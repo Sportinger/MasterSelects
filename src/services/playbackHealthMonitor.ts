@@ -61,6 +61,17 @@ import type {
 const log = Logger.create('PlaybackHealth');
 
 type VideoSyncManagerLike = ReturnType<typeof layerBuilder.getVideoSyncManager>;
+type ClipIdTree = { id: string; nestedClips?: readonly ClipIdTree[] };
+
+function collectClipIds(clips: readonly ClipIdTree[], output = new Set<string>()): Set<string> {
+  for (const clip of clips) {
+    output.add(clip.id);
+    if (clip.nestedClips?.length) {
+      collectClipIds(clip.nestedClips, output);
+    }
+  }
+  return output;
+}
 
 function getActiveRvfcClipIds(vsm: VideoSyncManagerLike): string[] {
   const candidate = vsm as VideoSyncManagerLike & {
@@ -208,7 +219,7 @@ export class PlaybackHealthMonitor {
 
     // 3. RVFC_ORPHANED
     const activeRvfcClipIds = getActiveRvfcClipIds(vsm);
-    const currentClipIds = new Set(clips.map((c) => c.id));
+    const currentClipIds = collectClipIds(clips);
     for (const clipId of activeRvfcClipIds) {
       if (!currentClipIds.has(clipId)) {
         if (this.recordAnomaly('RVFC_ORPHANED', clipId, 'RVFC handle for clip not in timeline')) {
@@ -293,7 +304,7 @@ export class PlaybackHealthMonitor {
     this.maybeRecoverPreviewFreeze(now, isPlaying, stats.decoder);
 
     // Cleanup stale tracker entries for clips no longer in timeline
-    const currentClipIdSet = new Set(clips.map((c) => c.id));
+    const currentClipIdSet = collectClipIds(clips);
     const htmlHealthClipIdSet = new Set(htmlHealthVideoClips.map((c) => c.id));
     for (const id of this.videoTimeTracker.keys()) {
       if (!currentClipIdSet.has(id) || !htmlHealthClipIdSet.has(id)) this.videoTimeTracker.delete(id);

@@ -50,10 +50,10 @@ export function PrivacyES() {
       <h3>4. Cuentas y pagos</h3>
       <p>Los pagos son procesados por <strong>Stripe, Inc.</strong> (certificado EU-US DPF). No almacenamos datos de tarjetas.</p>
       <p>
-        <strong>Registros del chat de IA alojado:</strong> cuando utiliza el chat de IA alojado, los mensajes/prompts,
-        respuestas, llamadas a herramientas, recuentos de tokens, coste en créditos, duración, estado y errores
-        pueden almacenarse en nuestra base D1 para historial de cuenta, facturación/depuración, prevención de abuso
-        y soporte.
+        <strong>Registros de IA alojada:</strong> cuando utiliza el chat de IA alojado o la generacion multimedia
+        alojada, los mensajes/prompts, payloads de solicitud, respuestas, llamadas a herramientas, resultados de
+        moderacion, recuentos de tokens, coste en creditos, duracion, estado, errores y un hash IP seudonimo pueden
+        almacenarse en nuestra base D1 para historial de cuenta, facturacion/depuracion, prevencion de abuso y soporte.
       </p>
       <h3>5. Sus derechos (RGPD)</h3>
       <ul>

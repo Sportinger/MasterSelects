@@ -53,7 +53,11 @@ function normalizeVideoDuration(value: number | undefined, min = 3): number {
 }
 
 function normalizeMode(value: string | undefined): string {
-  return value === 'pro' ? 'pro' : 'std';
+  if (value === 'pro' || value === '4K') {
+    return value;
+  }
+
+  return 'std';
 }
 
 function resolveEffectiveAudio(input: FlashBoardPricingInput): boolean {

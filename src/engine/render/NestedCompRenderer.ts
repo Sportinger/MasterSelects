@@ -33,6 +33,33 @@ const log = Logger.create('NestedCompRenderer');
 interface NestedCompTexture {
   texture: GPUTexture;
   view: GPUTextureView;
+  initialized: boolean;
+}
+
+function isRenderableNestedLayer(layer: Layer): boolean {
+  return !!layer?.source && layer.visible !== false && layer.opacity !== 0;
+}
+
+function isCriticalNestedLayer(layer: Layer): boolean {
+  if (!isRenderableNestedLayer(layer)) return false;
+  const source = layer.source;
+  return !!(
+    source?.nestedComposition ||
+    source?.type === 'video' ||
+    source?.videoElement ||
+    source?.videoFrame ||
+    source?.webCodecsPlayer ||
+    source?.runtimeSourceId ||
+    source?.nativeDecoder
+  );
+}
+
+function hasMissingCriticalNestedLayer(
+  layers: readonly Layer[],
+  layerData: readonly LayerRenderData[],
+): boolean {
+  const collectedLayerIds = new Set(layerData.map((entry) => entry.layer.id));
+  return layers.some((layer) => isCriticalNestedLayer(layer) && !collectedLayerIds.has(layer.id));
 }
 
 interface PooledTexturePair {
@@ -217,7 +244,7 @@ export class NestedCompRenderer {
         format: 'rgba8unorm',
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST,
       });
-      compTexture = { texture, view: texture.createView() };
+      compTexture = { texture, view: texture.createView(), initialized: false };
       this.nestedCompTextures.set(compositionId, compTexture);
     }
 
@@ -227,14 +254,10 @@ export class NestedCompRenderer {
     const lastTime = this.lastRenderTime.get(compositionId);
     const lastCount = this.lastLayerCount.get(compositionId);
 
-    if (quantizedTime >= 0 && lastTime === quantizedTime && lastCount === nestedLayers.length) {
+    if (compTexture.initialized && quantizedTime >= 0 && lastTime === quantizedTime && lastCount === nestedLayers.length) {
       // Same frame, return cached texture
       return compTexture.view;
     }
-
-    // Update cache tracking
-    this.lastRenderTime.set(compositionId, quantizedTime);
-    this.lastLayerCount.set(compositionId, nestedLayers.length);
 
     // Acquire ping-pong textures from pool
     const texturePair = this.acquireTexturePair(width, height);
@@ -254,6 +277,9 @@ export class NestedCompRenderer {
         skipEffects,
         particleQuality,
       );
+      if (hasMissingCriticalNestedLayer(nestedLayers, nestedLayerData)) {
+        return compTexture.initialized ? compTexture.view : null;
+      }
 
       // Process 3D layers through the shared scene renderer.
       if (flags.use3DLayers) {
@@ -270,10 +296,10 @@ export class NestedCompRenderer {
 
       // Handle empty composition
       if (nestedLayerData.length === 0) {
-        if (nestedLayers.length > 0) {
+        if (nestedLayers.length > 0 || (sceneClips?.length ?? 0) > 0) {
           // Input layers exist but none could be collected (transient decode gap)
           // Retain the existing texture which holds the last good frame
-          return compTexture.view;
+          return compTexture.initialized ? compTexture.view : null;
         }
         // Genuinely empty composition - clear to transparent
         const clearPass = commandEncoder.beginRenderPass({
@@ -285,6 +311,9 @@ export class NestedCompRenderer {
           }],
         });
         clearPass.end();
+        compTexture.initialized = true;
+        this.lastRenderTime.set(compositionId, quantizedTime);
+        this.lastLayerCount.set(compositionId, nestedLayers.length);
         return compTexture.view;
       }
 
@@ -316,6 +345,9 @@ export class NestedCompRenderer {
         { width, height }
       );
 
+      compTexture.initialized = true;
+      this.lastRenderTime.set(compositionId, quantizedTime);
+      this.lastLayerCount.set(compositionId, nestedLayers.length);
       return compTexture.view;
     } finally {
       this.releaseTexturePair(effectTexturePair);
@@ -657,7 +689,7 @@ export class NestedCompRenderer {
         format: 'rgba8unorm',
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
       });
-      compTexture = { texture, view: texture.createView() };
+      compTexture = { texture, view: texture.createView(), initialized: false };
       this.nestedCompTextures.set(compositionId, compTexture);
     }
 
@@ -668,6 +700,7 @@ export class NestedCompRenderer {
       { width, height }
     );
     this.device.queue.submit([commandEncoder.finish()]);
+    compTexture.initialized = true;
   }
 
   /**

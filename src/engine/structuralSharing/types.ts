@@ -28,6 +28,7 @@ export interface SerializedClipState {
   masks?: TimelineClip['masks'];
   textProperties?: TimelineClip['textProperties'];
   solidColor?: string;
+  transitionOverlay?: TimelineClip['transitionOverlay'];
   transitionIn?: TimelineClip['transitionIn'];
   transitionOut?: TimelineClip['transitionOut'];
   is3D?: boolean;

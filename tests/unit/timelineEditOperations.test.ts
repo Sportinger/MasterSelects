@@ -4,6 +4,7 @@ import {
   initHistoryStoreRefs,
   useHistoryStore,
 } from '../../src/stores/historyStore';
+import { useMediaStore, type Composition } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { DEFAULT_TRACKS } from '../../src/stores/timeline/constants';
 import {
@@ -18,6 +19,7 @@ import {
   resolveClipMoveRequest,
 } from '../../src/stores/timeline/editOperations/moveResolution';
 import { createMaskPathProperty, type LayerSource, type TimelineClip } from '../../src/types';
+import { installFakeMediaStore } from '../helpers/fakeMediaStore';
 import { createMockClip, createMockKeyframe, createMockTrack } from '../helpers/mockData';
 
 function createTransitionJunctionFixture(clipAId = 'clip-a', clipBId = 'clip-b', junctionTime = 10) {
@@ -93,6 +95,66 @@ function initializeTestHistoryRefs() {
   });
 }
 
+function installActiveParentComposition(id = 'parent-comp'): Composition {
+  const timelineData = useTimelineStore.getState().getSerializableState();
+  const parent: Composition = {
+    id,
+    name: 'Parent Comp',
+    type: 'composition',
+    parentId: null,
+    createdAt: 1,
+    width: 1920,
+    height: 1080,
+    frameRate: 30,
+    duration: timelineData.duration,
+    backgroundColor: '#000000',
+    timelineData,
+  };
+
+  useMediaStore.setState({
+    compositions: [parent],
+    activeCompositionId: id,
+    openCompositionIds: [id],
+  });
+  return parent;
+}
+
+function createHiddenTransitionComposition(
+  id: string,
+  parentCompositionId = 'parent-comp',
+  parentTransitionId = 'transition-existing',
+): Composition {
+  return {
+    id,
+    name: 'Hidden Transition',
+    type: 'composition',
+    parentId: null,
+    createdAt: 2,
+    width: 1920,
+    height: 1080,
+    frameRate: 30,
+    duration: 2,
+    backgroundColor: '#000000',
+    timelineData: { tracks: [], clips: [], duration: 2 },
+    transitionComp: {
+      kind: 'transition-comp',
+      parentCompositionId,
+      parentTransitionId,
+      parentOutgoingClipId: 'clip-a',
+      parentIncomingClipId: 'clip-b',
+      linkedOutgoingClipId: 'clip-a',
+      linkedIncomingClipId: 'clip-b',
+      innerTransitionId: '',
+      paddingBefore: 0,
+      paddingAfter: 0,
+      bodyStart: 0,
+      bodyEnd: 2,
+      templateType: 'crossfade',
+      templateVersion: 2,
+    },
+  };
+}
+
 describe('timeline edit operations kernel', () => {
   beforeEach(() => {
     initializeTestHistoryRefs();
@@ -110,6 +172,7 @@ describe('timeline edit operations kernel', () => {
       duration: 60,
       timelineToolPreview: null,
     });
+    installFakeMediaStore();
   });
 
   afterEach(() => {
@@ -504,6 +567,53 @@ describe('timeline edit operations kernel', () => {
 
     expect(result.success).toBe(true);
     expect(useTimelineStore.getState().clips).toEqual([]);
+  });
+
+  it('deleting one transition participant clears the survivor edge and hidden comp', () => {
+    const transition = {
+      id: 'transition-existing',
+      type: 'crossfade',
+      duration: 2,
+      compositionId: 'transition-comp-1',
+    };
+    const clipA = createMockClip({
+      id: 'clip-a',
+      trackId: 'video-1',
+      startTime: 0,
+      duration: 5,
+      transitionOut: { ...transition, linkedClipId: 'clip-b' },
+    });
+    const clipB = createMockClip({
+      id: 'clip-b',
+      trackId: 'video-1',
+      startTime: 5,
+      duration: 5,
+      transitionIn: { ...transition, linkedClipId: 'clip-a' },
+    });
+
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      clips: [clipA, clipB],
+      selectedClipIds: new Set(),
+    });
+    const parent = installActiveParentComposition();
+    useMediaStore.setState({
+      compositions: [
+        parent,
+        createHiddenTransitionComposition('transition-comp-1'),
+      ],
+      activeCompositionId: parent.id,
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'delete-transition-participant',
+      type: 'delete-clips',
+      clipIds: ['clip-a'],
+    }, { source: 'ui' });
+
+    expect(result.success).toBe(true);
+    expect(useTimelineStore.getState().clips.find((clip) => clip.id === 'clip-b')?.transitionIn).toBeUndefined();
+    expect(useMediaStore.getState().compositions.some((composition) => composition.id === 'transition-comp-1')).toBe(false);
   });
 
   it('releases AI node runtime resources for clips deleted by the edit kernel', () => {
@@ -1230,6 +1340,7 @@ describe('timeline edit operations kernel', () => {
         createMockClip({ id: 'clip-b', trackId: 'video-1', startTime: 10, duration: 8 }),
       ],
     });
+    installActiveParentComposition();
 
     const result = useTimelineStore.getState().applyTimelineEditOperation({
       id: 'typed-transition-apply',
@@ -1253,6 +1364,11 @@ describe('timeline edit operations kernel', () => {
     expect(clipA?.transitionOut).toMatchObject({ type: 'crossfade', duration: 2, linkedClipId: 'clip-b' });
     expect(clipB?.transitionIn).toMatchObject({ type: 'crossfade', duration: 2, linkedClipId: 'clip-a' });
     expect(clipA?.transitionOut?.id).toBe(clipB?.transitionIn?.id);
+    expect(clipA?.transitionOut?.compositionId).toBeTruthy();
+    expect(clipA?.transitionOut?.compositionId).toBe(clipB?.transitionIn?.compositionId);
+    expect(useMediaStore.getState().compositions.filter((composition) =>
+      composition.transitionComp?.kind === 'transition-comp'
+    )).toHaveLength(1);
     expect(clipB?.startTime).toBe(10);
   });
 
@@ -1285,7 +1401,12 @@ describe('timeline edit operations kernel', () => {
   });
 
   it('removes a typed transition without moving the incoming clip start', () => {
-    const transition = { id: 'transition-existing', type: 'crossfade', duration: 2 };
+    const transition = {
+      id: 'transition-existing',
+      type: 'crossfade',
+      duration: 2,
+      compositionId: 'transition-comp-1',
+    };
     useTimelineStore.setState({
       tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
       propertiesSelection: {
@@ -1311,6 +1432,13 @@ describe('timeline edit operations kernel', () => {
         }),
       ],
     });
+    const parent = installActiveParentComposition();
+    useMediaStore.setState({
+      compositions: [
+        parent,
+        createHiddenTransitionComposition('transition-comp-1'),
+      ],
+    });
 
     const result = useTimelineStore.getState().applyTimelineEditOperation({
       id: 'typed-transition-remove',
@@ -1329,6 +1457,7 @@ describe('timeline edit operations kernel', () => {
     expect(clips.find(clip => clip.id === 'clip-b')?.transitionIn).toBeUndefined();
     expect(clips.find(clip => clip.id === 'clip-b')?.startTime).toBe(10);
     expect(useTimelineStore.getState().propertiesSelection).toBeNull();
+    expect(useMediaStore.getState().compositions.some((composition) => composition.id === 'transition-comp-1')).toBe(false);
   });
 
   it('removes a typed transition when the connected clips are moved apart', () => {

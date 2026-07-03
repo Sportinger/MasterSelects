@@ -1,5 +1,7 @@
 import { getUserBillingSnapshot } from '../../lib/billing';
-import { getCreditLedgerEntryBySource, spendCredits } from '../../lib/credits';
+import { insertAiAuditEvent } from '../../lib/aiAudit';
+import { blocksAiRequest, moderateAiInput } from '../../lib/aiModeration';
+import { getCreditLedgerEntryBySource, refundCreditsForFailedTask, spendCredits } from '../../lib/credits';
 import { getCurrentUser, json, methodNotAllowed, parseJson } from '../../lib/db';
 import {
   buildHostedKlingCapabilities,
@@ -16,6 +18,7 @@ import {
   normalizeHostedSpecialVideoParams,
   type HostedImageParams,
   type HostedVideoParams,
+  type HostedVideoTask,
 } from '../../lib/providers/kieai';
 import {
   createGatewayError,
@@ -114,6 +117,27 @@ function buildCapabilityResponse(context: AppContext, hostedContext: HostedAiCon
     },
     status: 'ready',
   });
+}
+
+async function attachFailedTaskRefund(
+  context: AppContext,
+  userId: string,
+  taskId: string,
+  task: HostedVideoTask,
+): Promise<{ creditBalance: number | null; task: HostedVideoTask & { refund?: unknown } }> {
+  if (task.status !== 'failed') {
+    return { creditBalance: null, task };
+  }
+
+  const refund = await refundCreditsForFailedTask(context.env.DB, userId, taskId);
+  if (refund?.idempotencyKey) {
+    await completeUsageEvent(context.env.DB, refund.idempotencyKey, { creditCost: 0, status: 'failed' });
+  }
+
+  return {
+    creditBalance: refund?.creditBalance ?? null,
+    task: refund ? { ...task, refund } : task,
+  };
 }
 
 function parseHostedGeneration(body: HostedVideoRouteBody, requestId: string): HostedGenerationConfig | null {
@@ -271,11 +295,13 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       }
 
       try {
-        const task = await getHostedKlingTask(context.env, taskId.trim());
+        const normalizedTaskId = taskId.trim();
+        const task = await getHostedKlingTask(context.env, normalizedTaskId);
+        const refunded = await attachFailedTaskRefund(context, hostedContext.user.id, normalizedTaskId, task);
         return json(
           buildRouteEnvelope({
-            creditBalance: hostedContext.billing?.balance ?? 0,
-            data: task,
+            creditBalance: refunded.creditBalance ?? hostedContext.billing?.balance ?? 0,
+            data: refunded.task,
             ok: true,
             requestId: context.data.requestId ?? null,
             session: {
@@ -348,10 +374,11 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
 
     try {
       const task = await getHostedKlingTask(context.env, taskId);
+      const refunded = await attachFailedTaskRefund(context, hostedContext.user.id, taskId, task);
       return json(
         buildRouteEnvelope({
-          creditBalance: hostedContext.billing?.balance ?? 0,
-          data: task,
+          creditBalance: refunded.creditBalance ?? hostedContext.billing?.balance ?? 0,
+          data: refunded.task,
           ok: true,
           requestId,
           session: {
@@ -454,6 +481,42 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     );
   }
 
+  const moderation = await moderateAiInput(context.env, generation.params);
+  if (blocksAiRequest(moderation)) {
+    await insertAiAuditEvent(context, {
+      feature: generation.feature,
+      idempotencyKey,
+      model: generation.model,
+      moderation,
+      prompt: generation.params,
+      provider: generation.provider,
+      requestId,
+      status: 'blocked',
+      userId: hostedContext.user.id,
+    });
+
+    return json(
+      buildRouteEnvelope({
+        error: createGatewayError(
+          moderation.status === 'error' ? 'moderation_unavailable' : 'content_policy_violation',
+          moderation.status === 'error'
+            ? 'Hosted AI generation moderation is unavailable. Please try again later.'
+            : 'This hosted AI generation request was blocked by content safety checks.',
+          { categories: moderation.categories, outputType: generation.outputType, requestId },
+        ),
+        ok: false,
+        requestId,
+        session: {
+          authenticated: true,
+          email: hostedContext.user.email,
+          provider: 'cookie_session',
+        },
+        status: 'error',
+      }),
+      { status: moderation.status === 'error' ? 503 : 400 },
+    );
+  }
+
   await createUsageEvent(context.env.DB, {
     creditCost: creditsRequired,
     feature: generation.feature,
@@ -489,6 +552,20 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
 
     if (charge.insufficient) {
       await completeUsageEvent(context.env.DB, idempotencyKey, { status: 'failed' });
+      context.waitUntil(
+        insertAiAuditEvent(context, {
+          errorMessage: 'insufficient_credits',
+          feature: generation.feature,
+          idempotencyKey,
+          model: generation.model,
+          moderation,
+          prompt: generation.params,
+          provider: generation.provider,
+          requestId,
+          status: 'failed',
+          userId: hostedContext.user.id,
+        }).catch(() => {}),
+      );
       return json(
         buildRouteEnvelope({
           creditBalance: charge.balance,
@@ -515,6 +592,21 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       ledgerEntryId: charge.entry?.id ?? null,
       status: 'completed',
     });
+    context.waitUntil(
+      insertAiAuditEvent(context, {
+        creditCost: charge.charged ? creditsRequired : 0,
+        feature: generation.feature,
+        idempotencyKey,
+        model: generation.model,
+        moderation,
+        prompt: generation.params,
+        provider: generation.provider,
+        providerTaskId: taskId,
+        requestId,
+        status: 'accepted',
+        userId: hostedContext.user.id,
+      }).catch(() => {}),
+    );
 
     return json(
       buildRouteEnvelope({
@@ -537,6 +629,20 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     );
   } catch (error) {
     await completeUsageEvent(context.env.DB, idempotencyKey, { status: 'failed' });
+    context.waitUntil(
+      insertAiAuditEvent(context, {
+        errorMessage: error instanceof Error ? error.message : 'Hosted AI generation failed.',
+        feature: generation.feature,
+        idempotencyKey,
+        model: generation.model,
+        moderation,
+        prompt: generation.params,
+        provider: generation.provider,
+        requestId,
+        status: 'failed',
+        userId: hostedContext.user.id,
+      }).catch(() => {}),
+    );
 
     return json(
       buildRouteEnvelope({

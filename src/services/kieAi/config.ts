@@ -16,6 +16,7 @@ export const TOPAZ_IMAGE_UPSCALE_PROVIDER_ID = 'topaz/image-upscale';
 export const TOPAZ_VIDEO_UPSCALE_PROVIDER_ID = 'topaz/video-upscale';
 export const VEO_3_1_PROVIDER_ID = 'veo-3.1';
 export const RUNWAY_VIDEO_PROVIDER_ID = 'runway-video';
+export const RUNWAY_ASPECT_RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4'];
 
 export function isRemoteUrl(value: string): boolean {
   return /^https?:\/\//i.test(value);

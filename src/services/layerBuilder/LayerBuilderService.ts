@@ -49,7 +49,8 @@ import {
   findActiveTransitionPlanForTrack,
   type ActiveTransitionPlan,
 } from '../../stores/timeline/editOperations/transitionPlanner';
-import { assemblePreviewTransitionLayers } from './transitionLayerAssembly';
+import { ensureTransitionCompositionsForActiveTimeline } from '../../stores/timeline/editOperations/transitionCompositionMaintenance';
+import { buildLayerBuilderTransitionCompositionLayer } from './layerBuilderTransitionComposition';
 
 const log = Logger.create('LayerBuilder');
 
@@ -107,6 +108,14 @@ export class LayerBuilderService {
    * Main entry point - called from render loop
    */
   buildLayersFromStore(): Layer[] {
+    const repairedTransitionComps = ensureTransitionCompositionsForActiveTimeline(
+      useTimelineStore.setState,
+      useTimelineStore.getState,
+    );
+    if (repairedTransitionComps) {
+      this.invalidateCache();
+    }
+
     // Create frame context (single store read)
     const ctx = createFrameContext();
     hydrateTimelineMediaWindow(ctx);
@@ -307,19 +316,15 @@ export class LayerBuilderService {
 
       const activeTransition = this.getActiveTransitionForTrack(ctx, track.id);
       if (activeTransition) {
-        const activeComposition = ctx.compositionById.get(ctx.activeCompId);
-        layers.push(...assemblePreviewTransitionLayers({
-          plan: activeTransition.plan,
-          playheadPosition: ctx.playheadPosition,
-          trackIndex: layerIndex,
-          outgoingClip: activeTransition.outgoingClip,
-          incomingClip: activeTransition.incomingClip,
-          buildClipLayer: (clip, _role, opacity) => this.buildLayerForClip(clip, layerIndex, ctx, opacity),
-          outputSize: {
-            width: activeComposition?.width ?? 1920,
-            height: activeComposition?.height ?? 1080,
-          },
-        }));
+        const transitionCompLayer = buildLayerBuilderTransitionCompositionLayer(
+          activeTransition,
+          layerIndex,
+          ctx,
+          this.proxyFrames,
+        );
+        if (transitionCompLayer) {
+          layers.push(transitionCompLayer);
+        }
         return;
       }
 

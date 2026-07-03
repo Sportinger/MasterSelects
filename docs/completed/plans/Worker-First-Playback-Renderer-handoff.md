@@ -1,3 +1,5 @@
+> Status: Archived from `docs/ongoing/` on 2026-06-25 after docs triage; historical planning context unless explicitly reopened.
+
 # Worker-First Playback Renderer Handoff
 
 Status: W0-W4 foundations plus first packet set A-I and Packets J-DC integrated;

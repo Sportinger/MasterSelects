@@ -30,8 +30,6 @@ const SPECIAL_VIDEO_PROVIDERS = new Set(['veo-3.1', 'runway-video', 'topaz/video
 const IMAGE_PROVIDERS = new Set([
   'nano-banana-2',
   'nano-banana-pro',
-  'google/imagen4-fast',
-  'google/imagen4-ultra',
   'gpt-image-2-text-to-image',
   'gpt-image-2-image-to-image',
   'flux-2/pro-text-to-image',
@@ -170,7 +168,7 @@ export function normalizeHostedKlingParams(value: unknown): HostedVideoParams | 
     aspectRatio: typeof value.aspectRatio === 'string' && value.aspectRatio.trim() ? value.aspectRatio.trim() : '16:9',
     duration: normalizedDuration,
     endImageUrl: !multiShots && typeof value.endImageUrl === 'string' && value.endImageUrl.trim() ? value.endImageUrl.trim() : undefined,
-    mode: value.mode === 'pro' ? 'pro' : 'std',
+    mode: value.mode === 'pro' || value.mode === '4K' ? value.mode : 'std',
     multiPrompt,
     multiShots,
     prompt,
@@ -194,6 +192,10 @@ export function normalizeHostedImageParams(value: unknown): HostedImageParams | 
     return null;
   }
 
+  if (requestedProvider && !IMAGE_PROVIDERS.has(requestedProvider)) {
+    return null;
+  }
+
   const provider = requestedProvider || 'nano-banana-2';
   const imageInputs = Array.isArray(value.imageInputs)
     ? value.imageInputs.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
@@ -206,6 +208,7 @@ export function normalizeHostedImageParams(value: unknown): HostedImageParams | 
   return {
     aspectRatio: typeof value.aspectRatio === 'string' && value.aspectRatio.trim() ? value.aspectRatio.trim() : '1:1',
     imageInputs: imageInputs?.length ? imageInputs : undefined,
+    negativePrompt: typeof value.negativePrompt === 'string' && value.negativePrompt.trim() ? value.negativePrompt.trim() : undefined,
     outputFormat: value.outputFormat === 'jpeg' || value.outputFormat === 'webp' ? value.outputFormat : 'png',
     prompt,
     provider,

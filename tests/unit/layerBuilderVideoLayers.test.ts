@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMockClip } from '../helpers/mockData';
+import { useTimelineStore } from '../../src/stores/timeline';
 import type { FrameContext } from '../../src/services/layerBuilder/types';
 import type { TransformCache } from '../../src/services/layerBuilder/TransformCache';
 import type { LayerBuilderProxyFrames } from '../../src/services/layerBuilder/layerBuilderProxyFrames';
@@ -61,6 +62,7 @@ function createFrameContext(): FrameContext {
     getInterpolatedSpeed: vi.fn(() => 1),
     getSourceTimeForClip: vi.fn((_clipId: string, localTime: number) => localTime),
     hasKeyframes: vi.fn(() => false),
+    getClipKeyframes: (clipId: string) => useTimelineStore.getState().clipKeyframes.get(clipId) ?? [],
     now: 0,
     frameNumber: 30,
     frameRate: 30,
@@ -81,6 +83,10 @@ function createFrameContext(): FrameContext {
 }
 
 describe('buildLayerBuilderVideoLayer', () => {
+  afterEach(() => {
+    useTimelineStore.setState({ clipKeyframes: new Map() });
+  });
+
   it('uses the comp-frame visual time as the video layer target time', () => {
     hoisted.resolveLayerBuilderVideoSource.mockClear();
     const ctx = createFrameContext();
@@ -107,5 +113,36 @@ describe('buildLayerBuilderVideoLayer', () => {
     }));
     expect(ctx.getInterpolatedTransform).toHaveBeenCalledWith('clip-a', 1);
     expect(layer?.source?.mediaTime).toBe(1);
+  });
+
+  it('does not forward legacy transition render state to preview layers', () => {
+    const ctx = createFrameContext();
+    const clip = {
+      ...ctx.clips[0],
+      transitionRender: {
+        kind: 'distortion' as const,
+        distortion: 'swirl' as const,
+        progress: 0,
+      },
+    };
+    useTimelineStore.setState({
+      clipKeyframes: new Map([[
+        clip.id,
+        [
+          { id: 'kf-a', clipId: clip.id, property: 'transitionRender.progress', time: 0, value: 0, easing: 'linear' },
+          { id: 'kf-b', clipId: clip.id, property: 'transitionRender.progress', time: 2, value: 1, easing: 'linear' },
+        ],
+      ]]),
+    });
+
+    const layer = buildLayerBuilderVideoLayer({
+      clip,
+      layerIndex: 0,
+      ctx: { ...ctx, clips: [clip], clipsAtTime: [clip] },
+      transformCache: { getTransform: vi.fn((_key, transform) => transform) } as unknown as TransformCache,
+      proxyFrames: { selectProxyFrame: vi.fn() } as unknown as LayerBuilderProxyFrames,
+    });
+
+    expect(layer?.transitionRender).toBeUndefined();
   });
 });

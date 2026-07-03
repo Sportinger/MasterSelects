@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { Logger } from '../../services/logger';
 import { renderHostPort } from '../../services/render/renderHostPort';
+import { evaluateCompositionClipMasks } from '../../services/compositionRender/keyframeEvaluation';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useSAM2Store, maskToImageData } from '../../stores/sam2Store';
 import { useTimelineStore } from '../../stores/timeline';
 import { applyClipDragPreview } from '../../stores/timeline/clipDragPreview';
+import {
+  DEFAULT_TRANSITION_PLACEMENT,
+  findActiveTransitionPlanForTrack,
+} from '../../stores/timeline/editOperations/transitionPlanner';
 import type { ClipMask, MaskVertex } from '../../types/masks';
 import { generateMaskTexture } from '../../utils/maskRenderer';
 
@@ -24,7 +29,11 @@ function getMaskShapeHash(masks: ClipMask[]): string {
       v.handleOut.y.toFixed(4),
     ].join(',')).join(';')}|` +
     `${m.position.x.toFixed(4)},${m.position.y.toFixed(4)}|` +
-    `${(m.feather || 0).toFixed(2)}|${m.featherQuality ?? 50}`
+    `${(m.feather || 0).toFixed(2)}|${m.featherQuality ?? 50}|` +
+    `${Object.entries(m.edgeFeathers ?? {})
+      .toSorted(([a], [b]) => a.localeCompare(b))
+      .map(([edgeId, feather]) => `${edgeId}:${feather.toFixed(2)}`)
+      .join(';')}`
   ).join('||');
 }
 
@@ -39,6 +48,8 @@ export function useEngineMaskTextureSync(isEngineReady: boolean): (
   timelineTime?: number,
 ) => void {
   const maskVersionRef = useRef<Map<string, string>>(new Map());
+  const mediaFiles = useMediaStore(state => state.files);
+  const compositions = useMediaStore(state => state.compositions);
 
   const processClipMask = useCallback((
     clip: { id: string; masks?: ClipMask[] },
@@ -99,7 +110,7 @@ export function useEngineMaskTextureSync(isEngineReady: boolean): (
   const lastMaskTextureUpdate = useRef(0);
 
   const updateMaskTextures = useCallback((force = false, timelineTime?: number) => {
-    const { clips: storeClips, playheadPosition, maskDragging, clipDragPreview, getInterpolatedMasks } = useTimelineStore.getState();
+    const { clips: storeClips, tracks, playheadPosition, maskDragging, clipDragPreview, getInterpolatedMasks } = useTimelineStore.getState();
     const clips = applyClipDragPreview(storeClips, clipDragPreview);
     const effectivePlayheadPosition = timelineTime ?? playheadPosition;
 
@@ -150,10 +161,46 @@ export function useEngineMaskTextureSync(isEngineReady: boolean): (
         }
       }
     }
+
+    for (const track of tracks) {
+      if (track.type !== 'video' || track.visible === false) continue;
+      const activeTransition = findActiveTransitionPlanForTrack({
+        clips,
+        trackId: track.id,
+        time: effectivePlayheadPosition,
+        placement: DEFAULT_TRANSITION_PLACEMENT,
+        edgePolicy: 'hold',
+        getMediaDuration: (mediaFileId) => mediaFiles.find((file) => file.id === mediaFileId)?.duration,
+      });
+      const transition = activeTransition?.outgoingClip.transitionOut;
+      const composition = transition?.compositionId
+        ? compositions.find((candidate) => candidate.id === transition.compositionId)
+        : undefined;
+      if (!activeTransition || !transition || !composition?.timelineData) continue;
+
+      const transitionDuration = Math.max(0.0001, activeTransition.plan.bodyEnd - activeTransition.plan.bodyStart);
+      const progress = Math.min(
+        1,
+        Math.max(0, (effectivePlayheadPosition - activeTransition.plan.bodyStart) / transitionDuration),
+      );
+      const bodyStart = composition.timelineData.inPoint ?? composition.transitionComp?.bodyStart ?? 0;
+      const bodyEnd = composition.timelineData.outPoint ??
+        composition.transitionComp?.bodyEnd ??
+        Math.max(bodyStart, composition.duration);
+      const compositionTime = bodyStart + progress * Math.max(0.0001, bodyEnd - bodyStart);
+
+      for (const clip of composition.timelineData.clips) {
+        if (compositionTime < clip.startTime || compositionTime >= clip.startTime + clip.duration) continue;
+        const localTime = compositionTime - clip.startTime;
+        const masks = evaluateCompositionClipMasks(clip.masks, clip.keyframes, localTime);
+        changed = processClipMask({ id: clip.id, masks }, maskDimensions, renderOptions) || changed;
+      }
+    }
+
     if (changed) {
       renderHostPort.requestRender();
     }
-  }, [processClipMask]);
+  }, [compositions, mediaFiles, processClipMask]);
 
   useEffect(() => {
     if (!isEngineReady) return;

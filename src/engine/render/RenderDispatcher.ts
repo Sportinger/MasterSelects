@@ -396,14 +396,15 @@ export class RenderDispatcher {
     debugSnapshot.after3DLayerData = layerData.length;
 
     const commandBuffers: GPUCommandBuffer[] = [];
-    debugSnapshot.finalLayerData = layerData.length;
 
     // Pre-render nested compositions (batched with main composite)
     let hasNestedComps = false;
+    let hasDeferredNestedComp = false;
     let hasMotionLayers = false;
 
     const preRenderEncoder = device.createCommandEncoder();
-    for (const data of layerData) {
+    for (let i = layerData.length - 1; i >= 0; i--) {
+      const data = layerData[i];
       if (data.layer.source?.type === 'motion') {
         hasMotionLayers = true;
         const rendered = d.motionRenderer?.renderLayer(data.layer, preRenderEncoder);
@@ -430,7 +431,27 @@ export class RenderDispatcher {
           skipEffects,
           isExporting ? 'export' : 'preview',
         );
-        if (view) data.textureView = view;
+        if (view) {
+          data.textureView = view;
+        } else {
+          hasDeferredNestedComp = true;
+          layerData.splice(i, 1);
+        }
+      }
+    }
+    debugSnapshot.finalLayerData = layerData.length;
+    if (hasDeferredNestedComp && isExporting) {
+      throw new Error('Export frame deferred because a nested composition was not ready');
+    }
+    if (hasDeferredNestedComp && layerData.length === 0 && !isExporting) {
+      const heldCompositeRendered = this.renderHeldCompositeFrame(device);
+      if (heldCompositeRendered) {
+        this.recordMainPreviewFrame('nested-stall-hold', undefined, {
+          ...this.telemetry.getPreviewFallbackFromLayers(layers),
+          displayedTimeMs: this.telemetry.getLastPreviewDisplayedTimeMs(),
+        });
+        d.performanceStats.setLayerCount(0);
+        return;
       }
     }
     if (hasNestedComps || hasMotionLayers) {

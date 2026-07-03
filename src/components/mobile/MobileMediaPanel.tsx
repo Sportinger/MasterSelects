@@ -2,6 +2,7 @@
 
 import { useCallback } from 'react';
 import { useMediaStore } from '../../stores/mediaStore';
+import { isUserVisibleComposition } from '../../stores/mediaStore/compositionVisibility';
 import { useTimelineStore } from '../../stores/timeline';
 import { placeSignalAssetOnTimeline } from '../../runtime/renderers/signalTimelineRendererAdapter';
 
@@ -13,7 +14,8 @@ interface MobileMediaPanelProps {
 export function MobileMediaPanel({ isOpen, onClose }: MobileMediaPanelProps) {
   const files = useMediaStore((s) => s.files);
   const signalAssets = useMediaStore((s) => s.signalAssets);
-  const compositions = useMediaStore((s) => s.compositions);
+  const allCompositions = useMediaStore((s) => s.compositions);
+  const compositions = allCompositions.filter(isUserVisibleComposition);
   const importFiles = useMediaStore((s) => s.importFiles);
   const refreshFileUrls = useMediaStore((s) => s.refreshFileUrls);
   const tracks = useTimelineStore((s) => s.tracks);

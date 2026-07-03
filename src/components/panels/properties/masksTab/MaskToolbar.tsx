@@ -11,10 +11,12 @@ interface MaskToolbarProps {
   activeMask: ClipMask | null;
   maskEditMode: MaskEditMode;
   registry: MaskToolbarShortcutRegistry;
+  canPasteMask: boolean;
   onCreateEllipse: () => void;
   onCreateRectangle: () => void;
-  onEditActiveMask: () => void;
+  onCopyActiveMask: () => void;
   onExitMaskMode: () => void;
+  onPasteMask: () => void;
   onStartDrawMode: (mode: 'drawingRect' | 'drawingEllipse' | 'drawingPen') => void;
 }
 
@@ -22,10 +24,12 @@ export function MaskToolbar({
   activeMask,
   maskEditMode,
   registry,
+  canPasteMask,
   onCreateEllipse,
   onCreateRectangle,
-  onEditActiveMask,
+  onCopyActiveMask,
   onExitMaskMode,
+  onPasteMask,
   onStartDrawMode,
 }: MaskToolbarProps) {
   return (
@@ -52,18 +56,22 @@ export function MaskToolbar({
           guidedTarget="ellipse"
           onClick={() => onStartDrawMode('drawingEllipse')}
         />
-        <IconButton
-          icon="edit"
-          title={`Edit Path (${registry.getLabel('mask.edit')})`}
-          active={maskEditMode === 'editing'}
-          disabled={!activeMask}
-          guidedTarget="edit"
-          onClick={onEditActiveMask}
-        />
       </div>
       <div className="mask-toolbar-group">
         <IconButton icon="rect" title="Add rectangle mask" onClick={onCreateRectangle} />
         <IconButton icon="ellipse" title="Add ellipse mask" onClick={onCreateEllipse} />
+        <IconButton
+          icon="copy"
+          title={`Copy active mask (${registry.getLabel('edit.copy')})`}
+          disabled={!activeMask}
+          onClick={onCopyActiveMask}
+        />
+        <IconButton
+          icon="paste"
+          title={`Paste mask to selected clip (${registry.getLabel('edit.paste')})`}
+          disabled={!canPasteMask}
+          onClick={onPasteMask}
+        />
         {maskEditMode !== 'none' && (
           <IconButton icon="close" title="Exit mask mode" className="cancel" onClick={onExitMaskMode} />
         )}

@@ -9,6 +9,7 @@ import type { PreviewPanelSource } from '../../types/dock';
 import {
   createPreviewPanelDataPatch,
   getPreviewSourceLabel,
+  normalizeVisiblePreviewPanelSource,
   resolvePreviewSourceCompositionId,
 } from '../../utils/previewPanelSource';
 import { getFirstEditablePreviewPanelId } from './previewPanelDom';
@@ -63,9 +64,13 @@ export function usePreviewSourceConfig({
     () => tracks.filter((track) => track.type === 'video'),
     [tracks],
   );
+  const visibleSource = useMemo(
+    () => normalizeVisiblePreviewPanelSource(source, compositions, activeCompositionId),
+    [source, compositions, activeCompositionId],
+  );
   const sourceLabel = useMemo(
-    () => getPreviewSourceLabel(source, compositions, activeCompositionId, activeCompositionVideoTracks),
-    [source, compositions, activeCompositionId, activeCompositionVideoTracks],
+    () => getPreviewSourceLabel(visibleSource, compositions, activeCompositionId, activeCompositionVideoTracks),
+    [visibleSource, compositions, activeCompositionId, activeCompositionVideoTracks],
   );
 
   const sourceMonitorActive = source.type === 'activeComp'
@@ -88,12 +93,14 @@ export function usePreviewSourceConfig({
 
   const slotPreviewActive = source.type === 'activeComp' && previewCompositionId !== null;
   const renderSource = useMemo<PreviewPanelSource>(
-    () => (
+    () => normalizeVisiblePreviewPanelSource(
       slotPreviewActive && previewCompositionId
         ? { type: 'composition', compositionId: previewCompositionId }
-        : source
+        : source,
+      compositions,
+      activeCompositionId,
     ),
-    [source, slotPreviewActive, previewCompositionId],
+    [source, slotPreviewActive, previewCompositionId, compositions, activeCompositionId],
   );
   const renderSourceCompositionId =
     renderSource.type === 'composition' || renderSource.type === 'layer-index'
@@ -117,7 +124,7 @@ export function usePreviewSourceConfig({
         };
     }
   }, [activeCompositionId, renderSource.type, renderSourceCompositionId, renderSourceLayerIndex]);
-  const displayedCompId = resolvePreviewSourceCompositionId(renderSource, activeCompositionId);
+  const displayedCompId = resolvePreviewSourceCompositionId(renderSource, activeCompositionId, compositions);
   const displayedComp = compositions.find(c => c.id === displayedCompId);
   const isEditableSource =
     renderSource.type === 'activeComp' ||

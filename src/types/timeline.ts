@@ -18,6 +18,7 @@ import type {
 } from './clipMetadata';
 import type { Effect } from './effects';
 import type { Keyframe } from './keyframes';
+import type { LayerSourceRect, TransitionRenderState } from './layers';
 import type { MathSceneDefinition } from './mathScene';
 import type { ClipMask } from './masks';
 import type {
@@ -29,7 +30,16 @@ import type { ClipNodeGraph } from './nodeGraph';
 import type { Text3DProperties, TextClipProperties } from './text';
 import type { ClipTransform, TimelineTransition } from './timelineCore';
 import type { TimelineSourceType } from './timelineSource';
+import type { TransitionOverlayPattern } from '../transitions';
 import type { VectorAnimationClipSettings } from './vectorAnimation';
+
+export interface TransitionOverlayClipDefinition {
+  pattern: TransitionOverlayPattern;
+  color: string;
+  widthRatio: number;
+  softness: number;
+  angle: number;
+}
 
 export interface TimelineClipDataSource {
   type: TimelineSourceType;
@@ -52,6 +62,7 @@ export interface TimelineClipDataSource {
   imageUrl?: string;
   naturalDuration?: number;
   mediaFileId?: string;
+  transitionOverlay?: TransitionOverlayClipDefinition;
   vectorAnimationSettings?: VectorAnimationClipSettings;
   filePath?: string;
 }
@@ -98,6 +109,8 @@ export interface TimelineClip {
   waveformGenerating?: boolean;  // True while waveform is being generated
   waveformProgress?: number;     // 0-100 progress of waveform generation
   transform: ClipTransform;  // Visual transform properties
+  sourceRect?: LayerSourceRect;
+  transitionRender?: TransitionRenderState;
   effects: Effect[];      // Effects applied to this clip
   colorCorrection?: ColorCorrectionState;  // Professional node/list color correction state
   nodeGraph?: ClipNodeGraph; // Field-backed node graph UI state for this clip
@@ -141,6 +154,8 @@ export interface TimelineClip {
   text3DProperties?: Text3DProperties;
   // Solid clip support
   solidColor?: string;
+  // Generated transition overlay support
+  transitionOverlay?: TransitionOverlayClipDefinition;
   // MIDI clip support (issue #182): note data; instrument lives on the track
   midiData?: import('./midiClip').MidiClipData;
   // YouTube download support
@@ -211,6 +226,8 @@ export interface SerializableClip {
   waveform?: number[];
   waveformChannels?: number[][];
   transform: ClipTransform;
+  sourceRect?: LayerSourceRect;
+  transitionRender?: TransitionRenderState;
   effects: Effect[];         // Effects applied to this clip
   colorCorrection?: ColorCorrectionState;
   nodeGraph?: ClipNodeGraph; // Field-backed node graph UI state
@@ -238,6 +255,8 @@ export interface SerializableClip {
   text3DProperties?: Text3DProperties;
   // Solid clip support
   solidColor?: string;
+  // Generated transition overlay support
+  transitionOverlay?: TransitionOverlayClipDefinition;
   // MIDI clip support (issue #182)
   midiData?: import('./midiClip').MidiClipData;
   vectorAnimationSettings?: VectorAnimationClipSettings;
@@ -246,6 +265,8 @@ export interface SerializableClip {
   // Transition support
   transitionIn?: TimelineTransition;
   transitionOut?: TimelineTransition;
+  transitionSourceTimeOverride?: number;
+  transitionSourceHold?: boolean;
   // 3D layer support
   is3D?: boolean;
   modelSequence?: ModelSequenceData;

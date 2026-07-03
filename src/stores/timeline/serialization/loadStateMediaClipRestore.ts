@@ -100,6 +100,8 @@ function createRestoredMediaClip(params: {
     waveform: serializedClip.waveform,
     waveformChannels: serializedClip.waveformChannels,
     transform: serializedClip.transform,
+    sourceRect: serializedClip.sourceRect ? { ...serializedClip.sourceRect } : undefined,
+    transitionRender: serializedClip.transitionRender ? structuredClone(serializedClip.transitionRender) : undefined,
     effects: serializedClip.effects || [],
     transitionIn: serializedClip.transitionIn ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionIn)) : undefined,
     transitionOut: serializedClip.transitionOut ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionOut)) : undefined,

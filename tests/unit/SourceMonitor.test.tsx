@@ -3,7 +3,6 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SourceMonitor } from '../../src/components/preview/SourceMonitor';
-import { runTimelinePlacementCommand } from '../../src/services/timelinePlacementCommands';
 import { useMediaStore, type MediaFile } from '../../src/stores/mediaStore';
 
 vi.mock('../../src/services/timelinePlacementCommands', () => ({
@@ -15,8 +14,6 @@ vi.mock('../../src/services/timelinePlacementCommands', () => ({
 const mockedUseMediaStore = useMediaStore as unknown as ReturnType<typeof vi.fn> & {
   getState: ReturnType<typeof vi.fn>;
 };
-
-const mockedRunTimelinePlacementCommand = runTimelinePlacementCommand as unknown as ReturnType<typeof vi.fn>;
 
 type MockMediaState = {
   files: MediaFile[];
@@ -137,19 +134,40 @@ describe('SourceMonitor edit commands', () => {
     vi.clearAllMocks();
   });
 
-  it('keeps source edit placement commands available for still sources', async () => {
+  it('hides source timing while keeping crop and command controls for still sources', async () => {
     render(<SourceMonitor file={createImageFile()} onClose={vi.fn()} />);
     await act(async () => {
       await Promise.resolve();
     });
 
+    expect(screen.queryByLabelText('Source timeline')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Set source In')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Set source Out')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Play')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Crop image' })).toBeInTheDocument();
     expect(screen.getByLabelText('Source edit commands')).toBeInTheDocument();
+  });
+
+  it('lets Space continue to the normal timeline handler for still sources', async () => {
+    render(<SourceMonitor file={createImageFile()} onClose={vi.fn()} />);
     await act(async () => {
-      fireEvent.click(screen.getByTitle('Insert source at playhead'));
       await Promise.resolve();
     });
 
-    expect(mockedRunTimelinePlacementCommand).toHaveBeenCalledWith('insert');
+    const downstream = vi.fn();
+    window.addEventListener('keydown', downstream, true);
+    const event = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      code: 'Space',
+      key: ' ',
+    });
+
+    window.dispatchEvent(event);
+    window.removeEventListener('keydown', downstream, true);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(downstream).toHaveBeenCalled();
   });
 
   it('zooms still source preview with the mouse wheel', async () => {

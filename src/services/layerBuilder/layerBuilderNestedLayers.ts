@@ -12,6 +12,7 @@ import { useTimelineStore } from '../../stores/timeline';
 import { getInterpolatedClipTransform } from '../../utils/keyframeInterpolation';
 import { getInterpolatedMotionLayer } from '../../utils/motionInterpolation';
 import { getEffectiveScale } from '../../utils/transformScale';
+import { evaluateCompositionClipMasks } from '../compositionRender/keyframeEvaluation';
 import type { FrameContext } from './types';
 
 export type NestedLayerBase = {
@@ -19,8 +20,11 @@ export type NestedLayerBase = {
   keyframes: Keyframe[];
 };
 
-function getNestedClipKeyframes(nestedClipId: string): Keyframe[] {
-  return useTimelineStore.getState().clipKeyframes.get(nestedClipId) || [];
+function getNestedClipKeyframes(nestedClip: TimelineClip): Keyframe[] {
+  const storeKeyframes = useTimelineStore.getState().clipKeyframes.get(nestedClip.id);
+  if (storeKeyframes?.length) return storeKeyframes;
+  const embeddedKeyframes = (nestedClip as TimelineClip & { keyframes?: readonly Keyframe[] }).keyframes;
+  return embeddedKeyframes ? [...embeddedKeyframes] : storeKeyframes ?? [];
 }
 
 function buildNestedBaseTransform(nestedClip: TimelineClip): ClipTransform {
@@ -88,7 +92,7 @@ export function buildNestedLayerBase(
   nestedClip: TimelineClip,
   nestedClipLocalTime: number,
 ): NestedLayerBase {
-  const keyframes = getNestedClipKeyframes(nestedClip.id);
+  const keyframes = getNestedClipKeyframes(nestedClip);
   const baseTransform = buildNestedBaseTransform(nestedClip);
   const transform = keyframes.length > 0
     ? getInterpolatedClipTransform(keyframes, nestedClipLocalTime, baseTransform, {
@@ -117,11 +121,14 @@ export function buildNestedLayerBase(
       y: ((transform.rotation?.y || 0) * Math.PI) / 180,
       z: ((transform.rotation?.z || 0) * Math.PI) / 180,
     },
+    sourceRect: nestedClip.sourceRect ? { ...nestedClip.sourceRect } : undefined,
   };
 
-  if (nestedClip.masks?.some(m => m.enabled !== false)) {
+  const masks = evaluateCompositionClipMasks(nestedClip.masks, keyframes, nestedClipLocalTime);
+  if (masks?.some(m => m.enabled !== false)) {
     baseLayer.maskClipId = nestedClip.id;
     baseLayer.maskInvert = false;
+    baseLayer.masks = masks;
   }
 
   return { baseLayer, keyframes };
@@ -147,7 +154,7 @@ export function buildNestedCompositionSourceLayer(
 
   return {
     ...baseLayer,
-    source: { type: 'image', nestedComposition: nestedCompData },
+    source: { type: 'image', mediaTime: nestedClipLocalTime, nestedComposition: nestedCompData },
   };
 }
 
@@ -169,6 +176,9 @@ export function buildNestedMotionSourceLayer(
 export function getNestedClipSourceTime(nestedClip: TimelineClip, nestedClipLocalTime: number): number {
   const inPoint = nestedClip.inPoint ?? 0;
   const outPoint = nestedClip.outPoint ?? nestedClip.duration;
+  const sourceOverride = nestedClip.transitionSourceTimeOverride;
+  if (Number.isFinite(sourceOverride)) return sourceOverride!;
+  if (nestedClip.transitionSourceHold) return inPoint;
   return nestedClip.reversed
     ? outPoint - nestedClipLocalTime
     : nestedClipLocalTime + inPoint;

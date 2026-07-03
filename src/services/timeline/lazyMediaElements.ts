@@ -1,4 +1,4 @@
-import type { TimelineClip } from '../../types';
+import type { SerializableClip, TimelineClip } from '../../types';
 import { useMediaStore, type MediaFile } from '../../stores/mediaStore';
 import type { FrameContext } from '../layerBuilder/types';
 import { Logger } from '../logger';
@@ -578,8 +578,70 @@ function nestedTrackAllowsKind(
   return track.muted !== true;
 }
 
+function transitionCompTrackAllowsKind(
+  clip: SerializableClip,
+  ctx: FrameContext,
+  kind: LazyMediaKind,
+  compositionId: string,
+): boolean {
+  const composition = ctx.compositionById.get(compositionId);
+  const track = composition?.timelineData?.tracks.find(candidate => candidate.id === clip.trackId);
+  if (!track) return true;
+  if (kind === 'video') return track.visible !== false;
+  return track.muted !== true;
+}
+
+function matchesTransitionLinkedClipId(clipId: string, baseId: string | undefined): boolean {
+  return Boolean(baseId) && (clipId === baseId || clipId.startsWith(`${baseId}:`));
+}
+
+function getTransitionRuntimeClip(
+  clip: SerializableClip,
+  compositionId: string,
+  ctx: FrameContext,
+  outgoingClip: TimelineClip,
+  incomingClip: TimelineClip,
+): TimelineClip | null {
+  const link = ctx.compositionById.get(compositionId)?.transitionComp;
+  if (link?.kind === 'transition-comp') {
+    if (matchesTransitionLinkedClipId(clip.id, link.linkedOutgoingClipId)) return outgoingClip;
+    if (matchesTransitionLinkedClipId(clip.id, link.linkedIncomingClipId)) return incomingClip;
+  }
+
+  if (clip.mediaFileId && (outgoingClip.mediaFileId === clip.mediaFileId || outgoingClip.source?.mediaFileId === clip.mediaFileId)) {
+    return outgoingClip;
+  }
+  if (clip.mediaFileId && (incomingClip.mediaFileId === clip.mediaFileId || incomingClip.source?.mediaFileId === clip.mediaFileId)) {
+    return incomingClip;
+  }
+  return null;
+}
+
+function createLazySerializableClip(clip: SerializableClip): TimelineClip {
+  return {
+    id: clip.id,
+    trackId: clip.trackId,
+    name: clip.name,
+    file: new File([], clip.name || 'transition-source'),
+    startTime: clip.startTime,
+    duration: clip.duration,
+    inPoint: clip.inPoint,
+    outPoint: clip.outPoint,
+    source: {
+      type: clip.sourceType,
+      mediaFileId: clip.mediaFileId,
+      naturalDuration: clip.naturalDuration ?? clip.duration,
+    },
+    mediaFileId: clip.mediaFileId,
+    transform: clip.transform,
+    effects: clip.effects ?? [],
+    isLoading: false,
+  };
+}
+
 function collectNestedDesiredClips(
   byTrack: Map<string, LazyClipCandidate[]>,
+  ctx: FrameContext,
   parentClip: TimelineClip,
   kind: LazyMediaKind,
   windowStart: number,
@@ -615,6 +677,7 @@ function collectNestedDesiredClips(
     ) {
       collectNestedDesiredClips(
         byTrack,
+        ctx,
         nestedClip,
         kind,
         windowStart,
@@ -624,6 +687,109 @@ function collectNestedDesiredClips(
         nestedTrackKey,
       );
     }
+
+    const transition = nestedClip.transitionOut;
+    if (!transition) continue;
+
+    const incomingClip = parentClip.nestedClips.find(candidate => candidate.id === transition.linkedClipId);
+    if (!incomingClip) continue;
+
+    const plan = planTransition({
+      outgoingClip: nestedClip,
+      incomingClip,
+      transitionType: transition.type,
+      requestedDuration: transition.duration,
+      placement: DEFAULT_TRANSITION_PLACEMENT,
+      edgePolicy: 'hold',
+      junctionTime: nestedClip.startTime + nestedClip.duration,
+      bodyOffset: transition.offset ?? 0,
+      getMediaDuration: (mediaFileId) => ctx.mediaFileById.get(mediaFileId)?.duration,
+    });
+    if (!plan) continue;
+
+    const absoluteBodyStart = parentAbsoluteStart + plan.bodyStart - parentSourceInPoint;
+    const bodyDuration = plan.bodyEnd - plan.bodyStart;
+    if (!isTimeSpanInWindow(absoluteBodyStart, bodyDuration, windowStart, windowEnd)) {
+      continue;
+    }
+
+    if (nestedClip.source?.type === kind && nestedTrackAllowsKind(parentClip, nestedClip, kind)) {
+      addCandidate(byTrack, {
+        clip: nestedClip,
+        trackKey: nestedTrackKey,
+        rankStartTime: absoluteBodyStart,
+        rankDuration: bodyDuration,
+      });
+    }
+    if (incomingClip.source?.type === kind && nestedTrackAllowsKind(parentClip, incomingClip, kind)) {
+      addCandidate(byTrack, {
+        clip: incomingClip,
+        trackKey: `${trackPath}:${incomingClip.trackId}`,
+        rankStartTime: absoluteBodyStart,
+        rankDuration: bodyDuration,
+      });
+    }
+    collectTransitionCompositionDesiredClips({
+      byTrack,
+      ctx,
+      kind,
+      windowStart,
+      windowEnd,
+      outgoingClip: nestedClip,
+      incomingClip,
+      trackKey: nestedTrackKey,
+      compositionId: transition.compositionId,
+      transitionBodyStart: absoluteBodyStart,
+    });
+  }
+}
+
+function collectTransitionCompositionDesiredClips(params: {
+  byTrack: Map<string, LazyClipCandidate[]>;
+  ctx: FrameContext;
+  kind: LazyMediaKind;
+  windowStart: number;
+  windowEnd: number;
+  outgoingClip: TimelineClip;
+  incomingClip: TimelineClip;
+  trackKey: string;
+  compositionId: string | undefined;
+  transitionBodyStart: number;
+}): void {
+  const {
+    byTrack,
+    ctx,
+    kind,
+    windowStart,
+    windowEnd,
+    outgoingClip,
+    incomingClip,
+    trackKey,
+    compositionId,
+    transitionBodyStart,
+  } = params;
+  if (!compositionId) return;
+
+  const composition = ctx.compositionById.get(compositionId);
+  if (composition?.transitionComp?.kind !== 'transition-comp') return;
+
+  for (const clip of composition.timelineData?.clips ?? []) {
+    if (clip.sourceType !== kind || !transitionCompTrackAllowsKind(clip, ctx, kind, compositionId)) {
+      continue;
+    }
+
+    const absoluteStart = transitionBodyStart + clip.startTime;
+    if (!isTimeSpanInWindow(absoluteStart, clip.duration, windowStart, windowEnd)) {
+      continue;
+    }
+
+    addCandidate(byTrack, {
+      clip: getTransitionRuntimeClip(clip, compositionId, ctx, outgoingClip, incomingClip)
+        ?? createLazySerializableClip(clip),
+      trackKey: `${trackKey}:transition:${compositionId}:${clip.trackId}`,
+      rankStartTime: absoluteStart,
+      rankDuration: clip.duration,
+    });
   }
 }
 
@@ -645,6 +811,7 @@ function collectDesiredClips(
     duration: number,
     junctionTime: number,
     offset: number | undefined,
+    compositionId?: string,
   ): void => {
     const plan = planTransition({
       outgoingClip,
@@ -678,6 +845,18 @@ function collectDesiredClips(
         rankDuration: plan.bodyEnd - plan.bodyStart,
       });
     }
+    collectTransitionCompositionDesiredClips({
+      byTrack,
+      ctx,
+      kind,
+      windowStart: start,
+      windowEnd: end,
+      outgoingClip,
+      incomingClip,
+      trackKey,
+      compositionId,
+      transitionBodyStart: plan.bodyStart,
+    });
   };
 
   for (const clip of ctx.clips) {
@@ -696,6 +875,7 @@ function collectDesiredClips(
     if (topLevelTrackAllowed && topLevelInWindow && clip.isComposition && clip.nestedClips?.length) {
       collectNestedDesiredClips(
         byTrack,
+        ctx,
         clip,
         kind,
         start,
@@ -718,6 +898,7 @@ function collectDesiredClips(
           transition.duration,
           clip.startTime + clip.duration,
           transition.offset,
+          transition.compositionId,
         );
       }
     }

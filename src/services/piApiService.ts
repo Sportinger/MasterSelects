@@ -194,8 +194,18 @@ export interface VideoTask {
   videoUrl?: string;
   imageUrl?: string;
   error?: string;
+  refund?: HostedAiRefundInfo;
   createdAt: Date;
   completedAt?: Date;
+}
+
+export interface HostedAiRefundInfo {
+  creditBalance: number;
+  credits: number;
+  idempotencyKey?: string | null;
+  jobId: string;
+  ledgerEntryId?: string | null;
+  refunded: boolean;
 }
 
 export interface TextToVideoParams {

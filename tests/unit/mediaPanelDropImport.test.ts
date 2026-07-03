@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  collectDroppedMediaFiles,
   planDroppedMediaImports,
   type DroppedMediaFileRecord,
   type MediaFolderLike,
@@ -69,5 +70,22 @@ describe('planDroppedMediaImports', () => {
         filesWithHandles: [],
       },
     ]);
+  });
+});
+
+describe('collectDroppedMediaFiles', () => {
+  it('collects file items from clipboard-style data transfers', async () => {
+    const file = createFile('clipboard.png');
+    const records = await collectDroppedMediaFiles({
+      files: [],
+      items: [
+        {
+          kind: 'file',
+          getAsFile: () => file,
+        },
+      ],
+    } as unknown as DataTransfer);
+
+    expect(records).toEqual([{ file, folderSegments: [] }]);
   });
 });

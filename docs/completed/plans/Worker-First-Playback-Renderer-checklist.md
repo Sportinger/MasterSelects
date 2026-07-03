@@ -1,6 +1,8 @@
+> Status: Archived from `docs/ongoing/` on 2026-06-25 after docs triage; historical planning context unless explicitly reopened.
+
 # Worker-First Playback Renderer Checklist
 
-Status: active companion checklist for
+Original status before archive: active companion checklist for
 `Worker-First-Playback-Renderer.md`
 Updated: 2026-06-18
 

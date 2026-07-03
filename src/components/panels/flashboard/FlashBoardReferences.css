@@ -43,6 +43,29 @@
   isolation: isolate;
 }
 
+.fb-reference-card:not(.fb-reference-slot) {
+  animation: fb-reference-card-in 190ms cubic-bezier(0.16, 1, 0.28, 1) both;
+}
+
+html.fb-reference-view-transition::view-transition-group(*) {
+  animation-duration: 190ms;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.28, 1);
+}
+
+@keyframes fb-reference-card-in {
+  from {
+    opacity: 0;
+    transform: translateX(-12px) scale(0.92);
+  }
+
+  to {
+    opacity: 1;
+    transform:
+      translateY(calc(var(--fb-reference-focus) * -8px))
+      scale(calc(1 + var(--fb-reference-focus) * 0.46));
+  }
+}
+
 .fb-reference-card.start {
   --fb-reference-role-color: rgba(57, 255, 132, 0.94);
   --fb-reference-role-glow: rgba(45, 255, 123, 0.48);
@@ -58,6 +81,68 @@
   --fb-reference-role-glow: rgba(52, 146, 255, 0.28);
 }
 
+.fb-reference-card.audio-reference {
+  --fb-reference-role-color: rgba(190, 132, 255, 0.86);
+  --fb-reference-role-glow: rgba(171, 99, 255, 0.3);
+}
+
+.fb-reference-card.video-reference,
+.fb-reference-card.video-input {
+  --fb-reference-role-color: rgba(255, 190, 88, 0.9);
+  --fb-reference-role-glow: rgba(255, 170, 58, 0.3);
+}
+
+.fb-reference-card.fb-reference-slot {
+  border-color: transparent;
+  border-style: solid;
+  background: color-mix(in srgb, var(--fb-reference-role-color) 9%, transparent);
+  box-shadow: none;
+  opacity: 0.4;
+  transform: none;
+}
+
+.fb-reference-slot-grid {
+  --fb-reference-slot-size: 92px;
+  display: grid;
+  flex: 0 0 auto;
+  grid-auto-flow: column;
+  grid-auto-columns: var(--fb-reference-slot-size);
+  grid-template-rows: repeat(2, var(--fb-reference-slot-size));
+  gap: 6px;
+  align-self: center;
+}
+
+.fb-reference-slot-grid .fb-reference-card.fb-reference-slot {
+  flex: 0 0 var(--fb-reference-slot-size);
+  width: var(--fb-reference-slot-size);
+  height: var(--fb-reference-slot-size);
+  border-radius: 7px;
+  aspect-ratio: 1;
+}
+
+.fb-reference-card.fb-reference-slot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: 8px;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(90deg, var(--fb-reference-role-color) 0 14px, transparent 14px 28px) top left / 100% 1px no-repeat,
+    repeating-linear-gradient(90deg, var(--fb-reference-role-color) 0 14px, transparent 14px 28px) bottom left / 100% 1px no-repeat,
+    repeating-linear-gradient(180deg, var(--fb-reference-role-color) 0 14px, transparent 14px 28px) top left / 1px 100% no-repeat,
+    repeating-linear-gradient(180deg, var(--fb-reference-role-color) 0 14px, transparent 14px 28px) top right / 1px 100% no-repeat;
+}
+
+.fb-reference-slot-grid .fb-reference-card.fb-reference-slot::before {
+  border-radius: 7px;
+  background:
+    repeating-linear-gradient(90deg, var(--fb-reference-role-color) 0 10px, transparent 10px 20px) top left / 100% 1px no-repeat,
+    repeating-linear-gradient(90deg, var(--fb-reference-role-color) 0 10px, transparent 10px 20px) bottom left / 100% 1px no-repeat,
+    repeating-linear-gradient(180deg, var(--fb-reference-role-color) 0 10px, transparent 10px 20px) top left / 1px 100% no-repeat,
+    repeating-linear-gradient(180deg, var(--fb-reference-role-color) 0 10px, transparent 10px 20px) top right / 1px 100% no-repeat;
+}
+
 .fb-reference-card:hover,
 .fb-reference-card:focus-within {
   z-index: 6;
@@ -67,6 +152,22 @@
     0 0 18px color-mix(in srgb, var(--fb-reference-role-color) 74%, transparent),
     0 0 34px var(--fb-reference-role-glow),
     inset 0 0 0 1px color-mix(in srgb, var(--fb-reference-role-color) 72%, transparent);
+}
+
+.fb-reference-card.fb-reference-slot:hover,
+.fb-reference-card.fb-reference-slot:focus-within {
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.fb-reference-card.fb-reference-slot.is-active {
+  background: color-mix(in srgb, var(--fb-reference-role-color) 18%, transparent);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--fb-reference-role-color) 78%, white),
+    0 0 18px color-mix(in srgb, var(--fb-reference-role-color) 74%, transparent),
+    0 0 34px var(--fb-reference-role-glow);
+  opacity: 1;
 }
 
 .fb-reference-preview,
@@ -91,6 +192,17 @@
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.36);
 }
 
+.fb-reference-card.fb-reference-slot:hover .fb-reference-preview,
+.fb-reference-card.fb-reference-slot:focus-within .fb-reference-preview {
+  box-shadow: none;
+}
+
+.fb-reference-card.fb-reference-slot .fb-reference-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .fb-reference-preview img,
 .fb-reference-preview video {
   display: block;
@@ -104,6 +216,21 @@
   width: 100%;
   height: 100%;
   background: rgba(0, 0, 0, 0.22);
+}
+
+.fb-reference-slot-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: color-mix(in srgb, var(--fb-reference-role-color) 86%, white);
+  font-size: clamp(16px, 2.3vw, 26px);
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.fb-reference-slot-grid .fb-reference-slot-label {
+  font-size: 18px;
 }
 
 .fb-reference-number,
@@ -231,6 +358,22 @@
   .fb-reference-card {
     flex-basis: 72px;
     width: 72px;
+  }
+
+  .fb-reference-slot-grid {
+    --fb-reference-slot-size: 68px;
+  }
+
+  .fb-reference-slot-grid .fb-reference-card.fb-reference-slot {
+    flex-basis: var(--fb-reference-slot-size);
+    width: var(--fb-reference-slot-size);
+    height: var(--fb-reference-slot-size);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fb-reference-card:not(.fb-reference-slot) {
+    animation: none;
   }
 }
 

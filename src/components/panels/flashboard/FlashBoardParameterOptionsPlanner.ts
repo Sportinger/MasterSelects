@@ -7,6 +7,7 @@ import type {
 } from '../../../stores/flashboardStore/types';
 
 type FlashBoardParameterPopover = 'aspect' | 'duration' | 'imageSize' | 'mode';
+const RUNWAY_VIDEO_PROVIDER_ID = 'runway-video';
 
 export interface FlashBoardParameterOption {
   id: string;
@@ -24,6 +25,7 @@ interface FlashBoardParameterOptionsEntry {
   durations: number[];
   imageSizes?: string[];
   modes: string[];
+  modeLabels?: Record<string, string>;
   outputType?: FlashBoardOutputType;
 }
 
@@ -86,6 +88,30 @@ function buildPriceMeta({
   })?.compactLabel;
 }
 
+function getEffectiveDurationOptions(
+  entry: FlashBoardParameterOptionsEntry,
+  providerId: string,
+  mode: string,
+): number[] {
+  if (providerId === RUNWAY_VIDEO_PROVIDER_ID && mode === '1080p') {
+    return entry.durations.filter((optionDuration) => optionDuration !== 10);
+  }
+
+  return entry.durations;
+}
+
+function getEffectiveModeOptions(
+  entry: FlashBoardParameterOptionsEntry,
+  providerId: string,
+  duration: number,
+): string[] {
+  if (providerId === RUNWAY_VIDEO_PROVIDER_ID && duration === 10) {
+    return entry.modes.filter((optionMode) => optionMode !== '1080p');
+  }
+
+  return entry.modes;
+}
+
 export function buildFlashBoardParameterOptions({
   activePopover,
   aspectRatio,
@@ -99,6 +125,13 @@ export function buildFlashBoardParameterOptions({
   selectedEntry,
   service,
 }: BuildFlashBoardParameterOptionsInput): FlashBoardParameterOptionsState {
+  const effectiveDurationOptions = selectedEntry
+    ? getEffectiveDurationOptions(selectedEntry, providerId, mode)
+    : [];
+  const effectiveModeOptions = selectedEntry
+    ? getEffectiveModeOptions(selectedEntry, providerId, duration)
+    : [];
+
   return {
     aspectOptions: isParameterPopover(activePopover, 'aspect') && selectedEntry
       ? selectedEntry.aspectRatios.map((ratio) => ({
@@ -108,7 +141,7 @@ export function buildFlashBoardParameterOptions({
       }))
       : [],
     durationOptions: isParameterPopover(activePopover, 'duration') && selectedEntry
-      ? selectedEntry.durations.map((optionDuration) => ({
+      ? effectiveDurationOptions.map((optionDuration) => ({
         id: String(optionDuration),
         value: optionDuration,
         label: `${optionDuration}s`,
@@ -145,9 +178,9 @@ export function buildFlashBoardParameterOptions({
       }))
       : [],
     modeOptions: isParameterPopover(activePopover, 'mode') && selectedEntry
-      ? selectedEntry.modes.map((optionMode) => ({
+      ? effectiveModeOptions.map((optionMode) => ({
         id: optionMode,
-        label: optionMode,
+        label: selectedEntry.modeLabels?.[optionMode] ?? optionMode,
         active: mode === optionMode,
         meta: buildPriceMeta({
           duration,

@@ -92,7 +92,7 @@ export function PrivacyEN() {
         <li><strong>Account data:</strong> Email address, display name — Legal basis: Contract performance (Art. 6(1)(b) GDPR)</li>
         <li><strong>Payment data:</strong> Processed directly by <strong>Stripe, Inc.</strong> (South San Francisco, CA, USA). Stripe is certified under the EU-US Data Privacy Framework. We do not store credit card numbers or bank details. Legal basis: Contract performance (Art. 6(1)(b) GDPR)</li>
         <li><strong>Usage data:</strong> Credit balance, usage history — Legal basis: Contract performance (Art. 6(1)(b) GDPR)</li>
-        <li><strong>Hosted AI chat logs:</strong> When you use hosted AI chat, prompts/messages, assistant responses, tool calls, token counts, credit cost, duration, status, and error state may be stored in our D1 database for account history, billing/debugging, abuse handling, and support — Legal basis: Contract performance (Art. 6(1)(b) GDPR) and legitimate interest (Art. 6(1)(f) GDPR)</li>
+        <li><strong>Hosted AI logs:</strong> When you use hosted AI chat or hosted media generation, prompts/messages, request payloads, assistant responses, tool calls, moderation results, token counts, credit cost, duration, status, error state, and a pseudonymous IP hash may be stored in our D1 database for account history, billing/debugging, abuse handling, and support — Legal basis: Contract performance (Art. 6(1)(b) GDPR) and legitimate interest (Art. 6(1)(f) GDPR)</li>
         <li><strong>Billing data:</strong> Retained for 10 years per German tax law (§ 147 AO, § 257 HGB) — Legal basis: Legal obligation (Art. 6(1)(c) GDPR)</li>
       </ul>
 
@@ -100,7 +100,7 @@ export function PrivacyEN() {
       <p>
         MasterSelects stores project data, settings, and media references in your browser's IndexedDB.
         This data does not leave your computer and is not transmitted to us. AI features requiring an
-        API connection are explicitly labeled as such; hosted AI chat is processed on the Cloudflare backend
+        API connection are explicitly labeled as such; hosted AI chat and media generation are processed on the Cloudflare backend
         and can be logged as described above.
       </p>
 

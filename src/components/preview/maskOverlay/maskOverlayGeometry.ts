@@ -9,10 +9,6 @@ import type {
 
 const MIN_HANDLE_LENGTH = 24;
 
-export function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value));
-}
-
 export function constrainHandleDelta(dx: number, dy: number, shiftKey: boolean): MaskOverlayPoint {
   if (!shiftKey) return { x: dx, y: dy };
 
@@ -43,11 +39,12 @@ export function getDisplayHandleEndpoint(
   handleType: 'handleIn' | 'handleOut',
   previousVertex: MaskOverlayPoint | undefined,
   nextVertex: MaskOverlayPoint | undefined,
+  minHandleLength = MIN_HANDLE_LENGTH,
 ): MaskOverlayPoint {
   const handle = handleType === 'handleIn' ? vertex.handleIn : vertex.handleOut;
   const handleLength = Math.hypot(handle.x, handle.y);
 
-  if (handleLength >= MIN_HANDLE_LENGTH) {
+  if (handleLength >= minHandleLength) {
     return {
       x: vertex.x + handle.x,
       y: vertex.y + handle.y,
@@ -67,8 +64,8 @@ export function getDisplayHandleEndpoint(
     : fallbackDirection;
 
   return {
-    x: vertex.x + direction.x * MIN_HANDLE_LENGTH,
-    y: vertex.y + direction.y * MIN_HANDLE_LENGTH,
+    x: vertex.x + direction.x * minHandleLength,
+    y: vertex.y + direction.y * minHandleLength,
   };
 }
 

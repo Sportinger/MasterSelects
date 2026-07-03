@@ -7,12 +7,14 @@ import type {
   SolidItem,
 } from '../../../../stores/mediaStore';
 import type { ShapePrimitive } from '../../../../types/motionDesign';
+import type { VideoFrameExtractionPosition } from '../videoFrameExtraction';
 import { MediaAddItemsMenu } from '../import/MediaAddItemsMenu';
 import { handleSubmenuHover, handleSubmenuLeave } from '../submenuPosition';
 import { MediaContextExplorerSubmenu } from './MediaContextExplorerSubmenu';
 import { MediaContextMoveFolderSubmenu } from './MediaContextMoveFolderSubmenu';
 import { MediaContextRegenerateSubmenu } from './MediaContextRegenerateSubmenu';
 import { canDownloadMediaFileInBrowser } from './useMediaContextExplorerHandlers';
+import { flashBoardMediaBridge } from '../../../../services/flashboard/FlashBoardMediaBridge';
 
 export interface MediaContextActionsMenuProps {
   showBoardAnnotationAction: boolean;
@@ -45,6 +47,7 @@ export interface MediaContextActionsMenuProps {
   onImport: () => void;
   onPaste: () => void;
   onToggleAiPromptReferences: (mediaFileIds: string[]) => void;
+  onCopyPrompt: (prompt: string) => void;
   onStartRename: (itemId: string, itemName: string) => void;
   onMoveToFolder: (ids: readonly string[], folderId: string | null) => void;
   onOpenCompositionSettings: (composition: Composition) => void;
@@ -56,6 +59,7 @@ export interface MediaContextActionsMenuProps {
   onRegenerateAudioProxy: (mediaFile: MediaFile, force: boolean) => void;
   onRegenerateWaveform: (mediaFile: MediaFile) => void;
   onRegenerateSpectrogram: (mediaFile: MediaFile) => void;
+  onExtractVideoFrame: (mediaFile: MediaFile, position: VideoFrameExtractionPosition) => Promise<void>;
   onDownloadMediaFile: (mediaFile: MediaFile) => Promise<void>;
   onShowRawInExplorer: (mediaFile: MediaFile) => Promise<void>;
   onShowProxyInExplorer: (mediaFile: MediaFile) => Promise<void>;
@@ -107,6 +111,7 @@ export function MediaContextActionsMenu({
   onImport,
   onPaste,
   onToggleAiPromptReferences,
+  onCopyPrompt,
   onStartRename,
   onMoveToFolder,
   onOpenCompositionSettings,
@@ -118,6 +123,7 @@ export function MediaContextActionsMenu({
   onRegenerateAudioProxy,
   onRegenerateWaveform,
   onRegenerateSpectrogram,
+  onExtractVideoFrame,
   onDownloadMediaFile,
   onShowRawInExplorer,
   onShowProxyInExplorer,
@@ -137,6 +143,9 @@ export function MediaContextActionsMenu({
   onNewMathScene,
   onNewMotionShape,
 }: MediaContextActionsMenuProps) {
+  const generationPrompt = mediaFile ? (flashBoardMediaBridge.getMetadata(mediaFile.id)?.prompt.trim() ?? '') : '';
+  const canCopyGenerationPrompt = !multiSelect && generationPrompt.length > 0;
+
   return (
     <>
       {showBoardAnnotationAction && (
@@ -191,6 +200,15 @@ export function MediaContextActionsMenu({
             </div>
           )}
 
+          <div
+            className={`context-menu-item ${!canCopyGenerationPrompt ? 'disabled' : ''}`}
+            onClick={() => {
+              if (canCopyGenerationPrompt) onCopyPrompt(generationPrompt);
+            }}
+          >
+            Copy Prompt
+          </div>
+
           {!multiSelect && selectedItem && (
             <div className="context-menu-item" onClick={() => onStartRename(selectedItem.id, selectedItem.name)}>
               Rename
@@ -207,6 +225,17 @@ export function MediaContextActionsMenu({
             <div className="context-menu-item" onClick={() => onOpenImageCrop(mediaFile)}>
               Crop
             </div>
+          )}
+
+          {!multiSelect && isVideoFile && mediaFile && (
+            <>
+              <div className="context-menu-item" onClick={() => { void onExtractVideoFrame(mediaFile, 'first'); }}>
+                Extract First Frame
+              </div>
+              <div className="context-menu-item" onClick={() => { void onExtractVideoFrame(mediaFile, 'last'); }}>
+                Extract Last Frame
+              </div>
+            </>
           )}
 
           <MediaContextMoveFolderSubmenu

@@ -46,7 +46,7 @@ describe('addImageClip', () => {
     vi.restoreAllMocks();
   });
 
-  it('loads added image clips as data-only sources after thumbnail/native-scale preparation', async () => {
+  it('loads added image clips as data-only sources without auto-scaling them', async () => {
     const clip = imageClip();
     const createdImages: HTMLImageElement[] = [];
     const updateClip = vi.fn();
@@ -84,7 +84,7 @@ describe('addImageClip', () => {
         mediaFileId: 'media-image',
       },
       transform: expect.objectContaining({
-        scale: { x: 0.5, y: 0.5 },
+        scale: { x: 1, y: 1 },
       }),
       thumbnails: ['data:image/jpeg;base64,thumb'],
       isLoading: false,

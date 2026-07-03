@@ -146,6 +146,72 @@ function drawMaskPath(
   ctx.fill(inverted ? 'evenodd' : 'nonzero');
 }
 
+function traceMaskEdge(
+  ctx: OffscreenCanvasRenderingContext2D,
+  from: MaskVertex,
+  to: MaskVertex,
+  width: number,
+  height: number,
+  offsetX: number,
+  offsetY: number,
+): void {
+  const fromX = (from.x + offsetX) * width;
+  const fromY = (from.y + offsetY) * height;
+  const toX = (to.x + offsetX) * width;
+  const toY = (to.y + offsetY) * height;
+  const cp1x = fromX + from.handleOut.x * width;
+  const cp1y = fromY + from.handleOut.y * height;
+  const cp2x = toX + to.handleIn.x * width;
+  const cp2y = toY + to.handleIn.y * height;
+  const isStraight =
+    from.handleOut.x === 0 && from.handleOut.y === 0 &&
+    to.handleIn.x === 0 && to.handleIn.y === 0;
+
+  ctx.moveTo(fromX, fromY);
+  if (isStraight) {
+    ctx.lineTo(toX, toY);
+  } else {
+    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, toX, toY);
+  }
+}
+
+function applyEdgeFeathersToShapeCanvas(mask: ClipMask, width: number, height: number, featherScale: number): void {
+  const edgeFeathers = mask.edgeFeathers;
+  if (!edgeFeathers || Object.keys(edgeFeathers).length === 0) return;
+
+  const verticesById = new Map(mask.vertices.map(vertex => [vertex.id, vertex]));
+  const tempCtx = ensureBlurCanvas(width, height);
+  const shapeCtx = ensureMaskShapeCanvas(width, height);
+  const offsetX = mask.position?.x ?? 0;
+  const offsetY = mask.position?.y ?? 0;
+
+  tempCtx.globalCompositeOperation = 'source-over';
+  tempCtx.clearRect(0, 0, width, height);
+  tempCtx.strokeStyle = '#ffffff';
+  tempCtx.lineCap = 'round';
+  tempCtx.lineJoin = 'round';
+
+  for (const [edgeId, featherValue] of Object.entries(edgeFeathers)) {
+    const feather = Math.max(0, featherValue * featherScale);
+    if (feather <= 0.5) continue;
+
+    const [fromId, toId] = edgeId.split('->');
+    const from = fromId ? verticesById.get(fromId) : undefined;
+    const to = toId ? verticesById.get(toId) : undefined;
+    if (!from || !to) continue;
+
+    tempCtx.filter = `blur(${Math.max(1, feather * 0.5)}px)`;
+    tempCtx.lineWidth = Math.max(1, feather * 2);
+    tempCtx.beginPath();
+    traceMaskEdge(tempCtx, from, to, width, height, offsetX, offsetY);
+    tempCtx.stroke();
+  }
+
+  tempCtx.filter = 'none';
+  shapeCtx.globalCompositeOperation = 'source-over';
+  shapeCtx.drawImage(blurCanvas!, 0, 0);
+}
+
 function getFeatherQualityScale(featherQuality: number | undefined): number {
   const quality = Math.min(100, Math.max(1, Math.round(featherQuality ?? 50)));
   if (quality <= 33) return 0.5;
@@ -153,7 +219,7 @@ function getFeatherQualityScale(featherQuality: number | undefined): number {
   return 1;
 }
 
-function renderMaskAlpha(mask: ClipMask, width: number, height: number): OffscreenCanvas {
+function renderMaskAlpha(mask: ClipMask, width: number, height: number, featherScale: number): OffscreenCanvas {
   const shapeCtx = ensureMaskShapeCanvas(width, height);
   shapeCtx.globalCompositeOperation = 'source-over';
   shapeCtx.filter = 'none';
@@ -169,6 +235,7 @@ function renderMaskAlpha(mask: ClipMask, width: number, height: number): Offscre
     mask.position.y,
     mask.inverted,
   );
+  applyEdgeFeathersToShapeCanvas(mask, width, height, featherScale);
   return maskShapeCanvas!;
 }
 
@@ -240,7 +307,7 @@ export function generateMaskTexture(
 
   // Process each mask
   for (const mask of enabledMasks) {
-    renderMaskAlpha(mask, width, height);
+    renderMaskAlpha(mask, width, height, featherScale);
     const feather = (mask.feather || 0) * featherScale;
     const baseFeatherQualityScale = getFeatherQualityScale(mask.featherQuality);
     const featherQualityScale = options.maxFeatherQualityScale

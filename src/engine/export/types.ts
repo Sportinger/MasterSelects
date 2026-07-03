@@ -2,6 +2,7 @@
 
 import type { TimelineClip, TimelineTrack } from '../../stores/timeline/types';
 import type { ActiveTransitionPlan } from '../../stores/timeline/editOperations/transitionPlanner';
+import type { Composition, MediaFile } from '../../stores/mediaStore/types';
 import type { BlendMode, ClipTransform, Effect, RuntimeColorGrade, TextBoundsPath } from '../../types';
 import type { VectorAnimationClipSettings } from '../../types/vectorAnimation';
 import type { WebCodecsPlayer } from '../WebCodecsPlayer';
@@ -137,6 +138,8 @@ export interface FrameContext {
   trackMap: Map<string, TimelineTrack>;
   clipsByTrack: Map<string, TimelineClip>;
   transitionParticipantsByTrack?: Map<string, ActiveTransitionPlan>;
+  mediaFiles?: MediaFile[];
+  mediaCompositions?: Composition[];
   getInterpolatedTransform: (clipId: string, localTime: number) => ClipTransform;
   getInterpolatedEffects: (clipId: string, localTime: number) => Effect[];
   getInterpolatedColorCorrection: (clipId: string, localTime: number) => RuntimeColorGrade | undefined;

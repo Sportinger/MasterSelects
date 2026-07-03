@@ -62,7 +62,7 @@ function extractTransitionTypes(source: string): number[] {
 }
 
 const EXPECTED_COMPOSITOR_TRANSITION_TYPES = [
-  0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 8, 9, 10, 11, 12, 13, 14, 15, 20, 21, 22, 23, 24,
+  0, 1, 2, 3, 4, 27, 28, 29, 5, 6, 7, 16, 17, 18, 19, 8, 9, 10, 11, 12, 13, 14, 15, 20, 21, 22, 23, 24,
 ];
 const EXPECTED_COMPOSITOR_DISTORTION_TYPES = [25, 26];
 

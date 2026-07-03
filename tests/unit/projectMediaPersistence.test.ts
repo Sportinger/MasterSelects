@@ -333,6 +333,86 @@ describe('project media persistence', () => {
     ]);
   }, 10_000);
 
+  it('persists transition comp clip render fields when syncing stores to the project file', async () => {
+    mocks.mediaState.compositions = [{
+      id: 'transition-comp',
+      name: 'Transition Comp',
+      type: 'composition',
+      parentId: null,
+      createdAt: 1,
+      width: 1920,
+      height: 1080,
+      frameRate: 30,
+      duration: 1,
+      backgroundColor: '#000000',
+      transitionComp: {
+        kind: 'transition-comp',
+        parentCompositionId: 'parent',
+        parentTransitionId: 'transition-1',
+        parentOutgoingClipId: 'out',
+        parentIncomingClipId: 'in',
+        linkedOutgoingClipId: 'out',
+        linkedIncomingClipId: 'in',
+        innerTransitionId: '',
+        paddingBefore: 0,
+        paddingAfter: 0,
+        bodyStart: 0,
+        bodyEnd: 1,
+      },
+      timelineData: {
+        duration: 1,
+        tracks: [],
+        clips: [{
+          id: 'clip-1',
+          trackId: 'track-1',
+          name: 'Panel',
+          mediaFileId: 'media-1',
+          startTime: 0,
+          duration: 1,
+          inPoint: 0,
+          outPoint: 1,
+          sourceType: 'video',
+          naturalDuration: 3,
+          transform: {
+            opacity: 1,
+            blendMode: 'normal',
+            position: { x: 0, y: 0, z: 0 },
+            scale: { x: 1, y: 1, z: 1 },
+            rotation: { x: 0, y: 0, z: 0 },
+          },
+          sourceRect: { x: 0.25, y: 0, width: 0.5, height: 1 },
+          transitionRender: { kind: 'distortion', progress: 0.4, distortion: 'swirl', seed: 7 },
+          transitionSourceTimeOverride: 2.5,
+          transitionSourceHold: true,
+          effects: [],
+          masks: [],
+          keyframes: [],
+          volume: 1,
+          audioEnabled: true,
+          reversed: false,
+          disabled: false,
+        }],
+      },
+    }];
+
+    const { syncStoresToProject } = await import('../../src/services/project/projectSave');
+    await syncStoresToProject();
+
+    expect(mocks.updateCompositions).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: 'transition-comp',
+        clips: [
+          expect.objectContaining({
+            sourceRect: { x: 0.25, y: 0, width: 0.5, height: 1 },
+            transitionRender: { kind: 'distortion', progress: 0.4, distortion: 'swirl', seed: 7 },
+            transitionSourceTimeOverride: 2.5,
+            transitionSourceHold: true,
+          }),
+        ],
+      }),
+    ]);
+  });
+
   it('drops obsolete YouTube panel payloads when syncing stores to the project file', async () => {
     const projectData = {
       media: [],

@@ -30,6 +30,7 @@ export interface ExportRenderHostPort {
   createVideoFrameFromExport(timestamp: number, duration: number): Promise<VideoFrame | null>;
   readPixels(): Promise<Uint8ClampedArray | null>;
   cleanupExportCanvas(): void;
+  requestPreviewRender(): void;
   hasMaskTexture(layerId: string): boolean;
   updateMaskTexture(layerId: string, imageData: ImageData | null): void;
   removeMaskTexture(layerId: string): void;
@@ -119,6 +120,10 @@ class MainExportRenderHostPort implements ExportRenderHostPort {
 
   cleanupExportCanvas(): void {
     engine.cleanupExportCanvas();
+  }
+
+  requestPreviewRender(): void {
+    engine.requestNewFrameRender();
   }
 
   hasMaskTexture(layerId: string): boolean {
@@ -340,6 +345,11 @@ class WorkerFirstExportRenderHostPort implements ExportRenderHostPort {
     this.targetReady = false;
     this.pendingReadback = null;
     this.suppressNextWorkerTargetResize = this.workerReady;
+  }
+
+  requestPreviewRender(): void {
+    if (isWorkerOnlyStrictMode()) return;
+    this.main.requestPreviewRender();
   }
 
   hasMaskTexture(layerId: string): boolean {

@@ -65,7 +65,7 @@ describe('light and film transition definitions', () => {
     });
   });
 
-  it('defines Light Leak with deterministic generated warm edge overlays', () => {
+  it('defines Light Leak with a deterministic masked reveal and moving warm overlay', () => {
     expect(lightLeak).toMatchObject({
       id: 'light-leak',
       name: 'Light Leak',
@@ -81,19 +81,27 @@ describe('light and film transition definitions', () => {
       defaultValue: '#ffb36a',
     });
     expect(lightLeak.recipe).toContainEqual({
+      kind: 'mask',
+      target: 'incoming',
+      mask: 'wipe',
+      direction: 'right',
+      angle: 0.18,
+      feather: 0.1,
+    });
+    expect(lightLeak.recipe).toContainEqual({
       kind: 'overlay',
       overlay: 'light-leak',
       color: '#ffb36a',
       colorParam: 'color',
       blendMode: 'screen',
-      opacity: { from: 0, to: 0.86 },
-      centerX: { from: -0.2, to: 0.42 },
-      width: 0.44,
+      opacity: { from: 0.5, to: 0.5 },
+      centerX: { from: -0.25, to: 1.22 },
+      width: 0.32,
       softness: 0.42,
-      angle: 0.12,
+      angle: 0.18,
       startProgress: 0,
-      endProgress: 0.58,
-      curve: 'ease-out',
+      endProgress: 1,
+      curve: 'ease-in-out',
     });
   });
 

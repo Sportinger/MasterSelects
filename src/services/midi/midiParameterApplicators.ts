@@ -289,6 +289,11 @@ function applyMaskParameter(clipId: string, property: string, value: number): bo
     return true;
   }
 
+  if (key.startsWith('edge.') && key.endsWith('.feather')) {
+    timelineStore.setPropertyValue(clipId, property as AnimatableProperty, value);
+    return true;
+  }
+
   return false;
 }
 

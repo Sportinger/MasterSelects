@@ -16,7 +16,7 @@ GPT-powered editing with 86 exported model tools across 16 exported definition g
 - [AI Editor Tools](#ai-editor-tools)
 - [AI Visual Feedback System](#ai-visual-feedback-system)
 - [AI Bridge Architecture](#ai-bridge-architecture)
-- [Hosted Chat Logging](#hosted-chat-logging)
+- [Hosted AI Safety And Audit](#hosted-ai-safety-and-audit)
 - [Transcription](#transcription)
 - [Multicam EDL](#multicam-edl)
 - [Configuration](#configuration)
@@ -135,10 +135,11 @@ The old dock-level AI Generative tab is deprecated and removed from default and 
 - Kie.ai image generation includes Nano Banana 2, Nano Banana Pro, Imagen 4 Fast/Ultra, GPT Image 2, Flux 2 Pro, Seedream 5 Lite, and Flux Kontext Pro/Max through the shared async image-provider adapter. GPT Image 2 Edit, Flux 2 Pro Edit, Seedream 5 Lite Edit, Recraft Remove Background, Recraft Crisp Upscale, and Topaz Image Upscale require at least one reference image before generation is enabled.
 - Kie.ai utility image/video models are exposed in the same Image and Video category chips. Recraft and Topaz image utilities can run without a prompt but require image input; Topaz Video Upscale can run without a prompt but requires a video reference and uses the mode button for `2x` / `4x`.
 - Kie.ai video generation includes Kling 3.0, Seedance 2.0 / Fast, Veo 3.1, and Runway in BYO development flows. Veo and Runway use their dedicated Kie endpoints and polling schemas rather than the generic Market `recordInfo` schema.
+- The compact composer shows empty dashed capability slots for the selected video model's available inputs (`IN`, `OUT`, `REF`, `VID`, `AUD`) next to real reference cards. Resolution-capable models label their mode control with actual outputs such as `720p`, `1080p`, and `4K`; Runway hides `1080p` when `10s` is selected because Kie.ai does not allow that combination.
 - Nano Banana 2 and Nano Banana Pro accept up to 14 ordered reference images through Kie.ai; Nano Banana 2 is also available through EvoLink. Kie.ai and Cloud Seedance 2.0 / Fast accept multimodal image/video/audio references and send audio references as `reference_audio_urls` for lip-sync / performance timing; the composer labels generic references as `REF 1`, `REF 2`, ... so prompts can refer to them explicitly
-- Seedance 2.0 standard and Fast cannot combine strict `first_frame_url` / `last_frame_url` with multimodal references in the same Kie.ai request, so IN / OUT cards are converted to image references when REF media is present. In multimodal reference mode, the adapter sends `generate_audio: false`; audio references are passed separately as input drivers through `reference_audio_urls`, and the composer hides the `Sound` toggle while REF media is attached. Audio-only Seedance references are blocked locally because Seedance requires audio references to be paired with at least one image or video anchor.
+- Seedance 2.0 standard and Fast cannot combine strict `first_frame_url` / `last_frame_url` with multimodal references in the same Kie.ai request, so IN / OUT cards are converted to image references when REF media is present. Audio references are passed separately as input drivers through `reference_audio_urls`; adding one to Seedance automatically enables the `Sound` toggle so the Kie.ai request also sends `generate_audio: true`. Audio-only Seedance references are blocked locally because Seedance requires audio references to be paired with at least one image or video anchor.
 - Suno Music and Suno Sounds are separate Music-category targets. Suno Music keeps the lyrics/style/negative-tags controls; Suno Sounds uses the normal prompt box plus the mode button for one-shot/loop sounds. Both can run through hosted Cloud credits in production or BYO Kie in development when explicitly selected as the default key path.
-- The wand button in the composer refines the current prompt with GPT-5.5 through the hosted Cloudflare `/api/ai/chat` route by default. In non-production development it can still use a local OpenAI key when that key is explicitly marked as default. Suno Music, Suno Sounds, Nano Banana, GPT Image, Flux, Flux Kontext, Recraft/Topaz utilities, Seedream, Imagen, Kling, Seedance, Veo, and Runway targets use model-specific guidance so the refined prompt follows the selected model's input style and constraints.
+- The wand button in the composer refines the current prompt with GPT-5.5 through the hosted Cloudflare `/api/ai/chat` route by default. In non-production development it can still use a local OpenAI key when that key is explicitly marked as default; that BYO path streams real deltas into the Magic prompt while the original prompt stays available in a compact restore/dismiss box. The Original and Magic prompt boxes expand on focus for full reading/editing, and the Original text remains selectable for copying. The Magic prompt opens at full height briefly after refinement, then collapses to a compact scrollable height so the Generate controls stay anchored. Hosted refinement is non-streaming because `/api/ai/chat` does not expose prompt-refiner streaming. Suno Music, Suno Sounds, Nano Banana, GPT Image, Flux, Flux Kontext, Recraft/Topaz utilities, Seedream, Imagen, Kling, Seedance, Veo, and Runway targets use model-specific guidance so the refined prompt follows the selected model's input style and constraints.
 - The collapsed Media tray shows separate `Chat` and `Generate` launch buttons. `Chat` opens a compact chat prompt window with OpenAI/Cloud model selection, OpenAI reasoning effort for GPT-5.x models, a visible per-round credit estimate, and a temperature slider when the selected model accepts temperature. Non-production development can still expose Anthropic and Lemonade for local testing.
 - Compact chat requests include the Media-chat system prompt, current timeline summary, and callable AI tools. Tool calls route through the shared `executeAIToolCalls(..., 'chat')` dispatcher; actions that require confirmation are denied in the compact flow and reported back to the model unless the approval mode allows them automatically.
 - Queued and running generations appear as Media Panel preview cards with output type, status, elapsed timer, prompt, metadata, and progress when the provider reports it
@@ -383,13 +384,18 @@ POST http://127.0.0.1:9877/api/ai-tools -> Native Helper -> WebSocket (9876) -> 
 
 ---
 
-## Hosted Chat Logging
+## Hosted AI Safety And Audit
 
-Hosted `/api/ai/chat` requests are logged best-effort into the D1 `chat_logs` table:
+Hosted `/api/ai/chat`, `/api/ai/video`, and hosted generation paths in `/api/ai/audio` run a server-side OpenAI `omni-moderation-latest` preflight before provider calls. Flagged requests and moderation failures are blocked before credits are spent or provider jobs are created.
 
-- Successful and failed chat completions are both recorded
-- Stored fields include model, request/response payloads, tool calls, token counts, credit cost, duration, and error state
-- Logging is non-blocking; failures to write logs do not fail the chat response
+Async hosted media jobs that later fail at the provider status stage refund their original hosted credit charge once, update the failed usage event to zero credits, refresh the account balance, and show the user a failure dialog with the refunded credit amount and job ID.
+
+Hosted AI requests are also logged best-effort into D1:
+
+- Chat completions are recorded in `chat_logs` with model, request/response payloads, tool calls, token counts, credit cost, duration, and error state
+- Chat, image/video generation, Suno, and ElevenLabs speech requests are recorded in `ai_audit_events`
+- Audit fields include user ID, request ID, idempotency key, feature, provider, model, prompt/request payload, moderation status/categories, task ID when available, credit cost, status/error, user agent, and a salted IP hash
+- BYO provider proxy requests are not audited as hosted AI requests because they use the user's own provider key path
 
 Authenticated users can inspect that history through:
 

@@ -24,6 +24,12 @@ describe('kieAiService', () => {
     expect(getKieAiProviders()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          id: 'kling-3.0',
+          supportedModes: ['std', 'pro', '4K'],
+          supportedDurations: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+          supportedAspectRatios: ['16:9', '9:16', '1:1'],
+        }),
+        expect.objectContaining({
           id: 'bytedance/seedance-2',
           supportedModes: ['480p', '720p', '1080p'],
           supportedDurations: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
@@ -39,7 +45,8 @@ describe('kieAiService', () => {
     );
   });
 
-  it('uses explicit Kie.ai Seedance 2.0 vendor credit rates', () => {
+  it('uses explicit Kie.ai video vendor credit rates', () => {
+    expect(calculateKieAiCost('kling-3.0', '4K', 10)).toBe(670);
     expect(calculateKieAiCost('bytedance/seedance-2', '480p', 10)).toBe(190);
     expect(calculateKieAiCost('bytedance/seedance-2', '720p', 10)).toBe(410);
     expect(calculateKieAiCost('bytedance/seedance-2', '1080p', 10)).toBe(1020);
@@ -105,7 +112,7 @@ describe('kieAiService', () => {
         input: {
           aspect_ratio: '21:9',
           duration: 4,
-          generate_audio: false,
+          generate_audio: true,
           reference_video_urls: ['https://example.com/motion.mp4'],
           reference_audio_urls: ['https://example.com/timing.mp3'],
           resolution: '480p',
@@ -116,6 +123,79 @@ describe('kieAiService', () => {
     });
     expect(request.body.input).not.toHaveProperty('first_frame_url');
     expect(request.body.input).not.toHaveProperty('last_frame_url');
+  });
+
+  it('groups Kling image references into valid Kie element inputs', async () => {
+    kieAiService.setApiKey('kie_test_key');
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({
+          data: {
+            downloadUrl: 'https://example.com/download/hero',
+            fileUrl: 'https://example.com/hero.png',
+          },
+          success: true,
+        }), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({
+          data: {
+            downloadUrl: 'https://example.com/download/hero-side',
+            fileUrl: 'https://example.com/hero-side.png',
+          },
+          success: true,
+        }), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ code: 200, msg: 'success', data: { taskId: 'task_kling' } }), { status: 200 }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(kieAiService.createTextToVideo({
+      provider: 'kling-3.0',
+      version: 'latest',
+      prompt: 'A cinematic character enters the room.',
+      duration: 5,
+      aspectRatio: '16:9',
+      mode: 'std',
+      referenceMedia: [
+        {
+          mediaType: 'image',
+          source: 'data:image/png;base64,AAAA',
+          fileName: 'hero.png',
+          label: 'Hero',
+        },
+        {
+          mediaType: 'image',
+          source: 'data:image/png;base64,BBBB',
+          fileName: 'hero-side.png',
+          label: 'Hero Side',
+        },
+      ],
+    })).resolves.toBe('task_kling');
+
+    const request = JSON.parse(fetchMock.mock.calls[2][1].body);
+    expect(request).toMatchObject({
+      endpoint: '/api/v1/jobs/createTask',
+      method: 'POST',
+      body: {
+        model: 'kling-3.0/video',
+        input: {
+          kling_elements: [
+            {
+              description: 'Hero, Hero Side',
+              element_input_urls: [
+                'https://example.com/hero.png',
+                'https://example.com/hero-side.png',
+              ],
+              name: 'ref_1',
+            },
+          ],
+          prompt: 'A cinematic character enters the room. @ref_1',
+        },
+      },
+    });
+    expect(request.body.input.multi_shots).toBe(false);
   });
 
   it('sends Flux Kontext tasks to the dedicated Flux endpoint', async () => {

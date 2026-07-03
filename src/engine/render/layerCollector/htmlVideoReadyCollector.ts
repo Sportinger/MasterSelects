@@ -25,6 +25,8 @@ import {
 import { collectExportHtmlVideo } from './htmlVideoExportCollector';
 import type { HtmlVideoCollectRequest } from './htmlVideoCollector';
 
+const PLAYBACK_CACHE_CAPTURE_INTERVAL_MS = 2000;
+
 export function collectReadyHtmlVideo(
   request: HtmlVideoCollectRequest
 ): LayerRenderData | null {
@@ -60,13 +62,6 @@ export function collectReadyHtmlVideo(
     typeof lastPresentedTime === 'number' &&
     Number.isFinite(lastPresentedTime);
   const displayedTime = hasConfirmedPresentedFrame ? lastPresentedTime : undefined;
-  const reportedDisplayedTime =
-    deps.isPlaying &&
-    !video.paused &&
-    !video.seeking &&
-    Number.isFinite(currentTime)
-      ? currentTime
-      : displayedTime;
   const hasFreshPresentedFrame =
     hasConfirmedPresentedFrame &&
     (shouldGuardPausedTargetFrames
@@ -85,6 +80,11 @@ export function collectReadyHtmlVideo(
     (shouldGuardPausedTargetFrames
       ? isPausedHtmlTargetMediaTimeUsable(currentTime, targetTime)
       : currentTimeDriftSeconds <= 0.12);
+  const reportedDisplayedTime =
+    Number.isFinite(currentTime) &&
+    ((deps.isPlaying && !video.paused && !video.seeking) || hasStablePausedHtmlFrame)
+      ? currentTime
+      : displayedTime;
   const awaitingPausedTargetFrame =
     hasPresentedOwnerMismatch ||
     !deps.isPlaying &&
@@ -297,7 +297,7 @@ export function collectReadyHtmlVideo(
     if (deps.isPlaying) {
       const now = performance.now();
       const lastCapture = deps.scrubbingCache?.getLastCaptureTime(video) || 0;
-      if (now - lastCapture > 500) {
+      if (now - lastCapture > PLAYBACK_CACHE_CAPTURE_INTERVAL_MS) {
         deps.scrubbingCache?.captureVideoFrame(video, layer.sourceClipId);
         deps.scrubbingCache?.setLastCaptureTime(video, now);
       }

@@ -11,7 +11,7 @@ import {
   createHostedSunoSoundsTask,
   getHostedKlingTask,
 } from '../../functions/lib/kieai';
-import { normalizeHostedKlingParams } from '../../functions/lib/providers/kieai';
+import { normalizeHostedImageParams, normalizeHostedKlingParams } from '../../functions/lib/providers/kieai';
 import type { Env } from '../../functions/lib/env';
 import { getModelCreditCost } from '../../functions/lib/modelPricing';
 import { getFlashBoardPriceEstimate } from '../../src/services/flashboard/FlashBoardPricing';
@@ -26,6 +26,7 @@ describe('hosted Kie.ai pricing', () => {
     expect(calculateHostedKlingCost('std', 10, true)).toBe(1200);
     expect(calculateHostedKlingCost('pro', 10, false)).toBe(1080);
     expect(calculateHostedKlingCost('pro', 10, true)).toBe(1620);
+    expect(calculateHostedKlingCost('4K', 10, false)).toBe(4020);
   });
 
   it('charges hosted Nano Banana 2 image generation at the 6x cloud multiplier', () => {
@@ -34,9 +35,54 @@ describe('hosted Kie.ai pricing', () => {
     expect(calculateHostedImageCost('nano-banana-2', '4K')).toBe(108);
   });
 
+  it('rejects currently failing hosted Imagen providers at the route boundary', () => {
+    expect(normalizeHostedImageParams({
+      aspectRatio: '16:9',
+      outputType: 'image',
+      prompt: 'tree',
+      provider: 'google/imagen4-fast',
+      resolution: '1K',
+    })).toBeNull();
+  });
+
+  it('uses hosted image edit provider input keys', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: {
+          downloadUrl: 'https://cdn.example.com/download/source',
+          fileUrl: 'https://cdn.example.com/source.png',
+        },
+        success: true,
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        code: 200,
+        data: { taskId: 'gpt_image_edit_task_1' },
+        msg: 'success',
+      }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(createHostedImageTask({
+      KIEAI_API_KEY: 'kie_test_key',
+    } as Partial<Env> as Env, {
+      aspectRatio: 'auto',
+      imageInputs: ['data:image/png;base64,AAAA'],
+      prompt: 'Keep the subject and replace the background.',
+      provider: 'gpt-image-2-image-to-image',
+      resolution: '1K',
+    })).resolves.toEqual({ taskId: 'gpt_image_edit_task_1' });
+
+    const createBody = JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string);
+    expect(createBody.input).toEqual({
+      aspect_ratio: 'auto',
+      input_urls: ['https://cdn.example.com/source.png'],
+      prompt: 'Keep the subject and replace the background.',
+    });
+  });
+
   it('normalizes hosted Kling reference media for production cloud requests', () => {
     expect(normalizeHostedKlingParams({
       duration: 5,
+      mode: '4K',
       prompt: 'Make REF 1 walk through the frame.',
       provider: 'cloud-kling',
       referenceMedia: [
@@ -49,6 +95,7 @@ describe('hosted Kie.ai pricing', () => {
         },
       ],
     })).toMatchObject({
+      mode: '4K',
       provider: 'kling-3.0',
       referenceMedia: [
         {
@@ -68,6 +115,13 @@ describe('hosted Kie.ai pricing', () => {
         data: {
           downloadUrl: 'https://cdn.example.com/download/hero',
           fileUrl: 'https://cdn.example.com/hero.png',
+        },
+        success: true,
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: {
+          downloadUrl: 'https://cdn.example.com/download/hero-side',
+          fileUrl: 'https://cdn.example.com/hero-side.png',
         },
         success: true,
       }), { status: 200 }))
@@ -102,6 +156,13 @@ describe('hosted Kie.ai pricing', () => {
           source: 'data:image/png;base64,AAAA',
         },
         {
+          fileName: 'hero-side.png',
+          label: 'Hero Side',
+          mediaType: 'image',
+          mimeType: 'image/png',
+          source: 'data:image/png;base64,BBBB',
+        },
+        {
           fileName: 'motion.mp4',
           label: 'Motion',
           mediaType: 'video',
@@ -114,18 +175,23 @@ describe('hosted Kie.ai pricing', () => {
 
     const firstUploadBody = fetchMock.mock.calls[0]?.[1]?.body as FormData;
     const secondUploadBody = fetchMock.mock.calls[1]?.[1]?.body as FormData;
+    const thirdUploadBody = fetchMock.mock.calls[2]?.[1]?.body as FormData;
     expect(firstUploadBody.get('uploadPath')).toBe('images');
-    expect(secondUploadBody.get('uploadPath')).toBe('videos');
+    expect(secondUploadBody.get('uploadPath')).toBe('images');
+    expect(thirdUploadBody.get('uploadPath')).toBe('videos');
 
-    const createBody = JSON.parse(fetchMock.mock.calls[2]?.[1]?.body as string);
+    const createBody = JSON.parse(fetchMock.mock.calls[3]?.[1]?.body as string);
     expect(createBody).toMatchObject({
       input: {
         aspect_ratio: '16:9',
         duration: '5',
         kling_elements: [
           {
-            description: 'Hero',
-            element_input_urls: ['https://cdn.example.com/hero.png'],
+            description: 'Hero, Hero Side',
+            element_input_urls: [
+              'https://cdn.example.com/hero.png',
+              'https://cdn.example.com/hero-side.png',
+            ],
             name: 'ref_1',
           },
           {
@@ -135,12 +201,12 @@ describe('hosted Kie.ai pricing', () => {
           },
         ],
         mode: 'pro',
-        multi_shots: false,
         prompt: 'A cinematic subject enters the frame. @ref_1 @ref_2',
         sound: false,
       },
       model: 'kling-3.0/video',
     });
+    expect(createBody.input.multi_shots).toBe(false);
   });
 
   it('charges hosted Suno music generation through MasterSelects Cloud credits', () => {
@@ -242,7 +308,7 @@ describe('hosted Kie.ai pricing', () => {
       input: {
         aspect_ratio: '16:9',
         duration: 8,
-        generate_audio: false,
+        generate_audio: true,
         reference_audio_urls: ['https://cdn.example.com/voice-drive.wav'],
         resolution: '720p',
         return_last_frame: false,

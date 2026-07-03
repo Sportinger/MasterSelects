@@ -137,6 +137,7 @@ export interface LinkedGroupActions {
   unlinkGroup: (clipId: string) => void;
   linkClips: (clipIds: string[]) => void;
   unlinkClips: (clipIds: string[]) => void;
+  syncClipsViaAudio: (clipIds: string[], masterClipId?: string) => Promise<import('../../../services/audioSync').TimelineAudioSyncReport | null>;
 }
 
 export interface DownloadClipActions {

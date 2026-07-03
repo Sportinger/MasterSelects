@@ -1,12 +1,20 @@
 import { useCallback, type Dispatch, type MouseEvent as ReactMouseEvent, type MutableRefObject, type SetStateAction } from 'react';
 
-import { useTimelineStore } from '../../../../stores/timeline';
+import type { FlashBoardComposerReferenceRole } from '../../../../stores/flashboardStore';
+import { useFlashBoardStore } from '../../../../stores/flashboardStore';
+import { getCatalogEntry } from '../../../../services/flashboard/FlashBoardModelCatalog';
 import {
   clearExternalDragPayload,
   createExternalDragPayloadForProjectItem,
   dispatchExternalDragBridgeEvent,
   setExternalDragPayload,
 } from '../../../timeline/utils/externalDragSession';
+import { buildFlashBoardReferenceRolePatch } from '../../flashboard/FlashBoardReferenceAssignmentPlanner';
+import { runFlashBoardReferenceTransition } from '../../flashboard/FlashBoardReferenceTransition';
+import {
+  appendReferenceMediaFileIds,
+  isReferenceableMediaType,
+} from '../../flashboard/FlashBoardReferenceMediaPlanner';
 import {
   MEDIA_BOARD_AUTOPAN_EDGE_PX,
   MEDIA_BOARD_AUTOPAN_MAX_SPEED,
@@ -23,6 +31,46 @@ import type {
   MediaBoardNodePlacement,
   MediaBoardViewport,
 } from './types';
+
+const FLASH_BOARD_REFERENCE_SLOT_SELECTOR = '.fb-reference-slot[data-slot-key]';
+
+interface FlashBoardReferenceSlotTarget {
+  accepts: string[];
+  element: HTMLElement;
+  role: FlashBoardComposerReferenceRole;
+}
+
+function isFlashBoardReferenceRole(role: string | undefined): role is FlashBoardComposerReferenceRole {
+  return role === 'start' || role === 'end' || role === 'reference';
+}
+
+function getFlashBoardReferenceSlotTarget(
+  clientX: number,
+  clientY: number,
+  availableMediaTypes: Set<string>,
+): FlashBoardReferenceSlotTarget | null {
+  for (const element of document.querySelectorAll<HTMLElement>(FLASH_BOARD_REFERENCE_SLOT_SELECTOR)) {
+    const role = element.dataset.slotRole;
+    if (!isFlashBoardReferenceRole(role)) continue;
+
+    const accepts = (element.dataset.slotAccepts ?? '').split(/\s+/).filter(Boolean);
+    if (accepts.length > 0 && !accepts.some((type) => availableMediaTypes.has(type))) continue;
+
+    const rect = element.getBoundingClientRect();
+    if (
+      rect.width > 0
+      && rect.height > 0
+      && clientX >= rect.left
+      && clientX <= rect.right
+      && clientY >= rect.top
+      && clientY <= rect.bottom
+    ) {
+      return { accepts, element, role };
+    }
+  }
+
+  return null;
+}
 
 export interface UseMediaBoardNodeMoveGestureOptions {
   activeCompositionId: string | null;
@@ -43,6 +91,7 @@ export interface UseMediaBoardNodeMoveGestureOptions {
     groupPoint?: { x: number; y: number },
   ) => { groupId: string | null; position: MediaBoardGroupOffset } | null;
   getMediaBoardTopLevelMoveIds: (itemIds: string[]) => string[];
+  getSlotGridProgress: () => number;
   mediaBoardItemIds: Set<string>;
   mediaBoardLayout: MediaBoardLayoutResult;
   mediaBoardPlacementsById: Map<string, MediaBoardNodePlacement>;
@@ -70,6 +119,7 @@ export function useMediaBoardNodeMoveGesture({
   commitMediaBoardOrderChange,
   getMediaBoardInsertTarget,
   getMediaBoardTopLevelMoveIds,
+  getSlotGridProgress,
   mediaBoardItemIds,
   mediaBoardLayout,
   mediaBoardPlacementsById,
@@ -86,9 +136,54 @@ export function useMediaBoardNodeMoveGesture({
     return createExternalDragPayloadForProjectItem(item, {
       activeCompositionId,
       requireMediaFileObject: true,
-      slotGridProgress: useTimelineStore.getState().slotGridProgress,
+      slotGridProgress: getSlotGridProgress(),
     });
-  }, [activeCompositionId]);
+  }, [activeCompositionId, getSlotGridProgress]);
+
+  const addMoveIdsToFlashBoardReferences = useCallback((
+    moveIds: string[],
+    role: FlashBoardComposerReferenceRole = 'reference',
+    accepts: string[] = [],
+  ) => {
+    const referenceIds = moveIds.filter((id) => {
+      const item = mediaBoardPlacementsById.get(id)?.item;
+      return item
+        && !isMediaBoardFolder(item)
+        && isReferenceableMediaType(item.type)
+        && (accepts.length === 0 || accepts.includes(item.type));
+    });
+    if (referenceIds.length === 0) return false;
+
+    const { composer, setHoveredComposerReference, updateComposer } = useFlashBoardStore.getState();
+    if (role === 'reference') {
+      const referenceMediaFileIds = appendReferenceMediaFileIds(composer.referenceMediaFileIds ?? [], referenceIds);
+      const lastReferenceId = referenceIds[referenceIds.length - 1];
+      runFlashBoardReferenceTransition(() => {
+        updateComposer({ referenceMediaFileIds });
+      });
+      if (lastReferenceId) {
+        setHoveredComposerReference({ mediaFileId: lastReferenceId, role });
+      }
+      return true;
+    }
+
+    const mediaFileId = referenceIds[0];
+    if (!mediaFileId) return false;
+    const catalogEntry = composer.service && composer.providerId
+      ? getCatalogEntry(composer.service, composer.providerId)
+      : undefined;
+    runFlashBoardReferenceTransition(() => {
+      updateComposer(buildFlashBoardReferenceRolePatch({
+        composer,
+        effectiveReferenceMediaFileIds: composer.referenceMediaFileIds ?? [],
+        maxReferenceMedia: catalogEntry?.maxReferenceMedia ?? catalogEntry?.maxReferenceImages,
+        mediaFileId,
+        role,
+      }));
+    });
+    setHoveredComposerReference({ mediaFileId, role });
+    return true;
+  }, [mediaBoardPlacementsById]);
 
   return useCallback((event: ReactMouseEvent, item: MediaBoardItem) => {
     const requestedMoveIds = selectedIds.includes(item.id) ? selectedIds.filter((id) => mediaBoardItemIds.has(id)) : [item.id];
@@ -134,6 +229,9 @@ export function useMediaBoardNodeMoveGesture({
     let latestClientX = startX;
     let latestClientY = startY;
     let latestTimelineHandoffActive = false;
+    let latestFlashBoardReferenceTargetActive = false;
+    let latestFlashBoardReferenceSlotTarget: FlashBoardReferenceSlotTarget | null = null;
+    let activeFlashBoardReferenceSlotElement: HTMLElement | null = null;
     let timelineBridgeActive = false;
     let latestInsertTarget: { groupId: string | null; position: MediaBoardGroupOffset } | null = null;
     let autoPanVelocity = { x: 0, y: 0 };
@@ -150,6 +248,40 @@ export function useMediaBoardNodeMoveGesture({
       if (Math.max(outsideX, outsideY) < MEDIA_BOARD_TIMELINE_HANDOFF_DISTANCE_PX) return false;
       const targetElement = document.elementFromPoint(latestClientX, latestClientY);
       return Boolean((targetElement instanceof HTMLElement ? targetElement : null)?.closest('.track-lane[data-track-id], .new-track-drop-zone'));
+    };
+    const getReferenceMoveTypes = () => {
+      const mediaTypes = new Set<string>();
+      moveIds.forEach((id) => {
+        const movingItem = mediaBoardPlacementsById.get(id)?.item;
+        if (!movingItem || isMediaBoardFolder(movingItem) || !isReferenceableMediaType(movingItem.type)) return;
+        mediaTypes.add(movingItem.type);
+      });
+      return mediaTypes;
+    };
+    const setActiveFlashBoardReferenceSlotElement = (element: HTMLElement | null) => {
+      if (activeFlashBoardReferenceSlotElement === element) return;
+      activeFlashBoardReferenceSlotElement?.classList.remove('is-active');
+      activeFlashBoardReferenceSlotElement = element;
+      activeFlashBoardReferenceSlotElement?.classList.add('is-active');
+    };
+    const syncFlashBoardReferenceTarget = () => {
+      if (latestTimelineHandoffActive) {
+        latestFlashBoardReferenceTargetActive = false;
+        latestFlashBoardReferenceSlotTarget = null;
+        setActiveFlashBoardReferenceSlotElement(null);
+        return;
+      }
+      latestFlashBoardReferenceSlotTarget = getFlashBoardReferenceSlotTarget(
+        latestClientX,
+        latestClientY,
+        getReferenceMoveTypes(),
+      );
+      setActiveFlashBoardReferenceSlotElement(latestFlashBoardReferenceSlotTarget?.element ?? null);
+      latestFlashBoardReferenceTargetActive = document.elementsFromPoint(latestClientX, latestClientY).some(
+        (element) => element instanceof HTMLElement
+          && Boolean(element.closest('.media-ai-tray-expanded .fb-bubble:not(.media-download-bubble)')),
+      ) || latestFlashBoardReferenceSlotTarget !== null;
+      if (latestFlashBoardReferenceTargetActive) document.body.style.cursor = 'copy';
     };
     const syncTimelineBridge = (phase: 'move' | 'drop' | 'cancel' = 'move') => {
       if (!timelineDragPayload) {
@@ -177,7 +309,7 @@ export function useMediaBoardNodeMoveGesture({
       dispatchExternalDragBridgeEvent({ phase, clientX: latestClientX, clientY: latestClientY });
     };
     const updateInsertionPreview = () => {
-      if (latestTimelineHandoffActive) {
+      if (latestTimelineHandoffActive || latestFlashBoardReferenceTargetActive) {
         latestInsertTarget = null;
         setMediaBoardInsertionPreview(null);
         return;
@@ -265,6 +397,7 @@ export function useMediaBoardNodeMoveGesture({
       }
       moveEvent.preventDefault();
       syncTimelineBridge('move');
+      syncFlashBoardReferenceTarget();
       updatePreviewDelta();
       updateInsertionPreview();
       updateAutoPanVelocity();
@@ -287,13 +420,32 @@ export function useMediaBoardNodeMoveGesture({
       document.body.style.userSelect = '';
       if (didDrag) {
         suppressNextMediaBoardContextMenu();
-        mediaBoardViewportRef.current = liveViewport;
-        setMediaBoardViewport(liveViewport);
+        syncTimelineBridge('move');
+        syncFlashBoardReferenceTarget();
         if (latestTimelineHandoffActive && timelineDragPayload) {
+          mediaBoardViewportRef.current = liveViewport;
+          setMediaBoardViewport(liveViewport);
           syncTimelineBridge('drop');
           timelineBridgeActive = false;
           clearExternalDragPayload();
+        } else if (latestFlashBoardReferenceTargetActive) {
+          syncTimelineBridge('cancel');
+          if (latestFlashBoardReferenceSlotTarget) {
+            addMoveIdsToFlashBoardReferences(
+              moveIds,
+              latestFlashBoardReferenceSlotTarget.role,
+              latestFlashBoardReferenceSlotTarget.accepts,
+            );
+          } else {
+            addMoveIdsToFlashBoardReferences(moveIds);
+          }
+          liveViewport = startViewport;
+          mediaBoardViewportRef.current = startViewport;
+          applyMediaBoardViewportPreview(startViewport);
+          setMediaBoardViewport(startViewport);
         } else {
+          mediaBoardViewportRef.current = liveViewport;
+          setMediaBoardViewport(liveViewport);
           syncTimelineBridge('cancel');
           const insertionPoint = anchorLayout ? { x: anchorLayout.x + previewDx, y: anchorLayout.y + previewDy } : pointToBoard(latestClientX, latestClientY);
           const target = latestInsertTarget ?? getMediaBoardInsertTarget(insertionPoint, moveIds, pointToBoard(latestClientX, latestClientY));
@@ -306,6 +458,8 @@ export function useMediaBoardNodeMoveGesture({
         syncTimelineBridge('cancel');
         setMediaBoardPerformanceMode(false);
       }
+      latestFlashBoardReferenceSlotTarget = null;
+      setActiveFlashBoardReferenceSlotElement(null);
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       window.removeEventListener('blur', handleMouseUp);
@@ -318,6 +472,7 @@ export function useMediaBoardNodeMoveGesture({
     window.addEventListener('contextmenu', handleWindowContextMenu, true);
   }, [
     applyMediaBoardViewportPreview,
+    addMoveIdsToFlashBoardReferences,
     boardAutoPanFrameRef,
     boardCanvasRef,
     boardInteractionFrameRef,

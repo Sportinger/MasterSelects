@@ -32,3 +32,8 @@ export function resolvePlaybackStartPosition(
     ? rangeStart
     : clampedPlayhead;
 }
+
+export function resolvePlaybackStopPosition(inPoint: number | null, duration: number): number {
+  const safeDuration = Math.max(0, sanitizeTime(duration, 0));
+  return Math.max(0, Math.min(inPoint ?? 0, safeDuration));
+}

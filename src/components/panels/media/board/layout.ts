@@ -2,7 +2,6 @@ import type { MediaFolder, ProjectItem } from '../../../../stores/mediaStore';
 import { isImportedMediaFileItem } from '../itemTypeGuards';
 import {
   BOARD_LAYOUT_SNAPSHOT_VERSION,
-  MEDIA_BOARD_COMPACT_LOD_ZOOM,
   MEDIA_BOARD_COMPACT_RENDER_BUFFER_PX,
   MEDIA_BOARD_EMPTY_FOLDER_BODY_MIN_HEIGHT,
   MEDIA_BOARD_EMPTY_SLOT_ID,
@@ -170,9 +169,10 @@ export function getMediaBoardGroupChrome(groupId: string | null): { headerHeight
 export function getMediaBoardVisibleRect(
   viewport: MediaBoardViewport,
   viewportSize: MediaBoardViewportSize,
+  isCompactLod = false,
 ): MediaBoardVisibleRect {
   const zoom = Math.max(viewport.zoom, MEDIA_BOARD_PAN_ZOOM_MIN);
-  const buffer = zoom <= MEDIA_BOARD_COMPACT_LOD_ZOOM
+  const buffer = isCompactLod
     ? MEDIA_BOARD_COMPACT_RENDER_BUFFER_PX
     : MEDIA_BOARD_RENDER_BUFFER_PX;
 

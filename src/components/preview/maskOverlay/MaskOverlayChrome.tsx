@@ -1,6 +1,7 @@
 import type { MouseEvent as ReactMouseEvent, RefObject } from 'react';
 import { inferMaskVertexHandleMode } from '../../../utils/maskVertexHandles';
 import type { ClipMask } from "../../../types/masks";
+import { createMaskEdgeId, getMaskEdgeFeather } from '../../../utils/maskEdgeFeathers';
 import { getDisplayHandleEndpoint } from './maskOverlayGeometry';
 import type {
   CanvasMaskVertex,
@@ -10,6 +11,7 @@ import type {
 } from './maskOverlayTypes';
 
 type VertexMouseTarget = 'vertex' | 'handleIn' | 'handleOut';
+const FEATHER_PREVIEW_GRADIENT_STEPS = 32;
 
 interface MaskOverlayChromeProps {
   svgRef: RefObject<SVGSVGElement | null>;
@@ -17,9 +19,12 @@ interface MaskOverlayChromeProps {
   canvasHeight: number;
   displayWidth: number;
   displayHeight: number;
+  viewZoom: number;
   maskEditMode: string;
   activeMask: ClipMask | undefined;
   selectedVertexIds: Set<string>;
+  selectedMaskEdgeId: string | null;
+  featherPreview: { edgeId: string | null; changedAt: number; phase: 'in' | 'out' } | null;
   hoveredVertexId: string | null;
   hoveredEdgeKey: string | null;
   penInsertPreview: PenEdgeInsertPreview | null;
@@ -57,9 +62,12 @@ export function MaskOverlayChrome({
   canvasHeight,
   displayWidth,
   displayHeight,
+  viewZoom,
   maskEditMode,
   activeMask,
   selectedVertexIds,
+  selectedMaskEdgeId,
+  featherPreview,
   hoveredVertexId,
   hoveredEdgeKey,
   penInsertPreview,
@@ -82,14 +90,56 @@ export function MaskOverlayChrome({
   onHoveredEdgeChange,
   onHoveredVertexChange,
 }: MaskOverlayChromeProps) {
-  const vertexSize = 8;
-  const handleSize = 6;
+  const hitPaddingX = canvasWidth * 2;
+  const hitPaddingY = canvasHeight * 2;
+  const hitViewBoxWidth = canvasWidth + hitPaddingX * 2;
+  const hitViewBoxHeight = canvasHeight + hitPaddingY * 2;
+  const zoomScale = Math.max(viewZoom, 0.0001);
+  const unitsPerScreenPx = Math.max(
+    displayWidth > 0 ? canvasWidth / displayWidth : 1,
+    displayHeight > 0 ? canvasHeight / displayHeight : 1,
+  ) / zoomScale;
+  const vertexSize = 8 * unitsPerScreenPx;
+  const handleSize = 6 * unitsPerScreenPx;
+  const vertexHitRadius = 14 * unitsPerScreenPx;
+  const thinStrokeWidth = unitsPerScreenPx;
+  const outlineStrokeWidth = 2 * unitsPerScreenPx;
+  const ringStrokeWidth = 1.5 * unitsPerScreenPx;
+  const edgeHighlightWidth = 4 * unitsPerScreenPx;
+  const edgeHitWidth = 16 * unitsPerScreenPx;
+  const insertRadius = 7 * unitsPerScreenPx;
+  const insertCrossSize = 4 * unitsPerScreenPx;
+  const minHandleLength = 24 * unitsPerScreenPx;
+  const dashPattern = `${5 * unitsPerScreenPx},${5 * unitsPerScreenPx}`;
+  const featherPreviewAmount = activeMask && featherPreview
+    ? featherPreview.edgeId
+      ? getMaskEdgeFeather(activeMask, featherPreview.edgeId)
+      : activeMask.feather
+    : 0;
+  const featherPreviewPath = activeMask && featherPreview
+    ? featherPreview.edgeId
+      ? edgeSegments.find(seg => createMaskEdgeId(seg.idA, seg.idB) === featherPreview.edgeId)?.d ?? ''
+      : pathData
+    : '';
+  const featherPreviewRadius = Math.max(3 * unitsPerScreenPx, featherPreviewAmount * unitsPerScreenPx);
+  const showFeatherPreview = featherPreviewPath.length > 0 && featherPreviewAmount > 0;
+  const featherPreviewStrokes = showFeatherPreview
+    ? Array.from({ length: FEATHER_PREVIEW_GRADIENT_STEPS }, (_, index) => {
+        const step = index + 1;
+        const targetBefore = 0.5 * ((step - 1) / FEATHER_PREVIEW_GRADIENT_STEPS);
+        const targetAfter = 0.5 * (step / FEATHER_PREVIEW_GRADIENT_STEPS);
+        return {
+          opacity: 1 - ((1 - targetAfter) / (1 - targetBefore)),
+          strokeWidth: 2 * featherPreviewRadius * ((FEATHER_PREVIEW_GRADIENT_STEPS - index) / FEATHER_PREVIEW_GRADIENT_STEPS),
+        };
+      })
+    : [];
 
   return (
     <svg
       ref={svgRef}
       className="mask-overlay-svg"
-      viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
+      viewBox={`${-hitPaddingX} ${-hitPaddingY} ${hitViewBoxWidth} ${hitViewBoxHeight}`}
       preserveAspectRatio="xMidYMid meet"
       onClick={onSvgClick}
       onMouseDown={(e) => {
@@ -108,8 +158,8 @@ export function MaskOverlayChrome({
         position: 'absolute',
         top: '50%',
         left: '50%',
-        width: displayWidth,
-        height: displayHeight,
+        width: displayWidth * (hitViewBoxWidth / canvasWidth),
+        height: displayHeight * (hitViewBoxHeight / canvasHeight),
         transform: 'translate(-50%, -50%)',
         pointerEvents: 'auto',
         cursor: getCursor(maskEditMode),
@@ -120,8 +170,8 @@ export function MaskOverlayChrome({
           d={shapePreviewPath}
           fill="rgba(45, 140, 235, 0.15)"
           stroke="#2997E5"
-          strokeWidth="2"
-          strokeDasharray="5,5"
+          strokeWidth={outlineStrokeWidth}
+          strokeDasharray={dashPattern}
           pointerEvents="none"
         />
       )}
@@ -129,7 +179,7 @@ export function MaskOverlayChrome({
       {activeMask?.closed && activeMask.visible && pathData && (
         <path
           d={pathData}
-          fill={activeMask.inverted ? 'rgba(45, 140, 235, 0.1)' : 'rgba(45, 140, 235, 0.15)'}
+          fill="transparent"
           stroke="none"
           pointerEvents={maskEditMode === 'editing' ? 'all' : 'none'}
           cursor="move"
@@ -143,45 +193,66 @@ export function MaskOverlayChrome({
           d={maskPath.d}
           fill="none"
           stroke={maskPath.color}
-          strokeWidth="2"
-          strokeDasharray={maskPath.closed ? 'none' : '5,5'}
+          strokeWidth={outlineStrokeWidth}
+          strokeDasharray={maskPath.closed ? 'none' : dashPattern}
           pointerEvents="none"
         />
       ))}
+
+      {showFeatherPreview && (
+        <g
+          className={`mask-feather-preview ${featherPreview?.phase === 'out' ? 'fade-out' : 'fade-in'}`}
+          pointerEvents="none"
+        >
+          {featherPreviewStrokes.map((stroke, index) => (
+            <path
+              key={`feather-gradient-${index}`}
+              d={featherPreviewPath}
+              fill="none"
+              stroke={`rgba(255, 0, 0, ${stroke.opacity})`}
+              strokeWidth={stroke.strokeWidth}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          ))}
+        </g>
+      )}
 
       {maskEditMode === 'drawingPen' && penInsertPreview && (
         <g className="mask-edge-insert-preview" pointerEvents="none">
           <circle
             cx={penInsertPreview.canvasX}
             cy={penInsertPreview.canvasY}
-            r="7"
+            r={insertRadius}
             fill="rgba(255, 153, 0, 0.18)"
             stroke="#ff9900"
-            strokeWidth="2"
+            strokeWidth={outlineStrokeWidth}
           />
           <path
-            d={`M ${penInsertPreview.canvasX - 4} ${penInsertPreview.canvasY} L ${penInsertPreview.canvasX + 4} ${penInsertPreview.canvasY} M ${penInsertPreview.canvasX} ${penInsertPreview.canvasY - 4} L ${penInsertPreview.canvasX} ${penInsertPreview.canvasY + 4}`}
+            d={`M ${penInsertPreview.canvasX - insertCrossSize} ${penInsertPreview.canvasY} L ${penInsertPreview.canvasX + insertCrossSize} ${penInsertPreview.canvasY} M ${penInsertPreview.canvasX} ${penInsertPreview.canvasY - insertCrossSize} L ${penInsertPreview.canvasX} ${penInsertPreview.canvasY + insertCrossSize}`}
             fill="none"
             stroke="#ff9900"
-            strokeWidth="1.5"
+            strokeWidth={ringStrokeWidth}
           />
         </g>
       )}
 
       {maskEditMode === 'editing' && activeMask && edgeSegments.map((seg) => {
-        const edgeKey = `${seg.idA}-${seg.idB}`;
+        const edgeKey = createMaskEdgeId(seg.idA, seg.idB);
+        const isSelectedEdge = selectedMaskEdgeId === edgeKey;
+        const isHoveredEdge = hoveredEdgeKey === edgeKey;
         return (
           <g
             key={`edge-${edgeKey}`}
             data-guided-target={`mask-edge:${activeMask.id}:${seg.fromIndex}:${seg.toIndex}`}
             data-guided-mask-edge={`${activeMask.id}:${seg.fromIndex}:${seg.toIndex}`}
           >
-            {hoveredEdgeKey === edgeKey && (
+            {(isHoveredEdge || isSelectedEdge) && (
               <path
                 d={seg.d}
                 fill="none"
-                stroke="rgba(255, 153, 0, 0.85)"
-                strokeWidth="4"
+                stroke={isSelectedEdge ? 'rgba(41, 151, 229, 0.95)' : 'rgba(255, 153, 0, 0.85)'}
+                strokeWidth={edgeHighlightWidth}
                 pointerEvents="none"
                 className="mask-edge-highlight"
               />
@@ -190,7 +261,7 @@ export function MaskOverlayChrome({
               d={seg.d}
               fill="none"
               stroke="transparent"
-              strokeWidth="12"
+              strokeWidth={edgeHitWidth}
               cursor="move"
               pointerEvents="stroke"
               data-guided-target={`mask-edge:${activeMask.id}:${seg.fromIndex}:${seg.toIndex}`}
@@ -210,8 +281,8 @@ export function MaskOverlayChrome({
 
         const previousVertex = canvasVertices[index - 1] ?? (activeMask.closed ? canvasVertices[canvasVertices.length - 1] : undefined);
         const nextVertex = canvasVertices[index + 1] ?? (activeMask.closed ? canvasVertices[0] : undefined);
-        const handleInEndpoint = getDisplayHandleEndpoint(vertex, 'handleIn', previousVertex, nextVertex);
-        const handleOutEndpoint = getDisplayHandleEndpoint(vertex, 'handleOut', previousVertex, nextVertex);
+        const handleInEndpoint = getDisplayHandleEndpoint(vertex, 'handleIn', previousVertex, nextVertex, minHandleLength);
+        const handleOutEndpoint = getDisplayHandleEndpoint(vertex, 'handleOut', previousVertex, nextVertex, minHandleLength);
 
         return (
           <g key={`handles-${vertex.id}`} className={`mask-handle-group ${handleMode}`}>
@@ -221,7 +292,7 @@ export function MaskOverlayChrome({
               x2={handleInEndpoint.x}
               y2={handleInEndpoint.y}
               stroke="#ff9900"
-              strokeWidth="1"
+              strokeWidth={thinStrokeWidth}
               pointerEvents="none"
             />
             <circle
@@ -230,7 +301,7 @@ export function MaskOverlayChrome({
               r={handleSize / 2 + 1}
               fill="#ff9900"
               stroke="#fff"
-              strokeWidth="1"
+              strokeWidth={thinStrokeWidth}
               cursor="move"
               className="mask-handle-point"
               data-guided-target={`mask-handle:${activeMask.id}:${vertex.id}:in`}
@@ -245,7 +316,7 @@ export function MaskOverlayChrome({
               x2={handleOutEndpoint.x}
               y2={handleOutEndpoint.y}
               stroke="#ff9900"
-              strokeWidth="1"
+              strokeWidth={thinStrokeWidth}
               pointerEvents="none"
             />
             <circle
@@ -254,7 +325,7 @@ export function MaskOverlayChrome({
               r={handleSize / 2 + 1}
               fill="#ff9900"
               stroke="#fff"
-              strokeWidth="1"
+              strokeWidth={thinStrokeWidth}
               cursor="move"
               className="mask-handle-point"
               data-guided-target={`mask-handle:${activeMask.id}:${vertex.id}:out`}
@@ -285,6 +356,25 @@ export function MaskOverlayChrome({
             data-guided-mask-vertex={`${activeMask.id}:${vertex.id}`}
             data-guided-mask-vertex-index={`${activeMask.id}:${index}`}
           >
+            <circle
+              cx={vertex.x}
+              cy={vertex.y}
+              r={vertexHitRadius}
+              fill="transparent"
+              stroke="none"
+              pointerEvents="all"
+              cursor={isClosableFirst ? 'crosshair' : 'move'}
+              onMouseEnter={() => onHoveredVertexChange(vertex.id)}
+              onMouseLeave={() => onHoveredVertexChange(null)}
+              onMouseDown={isClosableFirst
+                ? onFirstVertexClose
+                : (e) => onVertexMouseDown(e, vertex.id, 'vertex')}
+              onDoubleClick={(e) => {
+                if (!isClosableFirst) {
+                  onVertexDoubleClick(e, vertex.id);
+                }
+              }}
+            />
             {(isSelected || isHovered || isClosableFirst) && (
               <circle
                 cx={vertex.x}
@@ -292,7 +382,7 @@ export function MaskOverlayChrome({
                 r={isClosableFirst ? vertexSize * 1.15 : vertexSize}
                 fill="none"
                 stroke={isClosableFirst ? '#ff4d4d' : '#ff9900'}
-                strokeWidth="1.5"
+                strokeWidth={ringStrokeWidth}
                 className={isSelected ? 'mask-active-vertex-ring' : 'mask-hover-vertex-ring'}
                 pointerEvents="none"
               />
@@ -304,7 +394,7 @@ export function MaskOverlayChrome({
               height={vertexSize}
               fill={isSelected ? '#2997E5' : '#fff'}
               stroke={isClosableFirst ? '#ff4d4d' : '#2997E5'}
-              strokeWidth={isClosableFirst ? '2' : '1'}
+              strokeWidth={isClosableFirst ? outlineStrokeWidth : thinStrokeWidth}
               cursor={isClosableFirst ? 'crosshair' : 'move'}
               className={`mask-vertex-point ${isSelected ? 'selected' : ''}`}
               data-guided-target={`mask-vertex:${activeMask.id}:${vertex.id}`}

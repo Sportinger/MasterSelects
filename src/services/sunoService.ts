@@ -1,5 +1,5 @@
 import { Logger } from './logger';
-import type { TaskStatus } from './piApiService';
+import type { HostedAiRefundInfo, TaskStatus } from './piApiService';
 
 const log = Logger.create('Suno');
 
@@ -61,6 +61,7 @@ export interface SunoMusicTask {
   error?: string;
   id: string;
   progress?: number;
+  refund?: HostedAiRefundInfo;
   results?: SunoMusicResult[];
   status: TaskStatus;
 }

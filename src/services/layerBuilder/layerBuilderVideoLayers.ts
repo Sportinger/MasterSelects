@@ -95,7 +95,7 @@ export function buildLayerBuilderNativeDecoderLayer(params: BuildNativeDecoderLa
     rotation: transform.rotation,
   };
 
-  addLayerBuilderMaskProperties(layer, clip);
+  addLayerBuilderMaskProperties(layer, clip, timeInfo.visualClipLocalTime, ctx.getClipKeyframes?.(clip.id));
   return layer;
 }
 
@@ -145,7 +145,7 @@ export function buildLayerBuilderVideoLayer(params: BuildTimelineVideoLayerParam
           height: proxyFrame.image.naturalHeight || proxyFrame.image.height,
         }),
         timing: proxyFrame,
-      }), clip);
+      }), clip, visualClipLocalTime, ctx.getClipKeyframes?.(clip.id));
     }
   }
 
@@ -171,6 +171,6 @@ export function buildLayerBuilderVideoLayer(params: BuildTimelineVideoLayerParam
     rotation: transform.rotation,
   };
 
-  addLayerBuilderMaskProperties(layer, clip);
+  addLayerBuilderMaskProperties(layer, clip, visualClipLocalTime, ctx.getClipKeyframes?.(clip.id));
   return layer;
 }

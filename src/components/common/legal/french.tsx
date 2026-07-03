@@ -54,10 +54,11 @@ export function PrivacyFR() {
       <h3>4. Comptes utilisateurs et paiements</h3>
       <p>Les paiements sont traités par <strong>Stripe, Inc.</strong> (certifié EU-US DPF). Nous ne stockons aucune donnée de carte bancaire.</p>
       <p>
-        <strong>Journaux du chat IA hébergé :</strong> lorsque vous utilisez le chat IA hébergé,
-        les messages/prompts, réponses, appels d&apos;outils, nombres de tokens, coût en crédits,
-        durée, statut et état d&apos;erreur peuvent être stockés dans notre base D1 pour
-        l&apos;historique du compte, la facturation/le débogage, la lutte contre les abus et le support.
+        <strong>Journaux IA heberges :</strong> lorsque vous utilisez le chat IA heberge ou la generation media
+        hebergee, les messages/prompts, payloads de requete, reponses, appels d&apos;outils, resultats de moderation,
+        nombres de tokens, cout en credits, duree, statut, etat d&apos;erreur et un hash IP pseudonyme peuvent etre
+        stockes dans notre base D1 pour l&apos;historique du compte, la facturation/le debogage, la lutte contre les
+        abus et le support.
       </p>
       <h3>5. Vos droits (RGPD)</h3>
       <ul>

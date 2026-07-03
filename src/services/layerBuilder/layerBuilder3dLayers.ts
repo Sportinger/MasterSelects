@@ -90,7 +90,7 @@ export function buildLayerBuilderModelLayer(params: BuildLayer3dParams): Layer {
     wireframe: clip.wireframe,
   };
 
-  addLayerBuilderMaskProperties(layer, clip);
+  addLayerBuilderMaskProperties(layer, clip, timeInfo.clipLocalTime);
   return layer;
 }
 
@@ -121,7 +121,7 @@ export function buildLayerBuilderGaussianSplatLayer(params: BuildLayer3dParams):
     is3D: true,
   };
 
-  addLayerBuilderMaskProperties(layer, clip);
+  addLayerBuilderMaskProperties(layer, clip, timeInfo.clipLocalTime);
   return layer;
 }
 

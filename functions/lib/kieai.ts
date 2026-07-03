@@ -78,10 +78,26 @@ export interface HostedVideoTask {
 export interface HostedImageParams {
   aspectRatio?: string;
   imageInputs?: string[];
+  negativePrompt?: string;
   outputFormat?: 'png' | 'jpeg' | 'webp';
   prompt: string;
   provider: string;
   resolution?: string;
+}
+
+type HostedImageInputKey = 'image_input' | 'image_urls' | 'input_urls';
+
+interface HostedImageModelSpec {
+  defaultAspectRatio: string;
+  imageInputKey?: HostedImageInputKey;
+  maxImages?: number;
+  quality?: string;
+  requiresImageInput?: boolean;
+  supportsGoogleSearch?: boolean;
+  supportsNegativePrompt?: boolean;
+  supportsNsfwChecker?: boolean;
+  supportsOutputFormat?: boolean;
+  supportsResolution?: boolean;
 }
 
 export interface HostedSunoParams {
@@ -434,6 +450,61 @@ function normalizeImageResolution(resolution?: string): '1K' | '2K' | '4K' {
   return '1K';
 }
 
+const DEFAULT_HOSTED_IMAGE_MODEL_SPEC: HostedImageModelSpec = {
+  defaultAspectRatio: '1:1',
+  imageInputKey: 'image_input',
+  supportsOutputFormat: true,
+  supportsResolution: true,
+};
+
+const HOSTED_IMAGE_MODEL_SPECS: Record<string, HostedImageModelSpec> = {
+  'nano-banana-2': {
+    ...DEFAULT_HOSTED_IMAGE_MODEL_SPEC,
+    defaultAspectRatio: 'auto',
+    maxImages: 14,
+    supportsGoogleSearch: true,
+  },
+  'nano-banana-pro': {
+    ...DEFAULT_HOSTED_IMAGE_MODEL_SPEC,
+    maxImages: 14,
+  },
+  'gpt-image-2-text-to-image': {
+    defaultAspectRatio: 'auto',
+  },
+  'gpt-image-2-image-to-image': {
+    defaultAspectRatio: 'auto',
+    imageInputKey: 'input_urls',
+    maxImages: 16,
+    requiresImageInput: true,
+  },
+  'flux-2/pro-text-to-image': {
+    defaultAspectRatio: '1:1',
+    supportsNsfwChecker: true,
+    supportsResolution: true,
+  },
+  'flux-2/pro-image-to-image': {
+    defaultAspectRatio: '1:1',
+    imageInputKey: 'input_urls',
+    maxImages: 8,
+    requiresImageInput: true,
+    supportsNsfwChecker: true,
+    supportsResolution: true,
+  },
+  'seedream/5-lite-text-to-image': {
+    defaultAspectRatio: '1:1',
+    quality: 'basic',
+    supportsNsfwChecker: true,
+  },
+  'seedream/5-lite-image-to-image': {
+    defaultAspectRatio: '1:1',
+    imageInputKey: 'image_urls',
+    maxImages: 14,
+    quality: 'basic',
+    requiresImageInput: true,
+    supportsNsfwChecker: true,
+  },
+};
+
 function normalizeUpscaleFactor(value: string | undefined): '2' | '4' {
   return value === '4' || value === '4x' || value === '4X' ? '4' : '2';
 }
@@ -446,6 +517,55 @@ function isImageUtilityProvider(provider: string): boolean {
   return provider === RECRAFT_REMOVE_BACKGROUND_PROVIDER_ID
     || provider === RECRAFT_CRISP_UPSCALE_PROVIDER_ID
     || provider === TOPAZ_IMAGE_UPSCALE_PROVIDER_ID;
+}
+
+function buildHostedMarketImageInput(params: HostedImageParams, imageInputs: string[]): Record<string, unknown> {
+  const spec = HOSTED_IMAGE_MODEL_SPECS[params.provider];
+  if (!spec) {
+    throw new Error(`Unsupported hosted image provider: ${params.provider}`);
+  }
+  const effectiveImageInputs = typeof spec.maxImages === 'number'
+    ? imageInputs.slice(0, spec.maxImages)
+    : imageInputs;
+
+  if (spec.requiresImageInput && effectiveImageInputs.length === 0) {
+    throw new Error('Add at least one reference image for this hosted image model.');
+  }
+
+  const input: Record<string, unknown> = {
+    aspect_ratio: params.aspectRatio ?? spec.defaultAspectRatio,
+    prompt: params.prompt,
+  };
+
+  if (spec.imageInputKey && effectiveImageInputs.length > 0) {
+    input[spec.imageInputKey] = effectiveImageInputs;
+  }
+
+  if (spec.supportsOutputFormat) {
+    input.output_format = params.outputFormat ?? 'png';
+  }
+
+  if (spec.supportsNegativePrompt) {
+    input.negative_prompt = params.negativePrompt?.trim() ?? '';
+  }
+
+  if (spec.supportsResolution) {
+    input.resolution = normalizeImageResolution(params.resolution);
+  }
+
+  if (spec.quality) {
+    input.quality = spec.quality;
+  }
+
+  if (spec.supportsNsfwChecker) {
+    input.nsfw_checker = false;
+  }
+
+  if (spec.supportsGoogleSearch) {
+    input.google_search = false;
+  }
+
+  return input;
 }
 
 function createHostedTaskId(kind: string, taskId: string): string {
@@ -654,16 +774,55 @@ function getKlingReferenceToken(index: number): string {
   return `ref_${index + 1}`;
 }
 
+interface KlingReferenceElement {
+  description: string;
+  element_input_urls: string[];
+  name: string;
+}
+
+function createKlingReferenceElements(
+  references: Array<HostedReferenceMedia & { url: string }>,
+): KlingReferenceElement[] {
+  const elements: KlingReferenceElement[] = [];
+  const imageReferences = references
+    .filter((reference) => reference.mediaType === 'image')
+    .slice(0, 4);
+
+  if (imageReferences.length >= 2) {
+    elements.push({
+      description: imageReferences
+        .map((reference, index) => reference.label || `Reference ${index + 1}`)
+        .join(', '),
+      element_input_urls: imageReferences.map((reference) => reference.url),
+      name: getKlingReferenceToken(elements.length),
+    });
+  }
+
+  for (const reference of references) {
+    if (reference.mediaType !== 'video' || elements.length >= 3) {
+      continue;
+    }
+
+    elements.push({
+      description: reference.label || `Reference ${elements.length + 1}`,
+      element_input_urls: [reference.url],
+      name: getKlingReferenceToken(elements.length),
+    });
+  }
+
+  return elements;
+}
+
 function applyKlingReferenceTokens(
   prompt: string,
-  references: Array<HostedReferenceMedia & { url: string }>,
+  elements: KlingReferenceElement[],
 ): string {
-  if (references.length === 0) {
+  if (elements.length === 0) {
     return prompt;
   }
 
   let nextPrompt = prompt;
-  const tokens = references.map((_, index) => getKlingReferenceToken(index));
+  const tokens = elements.map((element) => element.name);
 
   tokens.forEach((token, index) => {
     const pattern = new RegExp(`\\bREF\\s*${index + 1}\\b`, 'gi');
@@ -680,17 +839,13 @@ function applyKlingReferenceTokens(
 
 function addHostedKlingReferenceInput(
   input: Record<string, unknown>,
-  references: Array<HostedReferenceMedia & { url: string }>,
+  elements: KlingReferenceElement[],
 ): void {
-  if (references.length === 0) {
+  if (elements.length === 0) {
     return;
   }
 
-  input.kling_elements = references.map((reference, index) => ({
-    name: getKlingReferenceToken(index),
-    description: reference.label || `Reference ${index + 1}`,
-    element_input_urls: [reference.url],
-  }));
+  input.kling_elements = elements;
 }
 
 function isSeedanceProvider(provider: string | undefined): provider is typeof SEEDANCE_2_PROVIDER_ID | typeof SEEDANCE_2_FAST_PROVIDER_ID {
@@ -726,11 +881,13 @@ export function calculateHostedKlingCost(
   sound: boolean,
   multiShots = false,
 ): number {
-  const normalizedMode = mode === 'pro' ? 'pro' : 'std';
+  const normalizedMode = mode === 'pro' || mode === '4K' ? mode : 'std';
   const durationSeconds = Math.max(3, Math.min(15, Math.floor(duration)));
   const effectiveSound = multiShots ? true : sound;
   const baseCost =
-    normalizedMode === 'pro'
+    normalizedMode === '4K'
+      ? durationSeconds * 67
+      : normalizedMode === 'pro'
       ? durationSeconds * (effectiveSound ? 27 : 18)
       : durationSeconds * (effectiveSound ? 20 : 14);
 
@@ -793,7 +950,8 @@ export async function createHostedKlingTask(
       .filter((reference) => reference.mediaType === 'image' || reference.mediaType === 'video')
       .slice(0, 3),
   );
-  const prompt = applyKlingReferenceTokens(params.prompt, elementReferences);
+  const referenceElements = createKlingReferenceElements(elementReferences);
+  const prompt = applyKlingReferenceTokens(params.prompt, referenceElements);
 
   if (params.startImageUrl) {
     imageUrls.push(await uploadImage(env, params.startImageUrl));
@@ -806,7 +964,7 @@ export async function createHostedKlingTask(
   const input: Record<string, unknown> = {
     aspect_ratio: params.aspectRatio ?? '16:9',
     duration: String(params.duration),
-    mode: params.mode === 'pro' ? 'pro' : 'std',
+    mode: params.mode === 'pro' || params.mode === '4K' ? params.mode : 'std',
     multi_shots: Boolean(params.multiShots),
     prompt,
     sound: effectiveSound,
@@ -819,11 +977,11 @@ export async function createHostedKlingTask(
   if (multiPrompt) {
     input.multi_prompt = multiPrompt.map((shot) => ({
       ...shot,
-      prompt: applyKlingReferenceTokens(shot.prompt, elementReferences),
+      prompt: applyKlingReferenceTokens(shot.prompt, referenceElements),
     }));
   }
 
-  addHostedKlingReferenceInput(input, elementReferences);
+  addHostedKlingReferenceInput(input, referenceElements);
 
   const payload = await kieAiJsonRequest<KieAiCreateTaskResponse>(env, '/api/v1/jobs/createTask', 'POST', {
     input,
@@ -965,7 +1123,7 @@ export async function createHostedSeedanceTask(
   const input: Record<string, unknown> = {
     aspect_ratio: params.aspectRatio ?? '16:9',
     duration: normalizeSeedanceDuration(params.duration),
-    generate_audio: hasReferenceMedia ? false : Boolean(params.sound),
+    generate_audio: Boolean(params.sound),
     prompt: params.prompt,
     resolution: normalizeSeedanceResolution(provider, params.mode),
     return_last_frame: false,
@@ -1087,13 +1245,7 @@ export async function createHostedImageTask(
   }
 
   const payload = await kieAiJsonRequest<KieAiCreateTaskResponse>(env, '/api/v1/jobs/createTask', 'POST', {
-    input: {
-      aspect_ratio: params.aspectRatio ?? '1:1',
-      ...(uploadedInputs?.length ? { image_input: uploadedInputs } : {}),
-      output_format: params.outputFormat ?? 'png',
-      prompt: params.prompt,
-      resolution: normalizeImageResolution(params.resolution),
-    },
+    input: buildHostedMarketImageInput(params, uploadedInputs ?? []),
     model: params.provider,
   });
   const taskId = payload.data?.taskId;

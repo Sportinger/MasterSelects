@@ -1,39 +1,101 @@
 // Audio Sync Service
-// Synchronizes multiple camera angles using audio waveform cross-correlation
+// Synchronizes selected clips using audio waveform correlation.
 
+import type { Keyframe } from '../types/keyframes';
+import type { TimelineClip } from '../types/timeline';
+import { prepareClipAudioAnalysisInput } from './audio/ClipAudioAnalysisOrchestrator';
 import { Logger } from './logger';
 import { audioAnalyzer, type AudioFingerprint } from './audioAnalyzer';
+import {
+  DEFAULT_SAMPLE_RATE,
+  DEFAULT_TARGET_EXCERPT_SECONDS,
+  MIN_SYNC_SECONDS,
+  findAudioSyncOffset,
+  type AudioSyncOffsetResult,
+} from './audioSyncOffset';
+
+export { findAudioSyncOffset } from './audioSyncOffset';
+export type { AudioSyncOffsetResult } from './audioSyncOffset';
 
 const log = Logger.create('AudioSync');
 
+export interface TimelineAudioSyncClipInput {
+  clip: TimelineClip;
+  keyframes?: readonly Keyframe[];
+}
+
+export interface TimelineAudioSyncAlignment {
+  clipId: string;
+  audioClipId: string;
+  offsetSeconds: number;
+  targetStartTime: number;
+  peakRatio: number | null;
+  confidence: 'low' | 'medium' | 'high';
+  method: AudioSyncOffsetResult['method'];
+}
+
+export interface TimelineAudioSyncFailure {
+  clipId: string;
+  reason: string;
+}
+
+export interface TimelineAudioSyncReport {
+  masterClipId: string;
+  masterAudioClipId: string;
+  alignments: TimelineAudioSyncAlignment[];
+  failures: TimelineAudioSyncFailure[];
+}
+
+export interface TimelineAudioSyncOptions {
+  masterClipId?: string;
+  sampleRate?: number;
+  targetExcerptSeconds?: number;
+  minPeakRatio?: number;
+  signal?: AbortSignal;
+  onProgress?: (progress: number) => void;
+}
+
+interface PreparedSyncClip {
+  clip: TimelineClip;
+  samples: Float32Array;
+  sampleRate: number;
+  sourceDurationSeconds: number;
+  timelineSpeed: number;
+}
+
+interface Excerpt {
+  samples: Float32Array;
+  startSeconds: number;
+}
+
 /**
  * Cross-correlation algorithm to find the offset between two audio signals.
- * Returns the offset in milliseconds (positive = second signal is delayed)
+ * Returns sample offset; positive means the second signal is delayed.
  */
 export function crossCorrelate(
   signal1: Float32Array,
   signal2: Float32Array,
-  maxOffsetSamples: number
+  maxOffsetSamples: number,
 ): { offset: number; correlation: number } {
   let bestOffset = 0;
   let bestCorrelation = -Infinity;
 
-  // Search in both directions
-  for (let offset = -maxOffsetSamples; offset <= maxOffsetSamples; offset++) {
+  for (let offset = -maxOffsetSamples; offset <= maxOffsetSamples; offset += 1) {
     let correlation = 0;
     let count = 0;
 
-    for (let i = 0; i < signal1.length; i++) {
+    for (let i = 0; i < signal1.length; i += 1) {
       const j = i + offset;
       if (j >= 0 && j < signal2.length) {
         correlation += signal1[i] * signal2[j];
-        count++;
+        count += 1;
       }
     }
 
-    // Normalize by number of overlapping samples
     if (count > 0) {
       correlation /= count;
+    } else {
+      correlation = 0;
     }
 
     if (correlation > bestCorrelation) {
@@ -42,126 +104,270 @@ export function crossCorrelate(
     }
   }
 
-  return { offset: bestOffset, correlation: bestCorrelation };
+  return { offset: bestOffset, correlation: bestCorrelation === -Infinity ? 0 : bestCorrelation };
 }
 
-/**
- * Normalize cross-correlation (Pearson correlation coefficient)
- * More accurate but slower
- */
 function normalizedCrossCorrelate(
   signal1: Float32Array,
   signal2: Float32Array,
-  maxOffsetSamples: number
+  maxOffsetSamples: number,
 ): { offset: number; correlation: number } {
-  let bestOffset = 0;
-  let bestCorrelation = -Infinity;
-
-  // Calculate means
-  const mean1 = signal1.reduce((a, b) => a + b, 0) / signal1.length;
-  const mean2 = signal2.reduce((a, b) => a + b, 0) / signal2.length;
-
-  // Calculate standard deviations
-  let std1 = 0, std2 = 0;
-  for (let i = 0; i < signal1.length; i++) {
-    std1 += (signal1[i] - mean1) ** 2;
-  }
-  std1 = Math.sqrt(std1 / signal1.length);
-
-  for (let i = 0; i < signal2.length; i++) {
-    std2 += (signal2[i] - mean2) ** 2;
-  }
-  std2 = Math.sqrt(std2 / signal2.length);
-
-  // Search in both directions
-  for (let offset = -maxOffsetSamples; offset <= maxOffsetSamples; offset++) {
-    let correlation = 0;
-    let count = 0;
-
-    for (let i = 0; i < signal1.length; i++) {
-      const j = i + offset;
-      if (j >= 0 && j < signal2.length) {
-        correlation += ((signal1[i] - mean1) / std1) * ((signal2[j] - mean2) / std2);
-        count++;
-      }
-    }
-
-    if (count > 0) {
-      correlation /= count;
-    }
-
-    if (correlation > bestCorrelation) {
-      bestCorrelation = correlation;
-      bestOffset = offset;
-    }
-  }
-
-  return { offset: bestOffset, correlation: bestCorrelation };
+  const normalized1 = normalizeSeries(signal1);
+  const normalized2 = normalizeSeries(signal2);
+  return crossCorrelate(normalized1, normalized2, maxOffsetSamples);
 }
 
-// Clip info for sync (includes time bounds)
+function rms(samples: Float32Array): number {
+  if (samples.length === 0) return 0;
+  let sum = 0;
+  for (let index = 0; index < samples.length; index += 1) {
+    sum += samples[index] * samples[index];
+  }
+  return Math.sqrt(sum / samples.length);
+}
+
+function normalizeSeries(samples: Float32Array): Float32Array {
+  if (samples.length === 0) return new Float32Array();
+
+  let mean = 0;
+  for (let index = 0; index < samples.length; index += 1) {
+    mean += samples[index];
+  }
+  mean /= samples.length;
+
+  let variance = 0;
+  for (let index = 0; index < samples.length; index += 1) {
+    const centered = samples[index] - mean;
+    variance += centered * centered;
+  }
+
+  const standardDeviation = Math.sqrt(variance / samples.length);
+  const normalized = new Float32Array(samples.length);
+  if (standardDeviation < 1e-12) {
+    for (let index = 0; index < samples.length; index += 1) {
+      normalized[index] = samples[index] - mean;
+    }
+    return normalized;
+  }
+
+  for (let index = 0; index < samples.length; index += 1) {
+    normalized[index] = (samples[index] - mean) / standardDeviation;
+  }
+  return normalized;
+}
+
+function downsampleAudioBuffer(
+  buffer: AudioBuffer,
+  startSeconds: number,
+  durationSeconds: number,
+  sampleRate: number,
+): Float32Array {
+  const sourceStart = Math.max(0, Math.floor(startSeconds * buffer.sampleRate));
+  const sourceEnd = Math.min(buffer.length, Math.ceil((startSeconds + durationSeconds) * buffer.sampleRate));
+  const outputLength = Math.max(0, Math.floor(((sourceEnd - sourceStart) / buffer.sampleRate) * sampleRate));
+  const output = new Float32Array(outputLength);
+  if (outputLength === 0) return output;
+
+  const ratio = buffer.sampleRate / sampleRate;
+  const channelCount = Math.max(1, buffer.numberOfChannels);
+  for (let outputIndex = 0; outputIndex < outputLength; outputIndex += 1) {
+    const sourceIndex = Math.min(sourceEnd - 1, sourceStart + Math.floor(outputIndex * ratio));
+    let sample = 0;
+    for (let channel = 0; channel < channelCount; channel += 1) {
+      sample += buffer.getChannelData(channel)[sourceIndex] ?? 0;
+    }
+    output[outputIndex] = sample / channelCount;
+  }
+  return output;
+}
+
+function chooseActiveExcerpt(samples: Float32Array, sampleRate: number, maxSeconds: number): Excerpt {
+  const windowLength = Math.max(1, Math.round(maxSeconds * sampleRate));
+  if (samples.length <= windowLength) {
+    return { samples, startSeconds: 0 };
+  }
+
+  const step = Math.max(1, Math.round(Math.min(10, maxSeconds / 4) * sampleRate));
+  let bestStart = 0;
+  let bestScore = -Infinity;
+  for (let start = 0; start <= samples.length - windowLength; start += step) {
+    const window = samples.subarray(start, start + windowLength);
+    let onset = 0;
+    for (let index = 1; index < window.length; index += 1) {
+      onset += Math.abs(window[index] - window[index - 1]);
+    }
+    const score = rms(window) + 0.8 * (onset / Math.max(1, window.length - 1));
+    if (score > bestScore) {
+      bestScore = score;
+      bestStart = start;
+    }
+  }
+
+  return {
+    samples: samples.slice(bestStart, bestStart + windowLength),
+    startSeconds: bestStart / sampleRate,
+  };
+}
+
+async function prepareSyncClip(
+  input: TimelineAudioSyncClipInput,
+  sampleRate: number,
+  signal?: AbortSignal,
+): Promise<PreparedSyncClip> {
+  const { clip, keyframes = [] } = input;
+  if (clip.reversed) {
+    throw new Error('Reversed clips are not supported for audio sync.');
+  }
+
+  const prepared = await prepareClipAudioAnalysisInput({
+    clip,
+    keyframes,
+    needsProcessed: false,
+    signal,
+  });
+  if (!prepared) {
+    throw new Error('No readable audio source found.');
+  }
+
+  const speed = Math.abs(clip.speed ?? 1) || 1;
+  const sourceDurationSeconds = Math.max(
+    MIN_SYNC_SECONDS,
+    Math.min(
+      prepared.sourceBuffer.duration - clip.inPoint,
+      clip.outPoint > clip.inPoint ? clip.outPoint - clip.inPoint : clip.duration * speed,
+    ),
+  );
+  const samples = downsampleAudioBuffer(prepared.sourceBuffer, clip.inPoint, sourceDurationSeconds, sampleRate);
+  if (samples.length < MIN_SYNC_SECONDS * sampleRate || rms(samples) < 1e-5) {
+    throw new Error('Audio is too short or silent for sync.');
+  }
+
+  return {
+    clip,
+    samples,
+    sampleRate,
+    sourceDurationSeconds,
+    timelineSpeed: speed,
+  };
+}
+
+// Clip info for legacy sync callers.
 export interface ClipSyncInfo {
   mediaFileId: string;
   clipId: string;
-  inPoint: number;  // Start time within source file (seconds)
-  duration: number; // Duration of the clip (seconds)
+  inPoint: number;
+  duration: number;
 }
 
 class AudioSync {
-  // Cache fingerprints - key includes time range for trimmed clips
   private fingerprintCache = new Map<string, AudioFingerprint>();
 
-  /**
-   * Generate cache key that includes time range
-   */
   private getCacheKey(mediaFileId: string, startTime: number, duration: number): string {
     return `${mediaFileId}-${startTime.toFixed(2)}-${duration.toFixed(2)}`;
   }
 
-  /**
-   * Get or generate fingerprint for a media file (or portion of it)
-   * @param mediaFileId - ID of the media file
-   * @param startTime - Start time in seconds (for trimmed clips)
-   * @param duration - Duration to analyze in seconds
-   */
   private async getFingerprint(
     mediaFileId: string,
-    startTime: number = 0,
-    duration: number = 30
+    startTime = 0,
+    duration = 30,
   ): Promise<AudioFingerprint | null> {
     const cacheKey = this.getCacheKey(mediaFileId, startTime, duration);
-
-    // Check cache
     if (this.fingerprintCache.has(cacheKey)) {
       return this.fingerprintCache.get(cacheKey)!;
     }
 
-    // Generate fingerprint with time bounds
-    const fingerprint = await audioAnalyzer.generateFingerprint(
-      mediaFileId,
-      2000, // targetSampleRate
-      startTime,
-      duration
-    );
+    const fingerprint = await audioAnalyzer.generateFingerprint(mediaFileId, 2000, startTime, duration);
     if (fingerprint) {
       this.fingerprintCache.set(cacheKey, fingerprint);
     }
     return fingerprint;
   }
 
-  /**
-   * Find the time offset between two media files based on their audio.
-   * Returns offset in milliseconds.
-   * Positive offset means the second file's audio starts later than the first.
-   */
+  async syncTimelineClipsViaAudio(
+    inputs: TimelineAudioSyncClipInput[],
+    options: TimelineAudioSyncOptions = {},
+  ): Promise<TimelineAudioSyncReport> {
+    const sampleRate = options.sampleRate ?? DEFAULT_SAMPLE_RATE;
+    const targetExcerptSeconds = options.targetExcerptSeconds ?? DEFAULT_TARGET_EXCERPT_SECONDS;
+    const uniqueInputs = [...new Map(inputs.map(input => [input.clip.id, input])).values()];
+    const masterInput = uniqueInputs.find(input => input.clip.id === options.masterClipId) ?? uniqueInputs[0];
+    if (!masterInput || uniqueInputs.length < 2) {
+      throw new Error('Select at least two clips with audio to sync.');
+    }
+
+    const failures: TimelineAudioSyncFailure[] = [];
+    const preparedById = new Map<string, PreparedSyncClip>();
+    for (let index = 0; index < uniqueInputs.length; index += 1) {
+      const input = uniqueInputs[index];
+      try {
+        preparedById.set(input.clip.id, await prepareSyncClip(input, sampleRate, options.signal));
+      } catch (error) {
+        failures.push({
+          clipId: input.clip.id,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
+      options.onProgress?.(Math.round(((index + 1) / (uniqueInputs.length * 2)) * 100));
+    }
+
+    const master = preparedById.get(masterInput.clip.id);
+    if (!master) {
+      throw new Error(failures.find(failure => failure.clipId === masterInput.clip.id)?.reason ?? 'Master audio could not be prepared.');
+    }
+
+    const alignments: TimelineAudioSyncAlignment[] = [{
+      clipId: master.clip.id,
+      audioClipId: master.clip.id,
+      offsetSeconds: 0,
+      targetStartTime: master.clip.startTime,
+      peakRatio: null,
+      confidence: 'high',
+      method: 'waveform',
+    }];
+
+    const targets = [...preparedById.values()].filter(candidate => candidate.clip.id !== master.clip.id);
+    for (let index = 0; index < targets.length; index += 1) {
+      const target = targets[index];
+      const excerpt = chooseActiveExcerpt(target.samples, sampleRate, targetExcerptSeconds);
+      const measured = findAudioSyncOffset(master.samples, excerpt.samples, sampleRate, {
+        minPeakRatio: options.minPeakRatio,
+      });
+
+      if (!measured) {
+        failures.push({ clipId: target.clip.id, reason: 'No stable audio correlation peak found.' });
+      } else {
+        const masterMatchSeconds = measured.offsetSeconds;
+        const targetStartTime = master.clip.startTime
+          + masterMatchSeconds / master.timelineSpeed
+          - excerpt.startSeconds / target.timelineSpeed;
+        alignments.push({
+          clipId: target.clip.id,
+          audioClipId: target.clip.id,
+          offsetSeconds: measured.offsetSeconds - excerpt.startSeconds,
+          targetStartTime,
+          peakRatio: measured.peakRatio,
+          confidence: measured.confidence,
+          method: measured.method,
+        });
+      }
+
+      options.onProgress?.(Math.round(50 + ((index + 1) / Math.max(1, targets.length)) * 50));
+    }
+
+    return {
+      masterClipId: master.clip.id,
+      masterAudioClipId: master.clip.id,
+      alignments,
+      failures,
+    };
+  }
+
   async findOffset(
     masterMediaFileId: string,
     targetMediaFileId: string,
-    maxOffsetSeconds: number = 30
+    maxOffsetSeconds = 30,
   ): Promise<number> {
     log.info(`Finding offset between ${masterMediaFileId} and ${targetMediaFileId}`);
-
-    // Get fingerprints
     const [masterFp, targetFp] = await Promise.all([
       this.getFingerprint(masterMediaFileId),
       this.getFingerprint(targetMediaFileId),
@@ -172,55 +378,29 @@ class AudioSync {
       return 0;
     }
 
-    // Calculate max offset in samples
     const maxOffsetSamples = Math.floor(maxOffsetSeconds * masterFp.sampleRate);
-
-    // Perform cross-correlation
-    const result = normalizedCrossCorrelate(
-      masterFp.data,
-      targetFp.data,
-      maxOffsetSamples
-    );
-
-    // Convert offset from samples to milliseconds
+    const result = normalizedCrossCorrelate(masterFp.data, targetFp.data, maxOffsetSamples);
     const offsetMs = (result.offset / masterFp.sampleRate) * 1000;
-
     log.info(`Found offset: ${offsetMs.toFixed(2)}ms (correlation: ${result.correlation.toFixed(4)})`);
-
     return offsetMs;
   }
 
-  /**
-   * Sync multiple clips to a master clip using their audio.
-   * Uses clip inPoint and duration to analyze only the visible portion.
-   * Returns a map of clipId to offset in milliseconds.
-   */
   async syncMultipleClips(
     masterClip: ClipSyncInfo,
     targetClips: ClipSyncInfo[],
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
   ): Promise<Map<string, number>> {
     const offsets = new Map<string, number>();
-    offsets.set(masterClip.clipId, 0); // Master has zero offset
+    offsets.set(masterClip.clipId, 0);
 
-    const totalSteps = targetClips.length + 1; // +1 for master fingerprint
+    const totalSteps = targetClips.length + 1;
     let currentStep = 0;
+    const reportProgress = () => onProgress?.(Math.round((currentStep / totalSteps) * 100));
 
-    const reportProgress = () => {
-      if (onProgress) {
-        onProgress(Math.round((currentStep / totalSteps) * 100));
-      }
-    };
-
-    // Generate master fingerprint using clip's time bounds
     log.info(`Generating master fingerprint (${masterClip.inPoint.toFixed(1)}s - ${(masterClip.inPoint + masterClip.duration).toFixed(1)}s)...`);
     reportProgress();
-    const masterFp = await this.getFingerprint(
-      masterClip.mediaFileId,
-      masterClip.inPoint,
-      Math.min(masterClip.duration, 30) // Limit to 30s for performance
-    );
-    currentStep++;
+    const masterFp = await this.getFingerprint(masterClip.mediaFileId, masterClip.inPoint, Math.min(masterClip.duration, 30));
+    currentStep += 1;
     reportProgress();
 
     if (!masterFp) {
@@ -228,80 +408,44 @@ class AudioSync {
       return offsets;
     }
 
-    // Process each target clip
-    for (let i = 0; i < targetClips.length; i++) {
-      const targetClip = targetClips[i];
-
-      log.debug(`Processing target ${i + 1}/${targetClips.length} (${targetClip.inPoint.toFixed(1)}s - ${(targetClip.inPoint + targetClip.duration).toFixed(1)}s)...`);
-
-      // Get target fingerprint using clip's time bounds
-      const targetFp = await this.getFingerprint(
-        targetClip.mediaFileId,
-        targetClip.inPoint,
-        Math.min(targetClip.duration, 30)
-      );
-
+    for (const targetClip of targetClips) {
+      const targetFp = await this.getFingerprint(targetClip.mediaFileId, targetClip.inPoint, Math.min(targetClip.duration, 30));
       if (!targetFp) {
         log.warn('Could not generate fingerprint for clip', targetClip.clipId);
-        currentStep++;
+        currentStep += 1;
         reportProgress();
         continue;
       }
 
-      // Calculate max offset in samples (10 seconds - sufficient for most multicam)
       const maxOffsetSamples = Math.floor(10 * masterFp.sampleRate);
+      const result = normalizedCrossCorrelate(masterFp.data, targetFp.data, maxOffsetSamples);
+      const offsetMs = (result.offset / masterFp.sampleRate) * 1000;
+      offsets.set(targetClip.clipId, offsetMs);
+      log.info(`Offset for ${targetClip.clipId}: ${offsetMs.toFixed(1)}ms (correlation: ${result.correlation.toFixed(4)})`);
 
-      // Perform cross-correlation
-      const result = normalizedCrossCorrelate(
-        masterFp.data,
-        targetFp.data,
-        maxOffsetSamples
-      );
-
-      // Convert offset from samples to milliseconds
-      // Also account for inPoint differences: if master starts at 5s and target at 10s,
-      // the base offset is already (10-5)*1000 = 5000ms
-      const correlationOffsetMs = (result.offset / masterFp.sampleRate) * 1000;
-      const inPointDifferenceMs = (targetClip.inPoint - masterClip.inPoint) * 1000;
-      const totalOffsetMs = correlationOffsetMs + inPointDifferenceMs;
-
-      offsets.set(targetClip.clipId, totalOffsetMs);
-
-      log.info(`Offset for ${targetClip.clipId}: ${totalOffsetMs.toFixed(1)}ms (correlation: ${result.correlation.toFixed(4)}, inPoint diff: ${inPointDifferenceMs.toFixed(1)}ms)`);
-
-      currentStep++;
+      currentStep += 1;
       reportProgress();
     }
 
     return offsets;
   }
 
-  /**
-   * Legacy method: Sync multiple cameras by mediaFileId only.
-   * Uses full files (first 30s). For backward compatibility.
-   */
   async syncMultiple(
     masterMediaFileId: string,
     targetMediaFileIds: string[],
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
   ): Promise<Map<string, number>> {
     const offsets = new Map<string, number>();
-    offsets.set(masterMediaFileId, 0); // Master has zero offset
+    offsets.set(masterMediaFileId, 0);
 
-    const totalSteps = targetMediaFileIds.length + 1; // +1 for master fingerprint
+    const totalSteps = targetMediaFileIds.length + 1;
     let currentStep = 0;
+    const reportProgress = () => onProgress?.(Math.round((currentStep / totalSteps) * 100));
 
-    const reportProgress = () => {
-      if (onProgress) {
-        onProgress(Math.round((currentStep / totalSteps) * 100));
-      }
-    };
-
-    // Generate master fingerprint first (this is the slow part)
     log.info('Generating master fingerprint...');
     reportProgress();
     const masterFp = await this.getFingerprint(masterMediaFileId);
-    currentStep++;
+    currentStep += 1;
     reportProgress();
 
     if (!masterFp) {
@@ -309,57 +453,37 @@ class AudioSync {
       return offsets;
     }
 
-    // Process each target
-    for (let i = 0; i < targetMediaFileIds.length; i++) {
-      const targetId = targetMediaFileIds[i];
+    for (const targetId of targetMediaFileIds) {
       if (targetId === masterMediaFileId) {
-        currentStep++;
+        currentStep += 1;
         reportProgress();
         continue;
       }
 
-      log.debug(`Processing target ${i + 1}/${targetMediaFileIds.length}...`);
-
-      // Get target fingerprint
       const targetFp = await this.getFingerprint(targetId);
-
       if (!targetFp) {
         log.warn('Could not generate fingerprint for', targetId);
-        currentStep++;
+        currentStep += 1;
         reportProgress();
         continue;
       }
 
-      // Calculate max offset in samples (10 seconds - sufficient for most multicam)
       const maxOffsetSamples = Math.floor(10 * masterFp.sampleRate);
-
-      // Perform cross-correlation
-      const result = normalizedCrossCorrelate(
-        masterFp.data,
-        targetFp.data,
-        maxOffsetSamples
-      );
-
-      // Convert offset from samples to milliseconds
+      const result = normalizedCrossCorrelate(masterFp.data, targetFp.data, maxOffsetSamples);
       const offsetMs = (result.offset / masterFp.sampleRate) * 1000;
       offsets.set(targetId, offsetMs);
-
       log.info(`Offset for ${targetId}: ${offsetMs.toFixed(1)}ms (correlation: ${result.correlation.toFixed(4)})`);
 
-      currentStep++;
+      currentStep += 1;
       reportProgress();
     }
 
     return offsets;
   }
 
-  /**
-   * Clear the fingerprint cache
-   */
   clearCache(): void {
     this.fingerprintCache.clear();
   }
 }
 
-// Singleton instance
 export const audioSync = new AudioSync();

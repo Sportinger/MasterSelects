@@ -230,6 +230,7 @@ export const cloudApi = {
         return requestJson<CloudAiGatewayEnvelope>('/api/ai/video', {
           body: JSON.stringify(body),
           method: 'POST',
+          timeoutMs: AI_CHAT_REQUEST_TIMEOUT_MS,
         });
       },
       status(taskId: string): Promise<CloudAiGatewayEnvelope> {
@@ -261,6 +262,7 @@ export const cloudApi = {
       return requestJson<HostedVideoCreateResponse>('/api/ai/video', {
         body: JSON.stringify(body),
         method: 'POST',
+        timeoutMs: AI_CHAT_REQUEST_TIMEOUT_MS,
       });
     },
     videoInfo(): Promise<HostedVideoInfoResponse> {

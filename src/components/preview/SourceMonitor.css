@@ -199,6 +199,11 @@
   background: var(--bg-tertiary);
 }
 
+.source-monitor-toolbar-commands-only {
+  min-height: 32px;
+  padding: 5px 8px;
+}
+
 .source-monitor-timeline-strip {
   width: 100%;
   min-width: 0;
@@ -211,6 +216,14 @@
   gap: 8px;
   min-width: 0;
   min-height: 23px;
+}
+
+.source-monitor-control-row-commands-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.source-monitor-control-row-commands-only .source-monitor-center-controls {
+  justify-self: center;
 }
 
 .source-monitor-center-controls {
@@ -293,6 +306,17 @@
   min-width: 24px;
   height: 22px;
   padding: 0;
+}
+
+.source-monitor-crop-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 58px;
+  height: 22px;
+  padding: 0 7px;
+  font-size: 10px;
+  line-height: 1;
 }
 
 .source-monitor-command-btn svg {

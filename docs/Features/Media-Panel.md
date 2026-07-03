@@ -68,6 +68,7 @@ Click the **+ Add** button for creating new items:
 
 #### Drag and Drop
 - Drag files directly from the OS file explorer into the Media Panel
+- Paste clipboard images or files with `Ctrl+V` while the Media Panel is hovered
 - Drag folders directly into the panel; nested folders are recreated inside the project
 - Multiple files supported
 - Attempts to acquire file handles via `getAsFileSystemHandle` for persistence
@@ -132,6 +133,7 @@ When supported (Chrome/Edge):
 
 The panel supports three view modes through the header mode control. The selected mode is persisted in `localStorage`.
 When **Wooden media panel theme** is enabled in Appearance settings, the Classic, Icons, Board, and Media generator tray chrome use the same wood/leather/brass skin family as the Audio Mixer; the setting defaults off and turning it off keeps the standard dark panel styling.
+Image and video-capable media items show a cursor-following preview tooltip only after the pointer rests on the item for 400ms; the preview uses the existing thumbnail/image URL and fades in/out over 100ms.
 
 ### Classic View (default)
 - Table layout with sortable, reorderable columns
@@ -282,6 +284,7 @@ getOpenCompositions()                // List open tabs
 ### Source Monitor
 - Double-click a video or image file to open it in the source monitor
 - Image source monitor sessions include a `CROP` button. Applying a crop imports a new image beside the source, prefixed as `CROP <original name>`.
+- Locked-aspect image crop resizing keeps the opposite corner anchored while dragging a corner handle.
 - Sets `sourceMonitorFileId` in the store
 
 ---
@@ -374,10 +377,12 @@ Right-click on items or empty space for context options.
 - **Rename** (single selection only)
 - **Download** (single file selection, saves through the browser from the retained file/blob URL)
 - **Crop** (single image selection, opens the source monitor directly in crop mode)
+- **Extract First Frame** / **Extract Last Frame** (single video selection, imports the extracted PNG beside the source media)
 - **Move to Folder** submenu (shows available folders + "Root")
 - **Delete** (shows count for multi-selection)
 
 ### Video Files (single selection)
+- **Extract First Frame** / **Extract Last Frame** imports a PNG still from the selected source video into the same Media Panel folder and selects it after import
 - **Generate Proxy** / **Stop Proxy Generation (X%)** / **Proxy Ready** (disabled)
 - **Show in Explorer** submenu:
   - Raw (downloads file if no native path)

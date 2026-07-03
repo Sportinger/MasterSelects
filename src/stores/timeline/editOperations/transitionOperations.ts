@@ -761,12 +761,19 @@ function applyTransitionBetweenClips(
   const transitionId = transitionIdSource.startsWith('transition-')
     ? transitionIdSource
     : `transition-${transitionIdSource}`;
+  const existingCompositionId =
+    clipA.transitionOut?.id === transitionId
+      ? clipA.transitionOut.compositionId
+      : clipB.transitionIn?.id === transitionId
+        ? clipB.transitionIn.compositionId
+        : undefined;
   const normalizedParams = normalizeTransitionParams(transitionType, params);
   const transitionOut: TimelineTransition = {
     id: transitionId,
     type: transitionType,
     duration,
     ...(Math.abs(offset) > EPSILON ? { offset } : {}),
+    ...(existingCompositionId ? { compositionId: existingCompositionId } : {}),
     ...(normalizedParams ? { params: normalizedParams } : {}),
     linkedClipId: clipBId,
   };
@@ -775,6 +782,7 @@ function applyTransitionBetweenClips(
     type: transitionType,
     duration,
     ...(Math.abs(offset) > EPSILON ? { offset } : {}),
+    ...(existingCompositionId ? { compositionId: existingCompositionId } : {}),
     ...(normalizedParams ? { params: normalizedParams } : {}),
     linkedClipId: clipAId,
   };

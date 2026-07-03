@@ -24,6 +24,7 @@ import {
   clearProjectTimelineForLoad,
   convertProjectCompositionToStore,
   hydrateActiveCompositionTimeline,
+  normalizeLoadedTransitionCompositions,
 } from './load/loadTimelineHydration';
 import {
   createGeneratedMediaItemsForLoad,
@@ -31,6 +32,7 @@ import {
 } from './load/loadSignalsHydration';
 import { hydrateDockFlashboardAndWorkspaceFromProject } from './load/loadDockFlashboardHydration';
 import { runPostLoadRestoration } from './load/loadRuntimeRelink';
+import { isUserVisibleComposition } from '../../stores/mediaStore/compositionVisibility';
 
 export { setProjectLoadProgress } from './load/loadProgress';
 export { reloadNestedCompositionClips } from './load/loadTimelineHydration';
@@ -50,6 +52,37 @@ function createDefaultComposition(projectData: ProjectFile): Composition {
     duration: 60,
     backgroundColor: '#000000',
   };
+}
+
+function normalizeLoadedProjectCompositionState(): void {
+  const mediaState = useMediaStore.getState();
+  const existingIds = new Set(mediaState.compositions.map((composition) => composition.id));
+  const visibleIds = new Set(mediaState.compositions.filter(isUserVisibleComposition).map((composition) => composition.id));
+  const fallbackActiveId = mediaState.compositions.find(isUserVisibleComposition)?.id ?? mediaState.compositions[0]?.id ?? null;
+  const activeCompositionId =
+    mediaState.activeCompositionId && existingIds.has(mediaState.activeCompositionId)
+      ? mediaState.activeCompositionId
+      : fallbackActiveId;
+  const openCompositionIds = [
+    ...(activeCompositionId ? [activeCompositionId] : []),
+    ...mediaState.openCompositionIds.filter((id) => id !== activeCompositionId && existingIds.has(id)),
+  ];
+  const slotAssignments = Object.fromEntries(
+    Object.entries(mediaState.slotAssignments).filter(([compositionId]) => visibleIds.has(compositionId)),
+  );
+  const slotClipSettings = Object.fromEntries(
+    Object.entries(mediaState.slotClipSettings).filter(([compositionId]) => visibleIds.has(compositionId)),
+  );
+
+  useMediaStore.setState({
+    activeCompositionId,
+    openCompositionIds,
+    slotAssignments,
+    slotClipSettings,
+    selectedSlotCompositionId: mediaState.selectedSlotCompositionId && visibleIds.has(mediaState.selectedSlotCompositionId)
+      ? mediaState.selectedSlotCompositionId
+      : null,
+  });
 }
 
 export async function loadProjectToStores(): Promise<void> {
@@ -135,8 +168,15 @@ export async function loadProjectToStores(): Promise<void> {
         slotClipSettings: projectData.slotClipSettings || {},
         selectedSlotCompositionId: null,
       });
+      normalizeLoadedTransitionCompositions();
+      normalizeLoadedProjectCompositionState();
 
-      await hydrateActiveCompositionTimeline(projectData, compositions, timelineStore);
+      const mediaStateAfterNormalization = useMediaStore.getState();
+      await hydrateActiveCompositionTimeline(
+        { ...projectData, activeCompositionId: mediaStateAfterNormalization.activeCompositionId },
+        mediaStateAfterNormalization.compositions,
+        timelineStore,
+      );
 
       setProjectLoadProgress({ phase: 'ui', percent: 58, message: 'Restoring workspace', blocking: true });
       await hydrateDockFlashboardAndWorkspaceFromProject(projectData);

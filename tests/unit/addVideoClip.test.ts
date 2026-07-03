@@ -113,6 +113,7 @@ describe('direct video/audio add runtime sources', () => {
     expect(videoPatch.source).toEqual({ type: 'video', naturalDuration: 12, mediaFileId: 'media-video' });
     expect(videoPatch.source).not.toHaveProperty('videoElement');
     expect(videoPatch.source).not.toHaveProperty('webCodecsPlayer');
+    expect(videoPatch.transform).toEqual(expect.objectContaining({ scale: { x: 1, y: 1 } }));
     expect(videoPatch.isLoading).toBe(false);
     expect(audioPatch.source).toEqual({ type: 'audio', naturalDuration: 12, mediaFileId: 'media-video' });
     expect(audioPatch.source).not.toHaveProperty('audioElement');

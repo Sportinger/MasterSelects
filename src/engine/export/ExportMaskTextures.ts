@@ -20,7 +20,11 @@ function getMaskShapeHash(masks: ClipMask[]): string {
       vertex.handleOut.y.toFixed(4),
     ].join(',')).join(';')}|` +
     `${mask.position.x.toFixed(4)},${mask.position.y.toFixed(4)}|` +
-    `${(mask.feather || 0).toFixed(2)}|${mask.featherQuality ?? 50}`
+    `${(mask.feather || 0).toFixed(2)}|${mask.featherQuality ?? 50}|` +
+    `${Object.entries(mask.edgeFeathers ?? {})
+      .toSorted(([a], [b]) => a.localeCompare(b))
+      .map(([edgeId, feather]) => `${edgeId}:${feather.toFixed(2)}`)
+      .join(';')}`
   ).join('||');
 }
 
@@ -41,6 +45,18 @@ function collectMaskClipIds(layers: Layer[], ids: Set<string>): void {
     const nestedLayers = layer.source?.nestedComposition?.layers;
     if (nestedLayers?.length) {
       collectMaskClipIds(nestedLayers, ids);
+    }
+  }
+}
+
+function collectLayerMasks(layers: Layer[], masksByClipId: Map<string, ClipMask[]>): void {
+  for (const layer of layers) {
+    if (layer.maskClipId && layer.masks?.length) {
+      masksByClipId.set(layer.maskClipId, layer.masks);
+    }
+    const nestedLayers = layer.source?.nestedComposition?.layers;
+    if (nestedLayers?.length) {
+      collectLayerMasks(nestedLayers, masksByClipId);
     }
   }
 }
@@ -86,6 +102,8 @@ export function syncExportMaskTextures(
   const clipMap = new Map<string, TimelineClip>();
   const timelineState = useTimelineStore.getState();
   collectClips(timelineState.clips, clipMap);
+  const layerMasksByClipId = new Map<string, ClipMask[]>();
+  collectLayerMasks(layers, layerMasksByClipId);
   const maskClipLocalTimes = new Map<string, number>();
   collectMaskClipLocalTimes(
     layers,
@@ -98,7 +116,7 @@ export function syncExportMaskTextures(
     const clip = clipMap.get(clipId);
     const masks = clip
       ? timelineState.getInterpolatedMasks(clipId, maskClipLocalTimes.get(clipId) ?? 0)
-      : undefined;
+      : layerMasksByClipId.get(clipId);
     if (!masks?.some(mask => mask.enabled !== false)) {
       exportMaskVersions.delete(clipId);
       host.removeMaskTexture(clipId);

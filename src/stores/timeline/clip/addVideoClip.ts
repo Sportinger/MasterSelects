@@ -1,8 +1,8 @@
 // Video clip addition - extracted from addClip
 // Handles video file loading, WebCodecs initialization, thumbnails, and linked audio
 
-import type { TimelineClip, TimelineTrack } from '../../../types';
-import { DEFAULT_TRANSFORM, calculateNativeScale } from '../constants';
+import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
+import { DEFAULT_TRANSFORM } from '../constants';
 import { useMediaStore } from '../../mediaStore';
 import { useSettingsStore } from '../../settingsStore';
 import { NativeDecoder } from '../../../services/nativeHelper';
@@ -161,8 +161,6 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
       // Decode initial frame so preview isn't black
       await nativeDecoder.seekToFrame(0);
 
-      // Calculate native pixel scale so content appears at actual size
-      const nativeScale = calculateNativeScale(nativeDecoder.width, nativeDecoder.height);
       const registered = registerNativeDecoderForTimelineClip({
         clipId,
         mediaFileId,
@@ -183,7 +181,7 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
           mediaFileId,
           filePath,
         },
-        transform: { ...DEFAULT_TRANSFORM, scale: nativeScale },
+        transform: { ...DEFAULT_TRANSFORM },
         isLoading: false,
       });
 
@@ -222,17 +220,12 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
       log.warn('Duration unknown, estimated from file size', { file: file.name, duration: naturalDuration.toFixed(2), size: file.size });
     }
 
-    // Calculate native pixel scale so content appears at actual size
-    const nativeScale = (video.videoWidth && video.videoHeight)
-      ? calculateNativeScale(video.videoWidth, video.videoHeight)
-      : { x: 1, y: 1 };
-
     // Set isLoading: false immediately so clip becomes interactive
     updateClip(clipId, {
       duration: naturalDuration,
       outPoint: naturalDuration,
       source: { type: 'video', naturalDuration, mediaFileId },
-      transform: { ...DEFAULT_TRANSFORM, scale: nativeScale },
+      transform: { ...DEFAULT_TRANSFORM },
       isLoading: false,
     });
 

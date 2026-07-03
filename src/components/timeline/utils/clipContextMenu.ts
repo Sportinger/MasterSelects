@@ -395,6 +395,41 @@ export function executeClipContextMenuClipboardCommand(input: {
   }
 }
 
+async function writeTextToClipboard(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return;
+  } catch {
+    // Fall back below.
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  try {
+    textarea.select();
+    document.execCommand('copy');
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
+
+export async function executeClipContextMenuCopyPrompt(input: {
+  prompt: string;
+  canExecute: boolean;
+  writeClipboardText?: (text: string) => Promise<void>;
+  onCopied?: () => void;
+}): Promise<boolean> {
+  const prompt = input.prompt.trim();
+  if (!input.canExecute || !prompt) return false;
+
+  await (input.writeClipboardText ?? writeTextToClipboard)(prompt);
+  input.onCopied?.();
+  return true;
+}
+
 export function getClipContextMenuDeleteGapTime(clip: ClipContextMenuClipLike | null | undefined): number {
   return Math.max(0, (clip?.startTime ?? 0) - 0.0005);
 }
@@ -424,6 +459,10 @@ export function executeClipContextMenuTimelineCommand(input: {
       return true;
     case 'unlink-clips':
       input.actions.unlinkClips([...input.targetClipIds]);
+      return true;
+    case 'sync-via-audio':
+      if (!input.clipId) return false;
+      void input.actions.syncClipsViaAudio([...input.targetClipIds], input.clipId);
       return true;
     case 'convert-solid-to-motion-shape':
       if (!input.clipId) return false;
@@ -551,6 +590,7 @@ export async function executeClipContextMenuCommand(
       }
       if ([
         'delete-gap-at-clip-start',
+        'sync-via-audio',
         'convert-solid-to-motion-shape',
         'unlink-multicam-group',
         'toggle-reverse',
@@ -563,6 +603,9 @@ export async function executeClipContextMenuCommand(
         return false;
       }
       if (command.command === 'link-clips' && context.targetClipIds.length < 2) {
+        return false;
+      }
+      if (command.command === 'sync-via-audio' && context.targetClipIds.length < 2) {
         return false;
       }
       return executeClipContextMenuTimelineCommand({
@@ -594,5 +637,12 @@ export async function executeClipContextMenuCommand(
       });
     case 'export-current-frame':
       return context.exportCurrentFrame();
+    case 'copy-generation-prompt':
+      return executeClipContextMenuCopyPrompt({
+        prompt: command.prompt,
+        canExecute: command.canExecute,
+        writeClipboardText: context.writeClipboardText,
+        onCopied: context.onCopyPromptComplete,
+      });
   }
 }

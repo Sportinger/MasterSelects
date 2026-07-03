@@ -1,4 +1,5 @@
 import type { Composition } from '../stores/mediaStore/types';
+import { isUserVisibleComposition } from '../stores/mediaStore/compositionVisibility';
 import type { TimelineTrack } from '../types';
 import type { PreviewPanelData, PreviewPanelSource } from '../types/dock';
 
@@ -60,17 +61,46 @@ export function isSamePreviewPanelSource(a: PreviewPanelSource, b: PreviewPanelS
 export function resolvePreviewSourceCompositionId(
   source: PreviewPanelSource,
   activeCompositionId: string | null,
+  compositions?: Composition[],
 ): string | null {
   switch (source.type) {
     case 'activeComp':
       return activeCompositionId;
     case 'composition':
-      return source.compositionId;
+      return isVisiblePreviewCompositionId(source.compositionId, compositions, activeCompositionId)
+        ? source.compositionId
+        : activeCompositionId;
     case 'layer-index':
-      return source.compositionId ?? activeCompositionId;
+      return isVisiblePreviewCompositionId(source.compositionId, compositions, activeCompositionId)
+        ? source.compositionId ?? activeCompositionId
+        : activeCompositionId;
     default:
       return activeCompositionId;
   }
+}
+
+export function isVisiblePreviewCompositionId(
+  compositionId: string | null,
+  compositions: Composition[] | undefined,
+  activeCompositionId: string | null,
+): boolean {
+  if (compositionId === null || compositionId === activeCompositionId || compositions === undefined) return true;
+  const composition = compositions.find((comp) => comp.id === compositionId);
+  return !!composition && isUserVisibleComposition(composition);
+}
+
+export function normalizeVisiblePreviewPanelSource(
+  source: PreviewPanelSource,
+  compositions: Composition[],
+  activeCompositionId: string | null,
+): PreviewPanelSource {
+  if (source.type === 'composition' && !isVisiblePreviewCompositionId(source.compositionId, compositions, activeCompositionId)) {
+    return { type: 'activeComp' };
+  }
+  if (source.type === 'layer-index' && !isVisiblePreviewCompositionId(source.compositionId, compositions, activeCompositionId)) {
+    return { type: 'activeComp' };
+  }
+  return source;
 }
 
 export function getCompositionVideoTracks(
@@ -83,7 +113,7 @@ export function getCompositionVideoTracks(
     return activeCompositionVideoTracks;
   }
 
-  const composition = compositions.find((comp) => comp.id === compositionId);
+  const composition = compositions.find((comp) => comp.id === compositionId && isUserVisibleComposition(comp));
   return composition?.timelineData?.tracks.filter((track) => track.type === 'video') ?? [];
 }
 
@@ -104,14 +134,14 @@ export function getPreviewSourceLabel(
     case 'activeComp':
       return 'Active';
     case 'composition': {
-      const composition = compositions.find((comp) => comp.id === source.compositionId);
+      const composition = compositions.find((comp) => comp.id === source.compositionId && isUserVisibleComposition(comp));
       return composition?.name ?? 'Unknown';
     }
     case 'layer-index': {
       const compositionId = source.compositionId;
       const compositionName = compositionId === null
         ? 'Active'
-        : compositions.find((comp) => comp.id === compositionId)?.name ?? 'Unknown';
+        : compositions.find((comp) => comp.id === compositionId && isUserVisibleComposition(comp))?.name ?? 'Unknown';
       const videoTracks = getCompositionVideoTracks(
         compositionId,
         compositions,

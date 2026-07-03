@@ -21,6 +21,7 @@ import type {
   SplatEffectorItem,
   TextItem,
 } from '../../../../stores/mediaStore';
+import { isUserVisibleComposition } from '../../../../stores/mediaStore/compositionVisibility';
 
 interface MediaSearchToken {
   value: string;
@@ -168,7 +169,7 @@ function buildMediaPanelProjectListItems({
 >): ProjectItem[] {
   return [
     ...folders,
-    ...compositions,
+    ...compositions.filter(isUserVisibleComposition),
     ...textItems,
     ...solidItems,
     ...meshItems,
@@ -223,7 +224,7 @@ export function useMediaPanelProjectItems({
 }: MediaPanelProjectItemsInput): MediaPanelProjectItemsState {
   const allProjectItems = useMemo<ProjectItem[]>(() => ([
     ...files,
-    ...compositions,
+    ...compositions.filter(isUserVisibleComposition),
     ...folders,
     ...textItems,
     ...solidItems,

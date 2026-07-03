@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-07-03",
+    "type": "fix",
+    "title": "MasterSelects 2.3.4",
+    "description": "Maintenance release with FlashBoard media workflow polish, export stability fixes, and a clean dependency audit.",
+    "section": "Release"
+  },
+  {
     "date": "2026-06-24",
     "type": "new",
     "title": "MasterSelects 2.3.3",

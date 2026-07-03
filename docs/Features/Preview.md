@@ -93,7 +93,7 @@ The engine render loop is RAF-based and has three important behaviors:
 
 ### Browser Fallbacks
 
-- HTML video preview on Firefox uses copied textures instead of imported external textures because imported frames can go black there.
+- HTML video preview uses copied textures only on Firefox because imported frames can go black there; Chromium paths stay on live video import to avoid stale or corrupt copied textures.
 - The render path prefers live video import when the frame is ready, but it can fall back to cached frames or the last known frame to avoid black flashes.
 
 ---

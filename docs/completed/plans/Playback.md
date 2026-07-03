@@ -1,3 +1,5 @@
+> Status: Archived from `docs/ongoing/` on 2026-06-25 after docs triage; historical planning context unless explicitly reopened.
+
 # Playback Preview Notes
 
 > Status: Supporting investigation note for the worker-first playback renderer.

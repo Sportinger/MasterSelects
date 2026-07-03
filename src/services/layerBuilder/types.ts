@@ -7,6 +7,7 @@ import type {
   MasterAudioState,
   RuntimeColorGrade,
   AnimatableProperty,
+  Keyframe,
   ClipCustomNodeParamValue,
   ClipTransform,
   TextBoundsPath,
@@ -56,6 +57,7 @@ export interface FrameContext {
   getInterpolatedSpeed: (clipId: string, localTime: number) => number;
   getSourceTimeForClip: (clipId: string, localTime: number) => number;
   hasKeyframes: (clipId: string, property?: AnimatableProperty) => boolean;
+  getClipKeyframes?: (clipId: string) => readonly Keyframe[];
 
   // Timing
   now: number;

@@ -2,6 +2,7 @@
 // Manages Resolume-style slot grid assignments and per-slot clip behavior
 
 import { flags } from '../../../engine/featureFlags';
+import { isUserVisibleComposition } from '../compositionVisibility';
 import type {
   Composition,
   MediaSliceCreator,
@@ -234,7 +235,7 @@ export const createSlotSlice: MediaSliceCreator<SlotActions> = (set, get) => ({
 
     for (const [compId, slotIdx] of Object.entries(slotAssignments)) {
       if (slotIdx >= 0 && slotIdx < totalSlots) {
-        const comp = compositions.find((c: Composition) => c.id === compId);
+        const comp = compositions.find((c: Composition) => c.id === compId && isUserVisibleComposition(c));
         if (comp) {
           map[slotIdx] = comp;
         }

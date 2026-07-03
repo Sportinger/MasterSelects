@@ -86,4 +86,12 @@ describe('Kie.ai image command payloads', () => {
       prompt: '',
     })).toThrow('Add at least one reference image');
   });
+
+  it('rejects currently failing Imagen providers', () => {
+    expect(() => buildKieAiImageTaskInput({
+      provider: 'google/imagen4-fast',
+      prompt: 'tree',
+      aspectRatio: '16:9',
+    })).toThrow('Unsupported Kie.ai image provider');
+  });
 });

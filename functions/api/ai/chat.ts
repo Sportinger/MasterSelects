@@ -1,4 +1,6 @@
 import { getUserBillingSnapshot } from '../../lib/billing';
+import { insertAiAuditEvent } from '../../lib/aiAudit';
+import { blocksAiRequest, moderateAiInput } from '../../lib/aiModeration';
 import { insertChatLog } from '../../lib/chatLog';
 import { getCreditLedgerEntryBySource, spendCredits } from '../../lib/credits';
 import { getCurrentUser, json, methodNotAllowed, parseJson } from '../../lib/db';
@@ -244,6 +246,43 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       { status: 402 },
     );
   }
+
+  const moderation = await moderateAiInput(context.env, request.messages);
+  if (blocksAiRequest(moderation)) {
+    await insertAiAuditEvent(context, {
+      feature: 'hosted_ai_chat',
+      idempotencyKey,
+      model: request.model,
+      moderation,
+      prompt: request.messages,
+      provider: 'openai',
+      requestId,
+      status: 'blocked',
+      userId: hostedContext.user.id,
+    });
+
+    return json(
+      buildRouteEnvelope({
+        error: createGatewayError(
+          moderation.status === 'error' ? 'moderation_unavailable' : 'content_policy_violation',
+          moderation.status === 'error'
+            ? 'Hosted AI chat moderation is unavailable. Please try again later.'
+            : 'This hosted AI chat request was blocked by content safety checks.',
+          { categories: moderation.categories, requestId },
+        ),
+        ok: false,
+        requestId,
+        session: {
+          authenticated: true,
+          email: hostedContext.user.email,
+          provider: 'cookie_session',
+        },
+        status: 'error',
+      }),
+      { status: moderation.status === 'error' ? 503 : 400 },
+    );
+  }
+
   const providerBody: HostedChatRequest = {
     max_completion_tokens: request.max_completion_tokens,
     max_tokens: request.max_tokens,
@@ -293,6 +332,20 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
 
     if (charge.insufficient) {
       await completeUsageEvent(context.env.DB, idempotencyKey, { status: 'failed' });
+      context.waitUntil(
+        insertAiAuditEvent(context, {
+          errorMessage: 'insufficient_credits',
+          feature: 'hosted_ai_chat',
+          idempotencyKey,
+          model: request.model,
+          moderation,
+          prompt: request.messages,
+          provider: 'openai',
+          requestId,
+          status: 'failed',
+          userId: hostedContext.user.id,
+        }).catch(() => {}),
+      );
       return json(
         buildRouteEnvelope({
           creditBalance: charge.balance,
@@ -345,6 +398,20 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
         // Chat logging is best-effort — never block the response
       }),
     );
+    context.waitUntil(
+      insertAiAuditEvent(context, {
+        creditCost: charge.charged ? creditCost : 0,
+        feature: 'hosted_ai_chat',
+        idempotencyKey,
+        model: request.model,
+        moderation,
+        prompt: request.messages,
+        provider: 'openai',
+        requestId,
+        status: 'completed',
+        userId: hostedContext.user.id,
+      }).catch(() => {}),
+    );
 
     return json(
       buildRouteEnvelope({
@@ -381,6 +448,20 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       }).catch(() => {
         // Chat logging is best-effort
       }),
+    );
+    context.waitUntil(
+      insertAiAuditEvent(context, {
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        feature: 'hosted_ai_chat',
+        idempotencyKey,
+        model: request.model,
+        moderation,
+        prompt: request.messages,
+        provider: 'openai',
+        requestId,
+        status: 'failed',
+        userId: hostedContext.user.id,
+      }).catch(() => {}),
     );
 
     return json(

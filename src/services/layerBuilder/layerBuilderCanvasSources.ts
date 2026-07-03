@@ -89,6 +89,14 @@ export function buildNestedLayerBuilderCanvasBackedSourceLayer(
     return textCanvas ? buildNestedTextSourceLayer(baseLayer, textCanvas) : null;
   }
 
+  if (
+    nestedClip.source?.type === 'transition-overlay' ||
+    nestedClip.source?.type === 'solid' ||
+    nestedClip.source?.type === 'text'
+  ) {
+    return nestedClip.source.textCanvas ? buildNestedTextSourceLayer(baseLayer, nestedClip.source.textCanvas) : null;
+  }
+
   if (!isVectorAnimationSourceType(nestedClip.source?.type)) {
     return null;
   }

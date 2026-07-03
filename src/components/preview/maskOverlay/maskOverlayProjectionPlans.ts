@@ -89,6 +89,8 @@ export function getProjectionParams(
     scale: layer.scale,
     rotation: layer.rotation,
     perspective: 2,
+    uvClampMin: -1000,
+    uvClampMax: 1001,
   };
 }
 

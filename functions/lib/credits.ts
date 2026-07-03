@@ -37,6 +37,15 @@ export interface SpendCreditsResult {
   insufficient: boolean;
 }
 
+export interface FailedTaskCreditRefundResult {
+  creditBalance: number;
+  credits: number;
+  idempotencyKey: string | null;
+  jobId: string;
+  ledgerEntryId: string | null;
+  refunded: boolean;
+}
+
 export const FREE_PLAN_MONTHLY_CREDITS = 25;
 export const FREE_PLAN_MONTHLY_SOURCE = 'system:free_plan_monthly_grant';
 
@@ -296,6 +305,93 @@ export async function spendCredits(
     charged: true,
     entry,
     insufficient: false,
+  };
+}
+
+export async function refundCreditsForFailedTask(
+  db: AppD1Database,
+  userId: string,
+  taskId: string,
+): Promise<FailedTaskCreditRefundResult | null> {
+  const jobId = taskId.trim();
+  if (!jobId) {
+    return null;
+  }
+
+  const spendEntry = await db
+    .prepare(
+      `
+        SELECT id, user_id, entry_type, amount, balance_after, source, source_id, description, metadata_json, created_at
+        FROM credit_ledger
+        WHERE user_id = ?
+          AND entry_type = 'spend'
+          AND amount < 0
+          AND instr(COALESCE(metadata_json, ''), ?) > 0
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+      `,
+    )
+    .bind(userId, jobId)
+    .first<CreditLedgerRow>();
+
+  if (!spendEntry) {
+    return null;
+  }
+
+  const credits = Math.abs(spendEntry.amount);
+  const source = `refund:${spendEntry.source}`;
+  const sourceId = `failed-task:${jobId}`;
+  const existingRefund = await getCreditLedgerEntryBySource(db, userId, source, sourceId);
+
+  if (existingRefund) {
+    return {
+      creditBalance: await getCreditBalance(db, userId),
+      credits,
+      idempotencyKey: spendEntry.source_id,
+      jobId,
+      ledgerEntryId: existingRefund.id,
+      refunded: false,
+    };
+  }
+
+  const refundEntry = await appendCreditLedgerEntry(db, {
+    amount: credits,
+    description: `Refund for failed hosted AI job ${jobId}`,
+    entryType: 'adjustment',
+    metadata: {
+      failedTaskId: jobId,
+      originalLedgerEntryId: spendEntry.id,
+      originalSource: spendEntry.source,
+      originalSourceId: spendEntry.source_id,
+    },
+    source,
+    sourceId,
+    userId,
+  });
+
+  if (!refundEntry) {
+    const duplicateRefund = await getCreditLedgerEntryBySource(db, userId, source, sourceId);
+    if (!duplicateRefund) {
+      return null;
+    }
+
+    return {
+      creditBalance: await getCreditBalance(db, userId),
+      credits,
+      idempotencyKey: spendEntry.source_id,
+      jobId,
+      ledgerEntryId: duplicateRefund.id,
+      refunded: false,
+    };
+  }
+
+  return {
+    creditBalance: refundEntry.balance_after,
+    credits,
+    idempotencyKey: spendEntry.source_id,
+    jobId,
+    ledgerEntryId: refundEntry.id,
+    refunded: true,
   };
 }
 

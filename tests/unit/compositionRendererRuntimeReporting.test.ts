@@ -556,6 +556,106 @@ describe('compositionRenderer runtime reporting', () => {
     });
   });
 
+  it('renders transitions inside active nested composition clips as hidden transition comps', async () => {
+    const nestedTrack: TimelineTrack = {
+      ...tracks[0],
+      id: 'nested-video-track',
+      name: 'Nested Video 1',
+    };
+    const transition = {
+      id: 'nested-transition',
+      type: 'crossfade',
+      duration: 1,
+      linkedClipId: 'nested-incoming',
+      compositionId: 'transition-comp',
+    };
+    const nestedOutgoing = {
+      id: 'nested-outgoing',
+      trackId: nestedTrack.id,
+      name: 'Nested Out',
+      startTime: 0,
+      duration: 2,
+      inPoint: 0,
+      outPoint: 2,
+      source: { type: 'image', naturalDuration: 2 },
+      transform: defaultTransform,
+      effects: [],
+      transitionOut: transition,
+      isLoading: false,
+    } as TimelineClip;
+    const nestedIncoming = {
+      id: 'nested-incoming',
+      trackId: nestedTrack.id,
+      name: 'Nested In',
+      startTime: 2,
+      duration: 2,
+      inPoint: 0,
+      outPoint: 2,
+      source: { type: 'image', naturalDuration: 2 },
+      transform: defaultTransform,
+      effects: [],
+      transitionIn: {
+        ...transition,
+        linkedClipId: 'nested-outgoing',
+      },
+      isLoading: false,
+    } as TimelineClip;
+    const compClip = {
+      id: 'clip-comp',
+      trackId: 'video-track',
+      name: 'Nested Comp Clip',
+      startTime: 0,
+      duration: 4,
+      inPoint: 0,
+      outPoint: 4,
+      source: { type: 'video', naturalDuration: 4 },
+      transform: defaultTransform,
+      effects: [],
+      isLoading: false,
+      isComposition: true,
+      compositionId: 'nested-comp',
+      nestedTracks: [nestedTrack],
+      nestedClips: [nestedOutgoing, nestedIncoming],
+    } as TimelineClip;
+
+    useTimelineStore.setState({ clips: [compClip], tracks });
+    mockedUseMediaStore.getState.mockReturnValue({
+      activeCompositionId: 'comp-render',
+      compositions: [
+        makeComposition('comp-render', []),
+        makeComposition('nested-comp', []),
+        {
+          ...makeComposition('transition-comp', []),
+          transitionComp: {
+            kind: 'transition-comp',
+            parentCompositionId: 'nested-comp',
+            parentTransitionId: 'nested-transition',
+            parentOutgoingClipId: 'nested-outgoing',
+            parentIncomingClipId: 'nested-incoming',
+            linkedOutgoingClipId: 'transition-outgoing',
+            linkedIncomingClipId: 'transition-incoming',
+            innerTransitionId: '',
+            paddingBefore: 0,
+            paddingAfter: 0,
+            bodyStart: 0,
+            bodyEnd: 1,
+            materialized: true,
+          },
+        },
+      ],
+      files: [],
+      activeLayerSlots: {},
+    });
+
+    await expect(compositionRenderer.prepareComposition('comp-render')).resolves.toBe(true);
+
+    const layers = compositionRenderer.evaluateAtTime('comp-render', 1.75);
+    const nestedLayers = layers[0]?.source?.nestedComposition?.layers ?? [];
+
+    expect(nestedLayers).toHaveLength(1);
+    expect(nestedLayers[0].source?.nestedComposition?.compositionId).toBe('transition-comp');
+  });
+
   it('skips composition image hydration when the composition-render image budget is full', async () => {
     for (let index = 0; index < 96; index += 1) {
       timelineRuntimeCoordinator.retainResource({

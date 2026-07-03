@@ -84,6 +84,23 @@ type PendingDragUpdate =
       scale: { x: number; y: number };
     };
 
+function finiteNonZero(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && Math.abs(value) > 0.000001
+    ? value
+    : fallback;
+}
+
+export function resolveClipScaleFromLayerScale(
+  layerScale: { x: number; y: number },
+  clipScale: TimelineClip['transform']['scale'] | undefined,
+): { x: number; y: number } {
+  const all = finiteNonZero(clipScale?.all, 1);
+  return {
+    x: layerScale.x / all,
+    y: layerScale.y / all,
+  };
+}
+
 function resolveLayerMoveSnapDelta(params: {
   layer: Layer;
   candidatePosition: { x: number; y: number };
@@ -185,7 +202,9 @@ export function useLayerDrag({
 
     updateLayer(pending.layerId, { scale: pending.scale });
     if (pending.clipId) {
-      updateClipTransform(pending.clipId, { scale: pending.scale });
+      updateClipTransform(pending.clipId, {
+        scale: resolveClipScaleFromLayerScale(pending.scale, clip?.transform.scale),
+      });
     }
   }, [updateClipTransform, updateLayer]);
 

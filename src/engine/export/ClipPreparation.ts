@@ -2,6 +2,7 @@
 
 import { Logger } from '../../services/logger';
 import type { TimelineClip } from '../../stores/timeline/types';
+import type { Composition, MediaFile } from '../../stores/mediaStore/types';
 import type { ExportSettings, ExportClipState, ExportMode } from './types';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
@@ -29,11 +30,16 @@ interface FastExportFileSizeStats {
 export type { ExportClipState, ExportMode } from './types';
 export { cleanupExportMode, loadClipFileData };
 
-export interface ClipPreparationResult {
+export interface ClipPreparationModeResult {
   clipStates: Map<string, ExportClipState>;
   parallelDecoder: ParallelDecodeManager | null;
   useParallelDecode: boolean;
   exportMode: ExportMode;
+}
+
+export interface ClipPreparationResult extends ClipPreparationModeResult {
+  mediaFiles: MediaFile[];
+  mediaCompositions: Composition[];
 }
 
 export function shouldUsePreciseForFastExportFileSizes(stats: FastExportFileSizeStats): boolean {
@@ -81,9 +87,16 @@ export async function prepareClipsForExport(
 ): Promise<ClipPreparationResult> {
   const endPrepare = log.time('prepareClipsForExport TOTAL');
   const { clips, tracks } = useTimelineStore.getState();
-  const mediaFiles = useMediaStore.getState().files;
+  const mediaState = useMediaStore.getState();
+  const mediaFiles = mediaState.files;
+  const mediaCompositions = mediaState.compositions;
   const startTime = settings.startTime;
   const endTime = settings.endTime;
+  const withMedia = (result: ClipPreparationModeResult): ClipPreparationResult => ({
+    ...result,
+    mediaFiles,
+    mediaCompositions,
+  });
 
   const clipStates = new Map<string, ExportClipState>();
 
@@ -138,7 +151,7 @@ export async function prepareClipsForExport(
   if (exportMode === 'precise') {
     const result = await initializePreciseMode(videoClips, clipStates, mediaFiles, startTime, exportRunId);
     endPrepare();
-    return result;
+    return withMedia(result);
   }
 
   const fileSizeStats = getFastModeFileSizeStats(videoClips, mediaFiles);
@@ -146,11 +159,11 @@ export async function prepareClipsForExport(
     log.warn(formatLargeFastExportFallbackMessage(fileSizeStats, videoClips.length));
     const result = await initializePreciseMode(videoClips, clipStates, mediaFiles, startTime, exportRunId);
     endPrepare();
-    return result;
+    return withMedia(result);
   }
 
   try {
-    return await initializeFastMode(
+    return withMedia(await initializeFastMode(
       videoClips,
       mediaFiles,
       startTime,
@@ -159,7 +172,7 @@ export async function prepareClipsForExport(
       settings.fps,
       exportRunId,
       endPrepare
-    );
+    ));
   } catch (e) {
     if (shouldAutoFallbackToPrecise(e)) {
       log.warn('FAST export failed; retrying with PRECISE HTMLVideo export mode', e);
@@ -168,7 +181,7 @@ export async function prepareClipsForExport(
       await prepareImageClipsForExport(videoClips, mediaFiles, clipStates, exportRunId);
       const result = await initializePreciseMode(videoClips, clipStates, mediaFiles, startTime, exportRunId);
       endPrepare();
-      return result;
+      return withMedia(result);
     }
     cleanupExportMode(clipStates, null);
     endPrepare();

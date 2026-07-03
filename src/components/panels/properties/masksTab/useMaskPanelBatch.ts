@@ -13,6 +13,7 @@ export function useMaskPanelBatch() {
 
   const handleBatchEnd = useCallback(() => {
     useTimelineStore.getState().invalidateCache();
+    useTimelineStore.setState({ maskFeatherPreview: null });
     setMaskDragging(false);
     endBatch();
   }, [setMaskDragging]);

@@ -1,5 +1,6 @@
 import type { VideoProvider } from '../piApiService';
 import {
+  RUNWAY_ASPECT_RATIOS,
   RUNWAY_VIDEO_PROVIDER_ID,
   SEEDANCE_2_ASPECT_RATIOS,
   SEEDANCE_2_DURATIONS,
@@ -15,7 +16,7 @@ const KIEAI_PROVIDERS: VideoProvider[] = [
     name: 'Kling 3.0',
     description: 'Latest Kling model via Kie.ai',
     versions: ['3.0'],
-    supportedModes: ['std', 'pro'],
+    supportedModes: ['std', 'pro', '4K'],
     supportedDurations: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
     supportedAspectRatios: ['16:9', '9:16', '1:1'],
     supportsImageToVideo: true,
@@ -61,7 +62,7 @@ const KIEAI_PROVIDERS: VideoProvider[] = [
     versions: ['latest'],
     supportedModes: ['720p', '1080p'],
     supportedDurations: [5, 10],
-    supportedAspectRatios: ['16:9', '9:16', '1:1'],
+    supportedAspectRatios: RUNWAY_ASPECT_RATIOS,
     supportsImageToVideo: true,
     supportsTextToVideo: true,
   },
@@ -99,6 +100,7 @@ const KIEAI_CREDITS_PER_SECOND: Record<string, Record<string, KieAiCreditRate>> 
   'kling-3.0': {
     'std': { normal: 14, audio: 20 },
     'pro': { normal: 18, audio: 27 },
+    '4K': { normal: 67, audio: 67 },
   },
   [SEEDANCE_2_PROVIDER_ID]: {
     '480p': { normal: 19, videoInput: 11.5 },

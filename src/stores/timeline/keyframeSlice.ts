@@ -57,7 +57,7 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
   ...createKeyframeAssetInterpolationActions(set, get),
 
   setPropertyValue: (clipId, property, value) => {
-    const { isRecording, addKeyframe, updateClipTransform, updateClipEffect, updateClipAudioEffectInstance, updateColorNodeParam, updateMask, updateTextProperties, clips, tracks, hasKeyframes, isPlaying } = get();
+    const { isRecording, addKeyframe, updateClipTransform, updateClipEffect, updateClipAudioEffectInstance, updateColorNodeParam, updateMask, updateTextProperties, setMaskEdgeFeather, clips, tracks, hasKeyframes, isPlaying } = get();
     if (isClipOnLockedTrack(clips, tracks, clipId)) return;
     const currentClip = clips.find(c => c.id === clipId);
     const cameraPropertyForValue = parseCameraProperty(property);
@@ -218,6 +218,8 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
           updateMask(clipId, mask.id, { position: { ...mask.position, y: value } });
         } else if (maskProperty.property === 'feather') {
           updateMask(clipId, mask.id, { feather: Math.max(0, value) });
+        } else if (maskProperty.property === 'edgeFeather') {
+          setMaskEdgeFeather(clipId, mask.id, maskProperty.edgeId, Math.max(0, value));
         } else if (maskProperty.property === 'featherQuality') {
           updateMask(clipId, mask.id, { featherQuality: Math.min(100, Math.max(1, Math.round(value))) });
         }
@@ -358,6 +360,7 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
       updateClipAudioEffectInstance,
       updateColorNodeParam,
       updateMask,
+      setMaskEdgeFeather,
     } = get();
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return;
@@ -467,6 +470,8 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
           updateMask(clipId, mask.id, { position: { ...mask.position, y: currentValue } });
         } else if (maskProperty.property === 'feather') {
           updateMask(clipId, mask.id, { feather: Math.max(0, currentValue) });
+        } else if (maskProperty.property === 'edgeFeather') {
+          setMaskEdgeFeather(clipId, mask.id, maskProperty.edgeId, Math.max(0, currentValue));
         } else if (maskProperty.property === 'featherQuality') {
           updateMask(clipId, mask.id, { featherQuality: Math.min(100, Math.max(1, Math.round(currentValue))) });
         }

@@ -1,5 +1,7 @@
 import { getUserBillingSnapshot } from '../../lib/billing';
-import { getCreditLedgerEntryBySource, spendCredits } from '../../lib/credits';
+import { insertAiAuditEvent } from '../../lib/aiAudit';
+import { blocksAiRequest, moderateAiInput } from '../../lib/aiModeration';
+import { getCreditLedgerEntryBySource, refundCreditsForFailedTask, spendCredits } from '../../lib/credits';
 import { getCurrentUser, json, methodNotAllowed, parseJson } from '../../lib/db';
 import {
   buildHostedElevenLabsCapabilities,
@@ -12,13 +14,10 @@ import {
   normalizeHostedElevenLabsVoiceSearchParams,
 } from '../../lib/providers/elevenlabs';
 import {
-  calculateHostedSunoCost,
-  createHostedSunoMusicTask,
-  createHostedSunoSoundsTask,
   getHostedSunoMusicTask,
   normalizeHostedSunoParams,
   normalizeHostedSunoSoundsParams,
-  type HostedSunoParams,
+  type HostedSunoTask,
 } from '../../lib/providers/kieai';
 import {
   handleHostedOpenAITranscriptionRequest,
@@ -28,6 +27,7 @@ import {
   createHostedGatewayEnvelope,
   type HostedGatewayEnvelope,
 } from '../../lib/providers/shared';
+import { handleHostedSunoMusicRequest } from '../../lib/providers/sunoRoute';
 import { completeUsageEvent, createUsageEvent } from '../../lib/usage';
 import type { AppContext, AppRouteHandler } from '../../lib/env';
 
@@ -171,159 +171,25 @@ function requireHostedAudioAccess(
   return null;
 }
 
-async function handleHostedSunoMusicRequest(
+async function attachFailedTaskRefund(
   context: AppContext,
-  hostedContext: HostedAiContext,
-  params: HostedSunoParams,
-  idempotencyKey: string,
-  requestId: string,
-  sound = false,
-): Promise<Response> {
-  const creditsRequired = calculateHostedSunoCost();
-  const provider = sound ? 'suno-sounds' : 'suno-music';
-  const ledgerSource = sound ? 'hosted:suno_sounds' : 'hosted:suno_music';
-  const existingCharge = await getCreditLedgerEntryBySource(
-    context.env.DB,
-    hostedContext.user!.id,
-    ledgerSource,
-    idempotencyKey,
-  );
-
-  if (!existingCharge && (hostedContext.billing?.balance ?? 0) < creditsRequired) {
-    return json(
-      buildRouteEnvelope({
-        creditBalance: hostedContext.billing?.balance ?? 0,
-        error: createGatewayError(
-          'insufficient_credits',
-          `You need more credits to generate hosted ${sound ? 'Suno sounds' : 'Suno music'}.`,
-          { creditsRequired, provider, requestId },
-        ),
-        next: 'pricing',
-        ok: false,
-        provider,
-        requestId,
-        session: {
-          authenticated: true,
-          email: hostedContext.user!.email,
-          provider: 'cookie_session',
-        },
-        status: 'requires_billing',
-      }),
-      { status: 402 },
-    );
+  userId: string,
+  taskId: string,
+  task: HostedSunoTask,
+): Promise<{ creditBalance: number | null; task: HostedSunoTask & { refund?: unknown } }> {
+  if (task.status !== 'failed') {
+    return { creditBalance: null, task };
   }
 
-  await createUsageEvent(context.env.DB, {
-    creditCost: creditsRequired,
-    feature: sound ? 'suno_sounds_generation' : 'suno_music_generation',
-    idempotencyKey,
-    metadata: {
-      customMode: Boolean(params.customMode),
-      instrumental: params.instrumental !== false,
-      model: params.model ?? 'V5_5',
-      provider,
-      requestId,
-    },
-    model: params.model ?? 'V5_5',
-    provider,
-    requestUnits: sound ? '1 sound' : '1 song',
-    userId: hostedContext.user!.id,
-  });
-
-  try {
-    const { taskId } = sound
-      ? await createHostedSunoSoundsTask(context.env, params)
-      : await createHostedSunoMusicTask(context.env, params);
-    const charge = await spendCredits(
-      context.env.DB,
-      hostedContext.user!.id,
-      creditsRequired,
-      ledgerSource,
-      idempotencyKey,
-      `Hosted ${sound ? 'Suno sounds' : 'Suno music'} generation`,
-      {
-        customMode: Boolean(params.customMode),
-        instrumental: params.instrumental !== false,
-        model: params.model ?? 'V5_5',
-        provider,
-        requestId,
-        taskId,
-      },
-    );
-
-    if (charge.insufficient) {
-      await completeUsageEvent(context.env.DB, idempotencyKey, { status: 'failed' });
-      return json(
-        buildRouteEnvelope({
-          creditBalance: charge.balance,
-          error: createGatewayError(
-            'insufficient_credits',
-              `You need more credits to generate hosted ${sound ? 'Suno sounds' : 'Suno music'}.`,
-              { creditsRequired, provider, requestId },
-          ),
-          next: 'pricing',
-          ok: false,
-          provider,
-          requestId,
-          session: {
-            authenticated: true,
-            email: hostedContext.user!.email,
-            provider: 'cookie_session',
-          },
-          status: 'requires_billing',
-        }),
-        { status: 402 },
-      );
-    }
-
-    await completeUsageEvent(context.env.DB, idempotencyKey, {
-      ledgerEntryId: charge.entry?.id ?? null,
-      status: 'completed',
-    });
-
-    return json(
-      buildRouteEnvelope({
-        creditBalance: charge.balance,
-        creditsCharged: charge.charged ? creditsRequired : 0,
-        data: {
-          outputType: 'audio',
-          provider,
-          taskId,
-        },
-        ok: true,
-        provider,
-        requestId,
-        session: {
-          authenticated: true,
-          email: hostedContext.user!.email,
-          provider: 'cookie_session',
-        },
-        status: 'accepted',
-      }),
-    );
-  } catch (error) {
-    await completeUsageEvent(context.env.DB, idempotencyKey, { status: 'failed' });
-
-    return json(
-      buildRouteEnvelope({
-        error: createGatewayError(
-          'provider_request_failed',
-          error instanceof Error ? error.message : `Hosted ${sound ? 'Suno sounds' : 'Suno music'} generation failed.`,
-          { requestId },
-        ),
-        ok: false,
-        provider,
-        requestId,
-        session: {
-          authenticated: true,
-          email: hostedContext.user!.email,
-          provider: 'cookie_session',
-        },
-        status: 'error',
-      }),
-      { status: 502 },
-    );
+  const refund = await refundCreditsForFailedTask(context.env.DB, userId, taskId);
+  if (refund?.idempotencyKey) {
+    await completeUsageEvent(context.env.DB, refund.idempotencyKey, { creditCost: 0, status: 'failed' });
   }
+
+  return {
+    creditBalance: refund?.creditBalance ?? null,
+    task: refund ? { ...task, refund } : task,
+  };
 }
 
 export const onRequest: AppRouteHandler = async (context: AppContext): Promise<Response> => {
@@ -408,10 +274,11 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
         }
 
         const task = await getHostedSunoMusicTask(context.env, taskId);
+        const refunded = await attachFailedTaskRefund(context, hostedContext.user!.id, taskId, task);
         return json(
           buildRouteEnvelope({
-            creditBalance: hostedContext.billing?.balance ?? 0,
-            data: task,
+            creditBalance: refunded.creditBalance ?? hostedContext.billing?.balance ?? 0,
+            data: refunded.task,
             ok: true,
             provider: 'suno-music',
             requestId,
@@ -576,6 +443,50 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     );
   }
 
+  const moderation = await moderateAiInput(context.env, {
+    modelId: speechParams.modelId,
+    text: speechParams.text,
+    voiceId: speechParams.voiceId,
+  });
+  if (blocksAiRequest(moderation)) {
+    await insertAiAuditEvent(context, {
+      feature: 'hosted_ai_audio',
+      idempotencyKey,
+      model: speechParams.modelId,
+      moderation,
+      prompt: {
+        modelId: speechParams.modelId,
+        text: speechParams.text,
+        voiceId: speechParams.voiceId,
+      },
+      provider: 'elevenlabs',
+      requestId,
+      status: 'blocked',
+      userId: hostedContext.user!.id,
+    });
+
+    return json(
+      buildRouteEnvelope({
+        error: createGatewayError(
+          moderation.status === 'error' ? 'moderation_unavailable' : 'content_policy_violation',
+          moderation.status === 'error'
+            ? 'Hosted ElevenLabs moderation is unavailable. Please try again later.'
+            : 'This hosted ElevenLabs speech request was blocked by content safety checks.',
+          { categories: moderation.categories, requestId },
+        ),
+        ok: false,
+        requestId,
+        session: {
+          authenticated: true,
+          email: hostedContext.user!.email,
+          provider: 'cookie_session',
+        },
+        status: 'error',
+      }),
+      { status: moderation.status === 'error' ? 503 : 400 },
+    );
+  }
+
   await createUsageEvent(context.env.DB, {
     creditCost: estimatedCost.creditsRequired,
     feature: 'hosted_ai_audio',
@@ -624,6 +535,24 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
         creditCost: actualCreditsRequired,
         status: 'failed',
       });
+      context.waitUntil(
+        insertAiAuditEvent(context, {
+          errorMessage: 'insufficient_credits',
+          feature: 'hosted_ai_audio',
+          idempotencyKey,
+          model: speechParams.modelId,
+          moderation,
+          prompt: {
+            modelId: speechParams.modelId,
+            text: speechParams.text,
+            voiceId: speechParams.voiceId,
+          },
+          provider: 'elevenlabs',
+          requestId,
+          status: 'failed',
+          userId: hostedContext.user!.id,
+        }).catch(() => {}),
+      );
       return json(
         buildRouteEnvelope({
           creditBalance: charge.balance,
@@ -656,6 +585,24 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       ledgerEntryId: charge.entry?.id ?? null,
       status: 'completed',
     });
+    context.waitUntil(
+      insertAiAuditEvent(context, {
+        creditCost: charge.charged ? actualCreditsRequired : 0,
+        feature: 'hosted_ai_audio',
+        idempotencyKey,
+        model: speechParams.modelId,
+        moderation,
+        prompt: {
+          modelId: speechParams.modelId,
+          text: speechParams.text,
+          voiceId: speechParams.voiceId,
+        },
+        provider: 'elevenlabs',
+        requestId,
+        status: 'completed',
+        userId: hostedContext.user!.id,
+      }).catch(() => {}),
+    );
 
     return new Response(speech.audio, {
       headers: {
@@ -672,6 +619,24 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     });
   } catch (error) {
     await completeUsageEvent(context.env.DB, idempotencyKey, { status: 'failed' });
+    context.waitUntil(
+      insertAiAuditEvent(context, {
+        errorMessage: error instanceof Error ? error.message : 'Hosted ElevenLabs speech generation failed.',
+        feature: 'hosted_ai_audio',
+        idempotencyKey,
+        model: speechParams.modelId,
+        moderation,
+        prompt: {
+          modelId: speechParams.modelId,
+          text: speechParams.text,
+          voiceId: speechParams.voiceId,
+        },
+        provider: 'elevenlabs',
+        requestId,
+        status: 'failed',
+        userId: hostedContext.user!.id,
+      }).catch(() => {}),
+    );
 
     return json(
       buildRouteEnvelope({

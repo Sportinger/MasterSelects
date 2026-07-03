@@ -15,6 +15,10 @@ import { hasAudioEffect } from '../../engine/audio/AudioEffectRegistry';
 import { runAudioExportPreflight as computeAudioExportPreflight } from '../../services/audio/audioExportPreflight';
 import { cleanupDeletedClipResources } from './deletedClipResources';
 import {
+  clearTransitionsLinkedToRemovedClips,
+  setClipsAndCleanupTransitionComps,
+} from './editOperations/transitionCompositionMaintenance';
+import {
   cancelRuntimeAudioMeterMirrorFlush,
   clampPan,
   clampSendGainDb,
@@ -104,9 +108,10 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
     // and mirror the resulting bus state back into the store.
     runtimeAudioMeterBus.clearTrack(id);
     cleanupDeletedClipResources(deletedClips);
-    set({
+    const deletedClipIds = new Set(deletedClips.map((clip) => clip.id));
+    setClipsAndCleanupTransitionComps(set, clips, {
       tracks: nextTracks,
-      clips: clips.filter(c => c.trackId !== id),
+      clips: clearTransitionsLinkedToRemovedClips(clips.filter(c => c.trackId !== id), deletedClipIds),
       runtimeAudioMeters: runtimeAudioMeterBus.getState(),
       targetTrackIdByType: nextTargetTrackIdByType,
       ...(propertiesSelection?.kind === 'track' && propertiesSelection.trackId === id

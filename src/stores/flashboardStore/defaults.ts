@@ -28,6 +28,10 @@ export function createDefaultFlashBoardComposer(): FlashBoardComposerState {
     providerId: DEFAULT_FLASHBOARD_PROVIDER_ID,
     version: DEFAULT_FLASHBOARD_MODEL_VERSION,
     outputType: 'image',
+    mode: 'std',
+    duration: 5,
+    aspectRatio: '16:9',
+    imageSize: '1K',
     generateAudio: false,
     multiShots: false,
     multiPrompt: [],
@@ -40,5 +44,6 @@ export function createDefaultFlashBoardComposer(): FlashBoardComposerState {
     sunoWeirdnessConstraint: DEFAULT_SUNO_WEIRDNESS_CONSTRAINT,
     sunoAudioWeight: DEFAULT_SUNO_AUDIO_WEIGHT,
     referenceMediaFileIds: [],
+    modelSettingsByKey: {},
   };
 }

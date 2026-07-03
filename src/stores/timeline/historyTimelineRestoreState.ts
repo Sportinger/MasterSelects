@@ -178,6 +178,7 @@ function createRestoredClip(
       textProperties: clonePlain(clip.textProperties),
       text3DProperties: clonePlain(clip.text3DProperties),
       solidColor: clip.solidColor,
+      transitionOverlay: clonePlain(clip.transitionOverlay),
       midiData: clonePlain(clip.midiData),
       mathScene: clonePlain(clip.mathScene),
       motion: clonePlain(clip.motion),

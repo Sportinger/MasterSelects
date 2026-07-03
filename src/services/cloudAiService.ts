@@ -18,6 +18,7 @@ import {
 import type {
   AccountInfo,
   GenerationReferenceMedia,
+  HostedAiRefundInfo,
   ImageToVideoParams,
   TaskStatus,
   TextToVideoParams,
@@ -134,6 +135,24 @@ function syncHostedCreditBalanceFromHeaders(headers: Headers): void {
   useAccountStore.getState().applyHostedCreditBalance(creditBalance);
 }
 
+function normalizeHostedRefund(value: unknown): HostedAiRefundInfo | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const refund = value as Partial<HostedAiRefundInfo>;
+  return typeof refund.credits === 'number' && refund.credits > 0 && typeof refund.jobId === 'string'
+    ? {
+        creditBalance: typeof refund.creditBalance === 'number' ? refund.creditBalance : 0,
+        credits: refund.credits,
+        idempotencyKey: refund.idempotencyKey ?? null,
+        jobId: refund.jobId,
+        ledgerEntryId: refund.ledgerEntryId ?? null,
+        refunded: refund.refunded === true,
+      }
+    : undefined;
+}
+
 function createHostedAudioIdempotencyKey(): string {
   return `hosted-audio:${Date.now()}:${crypto.randomUUID()}`;
 }
@@ -216,6 +235,7 @@ export const cloudAiService = {
       params: {
         aspectRatio: params.aspectRatio,
         imageInputs: params.imageInputs,
+        negativePrompt: params.negativePrompt,
         outputFormat: params.outputFormat,
         outputType: 'image',
         prompt: params.prompt,
@@ -312,12 +332,14 @@ export const cloudAiService = {
   },
   async getSunoMusicTaskStatus(taskId: string): Promise<SunoMusicTask> {
     const response = await cloudApi.ai.audio.musicStatus(taskId);
+    syncHostedCreditBalance(response);
     const task = response.data as {
       completedAt?: string;
       createdAt?: string;
       error?: string;
       id?: string;
       progress?: number;
+      refund?: unknown;
       results?: SunoMusicTask['results'];
       status?: SunoMusicTask['status'];
     } | null;
@@ -328,6 +350,7 @@ export const cloudAiService = {
       error: task?.error,
       id: task?.id ?? taskId,
       progress: task?.progress,
+      refund: normalizeHostedRefund(task?.refund),
       results: task?.results,
       status: task?.status ?? 'pending',
     };
@@ -435,9 +458,11 @@ export const cloudAiService = {
         };
       }
 
+      const response = await cloudApi.ai.video.status(taskId);
+      syncHostedCreditBalance(response);
       return {
         decision,
-        response: await cloudApi.ai.video.status(taskId),
+        response,
       };
     },
   },
@@ -455,6 +480,7 @@ export const cloudAiService = {
   },
   async getTaskStatus(taskId: string): Promise<VideoTask> {
     const response = await cloudApi.ai.video.status(taskId);
+    syncHostedCreditBalance(response);
     const task = response.data as {
       completedAt?: string;
       createdAt?: string;
@@ -462,6 +488,7 @@ export const cloudAiService = {
       id?: string;
       imageUrl?: string;
       progress?: number;
+      refund?: unknown;
       status?: TaskStatus;
       taskId?: string;
       videoUrl?: string;
@@ -477,6 +504,7 @@ export const cloudAiService = {
       id: task?.id ?? task?.taskId ?? taskId,
       imageUrl: task?.imageUrl ?? task?.videoUrl,
       progress,
+      refund: normalizeHostedRefund(task?.refund),
       status: task?.status ?? 'pending',
       videoUrl: task?.videoUrl ?? task?.imageUrl,
     };

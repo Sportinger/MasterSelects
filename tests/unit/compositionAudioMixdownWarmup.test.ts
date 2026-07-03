@@ -52,7 +52,7 @@ describe('compositionAudioMixdownWarmup', () => {
     vi.restoreAllMocks();
   });
 
-  it('collects composition audio/video clips that still need mixdown buffers', () => {
+  it('collects composition audio clips and only unlinked composition video mixdown fallbacks', () => {
     const requests = collectCompositionAudioMixdownWarmupRequests({
       timelineSessionId: 7,
       clips: [
@@ -60,13 +60,26 @@ describe('compositionAudioMixdownWarmup', () => {
         clip({ id: 'normal-audio', isComposition: false }),
         clip({ id: 'already-ready', mixdownBuffer: audioBuffer() }),
         clip({ id: 'generating', mixdownGenerating: true }),
-        clip({ id: 'video-comp', source: { type: 'video', naturalDuration: 5 }, startTime: 0 }),
+        clip({
+          id: 'linked-video-comp',
+          source: { type: 'video', naturalDuration: 5 },
+          startTime: 0,
+          linkedClipId: 'linked-audio-comp',
+        }),
+        clip({
+          id: 'linked-audio-comp',
+          source: { type: 'audio', naturalDuration: 5 },
+          startTime: 0,
+          linkedClipId: 'linked-video-comp',
+        }),
+        clip({ id: 'unlinked-video-comp', source: { type: 'video', naturalDuration: 5 }, startTime: 0.5 }),
         clip({ id: 'earlier', startTime: 1 }),
       ],
     });
 
     expect(requests.map((request) => request.clipId)).toEqual([
-      'video-comp',
+      'linked-audio-comp',
+      'unlinked-video-comp',
       'earlier',
       'later',
     ]);

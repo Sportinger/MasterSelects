@@ -5,6 +5,7 @@ import {
   executeClipContextMenuAudioAnalysisRegeneration,
   executeClipContextMenuAudioProxyRegeneration,
   executeClipContextMenuClipboardCommand,
+  executeClipContextMenuCopyPrompt,
   executeClipContextMenuLabelColor,
   executeClipContextMenuProxyGeneration,
   executeClipContextMenuShowInExplorer,
@@ -582,6 +583,37 @@ describe('clip context menu model', () => {
     expect(actions.pasteClipEffects).not.toHaveBeenCalled();
   });
 
+  it('copies generation prompts to the system clipboard only when prompt data exists', async () => {
+    const writeClipboardText = vi.fn(async () => undefined);
+    const onCopied = vi.fn();
+
+    await expect(executeClipContextMenuCopyPrompt({
+      prompt: '  A cinematic generated shot.  ',
+      canExecute: true,
+      writeClipboardText,
+      onCopied,
+    })).resolves.toBe(true);
+
+    expect(writeClipboardText).toHaveBeenCalledWith('A cinematic generated shot.');
+    expect(onCopied).toHaveBeenCalledTimes(1);
+
+    await expect(executeClipContextMenuCopyPrompt({
+      prompt: '',
+      canExecute: true,
+      writeClipboardText,
+      onCopied,
+    })).resolves.toBe(false);
+    await expect(executeClipContextMenuCopyPrompt({
+      prompt: 'Has prompt but disabled',
+      canExecute: false,
+      writeClipboardText,
+      onCopied,
+    })).resolves.toBe(false);
+
+    expect(writeClipboardText).toHaveBeenCalledTimes(1);
+    expect(onCopied).toHaveBeenCalledTimes(1);
+  });
+
   it('derives delete-gap command time from the clip start', () => {
     expect(getClipContextMenuDeleteGapTime(clip('clip-a', { startTime: 4 }))).toBe(3.9995);
     expect(getClipContextMenuDeleteGapTime(clip('clip-a', { startTime: 0 }))).toBe(0);
@@ -596,6 +628,7 @@ describe('clip context menu model', () => {
       deleteGapAtTime: vi.fn(),
       linkClips: vi.fn(),
       unlinkClips: vi.fn(),
+      syncClipsViaAudio: vi.fn(async () => null),
       convertSolidToMotionShape: vi.fn(() => 'motion-shape'),
       setMulticamDialogOpen: vi.fn(),
       unlinkGroup: vi.fn(),
@@ -623,6 +656,16 @@ describe('clip context menu model', () => {
       actions,
     })).toBe(true);
     expect(actions.linkClips).toHaveBeenCalledWith(['clip-a', 'clip-b']);
+
+    expect(executeClipContextMenuTimelineCommand({
+      command: 'sync-via-audio',
+      clip: clip('clip-a'),
+      clipId: 'clip-a',
+      targetClipIds: ['clip-a', 'clip-b'],
+      canExecute: true,
+      actions,
+    })).toBe(true);
+    expect(actions.syncClipsViaAudio).toHaveBeenCalledWith(['clip-a', 'clip-b'], 'clip-a');
 
     expect(executeClipContextMenuTimelineCommand({
       command: 'delete-clip',
@@ -653,6 +696,7 @@ describe('clip context menu model', () => {
       deleteGapAtTime: vi.fn(),
       linkClips: vi.fn(),
       unlinkClips: vi.fn(),
+      syncClipsViaAudio: vi.fn(async () => null),
       convertSolidToMotionShape: vi.fn(() => 'motion-shape'),
       setMulticamDialogOpen: vi.fn(),
       unlinkGroup: vi.fn(),

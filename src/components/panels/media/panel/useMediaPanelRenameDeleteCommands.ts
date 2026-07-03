@@ -15,6 +15,7 @@ import type {
   useMediaStore,
 } from '../../../../stores/mediaStore';
 import type { MediaFileUsageSummary } from '../../../../stores/mediaStore/slices/fileManageSlice';
+import { isUserVisibleComposition } from '../../../../stores/mediaStore/compositionVisibility';
 
 const log = Logger.create('MediaPanel');
 
@@ -137,7 +138,7 @@ export function useMediaPanelRenameDeleteCommands({
 
     const file = files.find(f => f.id === renamingId);
     const folder = folders.find(f => f.id === renamingId);
-    const composition = compositions.find(c => c.id === renamingId);
+    const composition = compositions.filter(isUserVisibleComposition).find(c => c.id === renamingId);
     const signalAsset = signalAssets.find(item => item.id === renamingId);
 
     if (file) {
@@ -166,7 +167,7 @@ export function useMediaPanelRenameDeleteCommands({
 
   const deleteSelectedItems = useCallback(async (idsToDelete: string[], fileIdsToDelete: string[]) => {
     const fileIdSet = new Set(fileIdsToDelete);
-    const compositionIds = new Set(compositions.map((item) => item.id));
+    const compositionIds = new Set(compositions.filter(isUserVisibleComposition).map((item) => item.id));
     const folderIds = new Set(folders.map((item) => item.id));
     const textItemIds = new Set(textItems.map((item) => item.id));
     const solidItemIds = new Set(solidItems.map((item) => item.id));

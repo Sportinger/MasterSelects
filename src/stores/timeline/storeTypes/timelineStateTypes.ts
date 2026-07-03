@@ -101,6 +101,8 @@ export interface TimelineState {
   maskPanelActive: boolean;
   activeMaskId: string | null;
   selectedVertexIds: Set<string>;
+  selectedMaskEdgeId: string | null;
+  maskFeatherPreview: { maskId: string; edgeId: string | null; changedAt: number } | null;
   maskDrawStart: { x: number; y: number } | null;
   maskDragging: boolean;
   toolMode: TimelineToolMode;

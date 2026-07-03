@@ -42,7 +42,11 @@ export type ColorProperty = `color.${string}.${string}.${string}`;
 export type MaskPathProperty = `mask.${string}.path`;
 export type MaskNumericPropertyName = 'position.x' | 'position.y' | 'feather' | 'featherQuality';
 export type MaskNumericProperty = `mask.${string}.${MaskNumericPropertyName}`;
-export type MaskProperty = MaskPathProperty | MaskNumericProperty;
+export type MaskEdgeFeatherProperty = `mask.${string}.edge.${string}.feather`;
+export type MaskProperty = MaskPathProperty | MaskNumericProperty | MaskEdgeFeatherProperty;
+export type ParsedMaskProperty =
+  | { maskId: string; property: 'path' | MaskNumericPropertyName }
+  | { maskId: string; property: 'edgeFeather'; edgeId: string };
 
 // Text boundary property formats:
 // - textBounds.path stores the paragraph bounds bezier path as one keyframe value
@@ -52,8 +56,10 @@ export type TextBoundsNumericPropertyName = 'position.x' | 'position.y';
 export type TextBoundsNumericProperty = `textBounds.${TextBoundsNumericPropertyName}`;
 export type TextBoundsProperty = TextBoundsPathProperty | TextBoundsNumericProperty;
 
+export type TransitionRenderProperty = 'transitionRender.progress';
+
 // Combined animatable property type
-export type AnimatableProperty = TransformProperty | CameraProperty | EffectProperty | NodeGraphParamProperty | ColorProperty | MaskProperty | TextBoundsProperty | VectorAnimationInputProperty | VectorAnimationStateProperty | VectorAnimationDataBindingPropertyPath | MotionProperty;
+export type AnimatableProperty = TransformProperty | CameraProperty | EffectProperty | NodeGraphParamProperty | ColorProperty | MaskProperty | TextBoundsProperty | TransitionRenderProperty | VectorAnimationInputProperty | VectorAnimationStateProperty | VectorAnimationDataBindingPropertyPath | MotionProperty;
 
 export function isCameraProperty(property: string): property is CameraProperty {
   return /^camera\.(fov|near|far|resolutionWidth|resolutionHeight)$/.test(property);
@@ -111,6 +117,10 @@ export function createMaskNumericProperty(maskId: string, property: MaskNumericP
   return `mask.${maskId}.${property}` as MaskNumericProperty;
 }
 
+export function createMaskEdgeFeatherProperty(maskId: string, edgeId: string): MaskEdgeFeatherProperty {
+  return `mask.${maskId}.edge.${edgeId}.feather` as MaskEdgeFeatherProperty;
+}
+
 export function isMaskPathProperty(property: string): property is MaskPathProperty {
   return /^mask\.[^.]+\.path$/.test(property);
 }
@@ -119,7 +129,16 @@ export function isMaskNumericProperty(property: string): property is MaskNumeric
   return /^mask\.[^.]+\.(position\.(x|y)|feather|featherQuality)$/.test(property);
 }
 
-export function parseMaskProperty(property: string): { maskId: string; property: 'path' | MaskNumericPropertyName } | null {
+export function isMaskEdgeFeatherProperty(property: string): property is MaskEdgeFeatherProperty {
+  return /^mask\.[^.]+\.edge\.[^.]+\.feather$/.test(property);
+}
+
+export function parseMaskProperty(property: string): ParsedMaskProperty | null {
+  const edgeMatch = /^mask\.([^.]+)\.edge\.([^.]+)\.feather$/.exec(property);
+  if (edgeMatch) {
+    return { maskId: edgeMatch[1], property: 'edgeFeather', edgeId: edgeMatch[2] };
+  }
+
   const match = /^mask\.([^.]+)\.(.+)$/.exec(property);
   if (!match) return null;
 

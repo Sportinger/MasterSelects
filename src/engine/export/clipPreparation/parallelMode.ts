@@ -2,7 +2,7 @@ import { Logger } from '../../../services/logger';
 import type { TimelineClip } from '../../../stores/timeline/types';
 import type { MediaFile } from '../../../stores/mediaStore/types';
 import { ParallelDecodeManager } from '../../ParallelDecodeManager';
-import type { ClipPreparationResult, ExportClipState } from '../ClipPreparation';
+import type { ClipPreparationModeResult, ExportClipState } from '../ClipPreparation';
 import type { ExportParallelDecodeAdmissionReport } from '../../../services/timeline/exportRuntimeReporting';
 import {
   createParallelDecodeAdmissionReport,
@@ -28,7 +28,7 @@ export async function initializeParallelDecoding(
   exportRunId: string | undefined,
   endPrepare: () => void,
   fileDataCache: ClipFileDataCache
-): Promise<ClipPreparationResult> {
+): Promise<ClipPreparationModeResult> {
   const reservedParallelReports: ExportParallelDecodeAdmissionReport[] = [];
   if (exportRunId) {
     try {

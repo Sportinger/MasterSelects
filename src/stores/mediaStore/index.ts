@@ -5,6 +5,7 @@ import { subscribeWithSelector } from 'zustand/middleware';
 
 import type { MediaState, MediaFile, ProjectItem } from './types';
 import { DEFAULT_SCENE_CAMERA_SETTINGS } from './types';
+import { isUserVisibleComposition } from './compositionVisibility';
 import { DEFAULT_COMPOSITION } from './constants';
 import { fileSystemService } from '../../services/fileSystemService';
 import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../types/splatEffector';
@@ -171,7 +172,7 @@ export const useMediaStore = create<MediaStoreState>()(
       } = get();
       return [
         ...folders.filter((f) => f.parentId === folderId),
-        ...compositions.filter((c) => c.parentId === folderId),
+        ...compositions.filter((c) => c.parentId === folderId && isUserVisibleComposition(c)),
         ...textItems.filter((t) => t.parentId === folderId),
         ...solidItems.filter((s) => s.parentId === folderId),
         ...meshItems.filter((m) => m.parentId === folderId),

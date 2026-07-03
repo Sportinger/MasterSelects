@@ -36,9 +36,10 @@ export function PrivacyZH() {
       <h3>4. 支付</h3>
       <p>由 <strong>Stripe, Inc.</strong> 处理支付。我们不存储信用卡信息。</p>
       <p>
-        <strong>Hosted AI chat logs:</strong> when you use hosted AI chat, prompts/messages, responses, tool calls,
-        token counts, credit cost, duration, status, and error state may be stored in our D1 database for account
-        history, billing/debugging, abuse handling, and support.
+        <strong>Hosted AI logs:</strong> when you use hosted AI chat or hosted media generation, prompts/messages,
+        request payloads, responses, tool calls, moderation results, token counts, credit cost, duration, status,
+        error state, and a pseudonymous IP hash may be stored in our D1 database for account history,
+        billing/debugging, abuse handling, and support.
       </p>
       <h3>5. 您的权利（GDPR）</h3>
       <ul>

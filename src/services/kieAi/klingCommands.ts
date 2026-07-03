@@ -23,13 +23,50 @@ function getReferenceToken(index: number): string {
   return `ref_${index + 1}`;
 }
 
-function applyKlingReferenceTokens(prompt: string, references: UploadedReferenceMedia[]): string {
-  if (references.length === 0) {
+interface KlingReferenceElement {
+  description: string;
+  element_input_urls: string[];
+  name: string;
+}
+
+function createKlingReferenceElements(references: UploadedReferenceMedia[]): KlingReferenceElement[] {
+  const elements: KlingReferenceElement[] = [];
+  const imageReferences = references
+    .filter((reference) => reference.mediaType === 'image')
+    .slice(0, 4);
+
+  if (imageReferences.length >= 2) {
+    elements.push({
+      description: imageReferences
+        .map((reference, index) => reference.label || `Reference ${index + 1}`)
+        .join(', '),
+      element_input_urls: imageReferences.map((reference) => reference.url),
+      name: getReferenceToken(elements.length),
+    });
+  }
+
+  for (const reference of references) {
+    if (reference.mediaType !== 'video' || elements.length >= 3) {
+      continue;
+    }
+
+    elements.push({
+      description: reference.label || `Reference ${elements.length + 1}`,
+      element_input_urls: [reference.url],
+      name: getReferenceToken(elements.length),
+    });
+  }
+
+  return elements;
+}
+
+function applyKlingReferenceTokens(prompt: string, elements: KlingReferenceElement[]): string {
+  if (elements.length === 0) {
     return prompt;
   }
 
   let nextPrompt = prompt;
-  const tokens = references.map((_, index) => getReferenceToken(index));
+  const tokens = elements.map((element) => element.name);
 
   tokens.forEach((token, index) => {
     const pattern = new RegExp(`\\bREF\\s*${index + 1}\\b`, 'gi');
@@ -44,22 +81,18 @@ function applyKlingReferenceTokens(prompt: string, references: UploadedReference
   return `${nextPrompt.trim()} ${tokens.map((token) => `@${token}`).join(' ')}`.trim();
 }
 
-function addKlingReferenceInput(input: Record<string, unknown>, references: UploadedReferenceMedia[]): void {
-  if (references.length === 0) {
+function addKlingReferenceInput(input: Record<string, unknown>, elements: KlingReferenceElement[]): void {
+  if (elements.length === 0) {
     return;
   }
 
-  input.kling_elements = references.map((reference, index) => ({
-    name: getReferenceToken(index),
-    description: reference.label || `Reference ${index + 1}`,
-    element_input_urls: [reference.url],
-  }));
+  input.kling_elements = elements;
 }
 
 function addMultiPromptInput(
   input: Record<string, unknown>,
   multiPrompt: ReturnType<typeof normalizeMultiShotPrompt>,
-  references: UploadedReferenceMedia[],
+  references: KlingReferenceElement[],
 ): void {
   if (!multiPrompt) {
     return;
@@ -89,7 +122,8 @@ export async function createKlingTextToVideo(
   const multiPrompt = params.multiShots ? normalizeMultiShotPrompt(params.multiPrompt) : undefined;
   const effectiveSound = params.multiShots ? true : (params.sound ?? false);
   const elementReferences = (await mediaTools.uploadReferenceMedia(params.referenceMedia, ['image', 'video'])).slice(0, 3);
-  const prompt = applyKlingReferenceTokens(params.prompt, elementReferences);
+  const referenceElements = createKlingReferenceElements(elementReferences);
+  const prompt = applyKlingReferenceTokens(params.prompt, referenceElements);
 
   const input: Record<string, unknown> = {
     prompt,
@@ -100,8 +134,8 @@ export async function createKlingTextToVideo(
     multi_shots: Boolean(params.multiShots),
   };
 
-  addMultiPromptInput(input, multiPrompt, elementReferences);
-  addKlingReferenceInput(input, elementReferences);
+  addMultiPromptInput(input, multiPrompt, referenceElements);
+  addKlingReferenceInput(input, referenceElements);
 
   const body = {
     model: 'kling-3.0/video',
@@ -121,7 +155,8 @@ export async function createKlingImageToVideo(
   const multiPrompt = params.multiShots ? normalizeMultiShotPrompt(params.multiPrompt) : undefined;
   const effectiveSound = params.multiShots ? true : (params.sound ?? false);
   const elementReferences = (await mediaTools.uploadReferenceMedia(params.referenceMedia, ['image', 'video'])).slice(0, 3);
-  const prompt = applyKlingReferenceTokens(params.prompt, elementReferences);
+  const referenceElements = createKlingReferenceElements(elementReferences);
+  const prompt = applyKlingReferenceTokens(params.prompt, referenceElements);
 
   if (params.startImageUrl) {
     log.debug('Compressing and uploading start image...');
@@ -152,8 +187,8 @@ export async function createKlingImageToVideo(
     input.image_urls = imageUrls;
   }
 
-  addMultiPromptInput(input, multiPrompt, elementReferences);
-  addKlingReferenceInput(input, elementReferences);
+  addMultiPromptInput(input, multiPrompt, referenceElements);
+  addKlingReferenceInput(input, referenceElements);
 
   const body = {
     model: 'kling-3.0/video',

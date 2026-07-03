@@ -37,9 +37,10 @@ export function PrivacyKO() {
       <h3>4. 결제</h3>
       <p><strong>Stripe, Inc.</strong>가 결제를 처리합니다. 신용카드 정보는 저장하지 않습니다.</p>
       <p>
-        <strong>Hosted AI chat logs:</strong> when you use hosted AI chat, prompts/messages, responses, tool calls,
-        token counts, credit cost, duration, status, and error state may be stored in our D1 database for account
-        history, billing/debugging, abuse handling, and support.
+        <strong>Hosted AI logs:</strong> when you use hosted AI chat or hosted media generation, prompts/messages,
+        request payloads, responses, tool calls, moderation results, token counts, credit cost, duration, status,
+        error state, and a pseudonymous IP hash may be stored in our D1 database for account history,
+        billing/debugging, abuse handling, and support.
       </p>
       <h3>5. 귀하의 권리 (GDPR)</h3>
       <ul>

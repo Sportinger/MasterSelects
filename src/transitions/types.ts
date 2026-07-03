@@ -246,6 +246,8 @@ export type TransitionMaskPrimitive =
       target: 'outgoing' | 'incoming';
       mask: 'wipe';
       direction: TransitionWipeDirection;
+      angle?: number;
+      feather?: number;
     }
   | {
       kind: 'mask';

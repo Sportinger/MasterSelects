@@ -159,6 +159,11 @@ export function useFlashBoardPromptRefineController({
     setPromptRefineError(null);
   }, []);
 
+  const handleDismissPromptBeforeAiRewrite = useCallback(() => {
+    setPromptBeforeAiRewrite(null);
+    setSunoBeforeAiRewrite(null);
+  }, []);
+
   const handleRefinePrompt = useCallback(async () => {
     if (isAudioMode && !isSunoMode && selectedEntry?.promptRefinerProfile !== 'suno-sounds') {
       return;
@@ -206,14 +211,7 @@ export function useFlashBoardPromptRefineController({
     promptRefineAbortRef.current = abortController;
     setPromptBeforeAiRewrite(previousPrompt);
     setSunoBeforeAiRewrite(isSunoMode ? previousSunoPrompt : null);
-    if (isSunoMode) {
-      setPrompt('');
-      setSunoStyle('');
-      setSunoNegativeTags('');
-      setSunoCustomMode(true);
-    } else {
-      setPrompt('');
-    }
+    if (isSunoMode) setSunoCustomMode(true);
 
     try {
       const refinerInput = buildFlashBoardPromptRefineInput({
@@ -312,10 +310,7 @@ export function useFlashBoardPromptRefineController({
     referenceBadges,
     selectedEntry,
     service,
-    setPrompt,
     setSunoCustomMode,
-    setSunoNegativeTags,
-    setSunoStyle,
     sunoAudioWeight,
     sunoCustomMode,
     sunoInstrumental,
@@ -354,9 +349,11 @@ export function useFlashBoardPromptRefineController({
     clearPromptRefineError,
     clearPromptRefineState,
     handleRefinePrompt,
+    handleDismissPromptBeforeAiRewrite,
     handleRestorePromptBeforeAiRewrite,
     isRefiningPrompt,
     promptRefineError,
+    promptBeforeAiRewrite: isSunoMode ? sunoBeforeAiRewrite?.prompt ?? null : promptBeforeAiRewrite,
     promptRefineTitle,
   };
 }

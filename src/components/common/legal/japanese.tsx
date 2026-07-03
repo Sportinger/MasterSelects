@@ -37,9 +37,10 @@ export function PrivacyJA() {
       <h3>4. 決済</h3>
       <p><strong>Stripe, Inc.</strong> が決済を処理します。クレジットカード情報は保存しません。</p>
       <p>
-        <strong>Hosted AI chat logs:</strong> when you use hosted AI chat, prompts/messages, responses, tool calls,
-        token counts, credit cost, duration, status, and error state may be stored in our D1 database for account
-        history, billing/debugging, abuse handling, and support.
+        <strong>Hosted AI logs:</strong> when you use hosted AI chat or hosted media generation, prompts/messages,
+        request payloads, responses, tool calls, moderation results, token counts, credit cost, duration, status,
+        error state, and a pseudonymous IP hash may be stored in our D1 database for account history,
+        billing/debugging, abuse handling, and support.
       </p>
       <h3>5. あなたの権利（GDPR）</h3>
       <ul>

@@ -12,15 +12,23 @@ import {
   FLUX_KONTEXT_PRO_PROVIDER_ID,
   RECRAFT_CRISP_UPSCALE_PROVIDER_ID,
   RECRAFT_REMOVE_BACKGROUND_PROVIDER_ID,
+  RUNWAY_ASPECT_RATIOS,
   RUNWAY_VIDEO_PROVIDER_ID,
+  SEEDANCE_2_ASPECT_RATIOS,
   TOPAZ_IMAGE_UPSCALE_PROVIDER_ID,
   TOPAZ_VIDEO_UPSCALE_PROVIDER_ID,
   VEO_3_1_PROVIDER_ID,
 } from '../kieAi/config';
 
-const COMMON_IMAGE_ASPECT_RATIOS = ['auto', '1:1', '3:4', '4:3', '9:16', '16:9', '21:9'];
 const NANO_BANANA_ASPECT_RATIOS = ['auto', '1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'];
+const GPT_IMAGE_2_ASPECT_RATIOS = ['auto', '1:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16', '2:1', '1:2', '3:1', '1:3', '21:9', '9:21', '5:4', '4:5'];
+const FLUX_2_TEXT_ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'];
+const FLUX_2_IMAGE_ASPECT_RATIOS = [...FLUX_2_TEXT_ASPECT_RATIOS, 'auto'];
+const SEEDREAM_5_LITE_ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '2:3', '3:2', '21:9'];
+const FLUX_KONTEXT_ASPECT_RATIOS = ['16:9', '21:9', '4:3', '1:1', '3:4', '9:16', '16:21'];
 const NANO_BANANA_IMAGE_SIZES = ['1K', '2K', '4K'];
+const KLING_MODE_LABELS = { std: '720p', pro: '1080p', '4K': '4K' };
+const VEO_MODE_LABELS = { veo3_fast: 'Fast', veo3: 'Quality', veo3_lite: 'Lite' };
 const KIEAI_MARKET_IMAGE_ENTRIES: CatalogEntry[] = [
   {
     service: 'kieai',
@@ -64,47 +72,13 @@ const KIEAI_MARKET_IMAGE_ENTRIES: CatalogEntry[] = [
   },
   {
     service: 'kieai',
-    providerId: 'google/imagen4-fast',
-    name: 'Imagen 4 Fast',
-    description: 'Fast Google Imagen 4 text-to-image generation via Kie.ai',
-    versions: ['latest'],
-    modes: [],
-    durations: [],
-    aspectRatios: COMMON_IMAGE_ASPECT_RATIOS,
-    supportsTextToVideo: false,
-    supportsImageToVideo: false,
-    supportsTextToImage: true,
-    supportsGenerateAudio: false,
-    supportsMultiShot: false,
-    outputType: 'image',
-    promptRefinerProfile: 'imagen',
-  },
-  {
-    service: 'kieai',
-    providerId: 'google/imagen4-ultra',
-    name: 'Imagen 4 Ultra',
-    description: 'Premium Google Imagen 4 text-to-image generation via Kie.ai',
-    versions: ['latest'],
-    modes: [],
-    durations: [],
-    aspectRatios: COMMON_IMAGE_ASPECT_RATIOS,
-    supportsTextToVideo: false,
-    supportsImageToVideo: false,
-    supportsTextToImage: true,
-    supportsGenerateAudio: false,
-    supportsMultiShot: false,
-    outputType: 'image',
-    promptRefinerProfile: 'imagen',
-  },
-  {
-    service: 'kieai',
     providerId: 'gpt-image-2-text-to-image',
     name: 'GPT Image 2',
     description: 'GPT Image 2 text-to-image generation via Kie.ai',
     versions: ['latest'],
     modes: [],
     durations: [],
-    aspectRatios: COMMON_IMAGE_ASPECT_RATIOS,
+    aspectRatios: GPT_IMAGE_2_ASPECT_RATIOS,
     supportsTextToVideo: false,
     supportsImageToVideo: false,
     supportsTextToImage: true,
@@ -121,7 +95,7 @@ const KIEAI_MARKET_IMAGE_ENTRIES: CatalogEntry[] = [
     versions: ['latest'],
     modes: [],
     durations: [],
-    aspectRatios: COMMON_IMAGE_ASPECT_RATIOS,
+    aspectRatios: GPT_IMAGE_2_ASPECT_RATIOS,
     supportsTextToVideo: false,
     supportsImageToVideo: false,
     supportsTextToImage: true,
@@ -141,7 +115,7 @@ const KIEAI_MARKET_IMAGE_ENTRIES: CatalogEntry[] = [
     versions: ['latest'],
     modes: [],
     durations: [],
-    aspectRatios: COMMON_IMAGE_ASPECT_RATIOS,
+    aspectRatios: FLUX_2_TEXT_ASPECT_RATIOS,
     supportsTextToVideo: false,
     supportsImageToVideo: false,
     supportsTextToImage: true,
@@ -159,7 +133,7 @@ const KIEAI_MARKET_IMAGE_ENTRIES: CatalogEntry[] = [
     versions: ['latest'],
     modes: [],
     durations: [],
-    aspectRatios: COMMON_IMAGE_ASPECT_RATIOS,
+    aspectRatios: FLUX_2_IMAGE_ASPECT_RATIOS,
     supportsTextToVideo: false,
     supportsImageToVideo: false,
     supportsTextToImage: true,
@@ -180,7 +154,7 @@ const KIEAI_MARKET_IMAGE_ENTRIES: CatalogEntry[] = [
     versions: ['latest'],
     modes: [],
     durations: [],
-    aspectRatios: COMMON_IMAGE_ASPECT_RATIOS,
+    aspectRatios: SEEDREAM_5_LITE_ASPECT_RATIOS,
     supportsTextToVideo: false,
     supportsImageToVideo: false,
     supportsTextToImage: true,
@@ -197,7 +171,7 @@ const KIEAI_MARKET_IMAGE_ENTRIES: CatalogEntry[] = [
     versions: ['latest'],
     modes: [],
     durations: [],
-    aspectRatios: COMMON_IMAGE_ASPECT_RATIOS,
+    aspectRatios: SEEDREAM_5_LITE_ASPECT_RATIOS,
     supportsTextToVideo: false,
     supportsImageToVideo: false,
     supportsTextToImage: true,
@@ -217,7 +191,7 @@ const KIEAI_MARKET_IMAGE_ENTRIES: CatalogEntry[] = [
     versions: ['latest'],
     modes: [],
     durations: [],
-    aspectRatios: COMMON_IMAGE_ASPECT_RATIOS,
+    aspectRatios: FLUX_KONTEXT_ASPECT_RATIOS,
     supportsTextToVideo: false,
     supportsImageToVideo: false,
     supportsTextToImage: true,
@@ -237,7 +211,7 @@ const KIEAI_MARKET_IMAGE_ENTRIES: CatalogEntry[] = [
     versions: ['latest'],
     modes: [],
     durations: [],
-    aspectRatios: COMMON_IMAGE_ASPECT_RATIOS,
+    aspectRatios: FLUX_KONTEXT_ASPECT_RATIOS,
     supportsTextToVideo: false,
     supportsImageToVideo: false,
     supportsTextToImage: true,
@@ -342,6 +316,9 @@ export function getCatalogEntries(): CatalogEntry[] {
     const isImageOnly = !p.supportsTextToVideo && !p.supportsImageToVideo;
     const isSeedance2 = p.id === 'bytedance/seedance-2' || p.id === 'bytedance/seedance-2-fast';
     const isTopazVideoUpscale = p.id === TOPAZ_VIDEO_UPSCALE_PROVIDER_ID;
+    const isKling = p.id === 'kling-3.0';
+    const isRunway = p.id === RUNWAY_VIDEO_PROVIDER_ID;
+    const isVeo = p.id === VEO_3_1_PROVIDER_ID;
     entries.push({
       service: 'kieai',
       providerId: p.id,
@@ -349,18 +326,31 @@ export function getCatalogEntries(): CatalogEntry[] {
       description: p.description,
       versions: p.versions,
       modes: p.supportedModes,
+      modeLabels: isKling ? KLING_MODE_LABELS : isVeo ? VEO_MODE_LABELS : undefined,
+      modeControlLabel: isKling || isSeedance2 || isRunway ? 'Resolution' : isVeo ? 'Model' : undefined,
       durations: p.supportedDurations,
       aspectRatios: p.supportedAspectRatios,
+      referenceInputKinds: isKling
+        ? ['start-frame', 'end-frame', 'image-reference', 'video-reference']
+        : isSeedance2
+          ? ['start-frame', 'end-frame', 'image-reference', 'video-reference', 'audio-reference']
+          : isVeo
+            ? ['start-frame', 'end-frame', 'image-reference']
+            : isRunway
+              ? ['start-frame', 'image-reference']
+              : isTopazVideoUpscale
+                ? ['video-input']
+                : undefined,
       supportsTextToVideo: p.supportsTextToVideo,
       supportsImageToVideo: p.supportsImageToVideo,
-      supportsGenerateAudio: p.id === 'kling-3.0' || isSeedance2,
-      supportsMultiShot: p.id === 'kling-3.0',
-      maxReferenceMedia: p.id === 'kling-3.0' ? 3 : isSeedance2 ? 8 : isTopazVideoUpscale ? 1 : undefined,
+      supportsGenerateAudio: isKling || isSeedance2,
+      supportsMultiShot: isKling,
+      maxReferenceMedia: isKling ? 3 : isSeedance2 ? 8 : isVeo ? 3 : isRunway || isTopazVideoUpscale ? 1 : undefined,
       promptRefinerProfile: isTopazVideoUpscale
         ? 'utility-video'
-        : p.id === VEO_3_1_PROVIDER_ID
+        : isVeo
           ? 'veo'
-          : p.id === RUNWAY_VIDEO_PROVIDER_ID
+          : isRunway
             ? 'runway'
             : undefined,
       requiredReferenceMediaType: isTopazVideoUpscale ? 'video' : undefined,
@@ -380,7 +370,7 @@ export function getCatalogEntries(): CatalogEntry[] {
     versions: [EVOLINK_NANO_BANANA_2_MODEL],
     modes: [],
     durations: [],
-    aspectRatios: ['auto', '1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'],
+    aspectRatios: NANO_BANANA_ASPECT_RATIOS,
     supportsTextToVideo: false,
     supportsImageToVideo: false,
     supportsTextToImage: true,
@@ -508,9 +498,12 @@ export function getCatalogEntries(): CatalogEntry[] {
     name: 'Kling',
     description: 'Hosted Kling via MasterSelects Cloud',
     versions: ['latest'],
-    modes: ['std', 'pro'],
+    modes: ['std', 'pro', '4K'],
+    modeLabels: KLING_MODE_LABELS,
+    modeControlLabel: 'Resolution',
     durations: [5, 10],
     aspectRatios: ['16:9', '9:16', '1:1'],
+    referenceInputKinds: ['start-frame', 'end-frame', 'image-reference', 'video-reference'],
     supportsTextToVideo: true,
     supportsImageToVideo: true,
     supportsGenerateAudio: true,
@@ -526,8 +519,10 @@ export function getCatalogEntries(): CatalogEntry[] {
     description: 'Hosted Seedance 2.0 via MasterSelects Cloud',
     versions: ['latest'],
     modes: ['480p', '720p', '1080p'],
+    modeControlLabel: 'Resolution',
     durations: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-    aspectRatios: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'],
+    aspectRatios: SEEDANCE_2_ASPECT_RATIOS,
+    referenceInputKinds: ['start-frame', 'end-frame', 'image-reference', 'video-reference', 'audio-reference'],
     supportsTextToVideo: true,
     supportsImageToVideo: true,
     supportsGenerateAudio: true,
@@ -543,8 +538,10 @@ export function getCatalogEntries(): CatalogEntry[] {
     description: 'Hosted Seedance 2.0 Fast via MasterSelects Cloud',
     versions: ['latest'],
     modes: ['480p', '720p'],
+    modeControlLabel: 'Resolution',
     durations: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-    aspectRatios: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'],
+    aspectRatios: SEEDANCE_2_ASPECT_RATIOS,
+    referenceInputKinds: ['start-frame', 'end-frame', 'image-reference', 'video-reference', 'audio-reference'],
     supportsTextToVideo: true,
     supportsImageToVideo: true,
     supportsGenerateAudio: true,
@@ -560,8 +557,11 @@ export function getCatalogEntries(): CatalogEntry[] {
     description: 'Hosted Veo 3.1 via MasterSelects Cloud',
     versions: ['3.1'],
     modes: ['veo3_fast', 'veo3', 'veo3_lite'],
+    modeLabels: VEO_MODE_LABELS,
+    modeControlLabel: 'Model',
     durations: [],
     aspectRatios: ['16:9', '9:16'],
+    referenceInputKinds: ['start-frame', 'end-frame', 'image-reference'],
     supportsTextToVideo: true,
     supportsImageToVideo: true,
     supportsGenerateAudio: false,
@@ -578,8 +578,10 @@ export function getCatalogEntries(): CatalogEntry[] {
     description: 'Hosted Runway via MasterSelects Cloud',
     versions: ['latest'],
     modes: ['720p', '1080p'],
+    modeControlLabel: 'Resolution',
     durations: [5, 10],
-    aspectRatios: ['16:9', '9:16', '1:1'],
+    aspectRatios: RUNWAY_ASPECT_RATIOS,
+    referenceInputKinds: ['start-frame', 'image-reference'],
     supportsTextToVideo: true,
     supportsImageToVideo: true,
     supportsGenerateAudio: false,
@@ -596,8 +598,10 @@ export function getCatalogEntries(): CatalogEntry[] {
     description: 'Hosted Topaz video upscaling via MasterSelects Cloud',
     versions: ['latest'],
     modes: ['2x', '4x'],
+    modeControlLabel: 'Scale',
     durations: [],
     aspectRatios: [],
+    referenceInputKinds: ['video-input'],
     supportsTextToVideo: true,
     supportsImageToVideo: false,
     supportsGenerateAudio: false,

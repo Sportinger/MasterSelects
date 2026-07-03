@@ -5,6 +5,7 @@ const log = Logger.create('FrameExporter');
 import { AudioExportPipeline, type EncodedAudioResult } from '../audio';
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
 import { useTimelineStore } from '../../stores/timeline';
+import { useMediaStore } from '../../stores/mediaStore';
 import {
   createTransitionSourceClip,
   DEFAULT_TRANSITION_PLACEMENT,
@@ -50,6 +51,7 @@ import {
 } from '../../services/timeline/exportRuntimeReporting';
 import type { TimelineRuntimeAdmissionDecision } from '../../services/timeline/runtimeCoordinatorTypes';
 import { ExportPreviewPublisher } from './frameExporter/ExportPreviewPublisher';
+import { prepareTransitionCompositionsForExport } from './prepareTransitionCompositionsForExport';
 
 export class FrameExporter {
   private static readonly PREVIEW_FRAME_INTERVAL_MS = 0;
@@ -135,8 +137,7 @@ export class FrameExporter {
     this.renderSession = null;
   }
 
-  private shouldForcePreciseRendering(): boolean {
-    const state = useTimelineStore.getState();
+  private shouldForcePreciseRendering(state: ReturnType<typeof useTimelineStore.getState>): boolean {
     const clipsInRange = collectRenderableExportClipsInRange(
       this.settings.startTime,
       this.settings.endTime,
@@ -156,7 +157,8 @@ export class FrameExporter {
   }
 
   async export(onProgress: (progress: ExportProgress) => void): Promise<Blob | null> {
-    const forcePreciseRendering = this.shouldForcePreciseRendering();
+    const state = useTimelineStore.getState();
+    const forcePreciseRendering = this.shouldForcePreciseRendering(state);
     const initialMode = forcePreciseRendering ? 'precise' : this.exportMode;
 
     if (forcePreciseRendering && this.exportMode !== 'precise') {
@@ -167,18 +169,20 @@ export class FrameExporter {
     this.resetAttemptState();
 
     try {
-      return await this.exportAttempt(onProgress);
+      return await this.exportAttempt(onProgress, state);
     } catch (error) {
       log.error('Export error:', error);
       throw error;
     }
   }
 
-  private async exportAttempt(onProgress: (progress: ExportProgress) => void): Promise<Blob | null> {
+  private async exportAttempt(
+    onProgress: (progress: ExportProgress) => void,
+    state: ReturnType<typeof useTimelineStore.getState>,
+  ): Promise<Blob | null> {
     const { fps, startTime, endTime, width, height, includeAudio } = this.settings;
     const frameDuration = 1 / fps;
     const totalFrames = Math.ceil((endTime - startTime) * fps);
-    const state = useTimelineStore.getState();
     const tracks = Array.isArray(state.tracks) ? state.tracks : [];
     const clips = Array.isArray(state.clips) ? state.clips : [];
     const requestedAudio = !!includeAudio;
@@ -345,6 +349,7 @@ export class FrameExporter {
       this.exportMode = preparation.exportMode;
       reportExportClipStates(exportRunId, this.clipStates);
       this.reportExportRuntimeState(exportRunId, true);
+      await prepareTransitionCompositionsForExport();
 
       // Initialize layer builder cache (tracks don't change during export)
       initializeLayerBuilder(tracks);
@@ -633,6 +638,7 @@ export class FrameExporter {
    */
   private createFrameContext(time: number, fps: number, frameTolerance: number): FrameContext {
     const state = useTimelineStore.getState();
+    const mediaState = useMediaStore.getState();
     const getMediaDuration = createTimelineTransitionMediaDurationResolver();
     const clipsAtTime = state.getClipsAtTime(time);
 
@@ -682,6 +688,8 @@ export class FrameExporter {
       trackMap,
       clipsByTrack,
       transitionParticipantsByTrack,
+      mediaFiles: mediaState.files,
+      mediaCompositions: mediaState.compositions,
       getInterpolatedTransform: state.getInterpolatedTransform,
       getInterpolatedEffects: state.getInterpolatedEffects,
       getInterpolatedColorCorrection: state.getInterpolatedColorCorrection,

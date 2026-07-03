@@ -8,6 +8,7 @@ import { ALL_BLEND_MODES } from '../constants';
 import { getShortcutRegistry } from '../../../services/shortcutRegistry';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
+import { isUserVisibleComposition } from '../../../stores/mediaStore/compositionVisibility';
 import type { TimelineEditOperationActions } from '../../../stores/timeline/types';
 import { TIMELINE_TOOL_DEFINITIONS } from '../tools/registry';
 import { runTimelineToolCommand } from '../tools/timelineToolCommands';
@@ -165,7 +166,7 @@ export function useTimelineKeyboard({
             const mediaState = useMediaStore.getState();
             const ids = [
               ...mediaState.files.map((file) => file.id),
-              ...mediaState.compositions.map((composition) => composition.id),
+              ...mediaState.compositions.filter(isUserVisibleComposition).map((composition) => composition.id),
             ];
             mediaState.setSelection(ids);
             return;
@@ -292,6 +293,8 @@ export function useTimelineKeyboard({
 
       // Copy
       if (registry.matches('edit.copy', e)) {
+        const timelineState = useTimelineStore.getState();
+        if (timelineState.maskPanelActive && timelineState.activeMaskId) return;
         e.preventDefault();
         if (selectedKeyframeIds.size > 0) {
           copyKeyframes();
@@ -303,6 +306,8 @@ export function useTimelineKeyboard({
 
       // Paste
       if (registry.matches('edit.paste', e)) {
+        const timelineState = useTimelineStore.getState();
+        if (timelineState.maskPanelActive && timelineState.hasClipboardMask()) return;
         e.preventDefault();
         pasteKeyframes();
         return;

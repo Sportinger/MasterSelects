@@ -8,6 +8,8 @@ export type IconName =
   | 'eyeOff'
   | 'power'
   | 'invert'
+  | 'copy'
+  | 'paste'
   | 'trash'
   | 'close'
   | 'up'
@@ -63,6 +65,21 @@ export function MaskIcon({ name }: { name: IconName }) {
         <>
           <circle cx="12" cy="12" r="8" />
           <path d="M12 4a8 8 0 0 0 0 16z" fill="currentColor" stroke="none" />
+        </>
+      );
+    case 'copy':
+      return (
+        <>
+          <rect x="8" y="8" width="11" height="11" rx="1.5" />
+          <path d="M5 16H4a1.5 1.5 0 0 1-1.5-1.5V5A1.5 1.5 0 0 1 4 3.5h9.5A1.5 1.5 0 0 1 15 5v1" />
+        </>
+      );
+    case 'paste':
+      return (
+        <>
+          <path d="M8 4h8l1 3H7l1-3z" />
+          <path d="M6 7h12v13H6z" />
+          <path d="M9 11h6" />
         </>
       );
     case 'trash':

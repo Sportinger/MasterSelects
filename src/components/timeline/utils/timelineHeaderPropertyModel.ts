@@ -1,5 +1,6 @@
 import type { AnimatableProperty, ClipMask, ClipTransform, Keyframe } from '../../../types';
 import { parseCameraProperty, parseMaskProperty } from '../../../types';
+import { getMaskEdgeFeather } from '../../../utils/maskEdgeFeathers';
 import {
   parseVectorAnimationDataBindingProperty,
   parseVectorAnimationInputProperty,
@@ -21,22 +22,10 @@ import {
   formatTimelineHeaderVectorAnimationPropertyValue,
   getTimelineHeaderVectorAnimationPropertyValue,
 } from './timelineHeaderVectorPropertyModel';
-import {
-  type HeaderKeyframe,
-  type KeyframeTrackClip,
-  usesCameraPropertyModel,
-} from './timelineHeaderPropertyTypes';
+import { type HeaderKeyframe, type KeyframeTrackClip, usesCameraPropertyModel } from './timelineHeaderPropertyTypes';
 
-export {
-  getHeaderPropertyLabel,
-  sortTimelineHeaderProperties,
-} from './timelineHeaderPropertyLabels';
-export {
-  type HeaderKeyframe,
-  type KeyframeTrackClip,
-  shouldHide3DOnlyProperties,
-  usesCameraPropertyModel,
-} from './timelineHeaderPropertyTypes';
+export { getHeaderPropertyLabel, sortTimelineHeaderProperties } from './timelineHeaderPropertyLabels';
+export { type HeaderKeyframe, type KeyframeTrackClip, shouldHide3DOnlyProperties, usesCameraPropertyModel } from './timelineHeaderPropertyTypes';
 
 export function getMaskPathValue(mask: ClipMask): NonNullable<Keyframe['pathValue']> {
   return {
@@ -85,7 +74,9 @@ function getValueFromMaskProperty(
       ? mask.position.y
       : maskProperty.property === 'feather'
         ? mask.feather
-        : mask.featherQuality ?? 50;
+        : maskProperty.property === 'edgeFeather'
+          ? getMaskEdgeFeather(mask, maskProperty.edgeId)
+          : mask.featherQuality ?? 50;
 
   return interpolateKeyframes(
     keyframes as Keyframe[],
@@ -158,7 +149,7 @@ export function getHeaderPropertySensitivity(prop: string, clip: KeyframeTrackCl
   const maskProperty = parseMaskProperty(prop);
   if (maskProperty?.property === 'path') return 0;
   if (maskProperty?.property === 'position.x' || maskProperty?.property === 'position.y') return 0.001;
-  if (maskProperty?.property === 'feather') return 0.5;
+  if (maskProperty?.property === 'feather' || maskProperty?.property === 'edgeFeather') return 0.5;
   if (maskProperty?.property === 'featherQuality') return 1;
   const cameraProperty = parseCameraProperty(prop);
   if (cameraProperty === 'fov') return 0.5;
@@ -192,7 +183,7 @@ export function getHeaderPropertyDefaultValue(prop: string, clip: KeyframeTrackC
   const maskProperty = parseMaskProperty(prop);
   if (maskProperty?.property === 'path') return 0;
   if (maskProperty?.property === 'position.x' || maskProperty?.property === 'position.y') return 0;
-  if (maskProperty?.property === 'feather') return 0;
+  if (maskProperty?.property === 'feather' || maskProperty?.property === 'edgeFeather') return 0;
   if (maskProperty?.property === 'featherQuality') return 50;
   const cameraProperty = parseCameraProperty(prop);
   if (cameraProperty) {
@@ -218,7 +209,7 @@ export function getHeaderPropertyDefaultValue(prop: string, clip: KeyframeTrackC
 export function formatHeaderPropertyValue(value: number, prop: string, clip?: KeyframeTrackClip | null): string {
   const maskProperty = parseMaskProperty(prop);
   if (maskProperty?.property === 'path') return 'Path';
-  if (maskProperty?.property === 'feather') return `${value.toFixed(1)}px`;
+  if (maskProperty?.property === 'feather' || maskProperty?.property === 'edgeFeather') return `${value.toFixed(1)}px`;
   if (maskProperty?.property === 'featherQuality') return value.toFixed(0);
   if (maskProperty?.property === 'position.x' || maskProperty?.property === 'position.y') return value.toFixed(3);
 

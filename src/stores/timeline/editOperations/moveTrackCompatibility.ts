@@ -14,6 +14,7 @@ const VISUAL_SOURCE_TYPES = new Set([
   'gaussian-splat',
   'splat-effector',
   'math-scene',
+  'transition-overlay',
   'motion-shape',
   'motion-null',
   'motion-adjustment',

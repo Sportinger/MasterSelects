@@ -1,7 +1,7 @@
 import { Logger } from '../../../services/logger';
 import type { TimelineClip } from '../../../stores/timeline/types';
 import type { MediaFile } from '../../../stores/mediaStore/types';
-import type { ClipPreparationResult, ExportClipState } from '../ClipPreparation';
+import type { ClipPreparationModeResult, ExportClipState } from '../ClipPreparation';
 import { createPreciseExportVideoElement, getClipWarmupSourceTime } from './mediaElements';
 import { createExportRuntimeSource, getExportRuntimeOwnerId } from './runtimeBinding';
 
@@ -13,7 +13,7 @@ export async function initializePreciseMode(
   mediaFiles: MediaFile[],
   exportStartTime: number,
   exportRunId?: string
-): Promise<ClipPreparationResult> {
+): Promise<ClipPreparationModeResult> {
   const registerPreciseClip = async (clip: TimelineClip, warmupTime: number) => {
     const runtimeOwnerId = getExportRuntimeOwnerId(clip.id);
     const mediaFileId = clip.mediaFileId || clip.source?.mediaFileId;

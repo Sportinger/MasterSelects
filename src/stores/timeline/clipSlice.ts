@@ -25,6 +25,7 @@ function isVisualClipSourceType(sourceType: string | undefined): boolean {
     sourceType === 'gaussian-splat' ||
     sourceType === 'splat-effector' ||
     sourceType === 'math-scene' ||
+    sourceType === 'transition-overlay' ||
     sourceType === 'motion-shape' ||
     sourceType === 'motion-null' ||
     sourceType === 'motion-adjustment' ||
@@ -85,7 +86,13 @@ import {
   cloneLinkedSourceForPart,
   cloneSourceForPart,
   getSourceForFirstSplitPart,
+  remapTransitionLinksForSplitReplacements,
 } from './editOperations/splitBatchOperations';
+import {
+  clearTransitionsLinkedToRemovedClips,
+  ensureTransitionCompositionsForChangedClips,
+  setClipsAndCleanupTransitionComps,
+} from './editOperations/transitionCompositionMaintenance';
 import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 
 export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
@@ -115,7 +122,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     for (const removeId of idsToRemove) newSelectedIds.delete(removeId);
 
     // Build updated clips: remove the clip(s) and clear linkedClipId on the survivor
-    const updatedClips = clips
+    const updatedClips = clearTransitionsLinkedToRemovedClips(clips
       .filter(c => !idsToRemove.has(c.id))
       .map(c => {
         // If a surviving clip was linked to a removed clip, clear the link
@@ -123,9 +130,9 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
           return { ...c, linkedClipId: undefined };
         }
         return c;
-      });
+      }), idsToRemove);
 
-    set({
+    setClipsAndCleanupTransitionComps(set, clips, {
       clips: updatedClips,
       selectedClipIds: newSelectedIds,
     });
@@ -210,6 +217,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       linkedForcingOverlap = linkedResult.forcingOverlap;
     }
 
+    const previousClips = clips;
     set({
       clips: clips.map(c => {
         if (c.id === id) return { ...c, startTime: Math.max(0, finalStartTime), trackId: actualTrackId };
@@ -228,6 +236,11 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     if (linkedForcingOverlap && linkedClip && !skipLinked && !skipTrim) {
       trimOverlappingClips(linkedClip.id, linkedFinalTime, linkedClip.trackId, linkedClip.duration, excludeClipIds);
     }
+    ensureTransitionCompositionsForChangedClips(set, get, [
+      id,
+      ...(linkedClip && !skipLinked ? [linkedClip.id] : []),
+      ...groupClips.map((groupClip) => groupClip.id),
+    ], previousClips);
 
     updateDuration();
     invalidateCache();
@@ -239,12 +252,13 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       log.warn('Cannot trim clip on locked track', { id });
       return;
     }
-    set({
+    setClipsAndCleanupTransitionComps(set, clips, {
       clips: clips.map(c => {
         if (c.id !== id) return c;
         return clearProcessedAudioAnalysisRefs({ ...c, inPoint, outPoint, duration: outPoint - inPoint });
       }),
     });
+    ensureTransitionCompositionsForChangedClips(set, get, [id], clips);
     updateDuration();
     invalidateCache();
   },
@@ -318,7 +332,10 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
 
       const remaining = clips.filter(c => c.id !== clipId);
       remaining.push(midiFirstClip, midiSecondClip);
-      set({ clips: remaining, selectedClipIds: new Set([midiSecondClip.id]) });
+      setClipsAndCleanupTransitionComps(set, clips, {
+        clips: remaining,
+        selectedClipIds: new Set([midiSecondClip.id]),
+      });
       updateDuration();
       invalidateCache();
       log.debug('Split MIDI clip', {
@@ -358,13 +375,15 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
 
     const newClips: TimelineClip[] = clips.filter(c => c.id !== clipId && c.id !== clip.linkedClipId);
 
+    let linkedFirstClip: TimelineClip | undefined;
+    let linkedSecondClip: TimelineClip | undefined;
     if (clip.linkedClipId) {
       const linkedClip = clips.find(c => c.id === clip.linkedClipId);
       if (linkedClip) {
         const linkedSecondClipId = `clip-${timestamp}-${randomSuffix}-linked-b`;
         const linkedSecondSource = cloneLinkedSourceForPart(linkedClip);
 
-        const linkedFirstClip: TimelineClip = {
+        linkedFirstClip = {
           ...linkedClip,
           ...deepCloneClipProps(linkedClip),
           id: `clip-${timestamp}-${randomSuffix}-linked-a`,
@@ -373,7 +392,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
           linkedClipId: firstClip.id,
           source: getSourceForFirstSplitPart(linkedClip),
         };
-        const linkedSecondClip: TimelineClip = {
+        linkedSecondClip = {
           ...linkedClip,
           ...deepCloneClipProps(linkedClip),
           id: linkedSecondClipId,
@@ -390,7 +409,33 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     }
 
     newClips.push(firstClip, secondClip);
-    set({ clips: newClips, selectedClipIds: new Set([secondClip.id]) });
+    const remappedClips = remapTransitionLinksForSplitReplacements(newClips, [
+      {
+        originalClipId: clip.id,
+        incomingReplacementClipId: firstClip.id,
+        outgoingReplacementClipId: secondClip.id,
+      },
+      ...(linkedFirstClip && linkedSecondClip && clip.linkedClipId
+        ? [{
+            originalClipId: clip.linkedClipId,
+            incomingReplacementClipId: linkedFirstClip.id,
+            outgoingReplacementClipId: linkedSecondClip.id,
+          }]
+        : []),
+    ]);
+    const changedClipIds = [
+      clip.id,
+      firstClip.id,
+      secondClip.id,
+      ...(linkedFirstClip && linkedSecondClip && clip.linkedClipId
+        ? [clip.linkedClipId, linkedFirstClip.id, linkedSecondClip.id]
+        : []),
+    ];
+    setClipsAndCleanupTransitionComps(set, clips, {
+      clips: remappedClips,
+      selectedClipIds: new Set([secondClip.id]),
+    });
+    ensureTransitionCompositionsForChangedClips(set, get, changedClipIds, clips);
     updateDuration();
     invalidateCache();
     log.debug('Split clip', { clip: clip.name, splitTime: splitTime.toFixed(2) });
@@ -431,7 +476,10 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       log.warn('Cannot update clip on locked track', { id });
       return;
     }
-    set({ clips: clips.map(c => c.id === id ? applyClipUpdatesWithAudioAnalysisInvalidation(c, updates) : c) });
+    setClipsAndCleanupTransitionComps(set, clips, {
+      clips: clips.map(c => c.id === id ? applyClipUpdatesWithAudioAnalysisInvalidation(c, updates) : c),
+    });
+    ensureTransitionCompositionsForChangedClips(set, get, [id], clips);
     updateDuration();
   },
 

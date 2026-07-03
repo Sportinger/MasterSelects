@@ -242,6 +242,39 @@ describe('RenderDispatcher empty playback hold', () => {
     expect(dispatcher.lastRenderHadContent).toBe(false);
   });
 
+  it('fails export frames instead of dropping deferred nested compositions', () => {
+    const { dispatcher, deps, collect } = createDispatcher(false);
+    deps.getDevice = vi.fn(() => ({
+      createCommandEncoder: vi.fn(() => ({
+        finish: vi.fn(),
+      })),
+    })) as RenderDeps['getDevice'];
+    deps.exportCanvasManager.getIsExporting = vi.fn(() => true);
+    deps.nestedCompRenderer = {
+      preRender: vi.fn(() => null),
+    } as unknown as RenderDeps['nestedCompRenderer'];
+    collect.mockReturnValueOnce([{
+      layer: {
+        id: 'transition-nested',
+        visible: true,
+        opacity: 1,
+        source: {
+          type: 'image',
+          nestedComposition: {
+            compositionId: 'transition-comp',
+            layers: [],
+            width: 1920,
+            height: 1080,
+            currentTime: 0,
+          },
+        },
+      },
+      textureView: null,
+    }]);
+
+    expect(() => dispatcher.render([{} as Layer])).toThrow(/nested composition was not ready/);
+  });
+
   it('holds the last frame during large drag teleports instead of flashing black', () => {
     const { dispatcher, deps, renderEmptyFrame, recordMainPreviewFrame } = createDispatcher(false);
 

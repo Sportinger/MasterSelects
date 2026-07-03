@@ -3,13 +3,19 @@ import { useFlashBoardStore } from './index';
 import { createDefaultFlashBoardComposer } from './defaults';
 import type {
   FlashBoardActiveGenerationRecord,
+  FlashBoardComposerState,
   FlashBoardGenerationRequest,
+  FlashBoardJobRefund,
   FlashBoardJobState,
+  FlashBoardPromptHistoryEntry,
+  FlashBoardPromptHistoryKind,
   FlashBoardResult,
   FlashBoardStoreState,
 } from './types';
 
 export type { FlashBoardActiveGenerationRecord } from './types';
+
+const MAX_FLASHBOARD_PROMPT_HISTORY = 200;
 
 function areActiveGenerationRecordsEqual(
   left: FlashBoardActiveGenerationRecord[],
@@ -57,8 +63,25 @@ export function useFlashBoardActiveGenerationRecords(): FlashBoardActiveGenerati
   return useFlashBoardStore(selectFlashBoardActiveGenerationRecords);
 }
 
+function getFlashBoardState(): FlashBoardStoreState {
+  return useFlashBoardStore.getState();
+}
+
 export function getFlashBoardActiveGenerationRecords(): FlashBoardActiveGenerationRecord[] {
-  return selectFlashBoardActiveGenerationRecords(useFlashBoardStore.getState());
+  return selectFlashBoardActiveGenerationRecords(getFlashBoardState());
+}
+
+export function getFlashBoardComposerState(): FlashBoardComposerState {
+  return getFlashBoardState().composer;
+}
+
+export function subscribeFlashBoardComposerState(
+  listener: () => void,
+): () => void {
+  return useFlashBoardStore.subscribe(
+    (state) => state.composer,
+    () => listener(),
+  );
 }
 
 export function subscribeFlashBoardActiveGenerationRecords(
@@ -68,6 +91,15 @@ export function subscribeFlashBoardActiveGenerationRecords(
     selectFlashBoardActiveGenerationRecords,
     () => listener(),
     { equalityFn: areActiveGenerationRecordsEqual },
+  );
+}
+
+export function subscribeFlashBoardPromptHistory(
+  listener: () => void,
+): () => void {
+  return useFlashBoardStore.subscribe(
+    (state) => state.promptHistory,
+    () => listener(),
   );
 }
 
@@ -94,7 +126,35 @@ export function clearFlashBoardActiveGenerationSelection(): void {
 export function getFlashBoardActiveGenerationRecord(
   recordId: string,
 ): FlashBoardActiveGenerationRecord | undefined {
-  return useFlashBoardStore.getState().activeGenerationRecords.find((record) => record.id === recordId);
+  return getFlashBoardState().activeGenerationRecords.find((record) => record.id === recordId);
+}
+
+export function getFlashBoardPromptHistory(): FlashBoardPromptHistoryEntry[] {
+  return getFlashBoardState().promptHistory;
+}
+
+export function appendFlashBoardPromptHistoryEntry(input: {
+  kind: FlashBoardPromptHistoryKind;
+  prompt: string;
+}): FlashBoardPromptHistoryEntry | null {
+  const prompt = input.prompt.trim();
+  if (!prompt) return null;
+
+  const entry: FlashBoardPromptHistoryEntry = {
+    id: crypto.randomUUID(),
+    kind: input.kind,
+    prompt,
+    createdAt: Date.now(),
+  };
+
+  useFlashBoardStore.setState((state) => ({
+    promptHistory: [
+      entry,
+      ...state.promptHistory.filter((item) => item.kind !== entry.kind || item.prompt !== entry.prompt),
+    ].slice(0, MAX_FLASHBOARD_PROMPT_HISTORY),
+  }));
+
+  return entry;
 }
 
 export function completeFlashBoardActiveGenerationRecord(
@@ -131,10 +191,11 @@ export function updateFlashBoardActiveGenerationJob(
 export function failFlashBoardActiveGenerationRecord(
   recordId: string,
   error: string,
+  refund?: FlashBoardJobRefund,
 ): void {
   updateFlashBoardActiveGenerationRecord(recordId, (record) => ({
     ...record,
-    job: { ...record.job, status: 'failed', error },
+    job: { ...record.job, status: 'failed', error, refund: refund ?? record.job?.refund },
     updatedAt: Date.now(),
   }));
 }
@@ -148,17 +209,21 @@ export function resetFlashBoardActiveGenerationState(): void {
     activeGenerationRecords: [],
     selectedActiveGenerationRecordIds: [],
     composer: createDefaultFlashBoardComposer(),
+    promptHistory: [],
     hoveredComposerReference: null,
   });
 }
 
 export function hydrateFlashBoardActiveGenerationRecords(
   records: FlashBoardActiveGenerationRecord[],
+  composer: FlashBoardComposerState = createDefaultFlashBoardComposer(),
+  promptHistory: FlashBoardPromptHistoryEntry[] = [],
 ): void {
   useFlashBoardStore.setState({
     activeGenerationRecords: records,
     selectedActiveGenerationRecordIds: [],
-    composer: createDefaultFlashBoardComposer(),
+    composer,
+    promptHistory,
     hoveredComposerReference: null,
   });
 }
@@ -179,6 +244,13 @@ export function submitFlashBoardActiveGenerationRequest(
   useFlashBoardStore.setState((state) => ({
     activeGenerationRecords: [...state.activeGenerationRecords, record],
   }));
+  const prompts = [
+    request.prompt,
+    ...(request.multiPrompt ?? []).map((shot) => shot.prompt),
+  ];
+  for (let index = prompts.length - 1; index >= 0; index -= 1) {
+    appendFlashBoardPromptHistoryEntry({ kind: 'generation', prompt: prompts[index] });
+  }
 
   flashBoardJobService.submit({ recordId: record.id, request });
 

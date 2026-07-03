@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 
-import { useTimelineStore } from '../../../../stores/timeline';
 import type { ShortcutActionId } from '../../../../services/shortcutTypes';
 import type { ClipMask } from "../../../../types/masks";
 import { isTypingTarget } from './maskTabTypes';
@@ -11,11 +10,15 @@ interface MaskShortcutRegistry {
 
 interface UseMaskKeybindingsOptions {
   activeMask: ClipMask | null;
+  canPasteMask: boolean;
   clipId: string;
   cycleSelectedHandles: () => void;
+  maskEditMode: 'none' | 'drawing' | 'editing' | 'drawingRect' | 'drawingEllipse' | 'drawingPen';
   registry: MaskShortcutRegistry;
   selectedVertexCount: number;
   closeMask: (clipId: string, maskId: string) => void;
+  copyClipMask: (clipId: string, maskId: string) => void;
+  pasteClipMask: (targetClipIds?: string[]) => void;
   selectVertices: (vertexIds: string[]) => void;
   setActiveMask: (clipId: string | null, maskId: string | null) => void;
   setMaskEditMode: (mode: 'drawingRect' | 'drawingEllipse' | 'drawingPen' | 'editing') => void;
@@ -24,9 +27,13 @@ interface UseMaskKeybindingsOptions {
 
 export function useMaskKeybindings({
   activeMask,
+  canPasteMask,
   clipId,
   closeMask,
+  copyClipMask,
   cycleSelectedHandles,
+  maskEditMode,
+  pasteClipMask,
   registry,
   selectedVertexCount,
   selectVertices,
@@ -37,7 +44,19 @@ export function useMaskKeybindings({
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) return;
-      if (useTimelineStore.getState().maskEditMode !== 'none') return;
+
+      if (activeMask && registry.matches('edit.copy', event)) {
+        event.preventDefault();
+        copyClipMask(clipId, activeMask.id);
+        return;
+      }
+      if (canPasteMask && registry.matches('edit.paste', event)) {
+        event.preventDefault();
+        pasteClipMask([clipId]);
+        return;
+      }
+
+      if (maskEditMode !== 'none') return;
 
       if (registry.matches('mask.pen', event)) {
         event.preventDefault();
@@ -94,9 +113,13 @@ export function useMaskKeybindings({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
     activeMask,
+    canPasteMask,
     clipId,
     closeMask,
+    copyClipMask,
     cycleSelectedHandles,
+    maskEditMode,
+    pasteClipMask,
     registry,
     selectVertices,
     selectedVertexCount,

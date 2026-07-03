@@ -90,7 +90,7 @@ export function PrivacyDE() {
         <li><strong>Kontodaten:</strong> E-Mail-Adresse, Anzeigename — Rechtsgrundlage: Vertragserfüllung (Art. 6 Abs. 1 lit. b DSGVO)</li>
         <li><strong>Zahlungsdaten:</strong> Werden direkt von <strong>Stripe, Inc.</strong> verarbeitet. Stripe ist unter dem EU-US Data Privacy Framework zertifiziert. Wir speichern keine Kreditkartennummern oder Bankdaten. Rechtsgrundlage: Vertragserfüllung (Art. 6 Abs. 1 lit. b DSGVO)</li>
         <li><strong>Nutzungsdaten:</strong> Credit-Balance, Nutzungshistorie — Rechtsgrundlage: Vertragserfüllung (Art. 6 Abs. 1 lit. b DSGVO)</li>
-        <li><strong>Hosted-AI-Chat-Logs:</strong> Wenn Sie den gehosteten AI-Chat nutzen, k&ouml;nnen Prompts/Nachrichten, Antworten, Tool Calls, Tokenzahlen, Credit-Kosten, Dauer, Status und Fehlerzustand in unserer D1-Datenbank f&uuml;r Account-Historie, Abrechnung/Debugging, Missbrauchserkennung und Support gespeichert werden — Rechtsgrundlage: Vertragserf&uuml;llung (Art. 6 Abs. 1 lit. b DSGVO) und berechtigtes Interesse (Art. 6 Abs. 1 lit. f DSGVO)</li>
+        <li><strong>Hosted-AI-Logs:</strong> Wenn Sie den gehosteten AI-Chat oder gehostete Mediengenerierung nutzen, k&ouml;nnen Prompts/Nachrichten, Request-Payloads, Antworten, Tool Calls, Moderationsergebnisse, Tokenzahlen, Credit-Kosten, Dauer, Status, Fehlerzustand und ein pseudonymer IP-Hash in unserer D1-Datenbank f&uuml;r Account-Historie, Abrechnung/Debugging, Missbrauchserkennung und Support gespeichert werden — Rechtsgrundlage: Vertragserf&uuml;llung (Art. 6 Abs. 1 lit. b DSGVO) und berechtigtes Interesse (Art. 6 Abs. 1 lit. f DSGVO)</li>
         <li><strong>Rechnungsdaten:</strong> Werden gem. § 147 AO und § 257 HGB für 10 Jahre aufbewahrt — Rechtsgrundlage: Gesetzliche Pflicht (Art. 6 Abs. 1 lit. c DSGVO)</li>
       </ul>
 
@@ -98,7 +98,7 @@ export function PrivacyDE() {
       <p>
         MasterSelects speichert Projektdaten, Einstellungen und Medien-Referenzen in der IndexedDB Ihres Browsers.
         Diese Daten verlassen Ihren Computer nicht. AI-Funktionen mit API-Verbindung werden explizit gekennzeichnet;
-        der gehostete AI-Chat wird auf dem Cloudflare-Backend verarbeitet und kann wie oben beschrieben protokolliert werden.
+        gehosteter AI-Chat und gehostete Mediengenerierung werden auf dem Cloudflare-Backend verarbeitet und k&ouml;nnen wie oben beschrieben protokolliert werden.
       </p>
 
       <h3>6. Ihre Rechte</h3>

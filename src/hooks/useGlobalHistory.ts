@@ -10,6 +10,7 @@ import type {
   FlashBoardActiveGenerationRecord,
   FlashBoardComposerState,
   FlashBoardJobState,
+  FlashBoardPromptHistoryEntry,
 } from '../stores/flashboardStore';
 import type { Composition, MediaFile } from '../stores/mediaStore/types';
 import type { TimelineClip } from '../types';
@@ -30,6 +31,8 @@ import {
 import { Logger } from '../services/logger';
 
 const log = Logger.create('History');
+const DEFAULT_HISTORY_CAPTURE_DELAY_MS = 150;
+const MASK_HISTORY_CAPTURE_IDLE_MS = 1000;
 
 function isHistoryCaptureSuppressed(): boolean {
   const historyState = useHistoryStore.getState();
@@ -98,6 +101,14 @@ function normalizeFlashBoardComposerForHistory(composer: FlashBoardComposerState
     endMediaFileId: composer.endMediaFileId ?? null,
     referenceMediaFileIds: composer.referenceMediaFileIds ?? [],
   };
+}
+
+function normalizeFlashBoardPromptHistoryForHistory(promptHistory: FlashBoardPromptHistoryEntry[]) {
+  return promptHistory.map((entry) => ({
+    kind: entry.kind,
+    prompt: entry.prompt,
+    createdAt: entry.createdAt,
+  }));
 }
 
 function normalizeCompositionTimelineForHistory(timelineData: Composition['timelineData']) {
@@ -220,6 +231,15 @@ function normalizeValueForHistorySignature(
 export function createTimelineClipsHistorySignature(clips: TimelineClip[]): string {
   return JSON.stringify(
     clips.map(clip => normalizeValueForHistorySignature(clip, CLIP_HISTORY_SIGNATURE_SKIP_KEYS))
+  );
+}
+
+function createTimelineMasksHistorySignature(clips: TimelineClip[]): string {
+  return JSON.stringify(
+    clips.map(clip => ({
+      id: clip.id,
+      masks: normalizeValueForHistorySignature(clip.masks ?? [], CLIP_HISTORY_SIGNATURE_SKIP_KEYS),
+    }))
   );
 }
 
@@ -373,13 +393,13 @@ export function useGlobalHistory() {
   // Subscribe to store changes and capture snapshots
   useEffect(() => {
     // Debounced capture — stores timer ID and label so undo/redo can flush it
-    const debouncedCapture = (label: string) => {
+    const debouncedCapture = (label: string, delayMs = DEFAULT_HISTORY_CAPTURE_DELAY_MS) => {
       if (isHistoryDisabledForDebug()) return;
       if (pendingTimer.current) clearTimeout(pendingTimer.current);
-        pendingLabel.current = label;
-        pendingTimer.current = setTimeout(() => {
-          pendingTimer.current = null;
-          pendingLabel.current = '';
+      pendingLabel.current = label;
+      pendingTimer.current = setTimeout(() => {
+        pendingTimer.current = null;
+        pendingLabel.current = '';
 
         if (isHistoryCaptureSuppressed()) return;
 
@@ -393,7 +413,7 @@ export function useGlobalHistory() {
         // Fallback path: don't self-suppress (that would block the NEXT distinct
         // auto-captured edit). Only explicit slice captures suppress this path.
         captureSnapshot(label, { isAutoCapture: true });
-      }, 150);
+      }, delayMs);
     };
 
     if (isHistoryDisabledForDebug()) {
@@ -418,16 +438,22 @@ export function useGlobalHistory() {
         // and would cause expensive deep-clone snapshots every 150ms
         if (useTimelineStore.getState().maskDragging) return;
 
-        if (
-          curr.clips !== prev.clips &&
-          createTimelineClipsHistorySignature(curr.clips) !== createTimelineClipsHistorySignature(prev.clips)
-        ) {
-          if (curr.clips.length !== prev.clips.length) {
-            debouncedCapture(curr.clips.length > prev.clips.length ? 'Add clip' : 'Remove clip');
-          } else {
-            debouncedCapture('Modify clip');
+        if (curr.clips !== prev.clips) {
+          const currClipSignature = createTimelineClipsHistorySignature(curr.clips);
+          const prevClipSignature = createTimelineClipsHistorySignature(prev.clips);
+          if (currClipSignature !== prevClipSignature) {
+            if (curr.clips.length !== prev.clips.length) {
+              debouncedCapture(curr.clips.length > prev.clips.length ? 'Add clip' : 'Remove clip');
+            } else if (createTimelineMasksHistorySignature(curr.clips) !== createTimelineMasksHistorySignature(prev.clips)) {
+              debouncedCapture('Modify mask', MASK_HISTORY_CAPTURE_IDLE_MS);
+            } else {
+              debouncedCapture('Modify clip');
+            }
+            return;
           }
-        } else if (curr.tracks !== prev.tracks) {
+        }
+
+        if (curr.tracks !== prev.tracks) {
           debouncedCapture('Modify track');
         } else if (curr.clipKeyframes !== prev.clipKeyframes) {
           debouncedCapture('Modify keyframes');
@@ -507,6 +533,7 @@ export function useGlobalHistory() {
       (state) => ({
         activeGenerationRecords: state.activeGenerationRecords,
         composer: state.composer,
+        promptHistory: state.promptHistory,
       }),
       (curr, prev) => {
         if (isHistoryCaptureSuppressed()) return;
@@ -523,6 +550,12 @@ export function useGlobalHistory() {
             JSON.stringify(normalizeFlashBoardRecordsForHistory(prev.activeGenerationRecords))
         ) {
           debouncedCapture('Modify generation records');
+        } else if (
+          curr.promptHistory !== prev.promptHistory &&
+          JSON.stringify(normalizeFlashBoardPromptHistoryForHistory(curr.promptHistory)) !==
+            JSON.stringify(normalizeFlashBoardPromptHistoryForHistory(prev.promptHistory))
+        ) {
+          debouncedCapture('Modify prompt history');
         }
       },
       { equalityFn: shallowEqual, fireImmediately: false }

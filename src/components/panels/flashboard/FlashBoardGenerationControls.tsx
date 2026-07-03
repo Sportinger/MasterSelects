@@ -24,14 +24,12 @@ interface FlashBoardGenerationControlsProps {
   imageSizeLabel: string;
   isAudioMode: boolean;
   isElevenLabsMode: boolean;
-  isRefiningPrompt: boolean;
   isSunoMode: boolean;
   modeLabel: string;
   modelButtonLabel: string;
   multiShots: boolean;
   popoverHostClassName: string;
   popoverRef: RefObject<HTMLDivElement | null>;
-  promptRefineTitle: string;
   selectedEntryHasAspectRatios: boolean;
   selectedEntryHasDurations: boolean;
   selectedEntryHasImageSizes: boolean;
@@ -46,7 +44,6 @@ interface FlashBoardGenerationControlsProps {
   onAudioToggle: () => void;
   onMultiShotToggle: () => void;
   onOpenPopover: (type: GenerationControlPopover) => void;
-  onRefinePrompt: () => void | Promise<void>;
   onSunoVocalGenderChange: (value: string) => void;
 }
 
@@ -61,14 +58,12 @@ export function FlashBoardGenerationControls({
   imageSizeLabel,
   isAudioMode,
   isElevenLabsMode,
-  isRefiningPrompt,
   isSunoMode,
   modeLabel,
   modelButtonLabel,
   multiShots,
   popoverHostClassName,
   popoverRef,
-  promptRefineTitle,
   selectedEntryHasAspectRatios,
   selectedEntryHasDurations,
   selectedEntryHasImageSizes,
@@ -83,7 +78,6 @@ export function FlashBoardGenerationControls({
   onAudioToggle,
   onMultiShotToggle,
   onOpenPopover,
-  onRefinePrompt,
   onSunoVocalGenderChange,
 }: FlashBoardGenerationControlsProps) {
   return (
@@ -94,10 +88,7 @@ export function FlashBoardGenerationControls({
           onClick={() => onOpenPopover('model')}
           title={`Model: ${modelButtonLabel}`}
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-          </svg>
+          Model
         </button>
         {isElevenLabsMode && (
           <>
@@ -191,24 +182,6 @@ export function FlashBoardGenerationControls({
             Multi-shot
           </button>
         )}
-        {!isElevenLabsMode && (
-          <button
-            className={`fb-pill fb-pill-icon fb-prompt-refine ${isRefiningPrompt ? 'active is-loading' : ''}`}
-            type="button"
-            onClick={onRefinePrompt}
-            disabled={isRefiningPrompt}
-            title={isRefiningPrompt ? 'Refining prompt...' : promptRefineTitle}
-            aria-label="Refine prompt"
-          >
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.45" aria-hidden="true">
-              <path d="M5.5 12.5 13 5" />
-              <path d="m10.8 3.2 2 2" />
-              <path d="M2.8 1.6 3.3 3l1.5.5-1.5.5-.5 1.4L2.3 4 1 3.5 2.3 3l.5-1.4Z" />
-              <path d="m11.8 9.7.4 1.1 1.1.4-1.1.4-.4 1.1-.4-1.1-1.1-.4 1.1-.4.4-1.1Z" />
-            </svg>
-          </button>
-        )}
-
         {children}
       </div>
       <div className="fb-selected-model-label" title={modelButtonLabel}>

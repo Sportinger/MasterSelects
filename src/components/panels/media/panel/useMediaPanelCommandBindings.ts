@@ -4,6 +4,7 @@ import {
   useMediaContextLocalHandlers,
   type MediaContextSolidSettingsDialogState,
 } from '../context/useMediaContextLocalHandlers';
+import { useMediaContextFrameExtractionHandlers } from '../context/useMediaContextFrameExtractionHandlers';
 import { useMediaContextExplorerHandlers } from '../context/useMediaContextExplorerHandlers';
 import type { MediaFolder, useMediaStore } from '../../../../stores/mediaStore';
 import { useMediaPanelAddImportCommands } from './useMediaPanelAddImportCommands';
@@ -30,7 +31,9 @@ interface UseMediaPanelCommandBindingsInput {
   setSolidSettingsDialog: Dispatch<SetStateAction<MediaContextSolidSettingsDialogState | null>>;
   getAiReferenceMediaFileIds: () => string[];
   updateAiReferenceMediaFileIds: (referenceMediaFileIds: string[]) => void;
+  importFile: MediaStoreState['importFile'];
   importFiles: MediaStoreState['importFiles'];
+  importFilesWithHandles: MediaStoreState['importFilesWithHandles'];
   importFilesWithPicker: MediaStoreState['importFilesWithPicker'];
   createComposition: MediaStoreState['createComposition'];
   createFolder: MediaStoreState['createFolder'];
@@ -88,7 +91,9 @@ export function useMediaPanelCommandBindings({
   setSolidSettingsDialog,
   getAiReferenceMediaFileIds,
   updateAiReferenceMediaFileIds,
+  importFile,
   importFiles,
+  importFilesWithHandles,
   importFilesWithPicker,
   createComposition,
   createFolder,
@@ -138,6 +143,11 @@ export function useMediaPanelCommandBindings({
     openSourceMonitorCrop,
     setSolidSettingsDialog,
     closeContextMenu,
+  });
+  const mediaContextFrameExtractionHandlers = useMediaContextFrameExtractionHandlers({
+    closeContextMenu,
+    importFile,
+    setSelection,
   });
   const handleBadgeClick = useMediaPanelSourceMonitorBadges();
 
@@ -198,12 +208,17 @@ export function useMediaPanelCommandBindings({
     duplicateMediaItems,
     pasteMediaItems,
     hasMediaClipboard,
+    folders,
+    createFolder,
+    importFiles,
+    importFilesWithHandles,
     handleDelete,
   });
 
   return {
     mediaContextExplorerHandlers,
     mediaContextLocalHandlers,
+    mediaContextFrameExtractionHandlers,
     handleBadgeClick,
     ...addImportCommands,
     ...selectionCommands,

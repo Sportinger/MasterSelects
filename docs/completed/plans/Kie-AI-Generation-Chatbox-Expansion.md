@@ -1,6 +1,8 @@
+> Status: Archived from `docs/ongoing/` on 2026-06-25 after docs triage; historical planning context unless explicitly reopened.
+
 # Kie.ai Generation Chatbox Expansion
 
-Status: implementation landed locally; browser QA and hosted mirrors still open
+Original status before archive: implementation landed locally; browser QA and hosted mirrors still open
 Updated: 2026-06-24
 
 ## Goal

@@ -1,15 +1,95 @@
 // Mask-related actions slice
 
-import type { MaskActions, SliceCreator, ClipMask, MaskVertex, MaskEditMode } from './types';
+import type { MaskActions, SliceCreator, ClipMask, MaskVertex, MaskEditMode, Keyframe, ClipboardClipMaskData } from './types';
+import { createMaskEdgeFeatherProperty, createMaskNumericProperty, createMaskPathProperty, parseMaskProperty } from '../../types';
+import { createMaskEdgeId, setMaskEdgeFeatherValue } from '../../utils/maskEdgeFeathers';
 import { getMaskVerticesHandleModeUpdates, inferMaskVertexHandleMode } from '../../utils/maskVertexHandles';
+import { captureSnapshot } from '../historyStore';
 
 const DEFAULT_MASK_OUTLINE_COLORS = ['#2997E5', '#ff9900', '#7ddc7a', '#d16bff', '#ff5f6d', '#f8d34f'];
+
+function randomSuffix(): string {
+  return Math.random().toString(36).substr(2, 5);
+}
+
+function createMaskId(): string {
+  return `mask-${Date.now()}-${randomSuffix()}`;
+}
+
+function createVertexId(): string {
+  return `vertex-${Date.now()}-${randomSuffix()}`;
+}
+
+function remapMaskForPaste(clipboardMask: ClipboardClipMaskData, clipId: string, duration: number): { mask: ClipMask; keyframes: Keyframe[] } {
+  const nextMaskId = createMaskId();
+  const vertexIdMap = new Map<string, string>();
+  const mapVertexId = (id: string) => {
+    const existing = vertexIdMap.get(id);
+    if (existing) return existing;
+    const next = createVertexId();
+    vertexIdMap.set(id, next);
+    return next;
+  };
+  const cloneVertex = (vertex: MaskVertex): MaskVertex => ({
+    ...vertex,
+    id: mapVertexId(vertex.id),
+    handleIn: { ...vertex.handleIn },
+    handleOut: { ...vertex.handleOut },
+  });
+  const mask: ClipMask = {
+    ...structuredClone(clipboardMask.mask),
+    id: nextMaskId,
+    vertices: clipboardMask.mask.vertices.map(cloneVertex),
+    edgeFeathers: clipboardMask.mask.edgeFeathers
+      ? Object.fromEntries(
+          Object.entries(clipboardMask.mask.edgeFeathers).map(([edgeId, feather]) => {
+            const [fromId, toId] = edgeId.split('->');
+            return [
+              fromId && toId ? createMaskEdgeId(mapVertexId(fromId), mapVertexId(toId)) : edgeId,
+              feather,
+            ];
+          }),
+        )
+      : undefined,
+    expanded: true,
+  };
+  const keyframes = clipboardMask.keyframes.flatMap((keyframe): Keyframe[] => {
+    const parsed = parseMaskProperty(keyframe.property);
+    if (!parsed) return [];
+    const property = parsed.property === 'path'
+      ? createMaskPathProperty(nextMaskId)
+      : parsed.property === 'edgeFeather'
+        ? createMaskEdgeFeatherProperty(
+            nextMaskId,
+            (() => {
+              const [fromId, toId] = parsed.edgeId.split('->');
+              return fromId && toId ? createMaskEdgeId(mapVertexId(fromId), mapVertexId(toId)) : parsed.edgeId;
+            })(),
+          )
+        : createMaskNumericProperty(nextMaskId, parsed.property);
+    return [{
+      ...structuredClone(keyframe),
+      id: `kf_${Date.now()}_${randomSuffix()}`,
+      clipId,
+      time: Math.max(0, Math.min(duration, keyframe.time)),
+      property,
+      pathValue: keyframe.pathValue
+        ? {
+            closed: keyframe.pathValue.closed,
+            vertices: keyframe.pathValue.vertices.map(cloneVertex),
+          }
+        : undefined,
+    }];
+  });
+
+  return { mask, keyframes };
+}
 
 export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
   setMaskEditMode: (mode: MaskEditMode) => {
     set({ maskEditMode: mode, maskDrawStart: null });
     if (mode === 'none') {
-      set({ activeMaskId: null, selectedVertexIds: new Set() });
+      set({ activeMaskId: null, selectedVertexIds: new Set(), selectedMaskEdgeId: null });
     }
   },
 
@@ -26,7 +106,7 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
   },
 
   setActiveMask: (clipId, maskId) => {
-    set({ activeMaskId: maskId, selectedVertexIds: new Set() });
+    set({ activeMaskId: maskId, selectedVertexIds: new Set(), selectedMaskEdgeId: null });
     if (clipId && maskId) {
       set({ maskEditMode: 'editing' });
     }
@@ -41,18 +121,26 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
       } else {
         newSet.add(vertexId);
       }
-      set({ selectedVertexIds: newSet });
+      set({ selectedVertexIds: newSet, selectedMaskEdgeId: null });
     } else {
-      set({ selectedVertexIds: new Set([vertexId]) });
+      set({ selectedVertexIds: new Set([vertexId]), selectedMaskEdgeId: null });
     }
   },
 
   selectVertices: (vertexIds) => {
-    set({ selectedVertexIds: new Set(vertexIds) });
+    set({ selectedVertexIds: new Set(vertexIds), selectedMaskEdgeId: null });
+  },
+
+  selectMaskEdge: (edgeId) => {
+    set({ selectedMaskEdgeId: edgeId, selectedVertexIds: new Set() });
   },
 
   deselectAllVertices: () => {
-    set({ selectedVertexIds: new Set() });
+    set({ selectedVertexIds: new Set(), selectedMaskEdgeId: null });
+  },
+
+  showMaskFeatherPreview: (maskId, edgeId = null) => {
+    set({ maskFeatherPreview: { maskId, edgeId, changedAt: performance.now() } });
   },
 
   // Mask CRUD
@@ -93,7 +181,23 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
   },
 
   removeMask: (clipId, maskId) => {
-    const { clips, activeMaskId, invalidateCache } = get();
+    const { clips, activeMaskId, clipKeyframes, keyframeRecordingEnabled, selectedKeyframeIds, invalidateCache } = get();
+    const keyframes = clipKeyframes.get(clipId) || [];
+    const removedKeyframeIds = new Set<string>();
+    const retainedKeyframes = keyframes.filter(keyframe => {
+      if (parseMaskProperty(keyframe.property)?.maskId !== maskId) return true;
+      removedKeyframeIds.add(keyframe.id);
+      return false;
+    });
+    const nextClipKeyframes = removedKeyframeIds.size > 0 ? new Map(clipKeyframes) : clipKeyframes;
+    if (removedKeyframeIds.size > 0) {
+      if (retainedKeyframes.length > 0) {
+        nextClipKeyframes.set(clipId, retainedKeyframes);
+      } else {
+        nextClipKeyframes.delete(clipId);
+      }
+    }
+    const recordingPrefix = `${clipId}:mask.${maskId}.`;
 
     set({
       clips: clips.map(c =>
@@ -101,7 +205,15 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
           ? { ...c, masks: (c.masks || []).filter(m => m.id !== maskId) }
           : c
       ),
+      clipKeyframes: nextClipKeyframes,
+      keyframeRecordingEnabled: new Set(
+        [...keyframeRecordingEnabled].filter(key => !key.startsWith(recordingPrefix))
+      ),
+      selectedKeyframeIds: new Set(
+        [...selectedKeyframeIds].filter(keyframeId => !removedKeyframeIds.has(keyframeId))
+      ),
       activeMaskId: activeMaskId === maskId ? null : activeMaskId,
+      selectedMaskEdgeId: activeMaskId === maskId ? null : get().selectedMaskEdgeId,
     });
 
     invalidateCache();
@@ -126,6 +238,29 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
     if (!maskDragging) {
       invalidateCache();
     }
+  },
+
+  setMaskEdgeFeather: (clipId, maskId, edgeId, feather) => {
+    const { clips, invalidateCache, showMaskFeatherPreview } = get();
+    set({
+      clips: clips.map(c =>
+        c.id === clipId
+          ? {
+              ...c,
+              masks: (c.masks || []).map(mask =>
+                mask.id === maskId
+                  ? {
+                      ...mask,
+                      edgeFeathers: setMaskEdgeFeatherValue(mask.edgeFeathers, edgeId, feather),
+                    }
+                  : mask
+              ),
+            }
+          : c
+      ),
+    });
+    showMaskFeatherPreview(maskId, edgeId);
+    invalidateCache();
   },
 
   reorderMasks: (clipId, fromIndex, toIndex) => {
@@ -215,6 +350,7 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
       selectedVertexIds: new Set(
         Array.from(selectedVertexIds).filter(id => id !== vertexId)
       ),
+      selectedMaskEdgeId: null,
     });
 
     get().recordMaskPathKeyframe(clipId, maskId);
@@ -396,4 +532,63 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
     invalidateCache();
     return maskId;
   },
+
+  copyClipMask: (clipId, maskId) => {
+    const { clips, clipKeyframes } = get();
+    const clip = clips.find(c => c.id === clipId);
+    const mask = clip?.masks?.find(m => m.id === maskId);
+    if (!mask) return;
+
+    const keyframes = (clipKeyframes.get(clipId) || [])
+      .filter(keyframe => parseMaskProperty(keyframe.property)?.maskId === maskId)
+      .map(keyframe => structuredClone(keyframe));
+
+    set({
+      clipboardMask: {
+        sourceClipId: clipId,
+        mask: structuredClone(mask),
+        keyframes,
+      },
+    });
+  },
+
+  pasteClipMask: (targetClipIds) => {
+    const { clipboardMask, selectedClipIds, clips, clipKeyframes, invalidateCache } = get();
+    if (!clipboardMask) return;
+
+    const targetIds = targetClipIds?.length ? targetClipIds : [...selectedClipIds];
+    const targetIdSet = new Set(targetIds);
+    const targetClips = clips.filter(clip => targetIdSet.has(clip.id));
+    if (targetClips.length === 0) return;
+
+    captureSnapshot(targetClips.length === 1 ? 'Paste mask' : 'Paste mask to clips');
+    const nextKeyframes = new Map(clipKeyframes);
+    let pastedMaskId: string | null = null;
+
+    const nextClips = clips.map(clip => {
+      if (!targetIdSet.has(clip.id)) return clip;
+      const pasted = remapMaskForPaste(clipboardMask, clip.id, clip.duration);
+      pastedMaskId ??= pasted.mask.id;
+
+      const mergedKeyframes = [...(nextKeyframes.get(clip.id) || []), ...pasted.keyframes]
+        .toSorted((a, b) => a.time - b.time);
+      if (mergedKeyframes.length > 0) nextKeyframes.set(clip.id, mergedKeyframes);
+
+      return {
+        ...clip,
+        masks: [...(clip.masks || []), pasted.mask],
+      };
+    });
+
+    set({
+      clips: nextClips,
+      clipKeyframes: nextKeyframes,
+      activeMaskId: targetClips.length === 1 ? pastedMaskId : get().activeMaskId,
+      selectedVertexIds: new Set(),
+      selectedMaskEdgeId: null,
+    });
+    invalidateCache();
+  },
+
+  hasClipboardMask: () => get().clipboardMask !== null,
 });

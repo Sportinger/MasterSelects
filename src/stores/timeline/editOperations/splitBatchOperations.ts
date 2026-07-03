@@ -51,6 +51,46 @@ export function cloneLinkedSourceForPart(
   return stripTimelineMediaRuntimeSource(linkedClip.source);
 }
 
+export interface SplitTransitionLinkReplacement {
+  originalClipId: string;
+  incomingReplacementClipId: string;
+  outgoingReplacementClipId: string;
+}
+
+export function remapTransitionLinksForSplitReplacements(
+  clips: readonly TimelineClip[],
+  replacements: readonly SplitTransitionLinkReplacement[],
+): TimelineClip[] {
+  if (replacements.length === 0) return [...clips];
+  const incomingTargets = new Map(replacements.map((replacement) => [
+    replacement.originalClipId,
+    replacement.incomingReplacementClipId,
+  ]));
+  const outgoingTargets = new Map(replacements.map((replacement) => [
+    replacement.originalClipId,
+    replacement.outgoingReplacementClipId,
+  ]));
+
+  return clips.map((clip) => {
+    const nextTransitionOut = clip.transitionOut?.linkedClipId
+      ? incomingTargets.get(clip.transitionOut.linkedClipId)
+      : undefined;
+    const nextTransitionIn = clip.transitionIn?.linkedClipId
+      ? outgoingTargets.get(clip.transitionIn.linkedClipId)
+      : undefined;
+    if (!nextTransitionOut && !nextTransitionIn) return clip;
+    return {
+      ...clip,
+      ...(nextTransitionOut && clip.transitionOut
+        ? { transitionOut: { ...clip.transitionOut, linkedClipId: nextTransitionOut } }
+        : {}),
+      ...(nextTransitionIn && clip.transitionIn
+        ? { transitionIn: { ...clip.transitionIn, linkedClipId: nextTransitionIn } }
+        : {}),
+    };
+  });
+}
+
 function getTrackForClip(clip: TimelineClip, tracks: TimelineTrack[]): TimelineTrack | undefined {
   return tracks.find(track => track.id === clip.trackId);
 }
@@ -186,13 +226,28 @@ export function applySplitAtTimesOperation(
   }
 
   const removedIds = new Set([clip.id, ...(linkedClip ? [linkedClip.id] : [])]);
-  const finalClips = [
+  const linkedFirstPart = newLinkedParts[0];
+  const linkedLastPart = newLinkedParts[newLinkedParts.length - 1];
+  const finalClips = remapTransitionLinksForSplitReplacements([
     ...clips.filter(candidate => !removedIds.has(candidate.id)),
     ...newParts,
     ...newLinkedParts,
   ].map(candidate => candidate.linkedClipId && removedIds.has(candidate.linkedClipId)
     ? { ...candidate, linkedClipId: undefined }
-    : candidate);
+    : candidate), [
+    {
+      originalClipId: clip.id,
+      incomingReplacementClipId: newParts[0].id,
+      outgoingReplacementClipId: newParts[newParts.length - 1].id,
+    },
+    ...(linkedClip && linkedFirstPart && linkedLastPart
+      ? [{
+          originalClipId: linkedClip.id,
+          incomingReplacementClipId: linkedFirstPart.id,
+          outgoingReplacementClipId: linkedLastPart.id,
+        }]
+      : []),
+  ]);
 
   return {
     clips: finalClips,

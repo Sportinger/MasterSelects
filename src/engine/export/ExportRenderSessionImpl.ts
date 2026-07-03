@@ -9,6 +9,11 @@ import {
   exportRenderHostPort,
   type ExportRenderHostPort,
 } from './exportRenderHostPort';
+import { seekVideo } from './VideoSeeker';
+
+const MAX_EXPORT_VIDEO_SOURCE_NESTING_DEPTH = 8;
+const EXPORT_NESTED_DEFER_RETRY_LIMIT = 3;
+const EXPORT_NESTED_DEFER_RETRY_DELAY_MS = 16;
 
 export interface ExportRenderSessionOptions {
   readonly runId: string;
@@ -48,6 +53,115 @@ function createInvalidExportHostError(
   return new Error(
     `Export render host is unavailable during ${phase} (${hostDescription}). Try keeping the browser tab in focus.`,
   );
+}
+
+function finiteTime(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function collectExportLayerVideoSources(
+  layers: Layer[],
+  result: Map<HTMLVideoElement, number | null>,
+  depth = 0,
+): void {
+  if (depth >= MAX_EXPORT_VIDEO_SOURCE_NESTING_DEPTH) return;
+
+  for (const layer of layers) {
+    if (!layer || layer.visible === false || layer.opacity === 0) continue;
+
+    const source = layer.source;
+    if (!source) continue;
+
+    if (source.videoElement && !source.videoFrame) {
+      result.set(
+        source.videoElement,
+        finiteTime(source.mediaTime) ?? finiteTime(source.targetMediaTime),
+      );
+    }
+
+    const nestedLayers = source.nestedComposition?.layers;
+    if (nestedLayers?.length) {
+      collectExportLayerVideoSources(nestedLayers, result, depth + 1);
+    }
+  }
+}
+
+function waitForVideoReady(video: HTMLVideoElement): Promise<void> {
+  if (video.readyState >= 2 && !video.seeking) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    const timeoutId = setTimeout(finish, 800);
+
+    function cleanup(): void {
+      clearTimeout(timeoutId);
+      video.removeEventListener('loadeddata', onReady);
+      video.removeEventListener('canplay', onReady);
+      video.removeEventListener('canplaythrough', onReady);
+      video.removeEventListener('seeked', onReady);
+      video.removeEventListener('error', finish);
+    }
+
+    function finish(): void {
+      cleanup();
+      resolve();
+    }
+
+    function onReady(): void {
+      if (video.readyState >= 2 && !video.seeking) finish();
+    }
+
+    video.addEventListener('loadeddata', onReady);
+    video.addEventListener('canplay', onReady);
+    video.addEventListener('canplaythrough', onReady);
+    video.addEventListener('seeked', onReady);
+    video.addEventListener('error', finish);
+  });
+}
+
+function isNestedCompositionDeferredError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('nested composition was not ready');
+}
+
+function waitForNestedCompositionRetry(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(finish, EXPORT_NESTED_DEFER_RETRY_DELAY_MS);
+
+    function cleanup(): void {
+      clearTimeout(timeoutId);
+      signal.removeEventListener('abort', onAbort);
+    }
+
+    function finish(): void {
+      cleanup();
+      resolve();
+    }
+
+    function onAbort(): void {
+      cleanup();
+      reject(signal.reason);
+    }
+
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+async function waitForExportLayerVideoSources(
+  layers: Layer[],
+  signal: AbortSignal,
+): Promise<void> {
+  const sources = new Map<HTMLVideoElement, number | null>();
+  collectExportLayerVideoSources(layers, sources);
+  if (sources.size === 0) return;
+
+  await Promise.all([...sources.entries()].map(async ([video, targetTime]) => {
+    if (signal.aborted) throw new Error('Export cancelled');
+    if (targetTime !== null) {
+      await seekVideo(video, targetTime);
+      return;
+    }
+    await waitForVideoReady(video);
+  }));
 }
 
 export class ExportRenderSessionImpl implements ExportRenderSession {
@@ -100,17 +214,32 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
     await this.ensureHostAvailable('frame render');
 
     this.host.setRenderTimeOverride(input.time);
+    const ensureLayersStart = performance.now();
+    await this.host.ensureExportLayersReady(layers);
+    await waitForExportLayerVideoSources(layers, this.signal);
+    const ensureLayersMs = performance.now() - ensureLayersStart;
+
     const maskSyncStart = performance.now();
     syncExportMaskTextures(layers, this.width, this.height, input.time, this.host);
     const maskSyncMs = performance.now() - maskSyncStart;
 
-    const ensureLayersStart = performance.now();
-    await this.host.ensureExportLayersReady(layers);
-    const ensureLayersMs = performance.now() - ensureLayersStart;
-
-    const renderStart = performance.now();
-    this.host.render(layers);
-    const renderMs = performance.now() - renderStart;
+    let renderMs = 0;
+    for (let attempt = 0; ; attempt += 1) {
+      const renderStart = performance.now();
+      try {
+        this.host.render(layers);
+        renderMs += performance.now() - renderStart;
+        break;
+      } catch (error) {
+        renderMs += performance.now() - renderStart;
+        if (!isNestedCompositionDeferredError(error) || attempt >= EXPORT_NESTED_DEFER_RETRY_LIMIT) {
+          throw error;
+        }
+        await waitForNestedCompositionRetry(this.signal);
+        await this.host.ensureExportLayersReady(layers);
+        await waitForExportLayerVideoSources(layers, this.signal);
+      }
+    }
 
     if (this.useZeroCopy) {
       // Zero-copy path: create VideoFrame directly from OffscreenCanvas
@@ -210,5 +339,6 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
     this.host.cleanupExportCanvas();
     this.host.setExporting(false);
     this.host.setResolution(this.originalDimensions.width, this.originalDimensions.height);
+    this.host.requestPreviewRender();
   }
 }

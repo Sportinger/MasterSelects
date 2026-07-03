@@ -43,9 +43,10 @@ export function PrivacyPT() {
       <h3>4. Pagamentos</h3>
       <p>Processados pelo <strong>Stripe, Inc.</strong> (certificado EU-US DPF). Não armazenamos dados de cartão.</p>
       <p>
-        <strong>Logs do chat de IA hospedado:</strong> quando você usa o chat de IA hospedado, mensagens/prompts,
-        respostas, chamadas de ferramentas, contagens de tokens, custo em créditos, duração, status e estado de erro
-        podem ser armazenados no nosso banco D1 para histórico da conta, cobrança/debug, prevenção de abuso e suporte.
+        <strong>Logs de IA hospedada:</strong> quando voce usa o chat de IA hospedado ou a geracao de midia
+        hospedada, mensagens/prompts, payloads de requisicao, respostas, chamadas de ferramentas, resultados de
+        moderacao, contagens de tokens, custo em creditos, duracao, status, estado de erro e um hash de IP pseudonimo
+        podem ser armazenados no nosso banco D1 para historico da conta, cobranca/debug, prevencao de abuso e suporte.
       </p>
       <h3>5. Seus direitos (RGPD)</h3>
       <ul>

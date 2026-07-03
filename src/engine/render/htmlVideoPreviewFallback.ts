@@ -10,9 +10,9 @@ export function getCopiedHtmlVideoPreviewFrame(
   targetTime?: number,
   lookupOwnerId?: string,
   captureOwnerId?: string,
-  forceCopy = false
+  _forceCopy = false
 ): { view: GPUTextureView; width: number; height: number; mediaTime?: number } | null {
-  if ((!forceCopy && !isFirefoxBrowser()) || !scrubbingCache) {
+  if (!isFirefoxBrowser() || !scrubbingCache) {
     return null;
   }
 

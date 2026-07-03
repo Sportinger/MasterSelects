@@ -63,14 +63,6 @@ const KIEAI_IMAGE_MODEL_SPECS: Record<string, KieAiImageModelSpec> = {
     defaultAspectRatio: '1:1',
     supportsOutputFormat: true,
   },
-  'google/imagen4-fast': {
-    defaultAspectRatio: '16:9',
-    supportsNegativePrompt: true,
-  },
-  'google/imagen4-ultra': {
-    defaultAspectRatio: '1:1',
-    supportsNegativePrompt: true,
-  },
   'gpt-image-2-text-to-image': {
     defaultAspectRatio: 'auto',
   },
@@ -150,7 +142,11 @@ function normalizeUpscaleFactor(value: string | undefined): '2' | '4' {
 }
 
 function getImageModelSpec(provider: string): KieAiImageModelSpec {
-  return KIEAI_IMAGE_MODEL_SPECS[provider] ?? DEFAULT_IMAGE_MODEL_SPEC;
+  const spec = KIEAI_IMAGE_MODEL_SPECS[provider];
+  if (!spec) {
+    throw new Error(`Unsupported Kie.ai image provider: ${provider}`);
+  }
+  return spec;
 }
 
 export function buildKieAiImageTaskInput(

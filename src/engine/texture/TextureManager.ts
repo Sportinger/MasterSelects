@@ -27,9 +27,20 @@ export class TextureManager {
   // Video frame textures (rendered from external textures)
   private videoFrameTextures: Map<string, GPUTexture> = new Map();
   private videoFrameViews: Map<string, GPUTextureView> = new Map();
+  private externalTextureImportFailureAt = new WeakMap<object, number>();
 
   constructor(device: GPUDevice) {
     this.device = device;
+  }
+
+  private shouldLogExternalTextureImportFailure(source: object): boolean {
+    const now = performance.now();
+    const lastFailureAt = this.externalTextureImportFailureAt.get(source) ?? 0;
+    if (now - lastFailureAt < 2000) {
+      return false;
+    }
+    this.externalTextureImportFailureAt.set(source, now);
+    return true;
   }
 
   // Create GPU texture from HTMLImageElement
@@ -252,7 +263,9 @@ export class TextureManager {
       return texture;
     } catch (e) {
       // Log the actual error - this is critical for debugging Linux/Vulkan issues
-      log.error('Failed to import external texture', e);
+      if (this.shouldLogExternalTextureImportFailure(source)) {
+        log.error('Failed to import external texture', e);
+      }
       return null;
     }
   }

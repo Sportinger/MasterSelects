@@ -35,6 +35,7 @@ import {
   getAudibleStemLayers,
   usesSourceAudioLayer,
 } from './audioTrackStemSyncModel';
+import { shouldUseInlineCompositionMixdown } from '../timeline/compositionAudioClipLinks';
 
 const log = Logger.create('CutTransition');
 
@@ -334,7 +335,7 @@ export class AudioTrackSyncManager {
 
       const needsSourceElement = !stemSeparation || shouldUseSourceAudio;
       const compositionAudioElement = needsSourceElement
-        ? this.compositionPlaybackMixdowns.ensureCompositionAudioPlaybackElement(clip, 'source')
+        ? this.compositionPlaybackMixdowns.ensureCompositionAudioPlaybackElement(clip, 'source', ctx.clips)
         : null;
       const sourceAudioProxy = needsSourceElement ? this.getAudioProxyElementForClip(clip) : null;
       const sourceAudioElement = sourceAudioProxy ?? compositionAudioElement ?? this.getClipAudioElement(clip);
@@ -490,9 +491,15 @@ export class AudioTrackSyncManager {
    */
   private syncNestedCompMixdown(ctx: FrameContext, state: AudioSyncState): void {
     for (const clip of ctx.clipsAtTime) {
-      if (!clip.isComposition || this.hasActiveLinkedCompositionAudioClip(ctx, clip)) continue;
+      if (!shouldUseInlineCompositionMixdown(ctx.clips, clip)) {
+        if (clip.isComposition && clip.mixdownAudio) {
+          pauseAudioElement(clip.mixdownAudio);
+          audioRoutingManager.removeRoute(clip.mixdownAudio);
+        }
+        continue;
+      }
       const mixdownAudio = clip.mixdownAudio ??
-        this.compositionPlaybackMixdowns.ensureCompositionAudioPlaybackElement(clip, 'mixdown');
+        this.compositionPlaybackMixdowns.ensureCompositionAudioPlaybackElement(clip, 'mixdown', ctx.clips);
       if (!mixdownAudio || clip.hasMixdownAudio === false) continue;
 
       const timeInfo = getClipTimeInfo(ctx, clip);
@@ -516,14 +523,6 @@ export class AudioTrackSyncManager {
         meterTrackId: track?.id,
       }, ctx, state);
     }
-  }
-
-  private hasActiveLinkedCompositionAudioClip(ctx: FrameContext, clip: TimelineClip): boolean {
-    if (!clip.linkedClipId) return false;
-    const linkedClip = ctx.clipsAtTime.find(candidate => candidate.id === clip.linkedClipId);
-    return linkedClip?.isComposition === true &&
-      linkedClip.compositionId === clip.compositionId &&
-      this.isAudioSourceClip(linkedClip);
   }
 
   /**

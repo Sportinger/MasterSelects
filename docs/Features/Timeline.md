@@ -146,6 +146,7 @@ getTrackChildren()  // Query child tracks
 | Delete all gaps | Available from the empty timeline right-click menu; closes all gaps on unlocked visible tracks as one undoable operation. |
 | Fit comp to window | Available from the zoom controls and empty timeline right-click menu. |
 | Right-drag empty space or clips | Scrubs the playhead without opening the timeline context menu; context menus open only for a single right-click. |
+| Sync via Audio | Clip context menu action for selections with at least two audible clips; aligns selected audio/video pairs by waveform correlation and writes one manual linked group. |
 | Lift range | Available in the Cut flyout after drawing a Range Selection; removes the range and leaves a gap. |
 | Extract range | Available in the Cut flyout after drawing a Range Selection; removes the range and ripples following clips left. |
 | Copy | `Ctrl+C` copies selected keyframes first, otherwise selected clips. |
@@ -201,6 +202,7 @@ getTrackChildren()  // Query child tracks
 - Normal Select-mode drops still use gap-aware placement. Position/Overwrite intentionally keeps the requested drop time and lets the kernel trim/delete the affected target range.
 - Insert, Overwrite, Replace, Fit to Fill, Append, Place on Top, and Ripple Overwrite are enabled when the Media Panel or Source Monitor exposes a current source item. The commands resolve the source, prepare the affected range through the placement operation, then create the new clip on the target track.
 - Replace, Fit to Fill, and Ripple Overwrite prefer the selected timeline range or selected compatible target clip. Insert and Overwrite use the playhead. Append uses the end of the compatible target track, and Place on Top uses a free upper video track or creates one.
+- New visual media clips keep the default 100% scale; users resize or fit them manually in the Properties panel when needed.
 - Source Monitor In/Out marks constrain the placement source duration and source in point. Clearing the marks returns placement to the full source duration.
 - Source Monitor exposes a full-width source timeline with ruler, playhead, draggable In/Out handles, audio-file playback, and direct Insert, Overwrite, Replace, Fit, Append, and Top buttons, so source edit commands are available outside the timeline tool flyout.
 - Clicking a track header targets that video or audio track for source edits and clip paste. Clicking the same highlighted track again clears that target.
@@ -234,6 +236,7 @@ getTrackChildren()  // Query child tracks
 ## Keyframe Lanes
 
 - Expanded track headers show a flat list of property rows, not nested folders.
+- Property row labels are single-line with ellipsis so long effect, mask, and generated-source labels do not collide with keyframe controls or values.
 - The current clip's keyframes decide which rows are visible.
 - The UI hides `rotation.x`, `rotation.y`, `position.z`, and `scale.z` for 2D clips.
 - Camera clips and native-render gaussian splats keep the camera-style property model visible.
@@ -266,9 +269,10 @@ getTrackChildren()  // Query child tracks
 - The default placement is virtual `center`: the transition body is centered on the cut without moving either clip. Preview and export sample the incoming left handle before the clip start and the outgoing right handle after the clip end; when either side lacks real source material, the nearest first/last frame is held and shown as red fallback coverage.
 - Existing transition bodies render on the timeline, can be selected, moved left/right by dragging the body, resized by dragging either edge, and expose duration plus handle/hold details in the transition-scoped Properties tab. Move snaps to the centered cut position and to available source-handle edges; resize snaps to the same source edges. Move and resize previews show the same source-handle and red hold-frame feedback. Transition durations are not capped by clip length; missing material is represented with hold-frame fallback.
 - Preview and export share the same transition planner and layer assembly. Wipe transitions use compositor transition metadata rather than clip effects.
+- Double-clicking a transition body opens its linked transition composition. Light Leak transitions materialize as editable outgoing, incoming-masked, and generated light-streak layers with normal transform, opacity, mask, and keyframe editing. The parent timeline renders that linked comp as the actual transition source.
 
 ### Multicam
-- Multiple selected clips can be combined into a linked multicam group.
+- The old clip context-menu Combine Multicam entry has been replaced by Sync via Audio for selected audio/video pairs.
 - Linked group movement preserves offsets so sync timing stays intact.
 
 ### Pick Whip Parenting
@@ -310,6 +314,7 @@ The toolbar and wheel gestures still drive playback and navigation:
 - `J`, `K`, `L` shuttle reverse, pause, and forward.
 - `I` and `O` set in/out points.
 - `X` clears in/out.
+- Stop returns the playhead to the In point when one is set; otherwise it returns to timeline start.
 - `M` adds a marker at the playhead.
 - Right-clicking a marker opens marker transport and MIDI actions.
 - Markers can be turned into `Stop Marker`s that automatically pause playback when crossed.

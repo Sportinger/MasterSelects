@@ -7,6 +7,8 @@ import {
 import { useMediaStore, type MediaFile } from '../../../stores/mediaStore';
 import type { FlashBoardGenerationRequest } from '../../../stores/flashboardStore/types';
 import { useMediaDownloadStore, type MediaDownloadJob } from '../../../stores/mediaDownloadStore';
+import { flashBoardJobService } from '../../../services/flashboard/FlashBoardJobService';
+import { getCatalogEntry } from '../../../services/flashboard/FlashBoardModelCatalog';
 
 const VISIBLE_QUEUE_STATUSES = new Set(['queued', 'processing', 'completed', 'failed', 'canceled']);
 const MAX_VISIBLE_GENERATIONS = 6;
@@ -102,6 +104,15 @@ function getOutputLabel(request: FlashBoardGenerationRequest): string {
   return 'Video';
 }
 
+function getModelLabel(request: FlashBoardGenerationRequest): string {
+  return getCatalogEntry(request.service, request.providerId)?.name || request.providerId;
+}
+
+function getModeLabel(request: FlashBoardGenerationRequest): string | undefined {
+  if (!request.mode) return undefined;
+  return getCatalogEntry(request.service, request.providerId)?.modeLabels?.[request.mode] || request.mode;
+}
+
 function getPreviewAspectRatio(request: FlashBoardGenerationRequest): string {
   if (request.outputType === 'audio' || request.service === 'elevenlabs' || request.service === 'suno') {
     return '2.4 / 1';
@@ -129,7 +140,14 @@ function getGeneratedPreviewUrl(mediaFile: MediaFile | undefined): string | unde
 
 function getMetaLabel(request: FlashBoardGenerationRequest): string {
   const parts = [getServiceLabel(request)];
+  const modeLabel = getModeLabel(request);
 
+  if (request.version && request.version !== 'latest') {
+    parts.push(request.version);
+  }
+  if (modeLabel) {
+    parts.push(modeLabel);
+  }
   if (request.duration && getOutputLabel(request) !== 'Audio') {
     parts.push(`${request.duration}s`);
   }
@@ -138,6 +156,12 @@ function getMetaLabel(request: FlashBoardGenerationRequest): string {
   }
   if (request.imageSize) {
     parts.push(request.imageSize);
+  }
+  if (request.generateAudio) {
+    parts.push('Sound');
+  }
+  if (request.multiShots) {
+    parts.push('Multi-shot');
   }
 
   return parts.join(' · ');
@@ -366,6 +390,7 @@ function MediaAIGenerationQueueImpl() {
         const progressLabel = progress !== null ? `${Math.round(progress * 100)}%` : null;
         const canFlyToMedia = status === 'completed' && Boolean(mediaFileId);
         const canDismiss = status === 'failed' || status === 'canceled' || (status === 'completed' && !canFlyToMedia);
+        const canCancel = !isDownload && (status === 'queued' || status === 'processing');
         const itemId = item.id;
         const cardClassName = [
           'media-ai-generation-card',
@@ -401,9 +426,11 @@ function MediaAIGenerationQueueImpl() {
         };
         const title = isDownload ? job!.title : request!.prompt;
         const outputLabel = isDownload ? 'Download' : getOutputLabel(request!);
+        const previewLabel = isDownload ? outputLabel : getModelLabel(request!);
         const metaLabel = isDownload ? getDownloadMetaLabel(job!) : getMetaLabel(request!);
         const aspectRatio = isDownload ? '16 / 9' : getPreviewAspectRatio(request!);
         const error = isDownload ? job!.error : record!.job?.error;
+        const refund = isDownload ? undefined : record!.job?.refund;
 
         return (
           <div
@@ -423,7 +450,7 @@ function MediaAIGenerationQueueImpl() {
               {previewUrl ? (
                 <img src={previewUrl} alt="" draggable={false} />
               ) : null}
-              <span>{outputLabel}</span>
+              <span>{previewLabel}</span>
               {(status === 'queued' || status === 'processing') && (
                 <span className="media-ai-generation-pulse" aria-hidden="true" />
               )}
@@ -465,7 +492,25 @@ function MediaAIGenerationQueueImpl() {
                   {error}
                 </div>
               )}
+              {status === 'failed' && refund && (
+                <div className="media-ai-generation-error" title={`Job ${refund.jobId}`}>
+                  Refunded {refund.credits} credits
+                </div>
+              )}
             </div>
+            {canCancel && (
+              <button
+                className="media-ai-generation-dismiss media-ai-generation-cancel"
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  flashBoardJobService.cancel(itemId);
+                }}
+                title="Cancel generation"
+              >
+                &times;
+              </button>
+            )}
             {status === 'failed' && isDownload && (
               <button
                 className="media-ai-generation-dismiss media-ai-generation-retry"

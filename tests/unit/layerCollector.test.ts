@@ -1518,7 +1518,7 @@ describe('LayerCollector', () => {
     });
   });
 
-  it('copies stable paused HTML frames before live import so still renders stay visible', () => {
+  it('uses live import for stable paused HTML frames outside Firefox', () => {
     flags.useFullWebCodecsPlayback = false;
 
     const video = {
@@ -1531,13 +1531,6 @@ describe('LayerCollector', () => {
       videoHeight: 1080,
     } as unknown as HTMLVideoElement;
 
-    const copiedFrame = {
-      view: { label: 'copied-paused-frame' },
-      width: 1920,
-      height: 1080,
-      mediaTime: 6,
-    };
-    let captured = false;
     const textureManager = {
       importVideoTexture: vi.fn(() => ({ label: 'html-video-texture' })),
     };
@@ -1546,14 +1539,11 @@ describe('LayerCollector', () => {
       getLastPresentedOwner: vi.fn(() => undefined),
       getLastFrameOwner: vi.fn(() => undefined),
       getLastFrame: vi.fn(() => null),
-      getLastFrameNearTime: vi.fn(() => captured ? copiedFrame : null),
+      getLastFrameNearTime: vi.fn(() => null),
       getCachedFrameEntry: vi.fn(() => null),
       getNearestCachedFrameEntry: vi.fn(() => null),
       getLastCaptureTime: vi.fn(() => 0),
-      captureVideoFrame: vi.fn(() => {
-        captured = true;
-        return true;
-      }),
+      captureVideoFrame: vi.fn(() => true),
       setLastCaptureTime: vi.fn(),
       cacheFrameAtTime: vi.fn(),
       captureVideoFrameIfCloser: vi.fn(),
@@ -1586,21 +1576,20 @@ describe('LayerCollector', () => {
     });
 
     expect(result).toHaveLength(1);
-    expect(textureManager.importVideoTexture).not.toHaveBeenCalled();
-    expect(scrubbingCache.captureVideoFrame).toHaveBeenCalledWith(video, 'clip-paused-html-copy');
+    expect(textureManager.importVideoTexture).toHaveBeenCalledWith(video);
     expect(result[0]).toMatchObject({
-      isVideo: false,
-      externalTexture: null,
-      textureView: copiedFrame.view,
+      isVideo: true,
+      externalTexture: { label: 'html-video-texture' },
+      textureView: null,
       sourceWidth: 1920,
       sourceHeight: 1080,
       displayedMediaTime: 6,
       targetMediaTime: 6,
-      previewPath: 'copied-preview',
+      previewPath: 'live-import',
     });
   });
 
-  it('allows paused particle render effects to use a stable HTML still when full WebCodecs has no frame', () => {
+  it('uses live import for paused particle render effects outside Firefox when full WebCodecs has no frame', () => {
     const video = {
       src: 'blob:test-video',
       currentTime: 6,
@@ -1626,13 +1615,6 @@ describe('LayerCollector', () => {
     hoisted.getRuntimeFrameProvider.mockReturnValue(null);
     hoisted.readRuntimeFrameForSource.mockReturnValue(null);
 
-    const copiedFrame = {
-      view: { label: 'particle-paused-frame' },
-      width: 1920,
-      height: 1080,
-      mediaTime: 6,
-    };
-    let captured = false;
     const textureManager = {
       importVideoTexture: vi.fn(() => ({ label: 'webcodecs-texture' })),
     };
@@ -1641,14 +1623,11 @@ describe('LayerCollector', () => {
       getLastPresentedOwner: vi.fn(() => undefined),
       getLastFrameOwner: vi.fn(() => undefined),
       getLastFrame: vi.fn(() => null),
-      getLastFrameNearTime: vi.fn(() => captured ? copiedFrame : null),
+      getLastFrameNearTime: vi.fn(() => null),
       getCachedFrameEntry: vi.fn(() => null),
       getNearestCachedFrameEntry: vi.fn(() => null),
       getLastCaptureTime: vi.fn(() => 0),
-      captureVideoFrame: vi.fn(() => {
-        captured = true;
-        return true;
-      }),
+      captureVideoFrame: vi.fn(() => true),
       setLastCaptureTime: vi.fn(),
       cacheFrameAtTime: vi.fn(),
       captureVideoFrameIfCloser: vi.fn(),
@@ -1689,17 +1668,16 @@ describe('LayerCollector', () => {
 
     expect(result).toHaveLength(1);
     expect(webCodecsPlayer.getCurrentFrame).not.toHaveBeenCalled();
-    expect(textureManager.importVideoTexture).not.toHaveBeenCalled();
-    expect(scrubbingCache.captureVideoFrame).toHaveBeenCalledWith(video, 'clip-particle-paused-html-copy');
+    expect(textureManager.importVideoTexture).toHaveBeenCalledWith(video);
     expect(result[0]).toMatchObject({
-      isVideo: false,
-      externalTexture: null,
-      textureView: copiedFrame.view,
+      isVideo: true,
+      externalTexture: { label: 'webcodecs-texture' },
+      textureView: null,
       sourceWidth: 1920,
       sourceHeight: 1080,
       displayedMediaTime: 6,
       targetMediaTime: 6,
-      previewPath: 'copied-preview',
+      previewPath: 'live-import',
     });
   });
 

@@ -48,6 +48,8 @@ describe('vector user-action data-only loading', () => {
       naturalDuration: 6,
     }));
     expect(update.source).not.toHaveProperty('textCanvas');
+    expect(clip.transform.scale).toEqual({ x: 1, y: 1 });
+    expect(update.transform).toBeUndefined();
     expect(update.isLoading).toBe(false);
   });
 
@@ -86,6 +88,8 @@ describe('vector user-action data-only loading', () => {
       naturalDuration: 4,
     }));
     expect(update.source).not.toHaveProperty('textCanvas');
+    expect(clip.transform.scale).toEqual({ x: 1, y: 1 });
+    expect(update.transform).toBeUndefined();
     expect(update.isLoading).toBe(false);
   });
 });

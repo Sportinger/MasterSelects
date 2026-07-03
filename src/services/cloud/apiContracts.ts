@@ -204,6 +204,7 @@ export interface CloudAiVideoRequest {
     mode?: string;
     multiPrompt?: Array<{ index: number; prompt: string; duration: number }>;
     multiShots?: boolean;
+    negativePrompt?: string;
     outputFormat?: 'jpeg' | 'png' | 'webp';
     outputType?: 'image' | 'video';
     provider?: string;

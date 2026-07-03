@@ -24,6 +24,7 @@ export function isInfiniteTimelineSourceType(sourceType: string | null | undefin
     sourceType === 'camera' ||
     sourceType === 'splat-effector' ||
     sourceType === 'math-scene' ||
+    sourceType === 'transition-overlay' ||
     sourceType === 'midi';
 }
 

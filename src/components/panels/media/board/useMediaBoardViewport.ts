@@ -11,14 +11,11 @@ import {
 } from 'react';
 
 import {
-  MEDIA_BOARD_COMPACT_LOD_ZOOM,
   MEDIA_BOARD_GRID_PARALLAX,
-  MEDIA_BOARD_OVERVIEW_CANVAS_ZOOM,
   MEDIA_BOARD_PAN_ZOOM_MAX,
   MEDIA_BOARD_PAN_ZOOM_MIN,
-  MEDIA_BOARD_THUMBNAIL_LOD_MIN_ZOOM,
-  MEDIA_BOARD_THUMBNAIL_REQUEST_MIN_ZOOM,
   getMediaBoardGridSize,
+  getMediaBoardRenderLod,
   getMediaBoardUiScale,
 } from './constants';
 import { getMediaBoardVisibleRect } from './layout';
@@ -29,6 +26,11 @@ import type {
   MediaBoardViewportSize,
   MediaBoardVisibleRect,
 } from './types';
+
+interface MediaBoardViewportState {
+  renderLod: MediaBoardRenderLod;
+  viewport: MediaBoardViewport;
+}
 
 export interface UseMediaBoardViewportOptions {
   viewMode: string;
@@ -62,12 +64,33 @@ export function useMediaBoardViewport({
   const boardInteractionFrameRef = useRef<number | null>(null);
   const boardAutoPanFrameRef = useRef<number | null>(null);
   const boardWheelCommitTimerRef = useRef<number | null>(null);
-  const [mediaBoardViewport, setMediaBoardViewport] = useState<MediaBoardViewport>(loadMediaBoardViewport);
+  const [mediaBoardViewportState, setMediaBoardViewportState] = useState<MediaBoardViewportState>(() => {
+    const viewport = loadMediaBoardViewport();
+    return {
+      viewport,
+      renderLod: getMediaBoardRenderLod(viewport.zoom),
+    };
+  });
+  const mediaBoardViewport = mediaBoardViewportState.viewport;
+  const mediaBoardRenderLod = mediaBoardViewportState.renderLod;
   const mediaBoardViewportRef = useRef<MediaBoardViewport>(mediaBoardViewport);
   const [mediaBoardCanvasSize, setMediaBoardCanvasSize] = useState<MediaBoardViewportSize>(() => ({
     width: typeof window === 'undefined' ? 1280 : Math.max(1, window.innerWidth),
     height: typeof window === 'undefined' ? 720 : Math.max(1, window.innerHeight),
   }));
+  const setMediaBoardViewport: Dispatch<SetStateAction<MediaBoardViewport>> = useCallback((value) => {
+    setMediaBoardViewportState((current) => {
+      const nextViewport = typeof value === 'function' ? value(current.viewport) : value;
+      const nextRenderLod = getMediaBoardRenderLod(nextViewport.zoom, current.renderLod);
+      return current.viewport === nextViewport &&
+        current.renderLod.overviewCanvas === nextRenderLod.overviewCanvas &&
+        current.renderLod.compact === nextRenderLod.compact &&
+        current.renderLod.showImages === nextRenderLod.showImages &&
+        current.renderLod.requestThumbnails === nextRenderLod.requestThumbnails
+        ? current
+        : { viewport: nextViewport, renderLod: nextRenderLod };
+    });
+  }, []);
 
   useEffect(() => {
     mediaBoardViewportRef.current = mediaBoardViewport;
@@ -119,14 +142,8 @@ export function useMediaBoardViewport({
   const mediaBoardVisibleRect = useMemo(() => getMediaBoardVisibleRect(
     mediaBoardViewport,
     mediaBoardCanvasSize,
-  ), [mediaBoardCanvasSize, mediaBoardViewport]);
-
-  const mediaBoardRenderLod = useMemo(() => ({
-    overviewCanvas: mediaBoardViewport.zoom <= MEDIA_BOARD_OVERVIEW_CANVAS_ZOOM,
-    compact: mediaBoardViewport.zoom <= MEDIA_BOARD_COMPACT_LOD_ZOOM,
-    showImages: mediaBoardViewport.zoom > MEDIA_BOARD_THUMBNAIL_LOD_MIN_ZOOM,
-    requestThumbnails: mediaBoardViewport.zoom >= MEDIA_BOARD_THUMBNAIL_REQUEST_MIN_ZOOM,
-  }), [mediaBoardViewport.zoom]);
+    mediaBoardRenderLod.compact,
+  ), [mediaBoardCanvasSize, mediaBoardRenderLod.compact, mediaBoardViewport]);
 
   const screenToMediaBoard = useCallback((clientX: number, clientY: number) => {
     const rect = boardCanvasRef.current?.getBoundingClientRect();
@@ -144,7 +161,7 @@ export function useMediaBoardViewport({
 
   const reloadMediaBoardViewport = useCallback(() => {
     setMediaBoardViewport(loadMediaBoardViewport());
-  }, []);
+  }, [setMediaBoardViewport]);
 
   const applyMediaBoardViewportPreview = useCallback((viewport: MediaBoardViewport) => {
     const inner = boardCanvasInnerRef.current;
@@ -201,7 +218,7 @@ export function useMediaBoardViewport({
         window.requestAnimationFrame(() => setMediaBoardPerformanceMode(false));
       });
     }, 90);
-  }, [applyMediaBoardViewportPreview, setMediaBoardPerformanceMode]);
+  }, [applyMediaBoardViewportPreview, setMediaBoardPerformanceMode, setMediaBoardViewport]);
 
   return {
     applyMediaBoardViewportPreview,

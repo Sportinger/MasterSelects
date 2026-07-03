@@ -3,7 +3,7 @@ import {
   DEFAULT_VECTOR_ANIMATION_CLIP_SETTINGS,
   type VectorAnimationMetadata,
 } from '../../../types/vectorAnimation';
-import { DEFAULT_TRANSFORM, calculateNativeScale } from '../constants';
+import { DEFAULT_TRANSFORM } from '../constants';
 import { generateClipId } from '../helpers/idGenerator';
 
 export interface AddLottieClipParams {
@@ -19,9 +19,6 @@ export function createLottieClipPlaceholder(params: AddLottieClipParams): Timeli
   const { trackId, file, startTime, estimatedDuration, mediaFileId, metadata } = params;
   const clipId = generateClipId('clip-lottie');
   const duration = metadata?.duration ?? estimatedDuration;
-  const nativeScale = (metadata?.width && metadata?.height)
-    ? calculateNativeScale(metadata.width, metadata.height)
-    : { x: 1, y: 1 };
 
   return {
     id: clipId,
@@ -39,7 +36,7 @@ export function createLottieClipPlaceholder(params: AddLottieClipParams): Timeli
       vectorAnimationSettings: { ...DEFAULT_VECTOR_ANIMATION_CLIP_SETTINGS },
     },
     mediaFileId,
-    transform: { ...DEFAULT_TRANSFORM, scale: nativeScale },
+    transform: { ...DEFAULT_TRANSFORM },
     effects: [],
     isLoading: true,
   };
@@ -56,9 +53,6 @@ export interface LoadLottieMediaParams {
 export async function loadLottieMedia(params: LoadLottieMediaParams): Promise<void> {
   const { clip, file, mediaFileId, metadata, updateClip } = params;
   const naturalDuration = metadata?.duration ?? clip.duration;
-  const nativeScale = (metadata?.width && metadata?.height)
-    ? calculateNativeScale(metadata.width, metadata.height)
-    : clip.transform.scale;
 
   updateClip(clip.id, {
     file,
@@ -73,10 +67,6 @@ export async function loadLottieMedia(params: LoadLottieMediaParams): Promise<vo
         ...DEFAULT_VECTOR_ANIMATION_CLIP_SETTINGS,
         ...clip.source?.vectorAnimationSettings,
       },
-    },
-    transform: {
-      ...clip.transform,
-      scale: nativeScale,
     },
     isLoading: false,
   });

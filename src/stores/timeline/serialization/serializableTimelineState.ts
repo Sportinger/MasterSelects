@@ -104,6 +104,8 @@ function createSerializableClip(
       ? undefined
       : clip.waveformChannels,
     transform: clip.transform,
+    sourceRect: clip.sourceRect ? structuredClone(clip.sourceRect) : undefined,
+    transitionRender: clip.transitionRender ? structuredClone(clip.transitionRender) : undefined,
     effects: clip.effects,
     transitionIn: clip.transitionIn ? normalizeTransitionInstanceParams(structuredClone(clip.transitionIn)) : undefined,
     transitionOut: clip.transitionOut ? normalizeTransitionInstanceParams(structuredClone(clip.transitionOut)) : undefined,
@@ -123,6 +125,9 @@ function createSerializableClip(
     textProperties: clip.textProperties,
     text3DProperties: clip.text3DProperties ?? dataOnlySource?.text3DProperties,
     solidColor: dataOnlySource?.type === 'solid' ? (clip.solidColor || clip.name.replace('Solid ', '')) : undefined,
+    transitionOverlay: dataOnlySource?.type === 'transition-overlay'
+      ? structuredClone(clip.transitionOverlay ?? dataOnlySource.transitionOverlay)
+      : undefined,
     vectorAnimationSettings: dataOnlySource?.vectorAnimationSettings,
     mathScene: dataOnlySource?.type === 'math-scene' && clip.mathScene
       ? structuredClone(clip.mathScene)

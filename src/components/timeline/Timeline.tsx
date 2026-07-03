@@ -436,6 +436,7 @@ export function Timeline() {
     showInExplorer,
     splitClipAtPlayhead: timelineActions.splitClipAtPlayhead,
     startClipStemSeparation: timelineActions.startClipStemSeparation,
+    syncClipsViaAudio: timelineActions.syncClipsViaAudio,
     thumbnailsEnabled,
     timelineRef,
     toggleClipReverse: timelineActions.toggleClipReverse,
@@ -685,7 +686,6 @@ export function Timeline() {
   return (
     <TimelineRootShell {...rootShellProps}>
       <TimelineToolbarChrome {...timelineToolbarProps} />
-
       <TimelineSlotGridChrome {...slotGridChromeProps} />
 
       <TimelineBodySurface {...bodySurfaceProps} />

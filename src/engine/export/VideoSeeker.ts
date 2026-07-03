@@ -3,6 +3,11 @@
 import { Logger } from '../../services/logger';
 import type { ExportClipState, FrameContext } from './types';
 import type { TimelineClip } from '../../stores/timeline/types';
+import {
+  createTransitionSourceClip,
+  DEFAULT_TRANSITION_PLACEMENT,
+  findActiveTransitionPlanForTrack,
+} from '../../stores/timeline/editOperations/transitionPlanner';
 import { updateRuntimePlaybackTime } from '../../services/mediaRuntime/runtimePlayback';
 import { getClipSourceWindowTime } from './layerBuilder/timing';
 
@@ -65,6 +70,49 @@ function getRenderableClips(ctx: FrameContext): TimelineClip[] {
   return ctx.renderClipsAtTime ?? ctx.clipsAtTime;
 }
 
+function getNestedVideoClipTime(clip: TimelineClip, nestedTime: number): number {
+  if (Number.isFinite(clip.transitionSourceTimeOverride)) {
+    return clip.transitionSourceTimeOverride!;
+  }
+  const nestedLocalTime = nestedTime - clip.startTime;
+  const nestedSpeed = clip.speed ?? 1;
+  const speedAdjusted = nestedLocalTime * Math.abs(nestedSpeed);
+  return (clip.reversed !== (nestedSpeed < 0))
+    ? clip.outPoint - speedAdjusted
+    : clip.inPoint + speedAdjusted;
+}
+
+function getRenderableNestedClips(clip: TimelineClip, nestedTime: number): TimelineClip[] {
+  if (!clip.nestedClips || !clip.nestedTracks) return [];
+
+  const renderable: TimelineClip[] = [];
+  for (const track of clip.nestedTracks) {
+    if (track.type !== 'video' || track.visible === false) continue;
+    const transition = findActiveTransitionPlanForTrack({
+      clips: clip.nestedClips,
+      trackId: track.id,
+      time: nestedTime,
+      placement: DEFAULT_TRANSITION_PLACEMENT,
+      edgePolicy: 'hold',
+    });
+    if (transition) {
+      renderable.push(
+        createTransitionSourceClip(transition.outgoingClip, transition.plan.outgoing, nestedTime),
+        createTransitionSourceClip(transition.incomingClip, transition.plan.incoming, nestedTime),
+      );
+      continue;
+    }
+
+    const nestedClip = clip.nestedClips.find(candidate =>
+      candidate.trackId === track.id &&
+      nestedTime >= candidate.startTime &&
+      nestedTime < candidate.startTime + candidate.duration
+    );
+    if (nestedClip) renderable.push(nestedClip);
+  }
+  return renderable;
+}
+
 async function seekSequentialMode(
   ctx: FrameContext,
   clipStates: Map<string, ExportClipState>
@@ -81,21 +129,24 @@ async function seekSequentialMode(
       const clipLocalTime = time - clip.startTime;
       const nestedTime = clipLocalTime + (clip.inPoint || 0);
 
-      for (const nestedClip of clip.nestedClips) {
-        if (nestedTime >= nestedClip.startTime && nestedTime < nestedClip.startTime + nestedClip.duration) {
+      for (const nestedClip of getRenderableNestedClips(clip, nestedTime)) {
+        if (nestedClip.source?.type === 'video') {
+          const nestedClipTime = getNestedVideoClipTime(nestedClip, nestedTime);
+          const nestedState = clipStates.get(nestedClip.id);
+
+          if (nestedState?.isSequential && nestedState.webCodecsPlayer) {
+            seekPromises.push(nestedState.webCodecsPlayer.seekDuringExport(nestedClipTime).then(() => {
+              updateRuntimePlaybackTime(nestedState?.runtimeSource, nestedClipTime, 'export');
+            }));
+            continue;
+          }
+
           const nestedVideo = getExportVideoElement(
             nestedClip.id,
             clipStates,
             nestedClip.source?.videoElement
           );
           if (nestedVideo) {
-            const nestedLocalTime = nestedTime - nestedClip.startTime;
-            const nestedSpeed = nestedClip.speed ?? 1;
-            const speedAdjusted = nestedLocalTime * Math.abs(nestedSpeed);
-            const nestedClipTime = (nestedClip.reversed !== (nestedSpeed < 0))
-              ? nestedClip.outPoint - speedAdjusted
-              : nestedClip.inPoint + speedAdjusted;
-            const nestedState = clipStates.get(nestedClip.id);
             seekPromises.push(seekVideo(nestedVideo, nestedClipTime).then(() => {
               updateRuntimePlaybackTime(nestedState?.runtimeSource, nestedClipTime, 'export');
             }));
@@ -106,10 +157,7 @@ async function seekSequentialMode(
     }
 
     // Handle regular video clips
-    const exportVideo = clip.source?.type === 'video'
-      ? getExportVideoElement(clip.id, clipStates, clip.source.videoElement)
-      : null;
-    if (clip.source?.type === 'video' && exportVideo) {
+    if (clip.source?.type === 'video') {
       const clipLocalTime = time - clip.startTime;
 
       // Calculate clip time (handles speed keyframes and reversed clips)
@@ -130,7 +178,11 @@ async function seekSequentialMode(
         seekPromises.push(clipState.webCodecsPlayer.seekDuringExport(clipTime).then(() => {
           updateRuntimePlaybackTime(clipState.runtimeSource, clipTime, 'export');
         }));
-      } else {
+        continue;
+      }
+
+      const exportVideo = getExportVideoElement(clip.id, clipStates, clip.source.videoElement);
+      if (exportVideo) {
         // PRECISE MODE: HTMLVideoElement seeking
         seekPromises.push(seekVideo(exportVideo, clipTime).then(() => {
           updateRuntimePlaybackTime(clipState?.runtimeSource, clipTime, 'export');

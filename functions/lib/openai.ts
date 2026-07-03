@@ -1,6 +1,6 @@
 import type { Env } from './env';
 
-function getOpenAIKey(env: Env): string {
+export function getOpenAIKey(env: Env): string {
   const apiKey = env.OPENAI_API_KEY?.trim();
 
   if (!apiKey) {

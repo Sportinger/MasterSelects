@@ -1,9 +1,9 @@
 // Composition clip addition - extracted from addCompClip
 // Handles nested composition loading, audio mixdown, and linked audio creation
 
-import type { TimelineClip, TimelineTrack, CompositionTimelineData } from '../../../types';
+import type { TimelineClip, TimelineTrack, CompositionTimelineData } from '../../../types/timeline';
 import type { Composition } from '../types';
-import { DEFAULT_TRANSFORM, calculateNativeScale } from '../constants';
+import { DEFAULT_TRANSFORM } from '../constants';
 import { findOrCreateAudioTrack, createCompositionAudioClip } from '../helpers/audioTrackHelpers';
 import { generateCompClipId, generateClipId } from '../helpers/idGenerator';
 import { Logger } from '../../../services/logger';
@@ -69,7 +69,7 @@ export function createCompClipPlaceholder(params: AddCompClipParams): TimelineCl
     inPoint: 0,
     outPoint: compDuration,
     source: { type: 'video', naturalDuration: compDuration },
-    transform: { ...DEFAULT_TRANSFORM, scale: calculateNativeScale(composition.width, composition.height) },
+    transform: { ...DEFAULT_TRANSFORM },
     effects: [],
     isLoading: true,
     isComposition: true,

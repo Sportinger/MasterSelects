@@ -53,12 +53,20 @@ describe('playbackSlice', () => {
     expect(store.getState().playbackSpeed).toBe(1);
   });
 
-  it('stop: sets isPlaying false, resets playhead, and scrolls to the start', () => {
+  it('stop: sets isPlaying false, resets playhead, and scrolls to the start without an in point', () => {
     store.setState({ isPlaying: true, playheadPosition: 30, scrollX: 500 });
     store.getState().stop();
     expect(store.getState().isPlaying).toBe(false);
     expect(store.getState().playheadPosition).toBe(0);
     expect(store.getState().scrollX).toBe(0);
+  });
+
+  it('stop: jumps to the in point when one is set', () => {
+    store.setState({ isPlaying: true, playheadPosition: 30, inPoint: 12, scrollX: 500 });
+    store.getState().stop();
+    expect(store.getState().isPlaying).toBe(false);
+    expect(store.getState().playheadPosition).toBe(12);
+    expect(store.getState().scrollX).toBe(500);
   });
 
   it('stop: works when already stopped', () => {

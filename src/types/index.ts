@@ -12,11 +12,13 @@ export type {
   ColorProperty,
   EasingType,
   EffectProperty,
+  MaskEdgeFeatherProperty,
   MaskNumericProperty,
   MaskNumericPropertyName,
   MaskPathProperty,
   MaskProperty,
   NodeGraphParamProperty,
+  ParsedMaskProperty,
   RotationInterpolationMode,
   TextBoundsNumericProperty,
   TextBoundsNumericPropertyName,
@@ -26,6 +28,7 @@ export type {
 } from './animationProperties';
 export {
   createEffectProperty,
+  createMaskEdgeFeatherProperty,
   createMaskNumericProperty,
   createMaskPathProperty,
   createNodeGraphParamProperty,
@@ -34,6 +37,7 @@ export {
   isCameraProperty,
   isColorProperty,
   isEffectProperty,
+  isMaskEdgeFeatherProperty,
   isMaskNumericProperty,
   isMaskPathProperty,
   isNodeGraphParamProperty,
@@ -66,8 +70,10 @@ export type { EngineStats } from './engineStats';
 export type { Keyframe } from './keyframes';
 export type {
   Layer,
+  LayerSourceRect,
   LayerSource,
   NestedCompositionData,
+  TransitionRenderState,
 } from './layers';
 export type {
   MathBaseObject,
@@ -126,8 +132,9 @@ export type {
   TimelineClipSourceRuntimeHandles,
   TimelineState,
   TimelineTrack,
+  TransitionOverlayClipDefinition,
 } from './timeline';
-export type { ClipTransform, TimelineTransition } from './timelineCore';
+export type { ClipTransform, TimelineTransition, TransitionCompositionLink } from './timelineCore';
 export type { TimelineSourceType } from './timelineSource';
 export type {
   VectorAnimationClipSettings,

@@ -1,6 +1,8 @@
+> Status: Archived from `docs/ongoing/` on 2026-06-25 after docs triage; historical planning context unless explicitly reopened.
+
 # Worker-First Playback Renderer Plan
 
-Status: active architecture plan. Foundations, render-host routing, shadow
+Original status before archive: active architecture plan. Foundations, render-host routing, shadow
 parity, runtime smokes with worker-readback-only export evidence including local
 WebCodecs video fixture export/readback and aggressive DOM playhead scrub proof,
 platform evidence tooling, local worker-presenting
