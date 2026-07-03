@@ -431,6 +431,10 @@ function MediaAIGenerationQueueImpl() {
         const aspectRatio = isDownload ? '16 / 9' : getPreviewAspectRatio(request!);
         const error = isDownload ? job!.error : record!.job?.error;
         const refund = isDownload ? undefined : record!.job?.refund;
+        const generationRemoteTaskId = !isDownload && status === 'failed'
+          ? record!.job?.remoteTaskId
+          : undefined;
+        const canRetry = status === 'failed' && (isDownload || Boolean(request && generationRemoteTaskId));
 
         return (
           <div
@@ -511,15 +515,25 @@ function MediaAIGenerationQueueImpl() {
                 &times;
               </button>
             )}
-            {status === 'failed' && isDownload && (
+            {canRetry && (
               <button
                 className="media-ai-generation-dismiss media-ai-generation-retry"
                 type="button"
                 onClick={(event) => {
                   event.stopPropagation();
-                  retryDownloadJob(itemId);
+                  if (isDownload) {
+                    retryDownloadJob(itemId);
+                    return;
+                  }
+                  if (request && generationRemoteTaskId) {
+                    flashBoardJobService.resume({
+                      recordId: itemId,
+                      request,
+                      remoteTaskId: generationRemoteTaskId,
+                    });
+                  }
                 }}
-                title="Retry download"
+                title={isDownload ? 'Retry download' : 'Retry import'}
               >
                 <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
                   <path d="M12.2 6.3A4.4 4.4 0 1 0 13 9" />
