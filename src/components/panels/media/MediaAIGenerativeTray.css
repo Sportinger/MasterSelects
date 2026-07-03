@@ -186,6 +186,16 @@
   border: 0;
   background: transparent;
   box-shadow: none;
+  pointer-events: none;
+}
+
+.media-ai-tray-expanded .fb-bubble.has-references .fb-bubble-prompt,
+.media-ai-tray-expanded .fb-bubble.has-references > .fb-bubble-bar,
+.media-ai-tray-expanded .fb-bubble.has-references > .fb-chat-output,
+.media-ai-tray-expanded .fb-bubble.has-references > .fb-multishot-panel,
+.media-ai-tray-expanded .fb-bubble.has-references > .fb-audio-warning,
+.media-ai-tray-expanded .fb-bubble.has-references .fb-reference-strip {
+  pointer-events: auto;
 }
 
 .media-ai-tray-expanded .fb-bubble.has-references .fb-bubble-prompt,
@@ -605,7 +615,7 @@
   padding-top: 18px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  pointer-events: auto;
+  pointer-events: none;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 100%);
   mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 100%);
 }
@@ -631,6 +641,7 @@
   border-radius: 8px;
   background: color-mix(in srgb, var(--bg-elevated, #252536) 92%, black);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
+  pointer-events: auto;
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease,
@@ -656,6 +667,7 @@
 
 .media-ai-generation-card.failed {
   border-color: rgba(255, 100, 100, 0.45);
+  pointer-events: none;
 }
 
 .media-ai-generation-card.can-locate {
@@ -927,6 +939,7 @@
   font-size: 15px;
   line-height: 1;
   cursor: pointer;
+  pointer-events: auto;
 }
 
 .media-ai-generation-dismiss:hover {
@@ -949,6 +962,32 @@
 
 .media-ai-generation-retry svg {
   display: block;
+}
+
+.media-refund-dialog {
+  border-color: color-mix(in srgb, #f6c84f 52%, var(--border-color));
+  background: color-mix(in srgb, var(--bg-tertiary) 91%, #2b2107);
+}
+
+.media-refund-dialog .media-delete-dialog-kicker,
+.media-refund-dialog h3 {
+  color: #ffd86a;
+}
+
+.media-refund-dialog-credits {
+  color: #ffe8a3;
+  background: color-mix(in srgb, #f6c84f 14%, transparent);
+  border-color: color-mix(in srgb, #f6c84f 34%, var(--border-color));
+}
+
+.media-refund-dialog .media-delete-dialog-button.refund {
+  color: #1d1604;
+  background: #f6c84f;
+  border-color: #ffe08a;
+}
+
+.media-refund-dialog .media-delete-dialog-button.refund:hover:not(:disabled) {
+  background: #ffd86a;
 }
 
 @container (max-width: 260px) {

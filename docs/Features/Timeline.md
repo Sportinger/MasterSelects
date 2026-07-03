@@ -164,6 +164,7 @@ getTrackChildren()  // Query child tracks
 - Copy/paste preserves motion shape definitions.
 - Copying keyframes stores them relative to the earliest copied keyframe.
 - Pasting keyframes targets the selected clip when exactly one clip is selected; otherwise it falls back to the original clip from the clipboard data.
+- When timeline clips or keyframes are selected, timeline clipboard shortcuts take precedence over Media Panel clipboard shortcuts.
 
 ### Timeline Tool Palette
 - The ruler/header strip contains a compact grouped timeline tool palette.

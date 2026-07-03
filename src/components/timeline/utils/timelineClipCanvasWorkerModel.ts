@@ -558,6 +558,7 @@ export function buildTimelineClipCanvasWorkerDrawMessage(
     const workerClip: TimelineClipCanvasWorkerClip = {
       id: clip.id,
       paintPacket: paint.paintPacket,
+      bodyFill: clip.bodyFill,
     };
     workerClips.push(workerClip);
   }

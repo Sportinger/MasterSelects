@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMediaStore, type MediaFile } from '../../../stores/mediaStore';
+import { requestMediaBoardPlacement } from '../../panels/media/board/placementRequests';
 import type { SourceMonitorImageCropApplyRequest } from './SourceMonitorImageCrop';
 import { createSourceMonitorCroppedFile } from './sourceMonitorImageCropFile';
 
@@ -45,6 +46,7 @@ export function useSourceMonitorImageCrop(file: MediaFile, isImage: boolean) {
       if ('url' in imported) {
         setSelection([imported.id]);
         setSourceMonitorFile(imported.id);
+        requestMediaBoardPlacement({ itemIds: [imported.id], nearItemId: file.id });
       }
       setCropMode(false);
     } catch (error) {

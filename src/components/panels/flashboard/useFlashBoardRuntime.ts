@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   clearFlashBoardActiveGenerationSelection,
   ensureFlashBoardActiveGenerationBoard,
@@ -16,6 +16,12 @@ interface FlashBoardRuntimeOptions {
   enableKeyboardDelete?: boolean;
 }
 
+export interface FlashBoardRefundDialogState {
+  credits: number;
+  jobId: string;
+  creditBalance: number;
+}
+
 export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
   const { enableKeyboardDelete = true } = options;
   const hasGenerationBoard = useHasFlashBoardActiveGenerationBoard();
@@ -23,6 +29,11 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
   const selectedRecordIds = useSelectedFlashBoardActiveGenerationRecordIds();
   const removeGenerationRecord = useRemoveFlashBoardActiveGenerationRecord();
   const refundDialogKeysRef = useRef<Set<string>>(new Set());
+  const [refundDialog, setRefundDialog] = useState<FlashBoardRefundDialogState | null>(null);
+
+  const dismissRefundDialog = useCallback(() => {
+    setRefundDialog(null);
+  }, []);
 
   useEffect(() => {
     if (!hasGenerationBoard) {
@@ -55,7 +66,11 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
           const dialogKey = `${recordId}:${update.refund.jobId}:${update.refund.credits}`;
           if (!refundDialogKeysRef.current.has(dialogKey)) {
             refundDialogKeysRef.current.add(dialogKey);
-            window.alert(`Generation failed.\n\nRefunded ${update.refund.credits} credits.\nJob: ${update.refund.jobId}`);
+            setRefundDialog({
+              credits: update.refund.credits,
+              jobId: update.refund.jobId,
+              creditBalance: update.refund.creditBalance,
+            });
           }
         }
         return;
@@ -114,4 +129,9 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [enableKeyboardDelete, removeGenerationRecord, selectedRecordIds]);
+
+  return {
+    dismissRefundDialog,
+    refundDialog,
+  };
 }

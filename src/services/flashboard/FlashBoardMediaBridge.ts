@@ -32,6 +32,10 @@ function sanitizeForFilename(prompt: string, maxLen = 30): string {
     .toLowerCase() || 'untitled';
 }
 
+function isFetchNetworkError(error: unknown): boolean {
+  return error instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(error.message);
+}
+
 /**
  * FlashBoardMediaBridge handles importing AI-generated media into the Media Pool
  * and provides timeline integration (drag protocol, direct add-to-timeline).
@@ -48,6 +52,7 @@ function sanitizeForFilename(prompt: string, maxLen = 30): string {
  */
 class FlashBoardMediaBridge {
   private generationMetadata: Map<string, FlashBoardGenerationMetadata> = new Map();
+  private recordImports: Map<string, Promise<FlashBoardResult>> = new Map();
 
   // ---------------------------------------------------------------------------
   // Folder management — "AI Gen" with "Video" and "Images" subfolders
@@ -123,7 +128,15 @@ class FlashBoardMediaBridge {
    */
   async downloadAsFile(url: string, filename: string): Promise<File> {
     log.debug(`Downloading: ${filename} from ${url}`);
-    const response = await fetch(url);
+    let response: Response;
+    try {
+      response = await fetch(url);
+    } catch (error) {
+      if (isFetchNetworkError(error)) {
+        throw new Error('Could not download generated media from the provider. The media URL was unreachable or blocked; try again.');
+      }
+      throw error;
+    }
     if (!response.ok) {
       throw new Error(`Download failed: HTTP ${response.status} ${response.statusText}`);
     }
@@ -195,6 +208,39 @@ class FlashBoardMediaBridge {
     file: File,
     mediaType: FlashBoardMediaType,
   ): Promise<FlashBoardResult> {
+    return this.runSingleRecordImport(recordId, () => this.importGeneratedFileOnce(recordId, file, mediaType));
+  }
+
+  private async runSingleRecordImport(
+    recordId: string,
+    importMedia: () => Promise<FlashBoardResult>,
+  ): Promise<FlashBoardResult> {
+    const existingResult = getFlashBoardActiveGenerationRecord(recordId)?.result;
+    if (existingResult) {
+      return existingResult;
+    }
+
+    const existingImport = this.recordImports.get(recordId);
+    if (existingImport) {
+      return existingImport;
+    }
+
+    const importPromise = importMedia();
+    this.recordImports.set(recordId, importPromise);
+    try {
+      return await importPromise;
+    } finally {
+      if (this.recordImports.get(recordId) === importPromise) {
+        this.recordImports.delete(recordId);
+      }
+    }
+  }
+
+  private async importGeneratedFileOnce(
+    recordId: string,
+    file: File,
+    mediaType: FlashBoardMediaType,
+  ): Promise<FlashBoardResult> {
     const record = getFlashBoardActiveGenerationRecord(recordId);
     const folderId = this.getOrCreateMediaSubfolder(mediaType);
 
@@ -234,6 +280,16 @@ class FlashBoardMediaBridge {
     videoUrl: string,
     mediaType: FlashBoardMediaType = 'video'
   ): Promise<FlashBoardResult> {
+    return this.runSingleRecordImport(recordId, async () => {
+      return this.importGeneratedMediaOnce(recordId, videoUrl, mediaType);
+    });
+  }
+
+  private async importGeneratedMediaOnce(
+    recordId: string,
+    videoUrl: string,
+    mediaType: FlashBoardMediaType = 'video'
+  ): Promise<FlashBoardResult> {
     // Look up the record to get prompt/request info
     const record = getFlashBoardActiveGenerationRecord(recordId);
     const prompt = record?.request?.prompt ?? '';
@@ -254,7 +310,7 @@ class FlashBoardMediaBridge {
       throw err;
     }
 
-    return this.importGeneratedFile(recordId, file, mediaType);
+    return this.importGeneratedFileOnce(recordId, file, mediaType);
   }
 
   async importCurrentFrame(): Promise<MediaFile> {

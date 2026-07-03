@@ -111,6 +111,13 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     () => (Array.isArray(mediaFilesState) ? mediaFilesState : []),
     [mediaFilesState],
   );
+  const mediaThumbnailUrlsById = useMemo(() => {
+    const map = new Map<string, string | undefined>();
+    for (const file of mediaFiles) {
+      map.set(file.id, file.thumbnailUrl);
+    }
+    return map;
+  }, [mediaFiles]);
   const sourceWaveformPyramidIds = useMemo(
     () => buildSourceWaveformPyramidIdMap(mediaFiles),
     [mediaFiles],
@@ -194,9 +201,10 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
         minThumbnailWidth: LOD_THUMB_PX,
         thumbnailSlotPx: CANVAS_THUMB_SLOT_PX,
         maxThumbnailSlots: MAX_THUMB_SLOTS,
+        mediaThumbnailUrlsById,
       });
     },
-    [canvasOffsetX, clips, cssWidth, geometryProps, height, redrawNonce, scrollX, timeToPixel, viewportWidth],
+    [canvasOffsetX, clips, cssWidth, geometryProps, height, mediaThumbnailUrlsById, redrawNonce, scrollX, timeToPixel, viewportWidth],
   );
   useTimelineClipCanvasThumbnailWarmups({
     clips,
@@ -331,6 +339,7 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     waveformPyramids,
     spectrogramTileSets,
     mediaFileStatusById,
+    mediaThumbnailUrlsById,
     redrawNonce,
     resolveGeometry: (clip) => resolveClipGeometry(clip, geometryProps),
     getMediaStatus: (clip) => getTimelineClipCanvasMediaStatus(clip, mediaFileStatusById),

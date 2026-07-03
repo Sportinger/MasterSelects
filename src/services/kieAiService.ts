@@ -39,6 +39,14 @@ export {
   type TextToImageParams,
 };
 
+function isTransientFetchError(error: unknown): boolean {
+  return error instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(error.message);
+}
+
+function getPollingRetryDelay(pollInterval: number, attempt: number): number {
+  return Math.max(0, Math.min(pollInterval, attempt * 2000));
+}
+
 class KieAiService {
   private apiKey: string = '';
   private mediaTools: KieAiMediaTools;
@@ -143,9 +151,22 @@ class KieAiService {
     timeout = 600000,
   ): Promise<VideoTask> {
     const startTime = Date.now();
+    let transientFailures = 0;
 
     while (Date.now() - startTime < timeout) {
-      const task = await this.getTaskStatus(taskId);
+      let task: VideoTask;
+
+      try {
+        task = await this.getTaskStatus(taskId);
+        transientFailures = 0;
+      } catch (error) {
+        if (isTransientFetchError(error) && transientFailures < 4) {
+          transientFailures += 1;
+          await new Promise(resolve => setTimeout(resolve, getPollingRetryDelay(pollInterval, transientFailures)));
+          continue;
+        }
+        throw error;
+      }
       onProgress?.(task);
 
       if (task.status === 'completed' || task.status === 'failed') {

@@ -170,7 +170,10 @@ Image and video-capable media items show a cursor-following preview tooltip only
 - During deep board zoom, the focused node's existing name, metadata, and duration overlays stay visible and slide inward when their normal positions would run beyond the Media Panel edges; the collapsed Chat/Generate/Downloads launcher is hidden so it does not cover the inspected media
 - Board order, folder group offsets, and viewport are saved into the project UI state, with `localStorage` as the live-session fallback
 - Drag files or folders from the OS onto a group to import directly into that folder
+- OS file drops on the Board canvas place the imported top-level files at the drop point instead of waiting for auto-pack placement
 - Drag existing Media Panel items onto groups to move them between folders
+- Context-menu Add actions in Board view place new compositions, folders, text, solids, meshes, cameras, splat effectors, math scenes, and motion shapes at the clicked canvas point
+- Cropped image results are placed beside their original Board node when the Board is open
 - Switching to or from Board view morphs folder groups from/to their Classic rows or Icons thumbnails using the same 500ms view transition as media items
 - The board uses the same Add dropdown and context menu as Classic view; new folders appear immediately in Classic, Icons, and Board view
 - The **Generate** board action expands the Media Panel's bottom-right AI generator tray; generated results still import through the normal Media Store path
@@ -283,7 +286,7 @@ getOpenCompositions()                // List open tabs
 
 ### Source Monitor
 - Double-click a video or image file to open it in the source monitor
-- Image source monitor sessions include a `CROP` button. Applying a crop imports a new image beside the source, prefixed as `CROP <original name>`.
+- Image source monitor sessions include a `CROP` button. Applying a crop imports a new image beside the source, prefixed as `CROP <original name>`; in Board view the new node is placed beside the original node.
 - Locked-aspect image crop resizing keeps the opposite corner anchored while dragging a corner handle.
 - Sets `sourceMonitorFileId` in the store
 
@@ -377,6 +380,7 @@ Right-click on items or empty space for context options.
 - **Rename** (single selection only)
 - **Download** (single file selection, saves through the browser from the retained file/blob URL)
 - **Crop** (single image selection, opens the source monitor directly in crop mode)
+- **Create Comp** (single image/video selection, creates a composition at the media resolution, opens it, and places the media at time 0)
 - **Extract First Frame** / **Extract Last Frame** (single video selection, imports the extracted PNG beside the source media)
 - **Move to Folder** submenu (shows available folders + "Root")
 - **Delete** (shows count for multi-selection)

@@ -18,7 +18,7 @@ export interface TimelineClipCanvasWorkerThumbnailPreparation {
 }
 
 export function getTimelineClipCanvasThumbnailMediaFileId(clip: TimelinePaintSourceClip): string | null {
-  if (clip.source?.type !== 'video') return null;
+  if (clip.source?.type !== 'video' && clip.source?.type !== 'image') return null;
   return clip.source?.mediaFileId ?? clip.mediaFileId ?? null;
 }
 
@@ -36,6 +36,7 @@ export function collectTimelineClipCanvasWorkerThumbnailPreparation(input: {
   minThumbnailWidth: number;
   thumbnailSlotPx: number;
   maxThumbnailSlots: number;
+  mediaThumbnailUrlsById?: ReadonlyMap<string, string | undefined>;
 }): TimelineClipCanvasWorkerThumbnailPreparation {
   const handledClipIds = new Set<string>();
   const plansByClipId = new Map<string, TimelineClipCanvasWorkerThumbnailStripPlan>();
@@ -101,13 +102,18 @@ export function collectTimelineClipCanvasWorkerThumbnailPreparation(input: {
     const visibleInPoint = geometry.inPoint + sourceSpan * visibleStartRatio;
     const visibleOutPoint = geometry.inPoint + sourceSpan * visibleEndRatio;
     const count = Math.max(1, Math.min(input.maxThumbnailSlots, Math.floor(visibleW / input.thumbnailSlotPx)));
-    const urls = thumbnailCacheService.getThumbnailsForRange(
-      mediaFileId,
-      visibleInPoint,
-      visibleOutPoint,
-      count,
-      clip.reversed,
-    );
+    const staticThumbnailUrl = clip.source?.type === 'image'
+      ? input.mediaThumbnailUrlsById?.get(mediaFileId)
+      : undefined;
+    const urls = staticThumbnailUrl
+      ? Array.from({ length: count }, () => staticThumbnailUrl)
+      : thumbnailCacheService.getThumbnailsForRange(
+        mediaFileId,
+        visibleInPoint,
+        visibleOutPoint,
+        count,
+        clip.reversed,
+      );
     if (!urls.some((url) => Boolean(url))) {
       handledClipIds.add(clip.id);
       continue;

@@ -51,6 +51,7 @@ export interface MediaContextActionsMenuProps {
   onStartRename: (itemId: string, itemName: string) => void;
   onMoveToFolder: (ids: readonly string[], folderId: string | null) => void;
   onOpenCompositionSettings: (composition: Composition) => void;
+  onCreateCompositionFromMedia: (mediaFile: MediaFile) => Promise<void>;
   onOpenImageCrop: (mediaFile: MediaFile) => void;
   onOpenSolidSettings: (solidItem: SolidItem) => void;
   onCancelProxyGeneration: (mediaFileId: string) => void;
@@ -115,6 +116,7 @@ export function MediaContextActionsMenu({
   onStartRename,
   onMoveToFolder,
   onOpenCompositionSettings,
+  onCreateCompositionFromMedia,
   onOpenImageCrop,
   onOpenSolidSettings,
   onCancelProxyGeneration,
@@ -224,6 +226,12 @@ export function MediaContextActionsMenu({
           {!multiSelect && isImageFile && mediaFile && (
             <div className="context-menu-item" onClick={() => onOpenImageCrop(mediaFile)}>
               Crop
+            </div>
+          )}
+
+          {!multiSelect && (isVideoFile || isImageFile) && mediaFile?.file && (
+            <div className="context-menu-item" onClick={() => { void onCreateCompositionFromMedia(mediaFile); }}>
+              Create Comp
             </div>
           )}
 

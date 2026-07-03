@@ -57,6 +57,16 @@ function getLocalHostedApiError(path: string): Error {
   );
 }
 
+function isFetchNetworkError(error: unknown): boolean {
+  return error instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(error.message);
+}
+
+function getHostedApiNetworkError(path: string): Error {
+  return new Error(
+    `Network error while contacting MasterSelects Cloud (${path}). Check the connection and try again.`,
+  );
+}
+
 function getApiErrorMessage(error: ApiErrorResponse, status: number): string {
   if (typeof error.message === 'string' && error.message.trim().length > 0) {
     return error.message;
@@ -89,6 +99,10 @@ export async function requestResponse(path: string, init: RequestInit = {}): Pro
   } catch (error) {
     if (isLocalViteOrigin() && isHostedCloudApiRoute(path)) {
       throw getLocalHostedApiError(path);
+    }
+
+    if (isHostedCloudApiRoute(path) && isFetchNetworkError(error)) {
+      throw getHostedApiNetworkError(path);
     }
 
     throw error;
@@ -194,6 +208,10 @@ export async function requestJson<T>(path: string, init: ApiRequestInit = {}): P
 
     if (isLocalViteOrigin() && isHostedCloudApiRoute(path)) {
       throw getLocalHostedApiError(path);
+    }
+
+    if (isHostedCloudApiRoute(path) && isFetchNetworkError(error)) {
+      throw getHostedApiNetworkError(path);
     }
 
     throw error;

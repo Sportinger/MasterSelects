@@ -18,6 +18,10 @@ export interface KieAiTransport {
   getAccountInfo: () => Promise<AccountInfo>;
 }
 
+function isFetchNetworkError(error: unknown): boolean {
+  return error instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(error.message);
+}
+
 export function createKieAiTransport(getApiKey: () => string, hasApiKey: () => boolean): KieAiTransport {
   const request = async <T>(
     endpoint: string,
@@ -28,23 +32,31 @@ export function createKieAiTransport(getApiKey: () => string, hasApiKey: () => b
       throw new Error('Kie.ai API key not set');
     }
 
-    const response = canUseSameOriginProxy()
-      ? await fetch(BYO_PROXY_REQUEST_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-kieai-api-key': getApiKey(),
-          },
-          body: JSON.stringify({ endpoint, method, body }),
-        })
-      : await fetch(`${BASE_URL}${endpoint}`, {
-          method,
-          headers: {
-            'Authorization': `Bearer ${getApiKey()}`,
-            'Content-Type': 'application/json',
-          },
-          body: body ? JSON.stringify(body) : undefined,
-        });
+    let response: Response;
+    try {
+      response = canUseSameOriginProxy()
+        ? await fetch(BYO_PROXY_REQUEST_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-kieai-api-key': getApiKey(),
+            },
+            body: JSON.stringify({ endpoint, method, body }),
+          })
+        : await fetch(`${BASE_URL}${endpoint}`, {
+            method,
+            headers: {
+              'Authorization': `Bearer ${getApiKey()}`,
+              'Content-Type': 'application/json',
+            },
+            body: body ? JSON.stringify(body) : undefined,
+          });
+    } catch (error) {
+      if (isFetchNetworkError(error)) {
+        throw new Error('Network error while contacting Kie.ai. Check the connection or local API proxy and try again.');
+      }
+      throw error;
+    }
 
     const responseText = await response.text();
     let result: T;

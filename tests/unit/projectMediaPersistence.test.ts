@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { revokeAllMediaObjectUrls } from '../../src/services/project/mediaObjectUrlManager';
+import { flashBoardMediaBridge } from '../../src/services/flashboard/FlashBoardMediaBridge';
+import { resetFlashBoardActiveGenerationState } from '../../src/stores/flashboardStore/activeGenerationRecords';
+import type { ProjectFlashBoardState } from '../../src/services/project/types';
 
 const mocks = vi.hoisted(() => ({
   mediaState: {
@@ -212,6 +215,8 @@ const defaultProjectTransform = () => ({
 describe('project media persistence', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    flashBoardMediaBridge.hydrateMetadata({});
+    resetFlashBoardActiveGenerationState();
     mocks.mediaState.files = [];
     mocks.mediaState.compositions = [];
     mocks.mediaState.folders = [];
@@ -295,6 +300,7 @@ describe('project media persistence', () => {
   });
 
   afterEach(() => {
+    flashBoardMediaBridge.hydrateMetadata({});
     revokeAllMediaObjectUrls();
     vi.restoreAllMocks();
   });
@@ -436,6 +442,57 @@ describe('project media persistence', () => {
 
     expect(projectData).not.toHaveProperty('youtube');
     expect(mocks.youtubeState.getState).not.toHaveBeenCalled();
+  });
+
+  it('persists FlashBoard generation metadata when completed records are no longer active', async () => {
+    const projectData: {
+      media: unknown[];
+      compositions: unknown[];
+      folders: unknown[];
+      settings: { width: number; height: number; frameRate: number };
+      activeCompositionId: string | null;
+      openCompositionIds: string[];
+      expandedFolderIds: string[];
+      slotAssignments: Record<string, number>;
+      uiState: Record<string, unknown>;
+      flashboard?: ProjectFlashBoardState;
+    } = {
+      media: [],
+      compositions: [],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: null,
+      openCompositionIds: [],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {},
+    };
+    mocks.getProjectData.mockReturnValue(projectData);
+    flashBoardMediaBridge.hydrateMetadata({
+      'media-generated-video': {
+        mediaFileId: 'media-generated-video',
+        service: 'kieai',
+        providerId: 'kling-3.0',
+        version: '3.0',
+        outputType: 'video',
+        mediaType: 'video',
+        prompt: 'Draw the background first, then the figures.',
+        duration: 10,
+        aspectRatio: '16:9',
+        referenceMediaFileIds: ['start-frame'],
+        createdAt: '2026-07-03T06:40:15.866Z',
+      },
+    });
+
+    const { syncStoresToProject } = await import('../../src/services/project/projectSave');
+    await syncStoresToProject();
+
+    expect(projectData.flashboard?.generationRecords).toEqual([]);
+    expect(projectData.flashboard?.generationMetadataByMediaId['media-generated-video']).toMatchObject({
+      providerId: 'kling-3.0',
+      mediaType: 'video',
+      prompt: 'Draw the background first, then the figures.',
+    });
   });
 
   it('does not block project load on legacy WAV audio proxy disk checks', async () => {

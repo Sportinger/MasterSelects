@@ -14,15 +14,18 @@ export function drawTimelineClipCanvasThumbnails(
   requestRedraw: () => void,
   maxThumbnailSlots: number,
   thumbnailSlotPx: number,
+  staticThumbnailUrl?: string,
 ): number {
   const count = Math.max(1, Math.min(maxThumbnailSlots, Math.floor(w / thumbnailSlotPx)));
-  const urls = thumbnailCacheService.getThumbnailsForRange(
-    mediaFileId,
-    clip.inPoint ?? 0,
-    clip.outPoint ?? (clip.inPoint ?? 0) + clip.duration,
-    count,
-    clip.reversed,
-  );
+  const urls = staticThumbnailUrl
+    ? Array.from({ length: count }, () => staticThumbnailUrl)
+    : thumbnailCacheService.getThumbnailsForRange(
+      mediaFileId,
+      clip.inPoint ?? 0,
+      clip.outPoint ?? (clip.inPoint ?? 0) + clip.duration,
+      count,
+      clip.reversed,
+    );
   const slotW = w / count;
   let drawn = 0;
   for (let i = 0; i < count; i++) {

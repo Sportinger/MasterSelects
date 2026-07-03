@@ -46,6 +46,22 @@ interface UseMediaPanelDragDropMarqueeInput {
   getSlotGridProgress: () => number;
 }
 
+interface ImportedDropItem {
+  id: string;
+  parentId?: string | null;
+}
+
+function getImportedDropItemIds(items: unknown[], targetParentId: string | null): string[] {
+  return items
+    .filter((item): item is ImportedDropItem => (
+      Boolean(item)
+      && typeof item === 'object'
+      && typeof (item as ImportedDropItem).id === 'string'
+      && ((item as ImportedDropItem).parentId ?? null) === targetParentId
+    ))
+    .map((item) => item.id);
+}
+
 export function useMediaPanelDragDropMarquee({
   itemListRef,
   renameTimerRef,
@@ -201,19 +217,20 @@ export function useMediaPanelDragDropMarquee({
     removeExternalOverGuards();
   }, [removeExternalOverGuards, removeNativeDragGuards]);
 
-  const handleExternalDropImport = useCallback(async (dataTransfer: DataTransfer, targetParentId: string | null) => {
+  const handleExternalDropImport = useCallback(async (dataTransfer: DataTransfer, targetParentId: string | null): Promise<string[]> => {
     const droppedFiles = await collectDroppedMediaFiles(dataTransfer);
 
     if (droppedFiles.length === 0) {
-      return;
+      return [];
     }
 
-    await importDroppedMediaFiles(droppedFiles, targetParentId, {
+    const imported = await importDroppedMediaFiles(droppedFiles, targetParentId, {
       createFolder,
       existingFolders: folders,
       importFiles,
       importFilesWithHandles,
     });
+    return getImportedDropItemIds(imported, targetParentId);
   }, [createFolder, folders, importFiles, importFilesWithHandles]);
 
   const handleDragOver = useCallback((e: ReactDragEvent) => {

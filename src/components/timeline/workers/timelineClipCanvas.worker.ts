@@ -581,7 +581,7 @@ function draw(msg: DrawMessage): DrawnMessage {
     const isSel = clip.paintPacket.state.selected;
     const isHovered = clip.paintPacket.state.hovered;
     if (w < LOD_BAR_PX) {
-      ctx.fillStyle = isSel ? fillSelected : fill;
+      ctx.fillStyle = clip.bodyFill ?? (isSel ? fillSelected : fill);
       ctx.fillRect(x, 1, Math.max(1, w), height - 2);
       continue;
     }
@@ -589,7 +589,7 @@ function draw(msg: DrawMessage): DrawnMessage {
     const h = height - 2;
     ctx.beginPath();
     ctx.roundRect(x, top, w, h, radius);
-    ctx.fillStyle = isSel ? fillSelected : fill;
+    ctx.fillStyle = clip.bodyFill ?? (isSel ? fillSelected : fill);
     ctx.fill();
     if (workerClipPaintResourceId(clip, 'thumbnail-strip', paintResourceById, 'thumbnail-bitmap')) {
       thumbnailClipCount += 1;

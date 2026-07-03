@@ -6,6 +6,9 @@ import type { MediaFile, ProjectItem, useMediaStore } from '../../../../stores/m
 import type { MediaPanelContextMenu } from '../context/types';
 import { collectDroppedMediaFiles, importDroppedMediaFiles } from '../dropImport';
 import type { MediaPanelViewMode } from './types';
+import { DEFAULT_TRACKS, useTimelineStore } from '../../../../stores/timeline';
+import { DEFAULT_COMPOSITION } from '../../../../stores/mediaStore/constants';
+import { requestMediaBoardPlacement } from '../board/placementRequests';
 
 const log = Logger.create('MediaPanel');
 
@@ -20,6 +23,7 @@ interface FloatingText {
 
 interface UseMediaPanelSelectionCommandsInput {
   selectedIds: string[];
+  contextMenu: MediaPanelContextMenu | null;
   viewMode: MediaPanelViewMode;
   setGridFolderId: Dispatch<SetStateAction<string | null>>;
   setContextMenu: Dispatch<SetStateAction<MediaPanelContextMenu | null>>;
@@ -29,6 +33,8 @@ interface UseMediaPanelSelectionCommandsInput {
   getActiveParentId: () => string | null;
   getAiReferenceMediaFileIds: () => string[];
   updateAiReferenceMediaFileIds: (ids: string[]) => void;
+  createComposition: MediaStoreState['createComposition'];
+  updateComposition: MediaStoreState['updateComposition'];
   setSelection: MediaStoreState['setSelection'];
   addToSelection: MediaStoreState['addToSelection'];
   removeFromSelection: MediaStoreState['removeFromSelection'];
@@ -84,6 +90,24 @@ function isMediaPanelPasteTarget(root: HTMLDivElement | null, pointer: { x: numb
 function getClipboardImageExtension(type: string): string {
   const subtype = type.split('/')[1]?.split('+')[0] || 'png';
   return subtype === 'jpeg' ? 'jpg' : subtype;
+}
+
+function cleanCompositionBaseName(fileName: string): string {
+  return fileName.replace(/\.[^.]+$/, '').trim() || fileName;
+}
+
+export function getMediaCompositionSettings(mediaFile: MediaFile): {
+  duration: number;
+  frameRate: number;
+  height: number;
+  width: number;
+} {
+  return {
+    duration: Math.max(1, mediaFile.duration ?? 5),
+    frameRate: Math.max(1, Math.round(mediaFile.fps ?? DEFAULT_COMPOSITION.frameRate)),
+    height: Math.max(1, Math.round(mediaFile.height ?? DEFAULT_COMPOSITION.height)),
+    width: Math.max(1, Math.round(mediaFile.width ?? DEFAULT_COMPOSITION.width)),
+  };
 }
 
 async function readClipboardImageFiles(): Promise<File[]> {
@@ -189,6 +213,7 @@ async function regenerateTimelineSourceThumbnails(mediaFile: MediaFile): Promise
 
 export function useMediaPanelSelectionCommands({
   selectedIds,
+  contextMenu,
   viewMode,
   setGridFolderId,
   setContextMenu,
@@ -198,6 +223,8 @@ export function useMediaPanelSelectionCommands({
   getActiveParentId,
   getAiReferenceMediaFileIds,
   updateAiReferenceMediaFileIds,
+  createComposition,
+  updateComposition,
   setSelection,
   addToSelection,
   removeFromSelection,
@@ -232,6 +259,7 @@ export function useMediaPanelSelectionCommands({
   ) => void;
   handleToggleAiPromptReferences: (mediaFileIds: string[]) => void;
   handleCopyPrompt: (prompt: string) => void;
+  handleCreateCompositionFromMedia: (mediaFile: MediaFile) => Promise<void>;
   handleRegenerateMediaThumbnails: (mediaFile: MediaFile) => void;
   handleRegenerateMediaAudioProxy: (mediaFile: MediaFile, force: boolean) => void;
   handleRegenerateMediaWaveform: (mediaFile: MediaFile) => void;
@@ -247,6 +275,13 @@ export function useMediaPanelSelectionCommands({
   });
   const floatingTextIdRef = useRef(0);
   const [floatingTexts, setFloatingTexts] = useState<FloatingText[]>([]);
+  const hasTimelineClipboardSelection = useTimelineStore((state) => (
+    state.selectedClipIds.size > 0 || state.selectedKeyframeIds.size > 0
+  ));
+  const loadTimelineState = useTimelineStore((state) => state.loadState);
+  const addTimelineClip = useTimelineStore((state) => state.addClip);
+  const setTimelineDuration = useTimelineStore((state) => state.setDuration);
+  const getSerializableTimelineState = useTimelineStore((state) => state.getSerializableState);
 
   const showFloatingText = useCallback((text: string) => {
     const { x, y } = lastPointerRef.current;
@@ -343,6 +378,47 @@ export function useMediaPanelSelectionCommands({
     });
   }, [closeContextMenu, showFloatingText]);
 
+  const handleCreateCompositionFromMedia = useCallback(async (mediaFile: MediaFile) => {
+    if (!mediaFile.file || (mediaFile.type !== 'video' && mediaFile.type !== 'image')) return;
+
+    const settings = getMediaCompositionSettings(mediaFile);
+    const composition = createComposition(`${cleanCompositionBaseName(mediaFile.name)} Comp`, {
+      ...settings,
+      parentId: getActiveParentId(),
+    });
+    if (contextMenu?.boardPosition) {
+      requestMediaBoardPlacement({ itemIds: [composition.id], point: contextMenu.boardPosition });
+    }
+
+    openCompositionTab(composition.id, { skipAnimation: true });
+    await loadTimelineState(composition.timelineData);
+
+    const tracks = composition.timelineData?.tracks ?? DEFAULT_TRACKS;
+    const trackId = tracks.find((track) => track.type === 'video' && !track.locked)?.id;
+    if (!trackId) return;
+
+    await addTimelineClip(trackId, mediaFile.file, 0, settings.duration, mediaFile.id, mediaFile.type);
+    setTimelineDuration(settings.duration);
+    updateComposition(composition.id, {
+      duration: settings.duration,
+      timelineData: getSerializableTimelineState(),
+    });
+    showFloatingText('Comp created');
+    closeContextMenu();
+  }, [
+    addTimelineClip,
+    closeContextMenu,
+    contextMenu,
+    createComposition,
+    getActiveParentId,
+    getSerializableTimelineState,
+    loadTimelineState,
+    openCompositionTab,
+    setTimelineDuration,
+    showFloatingText,
+    updateComposition,
+  ]);
+
   const handleRegenerateMediaThumbnails = useCallback((mediaFile: MediaFile) => {
     void (async () => {
       await ensureFileThumbnail(mediaFile.id, { force: true });
@@ -433,6 +509,7 @@ export function useMediaPanelSelectionCommands({
       if (!isMediaPanelPasteTarget(root, lastPointerRef.current)) return;
       const active = document.activeElement as HTMLElement | null;
       if (isEditableElement(active)) return;
+      if (hasTimelineClipboardSelection) return;
 
       if ((e.key === 'Delete' || e.key === 'Backspace') && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
         if (selectedIds.length === 0) return;
@@ -477,6 +554,7 @@ export function useMediaPanelSelectionCommands({
     duplicateMediaItems,
     handleDelete,
     hasMediaClipboard,
+    hasTimelineClipboardSelection,
     importClipboardFiles,
     pasteMediaPanelItems,
     selectedIds,
@@ -489,6 +567,7 @@ export function useMediaPanelSelectionCommands({
       if (!isMediaPanelPasteTarget(root, lastPointerRef.current)) return;
       const active = document.activeElement as HTMLElement | null;
       if (isEditableElement(active)) return;
+      if (hasTimelineClipboardSelection) return;
 
       const clipboardData = event.clipboardData;
       const hasClipboardFiles = Boolean(
@@ -517,6 +596,7 @@ export function useMediaPanelSelectionCommands({
     document.addEventListener('paste', handlePaste, { capture: true });
     return () => document.removeEventListener('paste', handlePaste, { capture: true });
   }, [
+    hasTimelineClipboardSelection,
     importClipboardFiles,
     pasteMediaPanelItems,
     showFloatingText,
@@ -531,6 +611,7 @@ export function useMediaPanelSelectionCommands({
     handleContextMenu,
     handleToggleAiPromptReferences,
     handleCopyPrompt,
+    handleCreateCompositionFromMedia,
     handleRegenerateMediaThumbnails,
     handleRegenerateMediaAudioProxy,
     handleRegenerateMediaWaveform,

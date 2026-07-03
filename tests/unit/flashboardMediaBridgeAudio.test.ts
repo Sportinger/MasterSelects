@@ -104,4 +104,53 @@ describe('FlashBoardMediaBridge audio imports', () => {
       outputFormat: 'mp3_44100_128',
     });
   });
+
+  it('deduplicates concurrent imports for the same generation record', async () => {
+    const folders: MediaFolder[] = [];
+    const importedAudio: MediaFile = {
+      id: 'media-audio',
+      name: 'voice.mp3',
+      type: 'audio',
+      file: new File(['mp3'], 'voice.mp3', { type: 'audio/mpeg' }),
+      url: 'blob:voice',
+      duration: 1.5,
+      parentId: 'folder-audio',
+      createdAt: Date.now(),
+    };
+    const createFolder = vi.fn((name: string, parentId: string | null = null): MediaFolder => {
+      const folder: MediaFolder = {
+        id: `folder-${name.toLowerCase().replace(/\s+/g, '-')}`,
+        name,
+        parentId,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      folders.push(folder);
+      return folder;
+    });
+    let resolveImport: (file: MediaFile) => void = () => undefined;
+    const importFile = vi.fn(() => new Promise<MediaFile>((resolve) => {
+      resolveImport = resolve;
+    }));
+
+    vi.mocked(useMediaStore.getState).mockReturnValue({
+      folders,
+      files: [],
+      createFolder,
+      importFile,
+    } as unknown as ReturnType<typeof useMediaStore.getState>);
+
+    const file = new File(['mp3'], 'voice.mp3', { type: 'audio/mpeg' });
+    const first = flashBoardMediaBridge.importGeneratedFile('generation-audio', file, 'audio');
+    const second = flashBoardMediaBridge.importGeneratedFile('generation-audio', file, 'audio');
+
+    expect(importFile).toHaveBeenCalledTimes(1);
+    resolveImport(importedAudio);
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      expect.objectContaining({ mediaFileId: 'media-audio' }),
+      expect.objectContaining({ mediaFileId: 'media-audio' }),
+    ]);
+    expect(importFile).toHaveBeenCalledTimes(1);
+  });
 });

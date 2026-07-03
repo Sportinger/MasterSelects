@@ -23,6 +23,7 @@ import { isProxyFrameCountComplete } from '../../stores/mediaStore/helpers/proxy
 import { buildProjectAudioStateIndex } from '../audio/projectAudioState';
 import { createCurrentAudioArtifactStore } from '../audio/timelineWaveformPyramidCache';
 import { clonePersistedClipAudioState } from '../audio/clipAudioStatePersistence';
+import { flashBoardMediaBridge } from '../flashboard/FlashBoardMediaBridge';
 import { cloneClipNodeGraph } from '../nodeGraph';
 import { normalizeTransitionInstanceParams } from '../../transitions';
 import { syncTransitionCompositionTimelineToParent } from '../../stores/mediaStore/slices/composition/transitionCompositionSync';
@@ -460,7 +461,9 @@ function serializeFlashBoardState(
   composer: FlashBoardComposerState,
   promptHistory: FlashBoardPromptHistoryEntry[],
 ): ProjectFlashBoardState {
-  const generationMetadataByMediaId: Record<string, ProjectFlashBoardGenerationMetadata> = {};
+  const generationMetadataByMediaId: Record<string, ProjectFlashBoardGenerationMetadata> = {
+    ...flashBoardMediaBridge.serializeMetadata(),
+  };
 
   for (const record of records) {
     if (record.result?.mediaFileId && record.request) {

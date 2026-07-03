@@ -1,5 +1,6 @@
 import { useCallback, type ChangeEvent } from 'react';
 import type { MediaPanelContextMenu } from '../context/types';
+import { requestMediaBoardPlacement } from '../board/placementRequests';
 import type { MediaPanelViewMode } from './types';
 import type { MediaFolder, useMediaStore } from '../../../../stores/mediaStore';
 import type { MeshPrimitiveType } from '../../../../stores/mediaStore/types';
@@ -83,6 +84,7 @@ export function useMediaPanelAddImportCommands({
   handleNewMotionShape: (primitive: ShapePrimitive) => void;
   handleImportGaussianSplat: () => void;
 } {
+  const boardPosition = contextMenu?.boardPosition;
   const getActiveParentId = useCallback((): string | null => {
     if (contextMenu && contextMenu.parentId !== undefined) return contextMenu.parentId;
     if (viewMode === 'icons' && gridFolderId) return gridFolderId;
@@ -108,77 +110,96 @@ export function useMediaPanelAddImportCommands({
     }
   }, [importFiles]);
 
+  const placeCreatedItems = useCallback((itemIds: string[]) => {
+    if (!boardPosition) return;
+    requestMediaBoardPlacement({ itemIds, point: boardPosition });
+  }, [boardPosition]);
+
   const handleNewComposition = useCallback(() => {
-    createComposition(`Comp ${compositionCount + 1}`, { parentId: getActiveParentId() });
+    const composition = createComposition(`Comp ${compositionCount + 1}`, { parentId: getActiveParentId() });
+    placeCreatedItems([composition.id]);
     closeContextMenu();
-  }, [compositionCount, createComposition, getActiveParentId, closeContextMenu]);
+  }, [closeContextMenu, compositionCount, createComposition, getActiveParentId, placeCreatedItems]);
 
   const handleNewFolder = useCallback(() => {
-    createFolder('New Folder', getActiveParentId());
+    const folder = createFolder('New Folder', getActiveParentId());
+    placeCreatedItems([folder.id]);
     closeContextMenu();
-  }, [createFolder, getActiveParentId, closeContextMenu]);
+  }, [closeContextMenu, createFolder, getActiveParentId, placeCreatedItems]);
 
   const handleNewText = useCallback(() => {
-    const textFolderId = getOrCreateTextFolder();
-    createTextItem(undefined, textFolderId);
+    const textFolderId = boardPosition ? getActiveParentId() : getOrCreateTextFolder();
+    const id = createTextItem(undefined, textFolderId);
+    placeCreatedItems([id]);
     closeContextMenu();
-  }, [createTextItem, getOrCreateTextFolder, closeContextMenu]);
+  }, [boardPosition, closeContextMenu, createTextItem, getActiveParentId, getOrCreateTextFolder, placeCreatedItems]);
 
   const handleNewText3D = useCallback(() => {
-    const textFolderId = getOrCreateTextFolder();
-    createMeshItem('text3d', undefined, textFolderId);
+    const textFolderId = boardPosition ? getActiveParentId() : getOrCreateTextFolder();
+    const id = createMeshItem('text3d', undefined, textFolderId);
+    placeCreatedItems([id]);
     closeContextMenu();
-  }, [createMeshItem, getOrCreateTextFolder, closeContextMenu]);
+  }, [boardPosition, closeContextMenu, createMeshItem, getActiveParentId, getOrCreateTextFolder, placeCreatedItems]);
 
   const handleNewSolid = useCallback(() => {
-    const solidFolderId = getOrCreateSolidFolder();
-    createSolidItem(undefined, '#ffffff', solidFolderId);
+    const solidFolderId = boardPosition ? getActiveParentId() : getOrCreateSolidFolder();
+    const id = createSolidItem(undefined, '#ffffff', solidFolderId);
+    placeCreatedItems([id]);
     closeContextMenu();
-  }, [createSolidItem, getOrCreateSolidFolder, closeContextMenu]);
+  }, [boardPosition, closeContextMenu, createSolidItem, getActiveParentId, getOrCreateSolidFolder, placeCreatedItems]);
 
   const handleNewMesh = useCallback((meshType: MeshPrimitiveType) => {
-    const meshFolderId = getOrCreateMeshFolder();
-    createMeshItem(meshType, undefined, meshFolderId);
+    const meshFolderId = boardPosition ? getActiveParentId() : getOrCreateMeshFolder();
+    const id = createMeshItem(meshType, undefined, meshFolderId);
+    placeCreatedItems([id]);
     closeContextMenu();
-  }, [createMeshItem, getOrCreateMeshFolder, closeContextMenu]);
+  }, [boardPosition, closeContextMenu, createMeshItem, getActiveParentId, getOrCreateMeshFolder, placeCreatedItems]);
 
   const handleNewCamera = useCallback(() => {
-    const cameraFolderId = getOrCreateCameraFolder();
-    createCameraItem(undefined, cameraFolderId);
+    const cameraFolderId = boardPosition ? getActiveParentId() : getOrCreateCameraFolder();
+    const id = createCameraItem(undefined, cameraFolderId);
+    placeCreatedItems([id]);
     closeContextMenu();
-  }, [createCameraItem, getOrCreateCameraFolder, closeContextMenu]);
+  }, [boardPosition, closeContextMenu, createCameraItem, getActiveParentId, getOrCreateCameraFolder, placeCreatedItems]);
 
   const handleNewSplatEffector = useCallback(() => {
-    const effectorFolderId = getOrCreateSplatEffectorFolder();
-    createSplatEffectorItem(undefined, effectorFolderId);
+    const effectorFolderId = boardPosition ? getActiveParentId() : getOrCreateSplatEffectorFolder();
+    const id = createSplatEffectorItem(undefined, effectorFolderId);
+    placeCreatedItems([id]);
     closeContextMenu();
-  }, [createSplatEffectorItem, getOrCreateSplatEffectorFolder, closeContextMenu]);
+  }, [boardPosition, closeContextMenu, createSplatEffectorItem, getActiveParentId, getOrCreateSplatEffectorFolder, placeCreatedItems]);
 
   const handleNewMathScene = useCallback(() => {
-    const mathFolderId = getOrCreateMathSceneFolder();
-    createMathSceneItem(undefined, mathFolderId);
+    const mathFolderId = boardPosition ? getActiveParentId() : getOrCreateMathSceneFolder();
+    const id = createMathSceneItem(undefined, mathFolderId);
+    placeCreatedItems([id]);
     closeContextMenu();
-  }, [createMathSceneItem, getOrCreateMathSceneFolder, closeContextMenu]);
+  }, [boardPosition, closeContextMenu, createMathSceneItem, getActiveParentId, getOrCreateMathSceneFolder, placeCreatedItems]);
 
   const handleNewMotionShape = useCallback((primitive: ShapePrimitive) => {
-    const motionFolderId = getOrCreateMotionShapeFolder();
-    createMotionShapeItem(primitive, undefined, motionFolderId);
+    const motionFolderId = boardPosition ? getActiveParentId() : getOrCreateMotionShapeFolder();
+    const id = createMotionShapeItem(primitive, undefined, motionFolderId);
+    placeCreatedItems([id]);
     closeContextMenu();
-  }, [createMotionShapeItem, getOrCreateMotionShapeFolder, closeContextMenu]);
+  }, [boardPosition, closeContextMenu, createMotionShapeItem, getActiveParentId, getOrCreateMotionShapeFolder, placeCreatedItems]);
 
   const handleImportGaussianSplat = useCallback(() => {
+    const parentId = getActiveParentId();
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.ply,.compressed.ply,.splat,.ksplat,.spz,.sog,.lcc,.zip';
     input.onchange = async (e) => {
       const fileList = (e.target as HTMLInputElement).files;
       if (fileList && fileList.length > 0) {
-        await importGaussianSplat(fileList[0]);
+        const imported = await importGaussianSplat(fileList[0], parentId);
+        if (boardPosition) {
+          requestMediaBoardPlacement({ itemIds: [imported.id], point: boardPosition });
+        }
       }
     };
     input.click();
     closeContextMenu();
-  }, [importGaussianSplat, closeContextMenu]);
+  }, [boardPosition, closeContextMenu, getActiveParentId, importGaussianSplat]);
 
   return {
     getActiveParentId,

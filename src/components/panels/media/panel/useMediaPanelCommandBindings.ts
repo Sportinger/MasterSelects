@@ -36,6 +36,7 @@ interface UseMediaPanelCommandBindingsInput {
   importFilesWithHandles: MediaStoreState['importFilesWithHandles'];
   importFilesWithPicker: MediaStoreState['importFilesWithPicker'];
   createComposition: MediaStoreState['createComposition'];
+  updateComposition: MediaStoreState['updateComposition'];
   createFolder: MediaStoreState['createFolder'];
   showInExplorer: MediaStoreState['showInExplorer'];
   pickProxyFolder: MediaStoreState['pickProxyFolder'];
@@ -96,6 +97,7 @@ export function useMediaPanelCommandBindings({
   importFilesWithHandles,
   importFilesWithPicker,
   createComposition,
+  updateComposition,
   createFolder,
   showInExplorer,
   pickProxyFolder,
@@ -184,6 +186,7 @@ export function useMediaPanelCommandBindings({
 
   const selectionCommands = useMediaPanelSelectionCommands({
     selectedIds,
+    contextMenu,
     viewMode,
     setGridFolderId,
     setContextMenu,
@@ -193,6 +196,8 @@ export function useMediaPanelCommandBindings({
     getActiveParentId: addImportCommands.getActiveParentId,
     getAiReferenceMediaFileIds,
     updateAiReferenceMediaFileIds,
+    createComposition,
+    updateComposition,
     setSelection,
     addToSelection,
     removeFromSelection,
