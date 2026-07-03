@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetState
 import type { MediaFolder } from '../../../../stores/mediaStore';
 import {
   DEFAULT_BOARD_VIEWPORT,
+  MEDIA_BOARD_NODE_GAP,
   MEDIA_BOARD_ROOT_ORDER_KEY,
   MEDIA_BOARD_SLOT_CELL_HEIGHT,
   MEDIA_BOARD_SLOT_CELL_WIDTH,
@@ -16,6 +17,7 @@ import {
 } from './layout';
 import { reconcileMediaBoardLayouts } from './layoutReconcile';
 import { useMediaBoardLayoutCommit } from './useMediaBoardLayoutCommit';
+import { subscribeMediaBoardPlacementRequests } from './placementRequests';
 import {
   loadMediaBoardGroupOffsets,
   loadMediaBoardLayoutSnapshot,
@@ -68,6 +70,7 @@ export interface UseMediaBoardLayoutControllerResult {
   mediaBoardItemsById: Map<string, MediaBoardItem>;
   mediaBoardLayout: MediaBoardLayoutResult;
   mediaBoardPlacementsById: Map<string, MediaBoardNodePlacement>;
+  placeMediaBoardItemsAtPoint: (itemIds: string[], point: MediaBoardGroupOffset) => void;
   reloadMediaBoardLayoutState: () => void;
   resetMediaBoardLayout: () => void;
   setMediaBoardInsertionPreview: Dispatch<SetStateAction<MediaBoardInsertionPreview | null>>;
@@ -321,6 +324,62 @@ export function useMediaBoardLayoutController({
     return target;
   }, [getMediaBoardInsertTarget]);
 
+  const placeMediaBoardItemsInGroup = useCallback((
+    itemIds: string[],
+    targetGroupId: string | null,
+    targetPosition: MediaBoardGroupOffset,
+  ) => {
+    const normalizedIds = [...new Set(itemIds.filter(Boolean))];
+    if (normalizedIds.length === 0) return;
+
+    setMediaBoardLayouts((current) => {
+      const next = { ...current };
+      let changed = false;
+      normalizedIds.forEach((id, index) => {
+        const position = {
+          x: targetPosition.x + (index * MEDIA_BOARD_SLOT_CELL_WIDTH),
+          y: targetPosition.y,
+        };
+        if (next[id]?.x === position.x && next[id]?.y === position.y) return;
+        next[id] = position;
+        changed = true;
+      });
+      return changed ? next : current;
+    });
+    moveToFolder(normalizedIds, targetGroupId);
+  }, [moveToFolder]);
+
+  const placeMediaBoardItemsAtPoint = useCallback((itemIds: string[], point: MediaBoardGroupOffset) => {
+    const normalizedIds = [...new Set(itemIds.filter(Boolean))];
+    if (normalizedIds.length === 0) return;
+    const target = getMediaBoardInsertTarget(point, normalizedIds);
+    if (!target || !canMoveItemsToMediaBoardGroup(normalizedIds, target.groupId)) return;
+    placeMediaBoardItemsInGroup(normalizedIds, target.groupId, target.position);
+  }, [canMoveItemsToMediaBoardGroup, getMediaBoardInsertTarget, placeMediaBoardItemsInGroup]);
+
+  const placeMediaBoardItemsNearItem = useCallback((itemIds: string[], nearItemId: string) => {
+    const placement = mediaBoardPlacementsById.get(nearItemId);
+    if (!placement) return;
+    const targetGroup = mediaBoardLayout.groups.find((group) => group.id === placement.groupId) ?? null;
+    const chrome = getMediaBoardGroupChrome(placement.groupId);
+    const bodyLeft = targetGroup ? targetGroup.x + chrome.padding : 0;
+    const bodyTop = targetGroup ? targetGroup.y + chrome.headerHeight + chrome.padding : 0;
+    placeMediaBoardItemsInGroup(itemIds, placement.groupId, {
+      x: placement.layout.x - bodyLeft + placement.layout.width + MEDIA_BOARD_NODE_GAP,
+      y: placement.layout.y - bodyTop,
+    });
+  }, [mediaBoardLayout.groups, mediaBoardPlacementsById, placeMediaBoardItemsInGroup]);
+
+  useEffect(() => subscribeMediaBoardPlacementRequests((request) => {
+    if (request.point) {
+      placeMediaBoardItemsAtPoint(request.itemIds, request.point);
+      return;
+    }
+    if (request.nearItemId) {
+      placeMediaBoardItemsNearItem(request.itemIds, request.nearItemId);
+    }
+  }), [placeMediaBoardItemsAtPoint, placeMediaBoardItemsNearItem]);
+
   const commitMediaBoardOrderChange = useMediaBoardLayoutCommit({
     mediaBoardItems,
     mediaBoardItemsById,
@@ -350,6 +409,7 @@ export function useMediaBoardLayoutController({
     mediaBoardItemsById,
     mediaBoardLayout,
     mediaBoardPlacementsById,
+    placeMediaBoardItemsAtPoint,
     reloadMediaBoardLayoutState,
     resetMediaBoardLayout,
     setMediaBoardInsertionPreview,

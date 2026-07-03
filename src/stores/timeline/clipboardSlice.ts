@@ -141,7 +141,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
       };
     });
 
-    set({ clipboardData });
+    set({ clipboardData, clipboardKeyframes: null });
     log.info('Copied clips', { count: clipboardData.length, ids: clipboardData.map(c => c.id) });
   },
 
@@ -352,7 +352,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
       handleOut: kf.handleOut ? { ...kf.handleOut } : undefined,
     }));
 
-    set({ clipboardKeyframes });
+    set({ clipboardKeyframes, clipboardData: null });
     log.info('Copied keyframes', { count: clipboardKeyframes.length });
   },
 

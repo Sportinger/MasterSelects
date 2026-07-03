@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { drawTimelineClipCanvasMainThread } from '../../src/components/timeline/utils/timelineClipCanvasMainThreadDraw';
+import { resolveTimelineClipCanvasPaintVisuals } from '../../src/components/timeline/utils/timelineClipCanvasPaintVisualContributors';
+import { getTimelineClipCanvasThumbnailMediaFileId } from '../../src/components/timeline/utils/timelineClipCanvasThumbnailPreparation';
+import { createTimelineClipCanvasWorkerPaintClipInput } from '../../src/components/timeline/utils/timelineClipCanvasWorkerPaintClip';
 import type { TimelinePaintSourceClip } from '../../src/timeline';
 
 function createContext(): CanvasRenderingContext2D {
@@ -23,6 +26,27 @@ function createClip(): TimelinePaintSourceClip {
 }
 
 describe('timeline clip canvas main-thread draw', () => {
+  it('treats image clips as thumbnail-backed timeline previews', () => {
+    const clip: TimelinePaintSourceClip = {
+      ...createClip(),
+      mediaFileId: 'image-1',
+      source: { mediaFileId: 'image-1', naturalDuration: 5, type: 'image' },
+    };
+
+    expect(getTimelineClipCanvasThumbnailMediaFileId(clip)).toBe('image-1');
+    expect(resolveTimelineClipCanvasPaintVisuals(clip).thumbnail).toBe(true);
+  });
+
+  it('passes solid colors to the canvas worker body fill', () => {
+    const clip = {
+      ...createClip(),
+      solidColor: '#e2d0b0',
+      source: { naturalDuration: 5, type: 'solid' },
+    } as TimelinePaintSourceClip & { solidColor: string };
+
+    expect(createTimelineClipCanvasWorkerPaintClipInput(clip).bodyFill).toBe('#e2d0b0');
+  });
+
   it('skips drawing when a comp switch briefly gives the track no drawable height', () => {
     const ctx = createContext();
     const diagnostics = drawTimelineClipCanvasMainThread({

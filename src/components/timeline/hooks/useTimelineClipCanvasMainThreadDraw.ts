@@ -41,6 +41,7 @@ interface TimelineClipCanvasMainThreadDrawInput {
   waveformPyramids?: TimelineClipCanvasWaveformPyramidMap;
   spectrogramTileSets?: TimelineClipCanvasSpectrogramTileSetMap;
   mediaFileStatusById: ReadonlyMap<string, TimelineClipCanvasMediaStatus>;
+  mediaThumbnailUrlsById?: ReadonlyMap<string, string | undefined>;
   redrawNonce: number;
   resolveGeometry: (clip: TimelinePaintSourceClip) => TimelineClipCanvasTrimGeometry;
   getMediaStatus: (clip: TimelinePaintSourceClip) => TimelineClipCanvasMediaStatus | undefined;
@@ -81,6 +82,7 @@ export function useTimelineClipCanvasMainThreadDraw(input: TimelineClipCanvasMai
     waveformPyramids,
     spectrogramTileSets,
     mediaFileStatusById,
+    mediaThumbnailUrlsById,
     redrawNonce,
     resolveGeometry,
     getMediaStatus,
@@ -161,6 +163,7 @@ export function useTimelineClipCanvasMainThreadDraw(input: TimelineClipCanvasMai
         audioDisplayMode,
         waveformPyramids,
         spectrogramTileSets,
+        mediaThumbnailUrlsById,
         cssWidth,
         canvasOffsetX,
         renderOverscanPx,
@@ -212,5 +215,5 @@ export function useTimelineClipCanvasMainThreadDraw(input: TimelineClipCanvasMai
     };
     // scrollX intentionally excluded; scrollBucket drives viewport-thumbnail redraws.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workerMode, clips, trackId, height, cssWidth, canvasOffsetX, timeToPixel, selectedClipIds, hoveredClipId, trackColor, scrollBucket, viewportWidth, waveformsEnabled, audioDisplayMode, clipDrag, clipDragPreview, clipTrim, waveformPyramids, spectrogramTileSets, mediaFileStatusById, redrawNonce, workerEligibility, workerRuntimeFallbackReason, workerCanvasGeneration, markMainThreadCanvasContextInitialized]);
+  }, [workerMode, clips, trackId, height, cssWidth, canvasOffsetX, timeToPixel, selectedClipIds, hoveredClipId, trackColor, scrollBucket, viewportWidth, waveformsEnabled, audioDisplayMode, clipDrag, clipDragPreview, clipTrim, waveformPyramids, spectrogramTileSets, mediaFileStatusById, mediaThumbnailUrlsById, redrawNonce, workerEligibility, workerRuntimeFallbackReason, workerCanvasGeneration, markMainThreadCanvasContextInitialized]);
 }

@@ -153,6 +153,26 @@ function normalizeHostedRefund(value: unknown): HostedAiRefundInfo | undefined {
     : undefined;
 }
 
+function isTransientFetchError(error: unknown): boolean {
+  return error instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(error.message);
+}
+
+function getPollingRetryDelay(pollInterval: number, attempt: number): number {
+  return Math.max(0, Math.min(pollInterval, attempt * 2000));
+}
+
+function getHostedTaskDownloadUrl(taskId: string, sourceUrl: string | undefined): string | undefined {
+  if (!sourceUrl) {
+    return undefined;
+  }
+
+  const params = new URLSearchParams({
+    taskId,
+    download: '1',
+  });
+  return `/api/ai/video?${params.toString()}`;
+}
+
 function createHostedAudioIdempotencyKey(): string {
   return `hosted-audio:${Date.now()}:${crypto.randomUUID()}`;
 }
@@ -496,17 +516,23 @@ export const cloudAiService = {
     const progress = typeof task?.progress === 'number' && Number.isFinite(task.progress)
       ? Math.max(0, Math.min(1, task.progress))
       : undefined;
+    const id = task?.id ?? task?.taskId ?? taskId;
+    const status = task?.status ?? 'pending';
+    const rawImageUrl = task?.imageUrl ?? task?.videoUrl;
+    const rawVideoUrl = task?.videoUrl ?? task?.imageUrl;
+    const imageUrl = status === 'completed' ? getHostedTaskDownloadUrl(id, rawImageUrl) : rawImageUrl;
+    const videoUrl = status === 'completed' ? getHostedTaskDownloadUrl(id, rawVideoUrl) : rawVideoUrl;
 
     return {
       completedAt: task?.completedAt ? new Date(task.completedAt) : undefined,
       createdAt: task?.createdAt ? new Date(task.createdAt) : new Date(),
       error: task?.error,
-      id: task?.id ?? task?.taskId ?? taskId,
-      imageUrl: task?.imageUrl ?? task?.videoUrl,
+      id,
+      imageUrl,
       progress,
       refund: normalizeHostedRefund(task?.refund),
-      status: task?.status ?? 'pending',
-      videoUrl: task?.videoUrl ?? task?.imageUrl,
+      status,
+      videoUrl,
     };
   },
   async pollTaskUntilComplete(
@@ -516,9 +542,22 @@ export const cloudAiService = {
     timeout = 600000,
   ): Promise<VideoTask> {
     const startTime = Date.now();
+    let transientFailures = 0;
 
     while (Date.now() - startTime < timeout) {
-      const task = await cloudAiService.getTaskStatus(taskId);
+      let task: VideoTask;
+
+      try {
+        task = await cloudAiService.getTaskStatus(taskId);
+        transientFailures = 0;
+      } catch (error) {
+        if (isTransientFetchError(error) && transientFailures < 4) {
+          transientFailures += 1;
+          await new Promise((resolve) => setTimeout(resolve, getPollingRetryDelay(pollInterval, transientFailures)));
+          continue;
+        }
+        throw error;
+      }
 
       if (onProgress) {
         onProgress(task);

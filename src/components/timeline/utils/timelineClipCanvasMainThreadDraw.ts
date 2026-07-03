@@ -38,6 +38,7 @@ export interface TimelineClipCanvasMainThreadDrawInput {
   audioDisplayMode?: TimelineAudioDisplayMode;
   waveformPyramids?: TimelineClipCanvasWaveformPyramidMap;
   spectrogramTileSets?: TimelineClipCanvasSpectrogramTileSetMap;
+  mediaThumbnailUrlsById?: ReadonlyMap<string, string | undefined>;
   cssWidth: number;
   canvasOffsetX: number;
   renderOverscanPx: number;
@@ -68,6 +69,12 @@ function withAlpha(color: string, alpha: number): string {
   return color;
 }
 
+function getTimelineClipCanvasSolidFill(clip: TimelinePaintSourceClip): string | undefined {
+  if (clip.source?.type !== 'solid') return undefined;
+  return (clip as TimelinePaintSourceClip & { solidColor?: string }).solidColor ??
+    (clip.source as { color?: string }).color;
+}
+
 export function drawTimelineClipCanvasMainThread(
   input: TimelineClipCanvasMainThreadDrawInput,
 ): TimelineCanvasDrawDiagnostics {
@@ -85,6 +92,7 @@ export function drawTimelineClipCanvasMainThread(
     audioDisplayMode = 'detailed',
     waveformPyramids,
     spectrogramTileSets,
+    mediaThumbnailUrlsById,
     cssWidth,
     canvasOffsetX,
     renderOverscanPx,
@@ -138,8 +146,9 @@ export function drawTimelineClipCanvasMainThread(
     const x = absoluteX - canvasOffsetX;
     const visibleX = visibleAbsLeft - canvasOffsetX;
     const w = absoluteW;
+    const clipBodyFill = getTimelineClipCanvasSolidFill(clip);
     if (w < lodBarPx) {
-      ctx.fillStyle = selectedClipIds.has(clip.id) ? fillSelected : fill;
+      ctx.fillStyle = clipBodyFill ?? (selectedClipIds.has(clip.id) ? fillSelected : fill);
       ctx.fillRect(x, 1, Math.max(1, w), height - 2);
       continue;
     }
@@ -156,7 +165,7 @@ export function drawTimelineClipCanvasMainThread(
 
     ctx.beginPath();
     ctx.roundRect(x, top, w, h, radius);
-    ctx.fillStyle = selected ? fillSelected : fill;
+    ctx.fillStyle = clipBodyFill ?? (selected ? fillSelected : fill);
     ctx.fill();
 
     // Build the MIDI preview from the geometry-adjusted clip (live trim/drag
@@ -272,6 +281,7 @@ export function drawTimelineClipCanvasMainThread(
         requestRedraw,
         maxThumbnailSlots,
         thumbnailSlotPx,
+        clip.source?.type === 'image' ? mediaThumbnailUrlsById?.get(mediaFileId) : undefined,
       );
       const grad = ctx.createLinearGradient(0, top + h - 16, 0, top + h);
       grad.addColorStop(0, 'rgba(0,0,0,0)');

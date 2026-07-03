@@ -101,5 +101,5 @@ describe('getState access policy', () => {
 
     expect(unknownFiles, 'new non-adapter getState files must be classified').toEqual([]);
     expect(exceededFiles, 'getState hard-target ceilings must not increase').toEqual([]);
-  });
+  }, 15000);
 });

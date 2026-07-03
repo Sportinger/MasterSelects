@@ -18,34 +18,16 @@ function shouldUsePersonalApiKey(provider: 'piapi' | 'kieai' | 'evolink' | 'elev
 }
 
 function resolveEffectiveRequest(request: FlashBoardGenerationRequest): FlashBoardGenerationRequest {
-  if (request.service === 'kieai' && !shouldUsePersonalApiKey('kieai')) {
-    if (request.providerId === 'kling-3.0') {
-      return {
-        ...request,
-        providerId: 'cloud-kling',
-        service: 'cloud',
-        version: 'latest',
-      };
-    }
-
-    if (request.providerId === 'bytedance/seedance-2' || request.providerId === 'bytedance/seedance-2-fast') {
-      return {
-        ...request,
-        service: 'cloud',
-        version: 'latest',
-      };
-    }
-
-    if (request.providerId === 'nano-banana-2') {
-      return {
-        ...request,
-        service: 'cloud',
-        version: 'latest',
-      };
-    }
+  if (request.service === 'kieai') {
+    return {
+      ...request,
+      providerId: request.providerId === 'kling-3.0' ? 'cloud-kling' : request.providerId,
+      service: 'cloud',
+      version: 'latest',
+    };
   }
 
-  if (request.service === 'elevenlabs' && !shouldUsePersonalApiKey('elevenlabs')) {
+  if (request.service === 'elevenlabs') {
     return {
       ...request,
       providerId: 'cloud-elevenlabs-tts',
@@ -53,7 +35,7 @@ function resolveEffectiveRequest(request: FlashBoardGenerationRequest): FlashBoa
     };
   }
 
-  if (request.service === 'suno' && !shouldUsePersonalApiKey('kieai')) {
+  if (request.service === 'suno') {
     return {
       ...request,
       service: 'cloud',

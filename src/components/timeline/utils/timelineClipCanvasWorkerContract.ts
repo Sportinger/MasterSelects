@@ -95,6 +95,7 @@ export interface TimelineClipCanvasWorkerFadeVisualsResource {
 export interface TimelineClipCanvasWorkerClip {
   id: string;
   paintPacket: TimelinePaintPacket;
+  bodyFill?: string;
 }
 
 export interface TimelineClipCanvasWorkerThumbnailStripPayload {

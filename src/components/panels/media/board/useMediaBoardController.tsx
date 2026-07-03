@@ -37,7 +37,7 @@ export interface UseMediaBoardControllerOptions {
   finishRename: () => void;
   folders: MediaFolder[];
   handleContextMenu: MediaBoardContextMenuHandler;
-  handleExternalDropImport: (dataTransfer: DataTransfer, folderId: string | null) => Promise<void>;
+  handleExternalDropImport: (dataTransfer: DataTransfer, folderId: string | null) => Promise<string[]>;
   handleItemClick: (itemId: string, event: React.MouseEvent) => void;
   handleItemDoubleClick: (item: ProjectItem) => void | Promise<void>;
   getSlotGridProgress: () => number;
@@ -177,6 +177,7 @@ export function useMediaBoardController({
     handleExternalDropImport,
     internalDragId,
     mediaBoardPlacementsById: layout.mediaBoardPlacementsById,
+    placeMediaBoardItemsAtPoint: layout.placeMediaBoardItemsAtPoint,
     screenToMediaBoard: viewport.screenToMediaBoard,
     selectedIds,
     setDragOverFolderId,
@@ -307,6 +308,7 @@ export function useMediaBoardController({
     mediaBoardAnnotations,
     mediaBoardPlacementsById: layout.mediaBoardPlacementsById,
     mediaBoardViewport: viewport.mediaBoardViewport,
+    placeMediaBoardItemsAtPoint: layout.placeMediaBoardItemsAtPoint,
     reloadMediaBoardState,
     renderMediaBoardView,
     setMediaBoardViewport: viewport.setMediaBoardViewport,

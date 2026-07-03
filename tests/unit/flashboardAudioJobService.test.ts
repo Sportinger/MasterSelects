@@ -8,6 +8,7 @@ const elevenLabsMock = vi.hoisted(() => ({
 }));
 
 const cloudAiMock = vi.hoisted(() => ({
+  createElevenLabsSpeech: vi.fn(),
   createSunoMusic: vi.fn(),
   pollSunoMusicTaskUntilComplete: vi.fn(),
 }));
@@ -46,12 +47,13 @@ describe('FlashBoardJobService ElevenLabs audio jobs', () => {
     } as ReturnType<typeof useSettingsStore.getState>);
     elevenLabsMock.setApiKey.mockClear();
     elevenLabsMock.createSpeech.mockReset();
+    cloudAiMock.createElevenLabsSpeech.mockReset();
     cloudAiMock.createSunoMusic.mockReset();
     cloudAiMock.pollSunoMusicTaskUntilComplete.mockReset();
   });
 
-  it('returns a durable audio File completion for ElevenLabs speech', async () => {
-    elevenLabsMock.createSpeech.mockResolvedValue({
+  it('routes ElevenLabs speech through hosted Cloud AI and returns a durable audio File completion', async () => {
+    cloudAiMock.createElevenLabsSpeech.mockResolvedValue({
       audio: new Blob(['mp3-bytes'], { type: 'audio/mpeg' }),
       mimeType: 'audio/mpeg',
       extension: 'mp3',
@@ -94,13 +96,14 @@ describe('FlashBoardJobService ElevenLabs audio jobs', () => {
 
     const update = await completed;
 
-    expect(elevenLabsMock.setApiKey).toHaveBeenCalledWith('eleven-key');
-    expect(elevenLabsMock.createSpeech).toHaveBeenCalledWith(expect.objectContaining({
+    expect(elevenLabsMock.setApiKey).not.toHaveBeenCalled();
+    expect(elevenLabsMock.createSpeech).not.toHaveBeenCalled();
+    expect(cloudAiMock.createElevenLabsSpeech).toHaveBeenCalledWith(expect.objectContaining({
       voiceId: 'voice-1',
       text: 'Hello from the board',
       modelId: 'eleven_multilingual_v2',
       outputFormat: 'mp3_44100_128',
-    }), expect.any(AbortSignal));
+    }), expect.stringMatching(/^flashboard-audio:record-audio:/), expect.any(AbortSignal));
     expect(update.mediaType).toBe('audio');
     expect(update.assetFile).toBeInstanceOf(File);
     expect(update.assetFile?.type).toBe('audio/mpeg');

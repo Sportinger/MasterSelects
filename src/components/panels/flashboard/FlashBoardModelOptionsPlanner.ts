@@ -145,22 +145,6 @@ function getModelDisplayName(entry: CatalogEntry): string {
   return entry.name.replace(' (Kie.ai)', '').replace(' (EvoLink)', '');
 }
 
-function isKieCloudMirrorProvider(providerId: string): boolean {
-  return providerId === 'cloud-kling'
-    || providerId === 'nano-banana-2'
-    || providerId === 'bytedance/seedance-2'
-    || providerId === 'bytedance/seedance-2-fast'
-    || providerId === 'veo-3.1'
-    || providerId === 'runway-video'
-    || providerId === 'topaz/video-upscale'
-    || providerId.includes('/')
-    || providerId.includes('flux-kontext')
-    || providerId.includes('nano-banana')
-    || providerId.includes('imagen')
-    || providerId.includes('gpt-image')
-    || providerId.includes('seedream');
-}
-
 function isCatalogEntryVisible({
   allowedServices,
   entry,
@@ -182,14 +166,6 @@ function isCatalogEntryVisible({
 
   if (entry.service === 'cloud') {
     if (!hasHostedSession) {
-      return false;
-    }
-
-    if (
-      !useHostedProductionProviders
-      && isKieCloudMirrorProvider(entry.providerId)
-      && useKieAiKeyByDefault
-    ) {
       return false;
     }
 

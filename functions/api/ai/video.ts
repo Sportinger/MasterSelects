@@ -119,6 +119,96 @@ function buildCapabilityResponse(context: AppContext, hostedContext: HostedAiCon
   });
 }
 
+function getHostedTaskMediaUrl(task: HostedVideoTask): string | null {
+  const rawUrl = task.videoUrl ?? task.imageUrl;
+  if (typeof rawUrl !== 'string' || rawUrl.trim().length === 0) {
+    return null;
+  }
+
+  try {
+    const url = new URL(rawUrl.trim());
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function streamHostedTaskMedia(context: AppContext, taskId: string, task: HostedVideoTask): Promise<Response> {
+  const requestId = context.data.requestId ?? null;
+
+  if (task.status !== 'completed') {
+    return json(
+      buildRouteEnvelope({
+        error: createGatewayError('task_not_completed', 'Hosted AI result is not ready yet.', {
+          taskId,
+          taskStatus: task.status,
+        }),
+        ok: false,
+        requestId,
+        status: task.status === 'failed' ? 'error' : 'processing',
+      }),
+      { status: 409 },
+    );
+  }
+
+  const mediaUrl = getHostedTaskMediaUrl(task);
+  if (!mediaUrl) {
+    return json(
+      buildRouteEnvelope({
+        error: createGatewayError('provider_result_missing', 'Hosted AI task completed without a downloadable result.', {
+          taskId,
+        }),
+        ok: false,
+        requestId,
+        status: 'error',
+      }),
+      { status: 502 },
+    );
+  }
+
+  const requestHeaders = new Headers();
+  const range = context.request.headers.get('Range');
+  if (range) {
+    requestHeaders.set('Range', range);
+  }
+
+  const upstream = await fetch(mediaUrl, { headers: requestHeaders });
+  if (!upstream.ok || !upstream.body) {
+    return json(
+      buildRouteEnvelope({
+        error: createGatewayError('provider_download_failed', 'Failed to download hosted AI result from the provider.', {
+          providerStatus: upstream.status,
+          taskId,
+        }),
+        ok: false,
+        requestId,
+        status: 'error',
+      }),
+      { status: 502 },
+    );
+  }
+
+  const responseHeaders = new Headers({
+    'Cache-Control': 'private, no-store',
+    'X-Content-Type-Options': 'nosniff',
+  });
+  for (const header of ['Accept-Ranges', 'Content-Length', 'Content-Range', 'Content-Type', 'ETag', 'Last-Modified']) {
+    const value = upstream.headers.get(header);
+    if (value) {
+      responseHeaders.set(header, value);
+    }
+  }
+  if (!responseHeaders.has('Content-Type')) {
+    responseHeaders.set('Content-Type', 'application/octet-stream');
+  }
+
+  return new Response(upstream.body, {
+    headers: responseHeaders,
+    status: upstream.status,
+    statusText: upstream.statusText,
+  });
+}
+
 async function attachFailedTaskRefund(
   context: AppContext,
   userId: string,
@@ -275,7 +365,9 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   }
 
   if (context.request.method === 'GET') {
-    const taskId = new URL(context.request.url).searchParams.get('taskId');
+    const url = new URL(context.request.url);
+    const taskId = url.searchParams.get('taskId');
+    const download = url.searchParams.get('download') === '1';
 
     if (taskId) {
       const hostedContext = await loadHostedContext(context);
@@ -298,6 +390,9 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
         const normalizedTaskId = taskId.trim();
         const task = await getHostedKlingTask(context.env, normalizedTaskId);
         const refunded = await attachFailedTaskRefund(context, hostedContext.user.id, normalizedTaskId, task);
+        if (download) {
+          return streamHostedTaskMedia(context, normalizedTaskId, refunded.task);
+        }
         return json(
           buildRouteEnvelope({
             creditBalance: refunded.creditBalance ?? hostedContext.billing?.balance ?? 0,

@@ -1,27 +1,32 @@
 import {
-  DEFAULT_FLASHBOARD_MODEL_VERSION,
   DEFAULT_FLASHBOARD_PROVIDER_ID,
-  DEFAULT_FLASHBOARD_SERVICE,
 } from '../../../stores/flashboardStore/defaults';
 import { useFlashBoardStore } from '../../../stores/flashboardStore';
 import { useAccountStore } from '../../../stores/accountStore';
-import { useSettingsStore } from '../../../stores/settingsStore';
 import { FlashBoardComposer } from '../flashboard/FlashBoardComposer';
 import { MediaDownloadComposer } from './MediaDownloadComposer';
 import { MediaAIGenerationQueue } from './MediaAIGenerationQueue';
 import '../flashboard/FlashBoard.css';
 
-const MEDIA_GENERATIVE_SERVICES: Array<'cloud' | 'kieai' | 'evolink' | 'elevenlabs' | 'suno'> = [
+const MEDIA_GENERATIVE_SERVICES: Array<'cloud'> = [
   'cloud',
-  'kieai',
-  'evolink',
-  'elevenlabs',
-  'suno',
 ];
 
 interface MediaAIGenerativeTrayExpandedProps {
   mode: 'generate' | 'chat' | 'download';
   onCollapse: () => void;
+}
+
+function getHostedInitialProviderId(service: string | undefined, providerId: string | undefined): string {
+  if (service === 'kieai' && providerId === 'kling-3.0') {
+    return 'cloud-kling';
+  }
+
+  if (service === 'elevenlabs' && providerId === 'elevenlabs-tts') {
+    return 'cloud-elevenlabs-tts';
+  }
+
+  return providerId ?? DEFAULT_FLASHBOARD_PROVIDER_ID;
 }
 
 export function MediaAIGenerativeTrayExpanded({
@@ -30,14 +35,9 @@ export function MediaAIGenerativeTrayExpanded({
 }: MediaAIGenerativeTrayExpandedProps) {
   const accountSession = useAccountStore((s) => s.session);
   const hostedAIEnabled = useAccountStore((s) => s.hostedAIEnabled);
-  const apiKeys = useSettingsStore((s) => s.apiKeys);
-  const apiKeyDefaults = useSettingsStore((s) => s.apiKeyDefaults);
-  const apiKeysUnlocked = useSettingsStore((s) => s.apiKeysUnlocked);
   const flashBoardComposer = useFlashBoardStore((s) => s.composer);
-  const useKieAiKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.kieai && apiKeys.kieai.trim());
-  const useHostedProductionProviders = import.meta.env.PROD;
-  const useCloudDefaults = useHostedProductionProviders || !useKieAiKeyByDefault;
-  const useHostedDefaults = Boolean(accountSession?.authenticated && hostedAIEnabled && useCloudDefaults);
+  const useHostedDefaults = Boolean(accountSession?.authenticated && hostedAIEnabled);
+  const initialProviderId = getHostedInitialProviderId(flashBoardComposer.service, flashBoardComposer.providerId);
 
   return (
     <>
@@ -56,9 +56,9 @@ export function MediaAIGenerativeTrayExpanded({
         <MediaDownloadComposer />
       ) : (
         <FlashBoardComposer
-          initialProviderId={flashBoardComposer.providerId ?? DEFAULT_FLASHBOARD_PROVIDER_ID}
-          initialService={flashBoardComposer.service ?? (useCloudDefaults ? 'cloud' : DEFAULT_FLASHBOARD_SERVICE)}
-          initialVersion={flashBoardComposer.version ?? (useHostedDefaults ? 'latest' : DEFAULT_FLASHBOARD_MODEL_VERSION)}
+          initialProviderId={initialProviderId}
+          initialService="cloud"
+          initialVersion={useHostedDefaults ? 'latest' : flashBoardComposer.version}
           initialMode={mode}
           allowedServices={MEDIA_GENERATIVE_SERVICES}
         />

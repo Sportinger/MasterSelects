@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BillingSummaryResponse } from '../../src/services/cloudApi';
 
-const { createChatMock, createVideoMock, videoCapabilitiesMock } = vi.hoisted(() => ({
+const { createChatMock, createVideoMock, videoCapabilitiesMock, videoStatusMock } = vi.hoisted(() => ({
   createChatMock: vi.fn(),
   createVideoMock: vi.fn(),
   videoCapabilitiesMock: vi.fn(),
+  videoStatusMock: vi.fn(),
 }));
 
 vi.mock('../../src/services/cloudApi', () => ({
@@ -17,7 +18,7 @@ vi.mock('../../src/services/cloudApi', () => ({
       video: {
         capabilities: videoCapabilitiesMock,
         create: createVideoMock,
-        status: vi.fn(),
+        status: videoStatusMock,
       },
     },
   },
@@ -87,6 +88,7 @@ describe('cloudAiService billing sync', () => {
     createChatMock.mockReset();
     createVideoMock.mockReset();
     videoCapabilitiesMock.mockReset();
+    videoStatusMock.mockReset();
     resetAccountStore();
   });
 
@@ -179,5 +181,33 @@ describe('cloudAiService billing sync', () => {
 
     expect(useAccountStore.getState().creditBalance).toBe(154);
     expect(useAccountStore.getState().billingSummary?.creditBalance).toBe(154);
+  });
+
+  it('keeps polling hosted video tasks through transient fetch failures', async () => {
+    videoStatusMock
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce({
+        creditBalance: 151,
+        data: {
+          id: 'task_123',
+          status: 'completed',
+          videoUrl: 'https://cdn.example.com/video.mp4',
+        },
+        kind: 'ai.video',
+        mode: 'hosted',
+        ok: true,
+        provider: 'cloud-kling',
+        requestId: 'req_status',
+        status: 'completed',
+      });
+
+    const task = await cloudAiService.pollTaskUntilComplete('task_123', undefined, 0, 1000);
+
+    expect(videoStatusMock).toHaveBeenCalledTimes(2);
+    expect(task).toMatchObject({
+      id: 'task_123',
+      status: 'completed',
+      videoUrl: '/api/ai/video?taskId=task_123&download=1',
+    });
   });
 });

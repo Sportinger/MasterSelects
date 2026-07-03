@@ -20,7 +20,7 @@ export function MediaAIGenerativeTray({
   expanded,
   onExpandedChange,
 }: MediaAIGenerativeTrayProps) {
-  useFlashBoardRuntime({ enableKeyboardDelete: false });
+  const { dismissRefundDialog, refundDialog } = useFlashBoardRuntime({ enableKeyboardDelete: false });
   const [trayMode, setTrayMode] = useState<MediaAITrayMode>('generate');
 
   const stopEvent = useCallback((event: SyntheticEvent) => {
@@ -112,6 +112,41 @@ export function MediaAIGenerativeTray({
               onCollapse={() => onExpandedChange(false)}
             />
           </Suspense>
+        </div>
+      )}
+      {refundDialog && (
+        <div
+          className="media-delete-dialog-backdrop media-refund-dialog-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              dismissRefundDialog();
+            }
+          }}
+        >
+          <div
+            className="media-delete-dialog media-refund-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="media-refund-dialog-title"
+          >
+            <div className="media-delete-dialog-kicker">Refund</div>
+            <h3 id="media-refund-dialog-title">WE are sorry!</h3>
+            <p>Here are your credits back.</p>
+            <div className="media-delete-dialog-warning media-refund-dialog-credits">
+              Refunded {refundDialog.credits} credits
+            </div>
+            <div className="media-delete-dialog-actions">
+              <button
+                type="button"
+                className="media-delete-dialog-button refund"
+                onClick={dismissRefundDialog}
+                title={`Job ${refundDialog.jobId}`}
+              >
+                OK
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </>

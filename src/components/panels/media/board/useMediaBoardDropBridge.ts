@@ -16,9 +16,10 @@ export interface UseMediaBoardDropBridgeOptions {
     movingIds: string[],
   ) => { groupId: string | null; position: MediaBoardGroupOffset } | null;
   getMediaBoardTopLevelMoveIds: (itemIds: string[]) => string[];
-  handleExternalDropImport: (dataTransfer: DataTransfer, folderId: string | null) => Promise<void>;
+  handleExternalDropImport: (dataTransfer: DataTransfer, folderId: string | null) => Promise<string[]>;
   internalDragId: string | null;
   mediaBoardPlacementsById: Map<string, MediaBoardNodePlacement>;
+  placeMediaBoardItemsAtPoint: (itemIds: string[], point: MediaBoardGroupOffset) => void;
   screenToMediaBoard: (clientX: number, clientY: number) => { x: number; y: number };
   selectedIds: string[];
   setDragOverFolderId: (id: string | null) => void;
@@ -42,6 +43,7 @@ export function useMediaBoardDropBridge({
   handleExternalDropImport,
   internalDragId,
   mediaBoardPlacementsById,
+  placeMediaBoardItemsAtPoint,
   screenToMediaBoard,
   selectedIds,
   setDragOverFolderId,
@@ -111,7 +113,8 @@ export function useMediaBoardDropBridge({
 
     const point = screenToMediaBoard(event.clientX, event.clientY);
     const targetGroup = getMediaBoardGroupAtPoint(point);
-    await handleExternalDropImport(event.dataTransfer, targetGroup?.id ?? null);
+    const importedIds = await handleExternalDropImport(event.dataTransfer, targetGroup?.id ?? null);
+    placeMediaBoardItemsAtPoint(importedIds, point);
   }, [
     canMoveItemsToMediaBoardGroup,
     commitMediaBoardOrderChange,
@@ -119,6 +122,7 @@ export function useMediaBoardDropBridge({
     getMediaBoardInsertTarget,
     getMediaBoardTopLevelMoveIds,
     handleExternalDropImport,
+    placeMediaBoardItemsAtPoint,
     screenToMediaBoard,
     selectedIds,
     setDragOverFolderId,
@@ -150,7 +154,9 @@ export function useMediaBoardDropBridge({
       return;
     }
 
-    await handleExternalDropImport(event.dataTransfer, groupId);
+    const point = screenToMediaBoard(event.clientX, event.clientY);
+    const importedIds = await handleExternalDropImport(event.dataTransfer, groupId);
+    placeMediaBoardItemsAtPoint(importedIds, point);
     setIsExternalDragOver(false);
   }, [
     canMoveItemsToMediaBoardGroup,
@@ -158,6 +164,7 @@ export function useMediaBoardDropBridge({
     getMediaBoardInsertTarget,
     getMediaBoardTopLevelMoveIds,
     handleExternalDropImport,
+    placeMediaBoardItemsAtPoint,
     screenToMediaBoard,
     selectedIds,
     setDragOverFolderId,

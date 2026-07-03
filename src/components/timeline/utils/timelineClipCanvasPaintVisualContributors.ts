@@ -53,7 +53,7 @@ export const timelineClipCanvasPaintVisualContributors = [
         visuals.thumbnail = true;
         return;
       }
-      visuals.thumbnail = clip.source?.type === 'video' &&
+      visuals.thumbnail = (clip.source?.type === 'video' || clip.source?.type === 'image') &&
         Boolean(clip.source.mediaFileId ?? clip.mediaFileId);
     },
   },

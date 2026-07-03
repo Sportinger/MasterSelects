@@ -13,6 +13,13 @@ export interface TimelineClipCanvasWorkerPaintClipInput {
   duration: number;
   isAudio: boolean;
   visuals: TimelineClipCanvasPaintVisuals;
+  bodyFill?: string;
+}
+
+function getTimelineClipCanvasWorkerClipBodyFill(clip: TimelinePaintSourceClip): string | undefined {
+  if (clip.source?.type !== 'solid') return undefined;
+  return (clip as TimelinePaintSourceClip & { solidColor?: string }).solidColor ??
+    (clip.source as { color?: string }).color;
 }
 
 export function createTimelineClipCanvasWorkerPaintClipInput(
@@ -26,5 +33,6 @@ export function createTimelineClipCanvasWorkerPaintClipInput(
     duration: clip.duration,
     isAudio: isTimelineClipCanvasAudioClip(clip),
     visuals: resolveTimelineClipCanvasPaintVisuals(clip),
+    bodyFill: getTimelineClipCanvasWorkerClipBodyFill(clip),
   };
 }
