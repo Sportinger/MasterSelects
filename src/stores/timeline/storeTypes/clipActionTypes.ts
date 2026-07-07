@@ -15,7 +15,7 @@ import type {
   TextClipProperties,
   TimelineClip,
 } from '../../../types';
-import type { MidiNote } from '../../../types/midiClip';
+import type { MidiNote, MidiClipAutomation, AutomationPoint } from '../../../types/midiClip';
 import type {
   MotionColor,
   MotionLayerDefinition,
@@ -57,6 +57,20 @@ export interface MidiClipActions {
   ) => void;
   removeMidiNote: (clipId: string, noteId: string) => void;
   removeMidiNotes: (clipId: string, noteIds: string[]) => void;
+  /** Replace a MIDI clip's whole automation object (issue #298). */
+  setMidiClipAutomation: (clipId: string, automation: MidiClipAutomation | undefined) => void;
+  /**
+   * Replace the breakpoints of ONE automation lane (cutoff/mod/expression/
+   * pitchBend). Empty/undefined `points` clears the lane. `captureHistory:false`
+   * during live breakpoint drags; the final commit captures one snapshot (mirrors
+   * updateMidiNote).
+   */
+  setMidiClipAutomationLane: (
+    clipId: string,
+    lane: keyof MidiClipAutomation,
+    points: AutomationPoint[] | undefined,
+    options?: { captureHistory?: boolean },
+  ) => void;
 }
 
 export interface MathSceneClipActions {

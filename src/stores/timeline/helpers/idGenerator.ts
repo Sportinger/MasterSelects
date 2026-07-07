@@ -71,6 +71,14 @@ export function generateMidiNoteId(): string {
 }
 
 /**
+ * Generate a stable unique ID for a synth LFO (issue #298). The mod-matrix refers
+ * to LFOs by this id (never a positional index), so it must survive reorders.
+ */
+export function generateSynthLfoId(): string {
+  return generateClipId('lfo');
+}
+
+/**
  * Generate a unique ID for math scene clips.
  */
 export function generateMathSceneClipId(): string {

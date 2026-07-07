@@ -7,7 +7,7 @@
 // the piano-roll phase; this slice currently owns clip creation.
 
 import type { TimelineClip } from '../../types';
-import type { MidiClipData, MidiNote } from '../../types/midiClip';
+import type { MidiClipData, MidiNote, MidiClipAutomation, AutomationPoint } from '../../types/midiClip';
 import type { MidiClipActions, SliceCreator } from './types';
 import { DEFAULT_TRANSFORM } from './constants';
 import { generateMidiClipId, generateMidiNoteId } from './helpers/idGenerator';
@@ -194,5 +194,40 @@ export const createMidiClipSlice: SliceCreator<MidiClipActions> = (set, get) => 
     set({ clips: mapClipNotes(clips, clipId, notes => notes.filter(n => !ids.has(n.id))) });
     invalidateCache();
     captureSnapshot(noteIds.length === 1 ? 'Delete MIDI note' : 'Delete MIDI notes');
+  },
+
+  setMidiClipAutomation: (clipId, automation) => {
+    const { clips, invalidateCache } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip || clip.source?.type !== 'midi') return;
+    set({ clips: clips.map(c => (c.id === clipId ? { ...c, automation } : c)) });
+    invalidateCache();
+    captureSnapshot('Edit MIDI automation');
+  },
+
+  setMidiClipAutomationLane: (clipId, lane, points, options) => {
+    const { clips, invalidateCache } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip || clip.source?.type !== 'midi') return;
+
+    // Sort breakpoints by time so downstream sampling (midiAutomationWindow) can
+    // assume ascending order. Empty/undefined clears the lane; an object with no
+    // remaining lanes collapses back to undefined so a cleared clip is clean data.
+    const sorted: AutomationPoint[] | undefined = points && points.length > 0
+      ? [...points].sort((a, b) => a.time - b.time)
+      : undefined;
+
+    const nextAutomation: MidiClipAutomation | undefined = (() => {
+      const base: MidiClipAutomation = { ...(clip.automation ?? {}) };
+      if (sorted) base[lane] = { points: sorted };
+      else delete base[lane];
+      return Object.values(base).some(Boolean) ? base : undefined;
+    })();
+
+    set({ clips: clips.map(c => (c.id === clipId ? { ...c, automation: nextAutomation } : c)) });
+    invalidateCache();
+    if (options?.captureHistory !== false) {
+      captureSnapshot('Edit MIDI automation');
+    }
   },
 });

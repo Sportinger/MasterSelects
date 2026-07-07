@@ -6,7 +6,7 @@
 // behave consistently in the mixer). Works against both a live AudioContext and an
 // export OfflineAudioContext — the bank builds rate-correct buffers either way.
 
-import type { MidiInstrument } from '../../types/midiClip';
+import type { MidiInstrument, NoteAutomationWindow } from '../../types/midiClip';
 import type { IMidiSynth } from './IMidiSynth';
 import { getGmSampleBank, type GmSoundRef } from './GmSampleBank';
 import { Logger } from '../../services/logger';
@@ -46,6 +46,9 @@ export class WavetableSynth implements IMidiSynth {
     velocity: number,
     when: number,
     duration: number,
+    // Accepted for IMidiSynth parity; GM samples carry their own dynamics, so the
+    // performed automation window is intentionally ignored here.
+    _automation?: NoteAutomationWindow,
   ): void {
     // Only GM instruments reach this synth (via the factory). Narrowing also makes
     // `instrument.program` / `instrument.isDrum` access type-safe.

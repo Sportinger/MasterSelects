@@ -253,6 +253,10 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       midiData: (c.source?.type === 'midi' || c.sourceType === 'midi') && c.midiData
         ? structuredClone(c.midiData)
         : undefined,
+      // MIDI clip automation (issue #298) — the four performed CC lanes.
+      automation: (c.source?.type === 'midi' || c.sourceType === 'midi') && c.automation
+        ? structuredClone(c.automation)
+        : undefined,
       thumbnails: c.thumbnails,
       linkedClipId: c.linkedClipId,
       linkedGroupId: c.linkedGroupId,

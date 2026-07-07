@@ -11,24 +11,46 @@
 // `velocityToColor` from here so they can never drift, and keeping the helpers out
 // of PianoRoll.tsx keeps that already-oversized file from growing further.
 
-/** What a controller lane shows. Velocity is a per-note property; CC lanes (later) are free events. */
+import type { MidiClipAutomation } from '../../../types/midiClip';
+
+/** What a controller lane shows. Velocity is a per-note property; CC lanes are free breakpoint envelopes on `clip.automation`. */
 export type LaneKind = 'note-property' | 'cc';
 
 export interface LaneTypeDescriptor {
   /** Stable id persisted in `settingsStore.pianoRollControllerArea.lanes`. */
-  id: string;            // 'velocity', later 'cc1', 'cc11', 'pitchbend'
-  label: string;         // 'Velocity', 'CC1 Modulation', …
+  id: string;            // 'velocity', 'cc-cutoff', 'cc-mod', …
+  label: string;         // 'Velocity', 'Cutoff (CC74)', …
   kind: LaneKind;
-  /** Display scale shown in the UI (MIDI standard 0–127 for velocity). */
+  /** Display scale shown in the UI (MIDI standard 0–127 for velocity/CC). */
   min: number;
   max: number;
+  /** CC lanes only: which `clip.automation` lane this edits. */
+  automationKey?: keyof MidiClipAutomation;
+  /** CC lanes only: bipolar (-1..1, e.g. pitch bend) vs unipolar (0..1). */
+  bipolar?: boolean;
+  /** CC lanes only: curve/point color, readable on the #141414 lane. */
+  color?: string;
 }
 
-// Velocity is the only entry today. Adding a descriptor here is what makes a new
-// lane type selectable once the interactive picker lands (a deferred fast-follow).
+// Velocity (per-note) plus the four performed CC lanes (#298). Adding a descriptor
+// here is what makes a lane selectable in the controller-area picker.
 export const LANE_TYPES: readonly LaneTypeDescriptor[] = [
   { id: 'velocity', label: 'Velocity', kind: 'note-property', min: 0, max: 127 },
+  { id: 'cc-cutoff', label: 'Cutoff (CC74)', kind: 'cc', min: 0, max: 127, automationKey: 'cutoff', color: '#4ea1ff' },
+  { id: 'cc-mod', label: 'Mod Wheel (CC1)', kind: 'cc', min: 0, max: 127, automationKey: 'mod', color: '#57d38c' },
+  { id: 'cc-expression', label: 'Expression (CC11)', kind: 'cc', min: 0, max: 127, automationKey: 'expression', color: '#ffb347' },
+  { id: 'cc-pitchbend', label: 'Pitch Bend', kind: 'cc', min: -100, max: 100, bipolar: true, automationKey: 'pitchBend', color: '#c792ea' },
 ];
+
+/** Normalized storage range for a CC lane: bipolar [-1,1] else [0,1]. */
+export function laneValueRange(lane: LaneTypeDescriptor): [number, number] {
+  return lane.bipolar ? [-1, 1] : [0, 1];
+}
+
+/** Normalized stored value → integer display value (MIDI 0–127, or ±100% bend). */
+export function laneDisplayValue(lane: LaneTypeDescriptor, norm: number): number {
+  return Math.round(lane.bipolar ? norm * 100 : clamp01(norm) * 127);
+}
 
 /** Default ordered lane ids shown in the controller area (velocity-only for now). */
 export const DEFAULT_CONTROLLER_LANES: readonly string[] = ['velocity'];

@@ -262,6 +262,7 @@ export async function createLoadStateGeneratedClip(params: {
       nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
       audioState: serializedClip.audioState ? structuredClone(serializedClip.audioState) : undefined,
       midiData: serializedClip.midiData ? structuredClone(serializedClip.midiData) : { notes: [] },
+      automation: serializedClip.automation ? structuredClone(serializedClip.automation) : undefined,
       masks: serializedClip.masks,
       isLoading: false,
     };

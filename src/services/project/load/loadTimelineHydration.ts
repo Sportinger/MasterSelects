@@ -183,6 +183,7 @@ export function convertProjectCompositionToStore(
         sourceType: c.sourceType || 'video',
         naturalDuration: c.naturalDuration,
         midiData: c.midiData ? structuredClone(c.midiData) : undefined,
+        automation: c.automation ? structuredClone(c.automation) : undefined,
         thumbnails: c.thumbnails,
         linkedClipId: c.linkedClipId,
         linkedGroupId: c.linkedGroupId,

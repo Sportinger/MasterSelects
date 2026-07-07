@@ -2558,3 +2558,58 @@
 }
 
 }
+
+/* Simple Synth panel sections (#298) */
+.properties-hint {
+  margin: var(--sp-1) 0;
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  opacity: 0.8;
+}
+
+.synth-lfo-row,
+.synth-mod-row {
+  padding: var(--sp-1-5);
+  margin-bottom: var(--sp-1-5);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  border-radius: var(--radius-md);
+  background: var(--bg-hover, rgba(255, 255, 255, 0.03));
+}
+
+.synth-lfo-row .audio-bus-control-row:last-child,
+.synth-mod-row .audio-bus-control-row:last-child {
+  margin-bottom: 0;
+}
+
+.synth-preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin-top: var(--sp-1);
+}
+
+.synth-preset-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.synth-preset-chip > button {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.synth-preset-chip-x {
+  color: var(--text-tertiary, rgba(255, 255, 255, 0.4)) !important;
+  border-left: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12)) !important;
+}
+
+.synth-preset-chip-x:hover {
+  color: #ff6b6b !important;
+}

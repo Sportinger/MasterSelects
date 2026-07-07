@@ -13,7 +13,7 @@ import type { LayerSourceRect, TransitionRenderState } from '../../../types/laye
 import type { TransitionOverlayClipDefinition } from '../../../types/timeline';
 import type { TimelineTransition, TransitionCompositionLink } from '../../../types/timelineCore';
 import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
-import type { MidiClipData, MidiInstrument } from '../../../types/midiClip';
+import type { MidiClipData, MidiClipAutomation, MidiInstrument } from '../../../types/midiClip';
 import type {
   ProjectClipAnalysis,
   ProjectClipVideoState,
@@ -108,6 +108,8 @@ export interface ProjectClip {
   sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector' | 'math-scene' | 'transition-overlay' | 'motion-shape' | 'motion-null' | 'motion-adjustment' | 'lottie' | 'rive' | 'midi';
   // MIDI clip note data (issue #182); wired into save/load in the persistence phase
   midiData?: MidiClipData;
+  // MIDI clip automation (issue #298): the four performed CC lanes as breakpoints
+  automation?: MidiClipAutomation;
   naturalDuration?: number;
   linkedClipId?: string;
   linkedGroupId?: string;
