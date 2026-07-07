@@ -11,7 +11,8 @@ type HistoryStoreAccessor = {
 
 export function createHistoryFacade(useHistoryStore: HistoryStoreAccessor) {
   return {
-    captureSnapshot: (label: string) => useHistoryStore.getState().captureSnapshot(label),
+    captureSnapshot: (label: string, options?: { isAutoCapture?: boolean }) =>
+      useHistoryStore.getState().captureSnapshot(label, options),
     undo: () => useHistoryStore.getState().undo(),
     redo: () => useHistoryStore.getState().redo(),
     startBatch: (label: string) => useHistoryStore.getState().startBatch(label),

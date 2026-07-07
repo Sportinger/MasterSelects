@@ -47,7 +47,7 @@ function injectPianoRollUI(win: Window, clipId: string): void {
   win.document.body.appendChild(root);
 
   const reactRoot = createRoot(root);
-  reactRoot.render(createElement(PianoRoll, { clipId, onRequestClose: () => win.close() }));
+  reactRoot.render(createElement(PianoRoll, { clipId }));
   openWindows.set(clipId, { win, root: reactRoot });
 
   win.addEventListener('beforeunload', () => {

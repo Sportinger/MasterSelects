@@ -178,7 +178,7 @@ export const useHistoryStore = create<HistoryState>()(
     batchId: null,
     batchLabel: null,
 
-    captureSnapshot: (label: string) => {
+    captureSnapshot: (label: string, options?: { isAutoCapture?: boolean }) => {
       if (isHistoryDisabledForDebug()) return;
 
       const { isApplying, undoStack, currentSnapshot, redoStack, branches, maxHistorySize, batchId } = get();
@@ -188,6 +188,17 @@ export const useHistoryStore = create<HistoryState>()(
 
       // If batching, don't create new snapshots until batch ends
       if (batchId !== null) return;
+
+      // An EXPLICIT capture (a slice action calling this directly) is the
+      // authoritative undo step for its edit. The change-subscription in
+      // useGlobalHistory will ALSO see this edit's store mutation and schedule a
+      // debounced fallback capture (~150ms later); left alone that produces a
+      // redundant second, no-op undo step (the user has to press Ctrl+Z twice).
+      // Reuse the post-undo suppression window to drop that trailing fallback.
+      // The fallback path itself passes isAutoCapture:true so it never self-suppresses.
+      if (!options?.isAutoCapture) {
+        suppressCaptures();
+      }
 
       const captureStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
       const newSnapshot = createSnapshot(label, currentSnapshot);
