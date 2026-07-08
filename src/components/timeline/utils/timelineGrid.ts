@@ -166,6 +166,17 @@ export function formatTimelineFrameNumber(seconds: number, frameRate: number): s
   return Math.max(0, Math.round(seconds * safeFrameRate)).toString();
 }
 
+// MM:SS.cc clock label (cc = centiseconds). The single source of truth for the
+// timeline's plain time labels: both the timeline helpers hook and the piano-roll
+// Time lane import this so their labels are byte-identical by construction
+// (issue #249, §6 of the rulers plan).
+export function formatTimelineClock(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  const ms = Math.floor((seconds % 1) * 100);
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+}
+
 // ─── Per-lane ruler ticks (issue #257, Packet 4) ─────────────────────────────
 //
 // Unlike createTimelineGridPlan (which couples format selection with tick density

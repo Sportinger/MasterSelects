@@ -7,7 +7,9 @@
 //     when the user actually edits the note.
 //   - `[clip.inPoint, clip.outPoint]` is the visible/playable window into the
 //     content (`outPoint = inPoint + duration`). Resizing a clip moves this
-//     window, not the notes.
+//     window, not the notes. Extending a clip from the LEFT pushes `inPoint`
+//     below 0 (empty space before the content origin), so both `inPoint` and a
+//     note placed there have NEGATIVE content time — that is valid, not clamped.
 //   - On the timeline the window's left edge sits at `clip.startTime`, so a note
 //     at content time `t` plays at absolute time `startTime + (t - inPoint)`.
 //

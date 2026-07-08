@@ -350,9 +350,16 @@ export function useGlobalHistory() {
           const label = pendingLabel.current;
           pendingTimer.current = null;
           pendingLabel.current = '';
-          // Execute the capture immediately so the state isn't lost
+          // If an explicit slice capture just ran (suppress window active), this
+          // pending fallback is a DUPLICATE of the same edit — drop it. Otherwise
+          // undo()'s pre-flush would materialize it and the user would need a
+          // second Ctrl+Z to skip past the no-op snapshot (e.g. piano-roll edits,
+          // which capture explicitly). Mirrors the debounce's own suppress guard.
+          if (Date.now() < suppressUntil.current) return;
+          // Execute the capture immediately so the state isn't lost. This is the
+          // auto/fallback capture being flushed — don't suppress the next one.
           lastCaptureTime.current = Date.now();
-          captureSnapshot(label || 'pending');
+          captureSnapshot(label || 'pending', { isAutoCapture: true });
         }
       },
       suppressCaptures: () => {
@@ -403,7 +410,9 @@ export function useGlobalHistory() {
         // Minimum 100ms between captures
         if (now - lastCaptureTime.current < 100) return;
         lastCaptureTime.current = now;
-        captureSnapshot(label);
+        // Fallback path: don't self-suppress (that would block the NEXT distinct
+        // auto-captured edit). Only explicit slice captures suppress this path.
+        captureSnapshot(label, { isAutoCapture: true });
       }, delayMs);
     };
 
