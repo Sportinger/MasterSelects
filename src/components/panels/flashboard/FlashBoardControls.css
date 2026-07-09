@@ -20,6 +20,21 @@
   flex-wrap: nowrap;
 }
 
+.fb-bubble-bar .fb-chat-control-stack > .fb-pill-group {
+  flex-wrap: wrap;
+  align-content: flex-start;
+  row-gap: 5px;
+}
+
+.fb-bubble-bar .fb-chat-control-stack > .fb-pill-group > .fb-pill {
+  flex: 1 1 82px;
+  min-width: 0;
+  max-width: 100%;
+  justify-content: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .fb-bubble-bar .fb-pill-group.is-suno-controls {
   flex-wrap: wrap;
   align-content: flex-start;
@@ -264,6 +279,7 @@
   display: flex;
   align-items: center;
   gap: 3px;
+  min-width: 0;
   padding: 4px 10px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 16px;
@@ -273,6 +289,13 @@
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.12s, border-color 0.12s;
+}
+
+.fb-pill-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fb-pill:hover {

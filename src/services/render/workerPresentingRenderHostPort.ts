@@ -1280,7 +1280,11 @@ class WorkerPresentingRenderHostPortCore {
   }
 
   private startPendingGpuPresentationIfReady(targetId: string): void {
-    if (!this.attachedWorkerTargetIds.has(targetId) || this.inFlightGpuPresentationTargets.has(targetId)) return;
+    if (
+      !this.attachedWorkerTargetIds.has(targetId) ||
+      this.inFlightGpuPresentationTargets.has(targetId) ||
+      this.pendingGpuStreamStopsByTarget.has(targetId)
+    ) return;
     const queue = this.pendingGpuPresentationsByTarget.get(targetId);
     if (!queue || queue.length === 0) return;
 

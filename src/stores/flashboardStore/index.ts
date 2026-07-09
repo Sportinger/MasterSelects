@@ -13,6 +13,7 @@ export const useFlashBoardStore = create<FlashBoardStore>()(
     selectedActiveGenerationRecordIds: [],
     composer: createDefaultFlashBoardComposer(),
     promptHistory: [],
+    chatMessages: [],
     hoveredComposerReference: null,
 
     ...createUiSlice(set),

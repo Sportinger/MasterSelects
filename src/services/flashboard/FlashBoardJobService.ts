@@ -147,6 +147,11 @@ class FlashBoardJobService {
     }
   }
 
+  hasJob(recordId: string): boolean {
+    return this.queue.some((job) => job.recordId === recordId)
+      || this.running.some((job) => job.recordId === recordId);
+  }
+
   retry(recordId: string, request: FlashBoardGenerationRequest): void {
     this.submit({ recordId, request });
   }
@@ -338,6 +343,11 @@ class FlashBoardJobService {
   private async startJob(entry: QueueEntry): Promise<void> {
     const { recordId, abortController } = entry;
     const request = resolveEffectiveRequest(entry.request);
+    this.running.push({
+      recordId,
+      service: request.service,
+      abortController,
+    });
 
     try {
       this.onUpdate?.(recordId, { status: 'processing' });
@@ -348,12 +358,9 @@ class FlashBoardJobService {
         request,
         abortController,
         registerRunningJob: (remoteTaskId) => {
-          this.running.push({
-            recordId,
-            remoteTaskId,
-            service: request.service,
-            abortController,
-          });
+          this.running = this.running.map((job) => (
+            job.recordId === recordId ? { ...job, remoteTaskId } : job
+          ));
         },
         onProcessing: (update) => {
           this.onUpdate?.(recordId, update);

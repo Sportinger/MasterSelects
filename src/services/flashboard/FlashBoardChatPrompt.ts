@@ -76,7 +76,7 @@ After a cut or a visual edit, verify instead of assuming:
 - executeBatch reports failed if ANY single action fails, but the other actions still applied. Read data.results[].error, fix only the failed actions (most often an out-of-range slice: outPoint > source duration), and re-run just those — do not redo the whole batch or report total failure.
 - Audio awareness: most video clips carry audio, so addClipSegment / split create a LINKED audio clip automatically — and you cannot set that audio's track or position. So always check whether your sources have audio (getClipDetails -> linkedClipId, or getTimelineState for audio tracks) and decide intentionally: keep the source audio, or for a music-backed visual montage remove it with deleteClips(linkedAudioIds, withLinked:false). Never leave scattered or overlapping audio clips unaddressed — tidy or remove them and tell the user what you did.`;
 
-export function buildFlashBoardChatSystemPrompt(): string {
+export function buildFlashBoardChatSystemPrompt(basePrompt = FLASHBOARD_CHAT_SYSTEM_PROMPT): string {
   let timelineSummary = 'Timeline context unavailable.';
   try {
     timelineSummary = getQuickTimelineSummary();
@@ -85,7 +85,7 @@ export function buildFlashBoardChatSystemPrompt(): string {
   }
 
   return [
-    FLASHBOARD_CHAT_SYSTEM_PROMPT,
+    basePrompt.trim() || FLASHBOARD_CHAT_SYSTEM_PROMPT,
     '',
     `Current MasterSelects context: ${timelineSummary}`,
   ].join('\n');

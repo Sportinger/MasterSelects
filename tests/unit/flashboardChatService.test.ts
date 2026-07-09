@@ -26,6 +26,7 @@ describe('FlashBoardChatService', () => {
       openAiReasoningEffort: 'xhigh',
       prompt: 'Make this more cinematic',
       provider: 'openai',
+      systemPromptOverride: 'Custom compact editor prompt.',
       temperature: 1.2,
     });
 
@@ -45,6 +46,8 @@ describe('FlashBoardChatService', () => {
       reasoning: { effort: 'xhigh' },
       store: false,
     });
+    expect(body.instructions).toContain('Custom compact editor prompt.');
+    expect(body.instructions).toContain('Current MasterSelects context:');
     expect(body).not.toHaveProperty('temperature');
   });
 

@@ -5,7 +5,6 @@ export { PropertiesPanel } from './properties';
 export { MultiCamPanel } from './MultiCamPanel';
 export { TranscriptPanel } from './TranscriptPanel';
 export { AnalysisPanel } from './AnalysisPanel';
-export { AIChatPanel } from './AIChatPanel';
 export { MIDIMappingPanel } from './MIDIMappingPanel';
 export { TransitionsPanel } from './TransitionsPanel';
 export { SceneDescriptionPanel } from './SceneDescriptionPanel';

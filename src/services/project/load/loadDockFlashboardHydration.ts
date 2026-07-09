@@ -16,6 +16,7 @@ import { hydrateHistoryStateFromProject } from '../../../stores/historyStore';
 import { flashBoardMediaBridge } from '../../flashboard/FlashBoardMediaBridge';
 import type {
   FlashBoardGenerationRequest,
+  FlashBoardChatMessage,
   FlashBoardComposerModelSettings,
   FlashBoardComposerState,
   FlashBoardJobState,
@@ -28,6 +29,7 @@ import type {
 import type {
   ProjectFlashBoardComposerModelSettings,
   ProjectFlashBoardComposerState,
+  ProjectFlashBoardChatMessage,
   ProjectFlashBoardGenerationRecord,
   ProjectFlashBoardPromptHistoryEntry,
   ProjectFlashBoardState,
@@ -184,6 +186,38 @@ function normalizeFlashBoardPromptHistory(
     : [];
 }
 
+function normalizeFlashBoardChatMessage(
+  message: ProjectFlashBoardChatMessage,
+): FlashBoardChatMessage | null {
+  if (
+    (message.role !== 'user' && message.role !== 'assistant')
+    || typeof message.text !== 'string'
+  ) {
+    return null;
+  }
+
+  const createdAt = message.createdAt ? new Date(message.createdAt).getTime() : undefined;
+  const wasPending = message.isPending === true;
+  return {
+    id: typeof message.id === 'string' && message.id.trim() ? message.id : crypto.randomUUID(),
+    role: message.role,
+    text: wasPending ? 'Chat interrupted by reload.' : message.text,
+    createdAt: createdAt !== undefined && Number.isFinite(createdAt) ? createdAt : undefined,
+    editOptions: Array.isArray(message.editOptions) ? message.editOptions : undefined,
+    isError: message.isError || wasPending || undefined,
+    isPending: false,
+    toolCalls: Array.isArray(message.toolCalls) ? message.toolCalls : undefined,
+  };
+}
+
+function normalizeFlashBoardChatMessages(
+  messages: ProjectFlashBoardState['chatMessages'],
+): FlashBoardChatMessage[] {
+  return Array.isArray(messages)
+    ? messages.map(normalizeFlashBoardChatMessage).filter((message): message is FlashBoardChatMessage => message !== null)
+    : [];
+}
+
 function normalizeFlashBoardResult(result: FlashBoardResult | undefined): FlashBoardResult | undefined {
   if (!result) return undefined;
   return { ...result, mediaType: normalizeFlashBoardMediaType(result.mediaType) };
@@ -222,6 +256,7 @@ function hydrateFlashBoardGenerationRecordsFromProject(data: ProjectFlashBoardSt
     data.generationRecords.map(normalizeFlashBoardGenerationRecord),
     normalizeFlashBoardComposer(data.composer),
     normalizeFlashBoardPromptHistory(data.promptHistory),
+    normalizeFlashBoardChatMessages(data.chatMessages),
   );
 }
 

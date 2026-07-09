@@ -11,11 +11,12 @@ import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import {
   getFlashBoardActiveGenerationRecords,
+  getFlashBoardChatMessages,
   getFlashBoardComposerState,
   getFlashBoardPromptHistory,
   type FlashBoardActiveGenerationRecord,
 } from '../../stores/flashboardStore/activeGenerationRecords';
-import type { FlashBoardComposerState, FlashBoardPromptHistoryEntry } from '../../stores/flashboardStore/types';
+import type { FlashBoardChatMessage, FlashBoardComposerState, FlashBoardPromptHistoryEntry } from '../../stores/flashboardStore/types';
 import { getExportStoreData, useExportStore } from '../../stores/exportStore';
 import { useMIDIStore } from '../../stores/midiStore';
 import { recordHistoryEvent, serializeHistoryStateForProject } from '../../stores/historyStore';
@@ -29,6 +30,7 @@ import { normalizeTransitionInstanceParams } from '../../transitions';
 import { syncTransitionCompositionTimelineToParent } from '../../stores/mediaStore/slices/composition/transitionCompositionSync';
 import type {
   ProjectFlashBoardComposerState,
+  ProjectFlashBoardChatMessage,
   ProjectFlashBoardGenerationMetadata,
   ProjectFlashBoardGenerationRecord,
   ProjectFlashBoardPromptHistoryEntry,
@@ -456,10 +458,24 @@ function serializeFlashBoardPromptHistoryEntry(
   };
 }
 
+function serializeFlashBoardChatMessage(message: FlashBoardChatMessage): ProjectFlashBoardChatMessage {
+  return {
+    id: message.id,
+    role: message.role,
+    text: message.text,
+    createdAt: message.createdAt ? new Date(message.createdAt).toISOString() : undefined,
+    editOptions: message.editOptions,
+    isError: message.isError,
+    isPending: message.isPending,
+    toolCalls: message.toolCalls,
+  };
+}
+
 function serializeFlashBoardState(
   records: FlashBoardActiveGenerationRecord[],
   composer: FlashBoardComposerState,
   promptHistory: FlashBoardPromptHistoryEntry[],
+  chatMessages: FlashBoardChatMessage[],
 ): ProjectFlashBoardState {
   const generationMetadataByMediaId: Record<string, ProjectFlashBoardGenerationMetadata> = {
     ...flashBoardMediaBridge.serializeMetadata(),
@@ -474,6 +490,7 @@ function serializeFlashBoardState(
         version: record.request.version,
         outputType: record.request.outputType,
         mediaType: record.result.mediaType,
+        mode: record.request.mode,
         originalPrompt: record.request.originalPrompt,
         prompt: record.request.prompt,
         negativePrompt: record.request.negativePrompt,
@@ -510,6 +527,7 @@ function serializeFlashBoardState(
     version: 1,
     composer: serializeFlashBoardComposerState(composer),
     promptHistory: promptHistory.map(serializeFlashBoardPromptHistoryEntry),
+    chatMessages: chatMessages.map(serializeFlashBoardChatMessage),
     generationRecords: records.map(serializeFlashBoardGenerationRecord),
     generationMetadataByMediaId,
   };
@@ -734,6 +752,7 @@ export async function syncStoresToProject(): Promise<void> {
         getFlashBoardActiveGenerationRecords(),
         getFlashBoardComposerState(),
         getFlashBoardPromptHistory(),
+        getFlashBoardChatMessages(),
       );
     }
 

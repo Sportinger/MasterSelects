@@ -8,7 +8,7 @@ GPT-powered editing with 86 exported model tools across 16 exported definition g
 
 ## Table of Contents
 
-- [AI Chat Panel](#ai-chat-panel)
+- [FlashBoard Chat](#flashboard-chat)
 - [Chat Providers](#chat-providers)
 - [Lemonade Local Setup](#lemonade-local-setup)
 - [Media Generator Tray](#media-generator-tray)
@@ -23,11 +23,10 @@ GPT-powered editing with 86 exported model tools across 16 exported definition g
 
 ---
 
-## AI Chat Panel
+## FlashBoard Chat
 
 ### Location
-- Default tab in dock panels
-- View menu -> AI Chat
+- Floating FlashBoard composer chat mode
 
 ### Features
 - Interactive chat interface
@@ -46,7 +45,7 @@ GPT-powered editing with 86 exported model tools across 16 exported definition g
 
 Lemonade defaults to `http://localhost:13305/api/v1` and sends chat completions to `/chat/completions`. The endpoint and model are stored in local settings, and the settings panel can check `/models` to verify the server and discover locally available models. Lemonade endpoints are restricted to loopback hosts (`localhost`, `127.0.0.1`, or `::1`) so timeline context and tool results are not sent to a remote URL by mistake.
 
-The Lemonade integration is scoped to AI Chat. Transcription providers remain `local`, `openai`, `assemblyai`, and `deepgram`.
+The Lemonade integration is scoped to FlashBoard Chat. Transcription providers remain `local`, `openai`, `assemblyai`, and `deepgram`.
 
 ### Lemonade Local Setup
 
@@ -56,7 +55,7 @@ The Lemonade integration is scoped to AI Chat. Transcription providers remain `l
 4. Set Chat Provider to `Lemonade Local`.
 5. Keep the default endpoint `http://localhost:13305/api/v1` unless Lemonade is running on another loopback address.
 6. Click `Check` to verify `/models` and populate the model menu with installed Lemonade models.
-7. Open AI Chat and use the Lemonade model button in the panel header.
+7. Open FlashBoard Chat and use the Lemonade model button in the chat controls.
 
 Manually imported Lemonade models may be exposed with a `user.` prefix, for example `user.gemma4-it-e2b-FLM`. The app treats `/models` as authoritative and uses the first available Lemonade model when the saved preset name is not present.
 
@@ -64,11 +63,13 @@ Lemonade is a provider, not an editor bridge. It can return OpenAI-compatible to
 
 Because local FLM models have a smaller practical prompt budget than hosted models, Lemonade editor mode sends a compact high-use tool set instead of the full 86-tool catalog. The full exported catalog remains available to OpenAI/Cloud and to the local/native bridge.
 
-Lemonade chat responses use the OpenAI-compatible SSE streaming endpoint, so text appears incrementally in the chat panel while the local model is generating. Tool calls are collected from the streamed deltas and executed after the assistant response finishes. To stay within the 4096-token context used by current FLM models, Lemonade uses a shorter editor system prompt, compact tool results, and a lower completion-token limit than hosted models. If a local model still stalls after a tool result, MasterSelects times out the follow-up request and shows a deterministic tool-result summary instead of leaving the chat empty.
+Lemonade chat responses use the OpenAI-compatible SSE streaming endpoint, so text appears incrementally in FlashBoard Chat while the local model is generating. Tool calls are collected from the streamed deltas and executed after the assistant response finishes. The initial response timeout only covers reaching the SSE stream; once streaming starts, the idle timeout catches stalled local models without cutting off active long-running generations. To stay within the 4096-token context used by current FLM models, Lemonade uses a shorter editor system prompt, compact tool results, and a lower completion-token limit than hosted models. If a local model still stalls after a tool result, MasterSelects times out the follow-up request and shows a deterministic tool-result summary instead of leaving the chat empty.
 
 In Lemonade editor mode, each new user request is sent as a fresh tool-capable turn with the current timeline summary rather than replaying prior raw tool-call messages. This keeps small local FLM models from getting stuck on stale tool-call history while still allowing every new prompt to produce fresh tool calls.
 
-The AI Chat header includes a `Prompt` button for provider-specific system prompt overrides. Prompts can be saved into the current project folder under `Prompts/*.prompt.json`, reloaded from the saved prompt list, reset to the built-in prompt, imported from a text/Markdown file, and exported as a `.txt` file. The active override is still mirrored in app settings so the chat can use it immediately.
+FlashBoard Chat includes a `Prompt` button for provider-specific system prompt overrides. Prompts can be saved into the current project folder under `Prompts/*.prompt.json`, reloaded from the saved prompt list, reset to the built-in prompt, imported from a text/Markdown file, and exported as a `.txt` file. The active override is still mirrored in app settings so the chat can use it immediately. The old docked AI Chat panel is retired; the floating FlashBoard Chat is the primary AI editing surface.
+
+The `Options` chat pill enables the Phase A multi-option prototype. In this mode the next request asks the provider for 2-3 text-only edit approaches and explicitly avoids tool execution. Parsed options appear with `Use` buttons; choosing one sends a normal edit request that applies the selected approach through the existing tool dispatcher. This bounds the prototype to one planning round plus one apply round, guarded by `flags.flashBoardChatEditOptions`.
 
 ### Available Models
 
@@ -128,6 +129,7 @@ The old dock-level AI Generative tab is deprecated and removed from default and 
 
 ### FlashBoard Prompt Mode
 - Compact prompt composer for video, image, and audio generation
+- The expanded AI tray is loaded lazily on hover/click interaction; the collapsed tray does not import the heavy FlashBoard runtime on idle startup.
 - Active IN / OUT / REF assignments appear as removable media cards around the prompt box; image-to-video cards expose inline `IN`, `REF`, and `OUT` role controls
 - Compact setting buttons such as model, aspect ratio, duration, image size, and mode open as inline submenus: the standard control row slides out, submenu pills stagger in, and the default row returns after selection
 - Reference cards use pointer-proximity magnification in the compact Media tray, with previews scaling visually outside the tray without changing the prompt box height; crowded trays switch the reference cards into a vertical scroll strip
@@ -140,7 +142,7 @@ The old dock-level AI Generative tab is deprecated and removed from default and 
 - Seedance 2.0 standard and Fast cannot combine strict `first_frame_url` / `last_frame_url` with multimodal references in the same Kie.ai request, so IN / OUT cards are converted to image references when REF media is present. Audio references are passed separately as input drivers through `reference_audio_urls`; adding one to Seedance automatically enables the `Sound` toggle so the Kie.ai request also sends `generate_audio: true`. Audio-only Seedance references are blocked locally because Seedance requires audio references to be paired with at least one image or video anchor.
 - Suno Music and Suno Sounds are separate Music-category targets. Suno Music keeps the lyrics/style/negative-tags controls; Suno Sounds uses the normal prompt box plus the mode button for one-shot/loop sounds. Both run through hosted Cloud credits from the Media generator tray.
 - The wand button in the composer refines the current prompt with GPT-5.5 through the hosted Cloudflare `/api/ai/chat` route by default. In non-production development it can still use a local OpenAI key when that key is explicitly marked as default; that BYO path streams real deltas into the Magic prompt while the original prompt stays available in a compact restore/dismiss box. The Original and Magic prompt boxes expand on focus for full reading/editing, and the Original text remains selectable for copying. The Magic prompt opens at full height briefly after refinement, then collapses to a compact scrollable height so the Generate controls stay anchored. Hosted refinement is non-streaming because `/api/ai/chat` does not expose prompt-refiner streaming. Suno Music, Suno Sounds, Nano Banana, GPT Image, Flux, Flux Kontext, Recraft/Topaz utilities, Seedream, Imagen, Kling, Seedance, Veo, and Runway targets use model-specific guidance so the refined prompt follows the selected model's input style and constraints.
-- The collapsed Media tray shows separate `Chat` and `Generate` launch buttons. `Chat` opens a compact chat prompt window with OpenAI/Cloud model selection, OpenAI reasoning effort for GPT-5.x models, a visible per-round credit estimate, and a temperature slider when the selected model accepts temperature. Non-production development can still expose Anthropic and Lemonade for local testing.
+- The collapsed Media tray shows separate `Chat` and `Generate` launch buttons. `Chat` opens a compact chat prompt window with OpenAI/Cloud model selection, OpenAI reasoning effort for GPT-5.x models, a visible per-round credit estimate, a provider-scoped `Prompt` system-prompt editor, and a temperature slider when the selected model accepts temperature. Non-production development can still expose Anthropic and Lemonade for local testing; Lemonade reuses the persisted AI provider/model settings and falls back to the first discovered local model when the saved preset is not installed.
 - Compact chat requests include the Media-chat system prompt, current timeline summary, and callable AI tools. Tool calls route through the shared `executeAIToolCalls(..., 'chat')` dispatcher; actions that require confirmation are denied in the compact flow and reported back to the model unless the approval mode allows them automatically.
 - Queued and running generations appear as Media Panel preview cards with output type, status, elapsed timer, prompt, metadata, and progress when the provider reports it
 - The tray reuses the FlashBoard queue/import runtime without showing the full node canvas
@@ -410,7 +412,7 @@ Authenticated users can inspect that history through:
 
 #### Local Whisper (Browser)
 - Uses `@huggingface/transformers`
-- Model selection is language-dependent
+- Model selection is language-dependent: `Xenova/whisper-base.en` for English and `Xenova/whisper-base` for auto/multilingual
 - No API key needed
 - Dynamically imported on first use
 
@@ -432,6 +434,9 @@ Granularity: word
   `npm run dev:api` beside `npm run dev`.
 - Signed-out users can still use the configured local/BYO transcription
   provider selection.
+- Timeline clip context menus show the active transcription provider in the
+  `Transcribe (...)` label so the current model path is visible before work
+  starts.
 
 #### AssemblyAI
 ```
@@ -558,4 +563,4 @@ Tool definition integrity is covered by the unit tests in `tests/unit/aiToolDefi
 
 ---
 
-*Source: `src/main.tsx`, `src/components/panels/AIChatPanel.tsx`, `src/components/panels/media/MediaAIGenerativeTray.tsx`, `src/components/panels/flashboard/FlashBoardComposer.tsx`, `src/components/panels/SAM2Panel.tsx`, `src/components/panels/MultiCamPanel.tsx`, `src/components/panels/SceneDescriptionPanel.tsx`, `src/components/preview/SAM2Overlay.tsx`, `src/services/sam2/SAM2Service.ts`, `src/services/sam2/SAM2ModelManager.ts`, `src/services/sam2/sam2Worker.ts`, `src/stores/sam2Store.ts`, `src/services/aiTools/`, `src/services/aiTools/aiFeedback.ts`, `src/services/aiTools/executionState.ts`, `src/services/aiTools/bridge.ts`, `src/services/sceneDescriber.ts`, `src/services/claudeService.ts`, `src/services/kieAiService.ts`, `src/services/cloudAiService.ts`, `src/services/flashboard/`, `src/stores/multicamStore.ts`, `src/services/multicamAnalyzer.ts`, `functions/api/ai/chat.ts`, `functions/api/ai/chat-history.ts`, `functions/lib/chatLog.ts`*
+*Source: `src/main.tsx`, `src/components/panels/media/MediaAIGenerativeTray.tsx`, `src/components/panels/flashboard/FlashBoardComposer.tsx`, `src/components/panels/SAM2Panel.tsx`, `src/components/panels/MultiCamPanel.tsx`, `src/components/panels/SceneDescriptionPanel.tsx`, `src/components/preview/SAM2Overlay.tsx`, `src/services/sam2/SAM2Service.ts`, `src/services/sam2/SAM2ModelManager.ts`, `src/services/sam2/sam2Worker.ts`, `src/stores/sam2Store.ts`, `src/services/aiTools/`, `src/services/aiTools/aiFeedback.ts`, `src/services/aiTools/executionState.ts`, `src/services/aiTools/bridge.ts`, `src/services/sceneDescriber.ts`, `src/services/claudeService.ts`, `src/services/kieAiService.ts`, `src/services/cloudAiService.ts`, `src/services/flashboard/`, `src/stores/multicamStore.ts`, `src/services/multicamAnalyzer.ts`, `functions/api/ai/chat.ts`, `functions/api/ai/chat-history.ts`, `functions/lib/chatLog.ts`*

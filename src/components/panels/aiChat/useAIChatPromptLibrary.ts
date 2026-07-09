@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import type { AIProvider } from '../../../stores/settingsStore';
 import {
+  deleteProjectSystemPrompt,
   getDefaultProjectPromptName,
   listProjectSystemPrompts,
   loadProjectSystemPrompt,
@@ -8,7 +9,10 @@ import {
   saveProjectSystemPrompt,
   type SavedAiSystemPrompt,
 } from '../../../services/aiPromptLibrary';
-import { getErrorMessage } from './chatMessageUtils';
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 interface UseAIChatPromptLibraryParams {
   activeSystemPrompt: string;
@@ -52,14 +56,25 @@ export function useAIChatPromptLibrary({
     }
   }, [aiProvider]);
 
-  const openPromptDialog = useCallback(() => {
+  const preparePromptDraft = useCallback(() => {
     setPromptDraft(activeSystemPrompt);
     setPromptNameDraft(getDefaultProjectPromptName(aiProvider));
     setPromptDialogError(null);
     setPromptDialogStatus(null);
-    setIsPromptDialogOpen(true);
     void refreshSavedPromptFiles();
   }, [activeSystemPrompt, aiProvider, refreshSavedPromptFiles]);
+
+  const openPromptDialog = useCallback(() => {
+    preparePromptDraft();
+    setIsPromptDialogOpen(true);
+  }, [preparePromptDraft]);
+
+  const applyPromptDraft = useCallback(() => {
+    const nextPrompt = promptDraft.trim() === defaultSystemPrompt.trim() ? '' : promptDraft;
+    setAiSystemPromptOverride(aiProvider, nextPrompt);
+    setPromptDialogError(null);
+    setPromptDialogStatus('Applied.');
+  }, [aiProvider, defaultSystemPrompt, promptDraft, setAiSystemPromptOverride]);
 
   const savePromptDialog = useCallback(async () => {
     if (!promptDraft.trim()) {
@@ -93,7 +108,66 @@ export function useAIChatPromptLibrary({
     setAiSystemPromptOverride,
   ]);
 
-  const loadSelectedProjectPrompt = useCallback(async () => {
+  const loadSelectedProjectPrompt = useCallback(async (fileName = selectedPromptFile) => {
+    if (!fileName) {
+      return;
+    }
+
+    setPromptDialogError(null);
+    setPromptDialogStatus(null);
+    setIsPromptLibraryLoading(true);
+
+    try {
+      const loadedPrompt = await loadProjectSystemPrompt(fileName);
+      const nextPrompt = loadedPrompt.prompt.trim() === defaultSystemPrompt.trim() ? '' : loadedPrompt.prompt;
+      setPromptDraft(loadedPrompt.prompt);
+      setPromptNameDraft(loadedPrompt.name);
+      setSelectedPromptFile(fileName);
+      setAiSystemPromptOverride(loadedPrompt.provider, nextPrompt);
+      setPromptDialogStatus('Loaded and applied.');
+    } catch (promptError) {
+      setPromptDialogError(getErrorMessage(promptError));
+    } finally {
+      setIsPromptLibraryLoading(false);
+    }
+  }, [defaultSystemPrompt, selectedPromptFile, setAiSystemPromptOverride]);
+
+  const overwriteSelectedProjectPrompt = useCallback(async () => {
+    if (!selectedPromptFile || !promptDraft.trim()) {
+      return;
+    }
+
+    const selectedPrompt = savedPromptFiles.find((prompt) => prompt.fileName === selectedPromptFile);
+    setPromptDialogError(null);
+    setPromptDialogStatus(null);
+    setIsPromptLibraryLoading(true);
+
+    try {
+      const savedPrompt = await saveProjectSystemPrompt(aiProvider, selectedPrompt?.name ?? promptNameDraft, promptDraft);
+      const nextPrompt = promptDraft.trim() === defaultSystemPrompt.trim() ? '' : promptDraft;
+      setAiSystemPromptOverride(aiProvider, nextPrompt);
+      setPromptNameDraft(savedPrompt.name);
+      setSelectedPromptFile(savedPrompt.fileName);
+      setPromptDialogStatus('Preset overwritten.');
+      await refreshSavedPromptFiles();
+      setSelectedPromptFile(savedPrompt.fileName);
+    } catch (promptError) {
+      setPromptDialogError(getErrorMessage(promptError));
+    } finally {
+      setIsPromptLibraryLoading(false);
+    }
+  }, [
+    aiProvider,
+    defaultSystemPrompt,
+    promptDraft,
+    promptNameDraft,
+    refreshSavedPromptFiles,
+    savedPromptFiles,
+    selectedPromptFile,
+    setAiSystemPromptOverride,
+  ]);
+
+  const deleteSelectedProjectPrompt = useCallback(async () => {
     if (!selectedPromptFile) {
       return;
     }
@@ -103,18 +177,15 @@ export function useAIChatPromptLibrary({
     setIsPromptLibraryLoading(true);
 
     try {
-      const loadedPrompt = await loadProjectSystemPrompt(selectedPromptFile);
-      const nextPrompt = loadedPrompt.prompt.trim() === defaultSystemPrompt.trim() ? '' : loadedPrompt.prompt;
-      setPromptDraft(loadedPrompt.prompt);
-      setPromptNameDraft(loadedPrompt.name);
-      setAiSystemPromptOverride(loadedPrompt.provider, nextPrompt);
-      setPromptDialogStatus('Loaded and applied.');
+      await deleteProjectSystemPrompt(selectedPromptFile);
+      setPromptDialogStatus('Preset deleted.');
+      await refreshSavedPromptFiles();
     } catch (promptError) {
       setPromptDialogError(getErrorMessage(promptError));
     } finally {
       setIsPromptLibraryLoading(false);
     }
-  }, [defaultSystemPrompt, selectedPromptFile, setAiSystemPromptOverride]);
+  }, [refreshSavedPromptFiles, selectedPromptFile]);
 
   const resetPromptDraft = useCallback(() => {
     setPromptDraft(defaultSystemPrompt);
@@ -149,12 +220,16 @@ export function useAIChatPromptLibrary({
   }, [aiProvider]);
 
   return {
+    applyPromptDraft,
+    deleteSelectedProjectPrompt,
     exportPromptDraft,
     isPromptDialogOpen,
     isPromptLibraryLoading,
     loadPromptFile,
     loadSelectedProjectPrompt,
+    overwriteSelectedProjectPrompt,
     openPromptDialog,
+    preparePromptDraft,
     promptDialogError,
     promptDialogStatus,
     promptDraft,

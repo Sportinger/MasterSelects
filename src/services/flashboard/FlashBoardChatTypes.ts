@@ -23,11 +23,13 @@ export interface FlashBoardChatRequest {
   hostedAvailable?: boolean;
   lemonadeEndpoint?: string;
   model: string;
+  onExecutedToolCalls?: (toolCalls: FlashBoardExecutedToolCall[]) => void;
   openAiApiKey?: string;
   openAiReasoningEffort?: FlashBoardOpenAiReasoningEffort;
   prompt: string;
   provider: FlashBoardChatProvider;
   signal?: AbortSignal;
+  systemPromptOverride?: string;
   temperature: number;
 }
 

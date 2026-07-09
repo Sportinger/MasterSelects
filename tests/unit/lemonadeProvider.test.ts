@@ -34,8 +34,45 @@ function sseResponse(events: string[]): Response {
   });
 }
 
+function delayedSseResponse(events: string[], intervalMs: number, signal: AbortSignal): Response {
+  const encoder = new TextEncoder();
+  const timers: Array<ReturnType<typeof setTimeout>> = [];
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const abort = () => {
+        for (const timer of timers) {
+          clearTimeout(timer);
+        }
+        controller.error(new Error('aborted'));
+      };
+
+      if (signal.aborted) {
+        abort();
+        return;
+      }
+
+      signal.addEventListener('abort', abort, { once: true });
+      events.forEach((event, index) => {
+        timers.push(setTimeout(() => {
+          controller.enqueue(encoder.encode(event));
+          if (index === events.length - 1) {
+            signal.removeEventListener('abort', abort);
+            controller.close();
+          }
+        }, intervalMs * (index + 1)));
+      });
+    },
+  });
+
+  return new Response(body, {
+    headers: { 'Content-Type': 'text/event-stream' },
+    status: 200,
+  });
+}
+
 describe('lemonadeProvider', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -256,6 +293,40 @@ describe('lemonadeProvider', () => {
         },
       ],
     });
+  });
+
+  it('does not abort active streams at the initial response timeout', async () => {
+    vi.useFakeTimers();
+    let streamSignal: AbortSignal | undefined;
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      streamSignal = init?.signal as AbortSignal | undefined;
+      if (!streamSignal) {
+        throw new Error('expected abort signal');
+      }
+      return delayedSseResponse([
+        'data: {"choices":[{"delta":{"content":"O"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"K"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ], 20, streamSignal);
+    });
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const resultPromise = createLemonadeChatCompletionStream({
+      endpoint: 'http://localhost:13305/api/v1',
+      model: 'user.gemma4-it-e2b-FLM',
+      messages: [{ role: 'user', content: 'Edit the selected clip.' }],
+      timeoutMs: 10,
+      streamIdleTimeoutMs: 30,
+    });
+
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(70);
+
+    await expect(resultPromise).resolves.toEqual({
+      content: 'OK',
+      toolCalls: [],
+    });
+    expect(streamSignal?.aborted).toBe(false);
   });
 
   it('rejects remote Lemonade chat completion endpoints before sending data', async () => {

@@ -173,3 +173,17 @@ export async function saveProjectSystemPrompt(
     updatedAt,
   };
 }
+
+export async function deleteProjectSystemPrompt(fileName: string): Promise<void> {
+  if (!projectFileService.isProjectOpen()) {
+    throw new Error('Open a project before deleting saved prompts.');
+  }
+  if (!fileName.endsWith(PROMPT_FILE_SUFFIX)) {
+    throw new Error('Saved prompt file is invalid.');
+  }
+
+  const deleted = await projectFileService.deleteFile('PROMPTS', fileName);
+  if (!deleted) {
+    throw new Error('Failed to delete prompt from the project folder.');
+  }
+}

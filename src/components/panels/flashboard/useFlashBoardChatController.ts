@@ -8,16 +8,20 @@ import {
 } from 'react';
 import {
   DEFAULT_FLASHBOARD_CHAT_MODEL,
-  DEFAULT_FLASHBOARD_CHAT_PROVIDER,
   DEFAULT_FLASHBOARD_CHAT_TEMPERATURE,
   DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT,
   sendFlashBoardChatMessage,
+  type FlashBoardExecutedToolCall,
   type FlashBoardChatProvider,
   type FlashBoardOpenAiReasoningEffort,
 } from '../../../services/flashboard/FlashBoardChatService';
+import { flags } from '../../../engine/featureFlags';
+import { useFlashBoardStore } from '../../../stores/flashboardStore';
 import { appendFlashBoardPromptHistoryEntry } from '../../../stores/flashboardStore/activeGenerationRecords';
+import type { AIProvider } from '../../../stores/settingsStore';
 import {
   checkLemonadeHealth,
+  DEFAULT_LEMONADE_MODEL,
   type LemonadeModelInfo,
 } from '../../../services/lemonadeProvider';
 import {
@@ -29,6 +33,12 @@ import {
 } from './FlashBoardChatOptionsPlanner';
 import type { FlashBoardChatMessage } from './FlashBoardChatOutput';
 import {
+  buildFlashBoardChatApplyOptionPrompt,
+  buildFlashBoardChatEditOptionsPrompt,
+  parseFlashBoardChatEditOptions,
+  type FlashBoardChatEditOption,
+} from './FlashBoardChatEditOptions';
+import {
   buildFlashBoardChatCompletionMessages,
   buildFlashBoardChatErrorMessages,
   buildFlashBoardChatOptimisticMessages,
@@ -36,6 +46,8 @@ import {
 } from './FlashBoardChatSendPlanner';
 
 interface UseFlashBoardChatControllerInput {
+  aiProvider: AIProvider;
+  aiSystemPromptOverrides: Partial<Record<AIProvider, string>>;
   anthropicApiKey: string;
   closePopover: () => void;
   hasAnthropicKey: boolean;
@@ -44,10 +56,13 @@ interface UseFlashBoardChatControllerInput {
   hostedAIEnabled: boolean;
   initialMode: 'generate' | 'chat';
   lemonadeEndpoint: string;
+  lemonadeModel: string;
   openAiApiKey: string;
   openAuthDialog: () => void;
   openPricingDialog: () => void;
   openSettings: () => void;
+  setAiProvider: (provider: AIProvider) => void;
+  setLemonadeModel: (model: string) => void;
   useHostedProductionProviders: boolean;
   useOpenAiKeyByDefault: boolean;
 }
@@ -57,6 +72,8 @@ function createFlashBoardChatMessageId(role: FlashBoardChatMessage['role']): str
 }
 
 export function useFlashBoardChatController({
+  aiProvider,
+  aiSystemPromptOverrides,
   anthropicApiKey,
   closePopover,
   hasAnthropicKey,
@@ -65,10 +82,13 @@ export function useFlashBoardChatController({
   hostedAIEnabled,
   initialMode,
   lemonadeEndpoint,
+  lemonadeModel,
   openAiApiKey,
   openAuthDialog,
   openPricingDialog,
   openSettings,
+  setAiProvider,
+  setLemonadeModel,
   useHostedProductionProviders,
   useOpenAiKeyByDefault,
 }: UseFlashBoardChatControllerInput) {
@@ -76,18 +96,35 @@ export function useFlashBoardChatController({
   const copiedChatResetTimeoutRef = useRef<number | null>(null);
   const [chatPanelOpen, setChatPanelOpen] = useState(initialMode === 'chat');
   const [chatPrompt, setChatPrompt] = useState('');
-  const [chatProvider, setChatProvider] = useState<FlashBoardChatProvider>(DEFAULT_FLASHBOARD_CHAT_PROVIDER);
-  const [chatModel, setChatModel] = useState(DEFAULT_FLASHBOARD_CHAT_MODEL);
+  const [chatProvider, setChatProvider] = useState<FlashBoardChatProvider>(aiProvider);
+  const [chatModel, setChatModelState] = useState(
+    aiProvider === 'lemonade' ? (lemonadeModel.trim() || DEFAULT_LEMONADE_MODEL) : DEFAULT_FLASHBOARD_CHAT_MODEL,
+  );
   const [chatTemperature, setChatTemperature] = useState(DEFAULT_FLASHBOARD_CHAT_TEMPERATURE);
   const [openAiReasoningEffort, setOpenAiReasoningEffort] = useState<FlashBoardOpenAiReasoningEffort>(
     DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT,
   );
-  const [chatMessages, setChatMessages] = useState<FlashBoardChatMessage[]>([]);
+  const chatMessages = useFlashBoardStore((state) => state.chatMessages);
+  const setChatMessages = useCallback((
+    updater: FlashBoardChatMessage[] | ((current: FlashBoardChatMessage[]) => FlashBoardChatMessage[]),
+  ) => {
+    useFlashBoardStore.setState((state) => ({
+      chatMessages: typeof updater === 'function' ? updater(state.chatMessages) : updater,
+    }));
+  }, []);
   const [copiedChatMessageId, setCopiedChatMessageId] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
   const [isChatting, setIsChatting] = useState(false);
+  const [chatOptionsMode, setChatOptionsMode] = useState(false);
   const [lemonadeStatus, setLemonadeStatus] = useState<'idle' | 'checking' | 'online' | 'offline'>('idle');
   const [lemonadeModels, setLemonadeModels] = useState<LemonadeModelInfo[]>([]);
+  const chatOptionsModeEnabled = flags.flashBoardChatEditOptions;
+  const chatSystemPromptProvider: AIProvider = chatProvider === 'lemonade' ? 'lemonade' : 'openai';
+  const chatSystemPromptOverride = chatProvider === 'anthropic'
+    ? undefined
+    : aiSystemPromptOverrides[chatSystemPromptProvider]?.trim()
+      ? aiSystemPromptOverrides[chatSystemPromptProvider]
+      : undefined;
 
   const chatOptionsState = useMemo(() => buildFlashBoardChatOptionsState({
     chatModel,
@@ -111,8 +148,11 @@ export function useFlashBoardChatController({
 
   useEffect(() => {
     const fallbackModel = buildFlashBoardChatModelFallback({ chatModel, chatModelOptions });
-    if (fallbackModel) setChatModel(fallbackModel);
-  }, [chatModel, chatModelOptions]);
+    if (fallbackModel) {
+      setChatModelState(fallbackModel);
+      if (chatProvider === 'lemonade') setLemonadeModel(fallbackModel);
+    }
+  }, [chatModel, chatModelOptions, chatProvider, setLemonadeModel]);
 
   useEffect(() => {
     setChatPanelOpen(initialMode === 'chat');
@@ -152,14 +192,21 @@ export function useFlashBoardChatController({
 
   const handleChatProviderSelect = useCallback((provider: FlashBoardChatProvider) => {
     setChatProvider(provider);
+    if (provider !== 'anthropic') setAiProvider(provider);
     setChatError(null);
 
     const nextDefaultModel = buildFlashBoardChatProviderDefaultModel(provider, lemonadeModels);
 
     if (nextDefaultModel) {
-      setChatModel(nextDefaultModel);
+      setChatModelState(nextDefaultModel);
+      if (provider === 'lemonade') setLemonadeModel(nextDefaultModel);
     }
-  }, [lemonadeModels]);
+  }, [lemonadeModels, setAiProvider, setLemonadeModel]);
+
+  const handleChatModelSelect = useCallback((model: string) => {
+    setChatModelState(model);
+    if (chatProvider === 'lemonade') setLemonadeModel(model);
+  }, [chatProvider, setLemonadeModel]);
 
   useEffect(() => {
     const fallbackProvider = buildFlashBoardChatProviderFallback({ chatProvider, chatProviderOptions });
@@ -168,10 +215,18 @@ export function useFlashBoardChatController({
     }
   }, [chatProvider, chatProviderOptions, handleChatProviderSelect]);
 
-  const handleChatButtonClick = useCallback(async () => {
+  const submitChatPrompt = useCallback(async (
+    promptOverride?: string,
+    options: { optionsMode?: boolean; visiblePrompt?: string } = {},
+  ) => {
     closePopover();
 
-    const effectiveChatPrompt = chatPrompt.trim();
+    const effectiveChatPrompt = (promptOverride ?? chatPrompt).trim();
+    const useEditOptions = chatOptionsModeEnabled && (options.optionsMode ?? chatOptionsMode);
+    const requestPrompt = effectiveChatPrompt && useEditOptions
+      ? buildFlashBoardChatEditOptionsPrompt(effectiveChatPrompt)
+      : effectiveChatPrompt;
+    const visibleUserPrompt = options.visiblePrompt ?? effectiveChatPrompt;
     const chatSendPlan = buildFlashBoardChatSendPlan({
       activeChatModelId,
       anthropicApiKey,
@@ -181,7 +236,7 @@ export function useFlashBoardChatController({
       chatPanelOpen,
       chatProvider,
       chatTemperature,
-      effectiveChatPrompt,
+      effectiveChatPrompt: requestPrompt,
       hasAnthropicKey,
       hasHostedSession,
       hostedAIEnabled,
@@ -220,24 +275,36 @@ export function useFlashBoardChatController({
     const optimisticMessages = buildFlashBoardChatOptimisticMessages({
       assistantMessageId,
       userMessageId,
-      userPrompt: effectiveChatPrompt,
+      userPrompt: visibleUserPrompt,
     });
 
     setIsChatting(true);
     setChatError(null);
-    setChatPrompt('');
+    if (promptOverride === undefined) {
+      setChatPrompt('');
+    }
     setChatMessages((current) => [
       ...current,
       ...optimisticMessages,
     ]);
-    appendFlashBoardPromptHistoryEntry({ kind: 'chat', prompt: effectiveChatPrompt });
+    appendFlashBoardPromptHistoryEntry({ kind: 'chat', prompt: visibleUserPrompt });
 
     try {
+      const executedToolCalls: FlashBoardExecutedToolCall[] = [];
       const response = await sendFlashBoardChatMessage({
         ...chatSendPlan.request,
+        onExecutedToolCalls: (toolCalls) => executedToolCalls.push(...toolCalls),
         signal: abortController.signal,
+        systemPromptOverride: chatSystemPromptOverride,
       });
-      setChatMessages((current) => buildFlashBoardChatCompletionMessages(current, assistantMessageId, response));
+      const editOptions = useEditOptions ? parseFlashBoardChatEditOptions(response) : undefined;
+      setChatMessages((current) => buildFlashBoardChatCompletionMessages(
+        current,
+        assistantMessageId,
+        response,
+        editOptions,
+        executedToolCalls,
+      ));
     } catch (error) {
       const errorMessage = abortController.signal.aborted
         ? 'Chat stopped.'
@@ -251,7 +318,10 @@ export function useFlashBoardChatController({
     }
   }, [
     activeChatModelId,
+    chatSystemPromptOverride,
     anthropicApiKey,
+    chatOptionsMode,
+    chatOptionsModeEnabled,
     chatMessages,
     chatPanelOpen,
     chatPrompt,
@@ -271,8 +341,23 @@ export function useFlashBoardChatController({
     openPricingDialog,
     openSettings,
     shouldUseHostedChat,
+    setChatMessages,
     useHostedProductionProviders,
   ]);
+
+  const handleChatButtonClick = useCallback(async () => {
+    await submitChatPrompt();
+  }, [submitChatPrompt]);
+
+  const handleEditOptionSelect = useCallback((option: FlashBoardChatEditOption) => {
+    void submitChatPrompt(
+      buildFlashBoardChatApplyOptionPrompt(option),
+      {
+        optionsMode: false,
+        visiblePrompt: `Use option ${option.index}: ${option.title}`,
+      },
+    );
+  }, [submitChatPrompt]);
 
   const handleClearChatHistory = useCallback(() => {
     closePopover();
@@ -287,7 +372,7 @@ export function useFlashBoardChatController({
     setChatError(null);
     setCopiedChatMessageId(null);
     setIsChatting(false);
-  }, [closePopover]);
+  }, [closePopover, setChatMessages]);
 
   const handleChatMessageDoubleClick = useCallback((message: FlashBoardChatMessage) => {
     if (message.role !== 'assistant' || message.isPending || !message.text.trim()) {
@@ -351,6 +436,8 @@ export function useFlashBoardChatController({
     ...chatOptionsState,
     chatError,
     chatMessages,
+    chatOptionsMode,
+    chatOptionsModeEnabled,
     chatPanelOpen,
     chatPrompt,
     chatProvider,
@@ -360,6 +447,7 @@ export function useFlashBoardChatController({
     handleChatButtonClick,
     handleChatInputKeyDown,
     handleChatMessageDoubleClick,
+    handleEditOptionSelect,
     handleChatProviderSelect,
     handleChatPromptChange,
     handleClearChatHistory,
@@ -367,7 +455,9 @@ export function useFlashBoardChatController({
     isChatting,
     lemonadeStatus,
     openAiReasoningEffort,
-    setChatModel,
+    chatSystemPromptProvider,
+    setChatOptionsMode,
+    setChatModel: handleChatModelSelect,
     setChatTemperature,
     setOpenAiReasoningEffort,
     showChatCloudActions,

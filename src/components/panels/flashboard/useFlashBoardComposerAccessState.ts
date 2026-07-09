@@ -14,10 +14,16 @@ export function useFlashBoardComposerAccessState() {
   const elevenLabsApiKey = normalizeApiKeyValue(useSettingsStore((s) => s.apiKeys.elevenlabs));
   const apiKeysUnlocked = useSettingsStore((s) => s.apiKeysUnlocked);
   const apiKeyDefaults = useSettingsStore((s) => s.apiKeyDefaults);
+  const aiSystemPromptOverrides = useSettingsStore((s) => s.aiSystemPromptOverrides);
+  const aiProvider = useSettingsStore((s) => s.aiProvider);
   const lemonadeEndpoint = useSettingsStore((s) => s.lemonadeEndpoint);
+  const lemonadeModel = useSettingsStore((s) => s.lemonadeModel);
   const openSettings = useSettingsStore((s) => s.openSettings);
   const aiApprovalMode = useSettingsStore((s) => s.aiApprovalMode);
   const setAiApprovalMode = useSettingsStore((s) => s.setAiApprovalMode);
+  const setAiProvider = useSettingsStore((s) => s.setAiProvider);
+  const setAiSystemPromptOverride = useSettingsStore((s) => s.setAiSystemPromptOverride);
+  const setLemonadeModel = useSettingsStore((s) => s.setLemonadeModel);
   const useOpenAiKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.openai && openAiApiKey.trim());
   const useAnthropicKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.anthropic && anthropicApiKey.trim());
   const usePiApiKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.piapi && piApiKey.trim());
@@ -37,6 +43,8 @@ export function useFlashBoardComposerAccessState() {
   return {
     accountSession,
     aiApprovalMode,
+    aiProvider,
+    aiSystemPromptOverrides,
     anthropicApiKey,
     canUseByoPromptRefiner,
     canUseHostedPromptRefiner,
@@ -50,11 +58,15 @@ export function useFlashBoardComposerAccessState() {
     hasOpenAiKey: useOpenAiKeyByDefault,
     hostedAIEnabled,
     lemonadeEndpoint,
+    lemonadeModel,
     openAiApiKey,
     openAuthDialog,
     openPricingDialog,
     openSettings,
     setAiApprovalMode,
+    setAiProvider,
+    setAiSystemPromptOverride,
+    setLemonadeModel,
     useElevenLabsKeyByDefault,
     useEvolinkKeyByDefault,
     useHostedProductionProviders,

@@ -97,12 +97,14 @@ function lemonadeHeaders(): HeadersInit {
 }
 
 function createRequestController(signal?: AbortSignal, timeoutMs?: number): {
+  clearTimeout: () => void;
   cleanup: () => void;
   didTimeout: () => boolean;
   signal: AbortSignal | undefined;
 } {
   if (!signal && (!timeoutMs || timeoutMs <= 0)) {
     return {
+      clearTimeout: () => undefined,
       cleanup: () => undefined,
       didTimeout: () => false,
       signal: undefined,
@@ -130,6 +132,12 @@ function createRequestController(signal?: AbortSignal, timeoutMs?: number): {
   }
 
   return {
+    clearTimeout: () => {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+        timeoutHandle = undefined;
+      }
+    },
     cleanup: () => {
       if (timeoutHandle) {
         clearTimeout(timeoutHandle);
@@ -375,6 +383,7 @@ export async function createLemonadeChatCompletionStream(
     requestController.cleanup();
     throw new Error(parseErrorPayload(data) || `Lemonade API error: ${response.status}`);
   }
+  requestController.clearTimeout();
 
   const toolCallParts = new Map<number, LemonadeToolCall>();
   let content = '';

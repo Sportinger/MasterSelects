@@ -32,6 +32,41 @@ export interface ProjectFlashBoardPromptHistoryEntry {
   createdAt: string;
 }
 
+export interface ProjectFlashBoardChatEditOption {
+  index: number;
+  title: string;
+  description: string;
+}
+
+export interface ProjectFlashBoardChatToolCall {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+export interface ProjectFlashBoardChatToolResult {
+  success: boolean;
+  data?: unknown;
+  error?: string;
+}
+
+export interface ProjectFlashBoardChatExecutedToolCall {
+  modelContent: string;
+  result: ProjectFlashBoardChatToolResult;
+  toolCall: ProjectFlashBoardChatToolCall;
+}
+
+export interface ProjectFlashBoardChatMessage {
+  createdAt?: string;
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  editOptions?: ProjectFlashBoardChatEditOption[];
+  isError?: boolean;
+  isPending?: boolean;
+  toolCalls?: ProjectFlashBoardChatExecutedToolCall[];
+}
+
 export interface ProjectFlashBoardComposerModelSettings {
   version?: string;
   mode?: string;
@@ -135,6 +170,7 @@ export interface ProjectFlashBoardGenerationMetadata {
   version: string;
   outputType?: ProjectFlashBoardOutputType;
   mediaType?: ProjectFlashBoardMediaType;
+  mode?: string;
   originalPrompt?: string;
   prompt: string;
   negativePrompt?: string;
@@ -178,6 +214,7 @@ export interface ProjectFlashBoardState {
   version: 1;
   composer?: ProjectFlashBoardComposerState;
   promptHistory?: ProjectFlashBoardPromptHistoryEntry[];
+  chatMessages?: ProjectFlashBoardChatMessage[];
   generationRecords: ProjectFlashBoardGenerationRecord[];
   generationMetadataByMediaId: Record<string, ProjectFlashBoardGenerationMetadata>;
 }

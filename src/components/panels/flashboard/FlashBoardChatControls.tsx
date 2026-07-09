@@ -27,6 +27,8 @@ interface FlashBoardChatControlsProps {
   chatProvider: FlashBoardChatProvider;
   chatProviderLabel: string;
   chatProviderOptions: FlashBoardChatProviderOption[];
+  editOptionsMode: boolean;
+  editOptionsModeEnabled: boolean;
   chatReasoningEffortOptions: ChatReasoningOption[];
   chatReasoningSupported: boolean;
   chatTemperature: number;
@@ -45,6 +47,8 @@ interface FlashBoardChatControlsProps {
   onChatTemperatureChange: (temperature: number) => void;
   onClearChatHistory: () => void;
   onClosePopover: (popover: NonNullable<ChatControlsPopover>) => void;
+  onEditOptionsModeToggle: () => void;
+  onOpenPromptBook: () => void;
   onOpenPopover: (popover: NonNullable<ChatControlsPopover>) => void;
   onReasoningEffortChange: (effort: FlashBoardOpenAiReasoningEffort) => void;
 }
@@ -60,6 +64,8 @@ export function FlashBoardChatControls({
   chatProvider,
   chatProviderLabel,
   chatProviderOptions,
+  editOptionsMode,
+  editOptionsModeEnabled,
   chatReasoningEffortOptions,
   chatReasoningSupported,
   chatTemperature,
@@ -78,25 +84,27 @@ export function FlashBoardChatControls({
   onChatTemperatureChange,
   onClearChatHistory,
   onClosePopover,
+  onEditOptionsModeToggle,
+  onOpenPromptBook,
   onOpenPopover,
   onReasoningEffortChange,
 }: FlashBoardChatControlsProps) {
   return (
-    <div className="fb-control-stack">
+    <div className="fb-control-stack fb-chat-control-stack">
       <div className={popoverHostClassName} ref={popoverRef}>
         <button
           className={`fb-pill ${activePopover === 'chatProvider' ? 'active' : ''}`}
           onClick={() => onOpenPopover('chatProvider')}
           title={`Provider: ${chatProviderLabel}`}
         >
-          {chatProviderLabel}
+          <span className="fb-pill-label">{chatProviderLabel}</span>
         </button>
         <button
           className={`fb-pill ${activePopover === 'chatModel' ? 'active' : ''}`}
           onClick={() => onOpenPopover('chatModel')}
           title={`Model: ${activeChatModel?.label ?? activeChatModelId}`}
         >
-          {activeChatModel?.label ?? activeChatModelId}
+          <span className="fb-pill-label">{activeChatModel?.label ?? activeChatModelId}</span>
         </button>
         {chatReasoningSupported && (
           <button
@@ -104,7 +112,7 @@ export function FlashBoardChatControls({
             onClick={() => onOpenPopover('chatReasoning')}
             title={`Reasoning effort: ${openAiReasoningEffort}`}
           >
-            {openAiReasoningEffort}
+            <span className="fb-pill-label">{openAiReasoningEffort}</span>
           </button>
         )}
         <button
@@ -112,7 +120,7 @@ export function FlashBoardChatControls({
           onClick={() => onOpenPopover('chatTemperature')}
           title={chatTemperatureSupported ? `Temperature: ${chatTemperature.toFixed(1)}` : 'Temperature fixed for this model'}
         >
-          {chatTemperatureSupported ? `Temp ${chatTemperature.toFixed(1)}` : 'Fixed temp'}
+          <span className="fb-pill-label">{chatTemperatureSupported ? `Temp ${chatTemperature.toFixed(1)}` : 'Fixed temp'}</span>
         </button>
         <button
           className={`fb-pill fb-chat-approval-pill ${aiApprovalMode === 'auto' ? 'active' : ''}`}
@@ -122,7 +130,28 @@ export function FlashBoardChatControls({
             ? 'Auto-approve ON - the chat runs edits (incl. executeBatch and imports) without asking. Click to require confirmation.'
             : 'Auto-approve OFF - edits that need confirmation (executeBatch, local imports) are blocked in chat. Click to let the chat run them automatically.'}
         >
-          {aiApprovalMode === 'auto' ? 'Auto on' : 'Auto off'}
+          <span className="fb-pill-label">{aiApprovalMode === 'auto' ? 'Auto on' : 'Auto off'}</span>
+        </button>
+        {editOptionsModeEnabled && (
+          <button
+            className={`fb-pill fb-chat-options-pill ${editOptionsMode ? 'active' : ''}`}
+            type="button"
+            onClick={onEditOptionsModeToggle}
+            disabled={isChatting}
+            title={editOptionsMode
+              ? 'Plan 3 mode on - next prompt proposes three edit choices before applying.'
+              : 'Plan 3 mode off - click to propose three edit choices before applying.'}
+          >
+            <span className="fb-pill-label">Plan 3</span>
+          </button>
+        )}
+        <button
+          className="fb-pill fb-prompt-book-pill"
+          type="button"
+          onClick={onOpenPromptBook}
+          title="Open chat PromptBook"
+        >
+          <span className="fb-pill-label">PromptBook</span>
         </button>
         <button
           className="fb-pill fb-chat-clear-pill"
@@ -131,7 +160,7 @@ export function FlashBoardChatControls({
           disabled={!hasChatMessages && !chatPrompt && !chatError}
           title="Clear chat history and start a new chat"
         >
-          New
+          <span className="fb-pill-label">New</span>
         </button>
 
         {renderedPopover === 'chatProvider' && (

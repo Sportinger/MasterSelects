@@ -87,7 +87,7 @@ export async function sendHostedOpenAiChat(request: FlashBoardChatRequest, syste
         content: parsed.content || readOpenAiChatCompletionText(data) || readOpenAiResponseText(data) || null,
         toolCalls: [],
       };
-  }, 'OpenAI');
+  }, 'OpenAI', FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS, request.onExecutedToolCalls);
 }
 
 export async function sendOpenAiResponsesChat(request: FlashBoardChatRequest, systemPrompt: string): Promise<string> {
@@ -148,6 +148,7 @@ export async function sendOpenAiResponsesChat(request: FlashBoardChatRequest, sy
     input.push(...getOpenAiResponsesOutput(data));
     const toolResults = await executeFlashBoardToolCalls(toolCalls, FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS);
     executedToolCalls.push(...toolResults);
+    request.onExecutedToolCalls?.(toolResults);
     for (const toolResult of toolResults) {
       input.push({
         type: 'function_call_output',
@@ -212,6 +213,7 @@ export async function sendAnthropicChat(request: FlashBoardChatRequest, systemPr
     messages.push({ role: 'assistant', content: parsed.contentBlocks });
     const toolResults = await executeFlashBoardToolCalls(parsed.toolCalls, FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS);
     executedToolCalls.push(...toolResults);
+    request.onExecutedToolCalls?.(toolResults);
     messages.push({
       role: 'user',
       content: toolResults.map((toolResult): AnthropicToolResultBlock => ({
@@ -243,5 +245,5 @@ export async function sendLemonadeChat(request: FlashBoardChatRequest, systemPro
       signal: request.signal,
       timeoutMs: 45_000,
     })
-  ), 'Lemonade', FLASHBOARD_LEMONADE_MAX_TOOL_RESULT_CHARS);
+  ), 'Lemonade', FLASHBOARD_LEMONADE_MAX_TOOL_RESULT_CHARS, request.onExecutedToolCalls);
 }

@@ -124,9 +124,10 @@ export function buildFlashBoardChatOptimisticMessages({
   userMessageId: string;
   userPrompt: string;
 }): FlashBoardChatMessage[] {
+  const createdAt = Date.now();
   return [
-    { id: userMessageId, role: 'user', text: userPrompt },
-    { id: assistantMessageId, role: 'assistant', text: 'Thinking...', isPending: true },
+    { createdAt, id: userMessageId, role: 'user', text: userPrompt },
+    { createdAt, id: assistantMessageId, role: 'assistant', text: 'Thinking...', isPending: true },
   ];
 }
 
@@ -134,10 +135,12 @@ export function buildFlashBoardChatCompletionMessages(
   messages: FlashBoardChatMessage[],
   assistantMessageId: string,
   response: string,
+  editOptions: FlashBoardChatMessage['editOptions'] = undefined,
+  toolCalls: FlashBoardChatMessage['toolCalls'] = undefined,
 ): FlashBoardChatMessage[] {
   return messages.map((message) => (
     message.id === assistantMessageId
-      ? { ...message, text: response || 'Empty response.', isPending: false }
+      ? { ...message, text: response || 'Empty response.', editOptions, toolCalls, isPending: false }
       : message
   ));
 }
