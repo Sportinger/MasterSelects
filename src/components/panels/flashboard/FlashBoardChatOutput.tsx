@@ -1,12 +1,8 @@
 import type { RefObject } from 'react';
+import type { FlashBoardChatMessage as StoredFlashBoardChatMessage } from '../../../stores/flashboardStore';
+import type { FlashBoardChatEditOption } from './FlashBoardChatEditOptions';
 
-export interface FlashBoardChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  text: string;
-  isError?: boolean;
-  isPending?: boolean;
-}
+export type FlashBoardChatMessage = StoredFlashBoardChatMessage;
 
 interface FlashBoardChatOutputProps {
   chatError: string | null;
@@ -15,6 +11,7 @@ interface FlashBoardChatOutputProps {
   messages: FlashBoardChatMessage[];
   showChatCloudActions: boolean;
   onAuthClick: () => void;
+  onEditOptionSelect: (option: FlashBoardChatEditOption) => void;
   onMessageDoubleClick: (message: FlashBoardChatMessage) => void;
   onPricingClick: () => void;
 }
@@ -26,6 +23,7 @@ export function FlashBoardChatOutput({
   messages,
   showChatCloudActions,
   onAuthClick,
+  onEditOptionSelect,
   onMessageDoubleClick,
   onPricingClick,
 }: FlashBoardChatOutputProps) {
@@ -53,6 +51,20 @@ export function FlashBoardChatOutput({
               {message.role === 'user' ? 'You' : copied ? 'Copied' : message.isError ? 'Error' : 'AI'}
             </div>
             <div className="fb-chat-output-message">{message.text}</div>
+            {message.editOptions?.length ? (
+              <div className="fb-chat-option-actions">
+                {message.editOptions.map((option) => (
+                  <button
+                    key={option.index}
+                    type="button"
+                    onClick={() => onEditOptionSelect(option)}
+                    title={option.title}
+                  >
+                    Use {option.index}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         );
       })}

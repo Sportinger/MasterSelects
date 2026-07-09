@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildFlashBoardChatSystemPrompt } from '../../src/services/flashboard/FlashBoardChatService';
+import {
+  buildFlashBoardChatSystemPrompt,
+  FLASHBOARD_CHAT_SYSTEM_PROMPT,
+} from '../../src/services/flashboard/FlashBoardChatService';
 
 // These tests pin the "prompt harness" invariants for the in-app FlashBoard chat agent.
 // Each assertion guards a piece of guidance whose removal reintroduces a known failure
@@ -17,6 +20,21 @@ describe('FlashBoard chat harness prompt', () => {
 
   it('tells the agent not to refuse or downscope tool-expressible work', () => {
     expect(prompt).toMatch(/never refuse or silently downscope/i);
+  });
+
+  it('allows an edited base prompt while keeping live context appended', () => {
+    const customPrompt = buildFlashBoardChatSystemPrompt('Custom compact editor prompt.');
+
+    expect(customPrompt).toContain('Custom compact editor prompt.');
+    expect(customPrompt).toContain('Current MasterSelects context:');
+    expect(customPrompt).not.toContain(FLASHBOARD_CHAT_SYSTEM_PROMPT.slice(0, 80));
+  });
+
+  it('can omit the live MasterSelects context for saved system prompts', () => {
+    const customPrompt = buildFlashBoardChatSystemPrompt('Custom compact editor prompt.', { includeContext: false });
+
+    expect(customPrompt).toBe('Custom compact editor prompt.');
+    expect(customPrompt).not.toContain('Current MasterSelects context:');
   });
 
   it('teaches the tool-step budget and batching as the bulk mechanism', () => {

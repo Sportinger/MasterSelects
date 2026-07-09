@@ -274,7 +274,7 @@ export function CustomNodeParameters({ clip, node }: { clip: TimelineClip; node:
           <span>{definition.status === 'ready' ? 'Ready' : 'Draft'}</span>
           <span>{conversationCount > 0 ? `${conversationCount} messages` : access.label}</span>
           {access.kind === 'none' && (
-            <button type="button" onClick={openSettings}>Configure AI</button>
+            <button type="button" onClick={() => openSettings()}>Configure AI</button>
           )}
         </div>
       </div>

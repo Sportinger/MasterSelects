@@ -104,6 +104,10 @@ Anything not using a `fast ...` command:
   `npm run build`, `npm run lint`, `npm run test`. Do not commit if any fail.
 - Do not rerun the chain if it already passed on the exact same HEAD after the
   latest changes; reuse the result and say so.
+- After pushing or merging to a protected branch (`staging` or `master`), wait
+  for the GitHub Actions `Security Checks` workflow on the exact pushed HEAD.
+  All jobs must be green before calling the branch ready or continuing a
+  `master` deploy. Local build/lint/test is not enough.
 - Feature, UI, workflow, architecture, or user-visible behavior changes update
   the relevant docs in `docs/Features/`.
 - Normal merges to `master` bump version + changelog (section 5).
@@ -123,9 +127,11 @@ Anything not using a `fast ...` command:
 - Issue workflow: comment "I am on it" → assign `sportinger` → create and link
   an issue branch → clone it into a separate folder and work from there →
   implement, test, repeat → commit and push to the issue branch at the agent's
-  discretion when the work is coherent and locally checked → merge to `master`
-  only after the user confirms everything works (no waiting for GitHub
-  checks) → comment the result on the issue.
+  discretion when the work is coherent and locally checked → merge to
+  `staging` only after local checks are green, then wait for the GitHub
+  `Security Checks` workflow on the pushed staging HEAD → merge to `master`
+  only after the user confirms everything works and staging GitHub checks are
+  green → comment the result on the issue.
 - Check budget: during ongoing work run focused unit/smoke tests, targeted
   builds, or lint proportional to risk and change scope. Do not run the full
   chain after every small edit; it is mandatory only at the normal-command
@@ -139,8 +145,12 @@ Anything not using a `fast ...` command:
 1. Required checks green on the exact HEAD being merged (reuse if already
    green).
 2. Bump version + changelog, commit, push.
-3. PR from the source branch to `master` unless a direct merge is requested.
-4. Bring `staging` back to the current `master` state when the workflow uses
+3. Wait for the GitHub Actions `Security Checks` workflow on the version-bump
+   HEAD if that commit was pushed to `staging` before `master`.
+4. PR from the source branch to `master` unless a direct merge is requested.
+5. Push `master`, then wait for GitHub Actions `Security Checks` on the exact
+   pushed master HEAD before reporting the deploy complete.
+6. Bring `staging` back to the current `master` state when the workflow uses
    staging.
 
 ---

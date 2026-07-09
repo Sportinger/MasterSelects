@@ -47,7 +47,6 @@ interface FlashBoardPromptEditorProps {
   onClearChatPrompt: () => void;
   onClearPrompt: () => void;
   onDismissPromptBeforeAiRewrite: () => void;
-  onOpenPromptBook: () => void;
   onPromptChange: (value: string) => void;
   onRefinePrompt: () => void | Promise<void>;
   onRestorePromptBeforeAiRewrite: () => void;
@@ -89,7 +88,6 @@ export function FlashBoardPromptEditor({
   onClearChatPrompt,
   onClearPrompt,
   onDismissPromptBeforeAiRewrite,
-  onOpenPromptBook,
   onPromptChange,
   onRefinePrompt,
   onRestorePromptBeforeAiRewrite,
@@ -124,19 +122,6 @@ export function FlashBoardPromptEditor({
             placeholder="Ask about the prompt, model choice, or next variation..."
             rows={3}
           />
-          <button
-            className="fb-bubble-history"
-            type="button"
-            onClick={onOpenPromptBook}
-            title="Prompt history"
-            aria-label="Prompt history"
-          >
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.55" aria-hidden="true">
-              <path d="M3.4 4.8A5.6 5.6 0 1 1 2.6 9" />
-              <path d="M3.4 1.9v2.9H.8" />
-              <path d="M8 4.8v3.5l2.2 1.3" />
-            </svg>
-          </button>
           <button
             className="fb-bubble-close"
             type="button"
@@ -271,19 +256,6 @@ export function FlashBoardPromptEditor({
             </svg>
           </button>
         )}
-        <button
-          className="fb-bubble-history"
-          type="button"
-          onClick={onOpenPromptBook}
-          title="Prompt history"
-          aria-label="Prompt history"
-        >
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.55" aria-hidden="true">
-            <path d="M3.4 4.8A5.6 5.6 0 1 1 2.6 9" />
-            <path d="M3.4 1.9v2.9H.8" />
-            <path d="M8 4.8v3.5l2.2 1.3" />
-          </svg>
-        </button>
         <button
           className="fb-bubble-close"
           type="button"

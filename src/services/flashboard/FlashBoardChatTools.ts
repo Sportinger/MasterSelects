@@ -216,6 +216,7 @@ export async function runChatCompletionToolLoop(
   }>,
   providerName: string,
   maxToolResultChars = FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS,
+  onExecutedToolCalls?: (toolCalls: FlashBoardExecutedToolCall[]) => void,
 ): Promise<string> {
   const executedToolCalls: FlashBoardExecutedToolCall[] = [];
 
@@ -245,6 +246,7 @@ export async function runChatCompletionToolLoop(
 
     const toolResults = await executeFlashBoardToolCalls(result.toolCalls, maxToolResultChars);
     executedToolCalls.push(...toolResults);
+    onExecutedToolCalls?.(toolResults);
     for (const toolResult of toolResults) {
       messages.push({
         role: 'tool',

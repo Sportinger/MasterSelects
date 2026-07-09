@@ -5,6 +5,8 @@ import { DEFAULT_FLASHBOARD_MODEL_VERSION } from '../../../stores/flashboardStor
 import { useMediaStore } from '../../../stores/mediaStore';
 import { SUNO_PROVIDER_ID } from '../../../services/sunoService';
 import { RUNWAY_VIDEO_PROVIDER_ID } from '../../../services/kieAi/config';
+import { isProjectPromptStorageAvailable } from '../../../services/aiPromptLibrary';
+import { FLASHBOARD_CHAT_SYSTEM_PROMPT } from '../../../services/flashboard/FlashBoardChatService';
 import type { CatalogEntry } from '../../../services/flashboard/types';
 import { buildFlashBoardGenerationActionState } from './FlashBoardGenerationActionStatePlanner';
 import {
@@ -20,6 +22,7 @@ import { FlashBoardComposerControlBar } from './FlashBoardComposerControlBar';
 import { FlashBoardComposerMainSection } from './FlashBoardComposerMainSection';
 import { FlashBoardComposerWarnings } from './FlashBoardComposerWarnings';
 import { FlashBoardPromptBook } from './FlashBoardPromptBook';
+import { useAIChatPromptLibrary } from '../aiChat/useAIChatPromptLibrary';
 import { useFlashBoardComposerAccessState } from './useFlashBoardComposerAccessState';
 import { useFlashBoardMultishotController } from './useFlashBoardMultishotController';
 import { useFlashBoardComposerPopovers } from './useFlashBoardComposerPopovers';
@@ -54,11 +57,12 @@ export function FlashBoardComposer({
   const setHoveredComposerReference = useFlashBoardStore((s) => s.setHoveredComposerReference);
   const mediaFiles = useMediaStore((s) => s.files);
   const {
-    accountSession, aiApprovalMode, anthropicApiKey, canUseByoPromptRefiner,
-    canUseHostedPromptRefiner, elevenLabsApiKey, hasAnthropicKey,
+    accountSession, aiApprovalMode, aiProvider, anthropicApiKey, canUseByoPromptRefiner,
+    aiSystemPromptOverrides, aiSystemPromptSendContext, canUseHostedPromptRefiner, elevenLabsApiKey, hasAnthropicKey,
     hasElevenLabsKey, hasEvolinkKey, hasHostedAudioAccess, hasHostedSession,
-    hasKieAiKey, hasOpenAiKey, hostedAIEnabled, lemonadeEndpoint, openAiApiKey,
-    openAuthDialog, openPricingDialog, openSettings, setAiApprovalMode,
+    hasKieAiKey, hasOpenAiKey, hostedAIEnabled, lemonadeContextSize, lemonadeEndpoint, lemonadeModel,
+    openAiApiKey, openAuthDialog, openPricingDialog, openSettings, setAiApprovalMode,
+    setAiProvider, setAiSystemPromptOverride, setAiSystemPromptSendContext, setLemonadeContextSize, setLemonadeModel,
     useElevenLabsKeyByDefault, useEvolinkKeyByDefault, useHostedProductionProviders,
     useKieAiKeyByDefault, useOpenAiKeyByDefault, usePiApiKeyByDefault,
   } = useFlashBoardComposerAccessState();
@@ -124,19 +128,23 @@ export function FlashBoardComposer({
   );
   const [mode, setMode] = useState(initialModelSettings?.mode ?? composer.mode ?? 'std');
   const [promptBookOpen, setPromptBookOpen] = useState(false);
+  const [promptBookInitialKind, setPromptBookInitialKind] = useState<'generation' | 'chat' | 'system'>('generation');
   const [copiedPromptBookEntryId, setCopiedPromptBookEntryId] = useState<string | null>(null);
   const copiedPromptBookResetRef = useRef<number | null>(null);
   const {
     activeChatModel, activeChatModelId, chatButtonLabel, chatChargeTitle, chatError,
-    chatMessages, chatModelOptions, chatPanelOpen, chatPrompt, chatProvider,
+    chatMessages, chatModelOptions, chatOptionsMode, chatOptionsModeEnabled, chatPanelOpen, chatPrompt, chatProvider,
     chatProviderLabel, chatProviderOptions, chatReasoningEffortOptions,
     chatReasoningSupported, chatTemperature, chatTemperatureSupported, clearChatError,
     copiedChatMessageId, handleChatButtonClick, handleChatInputKeyDown,
-    handleChatMessageDoubleClick, handleChatProviderSelect, handleChatPromptChange,
+    handleChatMessageDoubleClick, handleChatProviderSelect, handleChatPromptChange, handleEditOptionSelect,
     handleClearChatHistory, handleClearChatPrompt, isChatting, lemonadeStatus,
-    openAiReasoningEffort, setChatModel, setChatTemperature,
-    setOpenAiReasoningEffort, showChatCloudActions,
+    openAiReasoningEffort, chatSystemPromptProvider, chatSystemPromptSendContext, setChatModel, setChatTemperature,
+    setChatOptionsMode, setOpenAiReasoningEffort, showChatCloudActions,
   } = useFlashBoardChatController({
+    aiProvider,
+    aiSystemPromptSendContext,
+    aiSystemPromptOverrides,
     anthropicApiKey,
     closePopover,
     hasAnthropicKey,
@@ -144,14 +152,59 @@ export function FlashBoardComposer({
     hasOpenAiKey,
     hostedAIEnabled,
     initialMode,
+    lemonadeContextSize,
     lemonadeEndpoint,
+    lemonadeModel,
     openAiApiKey,
     openAuthDialog,
     openPricingDialog,
     openSettings,
+    setAiProvider,
+    setLemonadeModel,
     useHostedProductionProviders,
     useOpenAiKeyByDefault,
   });
+  const activeChatSystemPromptOverride = aiSystemPromptOverrides[chatSystemPromptProvider]?.trim()
+    ? aiSystemPromptOverrides[chatSystemPromptProvider]!
+    : '';
+  const chatPromptHasOverride = Boolean(activeChatSystemPromptOverride);
+  const activeChatSystemPrompt = activeChatSystemPromptOverride || FLASHBOARD_CHAT_SYSTEM_PROMPT;
+  const projectPromptStorageReady = isProjectPromptStorageAvailable();
+  const {
+    applyPromptDraft,
+    deleteSelectedProjectPrompt,
+    isPromptLibraryLoading,
+    loadSelectedProjectPrompt,
+    overwriteSelectedProjectPrompt,
+    preparePromptDraft,
+    promptDialogError,
+    promptDialogStatus,
+    promptDraft,
+    promptNameDraft,
+    promptSendContextDraft,
+    refreshSavedPromptFiles,
+    resetPromptDraft,
+    savePromptDialog,
+    savedPromptFiles,
+    selectedPromptFile,
+    setPromptDraft,
+    setPromptNameDraft,
+    setPromptSendContextDraft,
+    setSelectedPromptFile,
+  } = useAIChatPromptLibrary({
+    activeSendContext: chatSystemPromptSendContext,
+    activeSystemPrompt: activeChatSystemPrompt,
+    aiProvider: chatSystemPromptProvider,
+    defaultSystemPrompt: FLASHBOARD_CHAT_SYSTEM_PROMPT,
+    setAiSystemPromptOverride,
+    setAiSystemPromptSendContext,
+  });
+  const openPromptBook = (kind: 'generation' | 'chat' | 'system') => {
+    setPromptBookInitialKind(kind);
+    setPromptBookOpen(true);
+    if (kind === 'system') preparePromptDraft();
+    void refreshSavedPromptFiles();
+  };
   const [duration, setDuration] = useState(initialModelSettings?.duration ?? composer.duration ?? 5);
   const [aspectRatio, setAspectRatio] = useState(initialModelSettings?.aspectRatio ?? composer.aspectRatio ?? '16:9');
   const [imageSize, setImageSize] = useState(initialModelSettings?.imageSize ?? composer.imageSize ?? '1K');
@@ -597,6 +650,7 @@ export function FlashBoardComposer({
         chatOutput={{
           chatError, chatHistoryRef, copiedChatMessageId, messages: chatMessages,
           showChatCloudActions, onAuthClick: openAuthDialog,
+          onEditOptionSelect: handleEditOptionSelect,
           onMessageDoubleClick: handleChatMessageDoubleClick, onPricingClick: openPricingDialog,
         }}
         referenceStrip={{
@@ -637,7 +691,6 @@ export function FlashBoardComposer({
           onChatInputKeyDown: handleChatInputKeyDown, onChatPromptChange: handleChatPromptChange,
           onClearChatPrompt: handleClearChatPrompt, onClearPrompt: handleClearPrompt,
           onDismissPromptBeforeAiRewrite: handleDismissPromptBeforeAiRewrite,
-          onOpenPromptBook: () => setPromptBookOpen(true),
           onPromptChange: handlePromptChange, onRefinePrompt: handleRefinePrompt,
           onRestorePromptBeforeAiRewrite: handleRestorePromptBeforeAiRewrite,
           onSunoAudioWeightChange: setSunoAudioWeight, onSunoNegativeTagsChange: handleSunoNegativeTagsChange,
@@ -681,6 +734,7 @@ export function FlashBoardComposer({
           sunoVocalGenderOptions, supportsAudio,
           supportsMultiShot, voiceSettingsChanged, onAudioToggle: handleAudioToggle,
           onMultiShotToggle: handleMultiShotToggle, onOpenPopover: togglePopover,
+          onOpenPromptBook: () => openPromptBook('generation'),
           onSunoVocalGenderChange: handleSunoVocalGenderChange,
         }}
         modelPopover={{
@@ -734,32 +788,62 @@ export function FlashBoardComposer({
           onImageSizeChange: setImageSize, onModeChange: setMode,
         }}
         chatControls={{
-          activeChatModel, activeChatModelId, activePopover: popover, aiApprovalMode,
+          activeChatModel, activeChatModelId, activePopover: popover,
           chatError, chatModelOptions, chatPrompt, chatProvider, chatProviderLabel,
-          chatProviderOptions, chatReasoningEffortOptions, chatReasoningSupported,
+          chatProviderOptions, editOptionsMode: chatOptionsMode, editOptionsModeEnabled: chatOptionsModeEnabled,
+          chatReasoningEffortOptions, chatReasoningSupported,
           chatTemperature, chatTemperatureSupported, hasChatMessages: chatMessages.length > 0,
-          isChatting, lemonadeStatus, openAiReasoningEffort, popoverHostClassName,
-          popoverRef, renderedPopover, onAiApprovalModeChange: setAiApprovalMode,
+          isChatting, lemonadeContextSize, lemonadeStatus, openAiReasoningEffort, popoverHostClassName,
+          popoverRef, renderedPopover,
           onChatErrorClear: clearChatError, onChatModelChange: setChatModel,
           onChatProviderSelect: handleChatProviderSelect, onChatTemperatureChange: setChatTemperature,
           onClearChatHistory: handleClearChatHistory, onClosePopover: closePopover,
-          onOpenPopover: togglePopover, onReasoningEffortChange: setOpenAiReasoningEffort,
+          onEditOptionsModeToggle: () => setChatOptionsMode(!chatOptionsMode),
+          onLemonadeContextSizeChange: setLemonadeContextSize,
+          onOpenPopover: togglePopover, onOpenPromptBook: () => openPromptBook('chat'),
+          onReasoningEffortChange: setOpenAiReasoningEffort,
         }}
         actionStack={{
-          canGenerate, chatButtonLabel, chatButtonTitle: chatChargeTitle ?? 'Send chat prompt',
+          aiApprovalMode, canGenerate, chatButtonLabel, chatButtonTitle: chatChargeTitle ?? 'Send chat prompt',
           chatPanelOpen, generateButtonLabel, generateButtonTitle,
+          onAiApprovalModeChange: setAiApprovalMode,
           onChatButtonClick: handleChatButtonClick, onGenerate: handleGenerate,
         }}
       />
 
       {promptBookOpen && (
         <FlashBoardPromptBook
+          activeSystemPrompt={activeChatSystemPrompt}
+          activeSystemPromptProvider={chatSystemPromptProvider}
+          chatMessages={chatMessages}
           copiedEntryId={copiedPromptBookEntryId}
           entries={promptHistory}
           generationRecords={activeGenerationRecords}
+          initialKind={promptBookInitialKind}
+          isPromptLibraryLoading={isPromptLibraryLoading}
           mediaFiles={mediaFiles}
+          projectPromptStorageReady={projectPromptStorageReady}
+          promptDialogError={promptDialogError}
+          promptDialogStatus={promptDialogStatus}
+          promptDraft={promptDraft}
+          promptHasOverride={chatPromptHasOverride}
+          promptNameDraft={promptNameDraft}
+          promptSendContext={promptSendContextDraft}
+          savedSystemPrompts={savedPromptFiles}
+          selectedPromptFile={selectedPromptFile}
           onClose={() => setPromptBookOpen(false)}
           onCopy={handlePromptBookCopy}
+          onApplySystemPromptDraft={applyPromptDraft}
+          onDeleteSystemPrompt={deleteSelectedProjectPrompt}
+          onLoadSystemPrompt={loadSelectedProjectPrompt}
+          onOverwriteSystemPrompt={overwriteSelectedProjectPrompt}
+          onRefreshSystemPrompts={refreshSavedPromptFiles}
+          onResetSystemPromptDraft={resetPromptDraft}
+          onSaveSystemPrompt={savePromptDialog}
+          onSetPromptDraft={setPromptDraft}
+          onSetPromptSendContext={setPromptSendContextDraft}
+          onSetPromptName={setPromptNameDraft}
+          onSetSelectedPromptFile={setSelectedPromptFile}
         />
       )}
     </div>

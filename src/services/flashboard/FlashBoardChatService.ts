@@ -3,6 +3,7 @@ import { sendAnthropicChat, sendLemonadeChat, sendOpenAiChat } from './FlashBoar
 import type { FlashBoardChatRequest } from './FlashBoardChatTypes';
 
 export type {
+  FlashBoardExecutedToolCall,
   FlashBoardChatModelOption,
   FlashBoardChatProvider,
   FlashBoardChatProviderOption,
@@ -22,7 +23,7 @@ export {
   getOpenAiReasoningEffortOptions,
   isOpenAiReasoningEffortSupported,
 } from './FlashBoardChatConfig';
-export { buildFlashBoardChatSystemPrompt } from './FlashBoardChatPrompt';
+export { buildFlashBoardChatSystemPrompt, FLASHBOARD_CHAT_SYSTEM_PROMPT } from './FlashBoardChatPrompt';
 
 export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest): Promise<string> {
   const prompt = request.prompt.trim();
@@ -30,7 +31,9 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
     throw new Error('Write a prompt before starting chat.');
   }
 
-  const systemPrompt = buildFlashBoardChatSystemPrompt();
+  const systemPrompt = buildFlashBoardChatSystemPrompt(request.systemPromptOverride, {
+    includeContext: request.systemPromptIncludeContext !== false,
+  });
 
   switch (request.provider) {
     case 'anthropic':

@@ -26,6 +26,7 @@ describe('FlashBoard active generation state classification', () => {
       'selectedActiveGenerationRecordIds',
       'composer',
       'promptHistory',
+      'chatMessages',
       'hoveredComposerReference',
     ]);
     expect(FLASHBOARD_STATE_CLASSIFICATION.retiredBoardWorkspace).toEqual([]);

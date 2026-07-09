@@ -25,12 +25,12 @@ describe('cloudApi AI chat timeouts', () => {
       messages: [{ content: 'make vhs filter', role: 'user' }],
       model: 'gpt-5.1',
     });
-    const rejection = expect(request).rejects.toThrow('Request to /api/ai/chat timed out after 90000ms.');
+    const rejection = expect(request).rejects.toThrow('Request to /api/ai/chat timed out after 180000ms.');
 
     await vi.advanceTimersByTimeAsync(10_000);
     expect(signal?.aborted).toBe(false);
 
-    await vi.advanceTimersByTimeAsync(79_999);
+    await vi.advanceTimersByTimeAsync(169_999);
     expect(signal?.aborted).toBe(false);
 
     await vi.advanceTimersByTimeAsync(1);

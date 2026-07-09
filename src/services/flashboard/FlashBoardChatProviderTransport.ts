@@ -1,13 +1,16 @@
 import {
   createLemonadeChatCompletionStream,
   DEFAULT_LEMONADE_MODEL,
+  loadLemonadeModel,
 } from '../lemonadeProvider';
 import { cloudAiService } from '../cloudAiService';
 import { AI_TOOLS } from '../aiTools';
 import {
   FLASHBOARD_CHAT_MAX_TOOL_ITERATIONS,
   FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS,
+  FLASHBOARD_LEMONADE_INITIAL_RESPONSE_TIMEOUT_MS,
   FLASHBOARD_LEMONADE_MAX_TOOL_RESULT_CHARS,
+  FLASHBOARD_LEMONADE_STREAM_IDLE_TIMEOUT_MS,
   clampTemperature,
   isOpenAiReasoningEffortSupported,
   isTemperatureSupported,
@@ -87,7 +90,7 @@ export async function sendHostedOpenAiChat(request: FlashBoardChatRequest, syste
         content: parsed.content || readOpenAiChatCompletionText(data) || readOpenAiResponseText(data) || null,
         toolCalls: [],
       };
-  }, 'OpenAI');
+  }, 'OpenAI', FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS, request.onExecutedToolCalls);
 }
 
 export async function sendOpenAiResponsesChat(request: FlashBoardChatRequest, systemPrompt: string): Promise<string> {
@@ -148,6 +151,7 @@ export async function sendOpenAiResponsesChat(request: FlashBoardChatRequest, sy
     input.push(...getOpenAiResponsesOutput(data));
     const toolResults = await executeFlashBoardToolCalls(toolCalls, FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS);
     executedToolCalls.push(...toolResults);
+    request.onExecutedToolCalls?.(toolResults);
     for (const toolResult of toolResults) {
       input.push({
         type: 'function_call_output',
@@ -212,6 +216,7 @@ export async function sendAnthropicChat(request: FlashBoardChatRequest, systemPr
     messages.push({ role: 'assistant', content: parsed.contentBlocks });
     const toolResults = await executeFlashBoardToolCalls(parsed.toolCalls, FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS);
     executedToolCalls.push(...toolResults);
+    request.onExecutedToolCalls?.(toolResults);
     messages.push({
       role: 'user',
       content: toolResults.map((toolResult): AnthropicToolResultBlock => ({
@@ -227,6 +232,14 @@ export async function sendAnthropicChat(request: FlashBoardChatRequest, systemPr
 }
 
 export async function sendLemonadeChat(request: FlashBoardChatRequest, systemPrompt: string): Promise<string> {
+  await loadLemonadeModel({
+    contextSize: request.lemonadeContextSize,
+    endpoint: request.lemonadeEndpoint ?? '',
+    model: request.model || DEFAULT_LEMONADE_MODEL,
+    signal: request.signal,
+    timeoutMs: FLASHBOARD_LEMONADE_INITIAL_RESPONSE_TIMEOUT_MS,
+  });
+
   const messages: FlashBoardChatCompletionMessage[] = [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: request.prompt },
@@ -241,7 +254,8 @@ export async function sendLemonadeChat(request: FlashBoardChatRequest, systemPro
       maxTokens: 1024,
       temperature: clampTemperature(request.temperature),
       signal: request.signal,
-      timeoutMs: 45_000,
+      timeoutMs: FLASHBOARD_LEMONADE_INITIAL_RESPONSE_TIMEOUT_MS,
+      streamIdleTimeoutMs: FLASHBOARD_LEMONADE_STREAM_IDLE_TIMEOUT_MS,
     })
-  ), 'Lemonade', FLASHBOARD_LEMONADE_MAX_TOOL_RESULT_CHARS);
+  ), 'Lemonade', FLASHBOARD_LEMONADE_MAX_TOOL_RESULT_CHARS, request.onExecutedToolCalls);
 }

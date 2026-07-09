@@ -6,6 +6,7 @@ import {
   createLemonadeChatCompletionStream,
   INVALID_LEMONADE_ENDPOINT_MESSAGE,
   isLoopbackLemonadeEndpoint,
+  loadLemonadeModel,
   parseLemonadeChatCompletion,
 } from '../../src/services/lemonadeProvider';
 
@@ -34,8 +35,45 @@ function sseResponse(events: string[]): Response {
   });
 }
 
+function delayedSseResponse(events: string[], intervalMs: number, signal: AbortSignal): Response {
+  const encoder = new TextEncoder();
+  const timers: Array<ReturnType<typeof setTimeout>> = [];
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const abort = () => {
+        for (const timer of timers) {
+          clearTimeout(timer);
+        }
+        controller.error(new Error('aborted'));
+      };
+
+      if (signal.aborted) {
+        abort();
+        return;
+      }
+
+      signal.addEventListener('abort', abort, { once: true });
+      events.forEach((event, index) => {
+        timers.push(setTimeout(() => {
+          controller.enqueue(encoder.encode(event));
+          if (index === events.length - 1) {
+            signal.removeEventListener('abort', abort);
+            controller.close();
+          }
+        }, intervalMs * (index + 1)));
+      });
+    },
+  });
+
+  return new Response(body, {
+    headers: { 'Content-Type': 'text/event-stream' },
+    status: 200,
+  });
+}
+
 describe('lemonadeProvider', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -55,12 +93,14 @@ describe('lemonadeProvider', () => {
               },
             ],
           },
+          finish_reason: 'stop',
         },
       ],
     });
 
     expect(result).toEqual({
       content: 'I can do that.',
+      finishReason: 'stop',
       toolCalls: [
         {
           id: 'call_1',
@@ -248,6 +288,7 @@ describe('lemonadeProvider', () => {
     expect(deltas).toEqual(['Hel', 'lo']);
     expect(result).toEqual({
       content: 'Hello',
+      finishReason: null,
       toolCalls: [
         {
           id: 'call_1',
@@ -256,6 +297,91 @@ describe('lemonadeProvider', () => {
         },
       ],
     });
+  });
+
+  it('does not abort active streams at the initial response timeout', async () => {
+    vi.useFakeTimers();
+    let streamSignal: AbortSignal | undefined;
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      streamSignal = init?.signal as AbortSignal | undefined;
+      if (!streamSignal) {
+        throw new Error('expected abort signal');
+      }
+      return delayedSseResponse([
+        'data: {"choices":[{"delta":{"content":"O"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"K"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ], 20, streamSignal);
+    });
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const resultPromise = createLemonadeChatCompletionStream({
+      endpoint: 'http://localhost:13305/api/v1',
+      model: 'user.gemma4-it-e2b-FLM',
+      messages: [{ role: 'user', content: 'Edit the selected clip.' }],
+      timeoutMs: 10,
+      streamIdleTimeoutMs: 30,
+    });
+
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(70);
+
+    await expect(resultPromise).resolves.toEqual({
+      content: 'OK',
+      finishReason: null,
+      toolCalls: [],
+    });
+    expect(streamSignal?.aborted).toBe(false);
+  });
+
+  it('loads a Lemonade model with an explicit context size', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ status: 'loaded' }));
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    await loadLemonadeModel({
+      contextSize: 16384,
+      endpoint: 'http://localhost:13305/api/v1/',
+      model: 'Gemma-3-4b-it-GGUF',
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('http://localhost:13305/api/v1/load');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toEqual({
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer lemonade',
+    });
+    expect(JSON.parse(init.body as string)).toEqual({
+      ctx_size: 16384,
+      model_name: 'Gemma-3-4b-it-GGUF',
+    });
+  });
+
+  it('does not reload Lemonade for automatic context size', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    await loadLemonadeModel({
+      contextSize: -1,
+      endpoint: 'http://localhost:13305/api/v1/',
+      model: 'Gemma-3-4b-it-GGUF',
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('explains empty streams that stop at the token or context limit', async () => {
+    const fetchMock = vi.fn(async () => sseResponse([
+      'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n\n',
+      'data: [DONE]\n\n',
+    ]));
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    await expect(createLemonadeChatCompletionStream({
+      endpoint: 'http://localhost:13305/api/v1',
+      model: 'user.gemma4-it-e2b-FLM',
+      messages: [{ role: 'user', content: 'Write 60 jokes.' }],
+    })).rejects.toThrow('model hit its output or context limit');
   });
 
   it('rejects remote Lemonade chat completion endpoints before sending data', async () => {

@@ -9,6 +9,7 @@ import { projectFileService } from '../services/project/ProjectFileService';
 import { flags } from '../engine/featureFlags';
 import { Logger } from '../services/logger';
 import {
+  DEFAULT_LEMONADE_CONTEXT_SIZE,
   DEFAULT_LEMONADE_ENDPOINT,
   DEFAULT_LEMONADE_MODEL,
 } from '../services/lemonadeProvider';
@@ -62,6 +63,32 @@ export {
 } from './settings/settingsOptions';
 
 const log = Logger.create('SettingsStore');
+
+export type SettingsCategoryId =
+  | 'general'
+  | 'midi'
+  | 'shortcuts'
+  | 'appearance'
+  | 'audio'
+  | 'transcription'
+  | 'nativeHelper'
+  | 'apiKeys';
+
+// Piano-roll controller-lane area (#249). Forward-compatible: `lanes` is an
+// ordered list of lane-type ids (see pianoRollLaneTypes.ts) so future CC /
+// pitchbend lanes persist without a schema change. Velocity is the only entry
+// today. Both the show/hide flag and the area height survive across sessions.
+export interface PianoRollControllerAreaState {
+  visible: boolean;   // show the lane area under the grid (default true)
+  height: number;     // px height of the whole area (clamped on resize)
+  lanes: string[];    // ordered lane-type ids shown; default ['velocity']
+}
+
+const DEFAULT_PIANO_ROLL_CONTROLLER_AREA: PianoRollControllerAreaState = {
+  visible: true,
+  height: 96,
+  lanes: ['velocity'],
+};
 
 function persistChangelogStateToProject(
   showChangelogOnStartup: boolean,
@@ -140,8 +167,10 @@ interface SettingsState {
   aiApprovalMode: 'auto' | 'confirm-destructive' | 'confirm-all-mutating';
   aiProvider: AIProvider;
   lemonadeEndpoint: string;
+  lemonadeContextSize: number;
   lemonadeModel: string;
   aiSystemPromptOverrides: Partial<Record<AIProvider, string>>;
+  aiSystemPromptSendContext: Partial<Record<AIProvider, boolean>>;
   guidedActionReplayVisualizationMode: GuidedActionReplayVisualizationMode;
   guidedActionReplayBudgetMs: number;
   guidedActionReplayCompressionMode: GuidedActionReplayCompressionMode;
@@ -153,7 +182,6 @@ interface SettingsState {
   hasCompletedSetup: boolean;
   hasSeenTutorial: boolean;
   hasSeenTutorialPart2: boolean;
-  hasSeenAIChatOnboarding: boolean;
 
   // User background (which program they come from)
   userBackground: string | null;
@@ -173,8 +201,12 @@ interface SettingsState {
   // Playback engine mode
   webCodecsEnabled: boolean;  // true = WebCodecs, false = HTML Video
 
+  // Piano-roll controller-lane area (velocity + future CC lanes, #249)
+  pianoRollControllerArea: PianoRollControllerAreaState;
+
   // UI state
   isSettingsOpen: boolean;
+  settingsInitialCategory: SettingsCategoryId | null;
 
   // Output settings
   // Default resolution for new compositions (active composition drives the engine)
@@ -211,8 +243,10 @@ interface SettingsState {
   setAiApprovalMode: (mode: 'auto' | 'confirm-destructive' | 'confirm-all-mutating') => void;
   setAiProvider: (provider: AIProvider) => void;
   setLemonadeEndpoint: (endpoint: string) => void;
+  setLemonadeContextSize: (contextSize: number) => void;
   setLemonadeModel: (model: string) => void;
   setAiSystemPromptOverride: (provider: AIProvider, prompt: string) => void;
+  setAiSystemPromptSendContext: (provider: AIProvider, sendContext: boolean) => void;
   setGuidedActionReplayVisualizationMode: (mode: GuidedActionReplayVisualizationMode) => void;
   setGuidedActionReplayBudgetMs: (budgetMs: number) => void;
   setGuidedActionReplayCompressionMode: (mode: GuidedActionReplayCompressionMode) => void;
@@ -220,7 +254,6 @@ interface SettingsState {
   setHasCompletedSetup: (completed: boolean) => void;
   setHasSeenTutorial: (seen: boolean) => void;
   setHasSeenTutorialPart2: (seen: boolean) => void;
-  setHasSeenAIChatOnboarding: (seen: boolean) => void;
   setUserBackground: (bg: string) => void;
   // Shortcut actions
   setActiveShortcutPreset: (preset: ShortcutPresetId) => void;
@@ -235,7 +268,8 @@ interface SettingsState {
   setLastSeenChangelogVersion: (version: string | null) => void;
   markChangelogSeen: (version: string) => void;
   setWebCodecsEnabled: (enabled: boolean) => void;
-  openSettings: () => void;
+  setPianoRollControllerArea: (patch: Partial<PianoRollControllerAreaState>) => void;
+  openSettings: (category?: SettingsCategoryId) => void;
   closeSettings: () => void;
   toggleSettings: () => void;
 
@@ -296,8 +330,10 @@ export const useSettingsStore = create<SettingsState>()(
       aiApprovalMode: 'confirm-destructive' as const, // Require confirmation for destructive AI actions
       aiProvider: 'openai' as AIProvider,
       lemonadeEndpoint: DEFAULT_LEMONADE_ENDPOINT,
+      lemonadeContextSize: DEFAULT_LEMONADE_CONTEXT_SIZE,
       lemonadeModel: DEFAULT_LEMONADE_MODEL,
       aiSystemPromptOverrides: {},
+      aiSystemPromptSendContext: {},
       guidedActionReplayVisualizationMode: 'concise' as GuidedActionReplayVisualizationMode,
       guidedActionReplayBudgetMs: DEFAULT_GUIDED_ACTION_REPLAY_BUDGET_MS,
       guidedActionReplayCompressionMode: 'family' as GuidedActionReplayCompressionMode,
@@ -305,7 +341,6 @@ export const useSettingsStore = create<SettingsState>()(
       hasCompletedSetup: false, // Show welcome overlay on first run
       hasSeenTutorial: false, // Show tutorial on first run
       hasSeenTutorialPart2: false, // Show timeline tutorial after part 1
-      hasSeenAIChatOnboarding: false, // Show AI chat onboarding hint on first open
       userBackground: null, // Which program the user comes from
       activeShortcutPreset: DEFAULT_PRESET_ID as ShortcutPresetId,
       shortcutOverrides: null,
@@ -314,7 +349,9 @@ export const useSettingsStore = create<SettingsState>()(
       showChangelogOnStartup: true, // Show changelog dialog on every startup
       lastSeenChangelogVersion: null, // Latest app version whose changelog was acknowledged
       webCodecsEnabled: false, // Default to HTML Video
+      pianoRollControllerArea: { ...DEFAULT_PIANO_ROLL_CONTROLLER_AREA },
       isSettingsOpen: false,
+      settingsInitialCategory: null,
 
       // Output settings
       outputResolution: { width: 1920, height: 1080 },
@@ -445,6 +482,10 @@ export const useSettingsStore = create<SettingsState>()(
         set({ lemonadeEndpoint: endpoint });
       },
 
+      setLemonadeContextSize: (contextSize) => {
+        set({ lemonadeContextSize: Number.isFinite(contextSize) ? Math.trunc(contextSize) : DEFAULT_LEMONADE_CONTEXT_SIZE });
+      },
+
       setLemonadeModel: (model) => {
         set({ lemonadeModel: model });
       },
@@ -458,6 +499,18 @@ export const useSettingsStore = create<SettingsState>()(
             delete overrides[provider];
           }
           return { aiSystemPromptOverrides: overrides };
+        });
+      },
+
+      setAiSystemPromptSendContext: (provider, sendContext) => {
+        set((state) => {
+          const next = { ...state.aiSystemPromptSendContext };
+          if (sendContext) {
+            delete next[provider];
+          } else {
+            next[provider] = false;
+          }
+          return { aiSystemPromptSendContext: next };
         });
       },
 
@@ -487,10 +540,6 @@ export const useSettingsStore = create<SettingsState>()(
 
       setHasSeenTutorialPart2: (seen) => {
         set({ hasSeenTutorialPart2: seen });
-      },
-
-      setHasSeenAIChatOnboarding: (seen) => {
-        set({ hasSeenAIChatOnboarding: seen });
       },
 
       setUserBackground: (bg) => {
@@ -569,9 +618,17 @@ export const useSettingsStore = create<SettingsState>()(
         flags.disableHtmlPreviewFallback = enabled;
         set({ webCodecsEnabled: enabled });
       },
-      openSettings: () => set({ isSettingsOpen: true }),
-      closeSettings: () => set({ isSettingsOpen: false }),
-      toggleSettings: () => set((state) => ({ isSettingsOpen: !state.isSettingsOpen })),
+      setPianoRollControllerArea: (patch) => {
+        set((state) => ({
+          pianoRollControllerArea: { ...state.pianoRollControllerArea, ...patch },
+        }));
+      },
+      openSettings: (category) => set({ isSettingsOpen: true, settingsInitialCategory: category ?? null }),
+      closeSettings: () => set({ isSettingsOpen: false, settingsInitialCategory: null }),
+      toggleSettings: () => set((state) => ({
+        isSettingsOpen: !state.isSettingsOpen,
+        settingsInitialCategory: state.isSettingsOpen ? null : state.settingsInitialCategory,
+      })),
 
       // Output actions
       setResolution: (width, height) => {
@@ -658,8 +715,10 @@ export const useSettingsStore = create<SettingsState>()(
         aiApprovalMode: state.aiApprovalMode,
         aiProvider: state.aiProvider,
         lemonadeEndpoint: state.lemonadeEndpoint,
+        lemonadeContextSize: state.lemonadeContextSize,
         lemonadeModel: state.lemonadeModel,
         aiSystemPromptOverrides: state.aiSystemPromptOverrides,
+        aiSystemPromptSendContext: state.aiSystemPromptSendContext,
         guidedActionReplayVisualizationMode: state.guidedActionReplayVisualizationMode,
         guidedActionReplayBudgetMs: state.guidedActionReplayBudgetMs,
         guidedActionReplayCompressionMode: state.guidedActionReplayCompressionMode,
@@ -667,7 +726,6 @@ export const useSettingsStore = create<SettingsState>()(
         hasCompletedSetup: state.hasCompletedSetup,
         hasSeenTutorial: state.hasSeenTutorial,
         hasSeenTutorialPart2: state.hasSeenTutorialPart2,
-        hasSeenAIChatOnboarding: state.hasSeenAIChatOnboarding,
         userBackground: state.userBackground,
         activeShortcutPreset: state.activeShortcutPreset,
         shortcutOverrides: state.shortcutOverrides,
@@ -678,6 +736,7 @@ export const useSettingsStore = create<SettingsState>()(
         outputResolution: state.outputResolution,
         fps: state.fps,
         webCodecsEnabled: state.webCodecsEnabled,
+        pianoRollControllerArea: state.pianoRollControllerArea,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {

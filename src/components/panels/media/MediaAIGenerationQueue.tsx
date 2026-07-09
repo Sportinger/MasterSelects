@@ -509,6 +509,7 @@ function MediaAIGenerationQueueImpl() {
                 onClick={(event) => {
                   event.stopPropagation();
                   flashBoardJobService.cancel(itemId);
+                  removeItem();
                 }}
                 title="Cancel generation"
               >

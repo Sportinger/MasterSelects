@@ -10,8 +10,8 @@ import { isTransitionCompositionForPair, reuseExistingTimelineData } from './tra
 
 function invalidateCompositionAndParents(compositionId: string): void {
   void import('../compositionRenderer').then(({ compositionRenderer }) => {
-    compositionRenderer.invalidateCompositionAndParents(compositionId);
-  });
+    compositionRenderer?.invalidateCompositionAndParents?.(compositionId);
+  }).catch(() => undefined);
 }
 
 function isAttachedTransitionComposition(

@@ -53,7 +53,7 @@ export function buildFlashBoardChatModelOptions({
   const fallbackModels = FLASHBOARD_CHAT_MODEL_OPTIONS.lemonade;
   const mergedModels = discoveredModels.length > 0 ? discoveredModels : fallbackModels;
 
-  if (chatModel && !mergedModels.some((model) => model.id === chatModel)) {
+  if (discoveredModels.length === 0 && chatModel && !mergedModels.some((model) => model.id === chatModel)) {
     return [
       ...mergedModels,
       {

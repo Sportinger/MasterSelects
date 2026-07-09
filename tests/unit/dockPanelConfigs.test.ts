@@ -36,7 +36,7 @@ describe('dock panel configs', () => {
 
   it('excludes retired dock panel ids from the active panel contract', () => {
     const activePanelTypes = Object.keys(PANEL_CONFIGS);
-    const retiredPanelTypes = ['ai-video', 'youtube', 'download'];
+    const retiredPanelTypes = ['ai-chat', 'ai-video', 'youtube', 'download'];
 
     retiredPanelTypes.forEach((type) => {
       expect(activePanelTypes).not.toContain(type);

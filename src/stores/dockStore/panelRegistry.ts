@@ -13,7 +13,6 @@ export const BUILT_IN_PANEL_TYPES: PanelType[] = [
   'export',
   'midi-mapping',
   'multicam',
-  'ai-chat',
   'ai-segment',
   'scene-description',
   'transitions',

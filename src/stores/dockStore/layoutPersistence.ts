@@ -281,7 +281,7 @@ function isLegacyFactoryDefaultLayout(layout: DockLayout): boolean {
   const timelineGroup = findTabGroupById(layout.root, 'timeline-group');
   const leftPanelTypes = panelTypesForGroup(layout, 'left-group');
   return (
-    arePanelTypeListsEqual(leftPanelTypes, ['media', 'ai-chat'])
+    arePanelTypeListsEqual(leftPanelTypes, ['media'])
     && arePanelTypeListsEqual(panelTypesForGroup(layout, 'preview-group'), ['preview'])
     && arePanelTypeListsEqual(panelTypesForGroup(layout, 'timeline-group'), ['timeline'])
     && leftGroup?.activeIndex === 0

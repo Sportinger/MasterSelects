@@ -6,8 +6,8 @@ interface TranscriptionSettingsProps {
 }
 
 const providers: { id: TranscriptionProvider; label: string; description: string }[] = [
-  { id: 'local', label: 'Local (Whisper)', description: 'Runs in browser, no API key needed. Slower, less accurate.' },
-  { id: 'openai', label: 'OpenAI Whisper API', description: 'High accuracy, $0.006/minute. Requires API key.' },
+  { id: 'local', label: 'Local Whisper Base', description: 'Private browser transcription, no API key needed. Slower than cloud.' },
+  { id: 'openai', label: 'OpenAI Whisper API', description: 'High-accuracy speech transcription, $0.006/minute. Requires API key.' },
   { id: 'assemblyai', label: 'AssemblyAI', description: 'Excellent accuracy, speaker diarization. $0.015/minute.' },
   { id: 'deepgram', label: 'Deepgram', description: 'Fast, good accuracy. $0.0125/minute.' },
 ];
@@ -64,8 +64,8 @@ export function TranscriptionSettings({ localKeys }: TranscriptionSettingsProps)
         </div>
         <p className="settings-hint">
           {isSignedIn
-            ? 'Signed-in accounts always use OpenAI Cloud transcription through MasterSelects credits.'
-            : 'API keys for transcription providers can be configured in the API Keys section.'}
+            ? 'Signed-in accounts use OpenAI Whisper Cloud through MasterSelects credits. Timeline clip menus show the active provider before transcription starts.'
+            : 'Timeline clip menus show the active provider before transcription starts. API keys for cloud transcription providers can be configured in the API Keys section.'}
         </p>
       </div>
     </div>

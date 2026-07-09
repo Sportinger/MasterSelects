@@ -28,6 +28,7 @@ export const flags = {
   guidedActionsAIReplay: true,  // Visual replay for AI tool calls
   guidedActionsTutorials: true,  // Tutorial scenarios using guided actions
   guidedActionsRecorder: false,  // Future guided action authoring/recording layer
+  flashBoardChatEditOptions: true,  // Text-only multi-option edit planning prototype.
   timelineCanvasWorker: true,  // issue #228 P4: OffscreenCanvas clip renderer for eligible rows; verified by timeline canvas worker smokes.
   workerFirstRenderHost: false,  // Worker-first playback renderer primary host; remains gated until W5 and worker host mount are green.
 };

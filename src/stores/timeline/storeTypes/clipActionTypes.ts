@@ -43,6 +43,12 @@ export interface MidiClipActions {
   clipRenameId: string | null;
   setClipRenameId: (clipId: string | null) => void;
   addMidiNote: (clipId: string, note: { pitch: number; start: number; duration: number; velocity?: number }) => string | null;
+  /**
+   * Batch-insert notes into a MIDI clip as a SINGLE undo step, returning the new
+   * note ids in input order. Powers piano-roll paste/duplicate, where a per-note
+   * addMidiNote loop would push N snapshots and need N undos.
+   */
+  addMidiNotes: (clipId: string, notes: { pitch: number; start: number; duration: number; velocity?: number }[]) => string[];
   updateMidiNote: (
     clipId: string,
     noteId: string,
@@ -50,6 +56,7 @@ export interface MidiClipActions {
     options?: { captureHistory?: boolean },
   ) => void;
   removeMidiNote: (clipId: string, noteId: string) => void;
+  removeMidiNotes: (clipId: string, noteIds: string[]) => void;
 }
 
 export interface MathSceneClipActions {

@@ -43,6 +43,7 @@ interface FlashBoardGenerationControlsProps {
   voiceSettingsChanged: boolean;
   onAudioToggle: () => void;
   onMultiShotToggle: () => void;
+  onOpenPromptBook: () => void;
   onOpenPopover: (type: GenerationControlPopover) => void;
   onSunoVocalGenderChange: (value: string) => void;
 }
@@ -77,6 +78,7 @@ export function FlashBoardGenerationControls({
   voiceSettingsChanged,
   onAudioToggle,
   onMultiShotToggle,
+  onOpenPromptBook,
   onOpenPopover,
   onSunoVocalGenderChange,
 }: FlashBoardGenerationControlsProps) {
@@ -89,6 +91,14 @@ export function FlashBoardGenerationControls({
           title={`Model: ${modelButtonLabel}`}
         >
           Model
+        </button>
+        <button
+          className="fb-pill fb-prompt-book-pill"
+          type="button"
+          onClick={onOpenPromptBook}
+          title="Open generation Prompt Book"
+        >
+          <span className="fb-pill-label">Prompt Book</span>
         </button>
         {isElevenLabsMode && (
           <>
