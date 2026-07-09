@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-07-09",
+    "type": "new",
+    "title": "MasterSelects 2.3.5",
+    "description": "FlashBoard AI release with Prompt Book browsing, local Lemonade controls, longer chat timeouts, and project-saved system prompt context settings.",
+    "section": "Release"
+  },
+  {
     "date": "2026-07-03",
     "type": "fix",
     "title": "MasterSelects 2.3.4",
