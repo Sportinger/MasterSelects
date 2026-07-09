@@ -22,7 +22,7 @@ fn main() {
             "MasterSelects Native Helper — download acceleration",
         );
         res.set("CompanyName", "MasterSelects");
-        res.set("LegalCopyright", "MIT License");
+        res.set("LegalCopyright", "Copyright (c) 2026 Sportinger");
 
         if let Err(e) = res.compile() {
             println!(

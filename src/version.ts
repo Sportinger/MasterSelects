@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '2.3.5';
+export const APP_VERSION = '2.3.6';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -27,8 +27,8 @@ export const FEATURED_VIDEO: {
   title: 'MasterSelects Demo',
   banner: {
     type: 'success',
-    title: 'MasterSelects 2.3.5',
-    message: 'FlashBoard AI release with Prompt Book browsing, local Lemonade controls, longer chat timeouts, and project-saved system prompt context settings.',
+    title: 'MasterSelects 2.3.6',
+    message: 'Keyframe and licensing release: marquee selection now selects multiple keyframes at the correct timeline position, Continuous / Orbit camera segments follow their world-pivot arc, and the project adopts the Say Hi License across source and Windows installer metadata.',
     animated: true,
   },
 };
@@ -36,8 +36,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'MasterSelects 2.3.5',
-  message: 'FlashBoard AI release with Prompt Book browsing, local Lemonade controls, longer chat timeouts, and project-saved system prompt context settings.',
+  title: 'MasterSelects 2.3.6',
+  message: 'Keyframe and licensing release: marquee selection now selects multiple keyframes at the correct timeline position, Continuous / Orbit camera segments follow their world-pivot arc, and the project adopts the Say Hi License across source and Windows installer metadata.',
   animated: true,
 };
 

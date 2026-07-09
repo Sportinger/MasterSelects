@@ -230,8 +230,10 @@ export function useMarqueeSelection({
         const rowBottom = keyframeTrackRect.bottom - containerRect.top;
         if (rowBottom <= top || rowTop >= bottom) return;
 
-        const rowContentLeft = readFiniteDataNumber(rowElement, 'geometryX') ??
-          (keyframeTrackRect.left - containerRect.left + scrollX);
+        const geometryX = readFiniteDataNumber(rowElement, 'geometryX');
+        const rowContentLeft = geometryX === null
+          ? keyframeTrackRect.left - containerRect.left + scrollX
+          : getTimelineContentOriginX() + geometryX;
         const centerY = rowTop + keyframeTrackRect.height / 2;
 
         for (const clip of clips) {
@@ -264,7 +266,7 @@ export function useMarqueeSelection({
 
       return result;
     },
-    [_clipKeyframes, clipDrag, clips, scrollX, timeToPixel, trackLanesRef]
+    [_clipKeyframes, clipDrag, clips, getTimelineContentOriginX, scrollX, timeToPixel, trackLanesRef]
   );
 
   const getTrackIdsInRect = useCallback(
