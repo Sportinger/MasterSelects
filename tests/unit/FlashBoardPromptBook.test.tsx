@@ -72,10 +72,12 @@ describe('FlashBoardPromptBook', () => {
         projectPromptStorageReady
         promptDraft="Current prompt"
         promptNameDraft="Editorial prompt"
+        promptSendContext={false}
         savedSystemPrompts={[{
           fileName: 'openai--editorial.prompt.json',
           name: 'Editorial prompt',
           provider: 'openai',
+          sendContext: false,
           updatedAt: new Date(1000).toISOString(),
         }]}
         selectedPromptFile="openai--editorial.prompt.json"
@@ -89,8 +91,32 @@ describe('FlashBoardPromptBook', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
     expect(screen.getByDisplayValue('Current prompt')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save new' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Send current MasterSelects context')).not.toBeChecked();
+    expect(screen.getByText('Context off')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Editorial prompt/ }));
     expect(loadSystemPrompt).toHaveBeenCalledWith('openai--editorial.prompt.json');
+  });
+
+  it('toggles whether a system prompt sends live MasterSelects context', () => {
+    const setPromptSendContext = vi.fn();
+
+    render(
+      <FlashBoardPromptBook
+        activeSystemPrompt="Current prompt"
+        activeSystemPromptProvider="openai"
+        copiedEntryId={null}
+        entries={[]}
+        generationRecords={[]}
+        mediaFiles={[]}
+        promptSendContext
+        onClose={vi.fn()}
+        onCopy={vi.fn()}
+        onSetPromptSendContext={setPromptSendContext}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText('Send current MasterSelects context'));
+    expect(setPromptSendContext).toHaveBeenCalledWith(false);
   });
 
   it('renders prompt text beside generated media with run metadata and page-side navigation', () => {

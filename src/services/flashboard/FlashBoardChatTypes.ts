@@ -21,6 +21,7 @@ export interface FlashBoardChatModelOption {
 export interface FlashBoardChatRequest {
   anthropicApiKey?: string;
   hostedAvailable?: boolean;
+  lemonadeContextSize?: number;
   lemonadeEndpoint?: string;
   model: string;
   onExecutedToolCalls?: (toolCalls: FlashBoardExecutedToolCall[]) => void;
@@ -29,6 +30,7 @@ export interface FlashBoardChatRequest {
   prompt: string;
   provider: FlashBoardChatProvider;
   signal?: AbortSignal;
+  systemPromptIncludeContext?: boolean;
   systemPromptOverride?: string;
   temperature: number;
 }

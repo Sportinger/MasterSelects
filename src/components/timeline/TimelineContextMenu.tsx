@@ -213,6 +213,7 @@ export function TimelineContextMenu({
     <div className="timeline-copy-prompt-toast" role="status" aria-live="polite">Copied</div>
   ) : null;
   const transcriptionProvider = useSettingsStore((state) => state.transcriptionProvider);
+  const openSettings = useSettingsStore((state) => state.openSettings);
   const isSignedIn = useAccountStore((state) => Boolean(state.session?.authenticated));
   const activeTranscriptionProviderLabel = isSignedIn
     ? 'OpenAI Whisper Cloud'
@@ -753,6 +754,15 @@ export function TimelineContextMenu({
               : clip?.transcriptStatus === 'ready'
               ? `Re-transcribe (${activeTranscriptionProviderLabel})`
               : `Transcribe (${activeTranscriptionProviderLabel})`}
+          </div>
+          <div
+            className="context-menu-item"
+            onClick={() => {
+              openSettings('transcription');
+              setContextMenu(null);
+            }}
+          >
+            Transcription Settings...
           </div>
         </>
       )}

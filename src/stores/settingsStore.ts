@@ -9,6 +9,7 @@ import { projectFileService } from '../services/project/ProjectFileService';
 import { flags } from '../engine/featureFlags';
 import { Logger } from '../services/logger';
 import {
+  DEFAULT_LEMONADE_CONTEXT_SIZE,
   DEFAULT_LEMONADE_ENDPOINT,
   DEFAULT_LEMONADE_MODEL,
 } from '../services/lemonadeProvider';
@@ -62,6 +63,16 @@ export {
 } from './settings/settingsOptions';
 
 const log = Logger.create('SettingsStore');
+
+export type SettingsCategoryId =
+  | 'general'
+  | 'midi'
+  | 'shortcuts'
+  | 'appearance'
+  | 'audio'
+  | 'transcription'
+  | 'nativeHelper'
+  | 'apiKeys';
 
 // Piano-roll controller-lane area (#249). Forward-compatible: `lanes` is an
 // ordered list of lane-type ids (see pianoRollLaneTypes.ts) so future CC /
@@ -156,8 +167,10 @@ interface SettingsState {
   aiApprovalMode: 'auto' | 'confirm-destructive' | 'confirm-all-mutating';
   aiProvider: AIProvider;
   lemonadeEndpoint: string;
+  lemonadeContextSize: number;
   lemonadeModel: string;
   aiSystemPromptOverrides: Partial<Record<AIProvider, string>>;
+  aiSystemPromptSendContext: Partial<Record<AIProvider, boolean>>;
   guidedActionReplayVisualizationMode: GuidedActionReplayVisualizationMode;
   guidedActionReplayBudgetMs: number;
   guidedActionReplayCompressionMode: GuidedActionReplayCompressionMode;
@@ -193,6 +206,7 @@ interface SettingsState {
 
   // UI state
   isSettingsOpen: boolean;
+  settingsInitialCategory: SettingsCategoryId | null;
 
   // Output settings
   // Default resolution for new compositions (active composition drives the engine)
@@ -229,8 +243,10 @@ interface SettingsState {
   setAiApprovalMode: (mode: 'auto' | 'confirm-destructive' | 'confirm-all-mutating') => void;
   setAiProvider: (provider: AIProvider) => void;
   setLemonadeEndpoint: (endpoint: string) => void;
+  setLemonadeContextSize: (contextSize: number) => void;
   setLemonadeModel: (model: string) => void;
   setAiSystemPromptOverride: (provider: AIProvider, prompt: string) => void;
+  setAiSystemPromptSendContext: (provider: AIProvider, sendContext: boolean) => void;
   setGuidedActionReplayVisualizationMode: (mode: GuidedActionReplayVisualizationMode) => void;
   setGuidedActionReplayBudgetMs: (budgetMs: number) => void;
   setGuidedActionReplayCompressionMode: (mode: GuidedActionReplayCompressionMode) => void;
@@ -253,7 +269,7 @@ interface SettingsState {
   markChangelogSeen: (version: string) => void;
   setWebCodecsEnabled: (enabled: boolean) => void;
   setPianoRollControllerArea: (patch: Partial<PianoRollControllerAreaState>) => void;
-  openSettings: () => void;
+  openSettings: (category?: SettingsCategoryId) => void;
   closeSettings: () => void;
   toggleSettings: () => void;
 
@@ -314,8 +330,10 @@ export const useSettingsStore = create<SettingsState>()(
       aiApprovalMode: 'confirm-destructive' as const, // Require confirmation for destructive AI actions
       aiProvider: 'openai' as AIProvider,
       lemonadeEndpoint: DEFAULT_LEMONADE_ENDPOINT,
+      lemonadeContextSize: DEFAULT_LEMONADE_CONTEXT_SIZE,
       lemonadeModel: DEFAULT_LEMONADE_MODEL,
       aiSystemPromptOverrides: {},
+      aiSystemPromptSendContext: {},
       guidedActionReplayVisualizationMode: 'concise' as GuidedActionReplayVisualizationMode,
       guidedActionReplayBudgetMs: DEFAULT_GUIDED_ACTION_REPLAY_BUDGET_MS,
       guidedActionReplayCompressionMode: 'family' as GuidedActionReplayCompressionMode,
@@ -333,6 +351,7 @@ export const useSettingsStore = create<SettingsState>()(
       webCodecsEnabled: false, // Default to HTML Video
       pianoRollControllerArea: { ...DEFAULT_PIANO_ROLL_CONTROLLER_AREA },
       isSettingsOpen: false,
+      settingsInitialCategory: null,
 
       // Output settings
       outputResolution: { width: 1920, height: 1080 },
@@ -463,6 +482,10 @@ export const useSettingsStore = create<SettingsState>()(
         set({ lemonadeEndpoint: endpoint });
       },
 
+      setLemonadeContextSize: (contextSize) => {
+        set({ lemonadeContextSize: Number.isFinite(contextSize) ? Math.trunc(contextSize) : DEFAULT_LEMONADE_CONTEXT_SIZE });
+      },
+
       setLemonadeModel: (model) => {
         set({ lemonadeModel: model });
       },
@@ -476,6 +499,18 @@ export const useSettingsStore = create<SettingsState>()(
             delete overrides[provider];
           }
           return { aiSystemPromptOverrides: overrides };
+        });
+      },
+
+      setAiSystemPromptSendContext: (provider, sendContext) => {
+        set((state) => {
+          const next = { ...state.aiSystemPromptSendContext };
+          if (sendContext) {
+            delete next[provider];
+          } else {
+            next[provider] = false;
+          }
+          return { aiSystemPromptSendContext: next };
         });
       },
 
@@ -588,9 +623,12 @@ export const useSettingsStore = create<SettingsState>()(
           pianoRollControllerArea: { ...state.pianoRollControllerArea, ...patch },
         }));
       },
-      openSettings: () => set({ isSettingsOpen: true }),
-      closeSettings: () => set({ isSettingsOpen: false }),
-      toggleSettings: () => set((state) => ({ isSettingsOpen: !state.isSettingsOpen })),
+      openSettings: (category) => set({ isSettingsOpen: true, settingsInitialCategory: category ?? null }),
+      closeSettings: () => set({ isSettingsOpen: false, settingsInitialCategory: null }),
+      toggleSettings: () => set((state) => ({
+        isSettingsOpen: !state.isSettingsOpen,
+        settingsInitialCategory: state.isSettingsOpen ? null : state.settingsInitialCategory,
+      })),
 
       // Output actions
       setResolution: (width, height) => {
@@ -677,8 +715,10 @@ export const useSettingsStore = create<SettingsState>()(
         aiApprovalMode: state.aiApprovalMode,
         aiProvider: state.aiProvider,
         lemonadeEndpoint: state.lemonadeEndpoint,
+        lemonadeContextSize: state.lemonadeContextSize,
         lemonadeModel: state.lemonadeModel,
         aiSystemPromptOverrides: state.aiSystemPromptOverrides,
+        aiSystemPromptSendContext: state.aiSystemPromptSendContext,
         guidedActionReplayVisualizationMode: state.guidedActionReplayVisualizationMode,
         guidedActionReplayBudgetMs: state.guidedActionReplayBudgetMs,
         guidedActionReplayCompressionMode: state.guidedActionReplayCompressionMode,

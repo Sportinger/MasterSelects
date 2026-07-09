@@ -681,7 +681,8 @@
   animation-delay: calc(var(--fb-popover-index) * 10ms);
 }
 
-.fb-bubble-bar.is-inline-submenu-opening .fb-generate {
+.fb-bubble-bar.is-inline-submenu-opening .fb-generate,
+.fb-bubble-bar.is-inline-submenu-opening .fb-chat-split-button {
   opacity: 0;
   visibility: hidden;
   transform: translateX(30px) scale(0.96);
@@ -714,7 +715,8 @@
   animation-fill-mode: both;
 }
 
-.fb-bubble-bar.is-inline-submenu-closing .fb-generate {
+.fb-bubble-bar.is-inline-submenu-closing .fb-generate,
+.fb-bubble-bar.is-inline-submenu-closing .fb-chat-split-button {
   opacity: 1;
   visibility: visible;
   animation-name: fb-standard-row-in;

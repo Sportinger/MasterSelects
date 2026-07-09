@@ -43,6 +43,7 @@ async function importSettingsStoreWithMocks() {
   }));
   vi.doMock('../../src/services/lemonadeProvider', () => ({
     DEFAULT_LEMONADE_ENDPOINT: 'http://localhost:13305/api/v1',
+    DEFAULT_LEMONADE_CONTEXT_SIZE: -1,
     DEFAULT_LEMONADE_MODEL: 'local-model',
   }));
   vi.doMock('../../src/services/logger', () => ({

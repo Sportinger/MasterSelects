@@ -1207,11 +1207,22 @@
 }
 
 .fb-prompt-book-preset-field span,
+.fb-prompt-book-context-toggle,
 .fb-prompt-book-preset-meta,
 .fb-prompt-book-preset-status {
   color: rgba(44, 48, 54, 0.58);
   font-size: 10px;
   font-weight: 800;
+}
+
+.fb-prompt-book-context-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.fb-prompt-book-context-toggle input {
+  margin: 0;
 }
 
 .fb-prompt-book-preset-field input,
@@ -1244,7 +1255,7 @@
 
 .fb-prompt-book-page-face button.fb-prompt-book-preset-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
   align-items: center;
   width: 100%;
@@ -1268,6 +1279,13 @@
 .fb-prompt-book-preset-item time {
   color: rgba(44, 48, 54, 0.54);
   font-size: 9px;
+}
+
+.fb-prompt-book-preset-item small {
+  color: rgba(44, 48, 54, 0.54);
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .fb-prompt-book-preset-feedback {
@@ -1469,9 +1487,11 @@
 .fb-prompt-book-media-header,
 .fb-prompt-book-media-caption,
 .fb-prompt-book-preset-field span,
+.fb-prompt-book-context-toggle,
 .fb-prompt-book-preset-meta,
 .fb-prompt-book-preset-status,
 .fb-prompt-book-preset-empty,
+.fb-prompt-book-preset-item small,
 .fb-prompt-book-preset-item time,
 .fb-prompt-book-empty {
   color: var(--fb-book-muted);

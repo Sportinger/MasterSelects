@@ -123,7 +123,7 @@ export interface ApiRequestInit extends RequestInit {
 }
 
 const DEFAULT_JSON_REQUEST_TIMEOUT_MS = 10_000;
-export const AI_CHAT_REQUEST_TIMEOUT_MS = 90_000;
+export const AI_CHAT_REQUEST_TIMEOUT_MS = 180_000;
 
 function createRequestController(signal?: AbortSignal | null, timeoutMs?: number): {
   cleanup: () => void;

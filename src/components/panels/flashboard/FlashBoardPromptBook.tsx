@@ -30,6 +30,7 @@ interface FlashBoardPromptBookProps {
   promptDraft?: string;
   promptHasOverride?: boolean;
   promptNameDraft?: string;
+  promptSendContext?: boolean;
   savedSystemPrompts?: SavedAiSystemPrompt[];
   selectedPromptFile?: string;
   onClose: () => void;
@@ -41,6 +42,7 @@ interface FlashBoardPromptBookProps {
   onResetSystemPromptDraft?: () => void;
   onSaveSystemPrompt?: () => void;
   onSetPromptDraft?: (prompt: string) => void;
+  onSetPromptSendContext?: (sendContext: boolean) => void;
   onSetPromptName?: (name: string) => void;
   onSetSelectedPromptFile?: (fileName: string) => void;
   onApplySystemPromptDraft?: () => void;
@@ -519,6 +521,7 @@ export function FlashBoardPromptBook({
   promptDraft,
   promptHasOverride = false,
   promptNameDraft = '',
+  promptSendContext = true,
   savedSystemPrompts = EMPTY_SAVED_SYSTEM_PROMPTS,
   selectedPromptFile = '',
   onClose,
@@ -530,6 +533,7 @@ export function FlashBoardPromptBook({
   onResetSystemPromptDraft,
   onSaveSystemPrompt,
   onSetPromptDraft,
+  onSetPromptSendContext,
   onSetPromptName,
   onSetSelectedPromptFile,
   onApplySystemPromptDraft,
@@ -724,7 +728,10 @@ export function FlashBoardPromptBook({
 
   const goToFirstKind = (kind: PromptBookKind) => {
     const index = pages.findIndex((page) => page.kind === kind);
-    if (index >= 0) setPageIndex(index);
+    if (index >= 0) {
+      if (kind === 'system') onSetPromptDraft?.(pages[index]?.userPrompt ?? '');
+      setPageIndex(index);
+    }
   };
 
   const selectedSystemPrompt = savedSystemPrompts.find((prompt) => prompt.fileName === selectedPromptFile);
@@ -972,9 +979,18 @@ export function FlashBoardPromptBook({
                             disabled={isPromptLibraryLoading}
                           />
                         </label>
+                        <label className="fb-prompt-book-context-toggle">
+                          <input
+                            type="checkbox"
+                            checked={promptSendContext}
+                            onChange={(event) => onSetPromptSendContext?.(event.target.checked)}
+                            disabled={isPromptLibraryLoading}
+                          />
+                          <span>Send current MasterSelects context</span>
+                        </label>
                         {selectedSystemPrompt && (
                           <div className="fb-prompt-book-preset-meta">
-                            Updated {formatPromptBookTime(selectedSystemPromptUpdatedAt)}
+                            Updated {formatPromptBookTime(selectedSystemPromptUpdatedAt)} - Context {selectedSystemPrompt.sendContext ? 'on' : 'off'}
                           </div>
                         )}
                         {systemPromptFeedback && (
@@ -1012,6 +1028,7 @@ export function FlashBoardPromptBook({
                                 disabled={!canUseSystemPresets || isPromptLibraryLoading}
                               >
                                 <span>{prompt.name}</span>
+                                <small>{prompt.sendContext ? 'Context on' : 'Context off'}</small>
                                 <time dateTime={prompt.updatedAt}>{formatPromptBookTime(Date.parse(prompt.updatedAt) || activePage.createdAt)}</time>
                               </button>
                             ))

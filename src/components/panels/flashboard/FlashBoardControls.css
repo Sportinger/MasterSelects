@@ -17,10 +17,6 @@
 .fb-bubble-bar .fb-pill-group {
   grid-area: controls;
   min-width: 0;
-  flex-wrap: nowrap;
-}
-
-.fb-bubble-bar .fb-chat-control-stack > .fb-pill-group {
   flex-wrap: wrap;
   align-content: flex-start;
   row-gap: 5px;
@@ -59,7 +55,8 @@
   color: color-mix(in srgb, var(--accent, #4aa3ff) 30%, var(--text-primary, #fff));
 }
 
-.fb-bubble-bar .fb-generate {
+.fb-bubble-bar .fb-generate,
+.fb-bubble-bar .fb-chat-split-button {
   grid-area: generate;
   justify-self: end;
 }
@@ -90,7 +87,8 @@
 
 .fb-bubble-bar.has-inline-submenu .fb-pill-group > .fb-pill,
 .fb-bubble-bar.has-inline-submenu .fb-selected-model-label,
-.fb-bubble-bar.has-inline-submenu .fb-generate {
+.fb-bubble-bar.has-inline-submenu .fb-generate,
+.fb-bubble-bar.has-inline-submenu .fb-chat-split-button {
   --fb-standard-index: 0;
   pointer-events: none;
   transform-origin: center;
@@ -108,18 +106,21 @@
 .fb-bubble-bar.has-inline-submenu .fb-pill-group > .fb-pill:nth-of-type(9) { --fb-standard-index: 9; }
 .fb-bubble-bar.has-inline-submenu .fb-pill-group > .fb-pill:nth-of-type(10) { --fb-standard-index: 10; }
 .fb-bubble-bar.has-inline-submenu .fb-selected-model-label { --fb-standard-index: 11; }
-.fb-bubble-bar.has-inline-submenu .fb-generate { --fb-standard-index: 12; }
+.fb-bubble-bar.has-inline-submenu .fb-generate,
+.fb-bubble-bar.has-inline-submenu .fb-chat-split-button { --fb-standard-index: 12; }
 
 .fb-bubble-bar.is-inline-submenu-opening .fb-pill-group > .fb-pill,
 .fb-bubble-bar.is-inline-submenu-opening .fb-selected-model-label,
-.fb-bubble-bar.is-inline-submenu-opening .fb-generate {
+.fb-bubble-bar.is-inline-submenu-opening .fb-generate,
+.fb-bubble-bar.is-inline-submenu-opening .fb-chat-split-button {
   animation: fb-standard-row-out 230ms cubic-bezier(0.22, 0.72, 0.24, 1) both;
   animation-delay: calc(var(--fb-standard-index) * 9ms);
 }
 
 .fb-bubble-bar.is-inline-submenu-closing .fb-pill-group > .fb-pill,
 .fb-bubble-bar.is-inline-submenu-closing .fb-selected-model-label,
-.fb-bubble-bar.is-inline-submenu-closing .fb-generate {
+.fb-bubble-bar.is-inline-submenu-closing .fb-generate,
+.fb-bubble-bar.is-inline-submenu-closing .fb-chat-split-button {
   animation: fb-standard-row-in 260ms cubic-bezier(0.16, 1, 0.28, 1) both;
   animation-delay: calc((12 - var(--fb-standard-index)) * 8ms);
 }
@@ -309,6 +310,18 @@
   border-color: var(--accent, #7c4dff);
 }
 
+.fb-prompt-book-pill {
+  border-color: rgba(218, 181, 83, 0.58);
+  background: rgba(218, 181, 83, 0.18);
+  color: #f3d27a;
+}
+
+.fb-prompt-book-pill:hover {
+  border-color: rgba(242, 210, 122, 0.78);
+  background: rgba(218, 181, 83, 0.28);
+  color: #ffe39a;
+}
+
 .fb-pill:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -317,18 +330,6 @@
 .fb-suno-vocal-pill {
   padding-inline: 9px;
   font-size: 10px;
-}
-
-/* Auto-approve toggle: green when ON signals the confirmation gate is open. */
-.fb-chat-approval-pill.active {
-  background: #2e7d32;
-  border-color: #43a047;
-  color: #fff;
-}
-
-.fb-chat-approval-pill.active:hover {
-  background: #338a37;
-  color: #fff;
 }
 
 .fb-pill svg { flex-shrink: 0; }

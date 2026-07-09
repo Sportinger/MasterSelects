@@ -22,6 +22,7 @@ interface BuildFlashBoardChatSendPlanInput {
   hasHostedSession: boolean;
   hostedAIEnabled: boolean;
   isChatting: boolean;
+  lemonadeContextSize: number;
   lemonadeEndpoint: string;
   openAiApiKey: string;
   openAiReasoningEffort: FlashBoardOpenAiReasoningEffort;
@@ -61,6 +62,7 @@ export function buildFlashBoardChatSendPlan({
   hasHostedSession,
   hostedAIEnabled,
   isChatting,
+  lemonadeContextSize,
   lemonadeEndpoint,
   openAiApiKey,
   openAiReasoningEffort,
@@ -104,6 +106,7 @@ export function buildFlashBoardChatSendPlan({
     request: {
       anthropicApiKey,
       hostedAvailable: shouldUseHostedChat,
+      lemonadeContextSize: chatProvider === 'lemonade' ? lemonadeContextSize : undefined,
       lemonadeEndpoint,
       model: activeChatModelId,
       openAiApiKey,

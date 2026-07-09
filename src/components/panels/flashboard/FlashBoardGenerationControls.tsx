@@ -96,9 +96,9 @@ export function FlashBoardGenerationControls({
           className="fb-pill fb-prompt-book-pill"
           type="button"
           onClick={onOpenPromptBook}
-          title="Open generation PromptBook"
+          title="Open generation Prompt Book"
         >
-          <span className="fb-pill-label">PromptBook</span>
+          <span className="fb-pill-label">Prompt Book</span>
         </button>
         {isElevenLabsMode && (
           <>

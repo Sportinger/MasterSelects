@@ -10,6 +10,7 @@ interface StoredAiSystemPrompt {
   name: string;
   provider: AIProvider;
   prompt: string;
+  sendContext?: boolean;
   updatedAt: string;
 }
 
@@ -17,6 +18,7 @@ export interface SavedAiSystemPrompt {
   fileName: string;
   name: string;
   provider: AIProvider;
+  sendContext: boolean;
   updatedAt: string;
 }
 
@@ -81,6 +83,7 @@ function parseStoredPrompt(fileName: string, text: string): LoadedAiSystemPrompt
     name: normalizeProjectPromptName(stored.name, stored.provider),
     prompt: stored.prompt,
     provider: stored.provider,
+    sendContext: stored.sendContext !== false,
     updatedAt: stored.updatedAt,
   };
 }
@@ -108,6 +111,7 @@ export async function listProjectSystemPrompts(provider?: AIProvider): Promise<S
       fileName: parsed.fileName,
       name: parsed.name,
       provider: parsed.provider,
+      sendContext: parsed.sendContext,
       updatedAt: parsed.updatedAt,
     });
   }
@@ -140,6 +144,7 @@ export async function saveProjectSystemPrompt(
   provider: AIProvider,
   name: string,
   prompt: string,
+  sendContext = true,
 ): Promise<SavedAiSystemPrompt> {
   if (!projectFileService.isProjectOpen()) {
     throw new Error('Open a project before saving prompts.');
@@ -152,6 +157,7 @@ export async function saveProjectSystemPrompt(
     name: promptName,
     prompt,
     provider,
+    sendContext,
     updatedAt,
     version: PROMPT_FILE_VERSION,
   };
@@ -170,6 +176,7 @@ export async function saveProjectSystemPrompt(
     fileName,
     name: promptName,
     provider,
+    sendContext,
     updatedAt,
   };
 }

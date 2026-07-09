@@ -31,7 +31,9 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
     throw new Error('Write a prompt before starting chat.');
   }
 
-  const systemPrompt = buildFlashBoardChatSystemPrompt(request.systemPromptOverride);
+  const systemPrompt = buildFlashBoardChatSystemPrompt(request.systemPromptOverride, {
+    includeContext: request.systemPromptIncludeContext !== false,
+  });
 
   switch (request.provider) {
     case 'anthropic':

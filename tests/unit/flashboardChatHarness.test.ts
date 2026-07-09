@@ -30,6 +30,13 @@ describe('FlashBoard chat harness prompt', () => {
     expect(customPrompt).not.toContain(FLASHBOARD_CHAT_SYSTEM_PROMPT.slice(0, 80));
   });
 
+  it('can omit the live MasterSelects context for saved system prompts', () => {
+    const customPrompt = buildFlashBoardChatSystemPrompt('Custom compact editor prompt.', { includeContext: false });
+
+    expect(customPrompt).toBe('Custom compact editor prompt.');
+    expect(customPrompt).not.toContain('Current MasterSelects context:');
+  });
+
   it('teaches the tool-step budget and batching as the bulk mechanism', () => {
     expect(prompt).toMatch(/tool calls per turn/i);
     expect(prompt).toContain('executeBatch');

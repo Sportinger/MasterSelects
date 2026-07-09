@@ -15,7 +15,9 @@ export function useFlashBoardComposerAccessState() {
   const apiKeysUnlocked = useSettingsStore((s) => s.apiKeysUnlocked);
   const apiKeyDefaults = useSettingsStore((s) => s.apiKeyDefaults);
   const aiSystemPromptOverrides = useSettingsStore((s) => s.aiSystemPromptOverrides);
+  const aiSystemPromptSendContext = useSettingsStore((s) => s.aiSystemPromptSendContext);
   const aiProvider = useSettingsStore((s) => s.aiProvider);
+  const lemonadeContextSize = useSettingsStore((s) => s.lemonadeContextSize);
   const lemonadeEndpoint = useSettingsStore((s) => s.lemonadeEndpoint);
   const lemonadeModel = useSettingsStore((s) => s.lemonadeModel);
   const openSettings = useSettingsStore((s) => s.openSettings);
@@ -23,6 +25,8 @@ export function useFlashBoardComposerAccessState() {
   const setAiApprovalMode = useSettingsStore((s) => s.setAiApprovalMode);
   const setAiProvider = useSettingsStore((s) => s.setAiProvider);
   const setAiSystemPromptOverride = useSettingsStore((s) => s.setAiSystemPromptOverride);
+  const setAiSystemPromptSendContext = useSettingsStore((s) => s.setAiSystemPromptSendContext);
+  const setLemonadeContextSize = useSettingsStore((s) => s.setLemonadeContextSize);
   const setLemonadeModel = useSettingsStore((s) => s.setLemonadeModel);
   const useOpenAiKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.openai && openAiApiKey.trim());
   const useAnthropicKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.anthropic && anthropicApiKey.trim());
@@ -44,6 +48,7 @@ export function useFlashBoardComposerAccessState() {
     accountSession,
     aiApprovalMode,
     aiProvider,
+    aiSystemPromptSendContext,
     aiSystemPromptOverrides,
     anthropicApiKey,
     canUseByoPromptRefiner,
@@ -57,6 +62,7 @@ export function useFlashBoardComposerAccessState() {
     hasKieAiKey: useKieAiKeyByDefault,
     hasOpenAiKey: useOpenAiKeyByDefault,
     hostedAIEnabled,
+    lemonadeContextSize,
     lemonadeEndpoint,
     lemonadeModel,
     openAiApiKey,
@@ -66,6 +72,8 @@ export function useFlashBoardComposerAccessState() {
     setAiApprovalMode,
     setAiProvider,
     setAiSystemPromptOverride,
+    setAiSystemPromptSendContext,
+    setLemonadeContextSize,
     setLemonadeModel,
     useElevenLabsKeyByDefault,
     useEvolinkKeyByDefault,

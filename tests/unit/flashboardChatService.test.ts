@@ -8,6 +8,7 @@ import {
 
 describe('FlashBoardChatService', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -114,6 +115,70 @@ describe('FlashBoardChatService', () => {
         { role: 'user', content: 'Suggest lighting' },
       ],
     });
+  });
+
+  it('lets Lemonade cold-start past the old 60s timeout window', async () => {
+    vi.useFakeTimers();
+    let requestSignal: AbortSignal | undefined;
+    const fetchMock = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+      requestSignal = init?.signal ?? undefined;
+      return new Promise<Response>((resolve, reject) => {
+        requestSignal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+        setTimeout(() => {
+          resolve(new Response('data: {"choices":[{"delta":{"content":"Ready"}}]}\n\ndata: [DONE]\n\n', {
+            headers: { 'Content-Type': 'text/event-stream' },
+            status: 200,
+          }));
+        }, 100_000);
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const responsePromise = sendFlashBoardChatMessage({
+      lemonadeEndpoint: 'http://localhost:13305/api/v1',
+      model: 'user.gemma3-4b-it-GGUF',
+      prompt: 'Make this timeline shorter.',
+      provider: 'lemonade',
+      temperature: 0.7,
+    });
+
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(requestSignal?.aborted).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(40_000);
+    await expect(responsePromise).resolves.toBe('Ready');
+  });
+
+  it('asks Lemonade to load the selected context size before chat', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'loaded' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response('data: {"choices":[{"delta":{"content":"Ready"}}]}\n\ndata: [DONE]\n\n', {
+        headers: { 'Content-Type': 'text/event-stream' },
+        status: 200,
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await sendFlashBoardChatMessage({
+      lemonadeContextSize: 16384,
+      lemonadeEndpoint: 'http://localhost:13305/api/v1',
+      model: 'Gemma-3-4b-it-GGUF',
+      prompt: 'Make this timeline shorter.',
+      provider: 'lemonade',
+      temperature: 0.7,
+    });
+
+    expect(response).toBe('Ready');
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'http://localhost:13305/api/v1/load', expect.objectContaining({
+      method: 'POST',
+    }));
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      ctx_size: 16384,
+      model_name: 'Gemma-3-4b-it-GGUF',
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, 'http://localhost:13305/api/v1/chat/completions', expect.objectContaining({
+      method: 'POST',
+    }));
   });
 
   it('uses a fresh hosted charge key for each tool-followup model round', async () => {

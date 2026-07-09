@@ -1,13 +1,16 @@
 import {
   createLemonadeChatCompletionStream,
   DEFAULT_LEMONADE_MODEL,
+  loadLemonadeModel,
 } from '../lemonadeProvider';
 import { cloudAiService } from '../cloudAiService';
 import { AI_TOOLS } from '../aiTools';
 import {
   FLASHBOARD_CHAT_MAX_TOOL_ITERATIONS,
   FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS,
+  FLASHBOARD_LEMONADE_INITIAL_RESPONSE_TIMEOUT_MS,
   FLASHBOARD_LEMONADE_MAX_TOOL_RESULT_CHARS,
+  FLASHBOARD_LEMONADE_STREAM_IDLE_TIMEOUT_MS,
   clampTemperature,
   isOpenAiReasoningEffortSupported,
   isTemperatureSupported,
@@ -229,6 +232,14 @@ export async function sendAnthropicChat(request: FlashBoardChatRequest, systemPr
 }
 
 export async function sendLemonadeChat(request: FlashBoardChatRequest, systemPrompt: string): Promise<string> {
+  await loadLemonadeModel({
+    contextSize: request.lemonadeContextSize,
+    endpoint: request.lemonadeEndpoint ?? '',
+    model: request.model || DEFAULT_LEMONADE_MODEL,
+    signal: request.signal,
+    timeoutMs: FLASHBOARD_LEMONADE_INITIAL_RESPONSE_TIMEOUT_MS,
+  });
+
   const messages: FlashBoardChatCompletionMessage[] = [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: request.prompt },
@@ -243,7 +254,8 @@ export async function sendLemonadeChat(request: FlashBoardChatRequest, systemPro
       maxTokens: 1024,
       temperature: clampTemperature(request.temperature),
       signal: request.signal,
-      timeoutMs: 45_000,
+      timeoutMs: FLASHBOARD_LEMONADE_INITIAL_RESPONSE_TIMEOUT_MS,
+      streamIdleTimeoutMs: FLASHBOARD_LEMONADE_STREAM_IDLE_TIMEOUT_MS,
     })
   ), 'Lemonade', FLASHBOARD_LEMONADE_MAX_TOOL_RESULT_CHARS, request.onExecutedToolCalls);
 }

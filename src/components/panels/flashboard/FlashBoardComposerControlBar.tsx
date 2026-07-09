@@ -68,6 +68,9 @@ function getInlineSubmenuStyle(
     case chatControls.renderedPopover === 'chatModel':
       optionCount = chatControls.chatModelOptions.length;
       break;
+    case chatControls.renderedPopover === 'chatContext':
+      optionCount = 8;
+      break;
     case chatControls.renderedPopover === 'chatReasoning':
       optionCount = chatControls.chatReasoningEffortOptions.length;
       break;
