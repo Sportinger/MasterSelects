@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { ensureTransitionCompositionForPair } from '../../src/services/timeline/transitionCompositionService';
 import type { Composition } from '../../src/stores/mediaStore';
@@ -8,10 +8,6 @@ import type { SerializableClip, TimelineClip } from '../../src/types/timeline';
 vi.mock('../../src/services/compositionRenderer', () => ({
   compositionRenderer: { invalidateCompositionAndParents: vi.fn() },
 }));
-
-afterEach(async () => {
-  await vi.dynamicImportSettled();
-});
 
 function serializableClip(id: string, startTime: number): SerializableClip {
   return {
