@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '2.3.6';
+export const APP_VERSION = '2.3.7';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -27,8 +27,8 @@ export const FEATURED_VIDEO: {
   title: 'MasterSelects Demo',
   banner: {
     type: 'success',
-    title: 'MasterSelects 2.3.6',
-    message: 'Keyframe and licensing release: marquee selection now selects multiple keyframes at the correct timeline position, Continuous / Orbit camera segments follow their world-pivot arc, and the project adopts the Say Hi License across source and Windows installer metadata.',
+    title: 'MasterSelects 2.3.7',
+    message: 'Transition Compositions & Edge Scrubbing release: editable mapped transition subcompositions keep outgoing and incoming sources continuous across timing, speed, reverse, holds, keyframes, recipes, masks, light leaks, preview, and export; legacy transitions upgrade safely, nested playback stays fresh, and edge playhead dragging autoscrolls smoothly while preserving snapping.',
     animated: true,
   },
 };
@@ -36,8 +36,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'MasterSelects 2.3.6',
-  message: 'Keyframe and licensing release: marquee selection now selects multiple keyframes at the correct timeline position, Continuous / Orbit camera segments follow their world-pivot arc, and the project adopts the Say Hi License across source and Windows installer metadata.',
+  title: 'MasterSelects 2.3.7',
+  message: 'Transition Compositions & Edge Scrubbing release: editable mapped transition subcompositions keep outgoing and incoming sources continuous across timing, speed, reverse, holds, keyframes, recipes, masks, light leaks, preview, and export; legacy transitions upgrade safely, nested playback stays fresh, and edge playhead dragging autoscrolls smoothly while preserving snapping.',
   animated: true,
 };
 

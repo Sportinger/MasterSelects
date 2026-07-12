@@ -119,6 +119,183 @@ function dispatchTimelineInteractionEvent(
   }
 }
 
+function waitForAnimationFrames(count = 2) {
+  return new Promise<void>((resolve) => {
+    const step = () => {
+      if (count-- <= 1) {
+        resolve();
+        return;
+      }
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
+}
+
+function getPlayheadEdgeDragSnapshot() {
+  const state = useTimelineStore.getState();
+  return {
+    isDraggingPlayhead: state.isDraggingPlayhead,
+    isPlaying: state.isPlaying,
+    playheadPosition: state.playheadPosition,
+    scrollX: state.scrollX,
+    zoom: state.zoom,
+  };
+}
+
+async function measurePlayheadEdgeDrag(args: Record<string, unknown>) {
+  const originalState = useTimelineStore.getState();
+  const original = {
+    isDraggingPlayhead: originalState.isDraggingPlayhead,
+    isPlaying: originalState.isPlaying,
+    playheadPosition: originalState.playheadPosition,
+    scrollX: originalState.scrollX,
+    zoom: originalState.zoom,
+  };
+  const holdMs = typeof args.holdMs === 'number' && Number.isFinite(args.holdMs)
+    ? Math.max(250, Math.min(2000, Math.round(args.holdMs)))
+    : 600;
+
+  if (original.isDraggingPlayhead) {
+    return {
+      success: false,
+      error: 'Finish the active playhead drag before running this probe.',
+      data: { kind: 'playhead-edge-drag', original },
+    };
+  }
+
+  const laneReference = document.querySelector<HTMLElement>('.timeline-lane-reference');
+  if (!laneReference || originalState.duration <= 0) {
+    return {
+      success: false,
+      error: 'A visible timeline with a positive duration is required.',
+      data: { kind: 'playhead-edge-drag', original },
+    };
+  }
+
+  let released: (ReturnType<typeof getPlayheadEdgeDragSnapshot> & {
+    restored?: ReturnType<typeof getPlayheadEdgeDragSnapshot>;
+  }) | null = null;
+  let restored: ReturnType<typeof getPlayheadEdgeDragSnapshot> | null = null;
+  try {
+    originalState.pause();
+    const initialRect = laneReference.getBoundingClientRect();
+    const requiredZoom = (initialRect.width + 580) / originalState.duration;
+    originalState.setZoom(Math.max(original.zoom, requiredZoom));
+    await waitForAnimationFrames();
+
+    const rect = laneReference.getBoundingClientRect();
+    const state = useTimelineStore.getState();
+    const maxScrollX = Math.max(0, state.duration * state.zoom - rect.width + 100);
+    if (rect.width <= 0 || maxScrollX < 160) {
+      return {
+        success: false,
+        error: 'Timeline cannot scroll far enough for the bounded edge-drag probe.',
+        data: { kind: 'playhead-edge-drag', original, maxScrollX },
+      };
+    }
+
+    const stagedScrollX = maxScrollX / 2;
+    state.setScrollX(stagedScrollX);
+    state.setPlayheadPosition(Math.max(0, Math.min(
+      state.duration,
+      (stagedScrollX + rect.width / 2) / state.zoom,
+    )));
+    await waitForAnimationFrames();
+
+    const playhead = document.querySelector<HTMLElement>('[data-ai-id="timeline-playhead"]');
+    if (!playhead) {
+      return {
+        success: false,
+        error: 'Timeline playhead target not found after probe setup.',
+        data: { kind: 'playhead-edge-drag', original },
+      };
+    }
+
+    const playheadRect = playhead.getBoundingClientRect();
+    playhead.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      buttons: 1,
+      clientX: playheadRect.left + Math.max(1, playheadRect.width / 2),
+      clientY: playheadRect.top + Math.max(1, playheadRect.height / 2),
+      view: window,
+    }));
+    await waitForAnimationFrames();
+
+    const dispatchMove = (clientX: number) => {
+      document.dispatchEvent(new MouseEvent('mousemove', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX,
+        clientY: rect.top + Math.max(1, rect.height / 2),
+        view: window,
+      }));
+    };
+    const waitForHold = () => new Promise<void>(resolve => window.setTimeout(resolve, holdMs));
+
+    dispatchMove(rect.right - 4);
+    const rightAfterMove = getPlayheadEdgeDragSnapshot();
+    await waitForHold();
+    const rightAfterHold = getPlayheadEdgeDragSnapshot();
+
+    dispatchMove(rect.left + 4);
+    const leftAfterMove = getPlayheadEdgeDragSnapshot();
+    await waitForHold();
+    const leftAfterHold = getPlayheadEdgeDragSnapshot();
+
+    document.dispatchEvent(new MouseEvent('mouseup', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      buttons: 0,
+      clientX: rect.left + 4,
+      clientY: rect.top + Math.max(1, rect.height / 2),
+      view: window,
+    }));
+    await waitForAnimationFrames();
+    released = getPlayheadEdgeDragSnapshot();
+
+    return {
+      success: true,
+      data: {
+        kind: 'playhead-edge-drag',
+        holdMs,
+        original,
+        right: {
+          afterMove: rightAfterMove,
+          afterHold: rightAfterHold,
+          scrollDelta: rightAfterHold.scrollX - rightAfterMove.scrollX,
+          playheadDelta: rightAfterHold.playheadPosition - rightAfterMove.playheadPosition,
+        },
+        left: {
+          afterMove: leftAfterMove,
+          afterHold: leftAfterHold,
+          scrollDelta: leftAfterHold.scrollX - leftAfterMove.scrollX,
+          playheadDelta: leftAfterHold.playheadPosition - leftAfterMove.playheadPosition,
+        },
+        released,
+      },
+    };
+  } finally {
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0, buttons: 0, view: window }));
+    const state = useTimelineStore.getState();
+    state.pause();
+    state.setZoom(original.zoom);
+    state.setScrollX(original.scrollX);
+    state.setPlayheadPosition(original.playheadPosition);
+    if (original.isPlaying) await state.play();
+    await waitForAnimationFrames();
+    restored = getPlayheadEdgeDragSnapshot();
+    if (released) {
+      released.restored = restored;
+    }
+  }
+}
+
 export async function measureTimelineInteraction(args: Record<string, unknown> = {}) {
   const durationMs = typeof args.durationMs === 'number' && Number.isFinite(args.durationMs)
     ? Math.max(500, Math.min(60000, Math.round(args.durationMs)))
@@ -132,6 +309,9 @@ export async function measureTimelineInteraction(args: Record<string, unknown> =
   const kind = typeof args.kind === 'string' && args.kind.trim()
     ? args.kind.trim()
     : 'horizontal-wheel';
+  if (kind === 'playhead-edge-drag') {
+    return measurePlayheadEdgeDrag(args);
+  }
   const sectionKind = args.sectionKind === 'video' ? 'video' : 'audio';
   const target = getTimelineInteractionTarget(kind, sectionKind);
   if (!target) {

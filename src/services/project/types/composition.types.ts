@@ -11,7 +11,12 @@ import type { ClipNodeGraph } from '../../../types/nodeGraph';
 import type { MotionLayerDefinition } from '../../../types/motionDesign';
 import type { LayerSourceRect, TransitionRenderState } from '../../../types/layers';
 import type { TransitionOverlayClipDefinition } from '../../../types/timeline';
-import type { TimelineTransition, TransitionCompositionLink } from '../../../types/timelineCore';
+import type {
+  TimelineTransition,
+  TransitionCompositionLink,
+  TransitionRecipeBlendWindow,
+  TransitionSourceMap,
+} from '../../../types/timelineCore';
 import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
 import type { MidiClipData, MidiInstrument } from '../../../types/midiClip';
 import type {
@@ -77,6 +82,8 @@ export interface ProjectClip {
   transitionOut?: TimelineTransition;
   transitionSourceTimeOverride?: number;
   transitionSourceHold?: boolean;
+  transitionSourceMap?: TransitionSourceMap;
+  transitionRecipeBlendWindows?: TransitionRecipeBlendWindow[];
   colorCorrection?: ColorCorrectionState;
   nodeGraph?: ClipNodeGraph;
 

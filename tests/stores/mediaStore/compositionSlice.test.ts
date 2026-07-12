@@ -299,6 +299,70 @@ describe('compositionSlice', () => {
     expect(store.getState().selectedSlotCompositionId).toBeNull();
   });
 
+  it('removeComposition: removes a mapped transition comp with its linked legacy backup', () => {
+    const parent: Composition = {
+      ...store.getState().compositions[0],
+      timelineData: makeTimelineData([
+        {
+          id: 'out', trackId: 'video-1', name: 'Out', mediaFileId: 'out-media', startTime: 0, duration: 5,
+          inPoint: 0, outPoint: 5, sourceType: 'video', naturalDuration: 5,
+          transform: defaultTransform, effects: [],
+          transitionOut: {
+            id: 'transition-1', type: 'crossfade', duration: 1, linkedClipId: 'in', compositionId: 'mapped',
+          },
+        },
+        {
+          id: 'in', trackId: 'video-1', name: 'In', mediaFileId: 'in-media', startTime: 5, duration: 5,
+          inPoint: 0, outPoint: 5, sourceType: 'video', naturalDuration: 5,
+          transform: defaultTransform, effects: [],
+          transitionIn: {
+            id: 'transition-1', type: 'crossfade', duration: 1, linkedClipId: 'out', compositionId: 'mapped',
+          },
+        },
+      ]),
+    };
+    const mapped: Composition = {
+      ...parent,
+      id: 'mapped',
+      name: 'Mapped Transition',
+      timelineData: makeTimelineData([], { duration: 1 }),
+      transitionComp: {
+        kind: 'transition-comp',
+        sourceLayout: 'mapped-v3',
+        legacyBackupCompositionId: 'legacy-backup',
+        parentCompositionId: parent.id,
+        parentTransitionId: 'transition-1',
+        parentOutgoingClipId: 'out',
+        parentIncomingClipId: 'in',
+        linkedOutgoingClipId: 'mapped-out',
+        linkedIncomingClipId: 'mapped-in',
+        innerTransitionId: '',
+        paddingBefore: 0,
+        paddingAfter: 0,
+        bodyStart: 0,
+        bodyEnd: 1,
+      },
+    };
+    const legacyBackup: Composition = {
+      ...mapped,
+      id: 'legacy-backup',
+      name: 'Legacy Transition',
+      transitionComp: {
+        ...mapped.transitionComp!,
+        sourceLayout: 'legacy-segmented',
+        legacyBackupCompositionId: undefined,
+      },
+    };
+    store.setState({ compositions: [parent, mapped, legacyBackup] });
+
+    store.getState().removeComposition(mapped.id);
+
+    expect(store.getState().compositions.map((composition) => composition.id)).toEqual([parent.id]);
+    const [outgoing, incoming] = store.getState().compositions[0].timelineData!.clips;
+    expect(outgoing.transitionOut?.compositionId).toBeUndefined();
+    expect(incoming.transitionIn?.compositionId).toBeUndefined();
+  });
+
   it('removeComposition: removes hidden transition comps referenced by timeline even with stale backref', () => {
     const parent: Composition = {
       id: 'comp-1',

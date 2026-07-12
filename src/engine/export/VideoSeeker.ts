@@ -8,8 +8,9 @@ import {
   DEFAULT_TRANSITION_PLACEMENT,
   findActiveTransitionPlanForTrack,
 } from '../../stores/timeline/editOperations/transitionPlanner';
+import { MAX_NESTING_DEPTH } from '../../stores/timeline/constants';
 import { updateRuntimePlaybackTime } from '../../services/mediaRuntime/runtimePlayback';
-import { getClipSourceWindowTime } from './layerBuilder/timing';
+import { getClipSourceWindowTime, getMappedClipSourceTime } from './layerBuilder/timing';
 
 const log = Logger.create('VideoSeeker');
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
@@ -17,6 +18,11 @@ import { ParallelDecodeManager } from '../ParallelDecodeManager';
 type VideoFrameCallbackVideo = HTMLVideoElement & {
   requestVideoFrameCallback: (callback: () => void) => number;
 };
+
+interface VideoSeekTarget {
+  clip: TimelineClip;
+  sourceTime: number;
+}
 
 function hasVideoFrameCallback(video: HTMLVideoElement): video is VideoFrameCallbackVideo {
   return 'requestVideoFrameCallback' in video;
@@ -38,19 +44,32 @@ export async function seekAllClipsToTime(
   // ParallelDecoder provides VideoFrames directly, much faster than seeking videos
   if (useParallelDecode && parallelDecoder) {
     await parallelDecoder.prefetchFramesForTime(time);
-    if ((ctx.transitionParticipantsByTrack?.size ?? 0) > 0) {
-      await Promise.all(getRenderableClips(ctx)
+    const transitionTargets = (ctx.transitionParticipantsByTrack?.size ?? 0) > 0
+      ? getRenderableClips(ctx)
         .filter((clip) => {
           const track = ctx.trackMap.get(clip.trackId);
           return track?.visible && clip.source?.type === 'video';
         })
         .map((clip) => {
           const clipLocalTime = time - clip.startTime;
-          const sourceTime = getClipSourceWindowTime(clip, clipLocalTime, ctx);
-          return parallelDecoder.prefetchFrameForClipSourceTime(clip.id, sourceTime);
-        }));
+          return { clip, sourceTime: getClipSourceWindowTime(clip, clipLocalTime, ctx) };
+        })
+      : [];
+    const mappedTargets = getMappedVideoSeekTargets(ctx);
+
+    if (mappedTargets.length > 0) {
+      parallelDecoder.advanceToTime(time);
     }
-    parallelDecoder.advanceToTime(time);
+    const targetsByClipId = new Map<string, VideoSeekTarget>();
+    for (const target of [...transitionTargets, ...mappedTargets]) {
+      targetsByClipId.set(target.clip.id, target);
+    }
+    await Promise.all([...targetsByClipId.values()].map(({ clip, sourceTime }) =>
+      parallelDecoder.prefetchFrameForClipSourceTime(clip.id, sourceTime)
+    ));
+    if (mappedTargets.length === 0) {
+      parallelDecoder.advanceToTime(time);
+    }
     return;
   }
 
@@ -71,15 +90,17 @@ function getRenderableClips(ctx: FrameContext): TimelineClip[] {
 }
 
 function getNestedVideoClipTime(clip: TimelineClip, nestedTime: number): number {
+  const nestedLocalTime = nestedTime - clip.startTime;
+  const mappedSourceTime = getMappedClipSourceTime(clip, nestedLocalTime);
+  if (mappedSourceTime !== undefined) return mappedSourceTime;
+
   if (Number.isFinite(clip.transitionSourceTimeOverride)) {
     return clip.transitionSourceTimeOverride!;
   }
-  const nestedLocalTime = nestedTime - clip.startTime;
-  const nestedSpeed = clip.speed ?? 1;
-  const speedAdjusted = nestedLocalTime * Math.abs(nestedSpeed);
-  return (clip.reversed !== (nestedSpeed < 0))
-    ? clip.outPoint - speedAdjusted
-    : clip.inPoint + speedAdjusted;
+  if (clip.transitionSourceHold) return clip.inPoint ?? 0;
+  return clip.reversed
+    ? (clip.outPoint ?? clip.duration) - nestedLocalTime
+    : nestedLocalTime + (clip.inPoint ?? 0);
 }
 
 function getRenderableNestedClips(clip: TimelineClip, nestedTime: number): TimelineClip[] {
@@ -113,6 +134,79 @@ function getRenderableNestedClips(clip: TimelineClip, nestedTime: number): Timel
   return renderable;
 }
 
+function getNestedCompositionTime(clip: TimelineClip, parentTime: number): {
+  time: number;
+  isMapped: boolean;
+} {
+  const clipLocalTime = parentTime - clip.startTime;
+  const mappedSourceTime = getMappedClipSourceTime(clip, clipLocalTime);
+  return {
+    time: mappedSourceTime ?? clipLocalTime + (clip.inPoint || 0),
+    isMapped: mappedSourceTime !== undefined,
+  };
+}
+
+function collectNestedVideoSeekTargets(
+  compositionClip: TimelineClip,
+  parentTime: number,
+  targets: VideoSeekTarget[],
+  mappedAncestor = false,
+  mappedOnly = false,
+  depth = 0,
+): void {
+  if (depth >= MAX_NESTING_DEPTH) return;
+
+  const { time: nestedTime, isMapped } = getNestedCompositionTime(compositionClip, parentTime);
+  const requiresMappedSourceTime = mappedAncestor || isMapped;
+
+  for (const nestedClip of getRenderableNestedClips(compositionClip, nestedTime)) {
+    if (nestedClip.isComposition && nestedClip.nestedClips && nestedClip.nestedTracks) {
+      collectNestedVideoSeekTargets(
+        nestedClip,
+        nestedTime,
+        targets,
+        requiresMappedSourceTime,
+        mappedOnly,
+        depth + 1,
+      );
+      continue;
+    }
+    if (nestedClip.source?.type !== 'video') continue;
+
+    const nestedLocalTime = nestedTime - nestedClip.startTime;
+    const mappedSourceTime = getMappedClipSourceTime(nestedClip, nestedLocalTime);
+    if (!mappedOnly || requiresMappedSourceTime || mappedSourceTime !== undefined) {
+      targets.push({
+        clip: nestedClip,
+        sourceTime: mappedSourceTime ?? getNestedVideoClipTime(nestedClip, nestedTime),
+      });
+    }
+  }
+}
+
+function getMappedVideoSeekTargets(ctx: FrameContext): VideoSeekTarget[] {
+  const targets: VideoSeekTarget[] = [];
+
+  for (const clip of getRenderableClips(ctx)) {
+    const track = ctx.trackMap.get(clip.trackId);
+    if (!track?.visible) continue;
+
+    if (clip.isComposition && clip.nestedClips && clip.nestedTracks) {
+      collectNestedVideoSeekTargets(clip, ctx.time, targets);
+      continue;
+    }
+    if (clip.source?.type !== 'video') continue;
+
+    const clipLocalTime = ctx.time - clip.startTime;
+    const mappedSourceTime = getMappedClipSourceTime(clip, clipLocalTime);
+    if (mappedSourceTime !== undefined) {
+      targets.push({ clip, sourceTime: mappedSourceTime });
+    }
+  }
+
+  return targets;
+}
+
 async function seekSequentialMode(
   ctx: FrameContext,
   clipStates: Map<string, ExportClipState>
@@ -126,12 +220,11 @@ async function seekSequentialMode(
 
     // Handle nested composition clips
     if (clip.isComposition && clip.nestedClips && clip.nestedTracks) {
-      const clipLocalTime = time - clip.startTime;
-      const nestedTime = clipLocalTime + (clip.inPoint || 0);
+      const nestedTargets: VideoSeekTarget[] = [];
+      collectNestedVideoSeekTargets(clip, time, nestedTargets);
 
-      for (const nestedClip of getRenderableNestedClips(clip, nestedTime)) {
+      for (const { clip: nestedClip, sourceTime: nestedClipTime } of nestedTargets) {
         if (nestedClip.source?.type === 'video') {
-          const nestedClipTime = getNestedVideoClipTime(nestedClip, nestedTime);
           const nestedState = clipStates.get(nestedClip.id);
 
           if (nestedState?.isSequential && nestedState.webCodecsPlayer) {

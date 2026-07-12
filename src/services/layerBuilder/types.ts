@@ -26,6 +26,8 @@ export interface ClipTimeInfo {
   visualClipLocalTime: number;
   visualSourceTime: number;
   visualClipTime: number;
+  isHold: boolean;
+  sourceRate: number;
   speed: number;
   absSpeed: number;
 }

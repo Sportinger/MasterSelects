@@ -6,6 +6,7 @@ import type {
 } from 'react';
 import { TimelineControls } from '../TimelineControls';
 import type { TimelineControlsProps } from '../types';
+import { useLegacyTransitionCompositionUpgrade } from '../hooks/useLegacyTransitionCompositionUpgrade';
 
 interface TimelineToolbarChromeProps {
   duration: number;
@@ -50,6 +51,7 @@ export function TimelineToolbarChrome({
   timelineTimeDisplayMode,
   timelineTotalFrames,
 }: TimelineToolbarChromeProps) {
+  const upgradeLegacyTransitionComposition = useLegacyTransitionCompositionUpgrade();
   const toolbarStyle = slotGridProgress > 0 ? {
     height: `${Math.round((1 - slotGridProgress) * 36)}px`,
     opacity: 1 - slotGridProgress,
@@ -115,6 +117,16 @@ export function TimelineToolbarChrome({
         <TimelineControls variant="transport" {...timelineControlsProps} />
         <TimelineControls variant="utility" {...timelineControlsProps} />
         <TimelineControls variant="zoom" {...timelineControlsProps} />
+        {upgradeLegacyTransitionComposition && (
+          <button
+            className="timeline-ruler-duration"
+            type="button"
+            onClick={() => void upgradeLegacyTransitionComposition()}
+            title="Upgrade this transition to mapped sources"
+          >
+            Upgrade sources
+          </button>
+        )}
       </div>
     </div>
   );

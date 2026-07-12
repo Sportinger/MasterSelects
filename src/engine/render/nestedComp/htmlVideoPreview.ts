@@ -27,8 +27,37 @@ interface TryCollectHtmlVideoPreviewParams {
   warn: (message: string, context: Record<string, string>) => void;
 }
 
-function getLayerReuseKey(layer: Layer): string {
-  return layer.sourceClipId ? `${layer.id}:${layer.sourceClipId}` : layer.id;
+export function getNestedVideoOwnerId(layer: Pick<Layer, 'sourceClipId'>): string | undefined {
+  const clipId = layer.sourceClipId;
+  return clipId?.startsWith('transition-comp:')
+    ? clipId.replace(/:(?:seg|part):\d+/g, '')
+    : clipId;
+}
+
+export function getCompatibleNestedVideoOwnerId(
+  layer: Pick<Layer, 'sourceClipId'>,
+  lastPresentedOwner: string | undefined,
+  lastPresentedTime: number | undefined,
+  targetTime: number,
+  currentVideoTime?: number,
+): string | undefined {
+  return lastPresentedOwner &&
+    (
+      typeof lastPresentedTime === 'number' &&
+      Number.isFinite(lastPresentedTime) &&
+      Math.abs(lastPresentedTime - targetTime) <= 0.2 ||
+      typeof currentVideoTime === 'number' &&
+      Number.isFinite(currentVideoTime) &&
+      Math.abs(currentVideoTime - targetTime) <= 0.2
+    )
+    ? lastPresentedOwner
+    : getNestedVideoOwnerId(layer);
+}
+
+export function getNestedVideoReuseKey(layer: Pick<Layer, 'id' | 'sourceClipId'>): string {
+  const ownerId = getNestedVideoOwnerId(layer);
+  if (ownerId?.startsWith('transition-comp:')) return ownerId;
+  return ownerId ? `${layer.id}:${ownerId}` : layer.id;
 }
 
 function getTargetVideoTime(layer: Layer, video: HTMLVideoElement): number {
@@ -48,18 +77,18 @@ function isFrameNearTarget(
 }
 
 function getDragHoldFrame(
-  layer: Layer,
+  ownerId: string | undefined,
   video: HTMLVideoElement,
   scrubbingCache: ScrubbingCache | null
 ) {
-  if (!layer.sourceClipId) {
+  if (!ownerId) {
     return null;
   }
-  return scrubbingCache?.getLastFrame(video, layer.sourceClipId) ?? null;
+  return scrubbingCache?.getLastFrame(video, ownerId) ?? null;
 }
 
 function getSafeLastFrameFallback(
-  layer: Layer,
+  ownerId: string | undefined,
   video: HTMLVideoElement,
   targetTime: number,
   scrubbingCache: ScrubbingCache | null
@@ -69,7 +98,7 @@ function getSafeLastFrameFallback(
   }
   const isDragging = useTimelineStore.getState().isDraggingPlayhead;
   const tolerance = video.seeking || isDragging ? 0.35 : 0.2;
-  return scrubbingCache.getLastFrameNearTime(video, targetTime, tolerance, layer.sourceClipId);
+  return scrubbingCache.getLastFrameNearTime(video, targetTime, tolerance, ownerId);
 }
 
 function armHtmlHold(htmlHoldUntil: Map<string, number>, layerId: string): void {
@@ -162,7 +191,7 @@ export function tryCollectHtmlVideoPreview(
   if (!video) {
     return undefined;
   }
-  const layerReuseKey = getLayerReuseKey(layer);
+  const layerReuseKey = getNestedVideoReuseKey(layer);
   const targetTime = getTargetVideoTime(layer, video);
   const timelineState = useTimelineStore.getState();
   const isPlaying = timelineState.isPlaying;
@@ -175,10 +204,17 @@ export function tryCollectHtmlVideoPreview(
   const isPausedSettle = !isPlaying && !isDragging && isSettling;
   const lastPresentedTime = scrubbingCache?.getLastPresentedTime(video);
   const lastPresentedOwner = scrubbingCache?.getLastPresentedOwner(video);
+  const ownerId = getCompatibleNestedVideoOwnerId(
+    layer,
+    lastPresentedOwner,
+    lastPresentedTime,
+    targetTime,
+    video.readyState >= 2 && !video.seeking ? video.currentTime : undefined,
+  );
   const hasPresentedOwnerMismatch =
-    !!layer.sourceClipId &&
+    !!ownerId &&
     !!lastPresentedOwner &&
-    lastPresentedOwner !== layer.sourceClipId;
+    lastPresentedOwner !== ownerId;
   const hasConfirmedPresentedFrame =
     !hasPresentedOwnerMismatch &&
     typeof lastPresentedTime === 'number' &&
@@ -204,7 +240,7 @@ export function tryCollectHtmlVideoPreview(
     (!isSettling &&
       (!hasConfirmedPresentedFrame || Math.abs(lastPresentedTime - targetTime) > 0.05));
   const cacheSearchDistanceFrames = isDragging ? 12 : 6;
-  const lastSameClipFrame = getDragHoldFrame(layer, video, scrubbingCache);
+  const lastSameClipFrame = getDragHoldFrame(ownerId, video, scrubbingCache);
   const dragHoldFrame = isDragging
     ? isFrameNearTarget(
       lastSameClipFrame,
@@ -222,7 +258,7 @@ export function tryCollectHtmlVideoPreview(
     (isDragging || isSettling || awaitingPausedTargetFrame || video.seeking)
       ? lastSameClipFrame
       : null;
-  const safeFallback = getSafeLastFrameFallback(layer, video, targetTime, scrubbingCache) ?? dragHoldFrame;
+  const safeFallback = getSafeLastFrameFallback(ownerId, video, targetTime, scrubbingCache) ?? dragHoldFrame;
   const shouldPreferStableHold = shouldPreferHtmlHold(htmlHoldUntil, layerReuseKey, {
     hasHoldFrame: !!safeFallback || !!emergencyHoldFrame || !!sameClipHoldFrame,
     isDragging,
@@ -248,7 +284,7 @@ export function tryCollectHtmlVideoPreview(
     ? hasFreshPresentedFrame
     : !awaitingPausedTargetFrame &&
       (((!isDragging && !isSettling) || hasFreshPresentedFrame)));
-  const captureOwnerId = allowConfirmedFrameCaching ? layer.sourceClipId : undefined;
+  const captureOwnerId = allowConfirmedFrameCaching ? ownerId : undefined;
 
   if ((video.seeking || awaitingPausedTargetFrame) && scrubbingCache) {
     const cachedView =
@@ -296,7 +332,7 @@ export function tryCollectHtmlVideoPreview(
         video,
         scrubbingCache,
         targetTime,
-        layer.sourceClipId,
+        ownerId,
         captureOwnerId
       );
       if (copiedFrame) {
@@ -321,7 +357,7 @@ export function tryCollectHtmlVideoPreview(
         const lastCapture = scrubbingCache.getLastCaptureTime(video);
         if (isPlaying) {
           if (now - lastCapture > PLAYBACK_CACHE_CAPTURE_INTERVAL_MS) {
-            scrubbingCache.captureVideoFrame(video, layer.sourceClipId);
+            scrubbingCache.captureVideoFrame(video, ownerId);
             scrubbingCache.setLastCaptureTime(video, now);
           }
         } else if (allowConfirmedFrameCaching) {
@@ -336,7 +372,7 @@ export function tryCollectHtmlVideoPreview(
               video,
               targetTime,
               displayedTime,
-              layer.sourceClipId
+              ownerId
             );
           }
           if (typeof displayedTime === 'number' && Number.isFinite(displayedTime)) {
@@ -357,7 +393,7 @@ export function tryCollectHtmlVideoPreview(
           video,
           scrubbingCache,
           targetTime,
-          layer.sourceClipId,
+          ownerId,
           captureOwnerId
         );
         if (copiedFrame) {

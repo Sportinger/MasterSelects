@@ -4,12 +4,21 @@ import { useMemo } from 'react';
 import type { KeyboardEvent, MouseEvent, PointerEvent as ReactPointerEvent } from 'react';
 import type { TimelineClip, TimelineTrack } from '../../../types';
 import { useTimelineStore } from '../../../stores/timeline';
-import { useMediaStore, type Composition, type MediaFile } from '../../../stores/mediaStore';
+import { useMediaStore, type MediaFile } from '../../../stores/mediaStore';
 import { getRuntimeTransition } from '../../../transitions';
 import { DEFAULT_TRANSITION_PLACEMENT, planTransition } from '../../../stores/timeline/editOperations/transitionPlanner';
 import { buildTransitionToolPreviewGhostRanges } from '../../../stores/timeline/editOperations/transitionToolPreview';
 import { createTransitionMediaDurationResolver } from '../../../stores/timeline/editOperations/transitionMediaDurationResolver';
-import { openTransitionComposition } from '../../../services/timeline/transitionCompositionService';
+import { useTransitionCompositionOpen } from '../hooks/useTransitionCompositionOpen';
+import {
+  clampTransitionDuration,
+  getDurationSnapTargets,
+  getOffsetSnapTargets,
+  getOtherTransitionSnapTimes,
+  getTransitionHandleSnapLimits,
+  getTransitionSnapThresholdSeconds,
+  snapTransitionToTargets,
+} from '../utils/transitionOverlaySnapping';
 
 interface TransitionOverlaysProps {
   activeJunction: { trackId: string; junctionTime: number } | null;
@@ -21,139 +30,8 @@ interface TransitionOverlaysProps {
   getTrackHeight?: (track: TimelineTrack) => number;
 }
 
-function clampDuration(value: number, minDuration: number): number {
-  return Math.max(minDuration, value);
-}
-
-const TRANSITION_SNAP_PX = 10;
-const TRANSITION_SNAP_SECONDS_MIN = 1 / 120;
-const TRANSITION_SNAP_SECONDS_MAX = 0.12;
 const TRANSITION_DRAG_ACTIVATION_PX = 2;
 const EMPTY_MEDIA_FILES: readonly MediaFile[] = [];
-const EMPTY_COMPOSITIONS: readonly Composition[] = [];
-
-interface TransitionHandleSnapLimits {
-  incomingHandleAvailable: number;
-  outgoingHandleAvailable: number;
-}
-
-interface TransitionSnapTimesInput {
-  clips: readonly TimelineClip[];
-  currentTransitionId: string;
-  getMediaDuration: (mediaFileId: string) => number | undefined;
-}
-
-function getTransitionSnapThresholdSeconds(pixelsPerSecond: number): number {
-  return Math.min(
-    TRANSITION_SNAP_SECONDS_MAX,
-    Math.max(TRANSITION_SNAP_SECONDS_MIN, TRANSITION_SNAP_PX / pixelsPerSecond),
-  );
-}
-
-function uniqueFiniteTargets(targets: readonly number[]): number[] {
-  const result: number[] = [];
-  for (const target of targets) {
-    if (!Number.isFinite(target)) continue;
-    if (result.some(candidate => Math.abs(candidate - target) < 0.0005)) continue;
-    result.push(Math.abs(target) < 0.0005 ? 0 : target);
-  }
-  return result;
-}
-
-function snapToTargets(value: number, targets: readonly number[], threshold: number): number {
-  let snapped = value;
-  let bestDistance = threshold;
-
-  for (const target of targets) {
-    const distance = Math.abs(value - target);
-    if (distance > bestDistance) continue;
-
-    bestDistance = distance;
-    snapped = Math.abs(target) < 0.0005 ? 0 : target;
-  }
-
-  return snapped;
-}
-
-function getOtherTransitionSnapTimes({
-  clips,
-  currentTransitionId,
-  getMediaDuration,
-}: TransitionSnapTimesInput): number[] {
-  const targets: number[] = [];
-
-  for (const outgoingClip of clips) {
-    const transition = outgoingClip.transitionOut;
-    if (!transition || transition.id === currentTransitionId) continue;
-
-    const incomingClip = clips.find(candidate => candidate.id === transition.linkedClipId);
-    if (!incomingClip) continue;
-
-    const plan = planTransition({
-      outgoingClip,
-      incomingClip,
-      transitionType: transition.type,
-      requestedDuration: transition.duration,
-      params: transition.params,
-      placement: DEFAULT_TRANSITION_PLACEMENT,
-      edgePolicy: 'hold',
-      junctionTime: outgoingClip.startTime + outgoingClip.duration,
-      bodyOffset: transition.offset ?? 0,
-      getMediaDuration,
-    });
-    if (!plan) continue;
-
-    targets.push(
-      plan.bodyStart,
-      (plan.bodyStart + plan.bodyEnd) * 0.5,
-      plan.bodyEnd,
-    );
-  }
-
-  return uniqueFiniteTargets(targets);
-}
-
-function getOffsetSnapTargets(
-  duration: number,
-  limits: TransitionHandleSnapLimits,
-  junctionTime: number,
-  otherTransitionTimes: readonly number[],
-): number[] {
-  const halfDuration = duration * 0.5;
-  return uniqueFiniteTargets([
-    0,
-    halfDuration - limits.incomingHandleAvailable,
-    limits.outgoingHandleAvailable - halfDuration,
-    ...otherTransitionTimes.flatMap(targetTime => [
-      targetTime - junctionTime + halfDuration,
-      targetTime - junctionTime,
-      targetTime - junctionTime - halfDuration,
-    ]),
-  ]);
-}
-
-function getDurationSnapTargets(
-  offset: number,
-  minDuration: number,
-  limits: TransitionHandleSnapLimits,
-  junctionTime: number,
-  resizeEdge: 'start' | 'end',
-  otherTransitionTimes: readonly number[],
-): number[] {
-  const transitionCenter = junctionTime + offset;
-  const transitionTimeTargets = otherTransitionTimes.map(targetTime =>
-    resizeEdge === 'start'
-      ? 2 * (transitionCenter - targetTime)
-      : 2 * (targetTime - transitionCenter)
-  );
-
-  return uniqueFiniteTargets([
-    2 * (offset + limits.incomingHandleAvailable),
-    2 * (limits.outgoingHandleAvailable - offset),
-    ...transitionTimeTargets,
-  ]).filter(target => target >= minDuration);
-}
-
 export function TransitionOverlays({
   activeJunction,
   clips,
@@ -169,7 +47,7 @@ export function TransitionOverlays({
   const setTimelineToolPreview = useTimelineStore(state => state.setTimelineToolPreview);
   const editPreview = useTimelineStore(state => state.transitionEditPreview);
   const setTransitionEditPreview = useTimelineStore(state => state.setTransitionEditPreview);
-  const invalidateCache = useTimelineStore(state => state.invalidateCache);
+  const openTransitionComposition = useTransitionCompositionOpen();
   const mediaFilesStoreValue = useMediaStore(state => Array.isArray(state.files) ? state.files : []);
   const mediaFiles = Array.isArray(mediaFilesStoreValue) ? mediaFilesStoreValue : EMPTY_MEDIA_FILES;
   const getMediaDuration = useMemo(() => createTransitionMediaDurationResolver(mediaFiles), [mediaFiles]);
@@ -183,30 +61,6 @@ export function TransitionOverlays({
     return tracks
       .slice(0, trackIndex)
       .reduce((sum, candidate) => sum + resolveTrackHeight(candidate), 0);
-  };
-  const getTransitionHandleSnapLimits = (
-    clipA: TimelineClip,
-    clipB: TimelineClip,
-    transitionType: string,
-    requestedDuration: number,
-    junctionTime: number,
-  ): TransitionHandleSnapLimits => {
-    const plan = planTransition({
-      outgoingClip: clipA,
-      incomingClip: clipB,
-      transitionType,
-      requestedDuration,
-      placement: DEFAULT_TRANSITION_PLACEMENT,
-      edgePolicy: 'hold',
-      junctionTime,
-      bodyOffset: 0,
-      getMediaDuration,
-    });
-
-    return {
-      incomingHandleAvailable: Math.max(0, plan?.incoming.handleAvailable ?? 0),
-      outgoingHandleAvailable: Math.max(0, plan?.outgoing.handleAvailable ?? 0),
-    };
   };
   const startTransitionResize = (
     event: ReactPointerEvent<HTMLDivElement>,
@@ -238,6 +92,7 @@ export function TransitionOverlays({
       transition.type,
       startDuration,
       junctionTime,
+      getMediaDuration,
     );
     const otherTransitionSnapTimes = getOtherTransitionSnapTimes({
       clips,
@@ -252,8 +107,8 @@ export function TransitionOverlays({
       resizeEdge,
       otherTransitionSnapTimes,
     );
-    const snapDuration = (duration: number) => snapToTargets(
-      clampDuration(duration, minDuration),
+    const snapDuration = (duration: number) => snapTransitionToTargets(
+      clampTransitionDuration(duration, minDuration),
       durationSnapTargets,
       snapThresholdSeconds * 2,
     );
@@ -376,11 +231,6 @@ export function TransitionOverlays({
     const pixelsPerSecond = Math.abs(timeToPixel(1) - timeToPixel(0));
     if (!Number.isFinite(pixelsPerSecond) || pixelsPerSecond <= 0) return;
 
-    event.preventDefault();
-    event.stopPropagation();
-
-    const target = event.currentTarget;
-    const pointerId = event.pointerId;
     const startClientX = event.clientX;
     let hasDragged = false;
     const startOffset = transition.offset ?? 0;
@@ -392,6 +242,7 @@ export function TransitionOverlays({
       transition.type,
       transition.duration,
       junctionTime,
+      getMediaDuration,
     );
     const otherTransitionSnapTimes = getOtherTransitionSnapTimes({
       clips,
@@ -406,7 +257,7 @@ export function TransitionOverlays({
     );
     const getOffsetFromClientX = (clientX: number) => {
       const offset = startOffset + ((clientX - startClientX) / pixelsPerSecond);
-      return snapToTargets(offset, offsetSnapTargets, snapThresholdSeconds);
+      return snapTransitionToTargets(offset, offsetSnapTargets, snapThresholdSeconds);
     };
     const showMovePreview = (offset: number) => {
       const plan = planTransition({
@@ -438,28 +289,17 @@ export function TransitionOverlays({
       });
     };
 
-    selectTransitionProperties(clipA.id, 'out', transition.id);
-    setTransitionEditPreview({
-      clipId: clipA.id,
-      edge: 'out',
-      transitionId: transition.id,
-      duration: transition.duration,
-      offset: startOffset,
-    });
-    target.setPointerCapture(pointerId);
-
     const cleanup = () => {
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
       window.removeEventListener('pointercancel', handlePointerCancel);
-      if (target.hasPointerCapture(pointerId)) {
-        target.releasePointerCapture(pointerId);
-      }
     };
     const finishMove = (requestedOffset: number | null) => {
       cleanup();
+      if (!hasDragged) return;
+
       setTimelineToolPreview(null);
-      if (!hasDragged || requestedOffset === null || Math.abs(requestedOffset - startOffset) < 0.001) {
+      if (requestedOffset === null || Math.abs(requestedOffset - startOffset) < 0.001) {
         setTransitionEditPreview(null);
         return;
       }
@@ -485,7 +325,11 @@ export function TransitionOverlays({
       if (!hasDragged && Math.abs(moveEvent.clientX - startClientX) < TRANSITION_DRAG_ACTIVATION_PX) {
         return;
       }
-      hasDragged = true;
+      if (!hasDragged) {
+        hasDragged = true;
+        selectTransitionProperties(clipA.id, 'out', transition.id);
+      }
+      if (moveEvent.cancelable) moveEvent.preventDefault();
       const offset = getOffsetFromClientX(moveEvent.clientX);
       setTransitionEditPreview({
         clipId: clipA.id,
@@ -608,48 +452,6 @@ export function TransitionOverlays({
           event.stopPropagation();
           selectTransitionProperties(clipA.id, 'out', clipA.transitionOut!.id);
         };
-        const handleOpenTransitionComposition = (event: MouseEvent | ReactPointerEvent<HTMLDivElement>) => {
-          event.preventDefault();
-          event.stopPropagation();
-          const transitionId = clipA.transitionOut?.id;
-          if (!transitionId) return;
-
-          const timelineState = useTimelineStore.getState();
-          const mediaState = useMediaStore.getState();
-          const latestClips = timelineState.clips;
-          const latestCompositions = Array.isArray(mediaState.compositions) ? mediaState.compositions : EMPTY_COMPOSITIONS;
-          const latestClip = latestClips.find((clip) => clip.id === clipA.id);
-          const latestTransition = latestClip?.transitionOut;
-          if (!latestTransition || latestTransition.id !== transitionId) return;
-
-          selectTransitionProperties(clipA.id, 'out', transitionId);
-
-          openTransitionComposition({
-            outgoingClipId: clipA.id,
-            transitionId,
-            timelineClips: latestClips,
-            serializableClips: timelineState.getSerializableState().clips,
-            parentComposition: latestCompositions.find((composition) => composition.id === mediaState.activeCompositionId),
-            compositions: latestCompositions,
-            createComposition: mediaState.createComposition,
-            updateComposition: mediaState.updateComposition,
-            openCompositionTab: mediaState.openCompositionTab,
-            attachTransitionComposition: ({ outgoingClipId, incomingClipId, transitionId, compositionId }) => {
-              useTimelineStore.setState((state) => ({
-                clips: state.clips.map((clip) => {
-                  if (clip.id === outgoingClipId && clip.transitionOut?.id === transitionId) {
-                    return { ...clip, transitionOut: { ...clip.transitionOut, compositionId } };
-                  }
-                  if (clip.id === incomingClipId && clip.transitionIn?.id === transitionId) {
-                    return { ...clip, transitionIn: { ...clip.transitionIn, compositionId } };
-                  }
-                  return clip;
-                }),
-              }));
-              invalidateCache();
-            },
-          });
-        };
 
         return (
           <div
@@ -658,8 +460,13 @@ export function TransitionOverlays({
             role="button"
             tabIndex={0}
             title={`${transitionName} ${displayDuration.toFixed(2)}s offset ${displayOffset.toFixed(2)}s`}
+            onMouseDown={(event) => event.stopPropagation()}
             onClick={handleSelect}
-            onDoubleClick={handleOpenTransitionComposition}
+            onDoubleClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              openTransitionComposition(clipA.id, clipA.transitionOut!.id);
+            }}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
                 handleSelect(event);
@@ -695,14 +502,7 @@ export function TransitionOverlays({
                 justifyContent: 'center',
                 cursor: editPreview?.transitionId === clipA.transitionOut.id ? 'grabbing' : 'grab',
               }}
-              onPointerDown={(event) => {
-                if (event.detail >= 2) {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  return;
-                }
-                startTransitionMove(event, clipA, clipB);
-              }}
+              onPointerDown={(event) => startTransitionMove(event, clipA, clipB)}
             >
               <div
                 className="timeline-transition-resize-handle start"

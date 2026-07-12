@@ -433,6 +433,11 @@ export class RenderDispatcher {
         );
         if (view) {
           data.textureView = view;
+          if (nc.layers.some((layer) => !!layer.source?.videoElement)) {
+            data.displayedMediaTime = nc.currentTime;
+            data.targetMediaTime = nc.currentTime;
+            data.previewPath = 'nested-composite';
+          }
         } else {
           hasDeferredNestedComp = true;
           layerData.splice(i, 1);

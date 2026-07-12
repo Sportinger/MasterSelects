@@ -109,6 +109,8 @@ function createSerializableClip(
     effects: clip.effects,
     transitionIn: clip.transitionIn ? normalizeTransitionInstanceParams(structuredClone(clip.transitionIn)) : undefined,
     transitionOut: clip.transitionOut ? normalizeTransitionInstanceParams(structuredClone(clip.transitionOut)) : undefined,
+    transitionSourceMap: clip.transitionSourceMap ? structuredClone(clip.transitionSourceMap) : undefined,
+    transitionRecipeBlendWindows: clip.transitionRecipeBlendWindows ? structuredClone(clip.transitionRecipeBlendWindows) : undefined,
     colorCorrection: clip.colorCorrection ? structuredClone(clip.colorCorrection) : undefined,
     nodeGraph: cloneClipNodeGraph(clip.nodeGraph),
     keyframes: keyframes.length > 0 ? keyframes : undefined,

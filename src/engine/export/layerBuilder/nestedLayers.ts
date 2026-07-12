@@ -1,6 +1,6 @@
 import type { TimelineClip } from '../../../stores/timeline/types';
 import type { Composition, MediaFile } from '../../../stores/mediaStore/types';
-import { DEFAULT_TRANSFORM } from '../../../stores/timeline/constants';
+import { DEFAULT_TRANSFORM, MAX_NESTING_DEPTH } from '../../../stores/timeline/constants';
 import {
   DEFAULT_TRANSITION_PLACEMENT,
   findActiveTransitionPlanForTrack,
@@ -10,6 +10,7 @@ import type { Layer } from '../../../types/layers';
 import type { TimelineClipSource } from '../../../types';
 import type { ParallelDecodeManager } from '../../ParallelDecodeManager';
 import {
+  createTransientTransitionComposition,
   getTransitionCompositionTime,
   hydrateTransitionCompositionTimeline,
   type TransitionCompositionSourceResolver,
@@ -27,8 +28,7 @@ import {
 } from './sourceLookup';
 import { buildTextLikeLayer, isTextLikeClipSource } from './textLayers';
 import { buildNestedVideoLayer } from './videoLayers';
-
-const MAX_EXPORT_NESTING_DEPTH = 4;
+import { getMappedClipSourceTime } from './timing';
 
 export interface ExportNestedMediaState {
   mediaFiles: MediaFile[];
@@ -46,6 +46,9 @@ function matchesLinkedClipId(clipId: string, baseId: string): boolean {
 }
 
 function getNestedClipSourceTime(nestedClip: TimelineClip, nestedClipLocalTime: number): number {
+  const mappedSourceTime = getMappedClipSourceTime(nestedClip, nestedClipLocalTime);
+  if (mappedSourceTime !== undefined) return mappedSourceTime;
+
   const sourceOverride = nestedClip.transitionSourceTimeOverride;
   if (Number.isFinite(sourceOverride)) return sourceOverride!;
   if (nestedClip.transitionSourceHold) return nestedClip.inPoint ?? 0;
@@ -95,11 +98,9 @@ function createExportTransitionSourceResolver(
 function tagLinkedExportSourceClipIds(
   clips: TimelineClip[],
   activeTransition: ActiveTransitionPlan,
-  compositionId: string,
-  mediaCompositions: Composition[],
+  composition: Composition,
 ): void {
-  const composition = mediaCompositions.find(candidate => candidate.id === compositionId);
-  const link = composition?.transitionComp;
+  const link = composition.transitionComp;
   if (link?.kind !== 'transition-comp') return;
 
   for (const clip of clips as Array<TimelineClip & { exportSourceClipId?: string }>) {
@@ -122,6 +123,9 @@ export function buildTransitionCompositionLayerForExport(params: {
   useParallelDecode: boolean;
   mediaFiles: MediaFile[];
   mediaCompositions: Composition[];
+  outputWidth?: number;
+  outputHeight?: number;
+  frameRate?: number;
   depth?: number;
 }): Layer | null {
   const {
@@ -135,16 +139,28 @@ export function buildTransitionCompositionLayerForExport(params: {
     useParallelDecode,
     mediaFiles,
     mediaCompositions,
+    outputWidth,
+    outputHeight,
+    frameRate,
     depth = 0,
   } = params;
   const transition = activeTransition.outgoingClip.transitionOut;
   const compositionId = transition?.compositionId;
-  if (!transition || !compositionId || compositionId === parentCompositionId) return null;
-
-  const composition = mediaCompositions.find(candidate => candidate.id === compositionId);
-  if (!composition?.timelineData || composition.transitionComp?.kind !== 'transition-comp') return null;
+  if (!transition || compositionId === parentCompositionId) return null;
 
   const mediaFileById = new Map(mediaFiles.map(file => [file.id, file]));
+  const composition = compositionId
+    ? mediaCompositions.find(candidate => candidate.id === compositionId)
+    : createTransientTransitionComposition({
+        activeTransition,
+        parentCompositionId,
+        width: outputWidth ?? 1920,
+        height: outputHeight ?? 1080,
+        frameRate: frameRate ?? 30,
+        getMediaDuration: (mediaFileId) => mediaFileById.get(mediaFileId)?.duration,
+      });
+  if (!composition?.timelineData || composition.transitionComp?.kind !== 'transition-comp') return null;
+
   const compositionTime = getTransitionCompositionTime(activeTransition, composition, parentTime);
   const nestedTimeline = hydrateTransitionCompositionTimeline({
     composition,
@@ -152,7 +168,7 @@ export function buildTransitionCompositionLayerForExport(params: {
     mediaFileById,
     resolveSource: createExportTransitionSourceResolver(clipStates),
   });
-  tagLinkedExportSourceClipIds(nestedTimeline.clips, activeTransition, composition.id, mediaCompositions);
+  tagLinkedExportSourceClipIds(nestedTimeline.clips, activeTransition, composition);
 
   const duration = Math.max(0.0001, composition.timelineData.duration ?? composition.duration);
   const syntheticClip: TimelineClip = {
@@ -208,7 +224,7 @@ export function buildNestedLayersForExport(
   mediaCompositions: Composition[],
   depth: number = 0,
 ): Layer[] {
-  if (!clip.nestedClips || !clip.nestedTracks || depth >= MAX_EXPORT_NESTING_DEPTH) return [];
+  if (!clip.nestedClips || !clip.nestedTracks || depth >= MAX_NESTING_DEPTH) return [];
 
   const nestedVideoTracks = clip.nestedTracks.filter(t => t.type === 'video');
   const nestedAnyVideoSolo = nestedVideoTracks.some(t => t.solo);
@@ -289,9 +305,11 @@ function buildNestedLayerForExport(
   depth: number,
 ): Layer | null {
   const baseLayer = buildNestedBaseLayer(nestedClip, nestedClipLocalTime);
+  if (!baseLayer) return null;
 
   if (nestedClip.isComposition && nestedClip.nestedClips && nestedClip.nestedTracks) {
-    const subCompTime = nestedClipLocalTime + (nestedClip.inPoint || 0);
+    const subCompTime = getMappedClipSourceTime(nestedClip, nestedClipLocalTime)
+      ?? nestedClipLocalTime + (nestedClip.inPoint || 0);
     const subLayers = buildNestedLayersForExport(
       nestedClip,
       subCompTime,

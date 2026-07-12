@@ -1,4 +1,5 @@
-import type { BlendMode, Layer, NestedCompositionData, TimelineClip } from '../../types';
+import type { Layer } from '../../types/layers';
+import type { TimelineClip } from '../../types/timeline';
 import { MAX_NESTING_DEPTH } from '../../stores/timeline/constants';
 import { Logger } from '../logger';
 import { getClipTimeInfo, getMediaFileForClip } from './FrameContext';
@@ -7,26 +8,20 @@ import { buildNestedLayerBuilder3dSourceLayer } from './layerBuilder3dLayers';
 import { buildNestedLayerBuilderCanvasBackedSourceLayer } from './layerBuilderCanvasSources';
 import type { LayerBuilderProxyFrames } from './layerBuilderProxyFrames';
 import { buildNestedCompositionSourceLayer, buildNestedLayerBase, buildNestedMotionSourceLayer, getNestedClipSourceTime } from './layerBuilderNestedLayers';
-import { addLayerBuilderMaskProperties } from './layerBuilderLayerPostProcessing';
 import {
   getLayerBuilderVideoSourceDebugInfo,
   hasLayerBuilderRenderableVideoSource,
   resolveLayerBuilderVideoSource,
 } from './layerBuilderVideoSources';
-import type { TransformCache } from './TransformCache';
 import type { FrameContext } from './types';
 import { buildLayerBuilderNestedTransitionLayer } from './layerBuilderNestedTransitionLayer';
+import { evaluateTransitionMappedAnimation } from '../compositionRender/transitionMappedAnimation';
+import {
+  buildLayerBuilderNestedCompositionLayer,
+  type BuildNestedCompLayerParams,
+} from './layerBuilderNestedCompositionLayer';
 
 const log = Logger.create('LayerBuilderNestedLayers');
-
-type BuildNestedCompLayerParams = {
-  clip: TimelineClip;
-  layerIndex: number;
-  ctx: FrameContext;
-  transformCache: TransformCache;
-  proxyFrames: LayerBuilderProxyFrames;
-  opacityOverride?: number;
-};
 
 type BuildNestedLayersParams = {
   clip: TimelineClip;
@@ -42,12 +37,14 @@ function buildNestedClipLayer(
   params: BuildNestedLayersParams,
 ): Layer | null {
   const { ctx, proxyFrames, depth = 0 } = params;
-  const { baseLayer, keyframes } = buildNestedLayerBase(nestedClip, nestedClipLocalTime);
+  const nestedLayerBase = buildNestedLayerBase(nestedClip, nestedClipLocalTime);
+  if (!nestedLayerBase) return null;
+  const { baseLayer, keyframes } = nestedLayerBase;
   let nestedCanvasLayer: Layer | null = null;
   let nested3dLayer: Layer | null = null;
 
   if (nestedClip.isComposition && nestedClip.nestedClips && nestedClip.nestedClips.length > 0) {
-    const subCompTime = nestedClipLocalTime + (nestedClip.inPoint || 0);
+    const subCompTime = getNestedClipSourceTime(nestedClip, nestedClipLocalTime);
     const subLayers = buildLayerBuilderNestedLayers({
       clip: nestedClip,
       clipTime: subCompTime,
@@ -57,7 +54,7 @@ function buildNestedClipLayer(
     });
     if (subLayers.length === 0) return null;
 
-    return buildNestedCompositionSourceLayer(baseLayer, nestedClip, nestedClipLocalTime, subLayers, ctx);
+    return buildNestedCompositionSourceLayer(baseLayer, nestedClip, subCompTime, subLayers, ctx);
   }
 
   if (nestedClip.isLoading) {
@@ -186,8 +183,12 @@ export function buildLayerBuilderNestedLayers(params: BuildNestedLayersParams): 
 }
 
 export function buildLayerBuilderNestedCompLayer(params: BuildNestedCompLayerParams): Layer | null {
-  const { clip, layerIndex, ctx, transformCache, opacityOverride } = params;
+  const { clip, ctx } = params;
   const timeInfo = getClipTimeInfo(ctx, clip);
+  const mappedAnimation = clip.transitionSourceMap?.version === 2
+    ? evaluateTransitionMappedAnimation(clip, ctx.getClipKeyframes?.(clip.id), timeInfo.visualClipLocalTime)
+    : undefined;
+  if (mappedAnimation === null) return null;
   const nestedLayers = buildLayerBuilderNestedLayers({
     clip,
     clipTime: timeInfo.clipTime,
@@ -196,37 +197,10 @@ export function buildLayerBuilderNestedCompLayer(params: BuildNestedCompLayerPar
   });
   if (nestedLayers.length === 0) return null;
 
-  const transform = transformCache.getTransform(
-    `${ctx.activeCompId}_${layerIndex}`,
-    ctx.getInterpolatedTransform(clip.id, timeInfo.clipTime),
-  );
-  const composition = ctx.compositionById.get(clip.compositionId || '');
-  const nestedCompData: NestedCompositionData = {
-    compositionId: clip.compositionId || clip.id,
-    layers: nestedLayers,
-    width: composition?.width || 1920,
-    height: composition?.height || 1080,
-    currentTime: timeInfo.clipTime,
-    sceneClips: clip.nestedClips,
-    sceneTracks: clip.nestedTracks,
-  };
-  const layer: Layer = {
-    id: `${ctx.activeCompId}_layer_${layerIndex}_${clip.id}`,
-    name: clip.name,
-    sourceClipId: clip.id,
-    visible: true,
-    opacity: opacityOverride !== undefined
-      ? transform.opacity * opacityOverride
-      : transform.opacity,
-    blendMode: transform.blendMode as BlendMode,
-    source: { type: 'image', mediaTime: timeInfo.clipTime, nestedComposition: nestedCompData },
-    effects: ctx.getInterpolatedEffects(clip.id, timeInfo.clipTime),
-    colorCorrection: ctx.getInterpolatedColorCorrection(clip.id, timeInfo.clipTime),
-    position: transform.position,
-    scale: transform.scale,
-    rotation: transform.rotation,
-  };
-
-  addLayerBuilderMaskProperties(layer, clip, timeInfo.clipTime);
-  return layer;
+  return buildLayerBuilderNestedCompositionLayer({
+    ...params,
+    timeInfo,
+    nestedLayers,
+    mappedAnimation,
+  });
 }

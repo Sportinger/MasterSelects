@@ -64,6 +64,7 @@ export function useTimelinePlaybackSideEffectsController({
   setInPointAtPlayhead,
   setOutPointAtPlayhead,
   setPlayheadPosition,
+  setScrollX,
   snappingEnabled,
   splitClipAtPlayhead,
   startRamPreview,
@@ -73,6 +74,7 @@ export function useTimelinePlaybackSideEffectsController({
   toolMode,
   tracks,
   videoTracks,
+  zoom,
 }: UseTimelinePlaybackSideEffectsControllerParams): void {
   useTimelineKeyboard({
     isPlaying,
@@ -151,6 +153,8 @@ export function useTimelinePlaybackSideEffectsController({
     pixelToTime,
     getSnapTargetTimes,
     setPlayheadPosition,
+    setScrollX,
     setDraggingPlayhead,
+    zoom,
   });
 }

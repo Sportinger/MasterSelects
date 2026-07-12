@@ -13,6 +13,8 @@ import {
 import { initializeParallelDecoding } from './parallelMode';
 import { type ClipFileDataCache, loadClipFileDataCached } from './sourceResolution';
 import { createExportRuntimeSource, getExportRuntimeOwnerId } from './runtimeBinding';
+import { getMappedClipSourceTime } from '../layerBuilder/timing';
+import { collectNestedVideoClips, type NestedVideoClip } from './nestedVideoClips';
 
 const log = Logger.create('ClipPreparation');
 
@@ -73,11 +75,12 @@ export async function initializeFastMode(
       }
 
       const clipStartInExport = Math.max(0, startTime - clip.startTime);
+      const mappedSourceTime = getMappedClipSourceTime(clip, clipStartInExport);
       const clipSpeed = clip.speed ?? 1;
       const speedAdjusted = clipStartInExport * Math.abs(clipSpeed);
-      const clipTime = (clip.reversed !== (clipSpeed < 0))
+      const clipTime = mappedSourceTime ?? ((clip.reversed !== (clipSpeed < 0))
         ? clip.outPoint - speedAdjusted
-        : clip.inPoint + speedAdjusted;
+        : clip.inPoint + speedAdjusted);
 
       const endSeqPrep = log.time(`prepareForSequentialExport "${clip.name}"`);
       await exportPlayer.prepareForSequentialExport(clipTime);
@@ -109,11 +112,10 @@ export async function initializeFastMode(
   };
 
   const regularVideoClips: TimelineClip[] = [];
-  const nestedVideoClips: Array<{ clip: TimelineClip; parentClip: TimelineClip }> = [];
+  const nestedVideoClips: NestedVideoClip[] = [];
+  const preparedVideoClipIds = new Set<string>();
 
   for (const clip of videoClips) {
-    if (clip.source?.type !== 'video') continue;
-
     if (clip.isComposition) {
       clipStates.set(clip.id, {
         clipId: clip.id,
@@ -123,37 +125,20 @@ export async function initializeFastMode(
       });
       log.debug(`Clip ${clip.name}: Composition with nested clips`);
 
-      if (clip.nestedClips) {
-        for (const nestedClip of clip.nestedClips) {
-          if (nestedClip.source?.type === 'video' && nestedClip.source.videoElement) {
-            nestedVideoClips.push({ clip: nestedClip, parentClip: clip });
-          }
+      for (const nestedVideoClip of collectNestedVideoClips(clip)) {
+        if (!preparedVideoClipIds.has(nestedVideoClip.clip.id)) {
+          preparedVideoClipIds.add(nestedVideoClip.clip.id);
+          nestedVideoClips.push(nestedVideoClip);
         }
       }
-    } else {
+    } else if (clip.source?.type === 'video' && !preparedVideoClipIds.has(clip.id)) {
+      preparedVideoClipIds.add(clip.id);
       regularVideoClips.push(clip);
     }
   }
 
   const totalVideoClips = regularVideoClips.length + nestedVideoClips.length;
-  if (totalVideoClips >= 2) {
-    if (nestedVideoClips.length === 0) {
-      log.info(`Using multi-clip sequential WebCodecs export for ${regularVideoClips.length} regular video clips`);
-      for (const clip of regularVideoClips) {
-        await initializeSequentialClip(clip);
-      }
-
-      log.info(`All ${regularVideoClips.length} clips using FAST WebCodecs sequential decoding`);
-      endPrepare();
-
-      return {
-        clipStates,
-        parallelDecoder: null,
-        useParallelDecode: false,
-        exportMode: 'fast',
-      };
-    }
-
+  if (nestedVideoClips.length > 0) {
     log.info(`Using PARALLEL decoding for ${regularVideoClips.length} regular + ${nestedVideoClips.length} nested = ${totalVideoClips} video clips`);
     return initializeParallelDecoding(
       regularVideoClips,
@@ -167,6 +152,23 @@ export async function initializeFastMode(
       endPrepare,
       fileDataCache
     );
+  }
+
+  if (totalVideoClips >= 2) {
+    log.info(`Using multi-clip sequential WebCodecs export for ${regularVideoClips.length} regular video clips`);
+    for (const clip of regularVideoClips) {
+      await initializeSequentialClip(clip);
+    }
+
+    log.info(`All ${regularVideoClips.length} clips using FAST WebCodecs sequential decoding`);
+    endPrepare();
+
+    return {
+      clipStates,
+      parallelDecoder: null,
+      useParallelDecode: false,
+      exportMode: 'fast',
+    };
   }
 
   for (const clip of regularVideoClips) {

@@ -10,7 +10,10 @@ import {
 } from '../mediaRuntime/runtimePlayback';
 import type { RuntimeFrameProvider } from '../mediaRuntime/types';
 import { scrubSettleState } from '../scrubSettleState';
+import { resolveTransitionSourceMapTime } from '../timeline/transitionSourceMap';
+import { getNestedClipSourceTiming } from './layerBuilderNestedLayers';
 import type { FrameContext } from './types';
+import { syncNestedFullWebCodecs } from './videoSyncNestedFullWebCodecs';
 
 export type VideoSyncNestedCompositionCoordinatorDeps = {
   getClipHtmlVideoElement: (clip: TimelineClip) => HTMLVideoElement | null;
@@ -67,13 +70,21 @@ export class VideoSyncNestedCompositionCoordinator {
     this.deps = deps;
   }
 
-  syncNestedCompVideos(compClip: TimelineClip, ctx: FrameContext, depth = 0): void {
+  syncNestedCompVideos(
+    compClip: TimelineClip,
+    ctx: FrameContext,
+    depth = 0,
+    compositionTime?: number,
+  ): void {
     if (!compClip.nestedClips || !compClip.nestedTracks) return;
     if (depth >= MAX_NESTING_DEPTH) return;
     const isInteractivePreview = ctx.isDraggingPlayhead || ctx.hasClipDragPreview;
-
     const compLocalTime = ctx.playheadPosition - compClip.startTime;
-    const compTime = compLocalTime + compClip.inPoint;
+    const mappedCompTime = resolveTransitionSourceMapTime(
+      compClip.transitionSourceMap,
+      compLocalTime,
+    );
+    const compTime = compositionTime ?? mappedCompTime?.sourceTime ?? compLocalTime + compClip.inPoint;
 
     for (const nestedClip of compClip.nestedClips) {
       const nestedVideo = this.deps.getClipHtmlVideoElement(nestedClip);
@@ -89,10 +100,8 @@ export class VideoSyncNestedCompositionCoordinator {
         continue;
       }
 
-      const nestedLocalTime = compTime - nestedClip.startTime;
-      const nestedClipTime = nestedClip.reversed
-        ? nestedClip.outPoint - nestedLocalTime
-        : nestedLocalTime + nestedClip.inPoint;
+      const timing = getNestedClipSourceTiming(nestedClip, compTime - nestedClip.startTime);
+      const nestedClipTime = timing.sourceTime;
 
       const video = nestedVideo;
       const clipRuntimeProvider = this.deps.getClipRuntimeProvider(nestedClip);
@@ -102,20 +111,51 @@ export class VideoSyncNestedCompositionCoordinator {
       const timeDiff = Math.abs(video.currentTime - nestedClipTime);
 
       if (useFullWebCodecsPreview && clipRuntimeProvider) {
-        this.syncNestedFullWebCodecs(
+        syncNestedFullWebCodecs({
           nestedClip,
           ctx,
           video,
           clipRuntimeProvider,
           nestedClipTime,
           timeDiff,
-          isInteractivePreview
-        );
+          isInteractivePreview,
+          timing,
+          deps: this.deps,
+        });
         continue;
       }
 
       if (!video.seeking && video.readyState >= 2) {
         renderHostPort.ensureVideoFrameCached(video, nestedClip.id);
+      }
+
+      if (timing.isHold) {
+        scrubSettleState.resolve(nestedClip.id);
+        if (!video.paused) video.pause();
+        if (!video.seeking && timeDiff > VideoSyncNestedCompositionCoordinator.PAUSED_PRECISE_SEEK_THRESHOLD) {
+          this.deps.throttledSeek(nestedClip.id, video, nestedClipTime, ctx);
+        }
+        continue;
+      }
+
+      const isReversePlayback =
+        ctx.playbackSpeed < 0 || nestedClip.reversed || timing.sourceRate < 0;
+      const effectiveAbsRate = Math.abs(timing.sourceRate) *
+        (ctx.isPlaying ? Math.max(0.01, Math.abs(ctx.playbackSpeed || 1)) : 1);
+
+      if (isReversePlayback) {
+        if (!video.paused) video.pause();
+        if (!video.seeking && timeDiff > (isInteractivePreview ? 0.04 : 0.02)) {
+          this.deps.throttledSeek(nestedClip.id, video, nestedClipTime, ctx);
+        }
+        if (!isInteractivePreview) {
+          this.deps.maybeRecoverScrubSettle(nestedClip.id, video, nestedClipTime);
+        }
+        continue;
+      }
+
+      if (effectiveAbsRate > 0.01 && Math.abs(video.playbackRate - effectiveAbsRate) > 0.01) {
+        video.playbackRate = Math.min(16, Math.max(0.0625, effectiveAbsRate));
       }
 
       if (ctx.isPlaying) {
@@ -186,93 +226,21 @@ export class VideoSyncNestedCompositionCoordinator {
 
     for (const nestedClip of compClip.nestedClips) {
       if (nestedClip.isComposition && nestedClip.nestedClips && nestedClip.nestedClips.length > 0) {
-        const compLocalTime = ctx.playheadPosition - compClip.startTime;
-        const compTime = compLocalTime + compClip.inPoint;
         const isActive = compTime >= nestedClip.startTime && compTime < nestedClip.startTime + nestedClip.duration;
         if (isActive) {
-          const subCtx = {
-            ...ctx,
-            playheadPosition: compTime - nestedClip.startTime + nestedClip.inPoint,
-          };
-          const virtualCompClip = {
-            ...nestedClip,
-            startTime: 0,
-          };
-          this.syncNestedCompVideos(virtualCompClip, { ...subCtx, playheadPosition: compTime }, depth + 1);
+          const mappedNestedCompTime = resolveTransitionSourceMapTime(
+            nestedClip.transitionSourceMap,
+            compTime - nestedClip.startTime,
+          );
+          this.syncNestedCompVideos(
+            nestedClip,
+            ctx,
+            depth + 1,
+            mappedNestedCompTime?.sourceTime ?? compTime + nestedClip.inPoint,
+          );
         }
       }
     }
   }
 
-  private syncNestedFullWebCodecs(
-    nestedClip: TimelineClip,
-    ctx: FrameContext,
-    video: HTMLVideoElement,
-    clipRuntimeProvider: RuntimeFrameProvider,
-    nestedClipTime: number,
-    timeDiff: number,
-    isInteractivePreview: boolean
-  ): void {
-    if (ctx.isPlaying) {
-      scrubSettleState.resolve(nestedClip.id);
-      clipRuntimeProvider.advanceToTime?.(nestedClipTime);
-
-      const playbackReadyForAudio = this.deps.isPlaybackProviderReadyForAudioStart(
-        clipRuntimeProvider,
-        nestedClipTime
-      );
-      if (video.paused && playbackReadyForAudio) {
-        const startupAudioDrift = Math.abs(video.currentTime - nestedClipTime);
-        if (startupAudioDrift > 0.05) {
-          video.currentTime = this.deps.safeSeekTime(video, nestedClipTime);
-        }
-        video.play().catch(() => {});
-      }
-      if (
-        this.deps.shouldCorrectPlaybackAudioDrift(video, playbackReadyForAudio, false) &&
-        timeDiff > 0.3
-      ) {
-        video.currentTime = this.deps.safeSeekTime(video, nestedClipTime);
-      }
-      return;
-    }
-
-    if (!video.paused) video.pause();
-    if (isInteractivePreview) {
-      scrubSettleState.resolve(nestedClip.id);
-    }
-
-    const scrubRuntimeSource = getScrubRuntimeSource(
-      nestedClip.source,
-      nestedClip.trackId,
-      true
-    );
-    updateRuntimePlaybackTime(scrubRuntimeSource, nestedClipTime);
-    if (isInteractivePreview) {
-      void ensureRuntimeFrameProvider(scrubRuntimeSource, 'interactive', nestedClipTime);
-    }
-
-    const scrubProvider = getRuntimeFrameProvider(scrubRuntimeSource);
-    const pausedProvider = this.deps.getPausedWebCodecsProvider(
-      clipRuntimeProvider,
-      scrubProvider,
-      nestedClipTime,
-      { preferFreshRuntime: isInteractivePreview }
-    ) ?? clipRuntimeProvider;
-
-    if (pausedProvider?.isFullMode()) {
-      this.deps.syncPausedWebCodecsProvider(
-        pausedProvider,
-        `${nestedClip.id}:nested`,
-        nestedClipTime,
-        isInteractivePreview,
-        true,
-        true
-      );
-    }
-
-    if (!isInteractivePreview && timeDiff > 0.05) {
-      video.currentTime = this.deps.safeSeekTime(video, nestedClipTime);
-    }
-  }
 }

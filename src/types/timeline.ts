@@ -28,7 +28,12 @@ import type {
 import type { MotionLayerDefinition } from './motionDesign';
 import type { ClipNodeGraph } from './nodeGraph';
 import type { Text3DProperties, TextClipProperties } from './text';
-import type { ClipTransform, TimelineTransition } from './timelineCore';
+import type {
+  ClipTransform,
+  TimelineTransition,
+  TransitionRecipeBlendWindow,
+  TransitionSourceMap,
+} from './timelineCore';
 import type { TimelineSourceType } from './timelineSource';
 import type { TransitionOverlayPattern } from '../transitions';
 import type { VectorAnimationClipSettings } from './vectorAnimation';
@@ -170,6 +175,8 @@ export interface TimelineClip {
   transitionOut?: TimelineTransition;  // Transition to next clip
   transitionSourceTimeOverride?: number; // Runtime-only source time for virtual transition participant clips
   transitionSourceHold?: boolean; // Runtime-only: freeze a virtual transition participant on the override frame
+  transitionSourceMap?: TransitionSourceMap;
+  transitionRecipeBlendWindows?: TransitionRecipeBlendWindow[];
   // 3D layer support (AE-style per-layer toggle)
   is3D?: boolean;
   wireframe?: boolean;  // Debug: show 3D model as wireframe
@@ -267,6 +274,8 @@ export interface SerializableClip {
   transitionOut?: TimelineTransition;
   transitionSourceTimeOverride?: number;
   transitionSourceHold?: boolean;
+  transitionSourceMap?: TransitionSourceMap;
+  transitionRecipeBlendWindows?: TransitionRecipeBlendWindow[];
   // 3D layer support
   is3D?: boolean;
   modelSequence?: ModelSequenceData;

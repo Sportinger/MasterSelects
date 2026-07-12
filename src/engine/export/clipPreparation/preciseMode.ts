@@ -4,6 +4,7 @@ import type { MediaFile } from '../../../stores/mediaStore/types';
 import type { ClipPreparationModeResult, ExportClipState } from '../ClipPreparation';
 import { createPreciseExportVideoElement, getClipWarmupSourceTime } from './mediaElements';
 import { createExportRuntimeSource, getExportRuntimeOwnerId } from './runtimeBinding';
+import { collectNestedVideoClips } from './nestedVideoClips';
 
 const log = Logger.create('ClipPreparation');
 
@@ -14,7 +15,11 @@ export async function initializePreciseMode(
   exportStartTime: number,
   exportRunId?: string
 ): Promise<ClipPreparationModeResult> {
-  const registerPreciseClip = async (clip: TimelineClip, warmupTime: number) => {
+  const preparedVideoClipIds = new Set<string>();
+  const registerPreciseClip = async (clip: TimelineClip, warmupTime: number): Promise<boolean | null> => {
+    if (preparedVideoClipIds.has(clip.id)) return null;
+    preparedVideoClipIds.add(clip.id);
+
     const runtimeOwnerId = getExportRuntimeOwnerId(clip.id);
     const mediaFileId = clip.mediaFileId || clip.source?.mediaFileId;
     const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
@@ -43,10 +48,14 @@ export async function initializePreciseMode(
   let dedicatedPreciseVideoCount = 0;
 
   for (const clip of videoClips) {
-    if (clip.isComposition && clip.nestedClips) {
-      for (const nestedClip of clip.nestedClips) {
-        if (nestedClip.source?.type !== 'video') continue;
-        if (await registerPreciseClip(nestedClip, getClipWarmupSourceTime(nestedClip, nestedClip.startTime))) {
+    if (clip.isComposition) {
+      for (const { clip: nestedClip } of collectNestedVideoClips(clip)) {
+        const dedicated = await registerPreciseClip(
+          nestedClip,
+          getClipWarmupSourceTime(nestedClip, nestedClip.startTime),
+        );
+        if (dedicated === null) continue;
+        if (dedicated) {
           dedicatedPreciseVideoCount += 1;
         }
         preciseNestedClipCount += 1;
@@ -54,7 +63,9 @@ export async function initializePreciseMode(
     }
 
     if (clip.source?.type !== 'video') continue;
-    if (await registerPreciseClip(clip, getClipWarmupSourceTime(clip, exportStartTime))) {
+    const dedicated = await registerPreciseClip(clip, getClipWarmupSourceTime(clip, exportStartTime));
+    if (dedicated === null) continue;
+    if (dedicated) {
       dedicatedPreciseVideoCount += 1;
     }
     preciseClipCount += 1;

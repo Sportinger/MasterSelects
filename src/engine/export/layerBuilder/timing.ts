@@ -1,11 +1,24 @@
 import type { TimelineClip } from '../../../stores/timeline/types';
+import { resolveTransitionSourceMapTime } from '../../../services/timeline/transitionSourceMap';
 import type { FrameContextLike } from './contracts';
+
+export function getMappedClipSourceTime(
+  clip: TimelineClip,
+  clipLocalTime: number,
+): number | undefined {
+  return resolveTransitionSourceMapTime(clip.transitionSourceMap, clipLocalTime)?.sourceTime;
+}
 
 export function getClipSourceWindowTime(
   clip: TimelineClip,
   clipLocalTime: number,
   ctx: FrameContextLike,
 ): number {
+  const mappedSourceTime = getMappedClipSourceTime(clip, clipLocalTime);
+  if (mappedSourceTime !== undefined) {
+    return mappedSourceTime;
+  }
+
   if (Number.isFinite(clip.transitionSourceTimeOverride)) {
     return clip.transitionSourceTimeOverride!;
   }
