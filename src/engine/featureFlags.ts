@@ -31,6 +31,7 @@ export const flags = {
   flashBoardChatEditOptions: true,  // Text-only multi-option edit planning prototype.
   timelineCanvasWorker: true,  // issue #228 P4: OffscreenCanvas clip renderer for eligible rows; verified by timeline canvas worker smokes.
   workerFirstRenderHost: false,  // Worker-first playback renderer primary host; remains gated until W5 and worker host mount are green.
+  screenCaptureWebCodecs: false,  // Realtime crop/scale MP4 screen capture tier.
 };
 
 // Expose for runtime toggling from devtools

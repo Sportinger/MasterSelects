@@ -26,6 +26,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 | **3D Layers** | Shared-scene 3D layers, camera clips, Gaussian splats, and splat effectors |
 | **Vector Animation** | Lottie and Rive clips with canvas playback, bounce modes, render resolution overrides, keyframed state/data inputs, and export |
 | **Audio** | Timeline-native workstation audio with artifact-backed analysis, spectral editing, mixer, recording, and export parity |
+| **Screen Capture** | Browser-picker screen/window/tab recording with audio mixing, durable recovery, and optional timeline placement |
 | **Project Storage** | `project.json` source of truth, RAW-copy-first media flow, autosave, relink, backups |
 | **Native Helper** | Firefox storage backend, yt-dlp download flow, local AI bridge, native jobs |
 | **Security And Debugging** | Token-gated bridges, allowed-root file policy, playback monitors, logger tooling |
@@ -64,6 +65,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 | [3D Layers](./3D-Layers.md) | Shared-scene path, native Gaussian splats, cameras, and splat effectors |
 | [Vector Animation](./Vector-Animation.md) | Lottie/Rive import, runtime playback, bounce modes, state-machine keyframes, Rive data binding, and export behavior |
 | [Audio](./Audio.md) | Playback sync, clip audio state, waveform/spectral display, recording, and export |
+| [Screen Capture](./Screen-Capture.md) | Screen/window/tab recording, audio mixing, WebCodecs crop/scale, recovery, and diagnostics |
 | [Audio Workstation](./Audio-Workstation.md) | Target audio architecture, timeline detail mode, docked mixer, artifact refs, and analysis efficiency |
 | [Export](./Export.md) | WebCodecs fast/precise export, animated GIF, FFmpeg intermediates, image frame/sequence export, audio-only export, FCPXML, and project-persistent presets |
 | [Proxy System](./Proxy-System.md) | Proxy generation, on-disk frame layout, audio proxies, and warmup behavior |

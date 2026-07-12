@@ -26,6 +26,7 @@ const HistogramPanel = lazy(() => import('../panels/scopes/HistogramPanel').then
 const VectorscopePanel = lazy(() => import('../panels/scopes/VectorscopePanel').then(m => ({ default: m.VectorscopePanel })));
 const MultiPreviewPanel = lazy(() => import('../preview/MultiPreviewPanel').then(m => ({ default: m.MultiPreviewPanel })));
 const HistoryPanel = lazy(() => import('../panels/HistoryPanel').then(m => ({ default: m.HistoryPanel })));
+const CapturePanel = lazy(() => import('../panels/capture/CapturePanel').then(m => ({ default: m.CapturePanel })));
 
 const DEFAULT_MULTI_PREVIEW_DATA: MultiPreviewPanelData = {
   sourceCompositionId: null,
@@ -75,6 +76,8 @@ export function DockPanelContent({ panel }: DockPanelContentProps) {
       return <Suspense fallback={<PanelLoading />}><MIDIMappingPanel /></Suspense>;
     case 'multicam':
       return <Suspense fallback={<PanelLoading />}><MultiCamPanel /></Suspense>;
+    case 'capture':
+      return <Suspense fallback={<PanelLoading />}><CapturePanel /></Suspense>;
     case 'ai-segment':
       return <Suspense fallback={<PanelLoading />}><SAM2Panel /></Suspense>;
     case 'transitions':

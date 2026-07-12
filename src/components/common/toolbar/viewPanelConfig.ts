@@ -18,6 +18,7 @@ const VIEW_CORE_PANEL_TYPE_ORDER: PanelType[] = [
   'media',
   'export',
   'midi-mapping',
+  'capture',
 ];
 
 export const VIEW_CORE_PANEL_TYPES = VIEW_CORE_PANEL_TYPE_ORDER.filter((type) => (

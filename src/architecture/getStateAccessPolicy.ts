@@ -25,11 +25,12 @@ export const allowedAdapterPaths = [
   'src/services/audio/AudioRecordingService.ts',
   'src/services/audio/recording/commitRecording.ts',
   'src/services/audio/timelineRecordingWorkflow.ts',
+  'src/services/capture/recording/commitRecording.ts',
+  'src/services/capture/recording/webCodecsBackend.ts',
   'src/services/export/**',
   'src/services/render/**',
   'src/editorBoot.ts',
 ] as const;
-
 export const classCHardTargets = [
   { path: 'src/components/common/MatAnyoneSetupDialog.tsx', maxCurrentHits: 4 },
   { path: 'src/components/common/Toolbar.tsx', maxCurrentHits: 2 },
@@ -283,11 +284,10 @@ export const classCHardTargets = [
 ] as const satisfies readonly GetStateClassCHardTarget[];
 
 export const getStateAccessPolicyBaselines = {
-  allowedAdapterPathCount: 23,
+  allowedAdapterPathCount: 25,
   // Running redistribution log: 178 (packet 172), 182 (183), 187 (186),
   // 189 (189+190: ExportPanel/MediaPanel hits moved into runner/board-hook
   // entries). Totals conserved per redistribution; max-hits ratchets DOWN
-  // only (669 -> 665 via the packet-188 Preview ceiling cut).
   // fileCount log (totals conserved per split redistribution):
   // 192 ->193(218) ->196(227) ->199(231) ->203(239) ->205(246) ->206(253/254)
   // ->207(259) ->208(267) ->212(279) ->216(287) ->230(audio mixer) ->231(2.3.3) ->236(transition nested comps).

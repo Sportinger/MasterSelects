@@ -4,6 +4,18 @@ export const statsToolDefinitions: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'getCaptureState',
+      description: 'Get the serializable screen-capture session, encoder/muxer pressure, audio levels, and persisted recovery summary.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'getStats',
       description: 'Get current engine/playback stats snapshot for debugging. Returns FPS, timing breakdown, decoder info, drops, playback health, cache/budget stats, freeze/path counters, audio status, and GPU info.',
       parameters: {

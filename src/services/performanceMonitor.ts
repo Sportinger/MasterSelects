@@ -16,6 +16,7 @@ let slowFrameCount = 0;
 let lastCheckTime = 0;
 let isMonitoring = false;
 let onSlowPerformanceCallback: (() => void) | null = null;
+const qualityResetSuspensions = import.meta.hot?.data?.qualityResetSuspensions as Set<string> | undefined ?? new Set<string>();
 
 // Get quality parameter names for an effect type
 function getQualityParamNames(effectType: string): string[] {
@@ -106,8 +107,13 @@ export function onSlowPerformance(callback: () => void) {
 
 // Report render time (called from engine)
 export function reportRenderTime(ms: number) {
-  if (!isMonitoring) return;
+  if (!isMonitoring || qualityResetSuspensions.size > 0) return;
   checkPerformance(ms);
+}
+
+export function suspendPerformanceQualityReset(reason: string): () => void {
+  qualityResetSuspensions.add(reason);
+  return () => qualityResetSuspensions.delete(reason);
 }
 
 // Check if monitoring is active
@@ -117,3 +123,10 @@ export function isPerformanceMonitorActive(): boolean {
 
 // Auto-start monitoring when module is imported
 startPerformanceMonitor();
+
+if (import.meta.hot) {
+  import.meta.hot.accept();
+  import.meta.hot.dispose(data => {
+    data.qualityResetSuspensions = qualityResetSuspensions;
+  });
+}
