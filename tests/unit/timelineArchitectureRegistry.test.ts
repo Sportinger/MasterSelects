@@ -1748,6 +1748,7 @@ describe('timeline architecture registry', () => {
     const htmlClipCoordinatorSource = readRepoFile('src/services/layerBuilder/videoSyncHtmlClipCoordinator.ts');
     const htmlSeekCoordinatorSource = readRepoFile('src/services/layerBuilder/videoSyncHtmlSeekCoordinator.ts');
     const nestedCompositionCoordinatorSource = readRepoFile('src/services/layerBuilder/videoSyncNestedCompositionCoordinator.ts');
+    const nestedFullWebCodecsSource = readRepoFile('src/services/layerBuilder/videoSyncNestedFullWebCodecs.ts');
     const recoveryCoordinatorSource = readRepoFile('src/services/layerBuilder/videoSyncRecoveryCoordinator.ts');
     const warmupCoordinatorSource = readRepoFile('src/services/layerBuilder/videoSyncWarmupCoordinator.ts');
     const webCodecsPolicySource = readRepoFile('src/services/layerBuilder/videoSyncWebCodecsPolicy.ts');
@@ -1862,6 +1863,9 @@ describe('timeline architecture registry', () => {
     expect(nestedCompositionCoordinatorSource).toContain('class VideoSyncNestedCompositionCoordinator');
     expect(nestedCompositionCoordinatorSource).toContain('syncNestedCompVideos');
     expect(nestedCompositionCoordinatorSource).toContain('syncNestedFullWebCodecs');
+    expect(nestedCompositionCoordinatorSource).toContain("from './videoSyncNestedFullWebCodecs'");
+    expect(nestedFullWebCodecsSource).toContain('syncNestedFullWebCodecs');
+    expect(nestedFullWebCodecsSource).toContain('syncTransitionSourceHold');
     expect(recoveryCoordinatorSource).toContain('class VideoSyncRecoveryCoordinator');
     expect(recoveryCoordinatorSource).toContain('maybeRecoverScrubSettle');
     expect(recoveryCoordinatorSource).toContain('maybeRecoverDraggingPendingSeek');
@@ -1888,6 +1892,7 @@ describe('timeline architecture registry', () => {
     expect(lineCount(htmlClipCoordinatorSource)).toBeLessThanOrEqual(470);
     expect(lineCount(htmlSeekCoordinatorSource)).toBeLessThanOrEqual(520);
     expect(lineCount(nestedCompositionCoordinatorSource)).toBeLessThanOrEqual(320);
+    expect(lineCount(nestedFullWebCodecsSource)).toBeLessThanOrEqual(160);
     expect(lineCount(recoveryCoordinatorSource)).toBeLessThanOrEqual(220);
     expect(lineCount(warmupCoordinatorSource)).toBeLessThanOrEqual(650);
     expect(lineCount(webCodecsPolicySource)).toBeLessThanOrEqual(300);
@@ -1928,6 +1933,7 @@ describe('timeline architecture registry', () => {
   it('keeps LayerBuilderService video layer construction in a focused helper', () => {
     const layerBuilderSource = readRepoFile('src/services/layerBuilder/LayerBuilderService.ts');
     const videoLayerSource = readRepoFile('src/services/layerBuilder/layerBuilderVideoLayers.ts');
+    const videoMetadataSource = readRepoFile('src/services/layerBuilder/layerBuilderVideoSourceMetadata.ts');
 
     expect(layerBuilderSource).toContain("from './layerBuilderVideoLayers'");
     expect(layerBuilderSource).toContain('buildLayerBuilderNativeDecoderLayer');
@@ -1941,11 +1947,15 @@ describe('timeline architecture registry', () => {
     expect(videoLayerSource).toContain('buildLayerBuilderNativeDecoderLayer');
     expect(videoLayerSource).toContain('buildLayerBuilderVideoLayer');
     expect(videoLayerSource).toContain('getLayerSourceMetadata');
+    expect(videoLayerSource).toContain("from './layerBuilderVideoSourceMetadata'");
     expect(videoLayerSource).toContain('canUseSharedPreviewRuntimeSession');
     expect(videoLayerSource).toContain('buildLayerBuilderProxyImageLayer');
     expect(videoLayerSource).toContain('resolveLayerBuilderVideoSource');
+    expect(videoMetadataSource).toContain('getLayerSourceMetadata');
+    expect(videoMetadataSource).toContain('getFinalOpacity');
     expect(lineCount(layerBuilderSource)).toBeLessThanOrEqual(700);
     expect(lineCount(videoLayerSource)).toBeLessThanOrEqual(190);
+    expect(lineCount(videoMetadataSource)).toBeLessThanOrEqual(40);
   });
 
   it('keeps LayerBuilderService 3D source resolution in a focused helper', () => {
@@ -2113,6 +2123,7 @@ describe('timeline architecture registry', () => {
     const layerBuilderSource = readRepoFile('src/services/layerBuilder/LayerBuilderService.ts');
     const nestedBaseSource = readRepoFile('src/services/layerBuilder/layerBuilderNestedLayers.ts');
     const nestedBuilderSource = readRepoFile('src/services/layerBuilder/layerBuilderNestedLayerBuilder.ts');
+    const nestedCompositionLayerSource = readRepoFile('src/services/layerBuilder/layerBuilderNestedCompositionLayer.ts');
 
     expect(layerBuilderSource).toContain("from './layerBuilderNestedLayerBuilder'");
     expect(layerBuilderSource).toContain('buildLayerBuilderNestedCompLayer');
@@ -2136,6 +2147,7 @@ describe('timeline architecture registry', () => {
     expect(layerBuilderSource).not.toContain('buildNestedLayerBuilder3dSourceLayer');
     expect(layerBuilderSource).not.toContain('const compositions = useMediaStore.getState().compositions');
     expect(nestedBuilderSource).toContain('buildLayerBuilderNestedCompLayer');
+    expect(nestedBuilderSource).toContain("from './layerBuilderNestedCompositionLayer'");
     expect(nestedBuilderSource).toContain('buildLayerBuilderNestedLayers');
     expect(nestedBuilderSource).toContain('buildNestedClipLayer');
     expect(nestedBuilderSource).toContain('MAX_NESTING_DEPTH');
@@ -2146,6 +2158,8 @@ describe('timeline architecture registry', () => {
     expect(nestedBuilderSource).toContain('buildNestedLayerBuilderCanvasBackedSourceLayer');
     expect(nestedBuilderSource).toContain('buildNestedLayerBuilder3dSourceLayer');
     expect(nestedBuilderSource).toContain('resolveLayerBuilderVideoSource');
+    expect(nestedCompositionLayerSource).toContain('buildLayerBuilderNestedCompositionLayer');
+    expect(nestedCompositionLayerSource).toContain('NestedCompositionData');
     expect(nestedBaseSource).toContain('buildNestedLayerBase');
     expect(nestedBaseSource).toContain('getInterpolatedClipTransform');
     expect(nestedBaseSource).toContain('getEffectiveScale');
@@ -2155,6 +2169,7 @@ describe('timeline architecture registry', () => {
     expect(nestedBaseSource).toContain('buildNestedMotionSourceLayer');
     expect(lineCount(layerBuilderSource)).toBeLessThanOrEqual(540);
     expect(lineCount(nestedBuilderSource)).toBeLessThanOrEqual(240);
+    expect(lineCount(nestedCompositionLayerSource)).toBeLessThanOrEqual(100);
     expect(lineCount(nestedBaseSource)).toBeLessThanOrEqual(190);
   });
 
@@ -2332,6 +2347,7 @@ describe('timeline architecture registry', () => {
     const stemSeparationSource = readRepoFile('src/stores/timeline/stemSeparationSlice.ts');
     const proxyCacheSource = readRepoFile('src/stores/timeline/proxyCacheSlice.ts');
     const playbackSource = readRepoFile('src/stores/timeline/playbackSlice.ts');
+    const playbackWarmupSource = readRepoFile('src/stores/timeline/playbackWarmup.ts');
     const nestedCompositionSource = readRepoFile('src/stores/timeline/nestedCompositionLoader.ts');
     const nestedSegmentsSource = readRepoFile('src/stores/timeline/nestedComposition/nestedCompositionSegments.ts');
     const nestedThumbnailsSource = readRepoFile('src/stores/timeline/nestedComposition/nestedCompositionThumbnails.ts');
@@ -2394,7 +2410,8 @@ describe('timeline architecture registry', () => {
     expect(proxyCacheSource).not.toContain('source.videoElement');
     expect(playbackWarmupRuntimeSource).toContain('getTimelinePlaybackWarmupVideo');
     expect(playbackWarmupRuntimeSource).toContain('getRuntimeFrameProvider');
-    expect(playbackSource).toContain('getTimelinePlaybackWarmupVideo');
+    expect(playbackSource).toContain("from './playbackWarmup'");
+    expect(playbackWarmupSource).toContain('getTimelinePlaybackWarmupVideo');
     expect(playbackSource).not.toContain('source?.videoElement');
     expect(playbackSource).not.toContain('source.videoElement');
     expect(playbackSource).not.toContain('source?.webCodecsPlayer');

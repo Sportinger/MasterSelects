@@ -354,6 +354,7 @@ export function Timeline() {
     toolMode,
     tracks,
     videoTracks,
+    zoom,
   });
 
   const {
@@ -687,7 +688,6 @@ export function Timeline() {
     <TimelineRootShell {...rootShellProps}>
       <TimelineToolbarChrome {...timelineToolbarProps} />
       <TimelineSlotGridChrome {...slotGridChromeProps} />
-
       <TimelineBodySurface {...bodySurfaceProps} />
 
       <TimelineNavigatorChrome {...navigatorChromeProps} />

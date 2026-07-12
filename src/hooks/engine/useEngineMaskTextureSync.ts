@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { Logger } from '../../services/logger';
 import { renderHostPort } from '../../services/render/renderHostPort';
 import { evaluateCompositionClipMasks } from '../../services/compositionRender/keyframeEvaluation';
+import { evaluateTransitionMappedAnimation } from '../../services/compositionRender/transitionMappedAnimation';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useSAM2Store, maskToImageData } from '../../stores/sam2Store';
 import { useTimelineStore } from '../../stores/timeline';
@@ -192,7 +193,9 @@ export function useEngineMaskTextureSync(isEngineReady: boolean): (
       for (const clip of composition.timelineData.clips) {
         if (compositionTime < clip.startTime || compositionTime >= clip.startTime + clip.duration) continue;
         const localTime = compositionTime - clip.startTime;
-        const masks = evaluateCompositionClipMasks(clip.masks, clip.keyframes, localTime);
+        const masks = clip.transitionSourceMap?.version === 2
+          ? evaluateTransitionMappedAnimation(clip, clip.keyframes, localTime)?.masks
+          : evaluateCompositionClipMasks(clip.masks, clip.keyframes, localTime);
         changed = processClipMask({ id: clip.id, masks }, maskDimensions, renderOptions) || changed;
       }
     }

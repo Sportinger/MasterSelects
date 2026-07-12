@@ -13,6 +13,7 @@ import {
 } from '../mediaRuntime/runtimePlayback';
 import type { RuntimeFrameProvider } from '../mediaRuntime/types';
 import { getClipTimeInfo, getMediaFileForClip } from './FrameContext';
+import { resolveTransitionSourceMapTime } from '../timeline/transitionSourceMap';
 import type { FrameContext } from './types';
 import type { MediaFile } from '../../stores/mediaStore/types';
 
@@ -206,6 +207,8 @@ function calculateReversePrimeClipTime(input: {
 }): number {
   const { clip, playheadPosition, getSourceTimeForClip, getInterpolatedSpeed } = input;
   const clipLocalTime = playheadPosition - clip.startTime;
+  const mappedTime = resolveTransitionSourceMapTime(clip.transitionSourceMap, clipLocalTime);
+  if (mappedTime) return mappedTime.sourceTime;
   const isTransitionHold = clip.transitionSourceHold === true;
   const initialSpeed = isTransitionHold
     ? 1
@@ -218,6 +221,14 @@ function calculateReversePrimeClipTime(input: {
   return Number.isFinite(sourceOverride)
     ? sourceOverride!
     : Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + baseSourceTime));
+}
+
+function hasNegativeTransitionSourceRate(clip: TimelineClip, playheadPosition: number): boolean {
+  const mappedTime = resolveTransitionSourceMapTime(
+    clip.transitionSourceMap,
+    playheadPosition - clip.startTime,
+  );
+  return mappedTime ? mappedTime.sourceRate < 0 : false;
 }
 
 function bindReverseWorkerRuntimeSourceForPlaybackPrime(
@@ -270,7 +281,10 @@ export async function primeReverseWorkerRuntimeSourcesForPlayback(input: {
   for (const clip of input.clips) {
     if (seenClipIds.has(clip.id)) continue;
     seenClipIds.add(clip.id);
-    const reverseRequested = input.playbackSpeed < 0 || clip.reversed === true;
+    const reverseRequested =
+      input.playbackSpeed < 0 ||
+      clip.reversed === true ||
+      hasNegativeTransitionSourceRate(clip, input.playheadPosition);
     if (!reverseRequested || clip.source?.type !== 'video') continue;
 
     const source = bindReverseWorkerRuntimeSourceForPlaybackPrime(clip, input.mediaFiles ?? []);
@@ -347,7 +361,8 @@ export function isReverseWorkerWebCodecsCandidate(
     sourceType: clip.source?.type,
     renderHostMode: mode,
   };
-  const reverseRequested = ctx.playbackSpeed < 0 || clip.reversed;
+  const timeInfo = getClipTimeInfo(ctx, clip);
+  const reverseRequested = ctx.playbackSpeed < 0 || clip.reversed || timeInfo.speed < 0;
   if (!flags.useFullWebCodecsPlayback) {
     recordCheck({ ...baseCheck, candidate: false, reason: 'webcodecs-disabled' });
     return false;
@@ -372,15 +387,8 @@ export function isReverseWorkerWebCodecsCandidate(
     });
     return true;
   }
-  const timeInfo = getClipTimeInfo(ctx, clip);
-  const candidate = timeInfo.speed < 0;
-  recordCheck({
-    ...baseCheck,
-    timeInfoSpeed: timeInfo.speed,
-    candidate,
-    reason: candidate ? 'negative-clip-speed' : 'forward-playback',
-  });
-  return candidate;
+  recordCheck({ ...baseCheck, timeInfoSpeed: timeInfo.speed, candidate: false, reason: 'forward-playback' });
+  return false;
 }
 
 export function getReverseWorkerRuntimeSource(

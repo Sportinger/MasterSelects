@@ -22,6 +22,7 @@ import type { MotionRenderer } from '../motion/MotionRenderer';
 import { getMotionRenderSize } from '../motion/MotionTypes';
 import { compositeNestedLayers } from './nestedComp/compositeNestedLayers';
 import { tryCollectHtmlVideoPreview } from './nestedComp/htmlVideoPreview';
+import { NestedCompositionTexturePool } from './nestedComp/NestedCompositionTexturePool';
 import { process3DLayersForNestedScene } from './nestedComp/sharedScene';
 import {
   getFrameTimestampSeconds,
@@ -62,16 +63,6 @@ function hasMissingCriticalNestedLayer(
   return layers.some((layer) => isCriticalNestedLayer(layer) && !collectedLayerIds.has(layer.id));
 }
 
-interface PooledTexturePair {
-  pingTexture: GPUTexture;
-  pongTexture: GPUTexture;
-  pingView: GPUTextureView;
-  pongView: GPUTextureView;
-  width: number;
-  height: number;
-  inUse: boolean;
-}
-
 export class NestedCompRenderer {
   private device: GPUDevice;
   private compositorPipeline: CompositorPipeline;
@@ -83,8 +74,7 @@ export class NestedCompRenderer {
   private motionRenderer: MotionRenderer | null;
   private nestedCompTextures: Map<string, NestedCompTexture> = new Map();
 
-  // Texture pool for ping-pong buffers, keyed by "widthxheight"
-  private texturePool: Map<string, PooledTexturePair[]> = new Map();
+  private texturePool: NestedCompositionTexturePool;
 
   // Frame caching: track last render time to skip redundant re-renders
   private lastRenderTime: Map<string, number> = new Map();
@@ -163,56 +153,10 @@ export class NestedCompRenderer {
     this.effectsPipeline = effectsPipeline;
     this.textureManager = textureManager;
     this.maskTextureManager = maskTextureManager;
+    this.texturePool = new NestedCompositionTexturePool(device);
     this.scrubbingCache = scrubbingCache;
     this.colorPipeline = colorPipeline;
     this.motionRenderer = motionRenderer;
-  }
-
-  // Acquire a ping-pong texture pair from pool or create new
-  private acquireTexturePair(width: number, height: number): PooledTexturePair {
-    const key = `${width}x${height}`;
-    let pool = this.texturePool.get(key);
-    if (!pool) {
-      pool = [];
-      this.texturePool.set(key, pool);
-    }
-
-    // Find available pair
-    for (const pair of pool) {
-      if (!pair.inUse) {
-        pair.inUse = true;
-        return pair;
-      }
-    }
-
-    // Create new pair
-    const pingTexture = this.device.createTexture({
-      size: { width, height },
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
-    });
-    const pongTexture = this.device.createTexture({
-      size: { width, height },
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
-    });
-
-    const pair: PooledTexturePair = {
-      pingTexture,
-      pongTexture,
-      pingView: pingTexture.createView(),
-      pongView: pongTexture.createView(),
-      width,
-      height,
-      inUse: true,
-    };
-    pool.push(pair);
-    return pair;
-  }
-
-  // Release texture pair back to pool
-  private releaseTexturePair(pair: PooledTexturePair): void {
-    pair.inUse = false;
   }
 
   preRender(
@@ -254,14 +198,14 @@ export class NestedCompRenderer {
     const lastTime = this.lastRenderTime.get(compositionId);
     const lastCount = this.lastLayerCount.get(compositionId);
 
-    if (compTexture.initialized && quantizedTime >= 0 && lastTime === quantizedTime && lastCount === nestedLayers.length) {
+    if (!nestedLayers.some(isCriticalNestedLayer) && compTexture.initialized && quantizedTime >= 0 && lastTime === quantizedTime && lastCount === nestedLayers.length) {
       // Same frame, return cached texture
       return compTexture.view;
     }
 
     // Acquire ping-pong textures from pool
-    const texturePair = this.acquireTexturePair(width, height);
-    const effectTexturePair = this.acquireTexturePair(width, height);
+    const texturePair = this.texturePool.acquire(width, height);
+    const effectTexturePair = this.texturePool.acquire(width, height);
     const nestedPingView = texturePair.pingView;
     const nestedPongView = texturePair.pongView;
     const effectTempView = effectTexturePair.pingView;
@@ -350,8 +294,8 @@ export class NestedCompRenderer {
       this.lastLayerCount.set(compositionId, nestedLayers.length);
       return compTexture.view;
     } finally {
-      this.releaseTexturePair(effectTexturePair);
-      this.releaseTexturePair(texturePair);
+      this.texturePool.release(effectTexturePair);
+      this.texturePool.release(texturePair);
     }
   }
 
@@ -727,13 +671,6 @@ export class NestedCompRenderer {
     }
     this.nestedCompTextures.clear();
 
-    // Destroy texture pool
-    for (const pool of this.texturePool.values()) {
-      for (const pair of pool) {
-        pair.pingTexture.destroy();
-        pair.pongTexture.destroy();
-      }
-    }
-    this.texturePool.clear();
+    this.texturePool.destroy();
   }
 }

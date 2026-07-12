@@ -66,7 +66,13 @@ function collectAttachedTransitionCompositionIds(compositions: readonly Composit
   }
 
   while (pending.length > 0) {
-    collectFromTimeline(byId.get(pending.pop()!)?.timelineData);
+    const composition = byId.get(pending.pop()!);
+    collectFromTimeline(composition?.timelineData);
+    const backupCompositionId = composition?.transitionComp?.legacyBackupCompositionId;
+    if (backupCompositionId && !ids.has(backupCompositionId)) {
+      ids.add(backupCompositionId);
+      pending.push(backupCompositionId);
+    }
   }
   return ids;
 }
@@ -216,6 +222,8 @@ export function convertProjectCompositionToStore(
         transitionOut: c.transitionOut ? normalizeTransitionInstanceParams(structuredClone(c.transitionOut)) : undefined,
         transitionSourceTimeOverride: c.transitionSourceTimeOverride,
         transitionSourceHold: c.transitionSourceHold,
+        transitionSourceMap: c.transitionSourceMap ? structuredClone(c.transitionSourceMap) : undefined,
+        transitionRecipeBlendWindows: c.transitionRecipeBlendWindows ? structuredClone(c.transitionRecipeBlendWindows) : undefined,
         colorCorrection: c.colorCorrection ? structuredClone(c.colorCorrection) : undefined,
         nodeGraph: cloneClipNodeGraph(c.nodeGraph),
         masks: c.masks.map((mask): ClipMask => ({

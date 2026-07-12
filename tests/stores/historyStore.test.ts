@@ -955,6 +955,72 @@ describe('historyStore', () => {
     expect(mocks.timeline.getState().zoom).toBe(50);
   });
 
+  it('batch undo restores legacy transition links and removes the upgraded composition', () => {
+    const legacyLink = { id: 'transition-1', type: 'crossfade' as const, duration: 1, linkedClipId: 'in', compositionId: 'legacy' };
+    const outgoing = mockClip({ id: 'out', transitionOut: legacyLink });
+    const incoming = mockClip({ id: 'in', transitionIn: { ...legacyLink, linkedClipId: 'out' } });
+    const parent = mockComposition({
+      id: 'parent',
+      timelineData: { tracks: [], clips: [outgoing, incoming], duration: 10 } as never,
+    });
+    const legacy = mockComposition({
+      id: 'legacy',
+      transitionComp: {
+        kind: 'transition-comp',
+        sourceLayout: 'legacy-segmented',
+        parentCompositionId: parent.id,
+        parentTransitionId: legacyLink.id,
+        parentOutgoingClipId: outgoing.id,
+        parentIncomingClipId: incoming.id,
+        linkedOutgoingClipId: 'legacy-out',
+        linkedIncomingClipId: 'legacy-in',
+        innerTransitionId: 'legacy-inner',
+        paddingBefore: 0,
+        paddingAfter: 0,
+        bodyStart: 0,
+        bodyEnd: 1,
+      },
+    });
+    const mappedId = 'mapped';
+    const upgradedParent = {
+      ...parent,
+      timelineData: {
+        ...parent.timelineData!,
+        clips: parent.timelineData!.clips.map((clip) => (
+          clip.id === outgoing.id
+            ? { ...clip, transitionOut: { ...clip.transitionOut!, compositionId: mappedId } }
+            : { ...clip, transitionIn: { ...clip.transitionIn!, compositionId: mappedId } }
+        )),
+      },
+    };
+    const upgraded = mockComposition({
+      id: mappedId,
+      transitionComp: {
+        ...legacy.transitionComp!,
+        sourceLayout: 'mapped-v3',
+        legacyBackupCompositionId: legacy.id,
+      },
+    });
+
+    mocks.setMediaState({ compositions: [parent, legacy] });
+    useHistoryStore.getState().startBatch('Upgrade transition composition');
+    mocks.setMediaState({ compositions: [upgradedParent, legacy, upgraded] });
+    useHistoryStore.getState().endBatch();
+
+    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    expect(useHistoryStore.getState().currentSnapshot?.label).toBe('Upgrade transition composition');
+
+    useHistoryStore.getState().undo();
+
+    const restoredCompositions = mocks.media.getState().compositions;
+    const restoredParent = restoredCompositions.find((composition) => composition.id === parent.id)!;
+    expect(restoredCompositions.map((composition) => composition.id)).toEqual([parent.id, legacy.id]);
+    expect(restoredParent.timelineData?.clips.find((clip) => clip.id === outgoing.id)?.transitionOut?.compositionId)
+      .toBe(legacy.id);
+    expect(restoredParent.timelineData?.clips.find((clip) => clip.id === incoming.id)?.transitionIn?.compositionId)
+      .toBe(legacy.id);
+  });
+
   // ─── Media state undo/redo ─────────────────────────────────────────
 
   it('undo/redo restores media state (files)', () => {

@@ -1,10 +1,12 @@
 import { fireEvent, render, cleanup } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../src/services/timeline/transitionCompositionService', () => ({
   ensureTransitionCompositionForPair: vi.fn(),
   openTransitionComposition: vi.fn(),
+  upgradeLegacyTransitionCompositionForPair: vi.fn(),
 }));
 
 import { TransitionOverlays } from '../../src/components/timeline/components/TransitionOverlays';
@@ -14,6 +16,7 @@ import { useTimelineStore } from '../../src/stores/timeline';
 import type { TimelineClip, TimelineTrack } from '../../src/types';
 
 const openTransitionCompositionMock = vi.mocked(openTransitionComposition);
+let setPointerCaptureMock = vi.fn();
 const mockedUseMediaStore = useMediaStore as unknown as ReturnType<typeof vi.fn> & {
   getState: ReturnType<typeof vi.fn>;
 };
@@ -99,6 +102,7 @@ function createTransitionComposition(): Composition {
     backgroundColor: '#000000',
     transitionComp: {
       kind: 'transition-comp',
+      sourceLayout: 'mapped-v3',
       parentCompositionId: 'comp-1',
       parentTransitionId: 'transition-a',
       parentOutgoingClipId: 'clip-a',
@@ -140,10 +144,11 @@ describe('TransitionOverlays', () => {
     mockedUseMediaStore.mockImplementation((selector: (state: TransitionOverlayMediaState) => unknown) => selector(mediaState));
     mockedUseMediaStore.getState.mockImplementation(() => mediaState);
     openTransitionCompositionMock.mockReset();
+    setPointerCaptureMock = vi.fn();
 
     Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
       configurable: true,
-      value: vi.fn(),
+      value: setPointerCaptureMock,
     });
     Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
       configurable: true,
@@ -310,18 +315,13 @@ describe('TransitionOverlays', () => {
     expect(useTimelineStore.getState().timelineToolPreview).toBeNull();
   });
 
-  it('opens a transition composition once from a double-click and reopens the attached comp', () => {
-    const staleClips = useTimelineStore.getState().clips;
+  it('moves a selected transition body through the offset edit operation', () => {
+    const clips = useTimelineStore.getState().clips;
     const tracks = useTimelineStore.getState().tracks;
-    const transitionComposition = createTransitionComposition();
-    const openCompositionTab = vi.fn();
-    openTransitionCompositionMock.mockReturnValue(transitionComposition.id);
-    mediaState = { ...mediaState, openCompositionTab };
-
     const { container } = render(
       <TransitionOverlays
         activeJunction={null}
-        clips={staleClips}
+        clips={clips}
         tracks={tracks}
         timeToPixel={(time) => time * 100}
         isTrackExpanded={() => false}
@@ -335,28 +335,83 @@ describe('TransitionOverlays', () => {
     expect(transition).toBeTruthy();
     expect(transitionVisual).toBeTruthy();
 
-    fireEvent.pointerDown(transitionVisual!, { pointerId: 3, clientX: 500, button: 0, buttons: 1, detail: 2 });
-    fireEvent.doubleClick(transition!);
+    fireEvent.pointerDown(transitionVisual!, { pointerId: 3, clientX: 500, button: 0, buttons: 1 });
+    act(() => {
+      fireEvent.pointerMove(window, { pointerId: 3, clientX: 525, buttons: 1 });
+    });
+
+    expect(transition?.title).toContain('offset 0.25s');
+    expect(transition?.style.left).toBe('475px');
+    expect(useTimelineStore.getState().timelineToolPreview).toMatchObject({
+      startTime: 4.75,
+      endTime: 5.75,
+    });
+
+    act(() => {
+      fireEvent.pointerUp(window, { pointerId: 3, clientX: 525 });
+    });
+
+    const nextClips = useTimelineStore.getState().clips;
+    expect(nextClips.find(clip => clip.id === 'clip-a')?.transitionOut?.offset).toBeCloseTo(0.25);
+    expect(nextClips.find(clip => clip.id === 'clip-b')?.transitionIn?.offset).toBeCloseTo(0.25);
+    expect(useTimelineStore.getState().timelineToolPreview).toBeNull();
+  });
+
+  it('opens a transition composition from a physical double-click and reopens the attached comp', async () => {
+    const staleClips = useTimelineStore.getState().clips;
+    const tracks = useTimelineStore.getState().tracks;
+    const transitionComposition = createTransitionComposition();
+    const openCompositionTab = vi.fn();
+    const applyTimelineEditOperation = vi.spyOn(useTimelineStore.getState(), 'applyTimelineEditOperation');
+    openTransitionCompositionMock.mockReturnValue(transitionComposition.id);
+    mediaState = { ...mediaState, openCompositionTab };
+
+    const renderOverlays = () => (
+      <TransitionOverlays
+        activeJunction={null}
+        clips={staleClips}
+        tracks={tracks}
+        timeToPixel={(time) => time * 100}
+        isTrackExpanded={() => false}
+        getExpandedTrackHeight={(_, baseHeight) => baseHeight}
+        getTrackHeight={(track) => track.height}
+      />
+    );
+    const { container, rerender } = render(renderOverlays());
+
+    const transition = container.querySelector<HTMLElement>('.timeline-transition');
+    const transitionVisual = transition?.firstElementChild as HTMLElement | null;
+    expect(transition).toBeTruthy();
+    expect(transitionVisual).toBeTruthy();
+
+    await userEvent.setup().dblClick(transitionVisual!);
 
     expect(openTransitionCompositionMock).toHaveBeenCalledTimes(1);
+    expect(applyTimelineEditOperation).not.toHaveBeenCalled();
+    expect(setPointerCaptureMock).not.toHaveBeenCalled();
+    expect(useTimelineStore.getState().transitionEditPreview).toBeNull();
+    expect(useTimelineStore.getState().timelineToolPreview).toBeNull();
 
     openTransitionCompositionMock.mockClear();
-    useTimelineStore.setState((state) => ({
-      clips: state.clips.map((clip) => {
-        if (clip.id === 'clip-a' && clip.transitionOut?.id === 'transition-a') {
-          return { ...clip, transitionOut: { ...clip.transitionOut, compositionId: transitionComposition.id } };
-        }
-        if (clip.id === 'clip-b' && clip.transitionIn?.id === 'transition-a') {
-          return { ...clip, transitionIn: { ...clip.transitionIn, compositionId: transitionComposition.id } };
-        }
-        return clip;
-      }),
-    }));
+    act(() => {
+      useTimelineStore.setState((state) => ({
+        clips: state.clips.map((clip) => {
+          if (clip.id === 'clip-a' && clip.transitionOut?.id === 'transition-a') {
+            return { ...clip, transitionOut: { ...clip.transitionOut, compositionId: transitionComposition.id } };
+          }
+          if (clip.id === 'clip-b' && clip.transitionIn?.id === 'transition-a') {
+            return { ...clip, transitionIn: { ...clip.transitionIn, compositionId: transitionComposition.id } };
+          }
+          return clip;
+        }),
+      }));
+    });
     mediaState = {
       ...mediaState,
       compositions: [...mediaState.compositions, transitionComposition],
       openCompositionTab,
     };
+    rerender(renderOverlays());
 
     fireEvent.doubleClick(transition!);
 

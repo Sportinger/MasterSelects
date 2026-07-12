@@ -79,6 +79,7 @@ interface BuildTransitionExportLayersOptions {
   outputWidth?: number;
   outputHeight?: number;
   transitionParams?: Record<string, TransitionParamValue>;
+  materialize?: boolean;
 }
 
 function buildTransitionExportLayers({
@@ -93,6 +94,7 @@ function buildTransitionExportLayers({
   outputWidth = 1280,
   outputHeight = 720,
   transitionParams,
+  materialize = true,
 }: BuildTransitionExportLayersOptions) {
   const track = createVideoTrack();
   const outgoingClip = {
@@ -102,7 +104,7 @@ function buildTransitionExportLayers({
       type: transitionType,
       duration: requestedDuration,
       linkedClipId: 'incoming',
-      compositionId: `transition-comp-${transitionType}`,
+      ...(materialize ? { compositionId: `transition-comp-${transitionType}` } : {}),
       ...(transitionParams ? { params: transitionParams } : {}),
     },
     ...outgoingOverrides,
@@ -114,7 +116,7 @@ function buildTransitionExportLayers({
       type: transitionType,
       duration: requestedDuration,
       linkedClipId: 'outgoing',
-      compositionId: `transition-comp-${transitionType}`,
+      ...(materialize ? { compositionId: `transition-comp-${transitionType}` } : {}),
       ...(transitionParams ? { params: transitionParams } : {}),
     },
     ...incomingOverrides,
@@ -165,7 +167,7 @@ function buildTransitionExportLayers({
 
   return {
     layers: withMediaStoreState(
-      { compositions: [transitionComposition] },
+      { compositions: materialize ? [transitionComposition] : [] },
       () => buildLayersAtTime(ctx, clipStates, null, false),
     ),
     plan: plan!,
@@ -523,6 +525,23 @@ describe('ExportLayerBuilder', () => {
       expect(layers[0]?.source?.nestedComposition?.compositionId).toBe(`transition-comp-${transitionType}`);
       expect(layers[0]?.source?.nestedComposition?.layers).toHaveLength(2);
     }
+  });
+
+  it('builds the mapped transition scene for export before a composition is materialized', () => {
+    const { layers } = buildTransitionExportLayers({
+      transitionType: 'blur-dissolve',
+      materialize: false,
+      outgoingClip: { transform: createDefaultTransform() },
+      incomingClip: { transform: createDefaultTransform() },
+    });
+
+    const nested = layers[0]?.source?.nestedComposition;
+    expect(layers).toHaveLength(1);
+    expect(nested?.compositionId).toBe('transition-preview:export:transition-blur-dissolve');
+    expect(nested?.layers).toHaveLength(2);
+    expect(nested?.sceneClips).toEqual(expect.arrayContaining([
+      expect.objectContaining({ transitionSourceMap: expect.objectContaining({ version: 2 }) }),
+    ]));
   });
 
   it('hydrates transition composition export layers from prepared parent video states', () => {

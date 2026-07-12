@@ -180,7 +180,7 @@ export class VideoSyncHtmlClipCoordinator {
     const needsClipSpeedAdjust = effectiveAbsSpeed > 0.01 && Math.abs(effectiveAbsSpeed - 1) > 0.01;
     const hasSpeedKeyframes = ctx.hasKeyframes(clip.id, 'speed');
 
-    if (clip.transitionSourceHold === true) {
+    if (timeInfo.isHold) {
       syncHtmlTransitionSourceHold({
         clip,
         video,

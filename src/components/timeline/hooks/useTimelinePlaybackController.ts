@@ -25,6 +25,7 @@ type PlaybackActionKey =
   | 'setInPointAtPlayhead'
   | 'setOutPointAtPlayhead'
   | 'setPlayheadPosition'
+  | 'setScrollX'
   | 'splitClipAtPlayhead'
   | 'startRamPreview'
   | 'toggleCutTool'
@@ -61,6 +62,7 @@ export function useTimelinePlaybackController({
     setInPointAtPlayhead: timelineActions.setInPointAtPlayhead,
     setOutPointAtPlayhead: timelineActions.setOutPointAtPlayhead,
     setPlayheadPosition: timelineActions.setPlayheadPosition,
+    setScrollX: timelineActions.setScrollX,
     splitClipAtPlayhead: timelineActions.splitClipAtPlayhead,
     startRamPreview: timelineActions.startRamPreview,
     toggleCutTool: timelineActions.toggleCutTool,

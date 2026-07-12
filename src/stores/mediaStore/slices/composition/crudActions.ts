@@ -32,6 +32,11 @@ function collectTransitionCompositionDescendantIds(
   while (pending.length > 0) {
     const parentId = pending.pop()!;
     const parentComposition = compositions.find((composition) => composition.id === parentId);
+    const backupCompositionId = parentComposition?.transitionComp?.legacyBackupCompositionId;
+    if (backupCompositionId && !ids.has(backupCompositionId)) {
+      ids.add(backupCompositionId);
+      pending.push(backupCompositionId);
+    }
     for (const clip of parentComposition?.timelineData?.clips ?? []) {
       for (const transition of [clip.transitionIn, clip.transitionOut]) {
         if (transition?.compositionId && !ids.has(transition.compositionId)) {

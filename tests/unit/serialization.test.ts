@@ -143,6 +143,26 @@ describe('SerializableClip structure', () => {
     expect(restored.signalRenderAdapterId).toBe('masterselects.renderer.signal-text-summary');
   });
 
+  it('preserves transition source maps and recipe blend windows through JSON', () => {
+    const clip = makeSerializableClip({
+      transitionSourceMap: {
+        version: 1,
+        segments: [
+          { kind: 'linear', compStart: 0, compEnd: 1, sourceStart: 3, sourceEnd: 4 },
+          { kind: 'hold', compStart: 1, compEnd: 2, sourceTime: 4 },
+        ],
+      },
+      transitionRecipeBlendWindows: [
+        { compStart: 0.25, compEnd: 0.75, blendMode: 'add' },
+      ],
+    });
+
+    const restored: SerializableClip = JSON.parse(JSON.stringify(clip));
+
+    expect(restored.transitionSourceMap).toEqual(clip.transitionSourceMap);
+    expect(restored.transitionRecipeBlendWindows).toEqual(clip.transitionRecipeBlendWindows);
+  });
+
   it('preserves effects through JSON round-trip', () => {
     const effects: Effect[] = [
       { id: 'fx-1', name: 'Blur', type: 'blur', enabled: true, params: { radius: 5 } },

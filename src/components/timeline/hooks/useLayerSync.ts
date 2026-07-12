@@ -229,7 +229,8 @@ export function useLayerSync({
       const layer = currentLayers[layerIndex];
 
       if (clip?.isComposition && clip.nestedClips && clip.nestedClips.length > 0) {
-        const clipTime = playheadPosition - clip.startTime + clip.inPoint;
+        const clipLocalTime = playheadPosition - clip.startTime;
+        const clipTime = clipLocalTime + clip.inPoint;
 
         // Build all nested layers for pre-rendering
         const nestedLayers = buildLayerSyncNestedLayers({
@@ -242,7 +243,7 @@ export function useLayerSync({
 
         // Get parent clip transform
         const interpolatedTransform = getInterpolatedTransform(clip.id, clipTime);
-        const interpolatedEffects = getInterpolatedEffects(clip.id, clipTime);
+        const interpolatedEffects = getInterpolatedEffects(clip.id, clipLocalTime);
 
         // Get composition dimensions from mediaStore
         const mediaStore = useMediaStore.getState();

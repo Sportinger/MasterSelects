@@ -17,7 +17,6 @@ import {
 } from '../nestedRestore';
 
 const log = Logger.create('Timeline');
-
 type MediaStoreState = ReturnType<typeof useMediaStore.getState>;
 
 function activeCompositionDimensions(mediaStore: MediaStoreState): { width: number; height: number } {
@@ -36,6 +35,8 @@ function applyCommonRestoredClipFields(serializedClip: SerializableClip): Pick<
   | 'effects'
   | 'transitionIn'
   | 'transitionOut'
+  | 'transitionSourceMap'
+  | 'transitionRecipeBlendWindows'
   | 'colorCorrection'
   | 'nodeGraph'
   | 'masks'
@@ -51,6 +52,8 @@ function applyCommonRestoredClipFields(serializedClip: SerializableClip): Pick<
     effects: serializedClip.effects || [],
     transitionIn: serializedClip.transitionIn ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionIn)) : undefined,
     transitionOut: serializedClip.transitionOut ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionOut)) : undefined,
+    transitionSourceMap: serializedClip.transitionSourceMap ? structuredClone(serializedClip.transitionSourceMap) : undefined,
+    transitionRecipeBlendWindows: serializedClip.transitionRecipeBlendWindows ? structuredClone(serializedClip.transitionRecipeBlendWindows) : undefined,
     colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
     nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
     masks: serializedClip.masks,
@@ -262,6 +265,8 @@ export async function createLoadStateGeneratedClip(params: {
       nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
       audioState: serializedClip.audioState ? structuredClone(serializedClip.audioState) : undefined,
       midiData: serializedClip.midiData ? structuredClone(serializedClip.midiData) : { notes: [] },
+      transitionSourceMap: serializedClip.transitionSourceMap ? structuredClone(serializedClip.transitionSourceMap) : undefined,
+      transitionRecipeBlendWindows: serializedClip.transitionRecipeBlendWindows ? structuredClone(serializedClip.transitionRecipeBlendWindows) : undefined,
       masks: serializedClip.masks,
       isLoading: false,
     };

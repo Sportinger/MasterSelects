@@ -146,6 +146,7 @@ getTrackChildren()  // Query child tracks
 | Delete all gaps | Available from the empty timeline right-click menu; closes all gaps on unlocked visible tracks as one undoable operation. |
 | Fit comp to window | Available from the zoom controls and empty timeline right-click menu. |
 | Right-drag empty space or clips | Scrubs the playhead without opening the timeline context menu; context menus open only for a single right-click. |
+| Edge playhead drag | Left-drag the ruler or playhead head against either visible lane edge to auto-scroll proportionally; snapping and `Alt` behavior remain active. |
 | Sync via Audio | Clip context menu action for selections with at least two audible clips; aligns selected audio/video pairs by waveform correlation and writes one manual linked group. |
 | Lift range | Available in the Cut flyout after drawing a Range Selection; removes the range and leaves a gap. |
 | Extract range | Available in the Cut flyout after drawing a Range Selection; removes the range and ripples following clips left. |
@@ -270,7 +271,7 @@ getTrackChildren()  // Query child tracks
 - The default placement is virtual `center`: the transition body is centered on the cut without moving either clip. Preview and export sample the incoming left handle before the clip start and the outgoing right handle after the clip end; when either side lacks real source material, the nearest first/last frame is held and shown as red fallback coverage.
 - Existing transition bodies render on the timeline, can be selected, moved left/right by dragging the body, resized by dragging either edge, and expose duration plus handle/hold details in the transition-scoped Properties tab. Move snaps to the centered cut position and to available source-handle edges; resize snaps to the same source edges. Move and resize previews show the same source-handle and red hold-frame feedback. Transition durations are not capped by clip length; missing material is represented with hold-frame fallback.
 - Preview and export share the same transition planner and layer assembly. Wipe transitions use compositor transition metadata rather than clip effects.
-- Double-clicking a transition body opens its linked transition composition. Light Leak transitions materialize as editable outgoing, incoming-masked, and generated light-streak layers with normal transform, opacity, mask, and keyframe editing. The parent timeline renders that linked comp as the actual transition source.
+- Double-clicking a transition body opens its linked transition composition. Mapped-v3 has exactly one full-duration outgoing source clip and one incoming source clip; panels and generated layers may remain additional editable layers. Legacy segmented compositions prompt for an explicit upgrade and are otherwise opened unchanged. See [Transition Compositions](./Transition-Compositions.md) for mapped timing, template versions, parity, and the backup lifecycle.
 
 ### Multicam
 - The old clip context-menu Combine Multicam entry has been replaced by Sync via Audio for selected audio/video pairs.
