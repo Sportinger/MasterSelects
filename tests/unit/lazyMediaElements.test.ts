@@ -294,6 +294,30 @@ describe('lazy timeline media elements', () => {
     expect(stats.policies.interactive.resources[0].tags).toContain('primary-lazy-media');
   });
 
+  it('keeps imported WebM duration when lazy metadata reports a short fragment', () => {
+    const videoTrack = makeTrack('video', 'track-v1');
+    const videoClip = makeClip('clip-v1', videoTrack, 'video', 'media-v1');
+    videoClip.duration = 24.585;
+    videoClip.outPoint = 24.585;
+    videoClip.source!.naturalDuration = 24.585;
+    const ctx = makeContext({
+      clips: [videoClip],
+      tracks: [videoTrack],
+      mediaFiles: [
+        { id: 'media-v1', name: videoClip.name, type: 'video', url: 'blob:video', duration: 24.585 },
+      ],
+    });
+
+    hydrateTimelineMediaWindow(ctx);
+    const video = getLazyTimelineVideoElementForClip(videoClip)!;
+    Object.defineProperty(video, 'duration', { configurable: true, value: 1.3281195640563965 });
+    video.dispatchEvent(new Event('loadedmetadata'));
+
+    expect(videoClip.source?.naturalDuration).toBe(24.585);
+    expect(videoClip.duration).toBe(24.585);
+    expect(videoClip.outPoint).toBe(24.585);
+  });
+
   it('hydrates HTML video in worker GPU-only mode when WebCodecs playback is disabled', () => {
     mockRenderHostMode('worker-gpu-only');
     const videoTrack = makeTrack('video', 'track-v1');

@@ -26,6 +26,10 @@ import {
 
 const log = Logger.create('ClipAddAction');
 
+function getPositiveFiniteDuration(value: number | undefined): number | undefined {
+  return Number.isFinite(value) && value !== undefined && value > 0 ? value : undefined;
+}
+
 export async function applyAddClipAction(
   context: ClipActionContext,
   trackId: string,
@@ -80,6 +84,8 @@ export async function applyAddClipAction(
   };
 
   const sourceMediaFile = await loadSourceMediaFile(mediaFileId);
+  const authoritativeNaturalDuration = getPositiveFiniteDuration(options?.source?.naturalDuration)
+    ?? getPositiveFiniteDuration(sourceMediaFile?.duration);
   const sourceTranscript = sourceMediaFile?.transcriptStatus === 'ready' && sourceMediaFile.transcript?.length
     ? sourceMediaFile.transcript
     : undefined;
@@ -167,6 +173,7 @@ export async function applyAddClipAction(
       audioClipId: finalAudioClipId,
       file,
       mediaFileId,
+      authoritativeNaturalDuration,
       thumbnailsEnabled,
       waveformsEnabled,
       updateClip,

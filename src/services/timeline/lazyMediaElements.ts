@@ -207,7 +207,10 @@ function updateNaturalDuration(
   if (!clip.source) return;
 
   const mediaFile = getMediaFileForLazyClip(ctx, clip);
-  const naturalDuration = element.duration;
+  const importedDuration = mediaFile?.duration;
+  const naturalDuration = importedDuration !== undefined && Number.isFinite(importedDuration) && importedDuration > 0
+    ? importedDuration
+    : element.duration;
   clip.source.naturalDuration = naturalDuration;
   if (!Number.isFinite(mediaFile?.duration) && naturalDuration > 0) {
     // Media store duration updates are handled by project/import code. This keeps

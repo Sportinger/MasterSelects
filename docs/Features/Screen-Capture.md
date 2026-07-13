@@ -30,7 +30,7 @@ Captured display/tab audio and the selected microphone are mixed once through a 
 
 Browser picker support varies. Tab capture is the most reliable source of captured audio; many window or display selections expose no audio track. The panel reports the track actually supplied rather than assuming audio from the requested constraints.
 
-On import, a valid duration probed from the completed recording file remains authoritative for Source Monitor and timeline placement. The recorder clock is used only when file probing cannot provide a finite positive duration, preventing the timeline clip from truncating valid trailing video or audio.
+On import, a valid duration probed from the completed recording file remains authoritative for Source Monitor and timeline placement. The recorder clock is used only when file probing cannot provide a finite positive duration. When the clip loads, that imported duration also takes precedence over a shorter initial WebM duration reported by the browser, keeping linked video and audio clips at the full recording length.
 
 ## Recovery
 
