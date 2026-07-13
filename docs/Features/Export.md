@@ -19,6 +19,7 @@ FCPXML is exposed as a selectable export container for NLE interchange.
 ### Current Panel Layout
 
 - A sticky summary bar at the top shows compact badges plus the primary export button.
+- Its first badge shows `SaC` when export resolution and frame rate match the active composition, or `NaC` otherwise; clicking `NaC` copies those composition settings into Export.
 - Clicking a summary badge smooth-scrolls to the related control group and briefly highlights it.
 - A compact command row above `Basic` contains a project-persistent preset list plus `Load`, `Update`, and `Save`.
 - The workflow picker (`WebCodecs`, `HTMLVideo`, `FFmpeg`) is its own section above `Basic`.

@@ -274,6 +274,7 @@ getOpenCompositions()                // List open tabs
 
 ### Tab System
 - Compositions open as tabs in the timeline
+- Creating a composition from the Media Panel opens it immediately in the timeline
 - Tab switching saves current timeline state and loads the new composition's state
 - Animated transitions (exit/enter) when switching between compositions
 - Synced playhead when navigating into/out of nested compositions

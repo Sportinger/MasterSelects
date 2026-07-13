@@ -3,24 +3,36 @@ import type { ExportSummaryBadge, ExportSummaryTarget } from '../exportSummarySt
 import type { EncoderType } from '../useExportState';
 
 interface ExportSummaryBadgesSectionProps {
+  sameAsComposition: boolean;
   summaryBadges: ExportSummaryBadge[];
   primaryExportLabel: string;
   exportDisabled: boolean;
   onPrimaryExport: () => void;
+  onSyncComposition: () => void;
   onScrollToSummaryTarget: (target: ExportSummaryTarget) => void;
 }
 
 export function ExportSummaryBadgesSection({
+  sameAsComposition,
   summaryBadges,
   primaryExportLabel,
   exportDisabled,
   onPrimaryExport,
+  onSyncComposition,
   onScrollToSummaryTarget,
 }: ExportSummaryBadgesSectionProps) {
   return (
     <section className="export-hero-card export-summary-sticky export-summary-badges">
       <div className="export-summary-actions">
         <div className="export-pill-row">
+          <button
+            type="button"
+            className={`export-pill export-pill-${sameAsComposition ? 'sac' : 'nac'}`}
+            onClick={onSyncComposition}
+            title={sameAsComposition ? 'Same as composition' : 'Use composition resolution and frame rate'}
+          >
+            {sameAsComposition ? 'SaC' : 'NaC'}
+          </button>
           {summaryBadges.map((badge) => (
             <button
               key={`${badge.target}-${badge.label}`}

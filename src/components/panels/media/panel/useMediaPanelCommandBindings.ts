@@ -165,6 +165,7 @@ export function useMediaPanelCommandBindings({
     importFiles,
     importFilesWithPicker,
     createComposition,
+    openCompositionTab,
     createFolder,
     createTextItem,
     getOrCreateTextFolder,

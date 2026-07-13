@@ -517,6 +517,18 @@
   background: var(--warning-subtle);
 }
 
+.export-pill-sac {
+  color: var(--warning-light);
+  border-color: color-mix(in srgb, var(--warning) 28%, transparent);
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+}
+
+.export-pill-nac {
+  color: var(--danger-light);
+  border-color: var(--danger-border);
+  background: var(--danger-subtle);
+}
+
 .export-hero-footnote {
   grid-column: 1 / -1;
   font-size: 12px;

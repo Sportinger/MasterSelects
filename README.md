@@ -20,7 +20,7 @@
 
 <p>
   <a href="https://github.com/Sportinger/MasterSelects/releases"><img src="https://img.shields.io/badge/version-2.3.6-blue.svg" alt="Version"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-SHL--1.0-green.svg" alt="Say Hi License"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"></a>
   <a href="https://app.fossa.com/projects/custom%2b61097%2fmasterselects"><img src="https://app.fossa.com/api/projects/custom%2b61097%2fmasterselects.svg?type=shield" alt="FOSSA Status"></a>
 </p>
 
@@ -401,6 +401,6 @@ No source code of any dependency has been modified. No GPL/AGPL dependencies. Al
 
 <div align="center">
 
-**Say Hi License (SHL-1.0)** · Built by a human and an AI, at eye level
+**MIT License**
 
 </div>

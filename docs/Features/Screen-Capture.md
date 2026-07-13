@@ -14,6 +14,8 @@ MasterSelects can record a browser tab, application window, or display directly 
 
 The panel reports storage warnings before recording and shows live elapsed time, estimated size, and audio meters. The debug bridge adds encoder pressure and dropped-frame telemetry. Captured tab muting only prevents local tab playback; it is not echo cancellation.
 
+While capture is recording, a pulsing **REC** button appears immediately left of the Credits pill in the top toolbar. It remains visible without pulsing while paused, and opens the Capture panel when clicked.
+
 ## Capture tiers
 
 The default compatibility tier uses `MediaRecorder`, selecting the first supported VP9, VP8, WebM, H.264/MP4, or MP4 MIME type. Timeslice blobs are written sequentially to capture-specific recovery artifacts and are not retained in memory.
@@ -27,6 +29,8 @@ WebCodecs output is streamed through MediaBunny's positioned `StreamTarget` writ
 Captured display/tab audio and the selected microphone are mixed once through a Web Audio graph. Separate gain/analyser routes feed a stereo recording bus without a speaker destination. The compatibility tier consumes the resulting stream directly. The WebCodecs tier taps the same bus through an AudioWorklet and incrementally encodes planar PCM. Pause intervals are removed from both media clocks, and a 100 ms wall-clock drift guard rebases anomalous timestamps.
 
 Browser picker support varies. Tab capture is the most reliable source of captured audio; many window or display selections expose no audio track. The panel reports the track actually supplied rather than assuming audio from the requested constraints.
+
+On import, a valid duration probed from the completed recording file remains authoritative for Source Monitor and timeline placement. The recorder clock is used only when file probing cannot provide a finite positive duration, preventing the timeline clip from truncating valid trailing video or audio.
 
 ## Recovery
 

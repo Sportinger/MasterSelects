@@ -10,6 +10,7 @@ const mockFactory = vi.hoisted(() => {
   const state = {
     scenario: 'browser-gif' as Scenario,
     throwRenderFrame: false,
+    exportMismatch: false,
   };
 
   class MockExportFrameCaptureUnavailableError extends Error {
@@ -113,6 +114,7 @@ const mockFactory = vi.hoisted(() => {
     savePreset: vi.fn(),
     updatePreset: vi.fn(),
     loadPreset: vi.fn(),
+    setSettings: vi.fn(),
     settings: {
       useInOut: false,
     },
@@ -131,7 +133,7 @@ const mockFactory = vi.hoisted(() => {
     return {
       encoder: state.scenario === 'ffmpeg-video' ? 'ffmpeg' : 'webcodecs',
       setEncoder: vi.fn(),
-      width: 32,
+      width: state.exportMismatch ? 16 : 32,
       height: 18,
       customWidth: 32,
       setCustomWidth: vi.fn(),
@@ -378,13 +380,17 @@ vi.mock('../../src/stores/timeline', () => {
 });
 
 vi.mock('../../src/stores/mediaStore', () => {
+  const composition = {
+    id: 'comp-1',
+    name: 'Test Composition',
+    width: 32,
+    height: 18,
+    frameRate: 1,
+  };
   const state = {
-    getActiveComposition: vi.fn(() => ({
-      name: 'Test Composition',
-      width: 32,
-      height: 18,
-      frameRate: 1,
-    })),
+    activeCompositionId: composition.id,
+    compositions: [composition],
+    getActiveComposition: vi.fn(() => composition),
   };
   const useMediaStore = Object.assign(
     vi.fn((selector?: (value: typeof state) => unknown) => (selector ? selector(state) : state)),
@@ -450,12 +456,14 @@ beforeEach(() => {
   mockFactory.sessionInstances.length = 0;
   mockFactory.frameRendererInstances.length = 0;
   mockFactory.state.throwRenderFrame = false;
+  mockFactory.state.exportMismatch = false;
   mockFactory.downloadBlob.mockClear();
   mockFactory.checkBrowserGifExportSize.mockClear();
   mockFactory.encodeBrowserGif.mockClear();
   mockFactory.createImageSequenceZip.mockClear();
   mockFactory.ffmpegBridge.encode.mockClear();
   mockFactory.ffmpegBridge.cancel.mockClear();
+  mockFactory.exportStoreState.setSettings.mockClear();
   mockFactory.setError.mockClear();
   mockFactory.setIsExporting.mockClear();
   mockFactory.setProgress.mockClear();
@@ -481,6 +489,21 @@ afterEach(() => {
 });
 
 describe('ExportPanel render-session adoption', () => {
+  it('offers composition settings first and applies them when export differs', () => {
+    mockFactory.state.exportMismatch = true;
+
+    const { getByRole } = render(<ExportPanel />);
+    fireEvent.click(getByRole('button', { name: 'NaC' }));
+
+    expect(mockFactory.exportStoreState.setSettings).toHaveBeenCalledWith({
+      customWidth: 32,
+      customHeight: 18,
+      useCustomResolution: true,
+      customFps: 1,
+      useCustomFps: true,
+    });
+  });
+
   it('leaves GIF mode when selecting MP3 audio-only output', () => {
     setScenario('browser-gif', false);
 

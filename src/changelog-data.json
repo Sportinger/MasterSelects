@@ -17,7 +17,7 @@
     "date": "2026-07-09",
     "type": "fix",
     "title": "MasterSelects 2.3.6",
-    "description": "Keyframe and licensing release: marquee selection now selects multiple keyframes at the correct timeline position, Continuous / Orbit camera segments follow their world-pivot arc, and the project adopts the Say Hi License across source and Windows installer metadata.",
+    "description": "Keyframe and licensing release: marquee selection now selects multiple keyframes at the correct timeline position, Continuous / Orbit camera segments follow their world-pivot arc, and the project uses the MIT License across source and Windows installer metadata.",
     "section": "Release"
   },
   {

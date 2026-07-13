@@ -331,7 +331,7 @@ The toolbar and wheel gestures still drive playback and navigation:
 - The toolbar also exposes a dedicated slot-grid toggle button that flips between timeline bars and the 12x4 grid icon.
 - The Navigation/Marking tool flyout exposes Marker, In Point, and Out Point commands for the current playhead position.
 
-The timeline navigator below the tracks provides the same scroll and zoom control in a dedicated bar.
+The timeline navigator below the tracks provides the same scroll and zoom control in a dedicated bar. Releasing its scroll thumb or zoom handles never falls through to the track's click-to-jump action.
 
 ---
 

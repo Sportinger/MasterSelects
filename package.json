@@ -2,6 +2,7 @@
   "name": "masterselects",
   "private": true,
   "version": "2.3.9",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",

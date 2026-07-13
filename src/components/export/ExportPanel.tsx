@@ -53,10 +53,10 @@ export function ExportPanel() {
     setExportProgress: s.setExportProgress,
     endExport: s.endExport,
   })));
-  const { getActiveComposition } = useMediaStore(useShallow(s => ({
+  const { composition, getActiveComposition } = useMediaStore(useShallow(s => ({
+    composition: s.compositions.find((candidate) => candidate.id === s.activeCompositionId),
     getActiveComposition: s.getActiveComposition,
   })));
-  const composition = getActiveComposition();
   const {
     presets,
     selectedPresetId,
@@ -64,6 +64,7 @@ export function ExportPanel() {
     savePreset,
     updatePreset,
     loadPreset,
+    setSettings,
   } = useExportStore(useShallow((state) => ({
     presets: state.presets,
     selectedPresetId: state.selectedPresetId,
@@ -71,6 +72,7 @@ export function ExportPanel() {
     savePreset: state.savePreset,
     updatePreset: state.updatePreset,
     loadPreset: state.loadPreset,
+    setSettings: state.setSettings,
   })));
 
   // All export state, effects, and simple handlers extracted to hook
@@ -244,6 +246,22 @@ export function ExportPanel() {
     setUseCustomFps(false);
     setFps(value);
   }, [setFps, setUseCustomFps]);
+
+  const sameAsComposition = !!composition &&
+    actualWidth === composition.width &&
+    actualHeight === composition.height &&
+    actualFps === composition.frameRate;
+
+  const syncCompositionSettings = useCallback(() => {
+    if (!composition || sameAsComposition) return;
+    setSettings({
+      customWidth: composition.width,
+      customHeight: composition.height,
+      useCustomResolution: true,
+      customFps: composition.frameRate,
+      useCustomFps: true,
+    });
+  }, [composition, sameAsComposition, setSettings]);
 
   const handleQuickBitratePreset = useCallback((value: number) => {
     setRateControl('vbr');
@@ -519,10 +537,12 @@ export function ExportPanel() {
       {!isExporting ? (
         <div className="export-form">
           <ExportSummaryBadgesSection
+            sameAsComposition={sameAsComposition}
             summaryBadges={summaryBadges}
             primaryExportLabel={primaryExportLabel}
             exportDisabled={exportDisabled}
             onPrimaryExport={handlePrimaryExport}
+            onSyncComposition={syncCompositionSettings}
             onScrollToSummaryTarget={scrollToSummaryTarget}
           />
 

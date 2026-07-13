@@ -57,7 +57,7 @@ export function VerticalScrollbar({
   }, [scrollY]);
 
   const handleTrackClick = useCallback((e: React.MouseEvent) => {
-    if (!trackRef.current || isDragging) return;
+    if (e.target !== e.currentTarget || !trackRef.current || isDragging) return;
 
     const rect = trackRef.current.getBoundingClientRect();
     const clickY = e.clientY - rect.top;

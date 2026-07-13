@@ -99,6 +99,14 @@ function patchDefaultMediaDuration(id: string, durationSeconds: number): void {
   }));
 }
 
+export function getCaptureDurationFallback(
+  probedDuration: number | undefined,
+  recorderDuration: number,
+): number | undefined {
+  const probeIsValid = typeof probedDuration === 'number' && probedDuration > 0 && Number.isFinite(probedDuration);
+  return !probeIsValid && recorderDuration > 0 && Number.isFinite(recorderDuration) ? recorderDuration : undefined;
+}
+
 async function commitOnce(
   result: CaptureRecordingResult,
   options: CaptureCommitOptions,
@@ -134,12 +142,10 @@ async function commitOnce(
     if (imported.type !== 'video') throw new Error(`Recorded file "${file.name}" did not import as video.`);
     fileName = file.name;
 
-    const durationSeconds = result.durationSeconds > 0 && Number.isFinite(result.durationSeconds)
-      ? result.durationSeconds
-      : imported.duration;
-    if (typeof durationSeconds === 'number' && durationSeconds > 0 && Number.isFinite(durationSeconds)) {
-      (options.patchMediaDuration ?? patchDefaultMediaDuration)(imported.id, durationSeconds);
-      imported = { ...imported, duration: durationSeconds };
+    const durationFallback = getCaptureDurationFallback(imported.duration, result.durationSeconds);
+    if (durationFallback !== undefined) {
+      (options.patchMediaDuration ?? patchDefaultMediaDuration)(imported.id, durationFallback);
+      imported = { ...imported, duration: durationFallback };
     }
 
     upsertCaptureRecoveryEntry(storage, {

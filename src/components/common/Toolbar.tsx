@@ -42,6 +42,7 @@ import { useToolbarEditActions } from './toolbar/useToolbarEditActions';
 import { useToolbarProjectActions } from './toolbar/useToolbarProjectActions';
 import { useToolbarProjectShortcuts } from './toolbar/useToolbarProjectShortcuts';
 import { useToolbarViewActions } from './toolbar/useToolbarViewActions';
+import { screenCaptureService } from '../../services/capture/ScreenCaptureService';
 
 const log = Logger.create('Toolbar');
 
@@ -125,9 +126,14 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
   const [showLegalDialog, setShowLegalDialog] = useState<LegalPage | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
   const [recentProjects, setRecentProjects] = useState<RecentProjectEntry[]>([]);
+  const [capturePhase, setCapturePhase] = useState(() => screenCaptureService.getSnapshot().phase);
   const menuBarRef = useRef<HTMLDivElement>(null);
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isRenamingRef = useRef(false);
+
+  useEffect(() => {
+    return screenCaptureService.subscribe(snapshot => setCapturePhase(snapshot.phase));
+  }, []);
 
   useEffect(() => {
     const updateProjectState = () => {
@@ -445,6 +451,16 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
       <div className="toolbar-spacer" />
 
       <div className="toolbar-section toolbar-right">
+        {(capturePhase === 'recording' || capturePhase === 'paused' || capturePhase === 'stopping') && (
+          <button
+            className={`toolbar-capture-rec${capturePhase === 'recording' ? ' recording' : ''}`}
+            onClick={() => activatePanelType('capture')}
+            title={capturePhase === 'paused' ? 'Screen capture paused' : 'Screen capture recording'}
+            type="button"
+          >
+            <span aria-hidden="true" /> REC
+          </button>
+        )}
         {accountSession?.authenticated && (
           <button
             className="toolbar-credit-pill"

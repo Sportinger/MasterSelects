@@ -20,6 +20,7 @@ interface UseMediaPanelAddImportCommandsInput {
   importFiles: MediaStoreState['importFiles'];
   importFilesWithPicker: MediaStoreState['importFilesWithPicker'];
   createComposition: MediaStoreState['createComposition'];
+  openCompositionTab: MediaStoreState['openCompositionTab'];
   createFolder: MediaStoreState['createFolder'];
   createTextItem: MediaStoreState['createTextItem'];
   getOrCreateTextFolder: MediaStoreState['getOrCreateTextFolder'];
@@ -51,6 +52,7 @@ export function useMediaPanelAddImportCommands({
   importFiles,
   importFilesWithPicker,
   createComposition,
+  openCompositionTab,
   createFolder,
   createTextItem,
   getOrCreateTextFolder,
@@ -118,8 +120,9 @@ export function useMediaPanelAddImportCommands({
   const handleNewComposition = useCallback(() => {
     const composition = createComposition(`Comp ${compositionCount + 1}`, { parentId: getActiveParentId() });
     placeCreatedItems([composition.id]);
+    openCompositionTab(composition.id);
     closeContextMenu();
-  }, [closeContextMenu, compositionCount, createComposition, getActiveParentId, placeCreatedItems]);
+  }, [closeContextMenu, compositionCount, createComposition, getActiveParentId, openCompositionTab, placeCreatedItems]);
 
   const handleNewFolder = useCallback(() => {
     const folder = createFolder('New Folder', getActiveParentId());
