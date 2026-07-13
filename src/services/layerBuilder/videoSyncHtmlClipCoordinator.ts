@@ -74,6 +74,7 @@ export type VideoSyncHtmlClipCoordinatorDeps = {
 
 export class VideoSyncHtmlClipCoordinator {
   private static readonly PAUSED_PRECISE_SEEK_THRESHOLD = 0.015;
+  private static readonly PLAYBACK_STOP_SEEK_THRESHOLD = 0.05;
   private static readonly PLAYBACK_STOP_SNAP_MAX_DELTA = 0.5;
 
   private readonly deps: VideoSyncHtmlClipCoordinatorDeps;
@@ -338,7 +339,9 @@ export class VideoSyncHtmlClipCoordinator {
         : ctx.playheadPosition;
       const playheadDelta = newPlayheadPos - currentPlayhead;
       const videoAdvanced = playheadDelta > 0.01;
-      const videoLaggedBehindPlayhead = playheadDelta < -0.01;
+      const videoLaggedBehindPlayhead =
+        playheadDelta < -VideoSyncHtmlClipCoordinator.PLAYBACK_STOP_SEEK_THRESHOLD;
+      const videoLagWithinTolerance = playheadDelta < -0.01 && !videoLaggedBehindPlayhead;
       const shouldSnapPlayheadToStopFrame =
         playheadDelta <= VideoSyncHtmlClipCoordinator.PLAYBACK_STOP_SNAP_MAX_DELTA;
       const handoffReleased = clipVideoElement !== actualVideo;
@@ -361,7 +364,7 @@ export class VideoSyncHtmlClipCoordinator {
       if (!renderHostPort.captureVideoFrameAtTime(actualVideo, pauseTargetTime, clip.id)) {
         renderHostPort.ensureVideoFrameCached(actualVideo, clip.id);
       }
-      if (videoAdvanced && shouldSnapPlayheadToStopFrame) {
+      if ((videoAdvanced || videoLagWithinTolerance) && shouldSnapPlayheadToStopFrame) {
         playheadState.position = newPlayheadPos;
         useTimelineStore.setState({ playheadPosition: newPlayheadPos });
       }

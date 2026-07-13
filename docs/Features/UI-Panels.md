@@ -476,6 +476,7 @@ control, `Hide` removes that tab, and `Change to` replaces the tab slot with ano
 target panel is already open elsewhere, it is moved into the clicked slot instead of creating a
 duplicate. The Timeline panel uses composition tabs instead of a normal panel tab; right-click the
 empty part of its tab bar next to the composition tabs to open the Timeline panel menu.
+Closing the active composition tab switches directly to its neighbor without running the normal composition-change animation.
 
 ### Layout Actions
 

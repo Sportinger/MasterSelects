@@ -127,7 +127,7 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
       getInterpolatedSpeed,
     });
 
-    const videosNeedingWarmup = videosToCheck.filter((video) => video.readyState < 3);
+    const videosNeedingWarmup = videosToCheck.filter((video) => video.readyState < 2 || video.seeking);
 
     if (videosNeedingWarmup.length > 0) {
       const playbackWarmup = createPlaybackWarmupState({
@@ -138,13 +138,14 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
       const { requestId: warmupRequestId } = playbackWarmup;
       set({ playbackWarmup });
 
-      // Wait for all videos to be ready (readyState >= 3 means HAVE_FUTURE_DATA)
+      // A settled current frame is enough to start; normal playback buffering
+      // handles subsequent frames without showing a false warmup after scrubs.
       const waitForReady = async (video: HTMLVideoElement): Promise<void> => {
-        if (video.readyState >= 3) return;
+        if (video.readyState >= 2 && !video.seeking) return;
 
         return new Promise((resolve) => {
           const checkReady = () => {
-            if (video.readyState >= 3) {
+            if (video.readyState >= 2 && !video.seeking) {
               resolve();
               return;
             }
@@ -152,7 +153,7 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
             video.play().then(() => {
               setTimeout(() => {
                 video.pause();
-                if (video.readyState >= 3) {
+                if (video.readyState >= 2 && !video.seeking) {
                   resolve();
                 } else {
                   // Check again after a short delay

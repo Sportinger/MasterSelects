@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createStore } from 'zustand';
 import type { MediaState, MediaFile, Composition } from '../../../src/stores/mediaStore/types';
-import type { SerializableClip } from '../../../src/types';
+import type { SerializableClip, TimelineClip } from '../../../src/types';
 import { createCompositionSlice, type CompositionActions } from '../../../src/stores/mediaStore/slices/compositionSlice';
 import { createSlotSlice, type SlotActions } from '../../../src/stores/mediaStore/slices/slotSlice';
 import { createMultiLayerSlice, type MultiLayerActions } from '../../../src/stores/mediaStore/slices/multiLayerSlice';
@@ -1146,6 +1146,7 @@ describe('compositionSlice', () => {
       openCompositionIds: ['comp-1', comp2.id],
       activeCompositionId: 'comp-1',
     });
+    useTimelineStore.setState({ clips: [{ id: 'clip-1' } as TimelineClip] });
     store.getState().closeCompositionTab('comp-1');
     // After closing first tab, active should switch to remaining tab
     expect(store.getState().openCompositionIds).toEqual([comp2.id]);

@@ -62,9 +62,9 @@ export const createCompositionTabActions: MediaSliceCreator<Pick<
     if (activeCompositionId === id && newOpenIds.length > 0) {
       const closedIndex = openCompositionIds.indexOf(id);
       const newActiveIndex = Math.min(closedIndex, newOpenIds.length - 1);
-      doSetActiveComposition(set, get, activeCompositionId, newOpenIds[newActiveIndex], compositions);
+      doSetActiveComposition(set, get, activeCompositionId, newOpenIds[newActiveIndex], compositions, { skipAnimation: true });
     } else if (newOpenIds.length === 0) {
-      doSetActiveComposition(set, get, activeCompositionId, null, compositions);
+      doSetActiveComposition(set, get, activeCompositionId, null, compositions, { skipAnimation: true });
     }
   },
 

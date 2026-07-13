@@ -162,7 +162,7 @@ describe('playbackSlice HTML readiness gate', () => {
       pause: vi.fn(),
     };
     htmlVideo.play.mockImplementation(() => {
-      htmlVideo.readyState = 3;
+      htmlVideo.readyState = 2;
       return Promise.resolve();
     });
 
@@ -202,6 +202,37 @@ describe('playbackSlice HTML readiness gate', () => {
     expect(htmlVideo.pause).toHaveBeenCalled();
   });
 
+  it('starts immediately when a scrubbed HTML video already has the settled target frame', async () => {
+    getRuntimeFrameProvider.mockReturnValue(null);
+
+    const htmlVideo = {
+      readyState: 2,
+      seeking: false,
+      play: vi.fn(),
+      pause: vi.fn(),
+    };
+    const state = createPlaybackTestStore({
+      clips: [{
+        id: 'clip-1',
+        trackId: 'video-1',
+        startTime: 0,
+        duration: 10,
+        source: { videoElement: htmlVideo },
+      }],
+      tracks: [{ id: 'video-1', type: 'video', visible: true }],
+      playheadPosition: 1,
+      duration: 60,
+      isPlaying: false,
+      playbackWarmup: null,
+    } as Partial<TimelineStore>);
+
+    await state.play();
+
+    expect(state.isPlaying).toBe(true);
+    expect(state.playbackWarmup).toBeNull();
+    expect(htmlVideo.play).not.toHaveBeenCalled();
+  });
+
   it('does not start playback when a pending warmup was canceled', async () => {
     vi.useFakeTimers();
     getRuntimeFrameProvider.mockReturnValue(null);
@@ -235,7 +266,7 @@ describe('playbackSlice HTML readiness gate', () => {
     expect(state.playbackWarmup).not.toBeNull();
 
     state.pause();
-    htmlVideo.readyState = 3;
+    htmlVideo.readyState = 2;
     await vi.advanceTimersByTimeAsync(60);
     await playPromise;
 

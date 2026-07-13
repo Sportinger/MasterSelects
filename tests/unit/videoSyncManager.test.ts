@@ -1563,6 +1563,44 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
     }
   });
 
+  it('keeps a nearby decoded stop frame instead of starting another seek', () => {
+    flags.useFullWebCodecsPlayback = false;
+
+    const manager = createManager();
+    mockRenderHostMode('main');
+    const previousPlayheadPosition = useTimelineStore.getState().playheadPosition;
+    const { clip, ctx, video } = createLazyVideoClip('clip-stop-near', {
+      currentTime: 1.5,
+      paused: false,
+      seeking: false,
+      readyState: 4,
+      duration: 10,
+      played: { length: 1 } as TimeRanges,
+      pause: vi.fn() as HTMLVideoElement['pause'],
+      play: vi.fn(() => Promise.resolve()) as HTMLVideoElement['play'],
+      playbackRate: 1,
+      src: 'blob:clip-stop-near',
+    });
+
+    try {
+      useTimelineStore.setState({ playheadPosition: 1.5 });
+      ctx.isPlaying = true;
+      ctx.playheadPosition = 1.5;
+      ctx.getSourceTimeForClip = () => 1.5;
+      manager.syncClipVideo(clip, ctx);
+
+      const pausedCtx = { ...ctx, isPlaying: false } as FrameContext;
+      video.currentTime = 1.47;
+      manager.syncClipVideo(clip, pausedCtx);
+
+      expect(video.currentTime).toBe(1.47);
+      expect(useTimelineStore.getState().playheadPosition).toBe(1.47);
+      expect(testEngine.markVideoFramePresented).toHaveBeenCalledWith(video, 1.47, clip.id);
+    } finally {
+      useTimelineStore.setState({ playheadPosition: previousPlayheadPosition });
+    }
+  });
+
   it('mutes HTML video source audio even when no linked audio clip exists', () => {
     flags.useFullWebCodecsPlayback = false;
 

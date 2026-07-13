@@ -209,7 +209,9 @@ Those tools surface:
 
 `purgePlaybackPath` resets the live playback path at the current playhead without a page reload. It clears VideoSync warmups/seeks, retargets active HTMLVideo/WebCodecs providers, resets GPU-ready state, and can resume playback automatically. The health monitor can invoke the same path when `vf_preview_frame` telemetry shows the playhead target moving while the preview frame remains frozen.
 
-When playback start has to wait for active HTML video readiness, `TimelineState.playbackWarmup` is set until the readiness gate finishes or is canceled. The main preview renders a small `Preparing playback` overlay only for that pre-start gate, so background VideoSync warmups during normal playback do not look like blocking loading states.
+When playback start has to wait for active HTML video readiness, `TimelineState.playbackWarmup` is set until the readiness gate finishes or is canceled. A settled current frame (`HAVE_CURRENT_DATA`, not seeking) starts immediately after a hop or scrub; the gate waits only when the target frame itself is unavailable. The main preview renders a small `Preparing playback` overlay only for that pre-start gate, so background VideoSync warmups during normal playback do not look like blocking loading states.
+
+HTML playback stop keeps a decoded frame within 50 ms of the playhead and aligns the playhead to that presented frame instead of issuing another precision seek. Larger lag still settles exactly; the tolerance prevents rapid play/pause cycles from creating a seek queue that makes later starts cold.
 
 `getAudioDiagnostics` is the focused bridge tool for audio crackle/dropout debugging. Capture it during audible playback to inspect `mediaSummary`, per-element `buffered.bufferedAheadSeconds`, `routing.context.baseLatencyMs`, `status.drift`, and `events.correctionMs`.
 
