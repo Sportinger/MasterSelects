@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '2.3.9';
+export const APP_VERSION = '2.4.0';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -27,8 +27,8 @@ export const FEATURED_VIDEO: {
   title: 'MasterSelects Demo',
   banner: {
     type: 'success',
-    title: 'MasterSelects 2.3.9',
-    message: 'Screen Capture release: record a browser tab, window, or display into the Media Library with mixed tab and microphone audio, pause/resume, durable recovery, optional timeline placement, and an experimental WebCodecs crop/scale path with streaming fragmented MP4 output.',
+    title: 'MasterSelects 2.4.0',
+    message: '3D release: scene light clips (point, panel, environment) with keyframeable intensity, diameter, color, and shadow strength; FBX model import for ASCII and binary files with a per-mesh selector; OBJ/MTL materials and textures with the new Model 3D tab; plus a first Premiere project import pass.',
     animated: true,
   },
 };
@@ -36,8 +36,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'MasterSelects 2.3.9',
-  message: 'Screen Capture release: record a browser tab, window, or display into the Media Library with mixed tab and microphone audio, pause/resume, durable recovery, optional timeline placement, and an experimental WebCodecs crop/scale path with streaming fragmented MP4 output.',
+  title: 'MasterSelects 2.4.0',
+  message: '3D release: scene light clips (point, panel, environment) with keyframeable intensity, diameter, color, and shadow strength; FBX model import for ASCII and binary files with a per-mesh selector; OBJ/MTL materials and textures with the new Model 3D tab; plus a first Premiere project import pass.',
   animated: true,
 };
 

@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-07-14",
+    "type": "new",
+    "title": "MasterSelects 2.4.0",
+    "description": "3D release: scene light clips (point, panel, and environment) light native meshes, 3D text, and imported models with keyframeable intensity, diameter, color, and shadow strength; FBX model import supports ASCII and binary files with a per-mesh selector for multi-mesh models; OBJ/MTL base-color materials and textures arrive together with the new Model 3D properties tab for material, shading, and UV controls; plus a first Premiere project import pass and editor workflow polish.",
+    "section": "Release"
+  },
+  {
     "date": "2026-07-12",
     "type": "new",
     "title": "MasterSelects 2.3.9",
