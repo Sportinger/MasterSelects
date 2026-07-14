@@ -277,7 +277,10 @@ export class PlaybackHealthMonitor {
     }
 
     // 7. RENDER_STALL
-    if (isPlaying && hasVisualRenderDemand) {
+    // Hidden tabs pause requestAnimationFrame, so a stale render timestamp is
+    // expected there — requestRender() could not produce a frame anyway.
+    const documentHidden = typeof document !== 'undefined' && document.hidden;
+    if (isPlaying && hasVisualRenderDemand && !documentHidden) {
       const rl = renderHostPort.getRenderLoop();
       if (rl) {
         const lastRender = rl.getLastSuccessfulRenderTime();

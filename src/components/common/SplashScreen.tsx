@@ -39,13 +39,26 @@ export function SplashScreen({ onClose, onOpenChangelog }: SplashScreenProps) {
   const featuredVideoPlayerRef = useRef<YouTubePlayerInstance | null>(null);
 
   const buildNotice = useMemo(() => getHelperBuildNotice(publishedHelperRelease), [publishedHelperRelease]);
-  const featuredNotices = useMemo(
-    () =>
-      [FEATURED_VIDEO?.banner, buildNotice, WIP_NOTICE].filter(
-        (notice): notice is ChangelogNoticeConfig => Boolean(notice)
-      ),
-    [buildNotice]
-  );
+  const featuredNotices = useMemo(() => {
+    // The featured banner and build notice can carry identical release copy;
+    // collapse content-identical cards but keep extras (helper link, annotation).
+    const byIdentity = new Map<string, ChangelogNoticeConfig>();
+    for (const notice of [FEATURED_VIDEO?.banner, buildNotice, WIP_NOTICE]) {
+      if (!notice) continue;
+      const identity = JSON.stringify([notice.type, notice.title, notice.message]);
+      const existing = byIdentity.get(identity);
+      if (!existing) {
+        byIdentity.set(identity, notice);
+        continue;
+      }
+      byIdentity.set(identity, {
+        ...existing,
+        link: existing.link ?? notice.link,
+        annotation: existing.annotation ?? notice.annotation,
+      });
+    }
+    return [...byIdentity.values()];
+  }, [buildNotice]);
   const featuredVideoEmbedUrl = useMemo(
     () =>
       FEATURED_VIDEO
@@ -214,7 +227,7 @@ export function SplashScreen({ onClose, onOpenChangelog }: SplashScreenProps) {
             <div className="splash-notices">
               {featuredNotices.map((notice, index) => (
                 <NoticeCard
-                  key={`${notice.type}-${notice.title}`}
+                  key={`${notice.type}-${notice.title}-${index}`}
                   notice={notice}
                   staggerIndex={index}
                 />
