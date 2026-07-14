@@ -14,6 +14,7 @@ import {
   createRelinkCandidateMapFromHandles,
   findRelinkMatch,
   mediaNeedsRelink,
+  setRelinkHandlePath,
   type RelinkCandidate,
   type RelinkCandidateMap,
   type RelinkMatch,
@@ -148,14 +149,15 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
     // Collect all files from directory recursively
     const foundFiles = new Map<string, FileSystemFileHandle>();
 
-    const scanDirectory = async (dir: FileSystemDirectoryHandle) => {
+    const scanDirectory = async (dir: FileSystemDirectoryHandle, parentPath = '') => {
       try {
         for await (const entry of (dir as IterableDirectoryHandle).values()) {
+          const relativePath = parentPath ? `${parentPath}/${entry.name}` : entry.name;
           if (entry.kind === 'file') {
-            const fileName = entry.name.toLowerCase();
-            foundFiles.set(fileName, entry);
+            setRelinkHandlePath(entry, relativePath);
+            foundFiles.set(relativePath.toLowerCase(), entry);
           } else if (entry.kind === 'directory') {
-            await scanDirectory(entry);
+            await scanDirectory(entry, relativePath);
           }
         }
       } catch (e) {
@@ -230,7 +232,7 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
       if (handles && handles.length > 0) {
         const selectedFiles = await createRelinkCandidateMapFromHandles(handles);
         const directCandidate = handles.length === 1
-          ? [...selectedFiles.values()][0]
+          ? [...selectedFiles.values()][0]?.[0]
           : undefined;
 
         log.debug(`User selected ${selectedFiles.size} file(s)`);

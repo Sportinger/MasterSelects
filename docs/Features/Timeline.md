@@ -146,7 +146,7 @@ getTrackChildren()  // Query child tracks
 | Delete all gaps | Available from the empty timeline right-click menu; closes all gaps on unlocked visible tracks as one undoable operation. |
 | Fit comp to window | Available from the zoom controls and empty timeline right-click menu. |
 | Right-drag empty space or clips | Scrubs the playhead without opening the timeline context menu; context menus open only for a single right-click. |
-| Edge playhead drag | Left-drag the ruler or playhead head against either visible lane edge to auto-scroll proportionally; snapping and `Alt` behavior remain active. |
+| Edge playhead drag | Left-drag the ruler or playhead head against either visible lane edge to auto-scroll proportionally; snapping and `Alt` behavior remain active. Snapping to a clip end lands on its last visible composition frame instead of the exclusive time immediately after it. |
 | Sync via Audio | Clip context menu action for selections with at least two audible clips; aligns selected audio/video pairs by waveform correlation and writes one manual linked group. |
 | Lift range | Available in the Cut flyout after drawing a Range Selection; removes the range and leaves a gap. |
 | Extract range | Available in the Cut flyout after drawing a Range Selection; removes the range and ripples following clips left. |

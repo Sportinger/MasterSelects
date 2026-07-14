@@ -14,7 +14,7 @@ interface UsePlayheadSnapProps {
   duration: number;
   snappingEnabled: boolean;
   pixelToTime: (pixel: number) => number;
-  getSnapTargetTimes: () => number[];
+  getSnapTargetTimes: (mode?: 'edge' | 'last-frame') => number[];
   setPlayheadPosition: (position: number) => void;
   setScrollX: (scrollX: number) => void;
   setDraggingPlayhead: (dragging: boolean) => void;
@@ -70,7 +70,7 @@ export function usePlayheadSnap({
       const shouldSnap = snappingEnabled !== altKey;
 
       if (shouldSnap) {
-        const snapTimes = getSnapTargetTimes();
+        const snapTimes = getSnapTargetTimes('last-frame');
         const snapThreshold = pixelToTime(10);
 
         let closestSnap: number | null = null;

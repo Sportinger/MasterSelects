@@ -35,6 +35,7 @@ Import, organize, and manage media assets with folder structure, proxy generatio
 | **Audio** | WAV, MP3, OGG, FLAC, AAC, M4A, WMA, AIFF, OPUS |
 | **Image** | PNG, JPG/JPEG, GIF, WebP, BMP, SVG |
 | **Vector Animation** | `.lottie`, `.riv`, Lottie JSON (`.json`, content-sniffed) |
+| **Premiere Pro project** | `.prproj` (gzip or plain Premiere XML) |
 | **Signal Assets** | CSV as table signals; any other unknown file as a binary signal |
 
 The panel also accepts a few specialized asset types that flow into the timeline as 3D clips:
@@ -74,6 +75,12 @@ Click the **+ Add** button for creating new items:
 - Attempts to acquire file handles via `getAsFileSystemHandle` for persistence
 - Falls back to legacy directory-entry walking where needed
 - Falls back to standard File objects when handles are unavailable
+
+#### Premiere Pro Projects
+
+Dropping or selecting a `.prproj` creates one import folder and converts every Premiere sequence into a MasterSelects composition. The importer preserves video/audio track layout, cuts, trims, clip speed, nested composition references, and static Motion/Opacity values. Video tracks are reversed into MasterSelects' top-to-bottom compositing order.
+
+Media already present in the current MasterSelects project is reused by normalized path and filename. Sources that cannot be identified uniquely are added as missing media with their Premiere path and flow through the normal Relink dialog. Premiere bins, markers, transitions, blend modes, effect stacks, and animated effect/keyframe data are not converted yet.
 
 ### Import Pipeline
 
@@ -133,7 +140,7 @@ When supported (Chrome/Edge):
 
 The panel supports three view modes through the header mode control. The selected mode is persisted in `localStorage`.
 When **Wooden media panel theme** is enabled in Appearance settings, the Classic, Icons, Board, and Media generator tray chrome use the same wood/leather/brass skin family as the Audio Mixer; the setting defaults off and turning it off keeps the standard dark panel styling.
-Image and video-capable media items show a cursor-following preview tooltip only after the pointer rests on the item for 400ms; the preview uses the existing thumbnail/image URL and fades in/out over 100ms.
+Image and video-capable media items show a cursor-following preview tooltip only after the pointer rests on the item for 400ms; images use the existing thumbnail/image URL, while videos loop muted at 2x speed from their proxy or source URL. The tooltip fades in/out over 100ms.
 
 ### Classic View (default)
 - Table layout with sortable, reorderable columns
@@ -584,7 +591,7 @@ Files are reloaded in priority order:
 2. **Project folder scan** - Recursively scans the opened project folder and all subfolders, keeping `Raw/` matches first when duplicate names exist
 3. **Stored file handle** - Re-access the original file location, including permission re-checks
 
-On project load and in the Relink dialog, missing files are matched case-insensitively by expected filenames. Sequence assets match their frame filenames (`.glb`, `.ply`, `.splat`) instead of the media-panel display name. There is no content-hash relink pass.
+On project load and in the Relink dialog, missing files are matched case-insensitively by expected filenames. Recursive scans preserve relative subfolder paths and all duplicate basenames; path suffixes disambiguate matches such as `Folder A/1.mp4` versus `Folder B/1.mp4`. A basename-only collision stays unresolved for manual selection instead of silently linking the wrong file. Sequence assets match their frame filenames (`.glb`, `.ply`, `.splat`) instead of the media-panel display name. There is no content-hash relink pass.
 
 ### Double-Click Reload
 Double-clicking a file that has lost access triggers a single-file reload attempt with permission request.

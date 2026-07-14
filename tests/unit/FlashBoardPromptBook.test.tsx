@@ -279,6 +279,34 @@ describe('FlashBoardPromptBook', () => {
     expect(document.querySelector('.fb-prompt-book-media-group.magic')).toBeInTheDocument();
   });
 
+  it('mounts a time-boxed turn sheet when navigating between pages', () => {
+    render(
+      <FlashBoardPromptBook
+        copiedEntryId={null}
+        entries={[
+          { createdAt: 1000, id: 'chat-1', kind: 'chat', prompt: 'Chat prompt' },
+          { createdAt: 2000, id: 'gen-1', kind: 'generation', prompt: 'Gen prompt' },
+        ]}
+        generationRecords={[]}
+        mediaFiles={[]}
+        onClose={vi.fn()}
+        onCopy={vi.fn()}
+      />,
+    );
+
+    expect(document.querySelector('.fb-prompt-book-turn-sheet')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Chat$/ }));
+    const sheet = document.querySelector('.fb-prompt-book-turn-sheet');
+    expect(sheet).toBeInTheDocument();
+    expect(sheet).toHaveClass('is-forward');
+    expect(sheet).toHaveAttribute('aria-hidden', 'true');
+    expect(document.querySelector('.fb-prompt-book-sparkles')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Gen$/ }));
+    expect(document.querySelector('.fb-prompt-book-turn-sheet')).toHaveClass('is-backward');
+  });
+
   it('opens directly in the requested prompt category', () => {
     render(
       <FlashBoardPromptBook

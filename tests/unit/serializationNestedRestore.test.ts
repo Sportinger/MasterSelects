@@ -180,6 +180,7 @@ function mediaStoreState(overrides: Partial<MediaStoreState> = {}): MediaStoreSt
 
 describe('serialization nested video restore', () => {
   beforeEach(() => {
+    vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Win32');
     useTimelineStore.setState(initialTimelineState);
     vi.mocked(useMediaStore.getState).mockReturnValue(mediaStoreState());
     compositionAudioMixerMocks.mixdownComposition.mockReset();

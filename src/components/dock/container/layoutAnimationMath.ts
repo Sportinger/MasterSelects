@@ -115,7 +115,7 @@ function isPreviewLayoutAnimationId(id: string): boolean {
 }
 
 export function shouldAnimateLiveLayoutElement(id: string): boolean {
-  return isPreviewLayoutAnimationId(id) || id === 'panel:timeline';
+  return isPreviewLayoutAnimationId(id) || id === 'panel:timeline' || id === 'panel:media';
 }
 
 export function getDockLayoutOverlayZIndex(id: string, kind: 'panel' | 'child'): string {

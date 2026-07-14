@@ -34,6 +34,7 @@ const DEFAULT_FILE_PICKER_TYPES: FilePickerType[] = [
       'video/*': ['.mp4', '.webm', '.mov', '.avi', '.mkv'],
       'audio/*': ['.mp3', '.wav', '.ogg', '.aac', '.m4a'],
       'image/*': ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'],
+      'application/octet-stream': ['.prproj'],
     },
   },
 ];

@@ -1685,3 +1685,288 @@
   }
 }
 
+/* === Magic book: cover body, paper grain, opening + page-turn animation, sparkles.
+   Idle state is fully static; every animated element is time-boxed and removed
+   from the DOM afterwards. Transform/opacity-only — safe on weak GPUs and Mesa. === */
+
+.fb-prompt-book {
+  --fb-paper-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0.3 0 0 0 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.fb-prompt-book-cover-shell {
+  position: absolute;
+  inset: -7px -13px -9px;
+  border-radius: 12px;
+  background:
+    linear-gradient(115deg, rgba(140, 205, 242, 0.08), transparent 42%),
+    linear-gradient(180deg, #272c34, #101318);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.4),
+    0 24px 50px rgba(0, 0, 0, 0.42);
+  pointer-events: none;
+}
+
+.fb-prompt-book-cover-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--fb-paper-noise) repeat;
+  opacity: 0.25;
+}
+
+.fb-prompt-book-cover-shell::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border: 1px solid rgba(216, 181, 111, 0.26);
+  border-radius: 9px;
+}
+
+.fb-prompt-book-page-edges {
+  position: absolute;
+  inset: 3px -8px 1px;
+  border-radius: 2px;
+  background:
+    repeating-linear-gradient(90deg, #343b46 0 1px, #1d2229 1px 2.5px) left center / 8px calc(100% - 10px) no-repeat,
+    repeating-linear-gradient(90deg, #343b46 0 1px, #1d2229 1px 2.5px) right center / 8px calc(100% - 10px) no-repeat;
+  pointer-events: none;
+}
+
+.fb-prompt-book-spread > .fb-prompt-book-page-face::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--fb-paper-noise) repeat;
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.fb-prompt-book-volume.is-opening {
+  animation: fb-book-open-volume 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.fb-prompt-book-volume.is-opening .fb-prompt-book-left-page {
+  transform-origin: right center;
+  animation: fb-book-open-left 640ms cubic-bezier(0.3, 1.25, 0.45, 1) both;
+}
+
+.fb-prompt-book-volume.is-opening .fb-prompt-book-right-page {
+  transform-origin: left center;
+  animation: fb-book-open-right 640ms cubic-bezier(0.3, 1.25, 0.45, 1) both;
+}
+
+@keyframes fb-book-open-volume {
+  from {
+    transform: translateY(14px) scale(0.94);
+  }
+
+  to {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes fb-book-open-left {
+  0% {
+    opacity: 0;
+    transform: perspective(1400px) rotateY(-62deg);
+  }
+
+  30% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 1;
+    transform: perspective(1400px) rotateY(0deg);
+  }
+}
+
+@keyframes fb-book-open-right {
+  0% {
+    opacity: 0;
+    transform: perspective(1400px) rotateY(62deg);
+  }
+
+  30% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 1;
+    transform: perspective(1400px) rotateY(0deg);
+  }
+}
+
+.fb-prompt-book-turn-sheet {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 1001;
+  width: 50%;
+  height: 100%;
+  perspective: 1400px;
+  perspective-origin: left center;
+  pointer-events: none;
+}
+
+.fb-prompt-book-turn-card {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform-origin: left center;
+  will-change: transform;
+}
+
+.fb-prompt-book-turn-sheet.is-forward .fb-prompt-book-turn-card {
+  animation: fb-page-turn-forward 620ms cubic-bezier(0.33, 0.02, 0.2, 1) both;
+}
+
+.fb-prompt-book-turn-sheet.is-backward .fb-prompt-book-turn-card {
+  animation: fb-page-turn-backward 620ms cubic-bezier(0.33, 0.02, 0.2, 1) both;
+}
+
+@keyframes fb-page-turn-forward {
+  0% {
+    opacity: 0;
+    transform: rotateY(-2deg);
+  }
+
+  14% {
+    opacity: 1;
+  }
+
+  82% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: rotateY(-178deg);
+  }
+}
+
+@keyframes fb-page-turn-backward {
+  0% {
+    opacity: 0;
+    transform: rotateY(-176deg);
+  }
+
+  14% {
+    opacity: 1;
+  }
+
+  82% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: rotateY(-2deg);
+  }
+}
+
+.fb-prompt-book-turn-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.05) 22%, transparent 55%, rgba(255, 255, 255, 0.04) 80%, rgba(0, 0, 0, 0.12)),
+    linear-gradient(180deg, var(--fb-book-bg, #1f242b), var(--fb-book-bg-alt, #15191f));
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.25);
+}
+
+.fb-prompt-book-turn-face::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--fb-paper-noise) repeat;
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.fb-prompt-book-turn-face.is-front {
+  border-radius: 0 8px 8px 0;
+}
+
+.fb-prompt-book-turn-face.is-back {
+  transform: rotateY(180deg);
+  border-radius: 8px 0 0 8px;
+  background:
+    linear-gradient(270deg, rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.05) 22%, transparent 55%, rgba(255, 255, 255, 0.04) 80%, rgba(0, 0, 0, 0.12)),
+    linear-gradient(180deg, var(--fb-book-bg, #1f242b), var(--fb-book-bg-alt, #15191f));
+}
+
+.fb-prompt-book-sparkles {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  z-index: 1004;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.fb-prompt-book-sparkle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--fb-sparkle-size, 9px);
+  height: var(--fb-sparkle-size, 9px);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.95), var(--fb-sparkle-color, #e8c987) 65%);
+  clip-path: polygon(50% 0%, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0% 50%, 38% 38%);
+  filter: drop-shadow(0 0 4px var(--fb-sparkle-color, #e8c987));
+  opacity: 0;
+  animation: fb-sparkle-drift var(--fb-sparkle-duration, 720ms) ease-out var(--fb-sparkle-delay, 0ms) both;
+}
+
+@keyframes fb-sparkle-drift {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.2) rotate(0deg);
+  }
+
+  18% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(var(--fb-sparkle-dx, 0px), var(--fb-sparkle-dy, -40px)) scale(var(--fb-sparkle-scale, 1)) rotate(160deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fb-prompt-book-volume.is-opening,
+  .fb-prompt-book-volume.is-opening .fb-prompt-book-left-page,
+  .fb-prompt-book-volume.is-opening .fb-prompt-book-right-page,
+  .fb-prompt-book-turn-card,
+  .fb-prompt-book-sparkle {
+    animation: none;
+  }
+
+  .fb-prompt-book-turn-sheet,
+  .fb-prompt-book-sparkles {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .fb-prompt-book-turn-sheet,
+  .fb-prompt-book-page-edges,
+  .fb-prompt-book-sparkles {
+    display: none;
+  }
+
+  .fb-prompt-book-volume.is-opening .fb-prompt-book-left-page,
+  .fb-prompt-book-volume.is-opening .fb-prompt-book-right-page {
+    animation: none;
+  }
+
+  .fb-prompt-book-cover-shell {
+    inset: -6px;
+  }
+}
+

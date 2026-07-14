@@ -5,7 +5,6 @@ import { NativeHelperClient } from './services/nativeHelper/NativeHelperClient';
 import { useSettingsStore } from './stores/settingsStore';
 import { installRuntimeDiagnostics } from './services/runtimeDiagnostics';
 import { getStemSeparationService } from './services/audio/stemSeparation';
-import { scheduleAudioMixerWarmup } from './components/panels/audio-mixer/audioMixerWarmup';
 
 installRuntimeDiagnostics();
 
@@ -35,18 +34,6 @@ function warmNativeHelperForProjectBackend(): void {
 }
 
 warmNativeHelperForProjectBackend();
-scheduleAudioMixerWarmup({
-  includeWoodThemeImages: useSettingsStore.getState().audioMixerWoodThemeEnabled,
-});
-
-useSettingsStore.subscribe(
-  (state) => state.audioMixerWoodThemeEnabled,
-  (enabled) => {
-    if (enabled) {
-      scheduleAudioMixerWarmup({ includeWoodThemeImages: true });
-    }
-  },
-);
 
 setClipStemSeparationRunner((request) => getStemSeparationService().separateClip(request));
 

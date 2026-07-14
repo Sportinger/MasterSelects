@@ -52,7 +52,7 @@
   transform: translate3d(0, 0, 0) scale(1);
 }
 
-.media-panel-preview-tooltip img {
+.media-panel-preview-tooltip :is(img, video) {
   display: block;
   width: 100%;
   max-height: 160px;

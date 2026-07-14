@@ -8,6 +8,7 @@ import {
   getRawRelativePath,
   parseRawRelativePath,
 } from '../core/rawPath';
+import { setRelinkHandlePath } from '../relink/relinkMatching';
 
 const log = Logger.create('RawMedia');
 import { FileStorageService } from '../core/FileStorageService';
@@ -190,15 +191,14 @@ export class RawMediaService {
     try {
       const rawFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.RAW);
 
-      const scanDirectory = async (directory: FileSystemDirectoryHandle): Promise<void> => {
+      const scanDirectory = async (directory: FileSystemDirectoryHandle, parentPath = ''): Promise<void> => {
         for await (const entry of (directory as IterableDirectoryHandle).values()) {
+          const relativePath = parentPath ? `${parentPath}/${entry.name}` : entry.name;
           if (entry.kind === 'file') {
-            const key = entry.name.toLowerCase();
-            if (!foundFiles.has(key)) {
-              foundFiles.set(key, entry);
-            }
+            setRelinkHandlePath(entry, relativePath);
+            foundFiles.set(relativePath.toLowerCase(), entry);
           } else if (entry.kind === 'directory') {
-            await scanDirectory(entry);
+            await scanDirectory(entry, relativePath);
           }
         }
       };

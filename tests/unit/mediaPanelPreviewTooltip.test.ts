@@ -38,6 +38,10 @@ function tooltipImageSrc(node: ReactNode): string | null {
   return isValidElement(child) ? (child.props as { src?: string }).src ?? null : null;
 }
 
+function tooltipMedia(node: ReactNode): ReactNode {
+  return isValidElement(node) ? (node.props as { children?: ReactNode }).children : null;
+}
+
 describe('media panel preview tooltip', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -47,12 +51,13 @@ describe('media panel preview tooltip', () => {
     vi.useRealTimers();
   });
 
-  it('uses thumbnails first and falls back to image sources only', () => {
+  it('uses playable video sources and falls back to image thumbnails', () => {
     expect(getMediaPanelPreviewSource(mediaFile({
       type: 'video',
       thumbnailUrl: 'blob:thumb',
       url: 'blob:video',
-    }))).toBe('blob:thumb');
+      proxyVideoUrl: 'blob:proxy',
+    }))).toBe('blob:proxy');
 
     expect(getMediaPanelPreviewSource(mediaFile({
       type: 'image',
@@ -62,7 +67,7 @@ describe('media panel preview tooltip', () => {
     expect(getMediaPanelPreviewSource(mediaFile({
       type: 'video',
       url: 'blob:video',
-    }))).toBeNull();
+    }))).toBe('blob:video');
   });
 
   it('keeps the preview inside the viewport near edges', () => {
@@ -99,7 +104,9 @@ describe('media panel preview tooltip', () => {
     expect(result.current.element).toBeNull();
 
     act(() => vi.advanceTimersByTime(400));
-    expect(tooltipImageSrc(result.current.element)).toBe('blob:first');
+    const preview = tooltipMedia(result.current.element);
+    expect(isValidElement(preview) && preview.type).toBe('video');
+    expect(isValidElement(preview) && preview.props).toMatchObject({ autoPlay: true, loop: true, muted: true });
     expect(tooltipClassName(result.current.element)).toContain('visible');
 
     move(host);

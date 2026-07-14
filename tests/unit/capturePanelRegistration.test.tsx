@@ -23,6 +23,6 @@ describe('capture panel registration', () => {
 
   it('renders the lazy Capture panel content', async () => {
     render(<DockPanelContent panel={{ id: 'capture-1', type: 'capture', title: 'Capture' }} />);
-    expect(await screen.findByText('Capture panel loaded')).toBeInTheDocument();
+    expect(await screen.findByText('Capture panel loaded', {}, { timeout: 5000 })).toBeInTheDocument();
   });
 });

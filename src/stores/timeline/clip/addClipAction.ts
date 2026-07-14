@@ -25,7 +25,6 @@ import {
 } from './unlockedPlacementTrack';
 
 const log = Logger.create('ClipAddAction');
-
 function getPositiveFiniteDuration(value: number | undefined): number | undefined {
   return Number.isFinite(value) && value !== undefined && value > 0 ? value : undefined;
 }
@@ -43,7 +42,6 @@ export async function applyAddClipAction(
   const { get, set } = context;
   const mediaType = (mediaTypeOverride as Awaited<ReturnType<typeof classifyMediaType>> | 'gaussian-avatar' | 'gaussian-splat') || await classifyMediaType(file);
   const estimatedDuration = providedDuration ?? 5;
-
   log.debug('Adding clip', { mediaType, file: file.name });
 
   const requiredTrackType = getRequiredTrackTypeForMedia(mediaType);
@@ -53,14 +51,12 @@ export async function applyAddClipAction(
 
   if (!resolvedTrackId) return undefined;
   trackId = resolvedTrackId;
-
   const { tracks, clips, updateDuration, thumbnailsEnabled, waveformsEnabled, invalidateCache } = get();
   const targetTrack = tracks.find(t => t.id === trackId);
   if (!targetTrack) {
     log.warn('Track not found', { trackId });
     return undefined;
   }
-
   if (mediaType === 'unknown') {
     log.warn('Unsupported clip type', { file: file.name });
     return undefined;
@@ -82,7 +78,6 @@ export async function applyAddClipAction(
   const setClips = (updater: (clips: TimelineClip[]) => TimelineClip[]) => {
     set({ clips: updater(get().clips) });
   };
-
   const sourceMediaFile = await loadSourceMediaFile(mediaFileId);
   const authoritativeNaturalDuration = getPositiveFiniteDuration(options?.source?.naturalDuration)
     ?? getPositiveFiniteDuration(sourceMediaFile?.duration);
@@ -183,7 +178,6 @@ export async function applyAddClipAction(
     invalidateCache();
     return clipId;
   }
-
   if (mediaType === 'audio') {
     const audioClip = applyAddClipOptions(
       createAudioClipPlaceholder({ trackId, file, startTime, estimatedDuration, mediaFileId }),

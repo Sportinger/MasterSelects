@@ -13,6 +13,8 @@ import { flashBoardMediaBridge } from '../../../services/flashboard/FlashBoardMe
 import { useMediaStore } from '../../../stores/mediaStore';
 import type { MediaFile } from '../../../stores/mediaStore/types';
 import type { FlashBoardChatMessage } from './FlashBoardChatOutput';
+import { PromptBookSparkles } from './PromptBookSparkles';
+import { useBookOpening, usePrefersReducedMotion, usePromptBookTurnSheet } from './promptBookAnimations';
 
 interface FlashBoardPromptBookProps {
   activeSystemPrompt?: string;
@@ -539,6 +541,9 @@ export function FlashBoardPromptBook({
   onApplySystemPromptDraft,
 }: FlashBoardPromptBookProps) {
   const setSourceMonitorFile = useMediaStore((state) => state.setSourceMonitorFile);
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const bookOpening = useBookOpening(!prefersReducedMotion);
+  const { beginTurn, finishTurn, turnSheet } = usePromptBookTurnSheet(!prefersReducedMotion);
   const [editingSystemPrompt, setEditingSystemPrompt] = useState(false);
   const [visibleChatTime, setVisibleChatTime] = useState<number | null>(null);
   const [chatRowHeights, setChatRowHeights] = useState<Record<string, number>>({});
@@ -587,6 +592,16 @@ export function FlashBoardPromptBook({
     }
     return groups;
   }, [activePage?.kind, pages]);
+
+  const navigateToIndex = useCallback((index: number) => {
+    if (index === pageIndex || !pages[index]) return;
+    beginTurn(index > pageIndex ? 1 : -1);
+    setPageIndex(index);
+  }, [beginTurn, pageIndex, pages]);
+
+  const turnPage = useCallback((direction: -1 | 1) => {
+    navigateToIndex(getPromptBookTurnIndex(pages, pageIndex, direction));
+  }, [navigateToIndex, pageIndex, pages]);
 
   useEffect(() => {
     setPageIndex((current) => Math.min(current, lastPageIndex));
@@ -658,15 +673,15 @@ export function FlashBoardPromptBook({
       if (event.key === 'Escape') {
         onClose();
       } else if (event.key === 'ArrowLeft') {
-        setPageIndex((current) => getPromptBookTurnIndex(pages, current, -1));
+        turnPage(-1);
       } else if (event.key === 'ArrowRight') {
-        setPageIndex((current) => getPromptBookTurnIndex(pages, current, 1));
+        turnPage(1);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, pages]);
+  }, [onClose, turnPage]);
 
   const clearMediaClickTimer = useCallback(() => {
     if (mediaClickTimerRef.current === null) return;
@@ -675,10 +690,6 @@ export function FlashBoardPromptBook({
   }, []);
 
   useEffect(() => () => clearMediaClickTimer(), [clearMediaClickTimer]);
-
-  const turnPage = (direction: -1 | 1) => {
-    setPageIndex((current) => getPromptBookTurnIndex(pages, current, direction));
-  };
 
   const handleSpreadPageClick = (event: MouseEvent<HTMLElement>, direction: -1 | 1) => {
     if ((event.target as HTMLElement).closest('button, summary, details, a, input, textarea, select, .fb-prompt-book-media-tile')) return;
@@ -730,7 +741,7 @@ export function FlashBoardPromptBook({
     const index = pages.findIndex((page) => page.kind === kind);
     if (index >= 0) {
       if (kind === 'system') onSetPromptDraft?.(pages[index]?.userPrompt ?? '');
-      setPageIndex(index);
+      navigateToIndex(index);
     }
   };
 
@@ -753,7 +764,9 @@ export function FlashBoardPromptBook({
         </button>
 
         <div className="fb-prompt-book-stage">
-          <div className="fb-prompt-book-volume" aria-live="polite">
+          <div className={`fb-prompt-book-volume ${bookOpening ? 'is-opening' : ''}`} aria-live="polite">
+            <div className="fb-prompt-book-cover-shell" aria-hidden="true" />
+            <div className="fb-prompt-book-page-edges" aria-hidden="true" />
             <div className="fb-prompt-book-jump-nav">
               <div className="fb-prompt-book-page-pills" aria-label="Prompt pages">
                 {pageDayGroups.flatMap((group) => group.pages).map(({ index, page }) => (
@@ -761,7 +774,7 @@ export function FlashBoardPromptBook({
                     type="button"
                     className={`fb-prompt-book-jump-pill page ${pageIndex === index ? 'active' : ''}`}
                     key={page.id}
-                    onClick={() => setPageIndex(index)}
+                    onClick={() => navigateToIndex(index)}
                     title={page.userPrompt}
                   >
                     {formatPromptBookPageLabel(page)}
@@ -1118,6 +1131,22 @@ export function FlashBoardPromptBook({
                   </div>
                 </article>
               </div>
+            )}
+
+            {turnSheet && (
+              <div
+                className={`fb-prompt-book-turn-sheet ${turnSheet.direction === 1 ? 'is-forward' : 'is-backward'}`}
+                key={turnSheet.id}
+                aria-hidden="true"
+              >
+                <div className="fb-prompt-book-turn-card" onAnimationEnd={() => finishTurn(turnSheet.id)}>
+                  <div className="fb-prompt-book-turn-face is-front" />
+                  <div className="fb-prompt-book-turn-face is-back" />
+                </div>
+              </div>
+            )}
+            {(bookOpening || turnSheet !== null) && (
+              <PromptBookSparkles key={turnSheet ? `turn-${turnSheet.id}` : 'open'} />
             )}
           </div>
         </div>

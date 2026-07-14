@@ -10,6 +10,7 @@ const TOOLTIP_HEIGHT = 170;
 const VIEWPORT_PADDING = 8;
 
 interface MediaPanelPreviewTooltipState {
+  isVideo: boolean;
   itemId: string;
   left: number;
   name: string;
@@ -27,6 +28,7 @@ export function getMediaPanelPreviewSource(item: ProjectItem | undefined): strin
     return null;
   }
 
+  if (item.type === 'video') return item.proxyVideoUrl || item.url || null;
   return item.thumbnailUrl || (item.type === 'image' ? item.url : null);
 }
 
@@ -119,6 +121,7 @@ export function useMediaPanelPreviewTooltip({
     }
 
     const next = {
+      isVideo: isImportedMediaFileItem(item) && item.type === 'video',
       itemId: item.id,
       name: item.name,
       src,
@@ -146,7 +149,19 @@ export function useMediaPanelPreviewTooltip({
         className={`media-panel-preview-tooltip ${tooltip.visible ? 'visible' : ''}`}
         style={{ left: tooltip.left, top: tooltip.top }}
       >
-        <img src={tooltip.src} alt="" draggable={false} onError={hide} />
+        {tooltip.isVideo ? (
+          <video
+            src={tooltip.src}
+            autoPlay
+            loop
+            muted
+            playsInline
+            onLoadedMetadata={(event) => { event.currentTarget.playbackRate = 2; }}
+            onError={hide}
+          />
+        ) : (
+          <img src={tooltip.src} alt="" draggable={false} onError={hide} />
+        )}
       </div>
     ) : null,
     handleMouseLeave: hide,

@@ -6,6 +6,7 @@
 .relink-dialog {
   max-width: 500px;
   width: 90%;
+  align-items: stretch;
 }
 
 .relink-title {

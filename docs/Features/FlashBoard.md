@@ -34,6 +34,8 @@ FlashBoard is composed of:
 
 Boards are persisted inside the project state. The active board is restored on project load, generation metadata is serialized alongside the board state, and the prompt book keeps the project's generated and chat prompts available for review and copy. Prompt book generation pages group outputs by user prompt, show the Magic Wand prompt when one produced the final request, and preview generated images/videos directly on the page.
 
+The prompt book is presented as a "magic book": it opens with a one-shot fall-open animation, page navigation flips a blank textured overlay sheet across the spread, a short glitter burst accompanies opening and turning, and the pages carry a static paper-grain texture over a leather cover body. All effects are transform/opacity-only CSS animations that are time-boxed and removed from the DOM afterwards (the idle book is fully static), they are skipped entirely under `prefers-reduced-motion` and in the single-column mobile layout, and the animation state lives in `promptBookAnimations.ts` / `PromptBookSparkles.tsx` next to the book component.
+
 ---
 
 ## Node Lifecycle
