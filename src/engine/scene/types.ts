@@ -1,4 +1,6 @@
 import type { BlendMode, GaussianSplatSequenceData, ModelSequenceData, Text3DProperties } from '../../types';
+import type { LightClipSettings } from '../../types/light';
+import type { ModelMaterialSettings } from '../../types/modelMaterial';
 import type { GaussianSplatSettings } from '../gaussian/types';
 import type { MeshPrimitiveType } from '../../stores/mediaStore/types';
 import type { SplatEffectorMode } from '../../types/splatEffector';
@@ -22,7 +24,7 @@ export interface SceneWorldTransform {
 }
 
 export interface SceneLayerBase {
-  kind: 'splat' | 'plane' | 'primitive' | 'text3d' | 'model';
+  kind: 'splat' | 'plane' | 'primitive' | 'text3d' | 'model' | 'light';
   layerId: string;
   clipId: string;
   opacity: number;
@@ -66,6 +68,8 @@ export interface SceneModelLayer extends SceneLayerBase {
   modelUrl?: string;
   modelFileName?: string;
   modelSequence?: ModelSequenceData;
+  modelPrimitiveIndex?: number;
+  modelMaterialSettings?: ModelMaterialSettings;
   wireframe?: boolean;
 }
 
@@ -84,11 +88,17 @@ export interface SceneSplatLayer extends SceneLayerBase {
   preciseSplatSorting?: boolean;
 }
 
+export interface SceneLightLayer extends SceneLayerBase {
+  kind: 'light';
+  lightSettings: LightClipSettings;
+}
+
 export type SceneLayer3DData =
   | ScenePlaneLayer
   | ScenePrimitiveLayer
   | SceneText3DLayer
   | SceneModelLayer
+  | SceneLightLayer
   | SceneSplatLayer;
 
 export interface SceneCameraConfig {

@@ -9,6 +9,7 @@ import type { LayerSourceRect, TransitionRenderState } from '../../../types/laye
 import type { TextBoundsPath } from '../../../types/masks';
 import type { ClipTransform } from '../../../types/timelineCore';
 import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
+import type { LightClipSettings } from '../../../types/light';
 import type { WebCodecsPlayer } from '../../WebCodecsPlayer';
 
 export interface ExportClipStateLike {
@@ -58,6 +59,7 @@ export interface FrameContextLike {
   getInterpolatedColorCorrection: (clipId: string, localTime: number) => RuntimeColorGrade | undefined;
   getInterpolatedVectorAnimationSettings: (clipId: string, localTime: number) => VectorAnimationClipSettings;
   getInterpolatedTextBounds: (clipId: string, localTime: number) => TextBoundsPath | undefined;
+  getInterpolatedLightSettings?: (clipId: string, localTime: number) => LightClipSettings;
   getSourceTimeForClip: (clipId: string, localTime: number) => number;
   getInterpolatedSpeed: (clipId: string, localTime: number) => number;
 }

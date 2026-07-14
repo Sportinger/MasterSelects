@@ -87,6 +87,7 @@ export function collectStaticLayerData(
 
   if (
     source.type === 'model' ||
+    source.type === 'light' ||
     source.type === 'gaussian-avatar' ||
     source.type === 'gaussian-splat'
   ) {

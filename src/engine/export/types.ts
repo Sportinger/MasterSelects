@@ -5,6 +5,7 @@ import type { ActiveTransitionPlan } from '../../stores/timeline/editOperations/
 import type { Composition, MediaFile } from '../../stores/mediaStore/types';
 import type { BlendMode, ClipTransform, Effect, RuntimeColorGrade, TextBoundsPath } from '../../types';
 import type { VectorAnimationClipSettings } from '../../types/vectorAnimation';
+import type { LightClipSettings } from '../../types/light';
 import type { WebCodecsPlayer } from '../WebCodecsPlayer';
 
 // ============ VIDEO CODECS ============
@@ -145,6 +146,7 @@ export interface FrameContext {
   getInterpolatedColorCorrection: (clipId: string, localTime: number) => RuntimeColorGrade | undefined;
   getInterpolatedVectorAnimationSettings: (clipId: string, localTime: number) => VectorAnimationClipSettings;
   getInterpolatedTextBounds: (clipId: string, localTime: number) => TextBoundsPath | undefined;
+  getInterpolatedLightSettings?: (clipId: string, localTime: number) => LightClipSettings;
   getSourceTimeForClip: (clipId: string, localTime: number) => number;
   getInterpolatedSpeed: (clipId: string, localTime: number) => number;
 }

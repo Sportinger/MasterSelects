@@ -42,6 +42,7 @@ export function MediaPanelHeader({
   onNewMesh,
   onNewText3D,
   onNewCamera,
+  onNewLight,
   onNewSplatEffector,
   onImportGaussianSplat,
   onNewMathScene,
@@ -96,6 +97,7 @@ export function MediaPanelHeader({
                 onNewMesh={onNewMesh}
                 onNewText3D={onNewText3D}
                 onNewCamera={onNewCamera}
+                onNewLight={onNewLight}
                 onNewSplatEffector={onNewSplatEffector}
                 onImportGaussianSplat={onImportGaussianSplat}
                 onNewMathScene={onNewMathScene}

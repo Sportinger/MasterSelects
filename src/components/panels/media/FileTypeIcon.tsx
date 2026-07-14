@@ -110,6 +110,14 @@ export const FileTypeIcon = memo(({ type, large }: FileTypeIconProps) => {
           <path d="M5 5.2L6 4h4l1 1.2" stroke="#d5bf84" strokeWidth="0.7" strokeLinecap="round"/>
         </svg>
       );
+    case 'light':
+      return (
+        <svg style={style} viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#5a5530" stroke="#d8c75d" strokeWidth="0.7"/>
+          <circle cx="8" cy="7" r="2.4" fill="#f3dd6b"/>
+          <path d="M8 2.9v1.4M8 9.7v1.4M3.9 7H5M11 7h1.1M5.1 4.1l0.8 0.8M10.1 9.1l0.8 0.8M10.9 4.1l-0.8 0.8M5.9 9.1l-0.8 0.8" stroke="#fff0a3" strokeWidth="0.8" strokeLinecap="round"/>
+        </svg>
+      );
     case 'splat-effector':
       return (
         <svg style={style} viewBox="0 0 16 16" fill="none">
@@ -331,6 +339,15 @@ const LargeIcon = memo(({ type, style }: { type?: string; style: React.CSSProper
           <circle cx="24" cy="24" r="6.5" fill="#d8bc82" opacity="0.9"/>
           <circle cx="24" cy="24" r="3" fill="#6c5a36"/>
           <circle cx="34" cy="19" r="1.5" fill="#d8bc82" opacity="0.85"/>
+        </svg>
+      );
+    case 'light':
+      return (
+        <svg style={style} viewBox="0 0 48 48" fill="none">
+          <rect x="4" y="8" width="40" height="32" rx="3" fill="#5a5530" stroke="#d8c75d" strokeWidth="1"/>
+          <circle cx="24" cy="22" r="8" fill="#f3dd6b"/>
+          <circle cx="24" cy="22" r="13" stroke="#f3dd6b" strokeWidth="2" opacity="0.35"/>
+          <path d="M24 7v6M24 31v6M9 22h6M33 22h6M13.5 11.5l4.2 4.2M30.3 28.3l4.2 4.2M34.5 11.5l-4.2 4.2M17.7 28.3l-4.2 4.2" stroke="#fff0a3" strokeWidth="2" strokeLinecap="round"/>
         </svg>
       );
     case 'splat-effector':

@@ -2,6 +2,7 @@ import { NativeHelperClient } from '../../../../services/nativeHelper/NativeHelp
 
 type NativeFileReferenceClient = {
   parseFileReferenceUrl?: (url: string | undefined) => string | null;
+  getFileReferenceUrl?: (absolutePath: string) => string;
   getDownloadedFile?: (path: string) => Promise<ArrayBuffer | null>;
 };
 
@@ -17,6 +18,43 @@ async function getNativeFileBytes(path: string): Promise<ArrayBuffer | null> {
   return typeof client.getDownloadedFile === 'function'
     ? client.getDownloadedFile(path)
     : null;
+}
+
+function isAbsoluteLocalPath(path: string): boolean {
+  return /^[a-z]:[\\/]/i.test(path) || path.startsWith('\\\\') || path.startsWith('/');
+}
+
+function resolveNativeSiblingPath(basePath: string, relativePath: string): string | null {
+  const slashIndex = Math.max(basePath.lastIndexOf('/'), basePath.lastIndexOf('\\'));
+  if (slashIndex < 0) return null;
+
+  const separator = basePath.includes('\\') ? '\\' : '/';
+  const baseDir = basePath.slice(0, slashIndex);
+  const normalizedRelative = relativePath.replace(/[\\/]+/g, separator);
+  return `${baseDir}${separator}${normalizedRelative}`;
+}
+
+export function resolveModelSiblingUrl(baseUrl: string, relativePath: string): string | null {
+  const path = relativePath.trim();
+  if (!path) return null;
+  if (/^(?:https?|blob|data):/i.test(path)) return path;
+
+  const client = NativeHelperClient as NativeFileReferenceClient;
+  if (isAbsoluteLocalPath(path) && typeof client.getFileReferenceUrl === 'function') {
+    return client.getFileReferenceUrl(path);
+  }
+
+  const nativeBasePath = parseNativeFileReferenceUrl(baseUrl);
+  const nativeSiblingPath = nativeBasePath ? resolveNativeSiblingPath(nativeBasePath, path) : null;
+  if (nativeSiblingPath && typeof client.getFileReferenceUrl === 'function') {
+    return client.getFileReferenceUrl(nativeSiblingPath);
+  }
+
+  try {
+    return new URL(path, baseUrl).toString();
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchModelBytes(url: string): Promise<{ bytes: ArrayBuffer; contentType?: string } | null> {

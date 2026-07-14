@@ -124,10 +124,10 @@ function duplicateItemById(
     return dup.id;
   }
 
-  // Plain-data items (text/solid/mesh/camera/effector/math-scene/motion-shape).
+  // Plain-data items (text/solid/mesh/camera/light/effector/math-scene/motion-shape).
   // Each lives in its own array but shares the { id, name, parentId, createdAt } shape.
   const plainArrays: Array<keyof MediaState> = [
-    'textItems', 'solidItems', 'meshItems', 'cameraItems',
+    'textItems', 'solidItems', 'meshItems', 'cameraItems', 'lightItems',
     'splatEffectorItems', 'mathSceneItems', 'motionShapeItems',
   ];
   for (const key of plainArrays) {

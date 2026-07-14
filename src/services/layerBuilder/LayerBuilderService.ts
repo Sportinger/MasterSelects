@@ -38,6 +38,7 @@ import {
   buildLayerBuilderGaussianSplatLayer,
   buildLayerBuilderModelLayer,
 } from './layerBuilder3dLayers';
+import { buildLayerBuilderLightLayer } from './layerBuilderLightLayer';
 import {
   applyLayerBuilderAINodesToLayer,
   withLayerBuilderMaskProperties,
@@ -442,6 +443,16 @@ export class LayerBuilderService {
     // Splat effector clip (non-rendering scene controller for shared-scene splats)
     else if (clip.source?.type === 'splat-effector') {
       layer = null;
+    }
+    // Light clip (non-rendering scene light)
+    else if (clip.source?.type === 'light') {
+      layer = buildLayerBuilderLightLayer({
+        clip,
+        layerIndex,
+        ctx,
+        transformCache: this.transformCache,
+        opacityOverride,
+      });
     }
     // 3D Model clip
     else if (clip.source?.type === 'model') {

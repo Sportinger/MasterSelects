@@ -6,6 +6,7 @@ import type {
   SceneWorldTransform,
 } from './types';
 import { buildSceneWorldMatrix, getSplatOrientationMatrix, multiplyMat4 } from './SceneTransformUtils';
+import { mergeLightClipSettings } from '../../types/light';
 
 function getStableSourceDimensions(
   data: LayerRenderData,
@@ -79,6 +80,9 @@ function resolveSceneLayerKind(data: LayerRenderData): SceneLayer3DData['kind'] 
   const source = data.layer.source;
   if (source?.type === 'gaussian-splat') {
     return 'splat';
+  }
+  if (source?.type === 'light') {
+    return 'light';
   }
   if (source?.type === 'model') {
     if ((source.meshType ?? undefined) === 'text3d' || source.text3DProperties) {
@@ -161,6 +165,15 @@ export function collectScene3DLayers(
       continue;
     }
 
+    if (base.kind === 'light') {
+      result.push({
+        ...base,
+        kind: 'light',
+        lightSettings: mergeLightClipSettings(source?.lightSettings),
+      });
+      continue;
+    }
+
     if (base.kind === 'plane') {
       result.push({
         ...base,
@@ -211,6 +224,8 @@ export function collectScene3DLayers(
       modelUrl: source?.modelUrl ?? undefined,
       modelFileName: source?.modelFileName ?? source?.file?.name ?? layer.name,
       modelSequence: source?.modelSequence ?? undefined,
+      modelPrimitiveIndex: source?.modelPrimitiveIndex,
+      modelMaterialSettings: source?.modelMaterialSettings,
       wireframe: layer.wireframe,
     });
   }

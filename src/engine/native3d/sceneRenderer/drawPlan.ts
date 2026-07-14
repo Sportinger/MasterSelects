@@ -1,6 +1,7 @@
 import type {
   SceneCamera,
   SceneLayer3DData,
+  SceneLightLayer,
   ScenePlaneLayer,
   SceneSplatLayer,
 } from '../../scene/types';
@@ -21,10 +22,11 @@ export function canRenderNativeScene(
   planeLayers: ScenePlaneLayer[],
   nativeMeshLayers: SceneNativeMeshLayer[],
   splatLayers: SceneSplatLayer[],
+  lightLayers: SceneLightLayer[],
 ): boolean {
   return (
     layers.length > 0 &&
-    layers.length === planeLayers.length + nativeMeshLayers.length + splatLayers.length
+    layers.length === planeLayers.length + nativeMeshLayers.length + splatLayers.length + lightLayers.length
   );
 }
 

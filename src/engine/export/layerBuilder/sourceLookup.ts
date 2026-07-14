@@ -13,6 +13,9 @@ import {
 import { getModelSequenceFrameUrl, resolveModelSequenceData } from '../../../utils/modelSequence';
 import { getInterpolatedMotionLayer } from '../../../utils/motionInterpolation';
 import { getReusableModelUrl } from '../../../stores/timeline/restoredMediaSource';
+import { mergeLightClipSettings } from '../../../types/light';
+import { getInterpolatedClipLightSettings } from '../../../utils/keyframeInterpolation';
+import type { Keyframe } from '../../../types/keyframes';
 import type { ExportClipStateLike, FrameContextLike } from './contracts';
 
 export function getClipMeshType(clip: TimelineClip) {
@@ -55,6 +58,8 @@ export function buildModelSource(clip: TimelineClip, sourceTime: number): Layer[
   return {
     type: 'model',
     modelUrl: getModelSequenceFrameUrl(modelSequence, sourceTime, clip.source?.modelUrl ?? getReusableModelUrl(mediaFile)),
+    modelPrimitiveIndex: clip.source?.modelPrimitiveIndex,
+    modelMaterialSettings: clip.source?.modelMaterialSettings,
     ...(modelSequence ? { modelSequence } : {}),
     ...(meshType ? { meshType } : {}),
     ...(text3DProperties ? { text3DProperties } : {}),
@@ -115,6 +120,22 @@ export function buildMotionSource(clip: TimelineClip, clipLocalTime: number): La
   return {
     type: 'motion',
     motion: getInterpolatedMotionLayer(clip, keyframes, clipLocalTime) ?? clip.motion,
+  };
+}
+
+export function buildLightSource(
+  clip: TimelineClip,
+  clipLocalTime: number,
+  ctx?: FrameContextLike,
+  keyframes: readonly Keyframe[] = (clip as TimelineClip & { keyframes?: readonly Keyframe[] }).keyframes ?? [],
+): Layer['source'] {
+  const baseSettings = mergeLightClipSettings(clip.source?.type === 'light' ? clip.source.lightSettings : undefined);
+  return {
+    type: 'light',
+    lightSettings: mergeLightClipSettings(
+      ctx?.getInterpolatedLightSettings?.(clip.id, clipLocalTime)
+        ?? getInterpolatedClipLightSettings([...keyframes], clipLocalTime, baseSettings),
+    ),
   };
 }
 

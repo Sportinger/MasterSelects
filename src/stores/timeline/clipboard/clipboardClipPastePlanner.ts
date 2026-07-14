@@ -1,10 +1,10 @@
-import type { TimelineClip, TimelineTrack } from '../../../types';
-import { isVectorAnimationSourceType } from '../../../types/vectorAnimation';
-import { DEFAULT_SCENE_CAMERA_SETTINGS } from '../../mediaStore/types';
-import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../../types/splatEffector';
-import { createTimelineMathSceneCanvasRuntime, createTimelineTransitionOverlayCanvasRuntime } from '../../../services/timeline/timelineGeneratedCanvasRuntime';
+import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
 import { remapClipNodeGraphEffectIds } from '../../../services/nodeGraph';
 import type { ClipboardClipData, Keyframe } from '../types';
+import {
+  clipRequiresAsyncMediaLoad,
+  createPastedClipSource as createPastedClipSourceImpl,
+} from './clipboardPastedClipSource';
 
 export interface PastedClipboardClipsPlan {
   idMapping: Map<string, string>;
@@ -137,102 +137,12 @@ function isUsablePasteTargetTrack(track: TimelineTrack | undefined): track is Ti
   return !!track && track.locked !== true && (track.type !== 'video' || track.visible !== false);
 }
 
-function clipRequiresAsyncMediaLoad(clipData: ClipboardClipData): boolean {
-  return !clipData.isComposition &&
-    clipData.sourceType !== 'text' &&
-    clipData.sourceType !== 'solid' &&
-    clipData.sourceType !== 'math-scene' &&
-    clipData.sourceType !== 'transition-overlay' &&
-    !isPrimitiveMeshClip(clipData) &&
-    clipData.sourceType !== 'camera' &&
-    clipData.sourceType !== 'splat-effector' &&
-    !isMotionClip(clipData);
-}
-
-function isPrimitiveMeshClip(clipData: ClipboardClipData): boolean {
-  return clipData.sourceType === 'model' && !!clipData.meshType;
-}
-
-function isMotionClip(clipData: ClipboardClipData): boolean {
-  return clipData.sourceType === 'motion-shape' ||
-    clipData.sourceType === 'motion-null' ||
-    clipData.sourceType === 'motion-adjustment';
-}
-
+// createTimelineMathSceneCanvasRuntime lives in clipboardPastedClipSource.
 function createPastedClipSource(
   clipData: ClipboardClipData,
   text3DProperties: TimelineClip['text3DProperties'],
 ): TimelineClip['source'] {
-  if (isPrimitiveMeshClip(clipData)) {
-    return {
-      type: 'model',
-      meshType: clipData.meshType,
-      mediaFileId: clipData.mediaFileId,
-      naturalDuration: clipData.naturalDuration ?? Number.MAX_SAFE_INTEGER,
-      threeDEffectorsEnabled: clipData.threeDEffectorsEnabled ?? true,
-      ...(text3DProperties ? { text3DProperties } : {}),
-    };
-  }
-  if (clipData.sourceType === 'camera') {
-    return {
-      type: 'camera',
-      mediaFileId: clipData.mediaFileId,
-      naturalDuration: clipData.naturalDuration ?? Number.MAX_SAFE_INTEGER,
-      cameraSettings: clipData.cameraSettings ? { ...clipData.cameraSettings } : { ...DEFAULT_SCENE_CAMERA_SETTINGS },
-    };
-  }
-  if (clipData.sourceType === 'splat-effector') {
-    return {
-      type: 'splat-effector',
-      mediaFileId: clipData.mediaFileId,
-      naturalDuration: clipData.naturalDuration ?? Number.MAX_SAFE_INTEGER,
-      splatEffectorSettings: clipData.splatEffectorSettings
-        ? { ...clipData.splatEffectorSettings }
-        : { ...DEFAULT_SPLAT_EFFECTOR_SETTINGS },
-    };
-  }
-  if (clipData.sourceType === 'solid') {
-    return { type: 'solid', mediaFileId: clipData.mediaFileId, naturalDuration: clipData.duration };
-  }
-  if (clipData.sourceType === 'text') {
-    return { type: 'text', mediaFileId: clipData.mediaFileId, naturalDuration: clipData.naturalDuration ?? clipData.duration };
-  }
-  if (clipData.sourceType === 'math-scene' && clipData.mathScene) {
-    return {
-      type: 'math-scene',
-      mediaFileId: clipData.mediaFileId,
-      naturalDuration: clipData.naturalDuration ?? clipData.duration,
-      textCanvas: createTimelineMathSceneCanvasRuntime({ mathScene: clipData.mathScene, duration: clipData.duration }),
-    };
-  }
-  if (clipData.sourceType === 'transition-overlay' && clipData.transitionOverlay) {
-    return {
-      type: 'transition-overlay',
-      mediaFileId: clipData.mediaFileId,
-      naturalDuration: clipData.naturalDuration ?? clipData.duration,
-      textCanvas: createTimelineTransitionOverlayCanvasRuntime({ overlay: clipData.transitionOverlay }),
-      transitionOverlay: structuredClone(clipData.transitionOverlay),
-    };
-  }
-  if (isMotionClip(clipData) && clipData.motion) {
-    return { type: clipData.sourceType, mediaFileId: clipData.mediaFileId, naturalDuration: clipData.naturalDuration ?? clipData.duration };
-  }
-  if (isVectorAnimationSourceType(clipData.sourceType) && clipData.mediaFileId) {
-    return {
-      type: clipData.sourceType,
-      mediaFileId: clipData.mediaFileId,
-      naturalDuration: clipData.naturalDuration ?? clipData.duration,
-      vectorAnimationSettings: clipData.vectorAnimationSettings,
-    };
-  }
-  return clipData.mediaFileId
-    ? {
-        type: clipData.sourceType,
-        mediaFileId: clipData.mediaFileId,
-        naturalDuration: clipData.naturalDuration,
-        threeDEffectorsEnabled: clipData.threeDEffectorsEnabled ?? true,
-      }
-    : null;
+  return createPastedClipSourceImpl(clipData, text3DProperties);
 }
 
 function createPastedClipAudioState(clipData: ClipboardClipData): TimelineClip['audioState'] {

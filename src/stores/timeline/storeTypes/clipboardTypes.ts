@@ -12,6 +12,8 @@ import type {
   TransitionOverlayClipDefinition,
 } from '../../../types';
 import type { MotionLayerDefinition } from '../../../types/motionDesign';
+import type { LightClipSettings } from '../../../types/light';
+import type { ModelMaterialSettings } from '../../../types/modelMaterial';
 import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
 import type { MeshPrimitiveType, SceneCameraSettings } from '../../mediaStore/types';
 
@@ -48,7 +50,10 @@ export interface ClipboardClipData {
   motion?: MotionLayerDefinition;
   vectorAnimationSettings?: VectorAnimationClipSettings;
   cameraSettings?: SceneCameraSettings;
+  lightSettings?: LightClipSettings;
   meshType?: MeshPrimitiveType;
+  modelPrimitiveIndex?: number;
+  modelMaterialSettings?: ModelMaterialSettings;
   splatEffectorSettings?: import('../../../types/splatEffector').SplatEffectorSettings;
   threeDEffectorsEnabled?: boolean;
   thumbnails?: string[];

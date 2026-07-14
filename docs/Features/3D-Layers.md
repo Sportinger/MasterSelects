@@ -2,7 +2,7 @@
 
 MasterSelects authorable 3D content now resolves through one shared scene contract.
 
-- The native WebGPU scene is the primary runtime for 3D planes, primitive meshes, 3D text, imported OBJ/glTF/GLB models, camera clips, and native gaussian-splat scene objects.
+- The native WebGPU scene is the primary runtime for 3D planes, primitive meshes, 3D text, imported OBJ/FBX/glTF/GLB models, camera clips, and native gaussian-splat scene objects.
 - Gaussian splat clips render through the native WebGPU scene path and stay inside the same scene camera, object-transform, and effector contract as the rest of the 3D system.
 - The old `three.js` bridge has been removed. Native shared-scene rendering is the only active 3D runtime.
 
@@ -14,9 +14,10 @@ Legacy gaussian-avatar support still exists in code for migration and old projec
 |---|---|---|
 | Per-layer 3D toggle | Stable | Any normal video/image layer can be switched between 2D and 3D. |
 | 3D video/image planes | Stable | `clip.is3D` video and image layers render as scene planes. |
-| OBJ / glTF / GLB model import | Stable | Model clips are always 3D and render as shared-scene objects. |
+| OBJ / FBX / glTF / GLB model import | Stable | Model clips are always 3D and render as shared-scene objects. |
 | Primitive mesh clips | Stable | Cube, sphere, plane, cylinder, torus, cone, and 3D text render through the native shared scene. |
 | Scene camera clips | Stable | Timeline camera clips drive preview and export scene navigation. |
+| Scene light clips | Initial stable surface | Point, panel, and environment lights are timeline clips that light native 3D meshes. Shadow settings are stored/keyframeable, but shadow-map rendering is not implemented yet. |
 | Gaussian splat clips | Stable | They render as normal shared-scene objects under the native WebGPU path. |
 | Splat effector clips | Stable but specialized | They deform scene-driven splats live at playback time; 3D planes remain excluded in phase 1. |
 | Gaussian avatar import | Legacy only | Import is blocked; existing projects may still expose blendshape editing. |
@@ -50,11 +51,15 @@ Prepared splat runtime metadata, native splat rasterization, preview, nested com
 
 ### 3D Model Import
 
-- Supported import formats are `.obj`, `.gltf`, and `.glb`.
+- Supported import formats are `.obj`, `.fbx`, `.gltf`, and `.glb`.
 - Model clips are automatically marked `is3D: true` and cannot be switched back to 2D.
 - Models are auto-centered and normalized to fit the viewport.
+- ASCII FBX mesh geometry, UVs, and per-model translation/scale are parsed into the native model runtime; animation, rigs, materials, and binary FBX remain out of scope for this loader.
+- FBX model clips with multiple parsed meshes expose a Transform-tab mesh selector for `All Meshes` or one mesh primitive; solo meshes render centered on their own bounds so the clip transform acts from that mesh's local center.
+- OBJ imports parse `vt`, `usemtl`, MTL `Kd`, and MTL `map_Kd` base-color textures. Relative sidecar `.mtl`, `.bin`, and texture URLs resolve for normal web URLs and native-helper local file references.
 - glTF / GLB base color textures are loaded from data URIs, external image URIs, or embedded bufferViews when `baseColorTexture` and `TEXCOORD_0` are present.
 - Textured glTF / GLB materials render unlit in the native pass, matching scan/photogrammetry assets better than the simple fallback directional light.
+- The CLIP 3D tab exposes imported-model material controls: base color override, embedded texture enable/disable, lit/unlit/asset shading mode, and UV scale/offset.
 - GLB sequences normalize every frame against the first renderable frame's bounds and preload nearby playback frames, avoiding per-frame center/scale jumps and visible current-frame loading flicker.
 - GLB sequences imported into an open project are copied to `Raw/<sequence-name>/` using the original frame names; existing same-size frame files are reused instead of written again.
 - Untextured models use ambient plus directional fallback lighting.
@@ -114,6 +119,20 @@ When Edit mode is enabled while the playhead is over a camera clip, the preview 
 
 Camera rotation keyframes interpolate through the shortest angular path so timeline flights do not spin the long way around when yaw, pitch, or roll crosses a 360-degree wrap. Camera Position X/Y/Z and rotation keyframes render through world-pose interpolation: the camera eye and target are interpolated between keyed world poses, while legacy camera scale keyframes are ignored by the camera pose.
 
+### Scene Lights
+
+Light clips can be created from the Media Panel via `+ Add > 3D > Light` and dragged to the timeline.
+
+- Light clips are always 3D scene controller clips and do not render visible geometry in the final frame.
+- Supported light types are `Point`, `Panel`, and `Environment`.
+- Point and panel lights affect native primitive meshes, 3D text, and imported OBJ/FBX/glTF/GLB meshes in the shared native mesh shader.
+- Environment lights contribute ambient scene light instead of having a position.
+- Environment lights can reference an image media item as an environment map. The current implementation samples the image's average color and applies it as ambient light; it is not full image-based lighting.
+- The Light tab exposes type, color, environment map, intensity, diameter, shadow toggle, and shadow strength.
+- Intensity, diameter, color, and shadow strength are keyframeable.
+- The Transform tab controls the light position and rotation; panel lights emit along their local negative Z direction.
+- Shadow fields are persisted for projects and keyframes, but real shadow-map rendering is not part of this first pass.
+
 ## Gaussian Splats
 
 Gaussian splat clips are imported through the SuperSplat-compatible `@playcanvas/splat-transform` reader path. Supported scene formats include `.ply`, `.compressed.ply`, `.splat`, `.ksplat`, `.spz`, `.sog`, `.lcc`, and zipped SOG-style `.zip` payloads. Plain point-cloud PLY files without gaussian scale properties fall back to the local point-cloud conversion path.
@@ -165,6 +184,8 @@ If you see avatar-specific code paths in the renderer or AI tooling, treat them 
 |---|---|
 | Regular 2D clip | Transform, Effects, Masks, Transcript, Analysis |
 | Camera clip | Transform |
+| Light clip | Transform, Light |
+| Imported model clip | Transform, 3D, Color, Effects, Masks, Transcript, Analysis |
 | Gaussian splat clip | Transform, Gaussian, Effects, Masks, Transcript, Analysis |
 | Splat effector clip | Transform, Effector, Effects, Masks, Transcript, Analysis |
 | 3D text clip | 3D Text, Transform, Effects, Masks |
@@ -193,7 +214,7 @@ The Transform tab is context-sensitive:
 |---|---|
 | `src/engine/native3d/NativeSceneRenderer.ts` | Shared native 3D scene renderer entrypoint |
 | `src/engine/native3d/passes/MeshPass.ts` | Native primitive mesh, imported model, and 3D text render pass |
-| `src/engine/native3d/assets/ModelRuntimeCache.ts` | Native OBJ / glTF / GLB runtime cache, centering, and normalization |
+| `src/engine/native3d/assets/ModelRuntimeCache.ts` | Native OBJ / FBX / glTF / GLB runtime cache, centering, and normalization |
 | `src/engine/native3d/assets/TextMeshCache.ts` | Native font-outline text mesh cache and extrusion generator |
 | `src/engine/scene/types.ts` | Shared scene runtime and effector types |
 | `src/engine/scene/SceneCameraUtils.ts` | Shared scene camera resolution |
@@ -207,6 +228,8 @@ The Transform tab is context-sensitive:
 | `src/engine/export/ExportLayerBuilder.ts` | Export layer building for shared scene content |
 | `src/engine/export/preloadGaussianSplats.ts` | Shared splat preload and export preparation |
 | `src/components/panels/properties/TransformTab.tsx` | Context-sensitive 3D transform and scene-navigation controls |
+| `src/components/panels/properties/Model3DTab.tsx` | Imported model material, texture, shading, and UV controls |
+| `src/components/panels/properties/LightTab.tsx` | Light clip type, color, environment map, intensity, diameter, and shadow controls |
 | `src/components/panels/properties/GaussianSplatTab.tsx` | Gaussian splat render settings tab |
 | `src/components/panels/properties/SplatEffectorTab.tsx` | Splat effector settings tab |
 
@@ -215,9 +238,9 @@ The Transform tab is context-sensitive:
 | Format | Current support | Notes |
 |---|---|---|
 | `.obj` | Supported | Imported as a 3D model clip in the shared scene contract. |
+| `.fbx` | Supported | ASCII mesh geometry is imported as a 3D model clip in the shared scene contract. |
 | `.gltf` | Supported | Imported as a 3D model clip in the shared scene contract. |
 | `.glb` | Supported | Imported as a 3D model clip in the shared scene contract. |
-| `.fbx` | Not supported | Do not rely on FBX import; no native FBX loader ships today. |
 | `.ply` / `.compressed.ply` | Supported | Gaussian splat import with Morton ordering where needed. |
 | `.splat` | Supported | Gaussian splat import. |
 | `.ksplat` | Supported | Loaded through `@playcanvas/splat-transform`. |
@@ -231,4 +254,5 @@ The Transform tab is context-sensitive:
 - Temporal and particle splat controls are still only partially surfaced in the UI.
 - Composition-level camera settings still remain available alongside camera clips.
 - Legacy gaussian-avatar import is disabled.
+- Environment maps currently drive ambient color only; full image-based lighting, reflections, and HDR sampling are not implemented.
 - Higher-order spherical harmonics are preserved during import, but the current native shader still renders the DC color path only.

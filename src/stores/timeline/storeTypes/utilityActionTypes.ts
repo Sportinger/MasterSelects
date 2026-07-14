@@ -17,6 +17,7 @@ import type {
   TimelineClip,
 } from '../../../types';
 import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
+import type { LightClipSettings } from '../../../types/light';
 import type { SceneCameraSettings } from '../../mediaStore/types';
 import type {
   TimelineEditOperationSource,
@@ -99,6 +100,7 @@ export interface KeyframeActions {
   getClipKeyframes: (clipId: string) => Keyframe[];
   getInterpolatedTransform: (clipId: string, clipLocalTime: number) => ClipTransform;
   getInterpolatedCameraSettings: (clipId: string, clipLocalTime: number) => SceneCameraSettings;
+  getInterpolatedLightSettings: (clipId: string, clipLocalTime: number) => LightClipSettings;
   getInterpolatedEffects: (clipId: string, clipLocalTime: number) => Effect[];
   getInterpolatedNodeGraphParams: (clipId: string, nodeId: string, clipLocalTime: number) => Record<string, ClipCustomNodeParamValue>;
   getInterpolatedColorCorrection: (clipId: string, clipLocalTime: number) => RuntimeColorGrade | undefined;

@@ -21,7 +21,9 @@ export interface ModelRuntimePreloadOptions {
 }
 
 export interface ModelRuntimePrimitive {
+  name?: string;
   vertices: Float32Array;
+  centeredVertices?: Float32Array;
   indices: Uint32Array;
   baseColor: ModelColor;
   baseColorTexture?: ModelRuntimeTexture;
@@ -31,7 +33,7 @@ export interface ModelRuntimePrimitive {
 export interface ModelRuntimeData {
   url: string;
   fileName?: string;
-  format: 'obj' | 'gltf' | 'glb';
+  format: 'obj' | 'fbx' | 'gltf' | 'glb';
   primitives: ModelRuntimePrimitive[];
   sourceBounds?: ModelRuntimeBounds;
   normalizationKey?: string;
@@ -43,6 +45,7 @@ export interface ModelRuntimeRequest {
 }
 
 export interface PendingPrimitive {
+  name?: string;
   positions: Float32Array;
   normals: Float32Array;
   texcoords?: Float32Array;

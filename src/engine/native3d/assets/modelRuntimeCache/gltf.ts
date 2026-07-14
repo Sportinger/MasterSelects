@@ -9,7 +9,7 @@ import {
   transformPosition,
 } from './geometry';
 import { readAccessorFloats, readAccessorIndices } from './gltfAccessors';
-import { decodeDataUri, decodeText, fetchModelBytes, sliceBuffer } from './io';
+import { decodeDataUri, decodeText, fetchModelBytes, resolveModelSiblingUrl, sliceBuffer } from './io';
 import { createTextureFromBytes } from './texture';
 import type { GltfAsset, ModelColor, ModelRuntimeTexture, PendingPrimitive } from './types';
 import { DEFAULT_MODEL_COLOR } from './types';
@@ -91,10 +91,8 @@ export async function resolveGltfBuffers(
       continue;
     }
 
-    let resolvedUrl: string;
-    try {
-      resolvedUrl = new URL(buffer.uri, sourceUrl).toString();
-    } catch {
+    const resolvedUrl = resolveModelSiblingUrl(sourceUrl, buffer.uri);
+    if (!resolvedUrl) {
       return null;
     }
     const fetched = await fetchModelBytes(resolvedUrl);
@@ -126,7 +124,11 @@ export async function resolveGltfTextures(
 
     if (image.uri) {
       try {
-        const imageUrl = new URL(image.uri, sourceUrl).toString();
+        const imageUrl = resolveModelSiblingUrl(sourceUrl, image.uri);
+        if (!imageUrl) {
+          imageTextures[index] = null;
+          continue;
+        }
         const fetched = await fetchModelBytes(imageUrl);
         imageTextures[index] = fetched
           ? await createTextureFromBytes(fetched.bytes, image.mimeType ?? fetched.contentType)

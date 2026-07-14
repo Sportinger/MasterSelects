@@ -527,6 +527,8 @@ export function createClipboardMediaReloadPatch(
         modelUrl,
         naturalDuration: source.naturalDuration || 3600,
         mediaFileId,
+        modelPrimitiveIndex: source.modelPrimitiveIndex,
+        modelMaterialSettings: source.modelMaterialSettings,
       },
       isLoading: false,
       needsReload: false,

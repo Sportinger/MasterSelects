@@ -124,6 +124,12 @@ export function resolveClipContextMenuLabelTarget(
       : state.cameraItems?.[0]);
   }
 
+  if (clip.source?.type === 'light') {
+    return resolveLabelItemColor(mediaFileId
+      ? state.lightItems?.find((item) => item.id === mediaFileId)
+      : state.lightItems?.find((item) => item.name === clip.name));
+  }
+
   if (clip.source?.type === 'splat-effector') {
     return resolveLabelItemColor(mediaFileId
       ? state.splatEffectorItems?.find((item) => item.id === mediaFileId)

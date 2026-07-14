@@ -115,6 +115,8 @@ export function createDataOnlyRestoredModelSource(
     | 'mediaFileId'
     | 'naturalDuration'
     | 'modelSequence'
+    | 'modelPrimitiveIndex'
+    | 'modelMaterialSettings'
     | 'threeDEffectorsEnabled'
     | 'meshType'
     | 'text3DProperties'
@@ -142,6 +144,8 @@ export function createDataOnlyRestoredModelSource(
     naturalDuration: serializedClip.naturalDuration || mediaFile?.duration || fallbackDuration || 3600,
     mediaFileId: serializedClip.mediaFileId,
     threeDEffectorsEnabled: serializedClip.threeDEffectorsEnabled ?? true,
+    ...(serializedClip.modelPrimitiveIndex !== undefined ? { modelPrimitiveIndex: serializedClip.modelPrimitiveIndex } : {}),
+    ...(serializedClip.modelMaterialSettings ? { modelMaterialSettings: { ...serializedClip.modelMaterialSettings } } : {}),
     ...(serializedClip.meshType ? { meshType: serializedClip.meshType } : {}),
     ...(serializedClip.text3DProperties ? { text3DProperties: { ...serializedClip.text3DProperties } } : {}),
   };

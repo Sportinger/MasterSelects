@@ -15,6 +15,7 @@ import type {
 import type {
   ProjectCameraItem,
   ProjectLabelColor,
+  ProjectLightItem,
   ProjectMathSceneItem,
   ProjectMediaBoardGroupOffsets,
   ProjectMediaBoardNodeLayout,
@@ -162,6 +163,7 @@ export interface ProjectFile {
   solidItems?: ProjectSolidItem[];
   meshItems?: ProjectMeshItem[];
   cameraItems?: ProjectCameraItem[];
+  lightItems?: ProjectLightItem[];
   splatEffectorItems?: ProjectSplatEffectorItem[];
   mathSceneItems?: ProjectMathSceneItem[];
   motionShapeItems?: ProjectMotionShapeItem[];

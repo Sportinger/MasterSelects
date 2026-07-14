@@ -40,6 +40,7 @@ export function MediaPanel() {
     solidItems,
     meshItems,
     cameraItems,
+    lightItems,
     splatEffectorItems,
     mathSceneItems,
     motionShapeItems,
@@ -106,6 +107,9 @@ export function MediaPanel() {
     createCameraItem,
     getOrCreateCameraFolder,
     removeCameraItem,
+    createLightItem,
+    getOrCreateLightFolder,
+    removeLightItem,
     createSplatEffectorItem,
     getOrCreateSplatEffectorFolder,
     removeSplatEffectorItem,
@@ -200,6 +204,7 @@ export function MediaPanel() {
     solidItems,
     meshItems,
     cameraItems,
+    lightItems,
     splatEffectorItems,
     mathSceneItems,
     motionShapeItems,
@@ -217,6 +222,7 @@ export function MediaPanel() {
     removeSolidItem,
     removeMeshItem,
     removeCameraItem,
+    removeLightItem,
     removeSplatEffectorItem,
     removeMathSceneItem,
     removeMotionShapeItem,
@@ -275,6 +281,7 @@ export function MediaPanel() {
     handleNewSolid,
     handleNewMesh,
     handleNewCamera,
+    handleNewLight,
     handleNewSplatEffector,
     handleNewMathScene,
     handleNewMotionShape,
@@ -350,6 +357,8 @@ export function MediaPanel() {
     getOrCreateMeshFolder,
     createCameraItem,
     getOrCreateCameraFolder,
+    createLightItem,
+    getOrCreateLightFolder,
     createSplatEffectorItem,
     getOrCreateSplatEffectorFolder,
     createMathSceneItem,
@@ -394,6 +403,7 @@ export function MediaPanel() {
     solidItems,
     meshItems,
     cameraItems,
+    lightItems,
     splatEffectorItems,
     mathSceneItems,
     motionShapeItems,
@@ -565,6 +575,7 @@ export function MediaPanel() {
         onNewMesh={handleNewMesh}
         onNewText3D={handleNewText3D}
         onNewCamera={handleNewCamera}
+        onNewLight={handleNewLight}
         onNewSplatEffector={handleNewSplatEffector}
         onImportGaussianSplat={handleImportGaussianSplat}
         onNewMathScene={handleNewMathScene}
@@ -680,6 +691,7 @@ export function MediaPanel() {
           onNewMesh: handleNewMesh,
           onNewText3D: handleNewText3D,
           onNewCamera: handleNewCamera,
+          onNewLight: handleNewLight,
           onNewSplatEffector: handleNewSplatEffector,
           onImportGaussianSplat: handleImportGaussianSplat,
           onNewMathScene: handleNewMathScene,

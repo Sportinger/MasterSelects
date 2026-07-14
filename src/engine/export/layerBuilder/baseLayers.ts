@@ -14,6 +14,14 @@ import type { BaseLayerPropsLike, FrameContextLike } from './contracts';
 
 const log = Logger.create('ExportLayerBuilder');
 
+export function getNestedClipKeyframes(nestedClip: TimelineClip): Keyframe[] {
+  const { clipKeyframes } = useTimelineStore.getState();
+  const storeKeyframes = clipKeyframes.get(nestedClip.id);
+  return storeKeyframes?.length
+    ? storeKeyframes
+    : [...((nestedClip as TimelineClip & { keyframes?: readonly Keyframe[] }).keyframes ?? [])];
+}
+
 export function buildBaseLayerProps(
   clip: TimelineClip,
   clipLocalTime: number,
@@ -81,11 +89,7 @@ export function buildBaseLayerProps(
 }
 
 export function buildNestedBaseLayer(nestedClip: TimelineClip, nestedClipLocalTime: number): BaseLayerPropsLike {
-  const { clipKeyframes } = useTimelineStore.getState();
-  const storeKeyframes = clipKeyframes.get(nestedClip.id);
-  const keyframes = storeKeyframes?.length
-    ? storeKeyframes
-    : [...((nestedClip as TimelineClip & { keyframes?: readonly Keyframe[] }).keyframes ?? [])];
+  const keyframes = getNestedClipKeyframes(nestedClip);
 
   const baseTransform: ClipTransform = {
     opacity: nestedClip.transform?.opacity ?? DEFAULT_TRANSFORM.opacity,

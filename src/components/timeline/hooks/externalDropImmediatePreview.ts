@@ -102,6 +102,13 @@ export function resolveExternalDropImmediatePreview({
     return visualPreview(cameraItem?.duration, 10);
   }
 
+  if (types.includes('application/x-light-item-id')) {
+    if (dragPayload?.kind === 'light') return visualPreview(dragPayload.duration, 10);
+    const lightItemId = dataTransfer.getData('application/x-light-item-id');
+    const lightItem = mediaStore.lightItems.find((light) => light.id === lightItemId);
+    return visualPreview(lightItem?.duration, 10);
+  }
+
   if (types.includes('application/x-splat-effector-item-id')) {
     if (dragPayload?.kind === 'splat-effector') return visualPreview(dragPayload.duration, 10);
     const effectorItemId = dataTransfer.getData('application/x-splat-effector-item-id');

@@ -387,6 +387,7 @@ function getAllMediaItems(media: MediaSnapshot): Array<{ id: string; name: strin
     ...readMediaItems(media.solidItems),
     ...readMediaItems(media.meshItems),
     ...readMediaItems(media.cameraItems),
+    ...readMediaItems(media.lightItems),
     ...readMediaItems(media.splatEffectorItems),
     ...readMediaItems(media.mathSceneItems),
     ...readMediaItems(media.motionShapeItems),

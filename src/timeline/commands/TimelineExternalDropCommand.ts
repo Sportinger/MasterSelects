@@ -4,6 +4,7 @@ export const TIMELINE_EXTERNAL_DROP_MIME_TYPES = {
   solid: 'application/x-solid-item-id',
   mesh: 'application/x-mesh-item-id',
   camera: 'application/x-camera-item-id',
+  light: 'application/x-light-item-id',
   splatEffector: 'application/x-splat-effector-item-id',
   mathScene: 'application/x-math-scene-item-id',
   motionShape: 'application/x-motion-shape-item-id',
@@ -17,6 +18,7 @@ export type TimelineExternalDropCommandKind =
   | 'solid'
   | 'mesh'
   | 'camera'
+  | 'light'
   | 'splat-effector'
   | 'math-scene'
   | 'motion-shape'
@@ -45,6 +47,7 @@ const MIME_COMMAND_ORDER = [
   { kind: 'solid', mimeType: TIMELINE_EXTERNAL_DROP_MIME_TYPES.solid },
   { kind: 'mesh', mimeType: TIMELINE_EXTERNAL_DROP_MIME_TYPES.mesh },
   { kind: 'camera', mimeType: TIMELINE_EXTERNAL_DROP_MIME_TYPES.camera },
+  { kind: 'light', mimeType: TIMELINE_EXTERNAL_DROP_MIME_TYPES.light },
   { kind: 'splat-effector', mimeType: TIMELINE_EXTERNAL_DROP_MIME_TYPES.splatEffector },
   { kind: 'math-scene', mimeType: TIMELINE_EXTERNAL_DROP_MIME_TYPES.mathScene },
   { kind: 'motion-shape', mimeType: TIMELINE_EXTERNAL_DROP_MIME_TYPES.motionShape },

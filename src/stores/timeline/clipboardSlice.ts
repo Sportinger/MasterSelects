@@ -88,7 +88,12 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         cameraSettings: dataOnlySource?.type === 'camera' && dataOnlySource.cameraSettings
           ? { ...dataOnlySource.cameraSettings }
           : undefined,
+        lightSettings: dataOnlySource?.type === 'light' && dataOnlySource.lightSettings
+          ? { ...dataOnlySource.lightSettings }
+          : undefined,
         meshType: clip.meshType || dataOnlySource?.meshType,
+        modelPrimitiveIndex: dataOnlySource?.type === 'model' ? dataOnlySource.modelPrimitiveIndex : undefined,
+        modelMaterialSettings: dataOnlySource?.type === 'model' ? dataOnlySource.modelMaterialSettings : undefined,
         threeDEffectorsEnabled: dataOnlySource?.threeDEffectorsEnabled,
         splatEffectorSettings: dataOnlySource?.type === 'splat-effector' && dataOnlySource.splatEffectorSettings
           ? { ...dataOnlySource.splatEffectorSettings }
@@ -219,6 +224,10 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         }
 
         if (newClip.source?.type === 'camera') {
+          continue;
+        }
+
+        if (newClip.source?.type === 'light') {
           continue;
         }
 

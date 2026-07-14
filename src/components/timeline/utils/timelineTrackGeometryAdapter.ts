@@ -20,7 +20,7 @@ type TimelineTrackGeometryTrack = TimelineTrackProps['track'];
 export type TimelineTrackGeometryFadeState = { fadeInDuration: number; fadeOutDuration: number };
 
 const TIMELINE_PROJECTION_SOURCE_KINDS = new Set<string>([
-  'video', 'audio', 'image', 'text', 'solid', 'camera',
+  'video', 'audio', 'image', 'text', 'solid', 'camera', 'light',
   'composition', 'model', 'gaussian-splat', 'vector-animation', 'midi', 'data',
 ]);
 

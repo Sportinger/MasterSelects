@@ -18,7 +18,7 @@ const IMAGE_EXTENSIONS = [
   'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif', 'heic', 'heif',
 ];
 
-const MODEL_EXTENSIONS = ['obj', 'gltf', 'glb'];
+const MODEL_EXTENSIONS = ['obj', 'fbx', 'gltf', 'glb'];
 const GAUSSIAN_SPLAT_EXTENSIONS = ['ply', 'splat', 'ksplat', 'spz', 'sog', 'lcc', 'zip'];
 const VECTOR_ANIMATION_EXTENSIONS = ['lottie', 'riv', 'json'];
 

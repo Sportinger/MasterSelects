@@ -10,6 +10,7 @@ export function isImportedMediaFileItem(item: ProjectItem): item is MediaFile {
     item.type === 'text' ||
     item.type === 'solid' ||
     item.type === 'camera' ||
+    item.type === 'light' ||
     item.type === 'splat-effector' ||
     item.type === 'math-scene' ||
     item.type === 'motion-shape'
