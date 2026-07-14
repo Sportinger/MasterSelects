@@ -99,6 +99,13 @@ export function generateCameraClipId(): string {
 }
 
 /**
+ * Generate a unique ID for light clips.
+ */
+export function generateLightClipId(): string {
+  return generateClipId('clip-light');
+}
+
+/**
  * Generate a unique ID for splat effector clips.
  */
 export function generateSplatEffectorClipId(): string {

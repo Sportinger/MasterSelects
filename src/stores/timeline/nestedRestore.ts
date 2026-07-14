@@ -172,6 +172,7 @@ export function createRestoredPrimitiveMeshClip(
       source: {
         type: 'model',
         meshType: serializedClip.meshType,
+        modelMaterialSettings: serializedClip.modelMaterialSettings,
         mediaFileId: serializedClip.mediaFileId || undefined,
         naturalDuration: Number.MAX_SAFE_INTEGER,
         threeDEffectorsEnabled: serializedClip.threeDEffectorsEnabled ?? true,

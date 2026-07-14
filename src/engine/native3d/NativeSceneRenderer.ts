@@ -6,6 +6,7 @@ import type {
   SceneCamera,
   SceneGizmoRenderOptions,
   SceneLayer3DData,
+  SceneLightLayer,
   ScenePlaneLayer,
   SceneSplatEffectorRuntimeData,
   SceneSplatLayer,
@@ -111,6 +112,7 @@ export class NativeSceneRenderer {
     const planeLayers = this.planePass.collect(layers);
     const meshLayers = this.meshPass.collect(layers);
     const splatLayers = this.splatPass.collect(layers);
+    const lightLayers = layers.filter((layer): layer is SceneLightLayer => layer.kind === 'light');
     const preparedMeshLayers = meshLayers.map((layer) =>
       layer.kind === 'model'
         ? prepareModelLayerForRender(
@@ -123,7 +125,7 @@ export class NativeSceneRenderer {
     );
     const nativeMeshLayers = this.meshPass.collectNativeLayers(preparedMeshLayers);
 
-    if (!canRenderNativeScene(layers, planeLayers, nativeMeshLayers, splatLayers)) {
+    if (!canRenderNativeScene(layers, planeLayers, nativeMeshLayers, splatLayers, lightLayers)) {
       return null;
     }
 
@@ -132,6 +134,7 @@ export class NativeSceneRenderer {
       planeLayers,
       nativeMeshLayers,
       splatLayers,
+      lightLayers,
       camera,
       effectors,
       realtimePlayback,
@@ -147,6 +150,7 @@ export class NativeSceneRenderer {
       planes: planeLayers.length,
       meshes: meshLayers.length,
       splats: splatLayers.length,
+      lights: lightLayers.length,
     });
     return nativeSceneView;
   }
@@ -202,6 +206,7 @@ export class NativeSceneRenderer {
     planeLayers: ScenePlaneLayer[],
     nativeMeshLayers: SceneNativeMeshLayer[],
     layers: SceneSplatLayer[],
+    lightLayers: SceneLightLayer[],
     camera: SceneCamera,
     effectors: SceneSplatEffectorRuntimeData[],
     realtimePlayback: boolean,
@@ -289,6 +294,7 @@ export class NativeSceneRenderer {
       opaqueMeshes,
       camera,
       effectors,
+      lightLayers,
       this.modelRuntimeCache,
       temporaryBuffers,
       false,
@@ -379,6 +385,7 @@ export class NativeSceneRenderer {
       transparentMeshes,
       camera,
       effectors,
+      lightLayers,
       this.modelRuntimeCache,
       temporaryBuffers,
       true,
@@ -390,7 +397,7 @@ export class NativeSceneRenderer {
       return null;
     }
     const gizmoLayer = gizmo
-      ? [...planeLayers, ...nativeMeshLayers, ...layers].find((layer) => layer.clipId === gizmo.clipId) ??
+      ? [...planeLayers, ...nativeMeshLayers, ...layers, ...lightLayers].find((layer) => layer.clipId === gizmo.clipId) ??
         (gizmo.worldMatrix && gizmo.worldTransform
           ? {
               clipId: gizmo.clipId,

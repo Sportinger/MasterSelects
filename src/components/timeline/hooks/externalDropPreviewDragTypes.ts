@@ -4,6 +4,7 @@ export const GENERATED_VISUAL_DROP_TYPES = [
   'application/x-solid-item-id',
   'application/x-mesh-item-id',
   'application/x-camera-item-id',
+  'application/x-light-item-id',
   'application/x-splat-effector-item-id',
   'application/x-math-scene-item-id',
   'application/x-motion-shape-item-id',

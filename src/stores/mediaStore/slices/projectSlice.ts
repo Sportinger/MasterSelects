@@ -73,6 +73,7 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
       solidItems: [],
       meshItems: [],
       cameraItems: [],
+      lightItems: [],
       splatEffectorItems: [],
       mathSceneItems: [],
       motionShapeItems: [],
@@ -102,6 +103,7 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
     localStorage.removeItem('ms-solidItems');
     localStorage.removeItem('ms-meshItems');
     localStorage.removeItem('ms-cameraItems');
+    localStorage.removeItem('ms-lightItems');
     localStorage.removeItem('ms-splatEffectorItems');
     localStorage.removeItem('ms-mathSceneItems');
     localStorage.removeItem('ms-motionShapeItems');

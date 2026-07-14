@@ -17,9 +17,10 @@ import {
 } from '../../../services/layerBuilder/layerBuilderTransitionComposition';
 import { createTransitionNestedCompositionLayer } from '../../../services/layerBuilder/transitionNestedCompositionLayer';
 import type { ExportClipStateLike } from './contracts';
-import { buildNestedBaseLayer } from './baseLayers';
+import { buildNestedBaseLayer, getClipKeyframes } from './baseLayers';
 import {
   buildGaussianSplatSource,
+  buildLightSource,
   buildModelSource,
   buildMotionSource,
   getCompositionSize,
@@ -400,6 +401,14 @@ function buildNestedLayerForExport(
     return {
       ...baseLayer,
       source: buildGaussianSplatSource(nestedClip, nestedClipLocalTime),
+      is3D: true,
+    };
+  }
+
+  if (nestedClip.source?.type === 'light') {
+    return {
+      ...baseLayer,
+      source: buildLightSource(nestedClip, nestedClipLocalTime, undefined, getClipKeyframes(nestedClip)),
       is3D: true,
     };
   }

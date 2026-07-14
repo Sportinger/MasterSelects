@@ -39,16 +39,24 @@ function getFinalOpacity(transformOpacity: number, opacityOverride?: number): nu
     : transformOpacity;
 }
 
-function buildPrimaryModelSource(clip: TimelineClip, sourceTime: number): NonNullable<Layer['source']> {
+function buildPrimaryModelSource(
+  clip: TimelineClip,
+  sourceTime: number,
+  mediaFile?: { id?: string; name?: string; file?: File },
+): NonNullable<Layer['source']> {
   const modelSequence = getClipModelSequence(clip);
   const modelFrame = resolveClipModelFrame(clip, sourceTime);
+  const file = getRenderableLayerFile(mediaFile?.file) ?? getRenderableLayerFile(clip.file);
 
   return {
     type: 'model',
+    mediaFileId: mediaFile?.id ?? clip.mediaFileId ?? clip.source?.mediaFileId,
     modelUrl: resolveClipModelUrl(clip, sourceTime),
-    modelFileName: modelFrame?.name ?? clip.source?.modelFileName ?? clip.file?.name ?? clip.name,
+    modelFileName: modelFrame?.name ?? clip.source?.modelFileName ?? file?.name ?? mediaFile?.name ?? clip.name,
+    modelPrimitiveIndex: clip.source?.modelPrimitiveIndex,
+    modelMaterialSettings: clip.source?.modelMaterialSettings,
     ...(modelSequence ? { modelSequence } : {}),
-    file: getRenderableLayerFile(clip.file),
+    file,
     threeDEffectorsEnabled: resolveSceneEffectorsEnabled(clip.source?.threeDEffectorsEnabled),
     meshType: getClipMeshType(clip),
     text3DProperties: getClipText3DProperties(clip),
@@ -59,6 +67,8 @@ function buildNestedModelSource(clip: TimelineClip, sourceTime: number): NonNull
   return {
     type: 'model',
     modelUrl: resolveClipModelUrl(clip, sourceTime),
+    modelPrimitiveIndex: clip.source?.modelPrimitiveIndex,
+    modelMaterialSettings: clip.source?.modelMaterialSettings,
     file: clip.file,
     threeDEffectorsEnabled: resolveSceneEffectorsEnabled(clip.source?.threeDEffectorsEnabled),
     meshType: getClipMeshType(clip),
@@ -80,7 +90,7 @@ export function buildLayerBuilderModelLayer(params: BuildLayer3dParams): Layer {
     visible: true,
     opacity: getFinalOpacity(transform.opacity, opacityOverride),
     blendMode: transform.blendMode as BlendMode,
-    source: buildPrimaryModelSource(clip, timeInfo.clipTime),
+    source: buildPrimaryModelSource(clip, timeInfo.clipTime, getMediaFileForClip(ctx, clip)),
     effects: ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime),
     colorCorrection: ctx.getInterpolatedColorCorrection(clip.id, timeInfo.clipLocalTime),
     position: transform.position,

@@ -166,8 +166,11 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       modelSequence: serializeModelSequence(c.source?.modelSequence || c.modelSequence),
       gaussianSplatSequence: serializeGaussianSplatSequence(c.source?.gaussianSplatSequence || c.gaussianSplatSequence),
       meshType: c.source?.meshType || c.meshType,
+      modelPrimitiveIndex: c.source?.modelPrimitiveIndex ?? c.modelPrimitiveIndex,
+      modelMaterialSettings: c.source?.modelMaterialSettings || c.modelMaterialSettings,
       text3DProperties: c.source?.text3DProperties || c.text3DProperties,
       cameraSettings: c.source?.cameraSettings || c.cameraSettings,
+      lightSettings: c.source?.lightSettings || c.lightSettings,
       splatEffectorSettings: c.source?.splatEffectorSettings || c.splatEffectorSettings,
       threeDEffectorsEnabled: c.source?.threeDEffectorsEnabled,
       gaussianBlendshapes: c.source?.gaussianBlendshapes || c.gaussianBlendshapes,
@@ -647,6 +650,7 @@ export async function syncStoresToProject(): Promise<void> {
       projectData.solidItems = freshState.solidItems;
       projectData.meshItems = freshState.meshItems;
       projectData.cameraItems = freshState.cameraItems;
+      projectData.lightItems = freshState.lightItems;
       projectData.splatEffectorItems = freshState.splatEffectorItems;
       projectData.mathSceneItems = freshState.mathSceneItems;
       projectData.motionShapeItems = freshState.motionShapeItems;

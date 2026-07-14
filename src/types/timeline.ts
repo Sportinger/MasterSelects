@@ -19,6 +19,8 @@ import type {
 import type { Effect } from './effects';
 import type { Keyframe } from './keyframes';
 import type { LayerSourceRect, TransitionRenderState } from './layers';
+import type { LightClipSettings } from './light';
+import type { ModelMaterialSettings } from './modelMaterial';
 import type { MathSceneDefinition } from './mathScene';
 import type { ClipMask } from './masks';
 import type {
@@ -51,11 +53,14 @@ export interface TimelineClipDataSource {
   modelUrl?: string;
   modelFileName?: string;
   modelSequence?: ModelSequenceData;
+  modelPrimitiveIndex?: number;
+  modelMaterialSettings?: ModelMaterialSettings;
   gaussianSplatSequence?: GaussianSplatSequenceData;
   threeDEffectorsEnabled?: boolean;
   meshType?: import('../stores/mediaStore/types').MeshPrimitiveType;
   text3DProperties?: Text3DProperties;
   cameraSettings?: import('../stores/mediaStore/types').SceneCameraSettings;
+  lightSettings?: LightClipSettings;
   splatEffectorSettings?: import('./splatEffector').SplatEffectorSettings;
   gaussianAvatarUrl?: string;
   gaussianBlendshapes?: Record<string, number>;
@@ -279,10 +284,13 @@ export interface SerializableClip {
   // 3D layer support
   is3D?: boolean;
   modelSequence?: ModelSequenceData;
+  modelPrimitiveIndex?: number;
+  modelMaterialSettings?: ModelMaterialSettings;
   gaussianSplatSequence?: GaussianSplatSequenceData;
   threeDEffectorsEnabled?: boolean;
   meshType?: import('../stores/mediaStore/types').MeshPrimitiveType;
   cameraSettings?: import('../stores/mediaStore/types').SceneCameraSettings;
+  lightSettings?: LightClipSettings;
   splatEffectorSettings?: import('./splatEffector').SplatEffectorSettings;
   // Gaussian avatar blendshape state
   gaussianBlendshapes?: Record<string, number>;

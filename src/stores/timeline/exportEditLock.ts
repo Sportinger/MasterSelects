@@ -98,6 +98,7 @@ const EXPORT_LOCKED_ACTION_NAMES = new Set<string>([
   'addMeshClip',
   'updateText3DProperties',
   'addCameraClip',
+  'addLightClip',
   'addSplatEffectorClip',
 
   'addClipEffect',
@@ -245,6 +246,7 @@ const NULL_FALLBACK_ACTION_NAMES = new Set<string>([
   'convertSolidToMotionShape',
   'addMeshClip',
   'addCameraClip',
+  'addLightClip',
   'addSplatEffectorClip',
   'addClipAICustomNode',
   'addClipAICustomNodeFromPort',

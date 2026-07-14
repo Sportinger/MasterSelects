@@ -3,6 +3,7 @@ import { Logger } from '../../../../services/logger';
 import type {
   CameraItem,
   Composition,
+  LightItem,
   MathSceneItem,
   MediaFile,
   MediaFolder,
@@ -37,6 +38,7 @@ interface UseMediaPanelRenameDeleteCommandsInput {
   solidItems: SolidItem[];
   meshItems: MeshItem[];
   cameraItems: CameraItem[];
+  lightItems?: LightItem[];
   splatEffectorItems: SplatEffectorItem[];
   mathSceneItems: MathSceneItem[];
   motionShapeItems: MotionShapeItem[];
@@ -54,6 +56,7 @@ interface UseMediaPanelRenameDeleteCommandsInput {
   removeSolidItem: MediaStoreState['removeSolidItem'];
   removeMeshItem: MediaStoreState['removeMeshItem'];
   removeCameraItem: MediaStoreState['removeCameraItem'];
+  removeLightItem?: MediaStoreState['removeLightItem'];
   removeSplatEffectorItem: MediaStoreState['removeSplatEffectorItem'];
   removeMathSceneItem: MediaStoreState['removeMathSceneItem'];
   removeMotionShapeItem: MediaStoreState['removeMotionShapeItem'];
@@ -82,6 +85,7 @@ export function useMediaPanelRenameDeleteCommands({
   solidItems,
   meshItems,
   cameraItems,
+  lightItems = [],
   splatEffectorItems,
   mathSceneItems,
   motionShapeItems,
@@ -99,6 +103,7 @@ export function useMediaPanelRenameDeleteCommands({
   removeSolidItem,
   removeMeshItem,
   removeCameraItem,
+  removeLightItem,
   removeSplatEffectorItem,
   removeMathSceneItem,
   removeMotionShapeItem,
@@ -173,6 +178,7 @@ export function useMediaPanelRenameDeleteCommands({
     const solidItemIds = new Set(solidItems.map((item) => item.id));
     const meshItemIds = new Set(meshItems.map((item) => item.id));
     const cameraItemIds = new Set(cameraItems.map((item) => item.id));
+    const lightItemIds = new Set(lightItems.map((item) => item.id));
     const splatEffectorItemIds = new Set(splatEffectorItems.map((item) => item.id));
     const mathSceneItemIds = new Set(mathSceneItems.map((item) => item.id));
     const motionShapeItemIds = new Set(motionShapeItems.map((item) => item.id));
@@ -193,13 +199,14 @@ export function useMediaPanelRenameDeleteCommands({
       else if (solidItemIds.has(id)) removeSolidItem(id);
       else if (meshItemIds.has(id)) removeMeshItem(id);
       else if (cameraItemIds.has(id)) removeCameraItem(id);
+      else if (lightItemIds.has(id)) removeLightItem?.(id);
       else if (splatEffectorItemIds.has(id)) removeSplatEffectorItem(id);
       else if (mathSceneItemIds.has(id)) removeMathSceneItem(id);
       else if (motionShapeItemIds.has(id)) removeMotionShapeItem(id);
       else if (signalAssetIds.has(id)) removeSignalAsset(id);
     });
     closeContextMenu();
-  }, [compositions, folders, textItems, solidItems, meshItems, cameraItems, splatEffectorItems, mathSceneItems, motionShapeItems, signalAssets, deleteMediaFilesEverywhere, removeSignalAsset, removeComposition, removeFolder, removeTextItem, removeSolidItem, removeMeshItem, removeCameraItem, removeSplatEffectorItem, removeMathSceneItem, removeMotionShapeItem, closeContextMenu]);
+  }, [compositions, folders, textItems, solidItems, meshItems, cameraItems, lightItems, splatEffectorItems, mathSceneItems, motionShapeItems, signalAssets, deleteMediaFilesEverywhere, removeSignalAsset, removeComposition, removeFolder, removeTextItem, removeSolidItem, removeMeshItem, removeCameraItem, removeLightItem, removeSplatEffectorItem, removeMathSceneItem, removeMotionShapeItem, closeContextMenu]);
 
   const handleDelete = useCallback(async () => {
     const selectedIdSet = new Set(selectedIds);

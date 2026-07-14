@@ -58,6 +58,45 @@ describe('LayerCollector', () => {
     vi.useRealTimers();
   });
 
+  it('keeps light clips as zero-sized 3D scene placeholders', () => {
+    const layer = {
+      id: 'light-layer',
+      name: 'Light',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      position: { x: 0, y: 0, z: 3 },
+      scale: { x: 1, y: 1, z: 1 },
+      rotation: { x: 0, y: 0, z: 0 },
+      is3D: true,
+      source: {
+        type: 'light',
+        lightSettings: {
+          kind: 'point',
+          color: '#ff0000',
+          intensity: 20,
+          diameter: 2,
+          castsShadows: false,
+          shadowStrength: 0.5,
+        },
+      },
+    } as unknown as Layer;
+
+    const result = new LayerCollector().collect([layer], {
+      textureManager: {} as TextureManager,
+      scrubbingCache: null,
+      getLastVideoTime: () => undefined,
+      setLastVideoTime: () => {},
+      isExporting: false,
+      isPlaying: false,
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.layer.source?.type).toBe('light');
+    expect(result[0]?.textureView).toBeNull();
+  });
+
   it('uses the clip WebCodecs frame while a separate scrub runtime session is still cold', () => {
     const clipFrame = {
       timestamp: 2_000_000,

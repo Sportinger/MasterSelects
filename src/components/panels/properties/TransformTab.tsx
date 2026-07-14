@@ -1,8 +1,9 @@
 // Transform Tab - Position, Scale, Rotation, Opacity controls
-import { useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
+import { parseFbxMeshNames } from '../../../engine/native3d/assets/modelRuntimeCache/fbx';
 import { DEFAULT_SCENE_CAMERA_SETTINGS, type SceneCameraSettings } from '../../../stores/mediaStore/types';
 import {
   getSceneNavFpsMoveSpeedStepIndex,
@@ -76,19 +77,23 @@ export function TransformTab({
   const sourceType = clip?.source?.type;
   const isModel = sourceType === 'model';
   const isCameraClip = sourceType === 'camera';
+  const isLightClip = sourceType === 'light';
   const isGaussianSplat = sourceType === 'gaussian-splat';
   const isSplatEffector = sourceType === 'splat-effector';
   const supportsThreeDEffectorToggle = isModel || isGaussianSplat;
   const canToggleThreeDEffectors = supportsThreeDEffectorToggle;
   const threeDEffectorsEnabled = clip?.source?.threeDEffectorsEnabled !== false;
-  const supportsScaleZ = isModel || isSplatEffector || isGaussianSplat;
+  const supportsScaleZ = isModel || isSplatEffector || isGaussianSplat || isLightClip;
   const usesCameraControls = isCameraClip;
-  const isLocked3D = isModel || isGaussianSplat || isSplatEffector;
+  const isLocked3D = isModel || isGaussianSplat || isSplatEffector || isLightClip;
   const isEffectively3D = isCameraClip || isLocked3D || is3D;
   const cameraSettings: SceneCameraSettings = isCameraClip
     ? (cameraSettingsOverride ?? clip?.source?.cameraSettings ?? DEFAULT_SCENE_CAMERA_SETTINGS)
     : DEFAULT_SCENE_CAMERA_SETTINGS;
   const cameraValues = resolveCameraValues(cameraSettings);
+  const modelFileName = clip?.source?.modelFileName ?? clip?.file?.name ?? clip?.name ?? '';
+  const modelFile = clip?.source?.file ?? clip?.file;
+  const [modelPrimitiveNames, setModelPrimitiveNames] = useState<string[]>([]);
 
   const handleBatchStart = useCallback(() => startBatch('Adjust transform'), []);
   const handleBatchEnd = useCallback(() => endBatch(), []);
@@ -128,6 +133,41 @@ export function TransformTab({
     usesCameraControls,
   });
   const scaleValues = resolveScaleValues(transform);
+  const selectedModelPrimitiveIndex = Number.isInteger(clip?.source?.modelPrimitiveIndex)
+    ? clip?.source?.modelPrimitiveIndex
+    : undefined;
+  const modelPrimitiveOptions = useMemo(() => {
+    const fallbackCount = selectedModelPrimitiveIndex !== undefined
+      ? selectedModelPrimitiveIndex + 1
+      : 0;
+    const count = Math.max(modelPrimitiveNames.length, fallbackCount);
+    return Array.from({ length: count }, (_, index) => ({
+      index,
+      label: modelPrimitiveNames[index] ?? `Mesh ${index + 1}`,
+    }));
+  }, [modelPrimitiveNames, selectedModelPrimitiveIndex]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!isModel || !modelFileName.toLowerCase().endsWith('.fbx') || !modelFile) {
+      setModelPrimitiveNames([]);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void modelFile.arrayBuffer()
+      .then((buffer) => {
+        if (!cancelled) setModelPrimitiveNames(parseFbxMeshNames(buffer));
+      })
+      .catch(() => {
+        if (!cancelled) setModelPrimitiveNames([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isModel, modelFile, modelFileName]);
 
   const handlePosXChange = (value: number) => handlePropertyChange(
     'position.x',
@@ -230,6 +270,16 @@ export function TransformTab({
       },
     });
   }, [clip, clipId, threeDEffectorsEnabled, updateClip]);
+  const handleModelPrimitiveIndexChange = useCallback((index: number | undefined) => {
+    if (!clip?.source) return;
+    const source = { ...clip.source };
+    if (index === undefined) {
+      delete source.modelPrimitiveIndex;
+    } else {
+      source.modelPrimitiveIndex = index;
+    }
+    updateClip(clipId, { source });
+  }, [clip, clipId, updateClip]);
 
   return (
     <div
@@ -247,6 +297,8 @@ export function TransformTab({
         isModel={isModel}
         opacity={transform.opacity}
         opacityPct={opacityPct}
+        modelPrimitiveIndex={selectedModelPrimitiveIndex}
+        modelPrimitiveOptions={modelPrimitiveOptions}
         sceneNavFpsMode={sceneNavFpsMode}
         sceneNavFpsMoveSpeed={sceneNavFpsMoveSpeed}
         sceneNavFpsMoveSpeedIndex={sceneNavFpsMoveSpeedIndex}
@@ -260,6 +312,7 @@ export function TransformTab({
         onBatchEnd={handleBatchEnd}
         onBatchStart={handleBatchStart}
         onBlendModeChange={(blendMode) => updateClipTransform(clipId, { blendMode: blendMode as BlendMode })}
+        onModelPrimitiveIndexChange={handleModelPrimitiveIndexChange}
         onOpacityChange={handleOpacityChange}
         onResetAll={handleResetAll}
         onSceneNavFpsModeChange={setSceneNavFpsMode}

@@ -214,6 +214,42 @@ function interleaveVertices(
   return vertices;
 }
 
+function centerInterleavedVertices(vertices: Float32Array): Float32Array {
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let minZ = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  let maxZ = Number.NEGATIVE_INFINITY;
+
+  for (let i = 0; i < vertices.length; i += 8) {
+    const x = vertices[i] ?? 0;
+    const y = vertices[i + 1] ?? 0;
+    const z = vertices[i + 2] ?? 0;
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    minZ = Math.min(minZ, z);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+    maxZ = Math.max(maxZ, z);
+  }
+
+  if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(minZ)) {
+    return vertices;
+  }
+
+  const centered = new Float32Array(vertices);
+  const centerX = (minX + maxX) * 0.5;
+  const centerY = (minY + maxY) * 0.5;
+  const centerZ = (minZ + maxZ) * 0.5;
+  for (let i = 0; i < centered.length; i += 8) {
+    centered[i] = (centered[i] ?? 0) - centerX;
+    centered[i + 1] = (centered[i + 1] ?? 0) - centerY;
+    centered[i + 2] = (centered[i + 2] ?? 0) - centerZ;
+  }
+  return centered;
+}
+
 export function computeModelBounds(primitives: PendingPrimitive[]): ModelRuntimeBounds | null {
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
@@ -264,6 +300,8 @@ export function normalizeModelPrimitives(
   ) || 1;
   const scale = 1 / maxDim;
 
+  const shouldBuildCenteredVertices = primitives.length > 1;
+
   return primitives.map((primitive) => {
     const normalizedPositions = new Float32Array(primitive.positions.length);
     for (let i = 0; i < primitive.positions.length; i += 3) {
@@ -272,8 +310,12 @@ export function normalizeModelPrimitives(
       normalizedPositions[i + 2] = ((primitive.positions[i + 2] ?? 0) - centerZ) * scale;
     }
 
+    const vertices = interleaveVertices(normalizedPositions, primitive.normals, primitive.texcoords);
+
     return {
-      vertices: interleaveVertices(normalizedPositions, primitive.normals, primitive.texcoords),
+      ...(primitive.name ? { name: primitive.name } : {}),
+      vertices,
+      ...(shouldBuildCenteredVertices ? { centeredVertices: centerInterleavedVertices(vertices) } : {}),
       indices: primitive.indices,
       baseColor: primitive.baseColor,
       ...(primitive.baseColorTexture ? { baseColorTexture: primitive.baseColorTexture } : {}),

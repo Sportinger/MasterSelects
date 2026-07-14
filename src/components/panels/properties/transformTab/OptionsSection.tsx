@@ -18,6 +18,8 @@ interface OptionsSectionProps {
   isEffectively3D: boolean;
   isLocked3D: boolean;
   isModel: boolean;
+  modelPrimitiveIndex?: number;
+  modelPrimitiveOptions: readonly { index: number; label: string }[];
   opacity: number;
   opacityPct: number;
   sceneNavFpsMode: boolean;
@@ -33,6 +35,7 @@ interface OptionsSectionProps {
   onBatchEnd: () => void;
   onBatchStart: () => void;
   onBlendModeChange: (blendMode: string) => void;
+  onModelPrimitiveIndexChange: (index: number | undefined) => void;
   onOpacityChange: (pct: number) => void;
   onResetAll: () => void;
   onSceneNavFpsModeChange: (enabled: boolean) => void;
@@ -58,6 +61,8 @@ export function OptionsSection({
   isEffectively3D,
   isLocked3D,
   isModel,
+  modelPrimitiveIndex,
+  modelPrimitiveOptions,
   opacity,
   opacityPct,
   sceneNavFpsMode,
@@ -73,6 +78,7 @@ export function OptionsSection({
   onBatchEnd,
   onBatchStart,
   onBlendModeChange,
+  onModelPrimitiveIndexChange,
   onOpacityChange,
   onResetAll,
   onSceneNavFpsModeChange,
@@ -168,6 +174,25 @@ export function OptionsSection({
               Wire
             </button>
           )}
+        </div>
+      )}
+      {isModel && modelPrimitiveOptions.length > 1 && (
+        <div className="control-row transform-option-row">
+          <label className="prop-label">Mesh</label>
+          <select
+            value={modelPrimitiveIndex ?? ''}
+            onChange={(event) => {
+              const value = event.target.value;
+              onModelPrimitiveIndexChange(value === '' ? undefined : Number(value));
+            }}
+          >
+            <option value="">All Meshes</option>
+            {modelPrimitiveOptions.map((option) => (
+              <option key={option.index} value={option.index}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </div>
       )}
       {supportsThreeDEffectorToggle && (

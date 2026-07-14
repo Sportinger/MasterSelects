@@ -59,6 +59,31 @@ export interface ProjectSceneCameraSettings {
   resolutionHeight?: number;
 }
 
+export type ProjectLightKind = 'point' | 'panel' | 'environment';
+
+export interface ProjectLightSettings {
+  kind: ProjectLightKind;
+  color: string;
+  intensity: number;
+  diameter: number;
+  castsShadows: boolean;
+  shadowStrength: number;
+  environmentMapMediaFileId?: string;
+  environmentMapUrl?: string;
+  environmentMapFileName?: string;
+}
+
+export interface ProjectModelMaterialSettings {
+  overrideBaseColor: boolean;
+  baseColor: string;
+  useEmbeddedTexture: boolean;
+  shading: 'asset' | 'lit' | 'unlit';
+  uvScaleX: number;
+  uvScaleY: number;
+  uvOffsetX: number;
+  uvOffsetY: number;
+}
+
 export type ProjectSplatEffectorMode = 'repel' | 'attract' | 'swirl' | 'noise';
 
 export interface ProjectSplatEffectorSettings {
@@ -105,6 +130,12 @@ export interface ProjectCameraItem extends ProjectMediaItemBase {
   type: 'camera';
   duration: number;
   cameraSettings: ProjectSceneCameraSettings;
+}
+
+export interface ProjectLightItem extends ProjectMediaItemBase {
+  type: 'light';
+  duration: number;
+  lightSettings: ProjectLightSettings;
 }
 
 export interface ProjectSplatEffectorItem extends ProjectMediaItemBase {

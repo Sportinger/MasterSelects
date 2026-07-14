@@ -75,6 +75,7 @@ export interface MediaContextActionsMenuProps {
   onNewMesh: (meshType: MeshPrimitiveType) => void;
   onNewText3D: () => void;
   onNewCamera: () => void;
+  onNewLight: () => void;
   onNewSplatEffector: () => void;
   onImportGaussianSplat: () => void;
   onNewMathScene: () => void;
@@ -140,6 +141,7 @@ export function MediaContextActionsMenu({
   onNewMesh,
   onNewText3D,
   onNewCamera,
+  onNewLight,
   onNewSplatEffector,
   onImportGaussianSplat,
   onNewMathScene,
@@ -173,6 +175,7 @@ export function MediaContextActionsMenu({
             onNewMesh={onNewMesh}
             onNewText3D={onNewText3D}
             onNewCamera={onNewCamera}
+            onNewLight={onNewLight}
             onNewSplatEffector={onNewSplatEffector}
             onImportGaussianSplat={onImportGaussianSplat}
             onNewMathScene={onNewMathScene}

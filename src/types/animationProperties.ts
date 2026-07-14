@@ -4,6 +4,7 @@ import type {
   VectorAnimationStateProperty,
 } from './vectorAnimation';
 import type { MotionProperty } from './motionDesign';
+import type { LightProperty } from './light';
 
 // Keyframe animation types
 export type EasingType = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'bezier';
@@ -59,7 +60,7 @@ export type TextBoundsProperty = TextBoundsPathProperty | TextBoundsNumericPrope
 export type TransitionRenderProperty = 'transitionRender.progress';
 
 // Combined animatable property type
-export type AnimatableProperty = TransformProperty | CameraProperty | EffectProperty | NodeGraphParamProperty | ColorProperty | MaskProperty | TextBoundsProperty | TransitionRenderProperty | VectorAnimationInputProperty | VectorAnimationStateProperty | VectorAnimationDataBindingPropertyPath | MotionProperty;
+export type AnimatableProperty = TransformProperty | CameraProperty | LightProperty | EffectProperty | NodeGraphParamProperty | ColorProperty | MaskProperty | TextBoundsProperty | TransitionRenderProperty | VectorAnimationInputProperty | VectorAnimationStateProperty | VectorAnimationDataBindingPropertyPath | MotionProperty;
 
 export function isCameraProperty(property: string): property is CameraProperty {
   return /^camera\.(fov|near|far|resolutionWidth|resolutionHeight)$/.test(property);

@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ModelRuntimeCache } from '../../src/engine/native3d/assets/ModelRuntimeCache';
+import { parseAsciiFbx, parseAsciiFbxMeshNames } from '../../src/engine/native3d/assets/modelRuntimeCache/fbx';
+import { normalizeModelPrimitives } from '../../src/engine/native3d/assets/modelRuntimeCache/geometry';
 
 vi.mock('../../src/services/logger', () => ({
   Logger: {
@@ -94,6 +96,163 @@ describe('ModelRuntimeCache', () => {
        0.5, -0.5, 0, 0, 0, 1, 0, 0,
       -0.5,  0.5, 0, 0, 0, 1, 0, 0,
     ]));
+  });
+
+  it('preloads OBJ UVs with MTL base color textures', async () => {
+    const cache = new ModelRuntimeCache();
+    const imageBitmap = {
+      width: 4,
+      height: 2,
+      close: vi.fn(),
+    } as unknown as ImageBitmap;
+    const createImageBitmapMock = vi.fn(async () => imageBitmap);
+    vi.stubGlobal('createImageBitmap', createImageBitmapMock);
+
+    const obj = [
+      'mtllib materials/banana.mtl',
+      'v 0 0 0',
+      'v 2 0 0',
+      'v 0 2 0',
+      'vt 0 0',
+      'vt 1 0',
+      'vt 0 1',
+      'usemtl Peel',
+      'f 1/1 2/2 3/3',
+    ].join('\n');
+    const mtl = [
+      'newmtl Peel',
+      'Kd 0.2 0.3 0.4',
+      'map_Kd ../textures/diffuse.png',
+    ].join('\n');
+
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === 'https://example.com/assets/textured.obj') {
+        return { ok: true, text: async () => obj };
+      }
+      if (url === 'https://example.com/assets/materials/banana.mtl') {
+        return { ok: true, text: async () => mtl };
+      }
+      if (url === 'https://example.com/assets/textures/diffuse.png') {
+        return {
+          ok: true,
+          headers: { get: () => 'image/png' },
+          arrayBuffer: async () => new Uint8Array([137, 80, 78, 71]).buffer,
+        };
+      }
+      return { ok: false, text: async () => '', arrayBuffer: async () => new ArrayBuffer(0), headers: { get: () => null } };
+    }) as typeof fetch);
+
+    const loaded = await cache.preload('https://example.com/assets/textured.obj', 'textured.obj');
+
+    expect(loaded).toBe(true);
+    expect(createImageBitmapMock).toHaveBeenCalledTimes(1);
+    const primitive = cache.get('https://example.com/assets/textured.obj')?.primitives[0];
+    expect(primitive?.name).toBe('Peel');
+    expect(primitive?.baseColor).toEqual([0.2, 0.3, 0.4, 1]);
+    expect(primitive?.baseColorTexture).toMatchObject({
+      image: imageBitmap,
+      width: 4,
+      height: 2,
+      mimeType: 'image/png',
+    });
+    expect(primitive?.unlit).toBe(true);
+    expect(primitive?.vertices).toEqual(new Float32Array([
+      -0.5, -0.5, 0, 0, 0, 1, 0, 0,
+       0.5, -0.5, 0, 0, 0, 1, 1, 0,
+      -0.5,  0.5, 0, 0, 0, 1, 0, 1,
+    ]));
+  });
+
+  it('preloads ASCII FBX 6 inline mesh arrays', async () => {
+    const cache = new ModelRuntimeCache();
+    const fbx = [
+      '; FBX 6.1.0 project file',
+      'Objects:  {',
+      '  Model: "Model::Triangle", "Mesh" {',
+      '    Vertices: 0,0,0',
+      '        ,2,0,0',
+      '        ,0,2,0',
+      '    PolygonVertexIndex: 0,1,-3',
+      '  }',
+      '}',
+      'Connections:  {',
+      '  Connect: "OO", "Model::Triangle", "Model::Scene"',
+      '}',
+    ].join('\n');
+
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      text: async () => fbx,
+      arrayBuffer: async () => new TextEncoder().encode(fbx).buffer,
+    })) as typeof fetch);
+
+    const loaded = await cache.preload('https://example.com/triangle.fbx', 'triangle.FBX');
+
+    expect(loaded).toBe(true);
+    const runtime = cache.get('https://example.com/triangle.fbx');
+    expect(runtime).toMatchObject({
+      format: 'fbx',
+      fileName: 'triangle.FBX',
+    });
+    expect(runtime?.primitives).toHaveLength(1);
+    expect(runtime?.primitives[0]?.indices).toEqual(new Uint32Array([0, 1, 2]));
+    expect(runtime?.primitives[0]?.vertices).toEqual(new Float32Array([
+      -0.5, -0.5, 0, 0, 0, 1, 0, 0,
+       0.5, -0.5, 0, 0, 0, 1, 0, 0,
+      -0.5,  0.5, 0, 0, 0, 1, 0, 0,
+    ]));
+  });
+
+  it('reads FBX UVs by polygon vertex index', () => {
+    const fbx = [
+      '; FBX 6.1.0 project file',
+      'Objects:  {',
+      '  Geometry: "Geometry::Triangle", "Mesh" {',
+      '    Vertices: 0,0,0, 2,0,0, 0,2,0',
+      '    PolygonVertexIndex: 0,1,-3',
+      '    LayerElementUV: 0 {',
+      '      MappingInformationType: "ByPolygonVertex"',
+      '      ReferenceInformationType: "IndexToDirect"',
+      '      UV: 0,0, 1,0, 0,1',
+      '      UVIndex: 0,1,2',
+      '    }',
+      '  }',
+      '}',
+    ].join('\n');
+
+    const primitive = parseAsciiFbx(fbx)[0];
+
+    expect(primitive?.texcoords).toEqual(new Float32Array([0, 0, 1, 0, 0, 1]));
+  });
+
+  it('reads FBX mesh names and model transforms', () => {
+    const fbx = [
+      '; FBX 6.1.0 project file',
+      'Objects:  {',
+      '  Model: "Model::Left", "Mesh" {',
+      '    Vertices: 0,0,0, 1,0,0, 0,1,0',
+      '    PolygonVertexIndex: 0,1,-3',
+      '  }',
+      '  Model: "Model::Right", "Mesh" {',
+      '    Properties60:  {',
+      '      Property: "Lcl Translation", "Lcl Translation", "A",2,0,0',
+      '    }',
+      '    Vertices: 0,0,0, 1,0,0, 0,1,0',
+      '    PolygonVertexIndex: 0,1,-3',
+      '  }',
+      '}',
+    ].join('\n');
+
+    const primitives = parseAsciiFbx(fbx);
+
+    expect(parseAsciiFbxMeshNames(fbx)).toEqual(['Left', 'Right']);
+    expect(primitives).toHaveLength(2);
+    expect(Array.from(primitives[1]?.positions.slice(0, 3) ?? [])).toEqual([2, 0, 0]);
+
+    const runtimePrimitives = normalizeModelPrimitives(primitives);
+    expect(runtimePrimitives[1]?.vertices[0]).toBeCloseTo(1 / 6);
+    expect(runtimePrimitives[1]?.centeredVertices?.[0]).toBeCloseTo(-1 / 6);
   });
 
   it('preloads glTF runtimes with embedded buffers and preserves baseColorFactor', async () => {

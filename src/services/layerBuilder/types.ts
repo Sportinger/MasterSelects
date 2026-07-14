@@ -12,6 +12,7 @@ import type {
   ClipTransform,
   TextBoundsPath,
 } from '../../types';
+import type { LightClipSettings } from '../../types/light';
 import type { VectorAnimationClipSettings } from '../../types/vectorAnimation';
 import type { Composition, MediaFile } from '../../stores/mediaStore/types';
 import type { AudioRouteEffectSettings, LiveAudioRouteProcessor } from '../audio/audioGraphRouteSettings';
@@ -56,6 +57,7 @@ export interface FrameContext {
   getInterpolatedColorCorrection: (clipId: string, localTime: number) => RuntimeColorGrade | undefined;
   getInterpolatedVectorAnimationSettings: (clipId: string, localTime: number) => VectorAnimationClipSettings;
   getInterpolatedTextBounds: (clipId: string, localTime: number) => TextBoundsPath | undefined;
+  getInterpolatedLightSettings: (clipId: string, localTime: number) => LightClipSettings;
   getInterpolatedSpeed: (clipId: string, localTime: number) => number;
   getSourceTimeForClip: (clipId: string, localTime: number) => number;
   hasKeyframes: (clipId: string, property?: AnimatableProperty) => boolean;

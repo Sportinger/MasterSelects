@@ -17,7 +17,7 @@ import type { BaseLayerPropsLike, FrameContextLike } from './contracts';
 
 const log = Logger.create('ExportLayerBuilder');
 
-function getClipKeyframes(clip: TimelineClip): Keyframe[] {
+export function getClipKeyframes(clip: TimelineClip): Keyframe[] {
   const storeKeyframes = useTimelineStore.getState().getClipKeyframes(clip.id);
   return storeKeyframes.length
     ? storeKeyframes

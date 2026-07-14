@@ -31,6 +31,14 @@ export interface TimelineExternalDropCommandExecutionActions {
   addSolidClip: (trackId: string, startTime: number, color?: string, duration?: number, skipMediaItem?: boolean) => string | null;
   addMeshClip: (trackId: string, startTime: number, meshType: import('../../stores/mediaStore/types').MeshPrimitiveType, duration?: number, skipMediaItem?: boolean) => string | null;
   addCameraClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
+  addLightClip: (
+    trackId: string,
+    startTime: number,
+    duration?: number,
+    skipMediaItem?: boolean,
+    lightSettings?: import('../../types/light').LightClipSettings,
+    mediaItemId?: string,
+  ) => string | null;
   addSplatEffectorClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
   addMathSceneClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
   addMotionShapeClip: (trackId: string, startTime: number, options?: { primitive?: ShapePrimitive; duration?: number; name?: string }) => string | null;
@@ -163,6 +171,13 @@ export async function executeTimelineExternalDropCommand(
     const cameraItem = mediaStore.cameraItems.find((item) => item.id === itemId);
     if (!cameraItem) return rejected('missing-camera-item');
     actions.addCameraClip(trackId, resolveStartTime(cameraItem.duration), cameraItem.duration, true);
+    return handled();
+  }
+
+  if (command.kind === 'light' && itemId) {
+    const lightItem = mediaStore.lightItems.find((item) => item.id === itemId);
+    if (!lightItem) return rejected('missing-light-item');
+    actions.addLightClip(trackId, resolveStartTime(lightItem.duration), lightItem.duration, true, lightItem.lightSettings, lightItem.id);
     return handled();
   }
 

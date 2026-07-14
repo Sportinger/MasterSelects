@@ -17,6 +17,7 @@ function isVisualSourceType(sourceType: string | undefined): boolean {
     sourceType === 'lottie' ||
     sourceType === 'rive' ||
     sourceType === 'camera' ||
+    sourceType === 'light' ||
     sourceType === 'math-scene' ||
     sourceType === 'model' ||
     sourceType === 'gaussian-avatar' ||

@@ -16,6 +16,7 @@ import { createMathSceneClipSlice } from './mathSceneClipSlice';
 import { createMotionClipSlice } from './motionClipSlice';
 import { createMeshClipSlice } from './meshClipSlice';
 import { createCameraClipSlice } from './cameraClipSlice';
+import { createLightClipSlice } from './lightClipSlice';
 import { createSplatEffectorClipSlice } from './splatEffectorClipSlice';
 import { createClipEffectSlice } from './clipEffectSlice';
 import { createColorCorrectionSlice } from './colorCorrectionSlice';
@@ -82,6 +83,7 @@ export const useTimelineStore = create<TimelineStore>()(
     const motionClipActions = createMotionClipSlice(set, get);
     const meshClipActions = createMeshClipSlice(set, get);
     const cameraClipActions = createCameraClipSlice(set, get);
+    const lightClipActions = createLightClipSlice(set, get);
     const splatEffectorClipActions = createSplatEffectorClipSlice(set, get);
     const clipEffectActions = createClipEffectSlice(set, get);
     const colorCorrectionActions = createColorCorrectionSlice(set, get);
@@ -381,6 +383,7 @@ export const useTimelineStore = create<TimelineStore>()(
       ...motionClipActions,
       ...meshClipActions,
       ...cameraClipActions,
+      ...lightClipActions,
       ...splatEffectorClipActions,
       ...clipEffectActions,
       ...colorCorrectionActions,

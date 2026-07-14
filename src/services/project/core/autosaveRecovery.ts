@@ -9,6 +9,7 @@ function generatedItemCount(project: ProjectFile): number {
     + (project.solidItems?.length ?? 0)
     + (project.meshItems?.length ?? 0)
     + (project.cameraItems?.length ?? 0)
+    + (project.lightItems?.length ?? 0)
     + (project.splatEffectorItems?.length ?? 0)
     + (project.mathSceneItems?.length ?? 0)
     + (project.motionShapeItems?.length ?? 0);

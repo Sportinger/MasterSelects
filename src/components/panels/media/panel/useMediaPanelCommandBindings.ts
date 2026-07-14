@@ -65,6 +65,8 @@ interface UseMediaPanelCommandBindingsInput {
   getOrCreateMeshFolder: MediaStoreState['getOrCreateMeshFolder'];
   createCameraItem: MediaStoreState['createCameraItem'];
   getOrCreateCameraFolder: MediaStoreState['getOrCreateCameraFolder'];
+  createLightItem: MediaStoreState['createLightItem'];
+  getOrCreateLightFolder: MediaStoreState['getOrCreateLightFolder'];
   createSplatEffectorItem: MediaStoreState['createSplatEffectorItem'];
   getOrCreateSplatEffectorFolder: MediaStoreState['getOrCreateSplatEffectorFolder'];
   createMathSceneItem: MediaStoreState['createMathSceneItem'];
@@ -126,6 +128,8 @@ export function useMediaPanelCommandBindings({
   getOrCreateMeshFolder,
   createCameraItem,
   getOrCreateCameraFolder,
+  createLightItem,
+  getOrCreateLightFolder,
   createSplatEffectorItem,
   getOrCreateSplatEffectorFolder,
   createMathSceneItem,
@@ -175,6 +179,8 @@ export function useMediaPanelCommandBindings({
     getOrCreateMeshFolder,
     createCameraItem,
     getOrCreateCameraFolder,
+    createLightItem,
+    getOrCreateLightFolder,
     createSplatEffectorItem,
     getOrCreateSplatEffectorFolder,
     createMathSceneItem,

@@ -1,6 +1,7 @@
 import {
   useMediaStore,
   type CameraItem,
+  type LightItem,
   type MathSceneItem,
   type MeshItem,
   type MotionShapeItem,
@@ -14,6 +15,7 @@ const EMPTY_TEXT_ITEMS: TextItem[] = [];
 const EMPTY_SOLID_ITEMS: SolidItem[] = [];
 const EMPTY_MESH_ITEMS: MeshItem[] = [];
 const EMPTY_CAMERA_ITEMS: CameraItem[] = [];
+const EMPTY_LIGHT_ITEMS: LightItem[] = [];
 const EMPTY_SPLAT_EFFECTOR_ITEMS: SplatEffectorItem[] = [];
 const EMPTY_MATH_SCENE_ITEMS: MathSceneItem[] = [];
 const EMPTY_MOTION_SHAPE_ITEMS: MotionShapeItem[] = [];
@@ -27,6 +29,7 @@ export function useMediaPanelStoreBindings() {
   const solidItems = useMediaStore(state => state.solidItems ?? EMPTY_SOLID_ITEMS);
   const meshItems = useMediaStore(state => state.meshItems ?? EMPTY_MESH_ITEMS);
   const cameraItems = useMediaStore(state => state.cameraItems ?? EMPTY_CAMERA_ITEMS);
+  const lightItems = useMediaStore(state => state.lightItems ?? EMPTY_LIGHT_ITEMS);
   const splatEffectorItems = useMediaStore(state => state.splatEffectorItems ?? EMPTY_SPLAT_EFFECTOR_ITEMS);
   const mathSceneItems = useMediaStore(state => state.mathSceneItems ?? EMPTY_MATH_SCENE_ITEMS);
   const motionShapeItems = useMediaStore(state => state.motionShapeItems ?? EMPTY_MOTION_SHAPE_ITEMS);
@@ -51,6 +54,7 @@ export function useMediaPanelStoreBindings() {
     solidItems,
     meshItems,
     cameraItems,
+    lightItems,
     splatEffectorItems,
     mathSceneItems,
     motionShapeItems,

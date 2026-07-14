@@ -92,6 +92,7 @@ export function getMediaBoardTypeLabel(item: MediaBoardItem): string {
       : undefined;
     return (frameCount ?? 1) > 1 ? 'Splat Seq' : 'Splat';
   }
+  if (item.type === 'light') return 'Light';
   if (item.type === 'splat-effector') return 'Effector';
   if (item.type === 'solid') return 'Solid';
   if (item.type === 'math-scene') return 'Math Scene';
@@ -118,7 +119,7 @@ export function getMediaBoardItemAspectRatio(item: MediaBoardItem): number {
     return clampMediaBoardNumber(width / height, MEDIA_BOARD_NODE_ASPECT_MIN, MEDIA_BOARD_NODE_ASPECT_MAX);
   }
 
-  if (item.type === 'camera' || item.type === 'model' || item.type === 'splat-effector' || item.type === 'motion-shape' || item.type === 'signal') {
+  if (item.type === 'camera' || item.type === 'light' || item.type === 'model' || item.type === 'splat-effector' || item.type === 'motion-shape' || item.type === 'signal') {
     return 1;
   }
 

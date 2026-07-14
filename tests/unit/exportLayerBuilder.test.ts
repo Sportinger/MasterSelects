@@ -290,6 +290,73 @@ describe('ExportLayerBuilder', () => {
     cleanupLayerBuilder();
   });
 
+  it('builds scene light layers for export', () => {
+    const track = createVideoTrack();
+    const clip = {
+      id: 'light-clip',
+      name: 'Keyed Light',
+      trackId: track.id,
+      startTime: 1,
+      duration: 5,
+      source: {
+        type: 'light',
+        lightSettings: {
+          kind: 'point',
+          color: '#ffffff',
+          intensity: 1,
+          diameter: 2,
+          castsShadows: false,
+          shadowStrength: 0.5,
+        },
+      },
+      transform: {},
+      is3D: true,
+    } as unknown as TimelineClip;
+    const getInterpolatedLightSettings = vi.fn(() => ({
+      kind: 'panel' as const,
+      color: '#ff3300',
+      intensity: 20,
+      diameter: 4,
+      castsShadows: true,
+      shadowStrength: 0.75,
+    }));
+    const ctx: FrameContext = {
+      time: 2,
+      fps: 30,
+      frameTolerance: 50_000,
+      clipsAtTime: [clip],
+      trackMap: new Map([[track.id, track]]),
+      clipsByTrack: new Map([[track.id, clip]]),
+      getInterpolatedTransform: createDefaultTransform,
+      getInterpolatedEffects: () => [],
+      getInterpolatedColorCorrection: () => undefined,
+      getInterpolatedVectorAnimationSettings: () => ({}),
+      getInterpolatedTextBounds: () => undefined,
+      getInterpolatedLightSettings,
+      getSourceTimeForClip: (_clipId, localTime) => localTime,
+      getInterpolatedSpeed: () => 1,
+    };
+
+    initializeLayerBuilder([track]);
+
+    const layers = buildLayersAtTime(ctx, new Map(), null, false);
+
+    expect(getInterpolatedLightSettings).toHaveBeenCalledWith('light-clip', 1);
+    expect(layers).toHaveLength(1);
+    expect(layers[0]?.is3D).toBe(true);
+    expect(layers[0]?.source).toEqual({
+      type: 'light',
+      lightSettings: {
+        kind: 'panel',
+        color: '#ff3300',
+        intensity: 20,
+        diameter: 4,
+        castsShadows: true,
+        shadowStrength: 0.75,
+      },
+    });
+  });
+
   it('builds a nested composition layer for an active transition', () => {
     const track = {
       id: 'track-1',

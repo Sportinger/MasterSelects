@@ -9,6 +9,7 @@ import { isUserVisibleComposition } from './compositionVisibility';
 import { DEFAULT_COMPOSITION } from './constants';
 import { fileSystemService } from '../../services/fileSystemService';
 import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../types/splatEffector';
+import { DEFAULT_LIGHT_CLIP_SETTINGS } from '../../types/light';
 
 // Import slices
 import { createFileImportSlice, type FileImportActions } from './slices/fileImportSlice';
@@ -34,6 +35,7 @@ export type {
   SolidItem,
   MeshItem,
   CameraItem,
+  LightItem,
   SplatEffectorItem,
   MathSceneItem,
   MotionShapeItem,
@@ -95,6 +97,9 @@ type MediaStoreState = MediaState &
     getOrCreateCameraFolder: () => string;
     createCameraItem: (name?: string, parentId?: string | null) => string;
     removeCameraItem: (id: string) => void;
+    getOrCreateLightFolder: () => string;
+    createLightItem: (name?: string, parentId?: string | null) => string;
+    removeLightItem: (id: string) => void;
     getOrCreateSplatEffectorFolder: () => string;
     createSplatEffectorItem: (name?: string, parentId?: string | null) => string;
     removeSplatEffectorItem: (id: string) => void;
@@ -116,6 +121,7 @@ export const useMediaStore = create<MediaStoreState>()(
     solidItems: [],
     meshItems: [],
     cameraItems: [],
+    lightItems: [],
     splatEffectorItems: [],
     mathSceneItems: [],
     motionShapeItems: [],
@@ -165,6 +171,7 @@ export const useMediaStore = create<MediaStoreState>()(
         solidItems,
         meshItems,
         cameraItems,
+        lightItems,
         splatEffectorItems,
         mathSceneItems,
         motionShapeItems,
@@ -177,6 +184,7 @@ export const useMediaStore = create<MediaStoreState>()(
         ...solidItems.filter((s) => s.parentId === folderId),
         ...meshItems.filter((m) => m.parentId === folderId),
         ...cameraItems.filter((c) => c.parentId === folderId),
+        ...lightItems.filter((l) => l.parentId === folderId),
         ...splatEffectorItems.filter((e) => e.parentId === folderId),
         ...mathSceneItems.filter((m) => m.parentId === folderId),
         ...motionShapeItems.filter((m) => m.parentId === folderId),
@@ -194,6 +202,7 @@ export const useMediaStore = create<MediaStoreState>()(
         solidItems,
         meshItems,
         cameraItems,
+        lightItems,
         splatEffectorItems,
         mathSceneItems,
         motionShapeItems,
@@ -207,6 +216,7 @@ export const useMediaStore = create<MediaStoreState>()(
         solidItems.find((s) => s.id === id) ||
         meshItems.find((m) => m.id === id) ||
         cameraItems.find((c) => c.id === id) ||
+        lightItems.find((l) => l.id === id) ||
         splatEffectorItems.find((e) => e.id === id) ||
         mathSceneItems.find((m) => m.id === id) ||
         motionShapeItems.find((m) => m.id === id) ||
@@ -384,6 +394,36 @@ export const useMediaStore = create<MediaStoreState>()(
 
     removeCameraItem: (id: string) => {
       set({ cameraItems: get().cameraItems.filter(c => c.id !== id) });
+    },
+
+    getOrCreateLightFolder: () => {
+      const { folders, createFolder } = get();
+      const existingFolder = folders.find((f) => f.name === 'Lights' && f.parentId === null);
+      if (existingFolder) {
+        return existingFolder.id;
+      }
+      const newFolder = createFolder('Lights', null);
+      return newFolder.id;
+    },
+
+    createLightItem: (name?: string, parentId?: string | null) => {
+      const { lightItems } = get();
+      const id = `light-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const newLight: import('./types').LightItem = {
+        id,
+        name: name || `Light ${lightItems.length + 1}`,
+        type: 'light',
+        parentId: parentId !== undefined ? parentId : null,
+        createdAt: Date.now(),
+        duration: 10,
+        lightSettings: { ...DEFAULT_LIGHT_CLIP_SETTINGS },
+      };
+      set({ lightItems: [...lightItems, newLight] });
+      return id;
+    },
+
+    removeLightItem: (id: string) => {
+      set({ lightItems: get().lightItems.filter(l => l.id !== id) });
     },
 
     getOrCreateSplatEffectorFolder: () => {

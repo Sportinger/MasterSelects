@@ -211,12 +211,17 @@ export async function createLoadStateGeneratedClip(params: {
     log.debug('Restored camera clip', { clip: serializedClip.name });
     return {
       ...createTimelineControlClipBase(serializedClip, serializedClip.name || 'Camera', 'camera-clip.dat'),
-      source: {
-        type: 'camera',
-        cameraSettings: serializedClip.cameraSettings || { ...DEFAULT_SCENE_CAMERA_SETTINGS },
-        mediaFileId: serializedClip.mediaFileId || undefined,
-        naturalDuration: Number.MAX_SAFE_INTEGER,
-      },
+      source: { type: 'camera', cameraSettings: serializedClip.cameraSettings || { ...DEFAULT_SCENE_CAMERA_SETTINGS }, mediaFileId: serializedClip.mediaFileId || undefined, naturalDuration: Number.MAX_SAFE_INTEGER },
+    };
+  }
+
+  if (serializedClip.sourceType === 'light') {
+    const { mergeLightClipSettings } = await import('../../../types/light');
+    log.debug('Restored light clip', { clip: serializedClip.name });
+    return {
+      ...createTimelineControlClipBase(serializedClip, serializedClip.name || 'Light', 'light-clip.dat'),
+      source: { type: 'light', lightSettings: mergeLightClipSettings(serializedClip.lightSettings), mediaFileId: serializedClip.mediaFileId || undefined, naturalDuration: Number.MAX_SAFE_INTEGER },
+      is3D: serializedClip.is3D ?? true,
     };
   }
 
@@ -225,12 +230,7 @@ export async function createLoadStateGeneratedClip(params: {
     log.debug('Restored splat effector clip', { clip: serializedClip.name });
     return {
       ...createTimelineControlClipBase(serializedClip, serializedClip.name || '3D Effector', 'splat-effector.dat'),
-      source: {
-        type: 'splat-effector',
-        splatEffectorSettings: serializedClip.splatEffectorSettings || { ...DEFAULT_SPLAT_EFFECTOR_SETTINGS },
-        mediaFileId: serializedClip.mediaFileId || undefined,
-        naturalDuration: Number.MAX_SAFE_INTEGER,
-      },
+      source: { type: 'splat-effector', splatEffectorSettings: serializedClip.splatEffectorSettings || { ...DEFAULT_SPLAT_EFFECTOR_SETTINGS }, mediaFileId: serializedClip.mediaFileId || undefined, naturalDuration: Number.MAX_SAFE_INTEGER },
       is3D: serializedClip.is3D ?? true,
     };
   }

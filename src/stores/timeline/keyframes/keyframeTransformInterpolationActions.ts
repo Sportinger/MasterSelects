@@ -1,8 +1,10 @@
 import type { ClipTransform, KeyframeActions, SliceCreator } from '../types';
 import { DEFAULT_SCENE_CAMERA_SETTINGS, type SceneCameraSettings } from '../../mediaStore/types';
 import { DEFAULT_TRANSFORM } from '../constants';
+import { DEFAULT_LIGHT_CLIP_SETTINGS, mergeLightClipSettings } from '../../../types/light';
 import {
   getInterpolatedClipCameraSettings,
+  getInterpolatedClipLightSettings,
   getInterpolatedClipTransform,
 } from '../../../utils/keyframeInterpolation';
 import { calculateSourceTime, getSpeedAtTime } from '../../../utils/speedIntegration';
@@ -13,6 +15,7 @@ type KeyframeTransformInterpolationActions = Pick<
   KeyframeActions,
   | 'getInterpolatedTransform'
   | 'getInterpolatedCameraSettings'
+  | 'getInterpolatedLightSettings'
   | 'getInterpolatedSpeed'
   | 'getSourceTimeForClip'
 >;
@@ -78,6 +81,18 @@ export const createKeyframeTransformInterpolationActions: SliceCreator<KeyframeT
     };
     const keyframes = clipKeyframes.get(clipId) || [];
     return getInterpolatedClipCameraSettings(keyframes, clipLocalTime, baseSettings);
+  },
+
+  getInterpolatedLightSettings: (clipId, clipLocalTime) => {
+    const { clips, clipKeyframes } = get();
+    const clip = findClipById(clips, clipId);
+    if (clip?.source?.type !== 'light') {
+      return { ...DEFAULT_LIGHT_CLIP_SETTINGS };
+    }
+
+    const baseSettings = mergeLightClipSettings(clip.source.lightSettings);
+    const keyframes = clipKeyframes.get(clipId) || [];
+    return getInterpolatedClipLightSettings(keyframes, clipLocalTime, baseSettings);
   },
 
   getInterpolatedSpeed: (clipId, clipLocalTime) => {

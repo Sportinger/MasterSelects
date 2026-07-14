@@ -10,6 +10,7 @@ import { isImportedMediaFileItem } from '../itemTypeGuards';
 import type {
   CameraItem,
   Composition,
+  LightItem,
   MathSceneItem,
   MediaFile,
   MediaFolder,
@@ -36,6 +37,7 @@ interface MediaPanelProjectItemsInput {
   solidItems: SolidItem[];
   meshItems: MeshItem[];
   cameraItems: CameraItem[];
+  lightItems?: LightItem[];
   splatEffectorItems: SplatEffectorItem[];
   mathSceneItems: MathSceneItem[];
   motionShapeItems: MotionShapeItem[];
@@ -149,6 +151,7 @@ function buildMediaPanelProjectListItems({
   solidItems,
   meshItems,
   cameraItems,
+  lightItems = [],
   splatEffectorItems,
   mathSceneItems,
   motionShapeItems,
@@ -161,6 +164,7 @@ function buildMediaPanelProjectListItems({
   | 'solidItems'
   | 'meshItems'
   | 'cameraItems'
+  | 'lightItems'
   | 'splatEffectorItems'
   | 'mathSceneItems'
   | 'motionShapeItems'
@@ -174,6 +178,7 @@ function buildMediaPanelProjectListItems({
     ...solidItems,
     ...meshItems,
     ...cameraItems,
+    ...lightItems,
     ...splatEffectorItems,
     ...mathSceneItems,
     ...motionShapeItems,
@@ -212,6 +217,7 @@ export function useMediaPanelProjectItems({
   solidItems,
   meshItems,
   cameraItems,
+  lightItems = [],
   splatEffectorItems,
   mathSceneItems,
   motionShapeItems,
@@ -230,11 +236,12 @@ export function useMediaPanelProjectItems({
     ...solidItems,
     ...meshItems,
     ...cameraItems,
+    ...lightItems,
     ...splatEffectorItems,
     ...mathSceneItems,
     ...motionShapeItems,
     ...signalAssets,
-  ]), [files, compositions, folders, textItems, solidItems, meshItems, cameraItems, splatEffectorItems, mathSceneItems, motionShapeItems, signalAssets]);
+  ]), [files, compositions, folders, textItems, solidItems, meshItems, cameraItems, lightItems, splatEffectorItems, mathSceneItems, motionShapeItems, signalAssets]);
 
   const projectListItems = useMemo<ProjectItem[]>(() => buildMediaPanelProjectListItems({
     folders,
@@ -243,12 +250,13 @@ export function useMediaPanelProjectItems({
     solidItems,
     meshItems,
     cameraItems,
+    lightItems,
     splatEffectorItems,
     mathSceneItems,
     motionShapeItems,
     signalAssets,
     files,
-  }), [folders, compositions, textItems, solidItems, meshItems, cameraItems, splatEffectorItems, mathSceneItems, motionShapeItems, signalAssets, files]);
+  }), [folders, compositions, textItems, solidItems, meshItems, cameraItems, lightItems, splatEffectorItems, mathSceneItems, motionShapeItems, signalAssets, files]);
 
   const allProjectItemsById = useMemo(() => new Map(allProjectItems.map((item) => [item.id, item])), [allProjectItems]);
   const totalItems = allProjectItems.length;

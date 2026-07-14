@@ -16,6 +16,7 @@ export interface MediaAddItemsMenuProps {
   onNewMesh: (meshType: MeshPrimitiveType) => void;
   onNewText3D: () => void;
   onNewCamera: () => void;
+  onNewLight: () => void;
   onNewSplatEffector: () => void;
   onImportGaussianSplat: () => void;
   onNewMathScene: () => void;
@@ -39,6 +40,7 @@ export function MediaAddItemsMenu({
   onNewMesh,
   onNewText3D,
   onNewCamera,
+  onNewLight,
   onNewSplatEffector,
   onImportGaussianSplat,
   onNewMathScene,
@@ -102,6 +104,10 @@ export function MediaAddItemsMenu({
           <div className={itemClass} onClick={() => run(onNewCamera)}>
             <span className={iconClass}><FileTypeIcon type="camera" /></span>
             <span>Camera</span>
+          </div>
+          <div className={itemClass} onClick={() => run(onNewLight)}>
+            <span className={iconClass}><FileTypeIcon type="light" /></span>
+            <span>Light</span>
           </div>
           <div className={itemClass} onClick={() => run(onNewSplatEffector)}>
             <span className={iconClass}><FileTypeIcon type="splat-effector" /></span>

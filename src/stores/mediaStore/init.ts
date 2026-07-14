@@ -387,6 +387,15 @@ function setupItemPersistence(): void {
   );
 
   useMediaStore.subscribe(
+    (state: MediaState) => state.lightItems,
+    (lightItems: MediaState['lightItems']) => {
+      try {
+        localStorage.setItem('ms-lightItems', JSON.stringify(lightItems));
+      } catch { /* quota exceeded or unavailable */ }
+    }
+  );
+
+  useMediaStore.subscribe(
     (state: MediaState) => state.splatEffectorItems,
     (splatEffectorItems: MediaState['splatEffectorItems']) => {
       try {

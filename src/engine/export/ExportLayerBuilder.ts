@@ -8,6 +8,7 @@ import type { ExportClipState, FrameContext } from './types';
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
 import {
   buildGaussianSplatSource,
+  buildLightSource,
   buildModelSource,
   buildMotionSource,
   getCompositionSize,
@@ -159,6 +160,14 @@ function buildExportLayerForClip(
     return {
       ...baseLayerProps,
       source: buildGaussianSplatSource(clip, clipLocalTime),
+      is3D: true,
+    };
+  }
+  // Handle scene light clips
+  if (clip.source?.type === 'light') {
+    return {
+      ...baseLayerProps,
+      source: buildLightSource(clip, clipLocalTime, ctx),
       is3D: true,
     };
   }

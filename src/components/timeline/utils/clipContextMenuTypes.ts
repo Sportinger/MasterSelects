@@ -79,6 +79,7 @@ export interface ClipContextMenuLabelStateLike {
   textItems?: readonly ClipContextMenuLabelItemLike[];
   meshItems?: readonly ClipContextMenuLabelItemLike[];
   cameraItems?: readonly ClipContextMenuLabelItemLike[];
+  lightItems?: readonly ClipContextMenuLabelItemLike[];
   splatEffectorItems?: readonly ClipContextMenuLabelItemLike[];
 }
 

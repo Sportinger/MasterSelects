@@ -66,6 +66,8 @@ function createInitialRestoredMediaSource(
     vectorAnimationSettings: serializedClip.vectorAnimationSettings,
     threeDEffectorsEnabled: serializedClip.threeDEffectorsEnabled ?? true,
     modelSequence: restoredModelSource?.modelSequence,
+    modelPrimitiveIndex: restoredModelSource?.modelPrimitiveIndex,
+    modelMaterialSettings: restoredModelSource?.modelMaterialSettings,
   };
 }
 

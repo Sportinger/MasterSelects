@@ -2,15 +2,19 @@ import {
   computeModelBounds,
   normalizeModelPrimitives,
 } from './geometry';
+import { Logger } from '../../../../services/logger';
 import {
   parseGlb,
   parseGltfPrimitives,
   resolveGltfBuffers,
   resolveGltfTextures,
 } from './gltf';
+import { parseFbx } from './fbx';
 import { decodeText, fetchModelBytes, fetchModelText } from './io';
-import { parseObj } from './obj';
+import { parseObj, resolveObjMaterials } from './obj';
 import type { GltfAsset, ModelRuntimeBounds, ModelRuntimeData } from './types';
+
+const log = Logger.create('ModelRuntimeCache');
 
 export async function loadModelRuntime(
   url: string,
@@ -25,7 +29,7 @@ export async function loadModelRuntime(
     if (!text) {
       return null;
     }
-    const parsedPrimitives = parseObj(text);
+    const parsedPrimitives = parseObj(text, await resolveObjMaterials(text, url));
     const sourceBounds = computeModelBounds(parsedPrimitives) ?? undefined;
     const primitives = normalizeModelPrimitives(parsedPrimitives, normalizationBounds ?? sourceBounds ?? null);
     return primitives.length > 0
@@ -33,6 +37,33 @@ export async function loadModelRuntime(
           url,
           fileName: resolvedFileName,
           format: 'obj',
+          primitives,
+          ...(sourceBounds ? { sourceBounds } : {}),
+          ...(normalizationKey ? { normalizationKey } : {}),
+        }
+      : null;
+  }
+
+  if (extension === 'fbx') {
+    const fetched = await fetchModelBytes(url);
+    if (!fetched) {
+      log.warn('FBX model could not be read', { fileName: resolvedFileName, url });
+      return null;
+    }
+    const parsedPrimitives = parseFbx(fetched.bytes);
+    const sourceBounds = computeModelBounds(parsedPrimitives) ?? undefined;
+    const primitives = normalizeModelPrimitives(parsedPrimitives, normalizationBounds ?? sourceBounds ?? null);
+    if (primitives.length === 0) {
+      log.warn('FBX model parsed without renderable mesh primitives', {
+        fileName: resolvedFileName,
+        byteLength: fetched.bytes.byteLength,
+      });
+    }
+    return primitives.length > 0
+      ? {
+          url,
+          fileName: resolvedFileName,
+          format: 'fbx',
           primitives,
           ...(sourceBounds ? { sourceBounds } : {}),
           ...(normalizationKey ? { normalizationKey } : {}),

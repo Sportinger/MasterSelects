@@ -30,6 +30,8 @@ interface UseMediaPanelAddImportCommandsInput {
   getOrCreateMeshFolder: MediaStoreState['getOrCreateMeshFolder'];
   createCameraItem: MediaStoreState['createCameraItem'];
   getOrCreateCameraFolder: MediaStoreState['getOrCreateCameraFolder'];
+  createLightItem: MediaStoreState['createLightItem'];
+  getOrCreateLightFolder: MediaStoreState['getOrCreateLightFolder'];
   createSplatEffectorItem: MediaStoreState['createSplatEffectorItem'];
   getOrCreateSplatEffectorFolder: MediaStoreState['getOrCreateSplatEffectorFolder'];
   createMathSceneItem: MediaStoreState['createMathSceneItem'];
@@ -62,6 +64,8 @@ export function useMediaPanelAddImportCommands({
   getOrCreateMeshFolder,
   createCameraItem,
   getOrCreateCameraFolder,
+  createLightItem,
+  getOrCreateLightFolder,
   createSplatEffectorItem,
   getOrCreateSplatEffectorFolder,
   createMathSceneItem,
@@ -81,6 +85,7 @@ export function useMediaPanelAddImportCommands({
   handleNewSolid: () => void;
   handleNewMesh: (meshType: MeshPrimitiveType) => void;
   handleNewCamera: () => void;
+  handleNewLight: () => void;
   handleNewSplatEffector: () => void;
   handleNewMathScene: () => void;
   handleNewMotionShape: (primitive: ShapePrimitive) => void;
@@ -165,6 +170,13 @@ export function useMediaPanelAddImportCommands({
     closeContextMenu();
   }, [boardPosition, closeContextMenu, createCameraItem, getActiveParentId, getOrCreateCameraFolder, placeCreatedItems]);
 
+  const handleNewLight = useCallback(() => {
+    const lightFolderId = boardPosition ? getActiveParentId() : getOrCreateLightFolder();
+    const id = createLightItem(undefined, lightFolderId);
+    placeCreatedItems([id]);
+    closeContextMenu();
+  }, [boardPosition, closeContextMenu, createLightItem, getActiveParentId, getOrCreateLightFolder, placeCreatedItems]);
+
   const handleNewSplatEffector = useCallback(() => {
     const effectorFolderId = boardPosition ? getActiveParentId() : getOrCreateSplatEffectorFolder();
     const id = createSplatEffectorItem(undefined, effectorFolderId);
@@ -215,6 +227,7 @@ export function useMediaPanelAddImportCommands({
     handleNewSolid,
     handleNewMesh,
     handleNewCamera,
+    handleNewLight,
     handleNewSplatEffector,
     handleNewMathScene,
     handleNewMotionShape,

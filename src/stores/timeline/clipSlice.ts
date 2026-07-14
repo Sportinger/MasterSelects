@@ -21,6 +21,7 @@ function isVisualClipSourceType(sourceType: string | undefined): boolean {
     sourceType === 'solid' ||
     sourceType === 'model' ||
     sourceType === 'camera' ||
+    sourceType === 'light' ||
     sourceType === 'gaussian-avatar' ||
     sourceType === 'gaussian-splat' ||
     sourceType === 'splat-effector' ||

@@ -33,7 +33,9 @@ import type {
   ProjectGaussianSplatSequenceData,
   ProjectGaussianSplatSettings,
   ProjectLabelColor,
+  ProjectLightSettings,
   ProjectMeshPrimitiveType,
+  ProjectModelMaterialSettings,
   ProjectModelSequenceData,
   ProjectSceneCameraSettings,
   ProjectSplatEffectorSettings,
@@ -112,7 +114,7 @@ export interface ProjectClip {
   compositionId?: string;
 
   // Additional clip metadata (for restoration)
-  sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector' | 'math-scene' | 'transition-overlay' | 'motion-shape' | 'motion-null' | 'motion-adjustment' | 'lottie' | 'rive' | 'midi';
+  sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'light' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector' | 'math-scene' | 'transition-overlay' | 'motion-shape' | 'motion-null' | 'motion-adjustment' | 'lottie' | 'rive' | 'midi';
   // MIDI clip note data (issue #182); wired into save/load in the persistence phase
   midiData?: MidiClipData;
   naturalDuration?: number;
@@ -122,7 +124,10 @@ export interface ProjectClip {
   waveform?: number[];
   waveformChannels?: number[][];
   meshType?: ProjectMeshPrimitiveType;
+  modelPrimitiveIndex?: number;
+  modelMaterialSettings?: ProjectModelMaterialSettings;
   cameraSettings?: ProjectSceneCameraSettings;
+  lightSettings?: ProjectLightSettings;
   splatEffectorSettings?: ProjectSplatEffectorSettings;
   gaussianBlendshapes?: Record<string, number>;
   gaussianSplatSettings?: ProjectGaussianSplatSettings;
