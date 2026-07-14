@@ -54,7 +54,7 @@ Prepared splat runtime metadata, native splat rasterization, preview, nested com
 - Supported import formats are `.obj`, `.fbx`, `.gltf`, and `.glb`.
 - Model clips are automatically marked `is3D: true` and cannot be switched back to 2D.
 - Models are auto-centered and normalized to fit the viewport.
-- ASCII FBX mesh geometry, UVs, and per-model translation/scale are parsed into the native model runtime; animation, rigs, materials, and binary FBX remain out of scope for this loader.
+- ASCII and binary FBX mesh geometry, UVs, and per-model translation/scale are parsed into the native model runtime; animation, rigs, and materials remain out of scope for this loader. Binary FBX supports both 32-bit and 64-bit record formats (FBX version 7500+) including zlib-compressed attribute arrays.
 - FBX model clips with multiple parsed meshes expose a Transform-tab mesh selector for `All Meshes` or one mesh primitive; solo meshes render centered on their own bounds so the clip transform acts from that mesh's local center.
 - OBJ imports parse `vt`, `usemtl`, MTL `Kd`, and MTL `map_Kd` base-color textures. Relative sidecar `.mtl`, `.bin`, and texture URLs resolve for normal web URLs and native-helper local file references.
 - glTF / GLB base color textures are loaded from data URIs, external image URIs, or embedded bufferViews when `baseColorTexture` and `TEXCOORD_0` are present.
@@ -238,7 +238,7 @@ The Transform tab is context-sensitive:
 | Format | Current support | Notes |
 |---|---|---|
 | `.obj` | Supported | Imported as a 3D model clip in the shared scene contract. |
-| `.fbx` | Supported | ASCII mesh geometry is imported as a 3D model clip in the shared scene contract. |
+| `.fbx` | Supported | ASCII and binary mesh geometry is imported as a 3D model clip in the shared scene contract. |
 | `.gltf` | Supported | Imported as a 3D model clip in the shared scene contract. |
 | `.glb` | Supported | Imported as a 3D model clip in the shared scene contract. |
 | `.ply` / `.compressed.ply` | Supported | Gaussian splat import with Morton ordering where needed. |

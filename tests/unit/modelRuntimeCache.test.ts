@@ -184,6 +184,7 @@ describe('ModelRuntimeCache', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
       text: async () => fbx,
+      arrayBuffer: async () => new TextEncoder().encode(fbx).buffer,
     })) as typeof fetch);
 
     const loaded = await cache.preload('https://example.com/triangle.fbx', 'triangle.FBX');

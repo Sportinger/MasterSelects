@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
-import { parseAsciiFbxMeshNames } from '../../../engine/native3d/assets/modelRuntimeCache/fbx';
+import { parseFbxMeshNames } from '../../../engine/native3d/assets/modelRuntimeCache/fbx';
 import { DEFAULT_SCENE_CAMERA_SETTINGS, type SceneCameraSettings } from '../../../stores/mediaStore/types';
 import {
   getSceneNavFpsMoveSpeedStepIndex,
@@ -156,9 +156,9 @@ export function TransformTab({
       };
     }
 
-    void modelFile.text()
-      .then((text) => {
-        if (!cancelled) setModelPrimitiveNames(parseAsciiFbxMeshNames(text));
+    void modelFile.arrayBuffer()
+      .then((buffer) => {
+        if (!cancelled) setModelPrimitiveNames(parseFbxMeshNames(buffer));
       })
       .catch(() => {
         if (!cancelled) setModelPrimitiveNames([]);

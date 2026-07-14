@@ -9,7 +9,7 @@ import {
   resolveGltfBuffers,
   resolveGltfTextures,
 } from './gltf';
-import { parseAsciiFbx } from './fbx';
+import { parseFbx } from './fbx';
 import { decodeText, fetchModelBytes, fetchModelText } from './io';
 import { parseObj, resolveObjMaterials } from './obj';
 import type { GltfAsset, ModelRuntimeBounds, ModelRuntimeData } from './types';
@@ -45,18 +45,18 @@ export async function loadModelRuntime(
   }
 
   if (extension === 'fbx') {
-    const text = await fetchModelText(url);
-    if (!text) {
+    const fetched = await fetchModelBytes(url);
+    if (!fetched) {
       log.warn('FBX model could not be read', { fileName: resolvedFileName, url });
       return null;
     }
-    const parsedPrimitives = parseAsciiFbx(text);
+    const parsedPrimitives = parseFbx(fetched.bytes);
     const sourceBounds = computeModelBounds(parsedPrimitives) ?? undefined;
     const primitives = normalizeModelPrimitives(parsedPrimitives, normalizationBounds ?? sourceBounds ?? null);
     if (primitives.length === 0) {
       log.warn('FBX model parsed without renderable mesh primitives', {
         fileName: resolvedFileName,
-        textLength: text.length,
+        byteLength: fetched.bytes.byteLength,
       });
     }
     return primitives.length > 0
