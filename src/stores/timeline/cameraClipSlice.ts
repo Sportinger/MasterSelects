@@ -36,7 +36,7 @@ export const createCameraClipSlice: SliceCreator<CameraClipActions> = (set, get)
         naturalDuration: Number.MAX_SAFE_INTEGER,
         cameraSettings: { ...DEFAULT_SCENE_CAMERA_SETTINGS },
       },
-      transform: { ...DEFAULT_TRANSFORM },
+      transform: { ...DEFAULT_TRANSFORM, position: { ...DEFAULT_TRANSFORM.position, z: 1 } },
       effects: [],
       isLoading: false,
     };

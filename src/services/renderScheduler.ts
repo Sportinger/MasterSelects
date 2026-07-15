@@ -266,14 +266,16 @@ class RenderSchedulerService {
 
       const now = performance.now();
       const deltaTime = now - this.lastFrameTime;
-      this.lastFrameTime = now;
 
       // Throttle to ~60fps (16.67ms) with slight buffer
       const shouldRender = deltaTime >= 14;
 
       // Skip during export to prevent video element conflicts
-      if (shouldRender && !renderHostPort.getIsExporting()) {
-        this.renderAllTargets();
+      if (shouldRender) {
+        this.lastFrameTime = now;
+        if (!renderHostPort.getIsExporting()) {
+          this.renderAllTargets();
+        }
       }
 
       this.rafId = requestAnimationFrame(renderLoop);
@@ -333,7 +335,7 @@ class RenderSchedulerService {
 
       // Skip if active comp — main loop handles it
       // Exception: layer-filtered sources need independent rendering even for active comp
-      const needsIndependentRender = target.source.type === 'layer' || target.source.type === 'layer-index';
+      const needsIndependentRender = Boolean(target.viewportOverride) || target.source.type === 'layer' || target.source.type === 'layer-index';
       if (compId === activeCompId && !needsIndependentRender) continue;
 
       // For active comp with layer filtering: reuse pre-built layers from main loop
@@ -349,13 +351,15 @@ class RenderSchedulerService {
         } else {
           filtered = this.activeCompLayers;
         }
-        filtered = normalizeIsolatedLayerPreview(filtered);
+        if (target.source.type === 'layer' || target.source.type === 'layer-index') {
+          filtered = normalizeIsolatedLayerPreview(filtered);
+        }
         renderHostPort.renderToPreviewCanvas(targetId, filtered);
         this.recordRuntimeJob({
           targetId,
           compositionId: compId,
           state: 'completed',
-          reason: 'active-layer-filter',
+          reason: target.viewportOverride ? 'composition-render' : 'active-layer-filter',
         });
         continue;
       }

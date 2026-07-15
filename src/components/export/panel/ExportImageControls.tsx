@@ -206,7 +206,7 @@ export function ExportImageControls({
           </div>
         </>
       ) : (
-        <div className="export-field-card export-subcard">
+        <div className="export-field-card export-subcard" data-export-target="image-range">
           <div className="export-field-head">
             <span>Frame</span>
             <strong>{time.formatTime(time.playheadPosition)}</strong>

@@ -42,6 +42,7 @@ import type {
 const log = Logger.create('ExportPanel');
 
 export function ExportPanel() {
+  const panelRef = useRef<HTMLDivElement>(null);
   const summaryHighlightTimeoutsRef = useRef<Map<HTMLElement, number>>(new Map());
   const [setupStatus, setSetupStatus] = useState<string | null>(null);
   const { duration, inPoint, outPoint, playheadPosition, startExport, setExportProgress, endExport } = useTimelineStore(useShallow(s => ({
@@ -327,18 +328,18 @@ export function ExportPanel() {
   }, [loadPreset, presets.length, selectedPresetId]);
 
   const scrollToSummaryTarget = useCallback((target: ExportSummaryTarget) => {
-    if (typeof document === 'undefined') {
+    const scrollContainer = panelRef.current?.querySelector<HTMLElement>('.export-form');
+    const node = panelRef.current?.querySelector<HTMLElement>(`[data-export-target="${target}"]`);
+    if (!scrollContainer || !node) {
       return;
     }
 
-    const node = document.querySelector<HTMLElement>(`[data-export-target="${target}"]`);
-    if (!node) {
-      return;
-    }
-
-    node.scrollIntoView({
-      behavior: 'smooth',
-      block: 'center',
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const nodeRect = node.getBoundingClientRect();
+    const stickySummaryHeight = panelRef.current?.querySelector<HTMLElement>('.export-summary-sticky')?.offsetHeight ?? 0;
+    scrollContainer.scrollTo({
+      behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      top: Math.max(0, scrollContainer.scrollTop + nodeRect.top - containerRect.top - stickySummaryHeight - 12),
     });
 
     const existingTimeout = summaryHighlightTimeoutsRef.current.get(node);
@@ -533,13 +534,15 @@ export function ExportPanel() {
   }
 
   return (
-    <div className="export-panel">
+    <div className="export-panel" ref={panelRef}>
       {!isExporting ? (
         <div className="export-form">
           <ExportSummaryBadgesSection
+            showCompositionSync={isVideoMode || isImageMode}
             sameAsComposition={sameAsComposition}
             summaryBadges={summaryBadges}
             primaryExportLabel={primaryExportLabel}
+            estimatedSizeLabel={estimatedSizeLabel}
             exportDisabled={exportDisabled}
             onPrimaryExport={handlePrimaryExport}
             onSyncComposition={syncCompositionSettings}

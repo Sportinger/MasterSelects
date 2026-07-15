@@ -233,7 +233,7 @@ export function TransformTab({
       try {
         clearCameraKeyframesAndStopwatches();
         updateClipTransform(clipId, {
-          position: { x: 0, y: 0, z: 0 },
+          position: { x: 0, y: 0, z: 1 },
           scale: { all: 1, x: 1, y: 1, z: 0 },
           rotation: { x: 0, y: 0, z: 0 },
         });

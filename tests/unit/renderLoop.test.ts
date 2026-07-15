@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RenderLoop } from '../../src/engine/render/RenderLoop';
 
 vi.mock('../../src/services/logger', () => ({
@@ -28,6 +28,8 @@ type RenderLoopTestAccess = {
 };
 
 function createLoop() {
+  vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+  vi.spyOn(performance, 'now').mockReturnValue(10_000);
   const performanceStats = {
     recordRafGap: vi.fn(),
     resetPerSecondCounters: vi.fn(),
@@ -53,6 +55,8 @@ function createLoop() {
   internal.idleSuppressed = false;
   return internal;
 }
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('RenderLoop watchdog', () => {
   it('limits playback renders to the visual target fps', () => {

@@ -1,6 +1,7 @@
 import { getThumbnailBitmap, ensureThumbnailBitmap } from '../../../services/timeline/thumbnailBitmapCache';
 import type { TimelinePaintSourceClip } from '../../../timeline';
 import { drawTimelineClipCanvasCover } from './timelineClipCanvasCoverDraw';
+import { getTimelineClipCanvasCompositionThumbnailSlotUrls } from './timelineClipCanvasCompositionResource';
 
 interface DrawTimelineClipCanvasCompositionSegmentsProps {
   maxThumbSlots: number;
@@ -37,14 +38,16 @@ export function drawTimelineClipCanvasCompositionSegmentThumbnails(
     ctx.fillRect(segmentX, top, segmentW, h);
 
     if (segment.thumbnails.length > 0) {
-      const count = Math.max(1, Math.min(props.maxThumbSlots, Math.ceil(segmentW / props.thumbSlotPx)));
+      const urls = getTimelineClipCanvasCompositionThumbnailSlotUrls(
+        segment.thumbnails,
+        segmentW,
+        props.thumbSlotPx,
+        props.maxThumbSlots,
+      );
+      const count = urls.length;
       const slotW = segmentW / count;
       for (let index = 0; index < count; index += 1) {
-        const thumbIndex = Math.min(
-          segment.thumbnails.length - 1,
-          Math.floor((index / count) * segment.thumbnails.length),
-        );
-        const url = segment.thumbnails[thumbIndex];
+        const url = urls[index];
         const bmp = getThumbnailBitmap(url);
         if (bmp) {
           drawTimelineClipCanvasCover(ctx, bmp, segmentX + index * slotW, top, slotW, h);

@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState, type MutableRefObject, type R
 import { resolveSharedSceneCameraConfig } from '../../engine/scene/SceneCameraUtils';
 import type { SceneCameraConfig, SceneVector3 } from '../../engine/scene/types';
 import { renderHostPort } from '../../services/render/renderHostPort';
-import { useEngineStore } from '../../stores/engineStore';
 import type { SceneCameraSettings } from '../../stores/mediaStore/types';
 import { useTimelineStore } from '../../stores/timeline';
 import type { TimelineClip } from '../../types/timeline';
@@ -12,10 +11,12 @@ import { cloneSceneVector, type EditCameraOrthoViewMode, type EditCameraViewMode
 import {
   DEFAULT_EDIT_CAMERA_SETTINGS,
   EDIT_CAMERA_BLEND_MS,
+  EDIT_CAMERA_PIVOT_BLEND_MS,
   EDIT_CAMERA_VIEW_LABELS,
   buildEditCameraOrthographicConfig,
   buildPreviewCameraConfigFromTransform,
   cloneSceneCameraConfig,
+  createDefaultEditorCameraTransform,
   createDefaultEditCameraOrthoFrame,
   lerpSceneCameraConfig,
   type CameraProperty,
@@ -39,6 +40,7 @@ interface UsePreviewEditCameraControllerOptions {
   gaussianPanStart: MutableRefObject<{ clipId: string | null }>;
   hasKeyframes: (clipId: string, property: CameraProperty) => boolean;
   isRecording: (clipId: string, property: CameraProperty) => boolean;
+  previewCameraOverride: SceneCameraConfig | null;
   sceneNavNoKeyframes: boolean;
   setIsGaussianOrbiting: (value: boolean) => void;
   setIsGaussianPanning: (value: boolean) => void;
@@ -61,6 +63,7 @@ export function usePreviewEditCameraController({
   gaussianPanStart: gaussianPanStartRef,
   hasKeyframes,
   isRecording,
+  previewCameraOverride,
   sceneNavNoKeyframes,
   setIsGaussianOrbiting,
   setIsGaussianPanning,
@@ -79,6 +82,10 @@ export function usePreviewEditCameraController({
   const editCameraAnimationRef = useRef<number | null>(null);
   const editCameraViewTransitionRef = useRef(false);
   const editCameraModeActiveRef = useRef(false);
+  const previewCameraOverrideRef = useRef<SceneCameraConfig | null>(previewCameraOverride);
+  useEffect(() => {
+    previewCameraOverrideRef.current = previewCameraOverride;
+  }, [previewCameraOverride]);
   const editCameraOrthoPanStart = useRef({ x: 0, y: 0, center: { x: 0, y: 0, z: 0 } as SceneVector3, scale: 1, mode: 'front' as EditCameraOrthoViewMode });
   const editCameraOrthoMode: EditCameraOrthoViewMode | null = editCameraViewMode === 'camera' ? null : editCameraViewMode;
   const editCameraOrthoViewActive = editCameraModeActive && editCameraOrthoMode !== null;
@@ -133,27 +140,37 @@ export function usePreviewEditCameraController({
     editCameraAnimationRef.current = null;
   }, []);
 
-  const animatePreviewCameraOverride = useCallback((fromConfig: SceneCameraConfig, toConfig: SceneCameraConfig, clearAtEnd: boolean) => {
+  const updatePreviewCameraOverride = useCallback((camera: SceneCameraConfig | null) => {
+    previewCameraOverrideRef.current = camera;
+    setPreviewCameraOverride(camera);
+  }, [setPreviewCameraOverride]);
+
+  const animatePreviewCameraOverride = useCallback((
+    fromConfig: SceneCameraConfig,
+    toConfig: SceneCameraConfig,
+    clearAtEnd: boolean,
+    durationMs = EDIT_CAMERA_BLEND_MS,
+  ) => {
     stopEditCameraAnimation();
     const from = cloneSceneCameraConfig(fromConfig);
     const to = cloneSceneCameraConfig(toConfig);
     const startedAt = performance.now();
     const tick = (now: number) => {
-      const rawT = Math.min(1, (now - startedAt) / EDIT_CAMERA_BLEND_MS);
-      setPreviewCameraOverride(lerpSceneCameraConfig(from, to, rawT < 0.5 ? 4 * rawT * rawT * rawT : 1 - Math.pow(-2 * rawT + 2, 3) / 2));
+      const rawT = Math.min(1, (now - startedAt) / durationMs);
+      updatePreviewCameraOverride(lerpSceneCameraConfig(from, to, rawT < 0.5 ? 4 * rawT * rawT * rawT : 1 - Math.pow(-2 * rawT + 2, 3) / 2));
       renderHostPort.requestRender();
       if (rawT < 1) {
         editCameraAnimationRef.current = window.requestAnimationFrame(tick);
         return;
       }
       editCameraAnimationRef.current = null;
-      setPreviewCameraOverride(clearAtEnd ? null : cloneSceneCameraConfig(to));
+      updatePreviewCameraOverride(clearAtEnd ? null : cloneSceneCameraConfig(to));
       renderHostPort.requestRender();
     };
-    setPreviewCameraOverride(cloneSceneCameraConfig(from));
+    updatePreviewCameraOverride(cloneSceneCameraConfig(from));
     renderHostPort.requestRender();
     editCameraAnimationRef.current = window.requestAnimationFrame(tick);
-  }, [setPreviewCameraOverride, stopEditCameraAnimation]);
+  }, [stopEditCameraAnimation, updatePreviewCameraOverride]);
 
   const applyNavigationCameraValues = useCallback((clip: TimelineClip, values: SceneNavCameraValues) => {
     if (!editCameraModeActive || clip.id !== editCameraClipIdRef.current || !editCameraTransformRef.current) {
@@ -190,7 +207,7 @@ export function usePreviewEditCameraController({
       editCameraSettingsRef.current,
     );
     if (nextCameraConfig) {
-      setPreviewCameraOverride(nextCameraConfig);
+      updatePreviewCameraOverride(nextCameraConfig);
       renderHostPort.requestRender();
     }
   }, [
@@ -198,8 +215,8 @@ export function usePreviewEditCameraController({
     editCameraModeActive,
     effectiveResolution.height,
     effectiveResolution.width,
-    setPreviewCameraOverride,
     stopEditCameraAnimation,
+    updatePreviewCameraOverride,
   ]);
 
   const setEditCameraView = useCallback((mode: EditCameraViewMode) => {
@@ -212,7 +229,7 @@ export function usePreviewEditCameraController({
       editCameraSettingsRef.current,
     );
     if (!cameraConfig) return;
-    const fromConfig = useEngineStore.getState().previewCameraOverride ?? getEditSceneCameraConfig(activeCameraClipAtPlayhead);
+    const fromConfig = previewCameraOverrideRef.current ?? getEditSceneCameraConfig(activeCameraClipAtPlayhead);
     if (!fromConfig) return;
     let toConfig = cameraConfig;
     let nextFrame: EditCameraOrthoFrame | null = null;
@@ -245,13 +262,14 @@ export function usePreviewEditCameraController({
       !editCameraModeActive ||
       !activeCameraClipAtPlayhead ||
       !editCameraTransformRef.current ||
-      object.kind === 'camera' ||
-      object.clipId === activeCameraClipAtPlayhead.id
+      !Number.isFinite(object.worldPosition.x) ||
+      !Number.isFinite(object.worldPosition.y) ||
+      !Number.isFinite(object.worldPosition.z)
     ) {
       return false;
     }
     const currentTransform = editCameraTransformRef.current;
-    const fromConfig = useEngineStore.getState().previewCameraOverride ?? getEditSceneCameraConfig(activeCameraClipAtPlayhead);
+    const fromConfig = previewCameraOverrideRef.current ?? getEditSceneCameraConfig(activeCameraClipAtPlayhead);
     const nextOrbitCenter = cloneSceneVector(object.worldPosition);
     const nextTransform: ClipTransform = {
       ...currentTransform,
@@ -292,7 +310,7 @@ export function usePreviewEditCameraController({
       setEditCameraOrthoFrame(nextFrame);
       toConfig = buildEditCameraOrthographicConfig(editCameraOrthoMode, nextFrame, nextCameraConfig);
     }
-    animatePreviewCameraOverride(fromConfig, toConfig, false);
+    animatePreviewCameraOverride(fromConfig, toConfig, false, EDIT_CAMERA_PIVOT_BLEND_MS);
     renderHostPort.requestRender();
     return true;
   }, [
@@ -339,25 +357,30 @@ export function usePreviewEditCameraController({
       const clipChanged = editCameraClipIdRef.current !== activeCameraClipAtPlayhead.id;
       if (clipChanged || !editCameraTransformRef.current) {
         editCameraClipIdRef.current = activeCameraClipAtPlayhead.id;
-        editCameraTransformRef.current = resolveCameraClipTransformAtPlayhead(activeCameraClipAtPlayhead);
+        const sceneCamera = getActualSceneCameraConfig();
+        editCameraTransformRef.current = createDefaultEditorCameraTransform(
+          sceneCamera,
+          resolveCameraClipTransformAtPlayhead(activeCameraClipAtPlayhead),
+        );
+        editCameraOrbitCenterRef.current = cloneSceneVector(sceneCamera.position);
       }
       const editCameraConfig = getEditSceneCameraConfig(activeCameraClipAtPlayhead);
       if (!editCameraConfig) return;
       editCameraModeActiveRef.current = true;
       if (!wasEditCameraModeActive || clipChanged) {
-        const fromConfig = useEngineStore.getState().previewCameraOverride ?? getActualSceneCameraConfig();
+        const fromConfig = previewCameraOverrideRef.current ?? getActualSceneCameraConfig();
         animatePreviewCameraOverride(fromConfig, editCameraConfig, false);
       } else if (editCameraViewTransitionRef.current) {
         editCameraViewTransitionRef.current = false;
       } else {
-        setPreviewCameraOverride(editCameraConfig);
+        updatePreviewCameraOverride(editCameraConfig);
         renderHostPort.requestRender();
       }
       return;
     }
     editCameraModeActiveRef.current = false;
     if (wasEditCameraModeActive) {
-      const fromConfig = useEngineStore.getState().previewCameraOverride ?? getActualSceneCameraConfig();
+      const fromConfig = previewCameraOverrideRef.current ?? getActualSceneCameraConfig();
       animatePreviewCameraOverride(fromConfig, getActualSceneCameraConfig(), true);
     }
   }, [
@@ -367,17 +390,17 @@ export function usePreviewEditCameraController({
     getActualSceneCameraConfig,
     getEditSceneCameraConfig,
     resolveCameraClipTransformAtPlayhead,
-    setPreviewCameraOverride,
+    updatePreviewCameraOverride,
   ]);
 
   useEffect(() => () => {
     stopEditCameraAnimation();
-    setPreviewCameraOverride(null);
+    updatePreviewCameraOverride(null);
     renderHostPort.requestRender();
-  }, [setPreviewCameraOverride, stopEditCameraAnimation]);
+  }, [stopEditCameraAnimation, updatePreviewCameraOverride]);
 
   const editCameraGizmoTransform = editCameraModeActive && activeCameraClipAtPlayhead ? resolveCameraClipTransformAtPlayhead(activeCameraClipAtPlayhead) : null;
-  const editCameraOrthoHint = editCameraOrthoViewActive && activeEditCameraOrthoFrame ? `${EDIT_CAMERA_VIEW_LABELS[activeEditCameraOrthoFrame.mode]} Ortho | 1 Front | 2 Side | 3 Top | 4 Camera | Wheel Zoom | Shift+Drag/MMB Pan` : null;
+  const editCameraOrthoHint = editCameraOrthoViewActive && activeEditCameraOrthoFrame ? `${EDIT_CAMERA_VIEW_LABELS[activeEditCameraOrthoFrame.mode]} Ortho | 1 Front | 2 Side | 3 Top | 4 Perspective | Wheel Zoom | Shift+Drag/MMB Pan` : null;
   const sceneObjectWorldGridPlane: 'xy' | 'yz' | 'xz' = editCameraModeActive && editCameraViewMode === 'front'
     ? 'xy'
     : editCameraModeActive && editCameraViewMode === 'side'

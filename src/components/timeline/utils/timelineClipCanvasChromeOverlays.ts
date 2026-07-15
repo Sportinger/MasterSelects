@@ -19,6 +19,8 @@ export interface TimelineClipCanvasChromeBadge {
 
 export interface TimelineClipCanvasChromeOverlay {
   id: string;
+  iconType?: string;
+  showIcon: boolean;
   label: string;
   left: number;
   width: number;
@@ -67,6 +69,7 @@ export function createTimelineClipCanvasChromeOverlays(input: {
   geometryProps: TimelineClipCanvasGeometryInput;
   mediaFileStatusById: TimelineClipCanvasMediaStatusMap;
   minLabelWidthPx: number;
+  thumbnailVisibleClipIds?: ReadonlySet<string>;
   timeToPixel: (time: number) => number;
 }): TimelineClipCanvasChromeOverlay[] {
   const overlays: TimelineClipCanvasChromeOverlay[] = [];
@@ -85,10 +88,10 @@ export function createTimelineClipCanvasChromeOverlays(input: {
       clip,
       getTimelineClipCanvasMediaStatus(clip, input.mediaFileStatusById),
     );
-    if (!clip.name && passiveBadges.length === 0) continue;
-
     overlays.push({
       id: clip.id,
+      iconType: clip.isComposition ? 'composition' : clip.source?.type ?? clip.trackType,
+      showIcon: !input.thumbnailVisibleClipIds?.has(clip.id),
       label: clip.name,
       left: visibleLeft - input.chromeScrollX,
       width: visibleW,

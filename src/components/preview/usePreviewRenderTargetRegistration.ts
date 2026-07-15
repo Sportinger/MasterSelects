@@ -4,9 +4,10 @@ import { Logger } from '../../services/logger';
 import {
   registerPreviewTarget,
   setPreviewTargetTransparency,
+  setPreviewTargetViewportOverride,
   unregisterPreviewTarget,
 } from '../../services/render/previewTargetRegistration';
-import type { RenderSource } from '../../types/renderTarget';
+import type { RenderSource, RenderTargetViewportOverride } from '../../types/renderTarget';
 
 const log = Logger.create('Preview');
 
@@ -17,6 +18,7 @@ interface UsePreviewRenderTargetRegistrationOptions {
   setCompReady: (ready: boolean) => void;
   showTransparencyGrid: boolean;
   stableRenderSource: RenderSource;
+  viewportOverride?: RenderTargetViewportOverride | null;
 }
 
 export function usePreviewRenderTargetRegistration({
@@ -26,6 +28,7 @@ export function usePreviewRenderTargetRegistration({
   setCompReady,
   showTransparencyGrid,
   stableRenderSource,
+  viewportOverride = null,
 }: UsePreviewRenderTargetRegistrationOptions): void {
   const showTransparencyGridRef = useRef(showTransparencyGrid);
 
@@ -59,4 +62,14 @@ export function usePreviewRenderTargetRegistration({
     if (!isEngineReady) return;
     setPreviewTargetTransparency(panelId, showTransparencyGrid);
   }, [isEngineReady, panelId, showTransparencyGrid]);
+
+  useEffect(() => {
+    if (!isEngineReady) return;
+    setPreviewTargetViewportOverride(panelId, viewportOverride);
+  }, [isEngineReady, panelId, stableRenderSource, viewportOverride]);
+
+  useEffect(() => {
+    if (!isEngineReady) return;
+    return () => setPreviewTargetViewportOverride(panelId, null);
+  }, [isEngineReady, panelId]);
 }

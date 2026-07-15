@@ -2,6 +2,8 @@
 // Every video destination is a RenderTarget with a source (what to show)
 // and a destination (where to show it)
 
+import type { SceneCameraConfig } from '../engine/scene/types';
+
 // === Source Types ===
 
 export type RenderSourceType = 'activeComp' | 'composition' | 'layer' | 'layer-index' | 'slot' | 'program';
@@ -25,6 +27,12 @@ export type RenderSource =
 
 export type RenderDestinationType = 'canvas' | 'window' | 'tab';
 
+export interface RenderTargetViewportOverride {
+  width: number;
+  height: number;
+  cameraOverride: SceneCameraConfig | null;
+}
+
 // === RenderTarget ===
 
 export interface RenderTarget {
@@ -39,4 +47,5 @@ export interface RenderTarget {
   context: GPUCanvasContext | null;
   window: Window | null;
   isFullscreen: boolean;
+  viewportOverride?: RenderTargetViewportOverride | null;
 }

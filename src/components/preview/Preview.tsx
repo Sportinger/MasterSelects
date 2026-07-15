@@ -2,7 +2,7 @@
 
 import './Preview.css';
 import './PreviewEditMode.css';
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useEngine } from '../../hooks/useEngine';
 import {
@@ -21,7 +21,7 @@ import { PreviewCanvasMount } from './PreviewCanvasMount';
 import { useEditModeOverlay } from './useEditModeOverlay';
 import { useLayerDrag } from './useLayerDrag';
 import { useSAM2Store } from '../../stores/sam2Store';
-import type { PreviewPanelSource } from '../../types/dock';
+import type { PreviewPanelData, PreviewPanelSource } from '../../types/dock';
 import { getFirstEditablePreviewPanelId, getPreviewPanelIdFromElement } from './previewPanelDom';
 import { usePreviewDropdownState } from './usePreviewDropdownState';
 import { usePreviewEditCameraController } from './usePreviewEditCameraController';
@@ -35,8 +35,9 @@ import { usePreviewSourceConfig } from './usePreviewSourceConfig';
 import { usePreviewViewGeometry } from './usePreviewViewGeometry';
 import { usePreviewViewport } from './usePreviewViewport';
 import { usePreviewWheelHandler } from './usePreviewWheelHandler';
+import { usePreviewInitialEditCameraView } from './usePreviewInitialEditCameraView';
+import type { SceneCameraConfig } from '../../engine/scene/types';
 import type { Layer } from '../../types/layers';
-
 const SCENE_OBJECT_INTERACTION_SELECTOR = [
   '.preview-scene-object-handle',
   '.preview-scene-gizmo-axis',
@@ -47,14 +48,14 @@ const SCENE_OBJECT_INTERACTION_SELECTOR = [
 function isSceneObjectInteractionTarget(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest(SCENE_OBJECT_INTERACTION_SELECTOR));
 }
-
 interface PreviewProps {
   panelId: string;
   source: PreviewPanelSource;
   showTransparencyGrid: boolean; // per-tab transparency toggle
+  initialEdit?: Pick<PreviewPanelData, 'initialEditMode' | 'initialEditCameraView'>;
 }
 
-export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps) {
+export function Preview({ panelId, source, showTransparencyGrid, initialEdit }: PreviewProps) {
   const { isEngineReady } = useEngine();
   // NOTE: these are store actions (stable references) — safe to destructure once.
   const { addKeyframe, hasKeyframes, isRecording } = useTimelineStore.getState();
@@ -64,10 +65,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const sceneNavFpsMode = useEngineStore(selectSceneNavFpsMode);
   const sceneNavFpsMoveSpeed = useEngineStore(selectSceneNavFpsMoveSpeed);
   const sceneNavNoKeyframes = useEngineStore(selectSceneNavNoKeyframes);
-  const previewCameraOverride = useEngineStore((s) => s.previewCameraOverride);
-  const setPreviewCameraOverride = useEngineStore((s) => s.setPreviewCameraOverride);
   const setSceneGizmoVisible = useEngineStore((s) => s.setSceneGizmoVisible);
-  const setSceneGizmoClipIdOverride = useEngineStore((s) => s.setSceneGizmoClipIdOverride);
   const activeSplatLoadProgress = useEngineStore(selectActiveGaussianSplatLoadProgress);
   const setSceneNavFpsMoveSpeed = useEngineStore((s) => s.setSceneNavFpsMoveSpeed);
   const {
@@ -158,15 +156,11 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const [canvasSize, setCanvasSize] = useState({ width: 1920, height: 1080 });
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [, setCompReady] = useState(false);
+  const [previewCameraOverride, setPreviewCameraOverride] = useState<SceneCameraConfig | null>(null);
 
-  usePreviewRenderTargetRegistration({
-    canvasRef,
-    isEngineReady,
-    panelId,
-    setCompReady,
-    showTransparencyGrid,
-    stableRenderSource,
-  });
+  useEffect(() => {
+    setSceneGizmoVisible(true);
+  }, [setSceneGizmoVisible]);
 
   const {
     dropdownRef,
@@ -182,8 +176,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const [statsExpanded, setStatsExpanded] = useState(false);
   const [sceneGizmoToolbarTarget, setSceneGizmoToolbarTarget] = useState<HTMLDivElement | null>(null);
 
-  // Edit mode state
-  const [editMode, setEditMode] = useState(false);
+  const [editMode, setEditMode] = useState(initialEdit?.initialEditMode ?? false);
   // #206: while editing a text clip inside the layer-edit mode, this toggles
   // between layer transform (move/scale handles) and text typing. Double-click
   // enters typing; Escape returns to transform.
@@ -195,6 +188,27 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const [isGaussianOrbiting, setIsGaussianOrbiting] = useState(false);
   const [isGaussianPanning, setIsGaussianPanning] = useState(false);
   const [isGaussianFpsLooking, setIsGaussianFpsLooking] = useState(false);
+  const renderResolution = editMode && containerSize.width > 0 && containerSize.height > 0
+    ? containerSize
+    : effectiveResolution;
+  const viewportOverride = useMemo(() => editMode && containerSize.width > 0 && containerSize.height > 0
+    ? {
+        width: containerSize.width,
+        height: containerSize.height,
+        cameraOverride: previewCameraOverride,
+      }
+    : null, [containerSize.height, containerSize.width, editMode, previewCameraOverride]);
+
+  usePreviewRenderTargetRegistration({
+    canvasRef,
+    isEngineReady,
+    panelId,
+    setCompReady,
+    showTransparencyGrid,
+    stableRenderSource,
+    viewportOverride,
+  });
+
   const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
   const gaussianOrbitStart = useRef({
     clipId: null as string | null,
@@ -356,13 +370,14 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     containerRef,
     displayedCompId,
     editCameraModeActive,
-    effectiveResolution,
+    effectiveResolution: renderResolution,
     endGaussianWheelBatch,
     endSceneNavHistoryBatch,
     gaussianOrbitStart,
     gaussianPanStart,
     hasKeyframes,
     isRecording,
+    previewCameraOverride,
     sceneNavNoKeyframes,
     setIsGaussianOrbiting,
     setIsGaussianPanning,
@@ -371,6 +386,8 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     stopGaussianKeyboardMovement,
     updateClipTransform,
   });
+
+  usePreviewInitialEditCameraView(initialEdit, editCameraModeActive, setEditCameraView);
 
   const {
     activeSharedSceneOverlayContent,
@@ -398,7 +415,6 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     editMode,
     getInterpolatedTextBounds,
     isEditableSource,
-    isEngineReady,
     isPlaying,
     layers,
     maskPanelActive,
@@ -407,12 +423,9 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     sceneObjectOverlayEnabled,
     sceneNavFpsMode,
     selectedClipId,
-    selectedClipIds,
     selectedLayerId,
     selectLayer,
     setEditMode,
-    setSceneGizmoClipIdOverride,
-    setSceneGizmoVisible,
     setTextTyping,
     sourceMonitorActive,
     textTyping,
@@ -423,7 +436,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     applyNavigationCameraValues,
     containerRef,
     editCameraModeActive,
-    effectiveResolution,
+    effectiveResolution: renderResolution,
     effectiveSceneNavFpsMode,
     endSceneNavHistoryBatch,
     finishGaussianKeyboardBatch,
@@ -473,6 +486,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     effectiveResolution,
     exportPreviewCanvasRef,
     exportPreviewFrame,
+    fillContainer: editMode,
     isExporting,
     setCanvasSize,
     setContainerSize,
@@ -490,7 +504,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     editCameraOrthoMode,
     editCameraOrthoViewActive,
     editCameraSettingsRef,
-    effectiveResolution,
+    effectiveResolution: renderResolution,
     effectiveSceneNavFpsMode,
     freeCanvasNavigationMode,
     gaussianFpsLookStart,
@@ -583,7 +597,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   }, [clips, getInterpolatedTransform, playheadPosition]);
   const { calculateLayerBounds, findLayerAtPosition, findHandleAtPosition, getCursorForHandle } =
     useEditModeOverlay({
-      effectiveResolution,
+      effectiveResolution: renderResolution,
       canvasSize,
       canvasInContainer,
       viewZoom,
@@ -604,7 +618,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     activeSharedSceneOverlayContent, activeSplatLoadProgress, canvasInContainer, canvasRef,
     canvasSize, canvasWrapperRef, clips, closeSourceMonitor, containerSize, displayedCompId,
     dragHandle, dragMode, editCameraGizmoTransform, editCameraModeActive, editCameraOrthoHint,
-    editMode, effectiveResolution, effectiveSceneNavFpsMode, engineInitError, engineInitFailed,
+    editMode, effectiveResolution: renderResolution, effectiveSceneNavFpsMode, engineInitError, engineInitFailed,
     exportPreviewCanvasRef, exportPreviewDisplaySize, exportPreviewFrame,
     focusEditCameraOnSceneObject, getCursorForHandle, handleOverlayMouseDown,
     handleOverlayMouseMove, handleOverlayMouseUp, hoverHandle, isDragging, isEditableSource,

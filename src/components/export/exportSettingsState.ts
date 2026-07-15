@@ -208,7 +208,6 @@ export function buildExportSettingsState(input: ExportSettingsStateInput) {
       : (!input.videoEnabled && !input.includeAudio && !isGifMode)
         ? '-'
         : estimateOutputSize(input, actualFps, gifSizeEstimate.bytes);
-  const sizeLabelPrefix = isVideoMode && isWebCodecsEncoder && !isGifMode ? 'Target' : 'Size';
   const sizeStatLabel = isVideoMode && isWebCodecsEncoder && !isGifMode ? 'Target Size' : 'Est. Size';
   const webCodecsRateNote = input.rateControl === 'vbr'
     ? 'VBR is only a bitrate target. Simple shots can encode much smaller than the selected Mbps.'
@@ -297,8 +296,6 @@ export function buildExportSettingsState(input: ExportSettingsStateInput) {
       currentCodecLabel,
       outputHeight,
       showFFmpegQualityControl,
-      estimatedSizeLabel,
-      sizeLabelPrefix,
     }),
     showRangeInVideo,
     showRangeInAudio,

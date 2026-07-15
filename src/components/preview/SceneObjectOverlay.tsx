@@ -73,10 +73,15 @@ interface SceneObjectOverlayProps {
   toolbarPortalTarget?: HTMLElement | null;
   enabled: boolean;
   canSetObjectOrbitPivot?: boolean;
-  onSetObjectOrbitPivot?: (object: PreviewSceneObject) => boolean;
+  onSetObjectOrbitPivot?: (object: Pick<PreviewSceneObject, 'clipId' | 'kind' | 'worldPosition'>) => boolean;
 }
 
 const OVERLAY_REFRESH_MS = 125;
+const ORIGIN_ORBIT_PIVOT = {
+  clipId: '',
+  kind: 'plane',
+  worldPosition: { x: 0, y: 0, z: 0 },
+} satisfies Pick<PreviewSceneObject, 'clipId' | 'kind' | 'worldPosition'>;
 
 function applySceneObjectTransform(clipId: string, transform: ClipTransformPatch): void {
   const store = useTimelineStore.getState();
@@ -282,6 +287,20 @@ export function SceneObjectOverlay({
     () => objects.find((object) => object.clipId === selectedClipId) ?? null,
     [objects, selectedClipId],
   );
+  const automaticOrbitPivotKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!canSetObjectOrbitPivot) {
+      automaticOrbitPivotKeyRef.current = null;
+      return;
+    }
+    const targetKey = selectedObject
+      ? `object:${selectedObject.clipId}`
+      : 'origin';
+    if (automaticOrbitPivotKeyRef.current === targetKey) return;
+    if (onSetObjectOrbitPivot?.(selectedObject ?? ORIGIN_ORBIT_PIVOT)) {
+      automaticOrbitPivotKeyRef.current = targetKey;
+    }
+  }, [canSetObjectOrbitPivot, onSetObjectOrbitPivot, selectedClipId, selectedObject]);
   const displayObjects = useMemo(
     () => resolveDisplayObjects(objects, canvasSize),
     [canvasSize, objects],

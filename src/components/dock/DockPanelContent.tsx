@@ -51,6 +51,7 @@ export function DockPanelContent({ panel }: DockPanelContentProps) {
           panelId={panel.id}
           source={normalizePreviewPanelSource(previewData)}
           showTransparencyGrid={previewData?.showTransparencyGrid ?? false}
+          initialEdit={previewData}
         />
       );
     }

@@ -13,6 +13,7 @@ import {
 } from './timelineRenderConstants';
 import type { ClipDragState, ClipTrimState } from './types';
 import type { TimelinePaintSourceClip } from '../../timeline';
+import { FileTypeIcon } from '../panels/media/FileTypeIcon';
 import { useTimelineClipCanvasAudioWarmups } from './hooks/useTimelineClipCanvasAudioWarmups';
 import { useTimelineClipCanvasMainThreadDraw } from './hooks/useTimelineClipCanvasMainThreadDraw';
 import { useTimelineClipCanvasThumbnailWarmups } from './hooks/useTimelineClipCanvasThumbnailWarmups';
@@ -53,6 +54,7 @@ import {
   createTimelineClipCanvasChromeOverlays,
   getTimelineClipCanvasMediaStatus,
 } from './utils/timelineClipCanvasChromeOverlays';
+import { getTimelineTrackColor } from './trackColor';
 
 // Viewport-bounded canvas sizing (the Linux/Mesa blank-canvas guard) lives in
 // useTimelineClipCanvasViewport; see docs/Features/Linux-Mesa-GPU.md.
@@ -63,9 +65,9 @@ const LOD_LABEL_PX = TIMELINE_CLIP_CANVAS_LOD_LABEL_PX;
 const LOD_THUMB_PX = LOD_BAR_PX;
 const CANVAS_THUMB_SLOT_PX = 71;
 const MAX_THUMB_SLOTS = 48;
-
 const THUMBNAIL_VIEWPORT_OVERSCAN_PX = 600;
 const CANVAS_RENDER_OVERSCAN_PX = 1200;
+const NEUTRAL_CLIP_COLOR = getTimelineTrackColor({ labelColor: 'none' });
 
 interface TimelineClipCanvasProps {
   clips: readonly TimelinePaintSourceClip[];
@@ -106,6 +108,7 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     clipDragPreview,
     clipTrim,
   } = props;
+  const clipBodyColor = trackColor === 'transparent' ? NEUTRAL_CLIP_COLOR : trackColor;
   const mediaFilesState = useMediaStore((state) => state.files);
   const mediaFiles = useMemo(
     () => (Array.isArray(mediaFilesState) ? mediaFilesState : []),
@@ -271,9 +274,10 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
       geometryProps,
       mediaFileStatusById,
       minLabelWidthPx: LOD_LABEL_PX,
+      thumbnailVisibleClipIds: workerThumbnailPreparation.visibleBitmapClipIds,
       timeToPixel,
     });
-  }, [chromeScrollX, chromeViewportWidth, clips, geometryProps, mediaFileStatusById, timeToPixel]);
+  }, [chromeScrollX, chromeViewportWidth, clips, geometryProps, mediaFileStatusById, timeToPixel, workerThumbnailPreparation.visibleBitmapClipIds]);
   const workerEligibility = useMemo(() => getTimelineClipCanvasWorkerEligibility({
     clips: workerPaintClips,
     waveformsEnabled,
@@ -299,7 +303,7 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     timeToPixel,
     selectedClipIds,
     hoveredClipId,
-    trackColor,
+    trackColor: clipBodyColor,
     waveformsEnabled,
     audioDisplayMode,
     workerEligibility,
@@ -327,7 +331,7 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     timeToPixel,
     selectedClipIds,
     hoveredClipId,
-    trackColor,
+    trackColor: clipBodyColor,
     scrollX,
     scrollBucket,
     viewportWidth,
@@ -369,41 +373,59 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
         }}
         aria-hidden="true"
       >
-        {chromeOverlays.map((overlay) => (
-          <div
-            key={overlay.id}
-            className="timeline-clip-chrome"
-            style={{
-              left: overlay.left,
-              top: 1,
-              width: overlay.width,
-              height: Math.max(1, height - 2),
-            }}
-          >
-            {overlay.label && (
-              <span
-                className="timeline-clip-chrome-title"
-                style={{ right: Math.max(6, overlay.badgeReserve + 8) }}
-              >
-                {overlay.label}
-              </span>
-            )}
-            {overlay.badges.map((badge, index) => (
-              <span
-                key={`${badge.label}:${index}`}
-                className="timeline-clip-chrome-badge"
-                style={{
-                  right: badge.right,
-                  width: badge.width,
-                  backgroundColor: badge.fill,
-                  borderColor: badge.stroke ?? 'transparent',
-                }}
-              >
-                {badge.label}
-              </span>
-            ))}
-          </div>
-        ))}
+        {chromeOverlays.map((overlay) => {
+          const iconSize = Math.max(0, Math.min(
+            height - 10,
+            overlay.width - 8,
+            overlay.width - overlay.badgeReserve * 2 - 8,
+          ));
+          const showIcon = overlay.showIcon && iconSize >= 4;
+          return (
+            <div
+              key={overlay.id}
+              className="timeline-clip-chrome"
+              style={{
+                left: overlay.left,
+                top: 1,
+                width: overlay.width,
+                height: Math.max(1, height - 2),
+              }}
+            >
+              {showIcon && (
+                <span className="timeline-clip-type-icon" data-clip-type={overlay.iconType ?? 'file'}>
+                  <FileTypeIcon type={overlay.iconType} outline size={iconSize} />
+                </span>
+              )}
+              {overlay.label && (
+                <span
+                  className="timeline-clip-chrome-title"
+                  style={{
+                    right: Math.max(
+                      overlay.badgeReserve + 8,
+                      showIcon ? overlay.width / 2 + iconSize / 2 + 4 : 6,
+                    ),
+                  }}
+                >
+                  {overlay.label}
+                </span>
+              )}
+              {overlay.badges.map((badge, index) => (
+                <span
+                  key={`${badge.label}:${index}`}
+                  className="timeline-clip-chrome-badge"
+                  style={{
+                    right: badge.right,
+                    width: badge.width,
+                    backgroundColor: badge.fill,
+                    borderColor: badge.stroke ?? 'transparent',
+                  }}
+                >
+                  {badge.label}
+                </span>
+              ))}
+            </div>
+          );
+        })}
       </div>
     </>
   );

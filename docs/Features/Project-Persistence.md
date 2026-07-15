@@ -485,7 +485,7 @@ saveLayoutAsDefault()      // View -> Layouts; stores dock layout, timeline focu
 resetLayout()              // View -> Layouts
 ```
 
-The hardcoded factory layouts are `VIDEO EDIT` and `AUDIO EDIT`. `VIDEO EDIT` is the default
+The hardcoded factory layouts are `VIDEO EDIT`, `AUDIO EDIT`, and `3D EDIT`. `VIDEO EDIT` is the default
 layout with Media on the left, Preview in the center, Properties/Export/History on the right
 with Export active, and Timeline at the bottom. It stores balanced timeline focus with two
 visible 70 px video tracks and one visible 48 px compact audio track, and first empty loads

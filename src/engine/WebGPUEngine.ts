@@ -196,6 +196,7 @@ export class WebGPUEngine {
 
   /** Remove a canvas from the unified target map */
   unregisterTargetCanvas(targetId: string): void {
+    this.renderDispatcher?.releasePreviewTarget(targetId);
     this.targetCanvases.delete(targetId);
     log.debug('Unregistered target canvas', { targetId });
   }

@@ -361,6 +361,31 @@ export class TargetPreviewLayerCollector {
           layerData.push({ layer, isVideo: false, externalTexture: null, textureView: d.textureManager!.getImageView(texture), sourceWidth: canvas.width, sourceHeight: canvas.height });
         }
       }
+      if (layer.source.nestedComposition && !layer.source.imageElement) {
+        layerData.push({
+          layer,
+          isVideo: false,
+          externalTexture: null,
+          textureView: null,
+          sourceWidth: layer.source.nestedComposition.width,
+          sourceHeight: layer.source.nestedComposition.height,
+        });
+      }
+      if (
+        layer.source.type === 'model' ||
+        layer.source.type === 'light' ||
+        layer.source.type === 'gaussian-avatar' ||
+        layer.source.type === 'gaussian-splat'
+      ) {
+        layerData.push({
+          layer,
+          isVideo: false,
+          externalTexture: null,
+          textureView: null,
+          sourceWidth: 0,
+          sourceHeight: 0,
+        });
+      }
       if (layer.source.type === 'motion') {
         const size = getMotionRenderSize(layer.source.motion);
         layerData.push({

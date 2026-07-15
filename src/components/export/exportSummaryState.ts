@@ -79,8 +79,6 @@ export interface ExportSummaryStateArgs {
   currentCodecLabel: string;
   outputHeight: number;
   showFFmpegQualityControl: boolean;
-  estimatedSizeLabel: string;
-  sizeLabelPrefix: string;
 }
 
 export function buildSummaryBadges(args: ExportSummaryStateArgs): ExportSummaryBadge[] {
@@ -103,8 +101,6 @@ export function buildSummaryBadges(args: ExportSummaryStateArgs): ExportSummaryB
     return [
       { label: args.exportModeLabel, target: 'basic-container' },
       { label: args.currentContainerLabel, target: 'basic-container' },
-      { label: `${input.composition?.width ?? args.actualWidth}x${input.composition?.height ?? args.actualHeight}`, target: 'basic-output' },
-      { label: `${input.composition?.frameRate ?? args.actualFps} fps`, target: 'basic-output' },
       { label: input.includeAudio ? 'With audio refs' : 'No audio refs', target: 'audio-section' },
     ];
   }
@@ -119,7 +115,7 @@ export function buildSummaryBadges(args: ExportSummaryStateArgs): ExportSummaryB
         label: args.isImageSequenceMode
           ? `${args.imageSequenceFrameCount} frames`
           : `Frame ${formatExportTime(input.playheadPosition)}`,
-        target: args.isImageSequenceMode ? 'image-range' : 'image-section',
+        target: 'image-range',
       },
       ...(args.isImageSequenceMode ? [{
         label: `${args.actualFps} fps`,
@@ -137,59 +133,53 @@ export function buildSummaryBadges(args: ExportSummaryStateArgs): ExportSummaryB
     ];
   }
 
+  if (args.isAudioOnlyMode && !input.includeAudio) {
+    return [{ label: args.exportModeLabel, target: 'audio-section' }];
+  }
+
   return [
-    {
+    ...(args.isVideoMode && args.effectiveIncludeAudio ? [] : [{
       label: args.exportModeLabel,
-      target: args.isVideoMode ? 'video-section' : 'audio-section',
-    },
+      target: args.isVideoMode ? 'video-section' as const : 'basic-container' as const,
+    }]),
     {
       label: args.isVideoMode ? args.methodTitle : `Audio ${args.currentAudioCodecLabel}`,
-      target: args.isVideoMode ? 'video-section' : 'audio-format',
+      target: args.isVideoMode ? 'basic-workflow' : 'audio-format',
     },
     ...(args.isVideoMode ? [
       { label: args.currentContainerLabel, target: 'basic-container' as const },
       { label: args.currentCodecLabel, target: 'video-codec' as const },
       { label: `${args.actualWidth}x${args.outputHeight}`, target: 'video-resolution' as const },
       { label: `${args.actualFps} fps`, target: 'video-fps' as const },
-      {
-        label: args.isGifMode
-          ? `${input.gifColors} colors`
-          : input.encoder === 'ffmpeg'
-            ? (args.showFFmpegQualityControl ? `MJPEG Q${input.ffmpegQuality}` : args.currentCodecLabel)
-            : `${(input.bitrate / 1_000_000).toFixed(1)} Mbps`,
-        target: args.isGifMode
-          ? 'gif-palette' as const
-          : input.encoder === 'ffmpeg' && !args.showFFmpegQualityControl ? 'video-codec' as const : 'video-rate' as const,
-      },
+      ...(args.isGifMode
+        ? [{ label: `${input.gifColors} colors`, target: 'gif-palette' as const }]
+        : input.encoder === 'ffmpeg'
+          ? (args.showFFmpegQualityControl
+              ? [{ label: `MJPEG Q${input.ffmpegQuality}`, target: 'video-rate' as const }]
+              : [])
+          : [{ label: `${(input.bitrate / 1_000_000).toFixed(1)} Mbps`, target: 'video-rate' as const }]),
       ...(args.isGifMode ? [{
         label: input.gifLoop === 'count' ? `${input.gifLoopCount} loops` : input.gifLoop,
         target: 'gif-palette' as const,
       }, {
         label: input.gifTransparency ? 'Transparent' : 'Opaque',
-        target: 'video-alpha' as const,
+        target: 'gif-palette' as const,
       }] : []),
     ] : []),
     ...audioSummaryBadges,
     {
       label: `Range ${formatExportTime(input.durationStartTime)} - ${formatExportTime(input.durationEndTime)}`,
-      target: args.isVideoMode ? (args.isGifMode ? 'gif-palette' : 'video-alpha') : 'audio-processing',
+      target: args.isVideoMode ? 'video-alpha' : 'audio-processing',
     },
     {
       label: `Duration ${formatExportTime(input.durationEndTime - input.durationStartTime)}`,
-      target: args.isVideoMode ? (args.isGifMode ? 'gif-palette' : 'video-alpha') : 'audio-processing',
+      target: args.isVideoMode ? 'video-alpha' : 'audio-processing',
     },
     ...(input.stackedAlpha && args.isVideoMode && !args.isGifMode ? [{
       label: 'Stacked alpha',
       target: 'video-alpha' as const,
       warning: true,
     }] : []),
-    {
-      label: `${args.sizeLabelPrefix} ${args.estimatedSizeLabel}`,
-      target: args.isVideoMode
-        ? (args.isGifMode ? 'gif-palette' : args.showFFmpegQualityControl ? 'video-rate' : 'video-codec')
-        : 'audio-quality',
-      warning: true,
-    },
   ];
 }
 

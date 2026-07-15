@@ -37,26 +37,31 @@ describe('timeline tool components', () => {
   it('activates the root tool button on a normal click', () => {
     const onActivate = vi.fn();
     const onOpen = vi.fn();
+    const onParentMouseDown = vi.fn();
 
     render(
-      <TimelineToolButton
-        groupId="selection"
-        label="Selection"
-        title="Selection tools"
-        active={false}
-        open={false}
-        icon={TestIcon}
-        onActivate={onActivate}
-        onOpen={onOpen}
-      />,
+      <div onMouseDown={onParentMouseDown}>
+        <TimelineToolButton
+          groupId="selection"
+          label="Selection"
+          title="Selection tools"
+          active={false}
+          open={false}
+          icon={TestIcon}
+          onActivate={onActivate}
+          onOpen={onOpen}
+        />
+      </div>,
     );
 
     const button = screen.getByRole('button', { name: 'Selection' });
+    fireEvent.mouseDown(button);
     fireEvent.pointerDown(button, { button: 0, clientX: 10, clientY: 10 });
     fireEvent.pointerUp(button, { button: 0, clientX: 10, clientY: 10 });
 
     expect(onActivate).toHaveBeenCalledWith('selection');
     expect(onOpen).not.toHaveBeenCalled();
+    expect(onParentMouseDown).not.toHaveBeenCalled();
   });
 
   it('opens the flyout on long press or right-click, and activates on release back on the button', () => {
@@ -103,19 +108,22 @@ describe('timeline tool components', () => {
 
   it('shows active flyout state, shortcut labels, and blocks disabled commands', () => {
     const onSelect = vi.fn();
+    const onParentMouseDown = vi.fn();
 
     render(
-      <TimelineToolFlyout
-        anchorRect={createRect()}
-        activeToolId="select"
-        tools={[
-          TIMELINE_TOOL_DEFINITION_BY_ID.select,
-          TIMELINE_TOOL_DEFINITION_BY_ID.insert,
-        ]}
-        isExporting={false}
-        onSelect={onSelect}
-        onClose={vi.fn()}
-      />,
+      <div onMouseDown={onParentMouseDown}>
+        <TimelineToolFlyout
+          anchorRect={createRect()}
+          activeToolId="select"
+          tools={[
+            TIMELINE_TOOL_DEFINITION_BY_ID.select,
+            TIMELINE_TOOL_DEFINITION_BY_ID.insert,
+          ]}
+          isExporting={false}
+          onSelect={onSelect}
+          onClose={vi.fn()}
+        />
+      </div>,
     );
 
     const selectItem = screen.getByRole('menuitem', { name: /Select \/ Move/i });
@@ -124,6 +132,8 @@ describe('timeline tool components', () => {
     expect(selectItem).toHaveClass('active');
     expect(screen.getByText('V')).toBeInTheDocument();
     expect(insertItem).toBeDisabled();
+    fireEvent.mouseDown(selectItem);
+    expect(onParentMouseDown).not.toHaveBeenCalled();
 
     fireEvent.click(insertItem);
     expect(onSelect).not.toHaveBeenCalled();

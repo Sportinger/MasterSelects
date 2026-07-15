@@ -3,9 +3,11 @@ import type { ExportSummaryBadge, ExportSummaryTarget } from '../exportSummarySt
 import type { EncoderType } from '../useExportState';
 
 interface ExportSummaryBadgesSectionProps {
+  showCompositionSync: boolean;
   sameAsComposition: boolean;
   summaryBadges: ExportSummaryBadge[];
   primaryExportLabel: string;
+  estimatedSizeLabel: string;
   exportDisabled: boolean;
   onPrimaryExport: () => void;
   onSyncComposition: () => void;
@@ -13,9 +15,11 @@ interface ExportSummaryBadgesSectionProps {
 }
 
 export function ExportSummaryBadgesSection({
+  showCompositionSync,
   sameAsComposition,
   summaryBadges,
   primaryExportLabel,
+  estimatedSizeLabel,
   exportDisabled,
   onPrimaryExport,
   onSyncComposition,
@@ -25,32 +29,41 @@ export function ExportSummaryBadgesSection({
     <section className="export-hero-card export-summary-sticky export-summary-badges">
       <div className="export-summary-actions">
         <div className="export-pill-row">
-          <button
-            type="button"
-            className={`export-pill export-pill-${sameAsComposition ? 'sac' : 'nac'}`}
-            onClick={onSyncComposition}
-            title={sameAsComposition ? 'Same as composition' : 'Use composition resolution and frame rate'}
-          >
-            {sameAsComposition ? 'SaC' : 'NaC'}
-          </button>
+          {showCompositionSync && (
+            <button
+              type="button"
+              className={`export-pill export-pill-${sameAsComposition ? 'sac' : 'nac'}`}
+              onClick={onSyncComposition}
+              aria-label={sameAsComposition ? 'Same as composition' : 'Use composition resolution and frame rate'}
+              title={sameAsComposition ? 'Same as composition' : 'Use composition resolution and frame rate'}
+            >
+              {sameAsComposition ? 'SaC' : 'NaC'}
+            </button>
+          )}
           {summaryBadges.map((badge) => (
             <button
               key={`${badge.target}-${badge.label}`}
               type="button"
               className={`export-pill${badge.warning ? ' export-pill-warning' : ''}`}
               onClick={() => onScrollToSummaryTarget(badge.target)}
+              title={`Show ${badge.label} settings`}
             >
               {badge.label}
             </button>
           ))}
+          <button
+            type="button"
+            className="export-pill export-summary-cta"
+            onClick={onPrimaryExport}
+            disabled={exportDisabled}
+            title={`${primaryExportLabel}${estimatedSizeLabel.startsWith('~') ? ` ${estimatedSizeLabel}` : ''}`}
+          >
+            <span>{primaryExportLabel}</span>
+            {estimatedSizeLabel.startsWith('~') && (
+              <span className="export-summary-cta-size">{estimatedSizeLabel}</span>
+            )}
+          </button>
         </div>
-        <button
-          className="btn export-start-btn export-summary-cta"
-          onClick={onPrimaryExport}
-          disabled={exportDisabled}
-        >
-          {primaryExportLabel}
-        </button>
       </div>
     </section>
   );

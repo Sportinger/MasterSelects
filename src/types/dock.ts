@@ -34,6 +34,8 @@ export interface PreviewPanelData {
   source?: PreviewPanelSource;
   compositionId?: string | null; // legacy: null = active composition
   showTransparencyGrid?: boolean; // per-tab transparency grid toggle (default false)
+  initialEditMode?: boolean;
+  initialEditCameraView?: 'camera' | 'front' | 'side' | 'top';
 }
 
 export interface MultiPreviewSlotData {

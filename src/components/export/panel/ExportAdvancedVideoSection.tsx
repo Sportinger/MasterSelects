@@ -39,6 +39,8 @@ export function ExportAdvancedVideoSection({
   options,
   actions,
 }: ExportAdvancedVideoSectionProps) {
+  const isPortrait = video.actualHeight > video.actualWidth;
+
   return (
     <div className="export-section export-advanced-section">
       <div className="export-section-header">Advanced Video</div>
@@ -157,13 +159,14 @@ export function ExportAdvancedVideoSection({
         <label>Resolution</label>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <select
-            value={video.useCustomResolution ? 'custom' : `${video.width}x${video.height}`}
+            value={video.useCustomResolution ? 'custom' : `${Math.max(video.width, video.height)}x${Math.min(video.width, video.height)}`}
             onChange={(e) => {
               if (e.target.value === 'custom') {
                 actions.setUseCustomResolution(true);
               } else {
                 actions.setUseCustomResolution(false);
-                actions.handleResolutionChange(e.target.value);
+                const [nextWidth, nextHeight] = e.target.value.split('x');
+                actions.handleResolutionChange(isPortrait ? `${nextHeight}x${nextWidth}` : e.target.value);
               }
             }}
             disabled={video.useCustomResolution}

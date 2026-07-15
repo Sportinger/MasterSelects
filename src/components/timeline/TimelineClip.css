@@ -292,6 +292,17 @@
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
 }
 
+.timeline-clip-type-icon {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.88);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
+  transform: translate(-50%, -50%);
+}
+
 .timeline-clip-chrome-badge {
   position: absolute;
   top: 4px;

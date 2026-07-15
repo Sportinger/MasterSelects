@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  FACTORY_3D_EDIT_LAYOUT_ID,
   FACTORY_AUDIO_EDIT_LAYOUT_ID,
   FACTORY_VIDEO_EDIT_LAYOUT_ID,
   getFactoryDockLayouts,
@@ -300,10 +301,45 @@ describe('dock store saved layouts', () => {
     expect(timeline.tracks.find((track) => track.type === 'audio')?.height).toBe(96);
   });
 
-  it('keeps the built-in video and audio layouts as default favorites', () => {
+  it('loads the hardcoded 3D editing layout with four independent edit views', () => {
+    useDockStore.getState().loadSavedLayout(FACTORY_3D_EDIT_LAYOUT_ID);
+
+    const layout = useDockStore.getState().layout;
+    expect(layout.root).toMatchObject({ kind: 'split', direction: 'horizontal', ratio: 0.77 });
+    if (layout.root.kind !== 'split') return;
+
+    const workspace = layout.root.children[0];
+    const sidebar = layout.root.children[1];
+    expect(workspace).toMatchObject({ kind: 'split', direction: 'vertical', ratio: 0.74 });
+    expect(sidebar).toMatchObject({ kind: 'split', direction: 'vertical', ratio: 0.62 });
+    if (workspace.kind !== 'split' || sidebar.kind !== 'split') return;
+
+    expect(panelTypes(findTabGroup(workspace, 'timeline-group'))).toEqual(['timeline']);
+    expect(panelTypes(findTabGroup(sidebar, 'left-group'))).toEqual(['media']);
+    expect(panelTypes(findTabGroup(sidebar, 'right-group'))).toEqual(['clip-properties', 'export', 'history']);
+
+    const previewPanels = ['front', 'side', 'top', 'perspective'].map((view) => (
+      findTabGroup(workspace, `3d-edit-${view}-group`)?.panels[0]
+    ));
+    expect(previewPanels.map((panel) => panel?.id)).toEqual([
+      '3d-preview-front',
+      '3d-preview-side',
+      '3d-preview-top',
+      '3d-preview-perspective',
+    ]);
+    expect(previewPanels.map((panel) => panel?.data)).toEqual([
+      { initialEditMode: true, initialEditCameraView: 'front' },
+      { initialEditMode: true, initialEditCameraView: 'side' },
+      { initialEditMode: true, initialEditCameraView: 'top' },
+      { initialEditMode: true, initialEditCameraView: 'camera' },
+    ]);
+  });
+
+  it('keeps the built-in video, audio, and 3D layouts as default favorites', () => {
     const savedLayouts = useDockStore.getState().savedLayouts;
     const videoLayout = savedLayouts.find((layout) => layout.id === FACTORY_VIDEO_EDIT_LAYOUT_ID);
     const audioLayout = savedLayouts.find((layout) => layout.id === FACTORY_AUDIO_EDIT_LAYOUT_ID);
+    const threeDLayout = savedLayouts.find((layout) => layout.id === FACTORY_3D_EDIT_LAYOUT_ID);
 
     expect(videoLayout).toMatchObject({
       name: 'VIDEO EDIT',
@@ -312,6 +348,11 @@ describe('dock store saved layouts', () => {
     });
     expect(audioLayout).toMatchObject({
       name: 'AUDIO EDIT',
+      favorite: true,
+      factory: true,
+    });
+    expect(threeDLayout).toMatchObject({
+      name: '3D EDIT',
       favorite: true,
       factory: true,
     });

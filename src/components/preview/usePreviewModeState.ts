@@ -1,6 +1,5 @@
 import { useEffect, useMemo } from 'react';
 
-import { renderHostPort } from '../../services/render/renderHostPort';
 import type { Layer } from '../../types/layers';
 import type { TextBoundsPath } from '../../types/masks';
 import type { TimelineClip, TimelineTrack } from '../../types/timeline';
@@ -19,7 +18,6 @@ interface UsePreviewModeStateOptions {
   editMode: boolean;
   getInterpolatedTextBounds: (clipId: string, clipLocalTime: number) => TextBoundsPath | undefined;
   isEditableSource: boolean;
-  isEngineReady: boolean;
   isPlaying: boolean;
   layers: Layer[];
   maskPanelActive: boolean;
@@ -28,12 +26,9 @@ interface UsePreviewModeStateOptions {
   sceneObjectOverlayEnabled: boolean;
   sceneNavFpsMode: boolean;
   selectedClipId: string | null;
-  selectedClipIds: Set<string>;
   selectedLayerId: string | null;
   selectLayer: (id: string) => void;
   setEditMode: (value: boolean) => void;
-  setSceneGizmoClipIdOverride: (clipId: string | null) => void;
-  setSceneGizmoVisible: (visible: boolean) => void;
   setTextTyping: (value: boolean) => void;
   sourceMonitorActive: boolean;
   textTyping: boolean;
@@ -114,7 +109,6 @@ export function usePreviewModeState({
   editMode,
   getInterpolatedTextBounds,
   isEditableSource,
-  isEngineReady,
   isPlaying,
   layers,
   maskPanelActive,
@@ -123,12 +117,9 @@ export function usePreviewModeState({
   sceneObjectOverlayEnabled,
   sceneNavFpsMode,
   selectedClipId,
-  selectedClipIds,
   selectedLayerId,
   selectLayer,
   setEditMode,
-  setSceneGizmoClipIdOverride,
-  setSceneGizmoVisible,
   setTextTyping,
   sourceMonitorActive,
   textTyping,
@@ -179,11 +170,6 @@ export function usePreviewModeState({
   const layerTransformMode = layerEditMode && !maskNavigationMode && (!textClipEditMode || !textTypingActive);
   const freeCanvasNavigationMode = layerTransformMode || maskNavigationMode || textClipEditMode;
   const effectiveSceneNavFpsMode = sceneNavFpsMode && !editCameraModeActive;
-  const editCameraClipSelected = Boolean(
-    editCameraModeActive &&
-    activeCameraClipAtPlayhead &&
-    selectedClipIds.has(activeCameraClipAtPlayhead.id),
-  );
   const activeEditCameraOrthoFrame =
     editCameraOrthoMode &&
     activeCameraClipAtPlayhead &&
@@ -210,49 +196,10 @@ export function usePreviewModeState({
       : selectedClipId;
 
   useEffect(() => {
-    return () => {
-      setSceneGizmoVisible(true);
-    };
-  }, [setSceneGizmoVisible]);
-
-  useEffect(() => {
-    setSceneGizmoVisible(sceneObjectOverlayEnabled && activeSharedSceneOverlayContent && isEditableSource && !sourceMonitorActive);
-    if (isEngineReady) {
-      renderHostPort.requestRender();
-    }
-  }, [
-    activeSharedSceneOverlayContent,
-    isEditableSource,
-    isEngineReady,
-    sceneObjectOverlayEnabled,
-    setSceneGizmoVisible,
-    sourceMonitorActive,
-  ]);
-
-  useEffect(() => {
     if (!isEditableSource) {
       setEditMode(false);
     }
   }, [isEditableSource, setEditMode]);
-
-  useEffect(() => {
-    let overrideClipId: string | null = null;
-    if (editCameraModeActive && selectedClipId && selectedClipId !== activeCameraClipAtPlayhead?.id) {
-      overrideClipId = selectedClipId;
-    } else if (editCameraClipSelected) {
-      overrideClipId = activeCameraClipAtPlayhead?.id ?? null;
-    }
-    setSceneGizmoClipIdOverride(overrideClipId);
-    return () => {
-      setSceneGizmoClipIdOverride(null);
-    };
-  }, [
-    activeCameraClipAtPlayhead?.id,
-    editCameraClipSelected,
-    editCameraModeActive,
-    selectedClipId,
-    setSceneGizmoClipIdOverride,
-  ]);
 
   useEffect(() => {
     if (!selectedClipId || !layerEditMode) return;

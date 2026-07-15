@@ -10,6 +10,20 @@ export interface TimelineClipCanvasCompositionSegmentInput {
   thumbnails?: readonly string[];
 }
 
+export function getTimelineClipCanvasCompositionThumbnailSlotUrls(
+  thumbnails: readonly string[],
+  segmentWidth: number,
+  thumbnailSlotPx: number,
+  maxThumbnailSlots: number,
+): readonly string[] {
+  if (thumbnails.length === 0) return [];
+  const count = Math.max(1, Math.min(maxThumbnailSlots, Math.ceil(segmentWidth / thumbnailSlotPx)));
+  return Array.from({ length: count }, (_, index) => thumbnails[Math.min(
+    thumbnails.length - 1,
+    Math.floor((index / count) * thumbnails.length),
+  )]);
+}
+
 export interface TimelineClipCanvasCompositionResourceClipInput {
   isComposition?: boolean;
   compositionId?: string;
@@ -134,17 +148,16 @@ function createTimelineClipCanvasWorkerCompositionSegmentThumbnailStripResource(
 
     const thumbnails = segment.thumbnails ?? [];
     if (thumbnails.length > 0) {
-      const count = Math.max(
-        1,
-        Math.min(input.maxThumbnailSlots, Math.ceil((segmentW / bitmapWidth * clipWidth) / input.thumbnailSlotPx)),
+      const urls = getTimelineClipCanvasCompositionThumbnailSlotUrls(
+        thumbnails,
+        segmentW / bitmapWidth * clipWidth,
+        input.thumbnailSlotPx,
+        input.maxThumbnailSlots,
       );
+      const count = urls.length;
       const slotW = segmentW / count;
       for (let index = 0; index < count; index += 1) {
-        const thumbIndex = Math.min(
-          thumbnails.length - 1,
-          Math.floor((index / count) * thumbnails.length),
-        );
-        const bitmap = getThumbnailBitmap(thumbnails[thumbIndex]);
+        const bitmap = getThumbnailBitmap(urls[index]);
         if (!bitmap) continue;
         drawCover(ctx, bitmap, segmentX + index * slotW, 0, slotW, bitmapHeight);
         drawCount += 1;

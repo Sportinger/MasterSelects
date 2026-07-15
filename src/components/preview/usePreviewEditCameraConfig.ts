@@ -21,13 +21,14 @@ import {
 const DEFAULT_EDIT_CAMERA_FOCAL_LENGTH_MM = 35;
 
 export const EDIT_CAMERA_BLEND_MS = 320;
+export const EDIT_CAMERA_PIVOT_BLEND_MS = 200;
 export const DEFAULT_EDIT_CAMERA_SETTINGS: SceneCameraSettings = {
   ...DEFAULT_SCENE_CAMERA_SETTINGS,
   fov: fullFrameFocalLengthMmToFov(DEFAULT_EDIT_CAMERA_FOCAL_LENGTH_MM),
 };
 
 export const EDIT_CAMERA_VIEW_LABELS: Record<EditCameraViewMode, string> = {
-  camera: 'Camera',
+  camera: 'Perspective',
   front: 'Front',
   side: 'Side',
   top: 'Top',
@@ -57,6 +58,42 @@ export function cloneClipTransform(transform: ClipTransform): ClipTransform {
     position: { ...transform.position },
     scale: { ...transform.scale },
     rotation: { ...transform.rotation },
+  };
+}
+
+export function createDefaultEditorCameraTransform(
+  sceneCamera: SceneCameraConfig,
+  baseTransform: ClipTransform,
+): ClipTransform {
+  const sceneDistance = Math.hypot(
+    sceneCamera.position.x - sceneCamera.target.x,
+    sceneCamera.position.y - sceneCamera.target.y,
+    sceneCamera.position.z - sceneCamera.target.z,
+  );
+  const distance = Math.max(
+    getSharedSceneDefaultCameraDistance(DEFAULT_EDIT_CAMERA_SETTINGS.fov),
+    sceneDistance * 0.75,
+  );
+  const diagonalLength = Math.hypot(1, 0.65, 1);
+  const position = {
+    x: sceneCamera.position.x + distance / diagonalLength,
+    y: sceneCamera.position.y + distance * 0.65 / diagonalLength,
+    z: sceneCamera.position.z + distance / diagonalLength,
+  };
+  const forward = {
+    x: (sceneCamera.position.x - position.x) / distance,
+    y: (sceneCamera.position.y - position.y) / distance,
+    z: (sceneCamera.position.z - position.z) / distance,
+  };
+
+  return {
+    ...cloneClipTransform(baseTransform),
+    position,
+    rotation: {
+      x: Math.asin(-forward.y) * 180 / Math.PI,
+      y: Math.atan2(-forward.x, -forward.z) * 180 / Math.PI,
+      z: 0,
+    },
   };
 }
 

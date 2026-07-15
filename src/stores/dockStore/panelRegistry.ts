@@ -35,10 +35,16 @@ export function getPanelConfig(type: PanelType): PanelConfig {
 }
 export const FACTORY_VIDEO_EDIT_LAYOUT_ID = 'factory-video-edit';
 export const FACTORY_AUDIO_EDIT_LAYOUT_ID = 'factory-audio-edit';
-export const FACTORY_DOCK_LAYOUT_IDS = new Set([FACTORY_VIDEO_EDIT_LAYOUT_ID, FACTORY_AUDIO_EDIT_LAYOUT_ID]);
+export const FACTORY_3D_EDIT_LAYOUT_ID = 'factory-3d-edit';
+export const FACTORY_DOCK_LAYOUT_IDS = new Set([
+  FACTORY_VIDEO_EDIT_LAYOUT_ID,
+  FACTORY_AUDIO_EDIT_LAYOUT_ID,
+  FACTORY_3D_EDIT_LAYOUT_ID,
+]);
 export const FACTORY_DOCK_LAYOUT_NAMES = new Map<string, string>([
   [FACTORY_VIDEO_EDIT_LAYOUT_ID, 'VIDEO EDIT'],
   [FACTORY_AUDIO_EDIT_LAYOUT_ID, 'AUDIO EDIT'],
+  [FACTORY_3D_EDIT_LAYOUT_ID, '3D EDIT'],
 ]);
 export const FACTORY_DOCK_LAYOUT_NAME_TO_ID = new Map<string, string>(
   Array.from(FACTORY_DOCK_LAYOUT_NAMES.entries()).map(([id, name]) => [name.toLowerCase(), id]),

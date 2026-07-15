@@ -43,6 +43,9 @@ getTrackChildren()  // Query child tracks
   above `TimelineClipCanvas`, clamped to the visible clip span while
   scrolling/zooming. The canvas still owns clip bodies, thumbnails, waveforms,
   spectrograms, and passive analysis/progress visuals.
+- When no thumbnail bitmap is available, clip chrome centers a height-scaled
+  white outline pictogram in the currently visible clip span. Hidden track
+  colors fall back to neutral gray, so every visible clip remains identifiable.
 - A single resolver, `getTimelineTrackColor()` (`src/components/timeline/trackColor.ts`),
   is the source of truth for a track's color. Precedence: a user-picked
   **label color** wins; otherwise a **per-type default** applies; otherwise the
@@ -123,6 +126,7 @@ getTrackChildren()  // Query child tracks
 ### Camera and Splat Effector
 - Camera clips and splat-effector clips are first-class clip types in the store and copy/paste flow.
 - Camera/native-gaussian clips expose camera-oriented property labels in the keyframe UI.
+- New and reset camera clips start at Z = 1 so their eye is outside the scene origin.
 
 ### YouTube Download
 - Pending download clips are represented in the timeline while the download is in progress.
