@@ -3,6 +3,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 const API_BASE = 'https://api.cloudflare.com/client/v4';
 const CREDIT_CLAIM_HASH_CONTEXT = 'masterselects:credit-claim:v1:';
+const WEBSITE_FREE_CREDIT_CAMPAIGN = 'website-free-credit';
 const DEFAULT_DATABASE_ID = 'a2f0a1aa-6bd9-4c75-9406-d09b93635eac';
 const DEFAULT_URL_BASE = 'https://www.masterselects.com';
 const MAX_CLAIM_AMOUNT = 1_000_000;
@@ -10,17 +11,19 @@ const MAX_CLAIM_AMOUNT = 1_000_000;
 function usage() {
   console.log(`Usage:
   npm run credits:create-claim -- --amount 3000 --email user@example.com --description "3 reported issues"
+  npm run credits:create-claim -- --arm-website-offer
 
 Options:
-  --amount <credits>       Required. Positive integer credit amount.
-  --email <address>        Locks the claim to this verified account email.
-  --unlocked               Allow any verified account to redeem the link.
+  --amount <credits>       Required for links. Positive integer credit amount.
+  --email <address>        Locks the claim link to this verified account email.
+  --unlocked               Allow any verified account to redeem the claim link.
+  --arm-website-offer      Let the next eligible website visitor receive the one-hour gift.
   --title <text>           Claim page title. Default: "MasterSelects credit reward".
   --description <text>     Claim page description.
   --expires-days <days>    Expiration window. Default: 30. Use 0 for no expiry.
   --created-by <name>      Audit label. Default: cloudflare-admin.
   --url-base <url>         Public app URL. Default: ${DEFAULT_URL_BASE}.
-  --dry-run                Print the claim without writing D1.
+  --dry-run                Print without writing D1.
 
 Environment:
   CLOUDFLARE_API_TOKEN     Required unless --dry-run.
@@ -33,22 +36,16 @@ function parseArgs(argv) {
 
   for (let index = 0; index < argv.length; index += 1) {
     const entry = argv[index];
-
-    if (!entry.startsWith('--')) {
-      continue;
-    }
+    if (!entry.startsWith('--')) continue;
 
     const key = entry.slice(2);
-    if (key === 'dry-run' || key === 'help' || key === 'unlocked') {
+    if (key === 'arm-website-offer' || key === 'dry-run' || key === 'help' || key === 'unlocked') {
       args[key] = true;
       continue;
     }
 
     const value = argv[index + 1];
-    if (!value || value.startsWith('--')) {
-      throw new Error(`Missing value for --${key}`);
-    }
-
+    if (!value || value.startsWith('--')) throw new Error(`Missing value for --${key}`);
     args[key] = value;
     index += 1;
   }
@@ -69,7 +66,6 @@ function asPositiveInteger(value, name) {
   if (!Number.isInteger(amount) || amount <= 0 || amount > MAX_CLAIM_AMOUNT) {
     throw new Error(`${name} must be an integer between 1 and ${MAX_CLAIM_AMOUNT}.`);
   }
-
   return amount;
 }
 
@@ -78,7 +74,6 @@ function asNonNegativeInteger(value, name) {
   if (!Number.isInteger(amount) || amount < 0) {
     throw new Error(`${name} must be a non-negative integer.`);
   }
-
   return amount;
 }
 
@@ -92,9 +87,7 @@ function hashCode(code) {
 
 async function cloudflareRequest(path, options = {}) {
   const token = process.env.CLOUDFLARE_API_TOKEN;
-  if (!token) {
-    throw new Error('CLOUDFLARE_API_TOKEN is required.');
-  }
+  if (!token) throw new Error('CLOUDFLARE_API_TOKEN is required.');
 
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -105,27 +98,45 @@ async function cloudflareRequest(path, options = {}) {
     },
   });
   const payload = await response.json();
-
   if (!response.ok || !payload.success) {
     const message = payload.errors?.map((error) => error.message).join('; ') || `Cloudflare request failed (${response.status})`;
     throw new Error(message);
   }
-
   return payload.result;
 }
 
 async function resolveAccountId() {
-  if (process.env.CLOUDFLARE_ACCOUNT_ID) {
-    return process.env.CLOUDFLARE_ACCOUNT_ID;
-  }
-
+  if (process.env.CLOUDFLARE_ACCOUNT_ID) return process.env.CLOUDFLARE_ACCOUNT_ID;
   const accounts = await cloudflareRequest('/accounts');
   const accountId = accounts?.[0]?.id;
-  if (!accountId) {
-    throw new Error('No Cloudflare account was returned for this token.');
-  }
-
+  if (!accountId) throw new Error('No Cloudflare account was returned for this token.');
   return accountId;
+}
+
+async function queryD1(sql, params = []) {
+  const accountId = await resolveAccountId();
+  const databaseId = process.env.CLOUDFLARE_D1_DATABASE_ID || DEFAULT_DATABASE_ID;
+  return cloudflareRequest(`/accounts/${accountId}/d1/database/${databaseId}/query`, {
+    body: JSON.stringify({ params, sql }),
+    method: 'POST',
+  });
+}
+
+async function armWebsiteOffer() {
+  const now = new Date().toISOString();
+  await queryD1(
+    `
+      INSERT INTO credit_claim_campaigns (id, is_armed, claimed_claim_id, active_claim_id, updated_at)
+      VALUES (?, 1, NULL, NULL, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        is_armed = 1,
+        claimed_claim_id = NULL,
+        active_claim_id = NULL,
+        updated_at = excluded.updated_at
+    `,
+    [WEBSITE_FREE_CREDIT_CAMPAIGN, now],
+  );
+  console.log(JSON.stringify({ armed: true, campaign: WEBSITE_FREE_CREDIT_CAMPAIGN, amount: 3000, duration: '1 hour' }, null, 2));
 }
 
 async function insertClaim(claim) {
@@ -133,15 +144,7 @@ async function insertClaim(claim) {
   const databaseId = process.env.CLOUDFLARE_D1_DATABASE_ID || DEFAULT_DATABASE_ID;
   const sql = `
     INSERT INTO credit_claims (
-      id,
-      token_hash,
-      amount,
-      title,
-      description,
-      expected_email,
-      expires_at,
-      created_by,
-      metadata_json
+      id, token_hash, amount, title, description, expected_email, expires_at, created_by, metadata_json
     )
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
@@ -180,15 +183,19 @@ function printClaim(claim) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (args.help) return usage();
 
-  if (args.help) {
-    usage();
+  if (args['arm-website-offer']) {
+    if (args['dry-run']) {
+      console.log(JSON.stringify({ armed: false, campaign: WEBSITE_FREE_CREDIT_CAMPAIGN, dryRun: true }, null, 2));
+      return;
+    }
+    await armWebsiteOffer();
     return;
   }
 
   const amount = asPositiveInteger(args.amount, '--amount');
   const email = normalizeEmail(args.email);
-
   if (!args.unlocked && !isValidEmail(email)) {
     throw new Error('--email is required unless --unlocked is set.');
   }
@@ -215,10 +222,7 @@ async function main() {
     tokenHash: hashCode(code),
   };
 
-  if (!args['dry-run']) {
-    await insertClaim(claim);
-  }
-
+  if (!args['dry-run']) await insertClaim(claim);
   printClaim(claim);
 }
 

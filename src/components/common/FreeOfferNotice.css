@@ -1,0 +1,254 @@
+@layer overlays {
+.free-offer-notice {
+  align-items: center;
+  animation: free-offer-notice-enter 420ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+  backdrop-filter: blur(22px) saturate(140%);
+  background:
+    radial-gradient(circle at 10% 15%, rgba(61, 202, 255, 0.28), transparent 31%),
+    radial-gradient(circle at 90% 0%, rgba(255, 188, 82, 0.24), transparent 34%),
+    linear-gradient(135deg, rgba(18, 16, 43, 0.98), rgba(45, 20, 50, 0.98) 54%, rgba(18, 39, 45, 0.98));
+  border: 1px solid rgba(186, 170, 255, 0.42);
+  border-radius: 20px;
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.46),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+    0 0 42px rgba(110, 76, 255, 0.16);
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 68px minmax(0, 1fr) auto;
+  left: 50%;
+  max-width: calc(100vw - 32px);
+  min-height: 142px;
+  overflow: hidden;
+  padding: 18px 52px 18px 18px;
+  position: fixed;
+  top: 20px;
+  transform: translateX(-50%);
+  width: min(620px, calc(100vw - 32px));
+  z-index: calc(var(--z-overlay) + 2);
+}
+
+.free-offer-notice::before {
+  background: linear-gradient(90deg, #55ddff, #9b79ff 42%, #ff6994 70%, #ffd36d);
+  content: '';
+  height: 3px;
+  left: 18px;
+  opacity: 0.95;
+  position: absolute;
+  right: 18px;
+  top: 0;
+}
+
+.free-offer-notice-shine {
+  background: linear-gradient(110deg, transparent 18%, rgba(255, 255, 255, 0.07), transparent 56%);
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-45%);
+}
+
+.free-offer-notice-gift {
+  align-items: center;
+  align-self: center;
+  background: linear-gradient(145deg, #3ad7ff, #786dff 55%, #c76cff);
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 18px;
+  box-shadow:
+    0 14px 30px rgba(78, 93, 255, 0.32),
+    0 1px 0 rgba(255, 255, 255, 0.35) inset;
+  color: #fff;
+  display: flex;
+  height: 62px;
+  justify-content: center;
+  position: relative;
+  transform: rotate(-3deg);
+  width: 62px;
+}
+
+.free-offer-notice-body {
+  align-self: center;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  position: relative;
+}
+
+.free-offer-notice-eyebrow {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.free-offer-notice-kicker,
+.free-offer-notice-timer {
+  align-items: center;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 900;
+  gap: 5px;
+  letter-spacing: 0.12em;
+}
+
+.free-offer-notice-kicker { color: #fff0af; }
+
+.free-offer-notice-timer {
+  background: rgba(255, 82, 112, 0.12);
+  border: 1px solid rgba(255, 96, 124, 0.28);
+  border-radius: 999px;
+  color: #ff8fa4;
+  padding: 4px 7px;
+}
+
+.free-offer-notice-timer strong {
+  color: #fff;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+.free-offer-notice-credits {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  line-height: 1;
+}
+
+.free-offer-notice-credits strong {
+  background: linear-gradient(90deg, #fff 5%, #b9f7ff 47%, #ffe49d 100%);
+  background-clip: text;
+  color: transparent;
+  font-size: 29px;
+  font-weight: 950;
+  letter-spacing: -0.04em;
+}
+
+.free-offer-notice-credits span {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+}
+
+.free-offer-notice-code-shell {
+  align-items: center;
+  background: rgba(4, 7, 18, 0.34);
+  border: 1px solid rgba(164, 221, 255, 0.16);
+  border-radius: 10px;
+  display: flex;
+  gap: 8px;
+  padding: 6px 7px 6px 9px;
+  width: fit-content;
+}
+
+.free-offer-notice-code-shell > span {
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.free-offer-notice-code-shell code {
+  color: #fff;
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 950;
+  letter-spacing: 0.22em;
+  line-height: 1;
+}
+
+.free-offer-notice-copy-button {
+  align-items: center;
+  background: rgba(92, 213, 255, 0.14);
+  border: 1px solid rgba(112, 224, 255, 0.34);
+  border-radius: 7px;
+  color: #d9faff;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 850;
+  gap: 4px;
+  padding: 4px 6px;
+}
+
+.free-offer-notice-body p {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 11px;
+  font-weight: 650;
+  margin: -2px 0 0;
+}
+
+.free-offer-notice-action {
+  align-items: center;
+  align-self: center;
+  background: linear-gradient(135deg, #ffe27a, #ffad4d);
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  border-radius: 12px;
+  box-shadow:
+    0 12px 24px rgba(255, 154, 55, 0.2),
+    0 1px 0 rgba(255, 255, 255, 0.5) inset;
+  color: #241406;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  gap: 7px;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 14px;
+  position: relative;
+  transition: filter 140ms ease, transform 140ms ease;
+  white-space: nowrap;
+}
+
+.free-offer-notice-close {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.58);
+  cursor: pointer;
+  display: flex;
+  height: 30px;
+  justify-content: center;
+  padding: 0;
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  width: 30px;
+  z-index: 1;
+}
+
+.free-offer-notice-action:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.free-offer-notice-copy-button:hover,
+.free-offer-notice-close:hover { filter: brightness(1.18); }
+
+.free-offer-notice-action:focus-visible,
+.free-offer-notice-copy-button:focus-visible,
+.free-offer-notice-close:focus-visible {
+  outline: 2px solid #79e5ff;
+  outline-offset: 2px;
+}
+
+@keyframes free-offer-notice-enter {
+  from { opacity: 0; transform: translate(-50%, -28px) scale(0.98); }
+  to { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+
+@media (max-width: 620px) {
+  .free-offer-notice {
+    gap: 12px;
+    grid-template-columns: 56px minmax(0, 1fr);
+    padding: 16px 46px 16px 14px;
+    top: 12px;
+  }
+
+  .free-offer-notice-gift { border-radius: 15px; height: 52px; width: 52px; }
+  .free-offer-notice-action { grid-column: 2; min-height: 38px; width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .free-offer-notice { animation: none; }
+}
+}

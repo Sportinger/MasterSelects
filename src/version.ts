@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '2.4.0';
+export const APP_VERSION = '2.4.1';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -27,8 +27,8 @@ export const FEATURED_VIDEO: {
   title: 'MasterSelects Demo',
   banner: {
     type: 'success',
-    title: 'MasterSelects 2.4.0',
-    message: '3D release: scene light clips (point, panel, environment) with keyframeable intensity, diameter, color, and shadow strength; FBX model import for ASCII and binary files with a per-mesh selector; OBJ/MTL materials and textures with the new Model 3D tab; plus a first Premiere project import pass.',
+    title: 'MasterSelects 2.4.1',
+    message: 'Hosted AI reliability release: provider-safe global generation pacing, separate secure credit links and a one-at-a-time browser-bound website gift, Account redemption polish, and quieter startup, background playback, and audio routing behavior.',
     animated: true,
   },
 };
@@ -36,8 +36,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'MasterSelects 2.4.0',
-  message: '3D release: scene light clips (point, panel, environment) with keyframeable intensity, diameter, color, and shadow strength; FBX model import for ASCII and binary files with a per-mesh selector; OBJ/MTL materials and textures with the new Model 3D tab; plus a first Premiere project import pass.',
+  title: 'MasterSelects 2.4.1',
+  message: 'Hosted AI reliability release: provider-safe global generation pacing, separate secure credit links and a one-at-a-time browser-bound website gift, Account redemption polish, and quieter startup, background playback, and audio routing behavior.',
   animated: true,
 };
 

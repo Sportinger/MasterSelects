@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
+import type { FormEvent } from 'react';
 import { useAccountStore } from '../../stores/accountStore';
+import { cloudApi } from '../../services/cloudApi';
 import { BILLING_PLANS, formatBillingPlanLabel } from '../../services/billingPlans';
 import { CLOUD_AI_PRICE_ROWS, CLOUD_EUR_PER_CREDIT, CLOUD_PRICE_BASELINE_PLAN } from '../../services/cloudAiPricing';
 import './authBillingDialogs.css';
+import './AccountRedeem.css';
 
 interface AccountDialogProps {
+  initialRedeemCode?: string;
   onClose: () => void;
+  onRedeemed?: () => void;
 }
-
-type AccountDetailView = 'usage' | 'prices';
 
 function formatCredits(value: number): string {
   return new Intl.NumberFormat('en-US').format(value);
@@ -52,10 +55,27 @@ function formatBillingDate(value: string | null | undefined): string | null {
   }).format(date);
 }
 
-export function AccountDialog({ onClose }: AccountDialogProps) {
-  const { billingSummary, error, isLoading, logout, openBillingPortal, openPricingDialog } = useAccountStore();
+export function AccountDialog({ initialRedeemCode = '', onClose, onRedeemed }: AccountDialogProps) {
+  const {
+    applyHostedCreditBalance,
+    billingSummary,
+    error,
+    isLoading,
+    loadAccountState,
+    logout,
+    openBillingPortal,
+    openPricingDialog,
+  } = useAccountStore();
   const [isClosing, setIsClosing] = useState(false);
-  const [detailView, setDetailView] = useState<AccountDetailView>('usage');
+  const [showPrices, setShowPrices] = useState(false);
+  const [redeemCode, setRedeemCode] = useState(initialRedeemCode);
+  const [redeemError, setRedeemError] = useState<string | null>(null);
+  const [redeemNotice, setRedeemNotice] = useState<string | null>(null);
+  const [isRedeeming, setIsRedeeming] = useState(false);
+
+  useEffect(() => {
+    setRedeemCode(initialRedeemCode);
+  }, [initialRedeemCode]);
 
   const handleClose = useCallback(() => {
     if (isClosing) return;
@@ -97,6 +117,33 @@ export function AccountDialog({ onClose }: AccountDialogProps) {
   const subscriptionDetailLabel = summary?.subscription?.cancelAtPeriodEnd && subscriptionEndsAt
     ? `Canceled · ends on ${subscriptionEndsAt}`
     : subscriptionStatusLabel;
+  const canRedeem = /^\d{6}$/.test(redeemCode.trim()) && Boolean(email) && !isRedeeming && !isLoading;
+
+  const handleRedeem = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canRedeem) return;
+
+    setIsRedeeming(true);
+    setRedeemError(null);
+    setRedeemNotice(null);
+
+    try {
+      const result = await cloudApi.credits.redeemClaim({
+        code: redeemCode.trim(),
+        email,
+        redeemCode: true,
+      });
+      applyHostedCreditBalance(result.creditBalance);
+      await loadAccountState();
+      setRedeemNotice(`${formatCredits(result.amount)} credits added to your account.`);
+      setRedeemCode('');
+      onRedeemed?.();
+    } catch (caught) {
+      setRedeemError(caught instanceof Error ? caught.message : 'The gift code could not be redeemed.');
+    } finally {
+      setIsRedeeming(false);
+    }
+  };
 
   return (
     <div className={`whats-new-backdrop ${isClosing ? 'closing' : ''}`} onClick={handleBackdropClick}>
@@ -159,42 +206,30 @@ export function AccountDialog({ onClose }: AccountDialogProps) {
             </div>
           </div>
 
-          {detailView === 'usage' ? (
-            <div className="account-usage-card">
-              <div className="account-usage-header">
-                <div className="account-metric-label">Recent usage</div>
-                {usageRows.length > 0 && (
-                  <span className="account-usage-summary">
-                    {summary?.usage.completedCount ?? 0} complete, {formatCredits(summary?.usage.creditCost ?? 0)} credits
-                  </span>
-                )}
-              </div>
-
-              <div className="account-usage-list">
-                {usageRows.map((entry) => (
-                  <div key={entry.feature} className="account-usage-entry">
-                    <div className="account-usage-feature">
-                      <span className="account-usage-name">{entry.feature}</span>
-                      <span className="account-usage-detail">
-                        {entry.completedCount} complete, {formatCredits(entry.creditCost)} credits
-                      </span>
-                    </div>
-                    <span className="account-usage-count">
-                      {entry.pendingCount > 0 ? `${entry.pendingCount} pending` : 'Done'}
-                    </span>
-                  </div>
-                ))}
-                {!usageRows.length && (
-                  <div className="account-usage-empty">
-                    <strong className="account-usage-empty-title">No hosted activity yet.</strong>
-                    <span className="account-usage-empty-detail">
-                      Image, chat, and video generations will appear here once you run them.
-                    </span>
-                  </div>
-                )}
-              </div>
+          <form className="account-redeem-card" onSubmit={handleRedeem}>
+            <div>
+              <span className="account-metric-label">Redeem gift code</span>
+              <p>Sign in first, then enter your personal six-digit code.</p>
             </div>
-          ) : (
+            <div className="account-redeem-controls">
+              <input
+                aria-label="Six-digit gift code"
+                autoComplete="one-time-code"
+                inputMode="numeric"
+                maxLength={6}
+                onChange={(event) => setRedeemCode(event.target.value.replace(/\D/g, ''))}
+                placeholder="123456"
+                value={redeemCode}
+              />
+              <button className="auth-dialog-submit" disabled={!canRedeem} type="submit">
+                {isRedeeming ? 'Redeeming...' : 'Redeem'}
+              </button>
+            </div>
+            {redeemNotice && <span className="account-redeem-notice">{redeemNotice}</span>}
+            {redeemError && <span className="account-redeem-error">{redeemError}</span>}
+          </form>
+
+          {showPrices && (
             <div className="account-usage-card account-prices-card">
               <div className="account-usage-header">
                 <div>
@@ -242,10 +277,10 @@ export function AccountDialog({ onClose }: AccountDialogProps) {
             <button
               className="auth-dialog-submit"
               disabled={isLoading}
-              onClick={() => setDetailView((current) => current === 'usage' ? 'prices' : 'usage')}
+              onClick={() => setShowPrices((current) => !current)}
               type="button"
             >
-              {detailView === 'usage' ? 'Prices' : 'Recent usage'}
+              {showPrices ? 'Hide prices' : 'Prices'}
             </button>
             <button className="auth-dialog-action-secondary" disabled={isLoading} onClick={openPricingDialog} type="button">
               Change plan
@@ -262,6 +297,40 @@ export function AccountDialog({ onClose }: AccountDialogProps) {
               Sign out
             </button>
           </div>
+
+          <details className="account-usage-card account-usage-disclosure">
+            <summary>
+              <span className="account-metric-label">Recent usage</span>
+              {usageRows.length > 0 && (
+                <span className="account-usage-summary">
+                  {summary?.usage.completedCount ?? 0} complete, {formatCredits(summary?.usage.creditCost ?? 0)} credits
+                </span>
+              )}
+            </summary>
+            <div className="account-usage-list">
+              {usageRows.map((entry) => (
+                <div key={entry.feature} className="account-usage-entry">
+                  <div className="account-usage-feature">
+                    <span className="account-usage-name">{entry.feature}</span>
+                    <span className="account-usage-detail">
+                      {entry.completedCount} complete, {formatCredits(entry.creditCost)} credits
+                    </span>
+                  </div>
+                  <span className="account-usage-count">
+                    {entry.pendingCount > 0 ? `${entry.pendingCount} pending` : 'Done'}
+                  </span>
+                </div>
+              ))}
+              {!usageRows.length && (
+                <div className="account-usage-empty">
+                  <strong className="account-usage-empty-title">No hosted activity yet.</strong>
+                  <span className="account-usage-empty-detail">
+                    Image, chat, and video generations will appear here once you run them.
+                  </span>
+                </div>
+              )}
+            </div>
+          </details>
 
           {error && <div className="auth-dialog-notice auth-dialog-notice-error">{error}</div>}
         </div>

@@ -1,0 +1,67 @@
+@layer features {
+.account-redeem-card {
+  align-items: end;
+  background: linear-gradient(110deg, rgba(255, 90, 104, 0.12), rgba(255, 209, 112, 0.06));
+  border: 1px solid rgba(255, 145, 151, 0.2);
+  border-radius: 12px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 0.75fr);
+  padding: 14px 16px;
+}
+
+.account-redeem-card p {
+  color: rgba(255, 255, 255, 0.54);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 4px 0 0;
+}
+
+.account-redeem-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.account-redeem-controls input {
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  min-width: 0;
+  padding: 10px 12px;
+  text-align: center;
+  width: 100%;
+}
+
+.account-redeem-controls .auth-dialog-submit {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.account-redeem-notice,
+.account-redeem-error {
+  font-size: 12px;
+  grid-column: 1 / -1;
+}
+
+.account-redeem-notice { color: #8fffc7; }
+.account-redeem-error { color: #ff9da6; }
+
+.account-usage-disclosure summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  list-style: none;
+}
+
+.account-usage-disclosure summary::-webkit-details-marker { display: none; }
+.account-usage-disclosure[open] summary { margin-bottom: 14px; }
+
+@media (max-width: 640px) {
+  .account-redeem-card { grid-template-columns: 1fr; }
+}
+}

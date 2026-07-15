@@ -39,7 +39,7 @@ Local Lemonade chat is treated as a local provider rather than a MasterSelects b
 
 Hosted OpenAI/Cloud chat is different from local editing and local Lemonade chat. Authenticated hosted chat requests are sent to the Cloudflare Functions backend, are credit-gated, and are logged best-effort in D1 for account history, billing/debugging, abuse handling, and support.
 
-Hosted credit claim links are also a Cloudflare boundary. The admin-created link contains a high-entropy random code, but D1 stores only its SHA-256 hash. Public claim routes can read claim metadata and redeem only through a same-origin POST with a signed-in session whose email matches the submitted email and any server-side recipient lock.
+Hosted credit claim links are also a Cloudflare boundary. The admin-created link contains a high-entropy random code, but D1 stores only its SHA-256 hash. Public claim routes can read claim metadata and redeem only through a same-origin POST with a signed-in session whose email matches the submitted email and any server-side recipient lock. The independent automatic website offer adds a six-digit Account code whose domain-separated hash is stored in D1. A signed, HttpOnly, SameSite cookie binds that offer to the winning browser, so the short code is neither a public lookup token nor a transferable bearer credential.
 
 ---
 

@@ -76,10 +76,9 @@ export interface MagicLinkTokenPayload {
 const textEncoder = new TextEncoder();
 
 function toBase64Url(input: ArrayBuffer | ArrayBufferView): string {
-  const bytes =
-    input instanceof ArrayBuffer
-      ? new Uint8Array(input)
-      : new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
+  const bytes = ArrayBuffer.isView(input)
+    ? new Uint8Array(input.buffer, input.byteOffset, input.byteLength)
+    : new Uint8Array(input);
   let binary = '';
 
   for (const byte of bytes) {

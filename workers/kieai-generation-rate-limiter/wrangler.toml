@@ -1,0 +1,12 @@
+name = "masterselects-kieai-rate-limiter"
+main = "src/index.ts"
+compatibility_date = "2026-03-18"
+workers_dev = false
+
+[[durable_objects.bindings]]
+name = "KIEAI_GENERATION_RATE_LIMITER"
+class_name = "KieAiGenerationRateLimiter"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["KieAiGenerationRateLimiter"]

@@ -109,8 +109,7 @@ type JobUpdateCallback = (recordId: string, update: {
 class FlashBoardJobService {
   private queue: QueueEntry[] = [];
   private running: RunningJob[] = [];
-  private maxConcurrent = 3;
-  private maxConcurrentKieAi = 1;
+  private maxConcurrent = 100;
   private maxConcurrentEvolink = 1;
   private maxConcurrentElevenLabs = 2;
   private onUpdate: JobUpdateCallback | null = null;
@@ -191,10 +190,6 @@ class FlashBoardJobService {
 
   private canStartJob(service: FlashBoardGenerationRequest['service']): boolean {
     if (this.running.length >= this.maxConcurrent) return false;
-    if (service === 'kieai') {
-      const kieaiRunning = this.running.filter(r => r.service === 'kieai').length;
-      if (kieaiRunning >= this.maxConcurrentKieAi) return false;
-    }
     if (service === 'evolink') {
       const evolinkRunning = this.running.filter(r => r.service === 'evolink').length;
       if (evolinkRunning >= this.maxConcurrentEvolink) return false;
@@ -350,7 +345,6 @@ class FlashBoardJobService {
     });
 
     try {
-      this.onUpdate?.(recordId, { status: 'processing' });
       assertPersonalApiKeyAccess(request);
 
       const result = await runFlashBoardProviderJob({

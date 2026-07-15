@@ -119,7 +119,10 @@ export const useAccountStore = create<AccountState>((set, get) => ({
     set({ isLoading: true, error: null, notice: null });
 
     try {
-      const response = await cloudApi.auth.login(input);
+      const response = await cloudApi.auth.login({
+        ...input,
+        redirectTo: input.redirectTo ?? `${window.location.pathname}${window.location.search}`,
+      });
       if (response.authorizationUrl) {
         window.location.assign(response.authorizationUrl);
         return;
