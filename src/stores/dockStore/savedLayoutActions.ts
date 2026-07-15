@@ -3,14 +3,17 @@ import { Logger } from '../../services/logger';
 import { DEFAULT_LAYOUT } from './layoutDefaults';
 import {
   cleanupPersistedLayout,
+  applyFactory3DEditPreviewDefaults,
   cloneDockLayout,
   getLayoutMaxZIndex,
   getMatchingEditableSavedLayout,
   isProtectedFactoryDockLayout,
 } from './layoutPersistence';
+import { FACTORY_3D_EDIT_LAYOUT_ID } from './panelRegistry';
 import { requestDockLayoutTransition } from './layoutTransition';
 import {
   applySavedTimelineLayout,
+  activate3DEditSceneCamera,
   captureTimelineLayout,
 } from './timelineLayoutAdapter';
 import { findGroupIdByPanelId } from './layoutTree';
@@ -129,7 +132,10 @@ export const createSavedLayoutActions: DockSliceCreator<SavedLayoutActions> = (s
       return;
     }
 
-    const nextLayout = cleanupPersistedLayout(cloneDockLayout(savedLayout.layout));
+    const savedDockLayout = savedLayout.id === FACTORY_3D_EDIT_LAYOUT_ID
+      ? applyFactory3DEditPreviewDefaults(savedLayout.layout)
+      : savedLayout.layout;
+    const nextLayout = cleanupPersistedLayout(cloneDockLayout(savedDockLayout));
     requestDockLayoutTransition();
     set({
       layout: nextLayout,
@@ -140,6 +146,7 @@ export const createSavedLayoutActions: DockSliceCreator<SavedLayoutActions> = (s
       activeSavedLayoutId: savedLayout.id,
     });
     applySavedTimelineLayout(savedLayout.timeline);
+    if (savedLayout.id === FACTORY_3D_EDIT_LAYOUT_ID) activate3DEditSceneCamera();
   },
 
   setDefaultSavedLayout: (layoutId) => {

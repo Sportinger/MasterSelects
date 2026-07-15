@@ -47,7 +47,6 @@ interface PreviewCanvasMountProps {
   exportPreviewCanvasRef: React.RefObject<HTMLCanvasElement | null>;
   exportPreviewDisplaySize: { width: number; height: number };
   exportPreviewFrame: ImageBitmap | null;
-  focusEditCameraOnSceneObject: (object: { clipId: string; kind: string; worldPosition: { x: number; y: number; z: number } }) => boolean;
   getCursorForHandle: (handle: string | null) => string;
   handleOverlayMouseDown: (event: React.MouseEvent<HTMLCanvasElement>) => void;
   handleOverlayMouseMove: (event: React.MouseEvent<HTMLCanvasElement>) => void;
@@ -147,7 +146,6 @@ export function PreviewCanvasMount({
   exportPreviewCanvasRef,
   exportPreviewDisplaySize,
   exportPreviewFrame,
-  focusEditCameraOnSceneObject,
   getCursorForHandle,
   handleOverlayMouseDown,
   handleOverlayMouseMove,
@@ -301,8 +299,6 @@ export function PreviewCanvasMount({
                   worldGridPlane={worldGridPlane}
                   toolbarPortalTarget={sceneGizmoToolbarTarget}
                   enabled
-                  canSetObjectOrbitPivot={editCameraModeActive}
-                  onSetObjectOrbitPivot={focusEditCameraOnSceneObject}
                 />
               )}
             </>

@@ -57,6 +57,7 @@ Any site that `yt-dlp` can fetch can still be downloaded even if it is not liste
 ## Native Helper Flow
 
 Downloads require the Native Helper for the actual media transfer.
+The helper status pill opens the Native Helper dialog for connection checks, downloads, and setup.
 
 1. The Media Downloads prompt asks the helper for available format recommendations
 2. The user picks a resolution/codec choice or the MP3 audio recommendation when available

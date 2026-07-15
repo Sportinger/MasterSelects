@@ -67,13 +67,14 @@ describe('audio mixer wood theme settings', () => {
     localStorage.clear();
   });
 
-  it('enables the wooden mixer theme by default and lets users disable it', async () => {
+  it('disables the wooden mixer theme by default and lets users enable it', async () => {
     const { useSettingsStore } = await importSettingsStoreWithMocks();
 
-    expect(useSettingsStore.getState().audioMixerWoodThemeEnabled).toBe(true);
-
-    useSettingsStore.getState().setAudioMixerWoodThemeEnabled(false);
-
     expect(useSettingsStore.getState().audioMixerWoodThemeEnabled).toBe(false);
+    expect(useSettingsStore.getState().mediaPanelWoodThemeEnabled).toBe(false);
+
+    useSettingsStore.getState().setAudioMixerWoodThemeEnabled(true);
+
+    expect(useSettingsStore.getState().audioMixerWoodThemeEnabled).toBe(true);
   });
 });

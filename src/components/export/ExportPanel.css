@@ -1113,10 +1113,6 @@
 }
 
 @container (max-width: 240px) {
-  .export-summary-badges .export-pill-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .export-summary-badges .export-pill {
     padding-inline: 8px;
     font-size: 11px;

@@ -1,5 +1,12 @@
-import type { DockDragState, DockLayout, SavedDockLayout, SavedDockTimelineLayout } from '../../types/dock';
+import type { DockDragState, DockLayout, PreviewPanelData, SavedDockLayout, SavedDockTimelineLayout } from '../../types/dock';
 import { FACTORY_3D_EDIT_LAYOUT_ID, FACTORY_AUDIO_EDIT_LAYOUT_ID, FACTORY_VIDEO_EDIT_LAYOUT_ID } from './panelRegistry';
+
+export const FACTORY_3D_EDIT_PREVIEW_DEFAULTS: Record<string, Pick<PreviewPanelData, 'initialEditMode' | 'initialEditCameraView'>> = {
+  '3d-preview-front': { initialEditMode: true, initialEditCameraView: 'front' },
+  '3d-preview-side': { initialEditMode: true, initialEditCameraView: 'side' },
+  '3d-preview-top': { initialEditMode: true, initialEditCameraView: 'top' },
+  '3d-preview-perspective': { initialEditMode: true, initialEditCameraView: 'camera' },
+};
 
 // Default editing layout: Media left, Preview center, Export active on the right, Timeline bottom.
 export const DEFAULT_LAYOUT: DockLayout = {
@@ -159,13 +166,13 @@ const THREE_D_EDIT_LAYOUT: DockLayout = {
                   {
                     kind: 'tab-group',
                     id: '3d-edit-front-group',
-                    panels: [{ id: '3d-preview-front', type: 'preview', title: 'Preview', data: { initialEditMode: true, initialEditCameraView: 'front' } }],
+                    panels: [{ id: '3d-preview-front', type: 'preview', title: 'Preview', data: FACTORY_3D_EDIT_PREVIEW_DEFAULTS['3d-preview-front'] }],
                     activeIndex: 0,
                   },
                   {
                     kind: 'tab-group',
                     id: '3d-edit-side-group',
-                    panels: [{ id: '3d-preview-side', type: 'preview', title: 'Preview', data: { initialEditMode: true, initialEditCameraView: 'side' } }],
+                    panels: [{ id: '3d-preview-side', type: 'preview', title: 'Preview', data: FACTORY_3D_EDIT_PREVIEW_DEFAULTS['3d-preview-side'] }],
                     activeIndex: 0,
                   },
                 ],
@@ -179,13 +186,13 @@ const THREE_D_EDIT_LAYOUT: DockLayout = {
                   {
                     kind: 'tab-group',
                     id: '3d-edit-top-group',
-                    panels: [{ id: '3d-preview-top', type: 'preview', title: 'Preview', data: { initialEditMode: true, initialEditCameraView: 'top' } }],
+                    panels: [{ id: '3d-preview-top', type: 'preview', title: 'Preview', data: FACTORY_3D_EDIT_PREVIEW_DEFAULTS['3d-preview-top'] }],
                     activeIndex: 0,
                   },
                   {
                     kind: 'tab-group',
                     id: '3d-edit-perspective-group',
-                    panels: [{ id: '3d-preview-perspective', type: 'preview', title: 'Preview', data: { initialEditMode: true, initialEditCameraView: 'camera' } }],
+                    panels: [{ id: '3d-preview-perspective', type: 'preview', title: 'Preview', data: FACTORY_3D_EDIT_PREVIEW_DEFAULTS['3d-preview-perspective'] }],
                     activeIndex: 0,
                   },
                 ],

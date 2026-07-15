@@ -441,7 +441,7 @@
 }
 
 .media-download-status-pill {
-  cursor: default;
+  font-family: inherit;
 }
 
 .media-download-status-pill.ready {

@@ -453,7 +453,7 @@ On a first empty load, `VIDEO EDIT` is also the active named layout, so the head
 
 The built-in `AUDIO EDIT` layout keeps Timeline above Media, Audio Mixer, and Properties/History. Its timeline defaults to audio focus with two visible 40 px video context tracks and one visible 96 px full-height audio track.
 
-The built-in `3D EDIT` layout keeps four independent Preview panels in a 2x2 grid above the Timeline, with Media and Properties/Export/History on the right. The previews open directly in Edit mode as Front, Side, Top, and Perspective views.
+The built-in `3D EDIT` layout keeps four independent Preview panels in a 2x2 grid above the Timeline, with Media and Properties/Export/History on the right. The previews open directly in Edit mode as Front, Side, Top, and Perspective views. Loading the layout keeps the current playhead when it is already covered by a camera clip, jumps to the earliest camera when cameras exist elsewhere in the composition, and creates one composition-length camera only when none exists.
 
 Multi Preview, scopes, and other panels are available from the View menu and can be floated or docked.
 

@@ -1,5 +1,4 @@
 // Preview canvas component with After Effects-style editing overlay
-
 import './Preview.css';
 import './PreviewEditMode.css';
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
@@ -36,6 +35,7 @@ import { usePreviewViewGeometry } from './usePreviewViewGeometry';
 import { usePreviewViewport } from './usePreviewViewport';
 import { usePreviewWheelHandler } from './usePreviewWheelHandler';
 import { usePreviewInitialEditCameraView } from './usePreviewInitialEditCameraView';
+import { createPreviewEditorCameraClip } from './usePreviewEditCameraConfig';
 import type { SceneCameraConfig } from '../../engine/scene/types';
 import type { Layer } from '../../types/layers';
 const SCENE_OBJECT_INTERACTION_SELECTOR = [
@@ -177,6 +177,7 @@ export function Preview({ panelId, source, showTransparencyGrid, initialEdit }: 
   const [sceneGizmoToolbarTarget, setSceneGizmoToolbarTarget] = useState<HTMLDivElement | null>(null);
 
   const [editMode, setEditMode] = useState(initialEdit?.initialEditMode ?? false);
+  useEffect(() => { if (initialEdit?.initialEditMode) setEditMode(true); }, [initialEdit?.initialEditMode]);
   // #206: while editing a text clip inside the layer-edit mode, this toggles
   // between layer transform (move/scale handles) and text typing. Double-click
   // enters typing; Escape returns to transform.
@@ -245,11 +246,8 @@ export function Preview({ panelId, source, showTransparencyGrid, initialEdit }: 
   const gaussianKeyboardBatchActiveRef = useRef(false);
   const sceneNavHistoryBatchActiveRef = useRef(false);
   const activeCameraClipAtPlayhead = useActiveCameraClipAtPlayhead(clips, tracks, playheadPosition);
-  const editCameraModeActive = Boolean(
-    isEditableSource &&
-    editMode &&
-    activeCameraClipAtPlayhead,
-  );
+  const editCameraClip = useMemo(() => createPreviewEditorCameraClip(panelId), [panelId]);
+  const editCameraModeActive = Boolean(isEditableSource && editMode && (initialEdit?.initialEditMode || activeCameraClipAtPlayhead));
 
   const getSceneNavPointerLockTarget = useCallback(() => {
     return canvasWrapperRef.current ?? containerRef.current;
@@ -349,14 +347,12 @@ export function Preview({ panelId, source, showTransparencyGrid, initialEdit }: 
     activeEditCameraOrthoFrame,
     applyNavigationCameraValues,
     editCameraClipIdRef,
-    editCameraGizmoTransform,
     editCameraOrthoFrame,
     editCameraOrthoHint,
     editCameraOrthoMode,
     editCameraOrthoPanStart,
     editCameraOrthoViewActive,
     editCameraSettingsRef,
-    focusEditCameraOnSceneObject,
     getFreshSceneNavTransform,
     getSceneNavSolveSettings,
     isEditCameraOrthoPanning,
@@ -365,25 +361,16 @@ export function Preview({ panelId, source, showTransparencyGrid, initialEdit }: 
     setEditCameraView,
     setIsEditCameraOrthoPanning,
   } = usePreviewEditCameraController({
-    activeCameraClipAtPlayhead,
     addKeyframe,
-    containerRef,
     displayedCompId,
+    editCameraClip,
     editCameraModeActive,
     effectiveResolution: renderResolution,
-    endGaussianWheelBatch,
-    endSceneNavHistoryBatch,
-    gaussianOrbitStart,
-    gaussianPanStart,
     hasKeyframes,
     isRecording,
     previewCameraOverride,
     sceneNavNoKeyframes,
-    setIsGaussianOrbiting,
-    setIsGaussianPanning,
     setPreviewCameraOverride,
-    stopGaussianFpsLook,
-    stopGaussianKeyboardMovement,
     updateClipTransform,
   });
 
@@ -408,6 +395,7 @@ export function Preview({ panelId, source, showTransparencyGrid, initialEdit }: 
   } = usePreviewModeState({
     activeCameraClipAtPlayhead,
     clips,
+    editCameraClip,
     editCameraModeActive,
     editCameraOrthoFrame,
     editCameraOrthoMode,
@@ -419,6 +407,7 @@ export function Preview({ panelId, source, showTransparencyGrid, initialEdit }: 
     layers,
     maskPanelActive,
     playheadPosition,
+    preserveEditModeWithoutSource: initialEdit?.initialEditMode === true,
     sceneNavClipId,
     sceneObjectOverlayEnabled,
     sceneNavFpsMode,
@@ -617,10 +606,10 @@ export function Preview({ panelId, source, showTransparencyGrid, initialEdit }: 
   const previewCanvasMountProps = {
     activeSharedSceneOverlayContent, activeSplatLoadProgress, canvasInContainer, canvasRef,
     canvasSize, canvasWrapperRef, clips, closeSourceMonitor, containerSize, displayedCompId,
-    dragHandle, dragMode, editCameraGizmoTransform, editCameraModeActive, editCameraOrthoHint,
+    dragHandle, dragMode, editCameraGizmoTransform: activeCameraClipAtPlayhead ? getInterpolatedTransform(activeCameraClipAtPlayhead.id, playheadPosition - activeCameraClipAtPlayhead.startTime) : null, editCameraModeActive, editCameraOrthoHint,
     editMode, effectiveResolution: renderResolution, effectiveSceneNavFpsMode, engineInitError, engineInitFailed,
     exportPreviewCanvasRef, exportPreviewDisplaySize, exportPreviewFrame,
-    focusEditCameraOnSceneObject, getCursorForHandle, handleOverlayMouseDown,
+    getCursorForHandle, handleOverlayMouseDown,
     handleOverlayMouseMove, handleOverlayMouseUp, hoverHandle, isDragging, isEditableSource,
     isEngineReady, isExporting, layerTransformMode, maskEditMode, maskNavigationMode,
     maskPanelActive, overlayRef, playbackWaiterVideoCount, previewCameraOverride,

@@ -9,7 +9,7 @@ export function usePreviewInitialEditCameraView(
   setEditCameraView: (view: EditCameraViewMode) => void,
 ): void {
   const view = initialEdit?.initialEditCameraView ?? 'camera';
-  const appliedRef = useRef(!initialEdit?.initialEditMode || view === 'camera');
+  const appliedRef = useRef(!initialEdit?.initialEditMode);
 
   useEffect(() => {
     if (appliedRef.current || !editCameraModeActive) return;

@@ -293,7 +293,7 @@ export const useSettingsStore = create<SettingsState>()(
       theme: 'dark' as ThemeMode,
       customHue: 210,       // Default: blue
       customBrightness: 15, // Default: dark
-      audioMixerWoodThemeEnabled: true,
+      audioMixerWoodThemeEnabled: false,
       mediaPanelWoodThemeEnabled: false,
       apiKeys: {
         openai: '',

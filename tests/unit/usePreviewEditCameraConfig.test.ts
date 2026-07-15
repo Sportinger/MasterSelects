@@ -2,19 +2,23 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_EDIT_CAMERA_SETTINGS,
-  EDIT_CAMERA_PIVOT_BLEND_MS,
   buildPreviewCameraConfigFromTransform,
   createDefaultEditorCameraTransform,
+  createPreviewEditorCameraClip,
 } from '../../src/components/preview/usePreviewEditCameraConfig';
 import type { TimelineClip } from '../../src/types/timeline';
 import type { ClipTransform } from '../../src/types/timelineCore';
 
 describe('preview editor camera', () => {
-  it('blends orbit pivot changes for exactly 200ms', () => {
-    expect(EDIT_CAMERA_PIVOT_BLEND_MS).toBe(200);
+  it('uses a panel-local camera carrier instead of a timeline camera', () => {
+    const clip = createPreviewEditorCameraClip('front');
+
+    expect(clip.id).toBe('preview-editor-camera-front');
+    expect(clip.source?.type).toBe('camera');
+    expect(clip.transform.position.z).toBe(1);
   });
 
-  it('starts outside the timeline camera and looks back at it', () => {
+  it('starts outside the scene origin and looks back at it', () => {
     const sceneCamera = {
       position: { x: 1, y: 2, z: 3 },
       target: { x: 1, y: 2, z: -2 },
@@ -35,13 +39,13 @@ describe('preview editor camera', () => {
       { id: 'camera', source: { type: 'camera' } } as TimelineClip,
       editorTransform,
       { width: 800, height: 600 },
-      sceneCamera.position,
+      { x: 0, y: 0, z: 0 },
       DEFAULT_EDIT_CAMERA_SETTINGS,
     );
 
-    expect(editorTransform.position).not.toEqual(sceneCamera.position);
-    expect(editorCamera?.target.x).toBeCloseTo(sceneCamera.position.x, 5);
-    expect(editorCamera?.target.y).toBeCloseTo(sceneCamera.position.y, 5);
-    expect(editorCamera?.target.z).toBeCloseTo(sceneCamera.position.z, 5);
+    expect(editorTransform.position).not.toEqual({ x: 0, y: 0, z: 0 });
+    expect(editorCamera?.target.x).toBeCloseTo(0, 5);
+    expect(editorCamera?.target.y).toBeCloseTo(0, 5);
+    expect(editorCamera?.target.z).toBeCloseTo(0, 5);
   });
 });

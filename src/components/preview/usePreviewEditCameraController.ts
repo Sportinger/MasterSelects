@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type MutableRefObject, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { resolveSharedSceneCameraConfig } from '../../engine/scene/SceneCameraUtils';
 import type { SceneCameraConfig, SceneVector3 } from '../../engine/scene/types';
@@ -7,11 +7,10 @@ import type { SceneCameraSettings } from '../../stores/mediaStore/types';
 import { useTimelineStore } from '../../stores/timeline';
 import type { TimelineClip } from '../../types/timeline';
 import type { ClipTransform } from '../../types/timelineCore';
-import { cloneSceneVector, type EditCameraOrthoViewMode, type EditCameraViewMode } from './previewSceneCameraMath';
+import { type EditCameraOrthoViewMode, type EditCameraViewMode } from './previewSceneCameraMath';
 import {
   DEFAULT_EDIT_CAMERA_SETTINGS,
   EDIT_CAMERA_BLEND_MS,
-  EDIT_CAMERA_PIVOT_BLEND_MS,
   EDIT_CAMERA_VIEW_LABELS,
   buildEditCameraOrthographicConfig,
   buildPreviewCameraConfigFromTransform,
@@ -28,48 +27,30 @@ import { usePreviewSceneCameraActions } from './usePreviewSceneCameraActions';
 interface PreviewSize { width: number; height: number }
 
 interface UsePreviewEditCameraControllerOptions {
-  activeCameraClipAtPlayhead: TimelineClip | null;
+  editCameraClip: TimelineClip;
   addKeyframe: (clipId: string, property: CameraProperty, value: number) => void;
-  containerRef: RefObject<HTMLDivElement | null>;
   displayedCompId: string | null;
   editCameraModeActive: boolean;
   effectiveResolution: PreviewSize;
-  endGaussianWheelBatch: () => void;
-  endSceneNavHistoryBatch: () => void;
-  gaussianOrbitStart: MutableRefObject<{ clipId: string | null }>;
-  gaussianPanStart: MutableRefObject<{ clipId: string | null }>;
   hasKeyframes: (clipId: string, property: CameraProperty) => boolean;
   isRecording: (clipId: string, property: CameraProperty) => boolean;
   previewCameraOverride: SceneCameraConfig | null;
   sceneNavNoKeyframes: boolean;
-  setIsGaussianOrbiting: (value: boolean) => void;
-  setIsGaussianPanning: (value: boolean) => void;
   setPreviewCameraOverride: (override: SceneCameraConfig | null) => void;
-  stopGaussianFpsLook: () => void;
-  stopGaussianKeyboardMovement: () => void;
   updateClipTransform: (clipId: string, transform: Partial<ClipTransform>) => void;
 }
 
 export function usePreviewEditCameraController({
-  activeCameraClipAtPlayhead,
+  editCameraClip,
   addKeyframe,
-  containerRef,
   displayedCompId,
   editCameraModeActive,
   effectiveResolution,
-  endGaussianWheelBatch,
-  endSceneNavHistoryBatch,
-  gaussianOrbitStart: gaussianOrbitStartRef,
-  gaussianPanStart: gaussianPanStartRef,
   hasKeyframes,
   isRecording,
   previewCameraOverride,
   sceneNavNoKeyframes,
-  setIsGaussianOrbiting,
-  setIsGaussianPanning,
   setPreviewCameraOverride,
-  stopGaussianFpsLook,
-  stopGaussianKeyboardMovement,
   updateClipTransform,
 }: UsePreviewEditCameraControllerOptions) {
   const [editCameraViewMode, setEditCameraViewMode] = useState<EditCameraViewMode>('camera');
@@ -89,10 +70,10 @@ export function usePreviewEditCameraController({
   const editCameraOrthoPanStart = useRef({ x: 0, y: 0, center: { x: 0, y: 0, z: 0 } as SceneVector3, scale: 1, mode: 'front' as EditCameraOrthoViewMode });
   const editCameraOrthoMode: EditCameraOrthoViewMode | null = editCameraViewMode === 'camera' ? null : editCameraViewMode;
   const editCameraOrthoViewActive = editCameraModeActive && editCameraOrthoMode !== null;
-  const activeEditCameraOrthoFrame = editCameraOrthoMode && activeCameraClipAtPlayhead && editCameraOrthoFrame?.clipId === activeCameraClipAtPlayhead.id && editCameraOrthoFrame.mode === editCameraOrthoMode
+  const activeEditCameraOrthoFrame = editCameraOrthoMode && editCameraOrthoFrame?.clipId === editCameraClip.id && editCameraOrthoFrame.mode === editCameraOrthoMode
     ? editCameraOrthoFrame
     : null;
-  const { applySceneCameraValues, getFreshSceneNavTransform, getSceneNavSolveSettings, resolveCameraClipTransformAtPlayhead } = usePreviewSceneCameraActions({
+  const { applySceneCameraValues, getFreshSceneNavTransform, getSceneNavSolveSettings } = usePreviewSceneCameraActions({
     addKeyframe,
     editCameraClipIdRef,
     editCameraModeActive,
@@ -119,7 +100,7 @@ export function usePreviewEditCameraController({
     },
   ), [displayedCompId, effectiveResolution.height, effectiveResolution.width]);
 
-  const getEditSceneCameraConfig = useCallback((clip: TimelineClip | null = activeCameraClipAtPlayhead): SceneCameraConfig | null => {
+  const getEditSceneCameraConfig = useCallback((clip: TimelineClip = editCameraClip): SceneCameraConfig | null => {
     if (!clip || !editCameraTransformRef.current) return null;
     const cameraConfig = buildPreviewCameraConfigFromTransform(
       clip,
@@ -132,7 +113,7 @@ export function usePreviewEditCameraController({
     return editCameraOrthoMode && editCameraOrthoFrame?.clipId === clip.id && editCameraOrthoFrame.mode === editCameraOrthoMode
       ? buildEditCameraOrthographicConfig(editCameraOrthoMode, editCameraOrthoFrame, cameraConfig)
       : cameraConfig;
-  }, [activeCameraClipAtPlayhead, editCameraOrthoFrame, editCameraOrthoMode, effectiveResolution.height, effectiveResolution.width]);
+  }, [editCameraClip, editCameraOrthoFrame, editCameraOrthoMode, effectiveResolution.height, effectiveResolution.width]);
 
   const stopEditCameraAnimation = useCallback(() => {
     if (editCameraAnimationRef.current === null) return;
@@ -220,23 +201,23 @@ export function usePreviewEditCameraController({
   ]);
 
   const setEditCameraView = useCallback((mode: EditCameraViewMode) => {
-    if (!activeCameraClipAtPlayhead || !editCameraTransformRef.current || mode === editCameraViewMode) return;
+    if (!editCameraTransformRef.current) return;
     const cameraConfig = buildPreviewCameraConfigFromTransform(
-      activeCameraClipAtPlayhead,
+      editCameraClip,
       editCameraTransformRef.current,
       { width: effectiveResolution.width, height: effectiveResolution.height },
       editCameraOrbitCenterRef.current,
       editCameraSettingsRef.current,
     );
     if (!cameraConfig) return;
-    const fromConfig = previewCameraOverrideRef.current ?? getEditSceneCameraConfig(activeCameraClipAtPlayhead);
+    const fromConfig = previewCameraOverrideRef.current ?? getEditSceneCameraConfig(editCameraClip);
     if (!fromConfig) return;
     let toConfig = cameraConfig;
     let nextFrame: EditCameraOrthoFrame | null = null;
     if (mode !== 'camera') {
-      nextFrame = editCameraOrthoFrame?.clipId === activeCameraClipAtPlayhead.id
+      nextFrame = editCameraOrthoFrame?.clipId === editCameraClip.id
         ? { ...editCameraOrthoFrame, mode }
-        : createDefaultEditCameraOrthoFrame(mode, activeCameraClipAtPlayhead.id, cameraConfig);
+        : createDefaultEditCameraOrthoFrame(mode, editCameraClip.id, cameraConfig);
       toConfig = buildEditCameraOrthographicConfig(mode, nextFrame, cameraConfig);
     }
     editCameraViewTransitionRef.current = true;
@@ -244,99 +225,19 @@ export function usePreviewEditCameraController({
     setEditCameraOrthoFrame(nextFrame);
     animatePreviewCameraOverride(fromConfig, toConfig, false);
   }, [
-    activeCameraClipAtPlayhead,
     animatePreviewCameraOverride,
+    editCameraClip,
     editCameraOrthoFrame,
-    editCameraViewMode,
     effectiveResolution.height,
     effectiveResolution.width,
     getEditSceneCameraConfig,
   ]);
 
-  const focusEditCameraOnSceneObject = useCallback((object: {
-    clipId: string;
-    kind: string;
-    worldPosition: SceneVector3;
-  }): boolean => {
-    if (
-      !editCameraModeActive ||
-      !activeCameraClipAtPlayhead ||
-      !editCameraTransformRef.current ||
-      !Number.isFinite(object.worldPosition.x) ||
-      !Number.isFinite(object.worldPosition.y) ||
-      !Number.isFinite(object.worldPosition.z)
-    ) {
-      return false;
-    }
-    const currentTransform = editCameraTransformRef.current;
-    const fromConfig = previewCameraOverrideRef.current ?? getEditSceneCameraConfig(activeCameraClipAtPlayhead);
-    const nextOrbitCenter = cloneSceneVector(object.worldPosition);
-    const nextTransform: ClipTransform = {
-      ...currentTransform,
-      position: { ...currentTransform.position, x: 0, y: 0 },
-      scale: { ...currentTransform.scale, z: 0 },
-    };
-    const nextCameraConfig = buildPreviewCameraConfigFromTransform(
-      activeCameraClipAtPlayhead,
-      nextTransform,
-      { width: effectiveResolution.width, height: effectiveResolution.height },
-      nextOrbitCenter,
-      editCameraSettingsRef.current,
-    );
-    if (!fromConfig || !nextCameraConfig) return false;
-    stopGaussianFpsLook();
-    stopGaussianKeyboardMovement();
-    endGaussianWheelBatch();
-    if (gaussianOrbitStartRef.current.clipId) {
-      gaussianOrbitStartRef.current.clipId = null;
-      setIsGaussianOrbiting(false);
-      endSceneNavHistoryBatch();
-    }
-    if (gaussianPanStartRef.current.clipId) {
-      gaussianPanStartRef.current.clipId = null;
-      setIsGaussianPanning(false);
-      endSceneNavHistoryBatch();
-    }
-    setIsEditCameraOrthoPanning(false);
-    containerRef.current?.focus({ preventScroll: true });
-    editCameraOrbitCenterRef.current = nextOrbitCenter;
-    editCameraTransformRef.current = nextTransform;
-    let toConfig: SceneCameraConfig = nextCameraConfig;
-    if (editCameraOrthoMode) {
-      const baseFrame = activeEditCameraOrthoFrame
-        ?? createDefaultEditCameraOrthoFrame(editCameraOrthoMode, activeCameraClipAtPlayhead.id, nextCameraConfig);
-      const nextFrame: EditCameraOrthoFrame = { ...baseFrame, clipId: activeCameraClipAtPlayhead.id, mode: editCameraOrthoMode, center: cloneSceneVector(nextOrbitCenter) };
-      editCameraViewTransitionRef.current = true;
-      setEditCameraOrthoFrame(nextFrame);
-      toConfig = buildEditCameraOrthographicConfig(editCameraOrthoMode, nextFrame, nextCameraConfig);
-    }
-    animatePreviewCameraOverride(fromConfig, toConfig, false, EDIT_CAMERA_PIVOT_BLEND_MS);
-    renderHostPort.requestRender();
-    return true;
-  }, [
-    activeCameraClipAtPlayhead,
-    activeEditCameraOrthoFrame,
-    animatePreviewCameraOverride,
-    containerRef,
-    editCameraModeActive,
-    editCameraOrthoMode,
-    effectiveResolution.height,
-    effectiveResolution.width,
-    endGaussianWheelBatch,
-    endSceneNavHistoryBatch,
-    gaussianOrbitStartRef,
-    gaussianPanStartRef,
-    getEditSceneCameraConfig,
-    setIsGaussianOrbiting,
-    setIsGaussianPanning,
-    stopGaussianFpsLook,
-    stopGaussianKeyboardMovement,
-  ]);
-
-  const activeEditCameraClipId = editCameraModeActive ? activeCameraClipAtPlayhead?.id ?? null : null;
+  const activeEditCameraClipId = editCameraModeActive ? editCameraClip.id : null;
   useEffect(() => {
     editCameraSettingsRef.current = { ...DEFAULT_EDIT_CAMERA_SETTINGS };
     editCameraOrbitCenterRef.current = null;
+    if (activeEditCameraClipId) return undefined;
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
@@ -353,18 +254,18 @@ export function usePreviewEditCameraController({
 
   useEffect(() => {
     const wasEditCameraModeActive = editCameraModeActiveRef.current;
-    if (editCameraModeActive && activeCameraClipAtPlayhead) {
-      const clipChanged = editCameraClipIdRef.current !== activeCameraClipAtPlayhead.id;
+    if (editCameraModeActive) {
+      const clipChanged = editCameraClipIdRef.current !== editCameraClip.id;
       if (clipChanged || !editCameraTransformRef.current) {
-        editCameraClipIdRef.current = activeCameraClipAtPlayhead.id;
+        editCameraClipIdRef.current = editCameraClip.id;
         const sceneCamera = getActualSceneCameraConfig();
         editCameraTransformRef.current = createDefaultEditorCameraTransform(
           sceneCamera,
-          resolveCameraClipTransformAtPlayhead(activeCameraClipAtPlayhead),
+          editCameraClip.transform,
         );
-        editCameraOrbitCenterRef.current = cloneSceneVector(sceneCamera.position);
+        editCameraOrbitCenterRef.current = { x: 0, y: 0, z: 0 };
       }
-      const editCameraConfig = getEditSceneCameraConfig(activeCameraClipAtPlayhead);
+      const editCameraConfig = getEditSceneCameraConfig(editCameraClip);
       if (!editCameraConfig) return;
       editCameraModeActiveRef.current = true;
       if (!wasEditCameraModeActive || clipChanged) {
@@ -384,12 +285,11 @@ export function usePreviewEditCameraController({
       animatePreviewCameraOverride(fromConfig, getActualSceneCameraConfig(), true);
     }
   }, [
-    activeCameraClipAtPlayhead,
     animatePreviewCameraOverride,
+    editCameraClip,
     editCameraModeActive,
     getActualSceneCameraConfig,
     getEditSceneCameraConfig,
-    resolveCameraClipTransformAtPlayhead,
     updatePreviewCameraOverride,
   ]);
 
@@ -399,7 +299,6 @@ export function usePreviewEditCameraController({
     renderHostPort.requestRender();
   }, [stopEditCameraAnimation, updatePreviewCameraOverride]);
 
-  const editCameraGizmoTransform = editCameraModeActive && activeCameraClipAtPlayhead ? resolveCameraClipTransformAtPlayhead(activeCameraClipAtPlayhead) : null;
   const editCameraOrthoHint = editCameraOrthoViewActive && activeEditCameraOrthoFrame ? `${EDIT_CAMERA_VIEW_LABELS[activeEditCameraOrthoFrame.mode]} Ortho | 1 Front | 2 Side | 3 Top | 4 Perspective | Wheel Zoom | Shift+Drag/MMB Pan` : null;
   const sceneObjectWorldGridPlane: 'xy' | 'yz' | 'xz' = editCameraModeActive && editCameraViewMode === 'front'
     ? 'xy'
@@ -411,7 +310,6 @@ export function usePreviewEditCameraController({
     activeEditCameraOrthoFrame,
     applyNavigationCameraValues,
     editCameraClipIdRef,
-    editCameraGizmoTransform,
     editCameraModeActiveRef,
     editCameraOrthoFrame,
     editCameraOrthoHint,
@@ -420,7 +318,6 @@ export function usePreviewEditCameraController({
     editCameraOrthoViewActive,
     editCameraSettingsRef,
     editCameraViewMode,
-    focusEditCameraOnSceneObject,
     getFreshSceneNavTransform,
     getSceneNavSolveSettings,
     isEditCameraOrthoPanning,

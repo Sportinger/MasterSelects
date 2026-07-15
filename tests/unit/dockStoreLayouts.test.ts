@@ -30,7 +30,9 @@ describe('dock store saved layouts', () => {
       activeSavedLayoutId: null,
     });
     useTimelineStore.setState({
+      clips: [],
       tracks: DEFAULT_TRACKS.map((track) => ({ ...track })),
+      playheadPosition: 0,
       audioDisplayMode: 'detailed',
       audioLayerAdvancedMode: true,
       audioFocusMode: false,
@@ -333,6 +335,26 @@ describe('dock store saved layouts', () => {
       { initialEditMode: true, initialEditCameraView: 'top' },
       { initialEditMode: true, initialEditCameraView: 'camera' },
     ]);
+    expect(useTimelineStore.getState().clips.filter((clip) => clip.source?.type === 'camera')).toHaveLength(1);
+
+    useDockStore.getState().loadSavedLayout(FACTORY_3D_EDIT_LAYOUT_ID);
+    expect(useTimelineStore.getState().clips.filter((clip) => clip.source?.type === 'camera')).toHaveLength(1);
+  });
+
+  it('jumps to an existing camera instead of creating another one', () => {
+    const trackId = useTimelineStore.getState().tracks.find((track) => track.type === 'video')!.id;
+    const cameraId = useTimelineStore.getState().addCameraClip(trackId, 12, 5, true);
+    useTimelineStore.getState().setPlayheadPosition(0);
+
+    useDockStore.getState().loadSavedLayout(FACTORY_3D_EDIT_LAYOUT_ID);
+
+    expect(useTimelineStore.getState().playheadPosition).toBe(12);
+    expect(useTimelineStore.getState().clips.filter((clip) => clip.source?.type === 'camera')).toHaveLength(1);
+    expect(useTimelineStore.getState().clips.find((clip) => clip.source?.type === 'camera')?.id).toBe(cameraId);
+
+    useTimelineStore.getState().setPlayheadPosition(13);
+    useDockStore.getState().loadSavedLayout(FACTORY_3D_EDIT_LAYOUT_ID);
+    expect(useTimelineStore.getState().playheadPosition).toBe(13);
   });
 
   it('keeps the built-in video, audio, and 3D layouts as default favorites', () => {

@@ -8,9 +8,14 @@ import type { EditCameraOrthoViewMode } from './previewSceneCameraMath';
 
 const TIMELINE_TIME_EPSILON = 1e-4;
 
+export function shouldResetPreviewEditMode(isEditableSource: boolean, preserveWithoutSource: boolean): boolean {
+  return !isEditableSource && !preserveWithoutSource;
+}
+
 interface UsePreviewModeStateOptions {
   activeCameraClipAtPlayhead: TimelineClip | null;
   clips: TimelineClip[];
+  editCameraClip: TimelineClip;
   editCameraModeActive: boolean;
   editCameraOrthoFrame: EditCameraOrthoFrame | null;
   editCameraOrthoMode: EditCameraOrthoViewMode | null;
@@ -22,6 +27,7 @@ interface UsePreviewModeStateOptions {
   layers: Layer[];
   maskPanelActive: boolean;
   playheadPosition: number;
+  preserveEditModeWithoutSource?: boolean;
   sceneNavClipId: string | null;
   sceneObjectOverlayEnabled: boolean;
   sceneNavFpsMode: boolean;
@@ -102,6 +108,7 @@ export function useActiveCameraClipAtPlayhead(
 export function usePreviewModeState({
   activeCameraClipAtPlayhead,
   clips,
+  editCameraClip,
   editCameraModeActive,
   editCameraOrthoFrame,
   editCameraOrthoMode,
@@ -113,6 +120,7 @@ export function usePreviewModeState({
   layers,
   maskPanelActive,
   playheadPosition,
+  preserveEditModeWithoutSource = false,
   sceneNavClipId,
   sceneObjectOverlayEnabled,
   sceneNavFpsMode,
@@ -153,7 +161,7 @@ export function usePreviewModeState({
     () => (selectedClip?.source?.type === 'camera' ? selectedClip : null),
     [selectedClip],
   );
-  const navigationSceneNavClip = editCameraModeActive ? activeCameraClipAtPlayhead : selectedSceneNavClip;
+  const navigationSceneNavClip = editCameraModeActive ? editCameraClip : selectedSceneNavClip;
   const sceneNavEnabled = Boolean(
     isEditableSource &&
     navigationSceneNavClip &&
@@ -172,8 +180,7 @@ export function usePreviewModeState({
   const effectiveSceneNavFpsMode = sceneNavFpsMode && !editCameraModeActive;
   const activeEditCameraOrthoFrame =
     editCameraOrthoMode &&
-    activeCameraClipAtPlayhead &&
-    editCameraOrthoFrame?.clipId === activeCameraClipAtPlayhead.id &&
+    editCameraOrthoFrame?.clipId === editCameraClip.id &&
     editCameraOrthoFrame.mode === editCameraOrthoMode
       ? editCameraOrthoFrame
       : null;
@@ -196,10 +203,10 @@ export function usePreviewModeState({
       : selectedClipId;
 
   useEffect(() => {
-    if (!isEditableSource) {
+    if (shouldResetPreviewEditMode(isEditableSource, preserveEditModeWithoutSource)) {
       setEditMode(false);
     }
-  }, [isEditableSource, setEditMode]);
+  }, [isEditableSource, preserveEditModeWithoutSource, setEditMode]);
 
   useEffect(() => {
     if (!selectedClipId || !layerEditMode) return;

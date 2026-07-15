@@ -43,13 +43,14 @@ export function registerPreviewTarget({
     renderHostPort.clearVideoCache();
     renderHostPort.clearScrubbingCache();
     renderHostPort.clearCompositeCache();
-    renderHostPort.requestRender();
   }
 
   if (isIndependent) {
     renderScheduler.register(id);
     onIndependentRegistered?.();
   }
+
+  renderHostPort.requestRender();
 
   return true;
 }

@@ -196,3 +196,24 @@ export function applySavedTimelineLayout(timeline: SavedDockTimelineLayout | und
     }
   }
 }
+
+export function activate3DEditSceneCamera(): string | null {
+  const timeline = useTimelineStore.getState();
+  const cameras = timeline.clips
+    .filter((clip) => clip.source?.type === 'camera')
+    .toSorted((left, right) => left.startTime - right.startTime);
+  const current = cameras.find((camera) => (
+    timeline.playheadPosition >= camera.startTime &&
+    timeline.playheadPosition < camera.startTime + camera.duration
+  ));
+  const existing = current ?? cameras[0];
+  if (existing) {
+    if (!current) timeline.setPlayheadPosition(existing.startTime);
+    return existing.id;
+  }
+
+  const trackId = timeline.tracks.find((track) => track.type === 'video')?.id ?? timeline.addTrack('video');
+  const cameraId = useTimelineStore.getState().addCameraClip(trackId, 0, Math.max(0.001, timeline.duration));
+  if (cameraId) useTimelineStore.getState().setPlayheadPosition(0);
+  return cameraId;
+}

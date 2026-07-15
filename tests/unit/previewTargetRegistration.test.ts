@@ -106,9 +106,9 @@ describe('preview target registration', () => {
       mocks.renderHostPort.clearVideoCache,
       mocks.renderHostPort.clearScrubbingCache,
       mocks.renderHostPort.clearCompositeCache,
-      mocks.renderHostPort.requestRender,
       mocks.renderScheduler.register,
       onIndependentRegistered,
+      mocks.renderHostPort.requestRender,
     );
   });
 
@@ -135,7 +135,7 @@ describe('preview target registration', () => {
     expect(mocks.renderScheduler.register).not.toHaveBeenCalled();
     expect(onIndependentRegistered).not.toHaveBeenCalled();
     expect(mocks.renderHostPort.clearVideoCache).not.toHaveBeenCalled();
-    expect(mocks.renderHostPort.requestRender).not.toHaveBeenCalled();
+    expect(mocks.renderHostPort.requestRender).toHaveBeenCalledOnce();
   });
 
   it('preserves the early return when engine canvas registration fails', () => {

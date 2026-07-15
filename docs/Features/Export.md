@@ -18,7 +18,7 @@ FCPXML is exposed as a selectable export container for NLE interchange.
 
 ### Current Panel Layout
 
-- A sticky summary bar at the top wraps compact badges ending in a green Export pill, which includes the estimated file size when a byte estimate is available.
+- A sticky summary bar at the top wraps compact badges in at least two columns, ending in a green Export pill that includes the estimated file size when a byte estimate is available.
 - Its first badge shows `SaC` when export resolution and frame rate match the active composition, or `NaC` otherwise; clicking `NaC` copies those composition settings into Export.
 - Clicking a summary badge smooth-scrolls within that Export panel to the related control group and briefly highlights it.
 - A compact command row above `Basic` contains a project-persistent preset list plus `Load`, `Update`, and `Save`.
