@@ -12,6 +12,7 @@ import { cleanupSavedTimelineLayout } from './timelineLayoutPersistence';
 import {
   CAN_EDIT_FACTORY_DOCK_LAYOUTS,
   FACTORY_3D_EDIT_LAYOUT_ID,
+  FACTORY_VIDEO_EDIT_LAYOUT_ID,
   FACTORY_DOCK_LAYOUT_IDS,
   FACTORY_DOCK_LAYOUT_NAMES,
   FACTORY_DOCK_LAYOUT_NAME_TO_ID,
@@ -249,9 +250,11 @@ export function mergeFactoryDockLayouts(savedLayouts: SavedDockLayout[]): SavedD
           ...savedLayout,
           id: factoryId,
           name: FACTORY_DOCK_LAYOUT_NAMES.get(factoryId) ?? savedLayout.name,
-          layout: factoryId === FACTORY_3D_EDIT_LAYOUT_ID
-            ? applyFactory3DEditPreviewDefaults(savedLayout.layout)
-            : savedLayout.layout,
+          layout: factoryId === FACTORY_VIDEO_EDIT_LAYOUT_ID
+            ? DEFAULT_LAYOUT
+            : factoryId === FACTORY_3D_EDIT_LAYOUT_ID
+              ? applyFactory3DEditPreviewDefaults(savedLayout.layout)
+              : savedLayout.layout,
           factory: true,
           favorite: savedLayout.favorite === true,
         });

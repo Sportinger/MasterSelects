@@ -69,7 +69,7 @@ describe('dock store saved layouts', () => {
     const rightGroup = findTabGroup(layout.root, 'right-group');
     const timelineGroup = findTabGroup(layout.root, 'timeline-group');
 
-    expect(panelTypes(leftGroup)).toEqual(['media']);
+    expect(panelTypes(leftGroup)).toEqual(['media', 'transitions']);
     expect(panelTypes(previewGroup)).toEqual(['preview']);
     expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'export', 'history']);
     expect(rightGroup?.activeIndex).toBe(1);

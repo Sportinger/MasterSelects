@@ -27,6 +27,7 @@ export const DEFAULT_LAYOUT: DockLayout = {
             id: 'left-group',
             panels: [
               { id: 'media', type: 'media', title: 'Media' },
+              { id: 'transitions', type: 'transitions', title: 'Transitions' },
             ],
             activeIndex: 0,
           },

@@ -9,7 +9,7 @@ import {
   getMatchingEditableSavedLayout,
   isProtectedFactoryDockLayout,
 } from './layoutPersistence';
-import { FACTORY_3D_EDIT_LAYOUT_ID } from './panelRegistry';
+import { FACTORY_3D_EDIT_LAYOUT_ID, FACTORY_VIDEO_EDIT_LAYOUT_ID } from './panelRegistry';
 import { requestDockLayoutTransition } from './layoutTransition';
 import {
   applySavedTimelineLayout,
@@ -132,9 +132,11 @@ export const createSavedLayoutActions: DockSliceCreator<SavedLayoutActions> = (s
       return;
     }
 
-    const savedDockLayout = savedLayout.id === FACTORY_3D_EDIT_LAYOUT_ID
-      ? applyFactory3DEditPreviewDefaults(savedLayout.layout)
-      : savedLayout.layout;
+    const savedDockLayout = savedLayout.id === FACTORY_VIDEO_EDIT_LAYOUT_ID
+      ? DEFAULT_LAYOUT
+      : savedLayout.id === FACTORY_3D_EDIT_LAYOUT_ID
+        ? applyFactory3DEditPreviewDefaults(savedLayout.layout)
+        : savedLayout.layout;
     const nextLayout = cleanupPersistedLayout(cloneDockLayout(savedDockLayout));
     requestDockLayoutTransition();
     set({

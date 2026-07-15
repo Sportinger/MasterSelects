@@ -441,9 +441,9 @@ same source-handle edges.
 
 ### Built-In Layouts
 
-The built-in `VIDEO EDIT` layout is the default desktop layout:
+The built-in `VIDEO EDIT` layout is the default desktop layout; its left tab group always contains `Media` followed by `Transitions`:
 
-- Left column: Media
+- Left column: Media / Transitions tabs
 - Center: Preview
 - Right column: Properties, Export, History (Export active)
 - Bottom: Timeline
