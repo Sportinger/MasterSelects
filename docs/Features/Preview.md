@@ -35,6 +35,7 @@ Current preview-related overlays and modes include:
 - Non-active compositions are rendered as independent targets.
 - `renderScheduler` drives those targets without depending on the main editor preview loop.
 - Each target can toggle its own transparency grid state.
+- During edit-mode scrubbing, independent previews keep their last visible frame while the video decoder seeks instead of flashing black.
 - Edit mode is panel-local: the Edit button only affects that preview, and the global `Tab` shortcut targets the focused preview or, with no focused preview, the first editable preview.
 
 ### Output Windows

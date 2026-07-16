@@ -25,6 +25,7 @@ type RenderDispatcherTestAccess = {
   lastPreviewTargetTimeMs?: number;
   lastPreviewDisplayedTimeMs?: number;
   render: RenderDispatcher['render'];
+  renderToPreviewCanvas: RenderDispatcher['renderToPreviewCanvas'];
   collectActiveSplatEffectors: (width: number, height: number) => unknown[];
   process3DLayers: (
     layerData: LayerRenderData[],
@@ -32,6 +33,7 @@ type RenderDispatcherTestAccess = {
     width: number,
     height: number,
     cameraOverride?: SceneCameraConfig | null,
+    targetId?: string,
   ) => void;
   renderEmptyFrame: RenderDispatcher['renderEmptyFrame'];
   setRenderTimeOverride: RenderDispatcher['setRenderTimeOverride'];
@@ -224,6 +226,31 @@ describe('RenderDispatcher empty playback hold', () => {
     expect(dispatcher.lastRenderHadContent).toBe(false);
   });
 
+  it('holds an independent preview canvas during empty scrub frames', () => {
+    const { dispatcher, deps } = createDispatcher(false);
+    const createCommandEncoder = vi.fn(() => ({ finish: vi.fn(() => ({})) }));
+    deps.getDevice = vi.fn(() => ({
+      limits: { maxTextureDimension2D: 8192 },
+      createCommandEncoder,
+      queue: { submit: vi.fn() },
+    })) as RenderDeps['getDevice'];
+    deps.targetCanvases.set('edit-preview', { context: {} });
+    deps.renderTargetManager.getIndependentPingView = vi.fn(() => ({}));
+    deps.renderTargetManager.getIndependentPongView = vi.fn(() => ({}));
+    deps.renderTargetManager.getBlackTexture = vi.fn(() => null);
+    deps.outputPipeline.updateResolution = vi.fn();
+    useTimelineStore.setState({ isDraggingPlayhead: true });
+
+    dispatcher.renderToPreviewCanvas('edit-preview', []);
+
+    expect(deps.outputPipeline.updateResolution).toHaveBeenCalledWith(1920, 1080);
+    expect(createCommandEncoder).not.toHaveBeenCalled();
+
+    useTimelineStore.setState({ isDraggingPlayhead: false });
+    dispatcher.renderToPreviewCanvas('edit-preview', []);
+    expect(createCommandEncoder).toHaveBeenCalledTimes(1);
+  });
+
   it('clears the stale preview canvas on large target jumps with empty layer data', () => {
     const { dispatcher, deps, renderEmptyFrame, recordMainPreviewFrame } = createDispatcher(true);
 
@@ -379,8 +406,8 @@ describe('RenderDispatcher empty playback hold', () => {
     });
   });
 
-  it('routes native gaussian splats through the shared scene renderer with a viewport-local camera and effectors', () => {
-    const { dispatcher, deps } = createDispatcher(false);
+  it('routes native gaussian splats through the shared scene renderer with a viewport-local camera and effectors during playback', () => {
+    const { dispatcher, deps } = createDispatcher(true);
     deps.sceneRenderer = {
       isInitialized: true,
       renderScene: vi.fn(() => ({ label: 'shared-scene-view' })),
@@ -462,7 +489,7 @@ describe('RenderDispatcher empty playback hold', () => {
       near: 0.1,
       far: 1000,
       applyDefaultDistance: false,
-    });
+    }, 'preview-target');
 
     expect(deps.sceneRenderer.renderScene).toHaveBeenCalledTimes(1);
     const [deviceArg, layers3D, camera, effectors, isRealtimePlayback] =
@@ -486,7 +513,7 @@ describe('RenderDispatcher empty playback hold', () => {
       mode: 'swirl',
       strength: 45,
     });
-    expect(isRealtimePlayback).toBe(false);
+    expect(isRealtimePlayback).toBe(true);
 
     expect(layerData).toHaveLength(1);
     expect(layerData[0]?.textureView).toEqual({ label: 'shared-scene-view' });

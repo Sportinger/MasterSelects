@@ -296,7 +296,7 @@ export class SharedScene3DProcessor {
       renderLayers3D,
       camera,
       activeSplatEffectors,
-      targetId ? false : isRealtimePlayback,
+      isRealtimePlayback,
       sceneGizmo,
       d.maskTextureManager,
       targetId ?? 'main',

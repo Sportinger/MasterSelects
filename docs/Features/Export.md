@@ -26,7 +26,7 @@ FCPXML is exposed as a selectable export container for NLE interchange.
 - `Basic` contains output naming and container selection. The container row is grouped by `Video`, `Image`, `Audio`, and `XML`, and switches output mode by selecting a deliverable directly.
 - The `Video` group contains codec selection, resolution, frame rate, bitrate/rate controls, animated GIF palette controls, stacked-alpha, and range toggles.
 - The video resolution header includes a compact orientation pictogram. Orientation is independent from the selected preset, so `1080p`, `4K`, and the other preset pills stay selectable in portrait and `Custom` remains reserved for genuinely custom dimensions.
-- Narrow dock panels never scroll horizontally: lower option groups stack to one column, chip grids step from three to two columns at the extreme breakpoint, and summary navigation scrolls only the panel's vertical form.
+- Narrow dock panels never scroll horizontally: lower option groups stack to one column, chip grids step from three to two and finally one column at the narrowest breakpoint, and summary navigation scrolls only the panel's vertical form.
 - In `Image` mode the same middle group becomes an `Image` panel with format-aware resolution and quality controls, and it can export either the current playhead frame or a numbered image sequence folder.
 - The `Audio` group contains audio-only format selection, sample rate, bitrate for browser-compressed audio, normalization, and audio-only range controls.
 - Lower in the panel, legacy `Advanced Video`, `Advanced Audio`, and `Range & Summary` sections still exist for raw-value access.

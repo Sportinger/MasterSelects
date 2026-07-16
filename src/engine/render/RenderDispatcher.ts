@@ -195,6 +195,7 @@ export class RenderDispatcher {
         }
       },
       () => this.getEffectiveTimelineTime(),
+      () => this.getTimelineState().isDraggingPlayhead,
     );
   }
 
@@ -206,7 +207,11 @@ export class RenderDispatcher {
     if (this.renderTimeOverride !== null) {
       return this.renderTimeOverride;
     }
-    return useTimelineStore.getState().playheadPosition;
+    return this.getTimelineState().playheadPosition;
+  }
+
+  private getTimelineState() {
+    return useTimelineStore.getState();
   }
 
   private getNativeGaussianSplatSceneKey(

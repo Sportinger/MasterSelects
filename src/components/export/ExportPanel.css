@@ -1112,6 +1112,12 @@
   }
 }
 
+@container export-panel (max-width: 220px) {
+  .export-container-group .export-chip-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @container (max-width: 240px) {
   .export-summary-badges .export-pill {
     padding-inline: 8px;

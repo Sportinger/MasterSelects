@@ -23,6 +23,8 @@ The system has two halves:
 
 `functions/_middleware.ts` records page visits in the background and writes new entries under the `visit2:` KV prefix.
 
+Unknown HTML paths return a real `404` at the Pages edge instead of loading and tracking the editor SPA fallback. Known entry paths and real static assets continue normally.
+
 Stored metadata can include:
 
 - timestamp

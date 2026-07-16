@@ -27,4 +27,5 @@ Keep the working editor directly reachable while testing a front-facing website 
 - Entry selection happens before the editor bundle is loaded.
 - The landing page is intentionally isolated from the editor UI and its app shell.
 - The landing CTA points back to the editor root for now, so the existing workflow stays intact.
+- Hosted Pages requests outside the editor, landing, and credit-claim entry paths return `404` instead of loading the editor fallback.
 - This is a staging experiment, not yet the final production routing plan.

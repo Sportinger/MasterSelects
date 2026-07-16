@@ -35,6 +35,7 @@ export class TargetPreviewRenderer {
   private readonly recordMainPreviewFrame: PreviewFrameRecorder;
   private readonly process3DLayers: Process3DLayers;
   private readonly getEffectiveTimelineTime: () => number;
+  private readonly getIsDraggingPlayhead: () => boolean;
   private readonly targetBuffers = new Map<string, TargetBuffers>();
 
   constructor(
@@ -42,12 +43,14 @@ export class TargetPreviewRenderer {
     recordMainPreviewFrame: PreviewFrameRecorder,
     process3DLayers: Process3DLayers,
     getEffectiveTimelineTime: () => number,
+    getIsDraggingPlayhead: () => boolean,
   ) {
     this.deps = deps;
     this.layerCollector = new TargetPreviewLayerCollector(deps);
     this.recordMainPreviewFrame = recordMainPreviewFrame;
     this.process3DLayers = process3DLayers;
     this.getEffectiveTimelineTime = getEffectiveTimelineTime;
+    this.getIsDraggingPlayhead = getIsDraggingPlayhead;
   }
 
   private getTargetBuffers(canvasId: string, device: GPUDevice, width: number, height: number): TargetBuffers {
@@ -127,6 +130,10 @@ export class TargetPreviewRenderer {
     d.outputPipeline.updateResolution(width, height);
 
     if (layerData.length === 0) {
+      if (this.getIsDraggingPlayhead()) {
+        this.recordMainPreviewFrame('target-empty-hold');
+        return;
+      }
       const commandEncoder = device.createCommandEncoder();
       const blackTex = d.renderTargetManager.getBlackTexture();
       if (blackTex) {

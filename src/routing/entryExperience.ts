@@ -11,6 +11,7 @@ interface EntryLocationLike {
 const LANDING_HOST = 'landing.localhost';
 const LANDING_PATHS = ['/landing'];
 const CREDIT_CLAIM_PATHS = ['/credits/claim', '/claim'];
+const EDITOR_PATHS = ['/', '/index.html'];
 
 function normalizeHostname(hostname: string): string {
   return hostname.trim().toLowerCase();
@@ -49,6 +50,13 @@ export function isLandingPath(pathname: string): boolean {
 export function isCreditClaimPath(pathname: string): boolean {
   const normalizedPath = normalizePathname(pathname);
   return CREDIT_CLAIM_PATHS.some((basePath) => matchesPathPrefix(normalizedPath, basePath));
+}
+
+export function isSupportedPagePath(pathname: string): boolean {
+  const normalizedPath = normalizePathname(pathname);
+  return EDITOR_PATHS.includes(normalizedPath)
+    || isLandingPath(normalizedPath)
+    || isCreditClaimPath(normalizedPath);
 }
 
 export function resolveEntryExperience(locationLike: EntryLocationLike): EntryExperience {

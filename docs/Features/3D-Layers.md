@@ -60,7 +60,7 @@ Prepared splat runtime metadata, native splat rasterization, preview, nested com
 - glTF / GLB base color textures are loaded from data URIs, external image URIs, or embedded bufferViews when `baseColorTexture` and `TEXCOORD_0` are present.
 - Textured glTF / GLB materials render unlit in the native pass, matching scan/photogrammetry assets better than the simple fallback directional light.
 - The CLIP 3D tab exposes imported-model material controls: base color override, embedded texture enable/disable, lit/unlit/asset shading mode, and UV scale/offset.
-- GLB sequences normalize every frame against the first renderable frame's bounds and preload nearby playback frames, avoiding per-frame center/scale jumps and visible current-frame loading flicker.
+- GLB sequences normalize every frame against the first renderable frame's bounds and preload nearby playback frames; during playback, the main preview and independent edit-camera previews hold the last renderable frame while the next frame loads, avoiding center/scale jumps and black flicker.
 - GLB sequences imported into an open project are copied to `Raw/<sequence-name>/` using the original frame names; existing same-size frame files are reused instead of written again.
 - Untextured models use ambient plus directional fallback lighting.
 - The Transform panel exposes a wireframe debug toggle for model clips.
