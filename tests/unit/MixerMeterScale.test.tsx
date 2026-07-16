@@ -1,9 +1,9 @@
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  getMixerFaderScaleTopPercent,
   MixerMeterScale,
 } from '../../src/components/panels/audio-mixer/MixerMeter';
+import { getMixerFaderScaleTopPercent } from '../../src/components/panels/audio-mixer/audioMixerMath';
 
 afterEach(() => {
   cleanup();

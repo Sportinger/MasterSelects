@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { buildClipNodeGraph, type NodeGraph } from '../../../services/nodeGraph';
+import type { NodeGraph } from '../../../services/nodeGraph';
+import { buildClipNodeGraph } from '../../../services/nodeGraph/clipGraphProjection';
 import {
   createNodeGraphOwnerClip,
   resolveLinkedClipNodeGraphContext,

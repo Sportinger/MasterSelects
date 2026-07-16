@@ -51,6 +51,7 @@ interface FlashBoardPromptBookProps {
 }
 
 const EMPTY_SAVED_SYSTEM_PROMPTS: SavedAiSystemPrompt[] = [];
+const EMPTY_FLASHBOARD_CHAT_MESSAGES: FlashBoardChatMessage[] = [];
 const EMPTY_PROMPT_BOOK_CHAT_MESSAGES: PromptBookChatTurn[] = [];
 
 type PromptBookKind = FlashBoardPromptHistoryEntry['kind'] | 'system';
@@ -510,7 +511,7 @@ function PromptBookVideo({
 export function FlashBoardPromptBook({
   activeSystemPrompt,
   activeSystemPromptProvider,
-  chatMessages = [],
+  chatMessages = EMPTY_FLASHBOARD_CHAT_MESSAGES,
   entries,
   generationRecords,
   initialKind,
@@ -545,8 +546,11 @@ export function FlashBoardPromptBook({
   const bookOpening = useBookOpening(!prefersReducedMotion);
   const { beginTurn, finishTurn, turnSheet } = usePromptBookTurnSheet(!prefersReducedMotion);
   const [editingSystemPrompt, setEditingSystemPrompt] = useState(false);
-  const [visibleChatTime, setVisibleChatTime] = useState<number | null>(null);
-  const [chatRowHeights, setChatRowHeights] = useState<Record<string, number>>({});
+  const [visibleChatTime, setVisibleChatTime] = useState<{ pageId: string; value: number } | null>(null);
+  const [chatRowHeights, setChatRowHeights] = useState<{
+    pageId: string;
+    values: Record<string, number>;
+  } | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const chatToolScrollRef = useRef<HTMLDivElement | null>(null);
   const chatTurnRefs = useRef(new Map<string, HTMLDivElement>());
@@ -566,7 +570,14 @@ export function FlashBoardPromptBook({
   );
   const initialPageIndex = initialKind ? pages.findIndex((page) => page.kind === initialKind) : -1;
   const [pageIndex, setPageIndex] = useState(() => Math.max(0, initialPageIndex));
+  const [syncedInitialPageIndex, setSyncedInitialPageIndex] = useState(initialPageIndex);
   const lastPageIndex = Math.max(0, pages.length - 1);
+  if (initialPageIndex !== syncedInitialPageIndex) {
+    setSyncedInitialPageIndex(initialPageIndex);
+    if (initialPageIndex >= 0) setPageIndex(initialPageIndex);
+  } else if (pageIndex > lastPageIndex) {
+    setPageIndex(lastPageIndex);
+  }
   const canGoBack = getPromptBookTurnIndex(pages, pageIndex, -1) !== pageIndex;
   const canGoForward = getPromptBookTurnIndex(pages, pageIndex, 1) !== pageIndex;
   const activePage = pages[pageIndex] ?? null;
@@ -574,7 +585,9 @@ export function FlashBoardPromptBook({
     ? activePage.chatMessages ?? EMPTY_PROMPT_BOOK_CHAT_MESSAGES
     : EMPTY_PROMPT_BOOK_CHAT_MESSAGES;
   const displayedPageTime = activePage?.kind === 'chat'
-    ? visibleChatTime ?? activeChatMessages[0]?.createdAt ?? activePage.createdAt
+    ? (visibleChatTime?.pageId === activePage.id ? visibleChatTime.value : null)
+      ?? activeChatMessages[0]?.createdAt
+      ?? activePage.createdAt
     : activePage?.createdAt;
   const mediaGroups = useMemo(() => buildPromptBookMediaGroups(activePage), [activePage]);
   const pageDayGroups = useMemo(() => {
@@ -603,23 +616,6 @@ export function FlashBoardPromptBook({
     navigateToIndex(getPromptBookTurnIndex(pages, pageIndex, direction));
   }, [navigateToIndex, pageIndex, pages]);
 
-  useEffect(() => {
-    setPageIndex((current) => Math.min(current, lastPageIndex));
-  }, [lastPageIndex]);
-
-  useEffect(() => {
-    if (initialPageIndex >= 0) setPageIndex(initialPageIndex);
-  }, [initialPageIndex]);
-
-  useEffect(() => {
-    if (activePage?.kind === 'chat') {
-      setVisibleChatTime(activeChatMessages[0]?.createdAt ?? activePage.createdAt);
-    } else {
-      setVisibleChatTime(null);
-      setChatRowHeights((current) => (Object.keys(current).length === 0 ? current : {}));
-    }
-  }, [activeChatMessages, activePage?.createdAt, activePage?.kind]);
-
   const updateVisibleChatTime = useCallback(() => {
     if (activePage?.kind !== 'chat') return;
     const scroller = chatScrollRef.current;
@@ -629,11 +625,15 @@ export function FlashBoardPromptBook({
       const element = chatTurnRefs.current.get(message.id);
       return element ? element.getBoundingClientRect().bottom >= scrollerTop + 8 : false;
     });
-    setVisibleChatTime(visibleMessage?.createdAt ?? activeChatMessages.at(-1)?.createdAt ?? activePage.createdAt);
+    const value = visibleMessage?.createdAt ?? activeChatMessages.at(-1)?.createdAt ?? activePage.createdAt;
+    setVisibleChatTime(current => current?.pageId === activePage.id && current.value === value
+      ? current
+      : { pageId: activePage.id, value });
   }, [activeChatMessages, activePage]);
 
   useEffect(() => {
     if (activePage?.kind !== 'chat') return undefined;
+    const pageId = activePage.id;
 
     const updateHeights = () => {
       const nextHeights: Record<string, number> = {};
@@ -642,10 +642,11 @@ export function FlashBoardPromptBook({
         if (element) nextHeights[message.id] = Math.ceil(element.getBoundingClientRect().height);
       }
       setChatRowHeights((current) => (
-        Object.keys(nextHeights).length === Object.keys(current).length
-        && Object.entries(nextHeights).every(([id, height]) => current[id] === height)
+        current?.pageId === pageId
+        && Object.keys(nextHeights).length === Object.keys(current.values).length
+        && Object.entries(nextHeights).every(([id, height]) => current.values[id] === height)
           ? current
-          : nextHeights
+          : { pageId, values: nextHeights }
       ));
       updateVisibleChatTime();
     };
@@ -666,7 +667,7 @@ export function FlashBoardPromptBook({
       observer.disconnect();
       window.removeEventListener('resize', updateHeights);
     };
-  }, [activeChatMessages, activePage?.kind, updateVisibleChatTime]);
+  }, [activeChatMessages, activePage?.id, activePage?.kind, updateVisibleChatTime]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1058,7 +1059,9 @@ export function FlashBoardPromptBook({
                             <div
                               className={`fb-prompt-book-tool-row ${message.toolCalls.length > 0 ? 'has-tools' : ''}`}
                               key={message.id}
-                              style={chatRowHeights[message.id] ? { minHeight: chatRowHeights[message.id] } : undefined}
+                              style={chatRowHeights?.pageId === activePage.id && chatRowHeights.values[message.id]
+                                ? { minHeight: chatRowHeights.values[message.id] }
+                                : undefined}
                             >
                               {message.toolCalls.map((toolCall) => (
                                 <details className="fb-prompt-book-tool-call" key={toolCall.id}>

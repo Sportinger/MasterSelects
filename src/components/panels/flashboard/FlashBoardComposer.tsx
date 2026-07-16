@@ -295,16 +295,12 @@ export function FlashBoardComposer({
     version,
   });
   const supportsAudio = !isAudioMode && selectedEntry?.supportsGenerateAudio === true;
-  useEffect(() => {
-    if (providerId === RUNWAY_VIDEO_PROVIDER_ID && duration === 10 && mode === '1080p') {
-      setMode('720p');
-    }
-  }, [duration, mode, providerId]);
-  useEffect(() => {
-    if (seedanceReferenceModeActive && hasAudioReferenceInput) {
-      setGenerateAudio(true);
-    }
-  }, [hasAudioReferenceInput, seedanceReferenceModeActive]);
+  if (providerId === RUNWAY_VIDEO_PROVIDER_ID && duration === 10 && mode === '1080p') {
+    setMode('720p');
+  }
+  if (seedanceReferenceModeActive && hasAudioReferenceInput && !generateAudio) {
+    setGenerateAudio(true);
+  }
   const supportsMultiShot = !isAudioMode && selectedEntry?.supportsMultiShot === true;
   const {
     canAddShot, handleAddShot, handleMultiShotToggle, handleRemoveShot,

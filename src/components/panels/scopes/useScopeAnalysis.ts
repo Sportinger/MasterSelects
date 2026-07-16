@@ -33,8 +33,6 @@ export function useGpuScope(
   const rafRef = useRef(0);
   const lastTimeRef = useRef(0);
   const initedRef = useRef(false);
-  const viewModeRef = useRef(viewMode);
-  viewModeRef.current = viewMode;
 
   // Initialize WebGPU context + renderer
   useEffect(() => {
@@ -75,7 +73,7 @@ export function useGpuScope(
     const canvas = canvasRef.current;
     if (!renderer || !ctx || !canvas) return;
 
-    const mode = VIEW_MODE_MAP[viewModeRef.current];
+    const mode = VIEW_MODE_MAP[viewMode];
 
     try {
       const texture = renderHostPort.getLastRenderedTexture();
@@ -131,7 +129,7 @@ export function useGpuScope(
     } catch {
       // GPU error — skip frame
     }
-  }, [scopeType, canvasRef]);
+  }, [scopeType, canvasRef, viewMode]);
 
   // RAF render loop
   useEffect(() => {

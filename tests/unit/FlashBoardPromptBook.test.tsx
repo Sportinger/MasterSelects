@@ -327,6 +327,31 @@ describe('FlashBoardPromptBook', () => {
     expect(screen.queryByText('Newer generation prompt')).not.toBeInTheDocument();
   });
 
+  it('keeps the clamped page when removed prompt pages return', () => {
+    const baseProps = {
+      copiedEntryId: null,
+      generationRecords: [],
+      mediaFiles: [],
+      onClose: vi.fn(),
+      onCopy: vi.fn(),
+    };
+    const newestEntry = { createdAt: 2000, id: 'gen-new', kind: 'generation' as const, prompt: 'Newest prompt' };
+    const olderEntry = { createdAt: 1000, id: 'gen-old', kind: 'generation' as const, prompt: 'Older prompt' };
+    const { rerender } = render(
+      <FlashBoardPromptBook {...baseProps} entries={[newestEntry, olderEntry]} />,
+    );
+
+    fireEvent.click(document.querySelector('.fb-prompt-book-right-page')!);
+    expect(screen.getAllByText('Older prompt').length).toBeGreaterThan(0);
+
+    rerender(<FlashBoardPromptBook {...baseProps} entries={[newestEntry]} />);
+    rerender(<FlashBoardPromptBook {...baseProps} entries={[newestEntry, olderEntry]} />);
+
+    const leftPageText = document.querySelector('.fb-prompt-book-left-page')?.textContent ?? '';
+    expect(leftPageText).toContain('Newest prompt');
+    expect(leftPageText).not.toContain('Older prompt');
+  });
+
   it('groups chat messages by day and shows assistant tool calls on the right page', () => {
     const createdAt = Date.parse('2026-07-09T10:00:00.000Z');
     const dayLabel = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(createdAt));
