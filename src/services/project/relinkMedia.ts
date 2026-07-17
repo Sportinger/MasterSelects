@@ -181,7 +181,7 @@ export function isNativeProjectLinkedMedia(mediaFile: MediaFile): boolean {
 }
 
 export function mediaNeedsRelink(mediaFile: MediaFile): boolean {
-  return !mediaFile.file && !isNativeProjectLinkedMedia(mediaFile);
+  return !mediaFile.liveInput && !mediaFile.file && !isNativeProjectLinkedMedia(mediaFile);
 }
 
 function replaceMediaFile(mediaFileId: string, nextFile: Partial<MediaFile>): void {

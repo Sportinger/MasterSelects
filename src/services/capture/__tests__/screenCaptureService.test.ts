@@ -81,4 +81,31 @@ describe('ScreenCaptureService', () => {
       hasPreviewSource: true,
     });
   });
+
+  it('accounts pause time from the request and coalesces calls while the backend drains', async () => {
+    let now = 1000;
+    let releasePause!: () => void;
+    const backend = createBackend();
+    backend.pause = vi.fn(() => new Promise<void>(resolve => { releasePause = resolve; }));
+    const service = createScreenCaptureService({ backend, storageManager: {}, now: () => now });
+    service.beginSourceSelection('session-1');
+    service.attachSource({ stream: { getTracks: () => [] } as unknown as MediaStream }, {
+      surface: 'window',
+      dimensions: { width: 1280, height: 720 },
+      hasDisplayAudio: false,
+      cursorSupported: false,
+    });
+    await service.start({ tier: 'media-recorder', fps: 30, bitrateBitsPerSecond: 4_000_000 });
+
+    now = 4000;
+    const firstPause = service.pause();
+    const secondPause = service.pause();
+    expect(secondPause).toBe(firstPause);
+    expect(backend.pause).toHaveBeenCalledOnce();
+    now = 9000;
+    releasePause();
+    await Promise.all([firstPause, secondPause]);
+
+    expect(service.getSnapshot()).toMatchObject({ phase: 'paused', elapsedSeconds: 3, pausedAt: 4000 });
+  });
 });

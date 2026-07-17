@@ -23,6 +23,7 @@ export interface ClipboardClipData {
   trackType: 'video' | 'audio' | 'midi';
   name: string;
   mediaFileId?: string;
+  liveInputId?: string;
   signalAssetId?: string;
   signalRefId?: string;
   signalRenderAdapterId?: string;
@@ -42,6 +43,7 @@ export interface ClipboardClipData {
   reversed?: boolean;
   speed?: number;
   preservesPitch?: boolean;
+  freeRun?: boolean;
   textProperties?: import('../../../types').TextClipProperties;
   text3DProperties?: import('../../../types').Text3DProperties;
   solidColor?: string;

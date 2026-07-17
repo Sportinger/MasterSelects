@@ -36,6 +36,7 @@ export function calcRangeCoverage(ranges: [number, number][], totalDuration: num
 }
 
 export function projectMediaCanHaveAudio(mediaFile: ProjectMediaFile): boolean {
+  if (mediaFile.liveInput) return false;
   if (mediaFile.type === 'audio') return true;
   if (mediaFile.type !== 'video') return false;
   return mediaFile.hasAudio !== false || Boolean(mediaFile.audioCodec);
@@ -48,7 +49,7 @@ export async function applyProjectRestoreMediaUpdate(update: MediaStoreUpdate): 
 }
 
 export function isProjectMediaThumbnailCandidate(media: ProjectMediaFile): boolean {
-  return Boolean(media.fileHash) && (media.type === 'image' || media.type === 'video');
+  return !media.liveInput && Boolean(media.fileHash) && (media.type === 'image' || media.type === 'video');
 }
 
 async function applyCachedThumbnailBatch(thumbnailsById: Map<string, Blob>): Promise<number> {
@@ -189,6 +190,11 @@ export async function restoreDeferredMediaCacheState(
 
   let completed = 0;
   for (const pm of projectMedia) {
+    if (pm.liveInput) {
+      completed++;
+      onProgress?.(completed, projectMedia.length, pm.name);
+      continue;
+    }
     onProgress?.(completed, projectMedia.length, pm.name, 0);
     const updates: Partial<MediaFile> = {};
 

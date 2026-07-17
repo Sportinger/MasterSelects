@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-07-17",
+    "type": "new",
+    "title": "MasterSelects 2.4.2",
+    "description": "Live Inputs release: reusable display, camera and capture-device streams plus composition feedback become normal Media Panel items and timeline clips with reconnect, persistence, live thumbnails, hover previews, properties, transforms and effects; capture, media hydration, clipboard, history and nested playback lifecycles are hardened; direct imprint/privacy routes, a self-hosted demo, user-activated free-credit checks and system-font defaults reduce unnecessary third-party requests; related editor interactions, documentation and tests are updated.",
+    "section": "Release"
+  },
+  {
     "date": "2026-07-15",
     "type": "new",
     "title": "MasterSelects 2.4.1",

@@ -61,12 +61,12 @@ export function InfoMenu({
             <span>About</span>
           </button>
           <div className="menu-separator" />
-          <button className="menu-option" onClick={() => openLegalDialog('imprint')}>
+          <a className="menu-option" href="/impressum" rel="noopener noreferrer" target="_blank">
             <span>Imprint</span>
-          </button>
-          <button className="menu-option" onClick={() => openLegalDialog('privacy')}>
+          </a>
+          <a className="menu-option" href="/datenschutz" rel="noopener noreferrer" target="_blank">
             <span>Privacy Policy</span>
-          </button>
+          </a>
           <button className="menu-option" onClick={() => openLegalDialog('contact')}>
             <span>Contact</span>
           </button>

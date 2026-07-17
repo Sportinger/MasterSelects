@@ -68,7 +68,8 @@ Dockable desktop panel system with an After Effects-style menu bar, unified clip
 - **Timeline Tour** starts the timeline deep dive campaign
 - **Changelog** opens the changelog dialog
 - **About** shows app and version information
-- **Imprint / Privacy Policy / Contact** open the legal dialog pages
+- **Imprint / Privacy Policy** open the directly addressable `/impressum` and `/datenschutz` pages in a new tab
+- **Contact** opens the legal dialog; German and English legal texts can be selected there
 
 The welcome/onboarding chooser can also apply shortcut-preset defaults based on the editor background the user selects.
 

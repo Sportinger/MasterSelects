@@ -158,6 +158,10 @@ export function LandingPage() {
           </div>
         </section>
       </main>
+      <footer className="landing-legal-links">
+        <a href="/impressum">Impressum</a>
+        <a href="/datenschutz">Datenschutz</a>
+      </footer>
     </div>
   );
 }

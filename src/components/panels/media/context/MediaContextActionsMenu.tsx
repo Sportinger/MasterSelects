@@ -72,6 +72,7 @@ export interface MediaContextActionsMenuProps {
   onNewFolder: () => void;
   onNewText: () => void;
   onNewSolid: () => void;
+  onNewLiveInput: () => void;
   onNewMesh: (meshType: MeshPrimitiveType) => void;
   onNewText3D: () => void;
   onNewCamera: () => void;
@@ -138,6 +139,7 @@ export function MediaContextActionsMenu({
   onNewFolder,
   onNewText,
   onNewSolid,
+  onNewLiveInput,
   onNewMesh,
   onNewText3D,
   onNewCamera,
@@ -172,6 +174,7 @@ export function MediaContextActionsMenu({
             onNewFolder={onNewFolder}
             onNewText={onNewText}
             onNewSolid={onNewSolid}
+            onNewLiveInput={onNewLiveInput}
             onNewMesh={onNewMesh}
             onNewText3D={onNewText3D}
             onNewCamera={onNewCamera}

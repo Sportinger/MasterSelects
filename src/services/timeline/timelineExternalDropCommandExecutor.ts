@@ -9,6 +9,7 @@ import {
   resolveMediaFileForTimelineDrop,
 } from './timelineExternalDropMediaResolver';
 import { Logger } from '../logger';
+import { placeLiveInputOnTimeline } from '../mediaRuntime/liveInputTimelineAdapter';
 
 const log = Logger.create('TimelineExternalDropCommandExecutor');
 
@@ -84,6 +85,17 @@ async function executeMediaFileDropCommand(
   const mediaFile = mediaStore.files.find((file) => file.id === mediaFileId);
   if (!mediaFile) {
     return rejected('missing-media-file');
+  }
+
+  if (mediaFile.liveInput) {
+    if (!params.isVideoTrack) return rejected('live-input-on-audio-track');
+    const clipId = placeLiveInputOnTimeline({
+      item: mediaFile,
+      trackId: params.trackId,
+      startTime: params.resolveStartTime(mediaFile.duration),
+      duration: mediaFile.duration,
+    });
+    return clipId ? handled() : rejected('live-input-unavailable-in-composition');
   }
 
   const fileIsAudio = params.isAudioOnlyMediaFile(mediaFile, mediaFile.file);

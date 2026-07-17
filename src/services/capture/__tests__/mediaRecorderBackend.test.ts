@@ -30,20 +30,38 @@ class MemoryBlobStore implements CaptureRecoveryBlobStore {
   async getChunk(): Promise<Blob | null> { return null; }
 }
 
+class BlockingBlobStore extends MemoryBlobStore {
+  private releaseWrite!: () => void;
+  private readonly blocked = new Promise<void>(resolve => { this.releaseWrite = resolve; });
+
+  release(): void { this.releaseWrite(); }
+
+  override async putChunk(input: CaptureRecoveryChunkInput): Promise<CaptureRecoveryChunkRef> {
+    await this.blocked;
+    return super.putChunk(input);
+  }
+}
+
 class FakeMediaRecorder extends EventTarget {
   static supported = new Set<string>();
   static isTypeSupported(mimeType: string): boolean { return this.supported.has(mimeType); }
   state: RecordingState = 'inactive';
   readonly mimeType: string;
+  emitDuringPause: string | null = null;
+  deferRequestData = false;
   readonly pause = vi.fn(() => {
     this.state = 'paused';
+    if (this.emitDuringPause) this.emit(this.emitDuringPause);
     this.dispatchEvent(new Event('pause'));
   });
   readonly resume = vi.fn(() => {
     this.state = 'recording';
     this.dispatchEvent(new Event('resume'));
   });
-  readonly requestData = vi.fn(() => this.emit('tail'));
+  readonly requestData = vi.fn(() => {
+    if (this.deferRequestData) globalThis.setTimeout(() => this.emit('tail'), 0);
+    else this.emit('tail');
+  });
   constructor(_stream: MediaStream, options?: MediaRecorderOptions) {
     super();
     this.mimeType = options?.mimeType ?? 'video/fallback';
@@ -112,7 +130,41 @@ describe('MediaRecorderCaptureBackend', () => {
     const result = await backend.stop();
 
     expect(recorder.pause).toHaveBeenCalledOnce();
+    expect(recorder.requestData).toHaveBeenCalledTimes(2);
     expect(recorder.resume).toHaveBeenCalledOnce();
     expect(result.durationSeconds).toBe(4);
+  });
+
+  it('flushes and drains pending recorder blobs before pause completes', async () => {
+    FakeMediaRecorder.supported = new Set(['video/webm']);
+    const blobStore = new BlockingBlobStore();
+    const { backend } = createBackend(() => 1000, blobStore);
+    await backend.start({
+      sessionId: 'session-1',
+      source: {} as MediaStream,
+      config: { tier: 'media-recorder', fps: 30, bitrateBitsPerSecond: 4_000_000 },
+    });
+    const recorder = (backend as unknown as { recorder: FakeMediaRecorder }).recorder;
+    recorder.emitDuringPause = 'stale';
+    recorder.deferRequestData = true;
+    recorder.emit('queued');
+    const pause = backend.pause();
+    await new Promise(resolve => globalThis.setTimeout(resolve, 0));
+
+    expect(backend.getStats()).toMatchObject({
+      pendingWriteBytes: 15,
+      maxPendingWriteBytes: 15,
+      artifactBytes: 0,
+    });
+
+    blobStore.release();
+    await pause;
+    expect(recorder.requestData).toHaveBeenCalledOnce();
+    expect(backend.getStats()).toMatchObject({
+      pendingWriteBytes: 0,
+      maxPendingWriteBytes: 15,
+      artifactBytes: 15,
+      outputBytes: 15,
+    });
   });
 });

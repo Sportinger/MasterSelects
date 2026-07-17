@@ -5,35 +5,12 @@
 export function ImprintDE() {
   return (
     <div className="legal-text">
-      <h3>Angaben gemäß § 5 TMG</h3>
-      <p>Roman Kuskowski<br />[Adresse wird nachgetragen]</p>
+      <h3>Angaben gemäß § 5 DDG</h3>
+      <p>Roman Kuskowski</p>
 
       <h3>Kontakt</h3>
       <p>E-Mail: admin@masterselects.com</p>
 
-      <h3>Verantwortlich für den Inhalt nach § 55 Abs. 2 RStV</h3>
-      <p>Roman Kuskowski<br />[Adresse wird nachgetragen]</p>
-
-      <h3>EU-Streitschlichtung</h3>
-      <p>
-        Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit:{' '}
-        <a href="https://ec.europa.eu/consumers/odr/" target="_blank" rel="noopener noreferrer">https://ec.europa.eu/consumers/odr/</a>
-      </p>
-
-      <h3>Haftungsausschluss</h3>
-      <h4>Haftung für Inhalte</h4>
-      <p>
-        Die Inhalte unserer Seiten wurden mit größter Sorgfalt erstellt. Für die Richtigkeit, Vollständigkeit
-        und Aktualität der Inhalte können wir jedoch keine Gewähr übernehmen. Als Diensteanbieter sind wir
-        gemäß § 7 Abs. 1 TMG für eigene Inhalte auf diesen Seiten nach den allgemeinen Gesetzen verantwortlich.
-        Nach §§ 8 bis 10 TMG sind wir als Diensteanbieter jedoch nicht verpflichtet, übermittelte oder
-        gespeicherte fremde Informationen zu überwachen.
-      </p>
-      <h4>Haftung für Links</h4>
-      <p>
-        Unser Angebot enthält Links zu externen Websites Dritter, auf deren Inhalte wir keinen Einfluss haben.
-        Für die Inhalte der verlinkten Seiten ist stets der jeweilige Anbieter oder Betreiber verantwortlich.
-      </p>
       <h4>Urheberrecht</h4>
       <p>
         MasterSelects ist Open Source Software, veröffentlicht auf GitHub unter{' '}
@@ -47,61 +24,89 @@ export function PrivacyDE() {
   return (
     <div className="legal-text">
       <h3>1. Datenschutz auf einen Blick</h3>
-      <h4>Allgemeine Hinweise</h4>
       <p>
-        Die folgenden Hinweise geben einen Überblick darüber, was mit Ihren personenbezogenen Daten passiert,
-        wenn Sie MasterSelects nutzen.
-      </p>
-      <h4>Datenverarbeitung auf dieser Website</h4>
-      <p>
-        <strong>MasterSelects ist primär eine lokale Anwendung.</strong> Alle Video-, Bild- und Audiodateien
-        werden ausschließlich auf Ihrem Gerät verarbeitet. Ihre Mediendateien verlassen zu keinem Zeitpunkt Ihren Computer.
+        <strong>MasterSelects arbeitet standardmäßig lokal.</strong> Projekte und Mediendateien werden im Browser
+        verarbeitet. Abgesehen von der technisch erforderlichen Auslieferung der Website verlassen Daten Ihr Gerät nur,
+        wenn Sie eine ausdrücklich als Cloud-, Download-, Login-, Zahlungs- oder Anbieterfunktion gekennzeichnete
+        Funktion aufrufen.
       </p>
 
       <h3>2. Verantwortlicher</h3>
       <p>Roman Kuskowski<br />E-Mail: admin@masterselects.com</p>
 
-      <h3>3. Hosting</h3>
+      <h3>3. Hosting und Website-Aufrufe</h3>
       <p>
         Diese Website wird bei <strong>Cloudflare, Inc.</strong> (101 Townsend St, San Francisco, CA 94107, USA) gehostet.
-        Cloudflare ist unter dem EU-US Data Privacy Framework zertifiziert (Angemessenheitsbeschluss der
-        EU-Kommission gem. Art. 45 DSGVO). Ergänzend bestehen Standardvertragsklauseln (SCCs).
+        Dabei verarbeitet Cloudflare insbesondere IP-Adresse, angefragte URL, Zeitpunkt, Referrer sowie Browser- und
+        Geräteinformationen zur Auslieferung und Absicherung der Website. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO
+        (sichere, zuverlässige Bereitstellung). Provider-Logs werden nach den vertraglichen und konfigurierten
+        Aufbewahrungsfristen gelöscht, sobald sie für Betrieb und Sicherheit nicht mehr erforderlich sind.
       </p>
       <p>
-        Beim Besuch der Website werden automatisch vom Hosting-Provider Informationen in sog. Server-Log-Dateien
-        gespeichert (IP-Adresse, Browsertyp, Betriebssystem, Referrer-URL, Uhrzeit). Rechtsgrundlage ist
-        Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an der sicheren Bereitstellung).
+        Zusätzlich speichern wir für Betriebsüberwachung und Missbrauchserkennung den Pfad, Zeitpunkt, Cloudflare-Land
+        und -Stadt, Referrer, einen gekürzten User-Agent sowie eine aus IP-Adresse und geheimem Salt gebildete pseudonyme
+        Besucherkennung. Die Klar-IP speichern wir in diesem eigenen Live-Log nicht. Diese Ereignisse werden nach etwa
+        einer Stunde automatisch gelöscht. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO.
       </p>
 
-      <p>
-        Zus&auml;tzlich verarbeiten wir vor&uuml;bergehend serverseitige Besuchsereignisse f&uuml;r die technische
-        Betriebs&uuml;berwachung und interne Live-Benachrichtigungen, wenn Seiten dieser Website aufgerufen werden.
-        Dabei k&ouml;nnen insbesondere der aufgerufene Pfad, der Zeitpunkt, Land und Stadt aus den Cloudflare-Geo-Daten,
-        Referrer, ein gek&uuml;rzter User-Agent sowie eine pseudonyme Besucherkennung verarbeitet werden, die aus der
-        IP-Adresse und einem geheimen Salt gebildet wird. Die Klar-IP speichern wir in diesem Live-Log selbst nicht.
-        Die Speicherdauer dieser Besuchsereignisse betr&auml;gt in der Regel etwa eine Stunde. Rechtsgrundlage ist
-        Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an sicherem Betrieb, Missbrauchserkennung und Kenntnis
-        aktueller Website-Aktivit&auml;ten).
-      </p>
-
-      <h3>4. Benutzerkonten und Zahlungsabwicklung</h3>
-      <p>Wenn Sie ein Benutzerkonto erstellen oder kostenpflichtige Dienste (z.B. API-Credits) nutzen, verarbeiten wir:</p>
+      <h3>4. Konten, Anmeldung, E-Mail und Zahlung</h3>
       <ul>
-        <li><strong>Kontodaten:</strong> E-Mail-Adresse, Anzeigename — Rechtsgrundlage: Vertragserfüllung (Art. 6 Abs. 1 lit. b DSGVO)</li>
-        <li><strong>Zahlungsdaten:</strong> Werden direkt von <strong>Stripe, Inc.</strong> verarbeitet. Stripe ist unter dem EU-US Data Privacy Framework zertifiziert. Wir speichern keine Kreditkartennummern oder Bankdaten. Rechtsgrundlage: Vertragserfüllung (Art. 6 Abs. 1 lit. b DSGVO)</li>
-        <li><strong>Nutzungsdaten:</strong> Credit-Balance, Nutzungshistorie — Rechtsgrundlage: Vertragserfüllung (Art. 6 Abs. 1 lit. b DSGVO)</li>
-        <li><strong>Hosted-AI-Logs:</strong> Wenn Sie den gehosteten AI-Chat oder gehostete Mediengenerierung nutzen, k&ouml;nnen Prompts/Nachrichten, Request-Payloads, Antworten, Tool Calls, Moderationsergebnisse, Tokenzahlen, Credit-Kosten, Dauer, Status, Fehlerzustand und ein pseudonymer IP-Hash in unserer D1-Datenbank f&uuml;r Account-Historie, Abrechnung/Debugging, Missbrauchserkennung und Support gespeichert werden — Rechtsgrundlage: Vertragserf&uuml;llung (Art. 6 Abs. 1 lit. b DSGVO) und berechtigtes Interesse (Art. 6 Abs. 1 lit. f DSGVO)</li>
-        <li><strong>Rechnungsdaten:</strong> Werden gem. § 147 AO und § 257 HGB für 10 Jahre aufbewahrt — Rechtsgrundlage: Gesetzliche Pflicht (Art. 6 Abs. 1 lit. c DSGVO)</li>
+        <li><strong>Kontodaten:</strong> E-Mail-Adresse, Anzeigename, Credit-Bestand und Nutzungshistorie; Art. 6 Abs. 1 lit. b DSGVO.</li>
+        <li><strong>Google-Anmeldung:</strong> Bei freiwilliger Google-Anmeldung erhalten wir die von Google freigegebenen Identitäts- und Kontaktdaten; Art. 6 Abs. 1 lit. b DSGVO.</li>
+        <li><strong>Transaktions-E-Mails:</strong> <strong>Resend</strong> verarbeitet Empfängeradresse und Nachrichteninhalt für Login- und Kontomails; Art. 6 Abs. 1 lit. b DSGVO.</li>
+        <li><strong>Zahlungen:</strong> <strong>Stripe, Inc.</strong> verarbeitet Zahlungs- und Abrechnungsdaten. Wir speichern keine vollständigen Karten- oder Bankdaten; Art. 6 Abs. 1 lit. b und lit. c DSGVO.</li>
       </ul>
-
-      <h3>5. Lokale Datenverarbeitung</h3>
       <p>
-        MasterSelects speichert Projektdaten, Einstellungen und Medien-Referenzen in der IndexedDB Ihres Browsers.
-        Diese Daten verlassen Ihren Computer nicht. AI-Funktionen mit API-Verbindung werden explizit gekennzeichnet;
-        gehosteter AI-Chat und gehostete Mediengenerierung werden auf dem Cloudflare-Backend verarbeitet und k&ouml;nnen wie oben beschrieben protokolliert werden.
+        Login-Zustände laufen nach zehn Minuten, Sitzungen nach 30 Tagen ab. Konten und nicht gesetzlich
+        aufbewahrungspflichtige Nutzungsdaten bleiben für die Vertragsdauer gespeichert und werden danach gelöscht,
+        sobald keine Abrechnungs-, Sicherheits- oder Rechtsansprüche mehr bestehen. Rechnungen und Buchungsbelege werden
+        grundsätzlich acht Jahre aufbewahrt (§ 147 AO, § 14b UStG).
       </p>
 
-      <h3>6. Ihre Rechte</h3>
+      <h3>5. Cloud- und KI-Funktionen</h3>
+      <p>
+        Wenn Sie eine Cloud- oder KI-Funktion starten, werden die dafür ausgewählten Prompts, Nachrichten, Medien,
+        Referenzen und technischen Metadaten an den jeweiligen Anbieter übermittelt. Abhängig von der gewählten Funktion
+        sind Empfänger insbesondere <strong>OpenAI</strong>, <strong>Kie.ai</strong> und dessen ausgewählte Modell- oder
+        Upload-Anbieter sowie <strong>ElevenLabs</strong>. Bei Verwendung eigener API-Schlüssel kann die Übermittlung direkt
+        aus Ihrem Browser unter anderem an OpenAI, Anthropic, AssemblyAI, Deepgram, PiAPI, Kie.ai, Evolink, ElevenLabs
+        oder die YouTube Data API erfolgen. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO; Sicherheits- und
+        Missbrauchsprotokolle beruhen ergänzend auf Art. 6 Abs. 1 lit. f DSGVO.
+      </p>
+      <p>
+        Beim gehosteten AI-Chat können Prompts, Antworten, Tool Calls, Moderationsergebnisse, Tokenzahlen, Credit-Kosten,
+        Dauer, Status, Fehler und ein pseudonymer IP-Hash für Account-Historie, Abrechnung, Support und Missbrauchsschutz
+        gespeichert werden. Diese Inhalte werden gelöscht, wenn sie hierfür nicht mehr erforderlich sind oder einem
+        berechtigten Löschverlangen entsprochen wird; gesetzlich erforderliche Abrechnungsnachweise bleiben unberührt.
+      </p>
+
+      <h3>6. Lokale Speicherung und externe Ressourcen</h3>
+      <p>
+        Projekte, Einstellungen, verschlüsselte eigene API-Schlüssel und Medienreferenzen liegen in Local Storage,
+        IndexedDB oder OPFS Ihres Browsers und können über die Browserdaten gelöscht werden. Wenn Sie ausdrücklich eine
+        Google-Schrift auswählen oder ein KI-/Audio-Modell laden, verbindet sich Ihr Browser mit Google Fonts bzw.
+        Hugging Face; dabei werden insbesondere IP-Adresse und angefragte Ressource übertragen. Wenn Sie Release-Infos
+        des Native Helpers oder GitHub-Links öffnen, verbindet sich Ihr Browser mit GitHub. Das Demo-Video wird von
+        MasterSelects selbst ausgeliefert und baut keine Verbindung zu YouTube auf.
+      </p>
+
+      <h3>7. Cookies und Endgerätespeicher</h3>
+      <p>
+        Wir verwenden keine Analyse- oder Marketing-Cookies. Technisch erforderliche Cookies sichern Login-Zustände
+        (höchstens zehn Minuten) und Sitzungen (höchstens 30 Tage). Erst wenn Sie aktiv nach dem kostenlosen Credit-Angebot
+        fragen, bindet ein notwendiger Cookie das angeforderte Angebot für höchstens eine Stunde an diesen Browser.
+        Die serverseitige Besuchsüberwachung speichert dafür nichts auf Ihrem Endgerät.
+      </p>
+
+      <h3>8. Drittlandübermittlungen</h3>
+      <p>
+        Einige genannte Anbieter verarbeiten Daten außerhalb des Europäischen Wirtschaftsraums. Solche Übermittlungen
+        erfolgen nur auf Grundlage eines Angemessenheitsbeschlusses nach Art. 45 DSGVO oder geeigneter Garantien nach
+        Art. 46 DSGVO, insbesondere Standardvertragsklauseln. Informationen und Kopien der einschlägigen Garantien können
+        Sie unter admin@masterselects.com anfordern.
+      </p>
+
+      <h3>9. Ihre Rechte</h3>
       <p>Sie haben jederzeit das Recht auf:</p>
       <ul>
         <li><strong>Auskunft</strong> (Art. 15 DSGVO)</li>
@@ -110,19 +115,20 @@ export function PrivacyDE() {
         <li><strong>Einschränkung</strong> (Art. 18 DSGVO)</li>
         <li><strong>Datenübertragbarkeit</strong> (Art. 20 DSGVO)</li>
         <li><strong>Widerspruch</strong> (Art. 21 DSGVO)</li>
+        <li><strong>Widerruf einer Einwilligung</strong> mit Wirkung für die Zukunft (Art. 7 Abs. 3 DSGVO)</li>
       </ul>
       <p>Zur Ausübung Ihrer Rechte genügt eine E-Mail an <strong>admin@masterselects.com</strong>.</p>
+      <p>Sie können sich außerdem bei einer Datenschutzaufsichtsbehörde beschweren (Art. 77 DSGVO).</p>
 
-      <h3>7. Cookies</h3>
+      <h3>10. Pflicht zur Bereitstellung</h3>
       <p>
-        MasterSelects verwendet ausschließlich technisch notwendige Cookies für Authentifizierung und
-        Session-Management. Keine Tracking- oder Marketing-Cookies. Die oben beschriebene serverseitige
-        Besuchsüberwachung speichert für diesen Zweck keine Informationen auf Ihrem Endgerät.
+        Die lokale Editor-Nutzung ist ohne Konto möglich. Für Konto, Zahlung oder Cloud-Credits sind die jeweils
+        abgefragten Angaben vertraglich erforderlich; ohne sie kann die betreffende Funktion nicht bereitgestellt werden.
       </p>
 
-      <h3>8. Änderungen</h3>
-      <p>Diese Datenschutzerklärung wird bei Bedarf angepasst. Aktuelle Version unter Info → Datenschutz.</p>
-      <p className="legal-meta">Stand: Mai 2026</p>
+      <h3>11. Änderungen</h3>
+      <p>Die aktuelle Fassung ist jederzeit unter <a href="/datenschutz">/datenschutz</a> erreichbar.</p>
+      <p className="legal-meta">Stand: 17. Juli 2026</p>
     </div>
   );
 }

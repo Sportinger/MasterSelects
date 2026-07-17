@@ -272,6 +272,7 @@
   font-size: var(--font-sm);
   cursor: pointer;
   text-align: left;
+  text-decoration: none;
   transition: background var(--transition-fast);
 }
 

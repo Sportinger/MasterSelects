@@ -34,7 +34,7 @@ export interface ScreenCaptureBackend {
   resume(): Promise<void> | void;
   stop(): Promise<CaptureRecordingResult>;
   cancel(): Promise<void> | void;
-  getStats?(): { encodeQueueSize?: number; droppedFrames?: number; queuedPacketBytes?: number; artifactBytes?: number; outputBytes?: number; mimeType?: string; codec?: string };
+  getStats?(): { encodeQueueSize?: number; droppedFrames?: number; queuedPacketBytes?: number; pendingWriteBytes?: number; maxPendingWriteBytes?: number; artifactBytes?: number; outputBytes?: number; mimeType?: string; codec?: string };
   setFatalErrorHandler?(handler: (error: Error) => void): void;
 }
 
@@ -67,6 +67,7 @@ export class ScreenCaptureService {
   private source: MediaStream | null = null;
   private readAudioLevels: (() => CaptureAudioLevels) | null = null;
   private lifecycle = new CaptureLifecycle();
+  private pausePromise: Promise<CaptureSessionSnapshot> | null = null;
   private stopPromise: Promise<CaptureRecordingResult> | null = null;
 
   constructor(options: ScreenCaptureServiceOptions = {}) {
@@ -152,10 +153,14 @@ export class ScreenCaptureService {
     }
   }
 
-  async pause(): Promise<CaptureSessionSnapshot> {
-    await this.backend.pause();
-    this.setSnapshot(transitionCaptureSession(this.snapshot, { type: 'pause', at: this.now() }));
-    return this.snapshot;
+  pause(): Promise<CaptureSessionSnapshot> {
+    if (this.pausePromise) return this.pausePromise;
+    const at = this.now();
+    this.pausePromise = Promise.resolve(this.backend.pause()).then(() => {
+      this.setSnapshot(transitionCaptureSession(this.snapshot, { type: 'pause', at }));
+      return this.snapshot;
+    }).finally(() => { this.pausePromise = null; });
+    return this.pausePromise;
   }
 
   async resume(): Promise<CaptureSessionSnapshot> {

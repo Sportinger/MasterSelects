@@ -13,6 +13,7 @@ export interface MediaAddItemsMenuProps {
   onNewFolder: () => void;
   onNewText: () => void;
   onNewSolid: () => void;
+  onNewLiveInput: () => void;
   onNewMesh: (meshType: MeshPrimitiveType) => void;
   onNewText3D: () => void;
   onNewCamera: () => void;
@@ -37,6 +38,7 @@ export function MediaAddItemsMenu({
   onNewFolder,
   onNewText,
   onNewSolid,
+  onNewLiveInput,
   onNewMesh,
   onNewText3D,
   onNewCamera,
@@ -79,6 +81,10 @@ export function MediaAddItemsMenu({
       <div className={itemClass} onClick={() => run(onNewSolid)}>
         <span className={iconClass}><FileTypeIcon type="solid" /></span>
         <span>Solid</span>
+      </div>
+      <div className={itemClass} onClick={() => run(onNewLiveInput)}>
+        <span className={iconClass}><FileTypeIcon type="video" /></span>
+        <span>Live Input...</span>
       </div>
       <div className={`${itemClass} has-submenu`} onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
         <span className={iconClass}><FileTypeIcon type="mesh" /></span>

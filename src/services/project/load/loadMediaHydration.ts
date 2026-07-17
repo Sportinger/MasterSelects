@@ -36,6 +36,26 @@ export async function convertProjectMediaToStore(
   const total = projectMedia.length;
 
   for (const pm of projectMedia) {
+    if (pm.liveInput) {
+      files.push({
+        id: pm.id,
+        name: pm.name,
+        type: 'video',
+        parentId: pm.folderId,
+        createdAt: new Date(pm.importedAt).getTime(),
+        url: '',
+        duration: pm.duration,
+        width: pm.width,
+        height: pm.height,
+        fps: pm.frameRate,
+        hasAudio: false,
+        labelColor: pm.labelColor as LabelColor | undefined,
+        liveInput: structuredClone(pm.liveInput),
+      });
+      options.onProgress?.(files.length, total, pm.name);
+      continue;
+    }
+
     const runtimeSources = await hydrateProjectMediaRuntimeSources(pm, hydrateFiles);
 
     let transcriptStatus: TranscriptStatus = 'none';

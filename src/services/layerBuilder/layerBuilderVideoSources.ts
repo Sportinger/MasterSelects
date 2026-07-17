@@ -18,24 +18,25 @@ import {
   resolveWorkerGpuLayerVideoSource,
 } from './layerBuilderWorkerGpuVideoSources';
 import { resolveRuntimeLayerBuilderVideoSource } from './layerBuilderRuntimeVideoSources';
-
-type LayerVideoSource = LayerSource;
+import { liveInputRuntime } from '../mediaRuntime/liveInputRuntime';
+import { clipTreeNeedsLiveVideoElement } from '../timeline/liveInputClipTree';
 
 export interface LayerBuilderVideoSourceResolution {
-  source: LayerVideoSource;
+  source: LayerSource;
   intrinsicSize?: {
     width?: number;
     height?: number;
   };
 }
 
-function getLayerBuilderVideoElement(clip: TimelineClip): HTMLVideoElement | null {
-  return getLazyTimelineVideoElementForClip(clip) ?? clip.source?.videoElement ?? null;
+function getLayerBuilderVideoElement(clip: TimelineClip, markRendered = false): HTMLVideoElement | null {
+  return liveInputRuntime.getVideoElement(clip.source?.liveInputId, markRendered) ??
+    getLazyTimelineVideoElementForClip(clip) ??
+    clip.source?.videoElement ??
+    null;
 }
 
-export function resetLayerBuilderReverseRuntimePresentationForTests(): void {
-  // Kept for tests that reset layer-builder preview policy between cases.
-}
+export function resetLayerBuilderReverseRuntimePresentationForTests(): void {}
 
 export interface LayerBuilderVideoSourceDebugInfo {
   hasVideoElement: boolean;
@@ -51,6 +52,8 @@ export function hasLayerBuilderRenderableVideoSource(
   clip?: TimelineClip,
   mediaFile?: Pick<MediaFile, 'id' | 'file' | 'width' | 'height'>,
 ): boolean {
+  if (clip?.source?.liveInputId) return !!liveInputRuntime.getVideoElement(clip.source.liveInputId);
+  if (clip?.freeRun) return !!getLayerBuilderVideoElement(clip);
   if (clip && isWorkerGpuOnlyRenderHost() && flags.useFullWebCodecsPlayback) {
     return hasWorkerGpuLayerVideoSource(clip, mediaFile);
   }
@@ -89,7 +92,7 @@ export function getLayerBuilderVideoSourceDebugInfo(clip: TimelineClip): LayerBu
 
 export function pauseLayerBuilderVideoSource(clip: TimelineClip, ctx: FrameContext): void {
   const video = getLayerBuilderVideoElement(clip);
-  if (video && !video.paused) {
+  if (!clip.source?.liveInputId && video && !video.paused) {
     video.pause();
   }
 
@@ -110,7 +113,13 @@ export function resolveLayerBuilderVideoSource(params: {
   workerGpuMediaFile?: Pick<MediaFile, 'id' | 'file' | 'width' | 'height'>;
 }): LayerBuilderVideoSourceResolution | null {
   const { clip, ctx, targetTime } = params;
-  const workerGpuSource = isWorkerGpuOnlyRenderHost() && flags.useFullWebCodecsPlayback
+  const isLiveInput = Boolean(clip.source?.liveInputId);
+  const workerGpuOnly = isWorkerGpuOnlyRenderHost() && flags.useFullWebCodecsPlayback;
+  const transferActiveVideosFromMain = workerGpuOnly && ctx.clipsAtTime.some((candidate) =>
+    ctx.visibleVideoTrackIds.has(candidate.trackId) &&
+    clipTreeNeedsLiveVideoElement(candidate)
+  );
+  const workerGpuSource = workerGpuOnly && !transferActiveVideosFromMain
     ? resolveWorkerGpuLayerVideoSource({
         clip,
         targetTime,
@@ -120,17 +129,31 @@ export function resolveLayerBuilderVideoSource(params: {
   if (workerGpuSource) {
     return workerGpuSource;
   }
-  if (isWorkerGpuOnlyRenderHost() && flags.useFullWebCodecsPlayback) {
+  if (workerGpuOnly && !transferActiveVideosFromMain) {
     return null;
   }
 
-  return resolveRuntimeLayerBuilderVideoSource({
+  if (clip.freeRun) {
+    const video = getLayerBuilderVideoElement(clip);
+    return video ? {
+      source: { type: 'video', videoElement: video },
+      intrinsicSize: { width: video.videoWidth, height: video.videoHeight },
+    } : null;
+  }
+
+  const resolution = resolveRuntimeLayerBuilderVideoSource({
     clip,
     ctx,
     targetTime,
     allowSharedPreviewSession: params.allowSharedPreviewSession,
     continuationVideo: params.continuationVideo,
-    getVideoElement: getLayerBuilderVideoElement,
+    getVideoElement: (candidate) => getLayerBuilderVideoElement(candidate, true),
     selectPausedVisualProvider: selectLayerBuilderPausedVisualProvider,
   });
+  if (isLiveInput && resolution?.source.videoElement) {
+    // A MediaStream has its own monotonic clock and must never be sought to the
+    // timeline time. Let the collector use the element's current frame time.
+    resolution.source.mediaTime = undefined;
+  }
+  return resolution;
 }

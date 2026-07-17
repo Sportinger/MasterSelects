@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { MediaFile, ProjectItem } from '../../src/stores/mediaStore';
 import {
+  getMediaPanelLivePreviewId,
   getMediaPanelPreviewSource,
   getMediaPanelPreviewTooltipPosition,
   useMediaPanelPreviewTooltip,
@@ -68,6 +69,15 @@ describe('media panel preview tooltip', () => {
       type: 'video',
       url: 'blob:video',
     }))).toBe('blob:video');
+
+    const liveInput = mediaFile({
+      id: 'live-display',
+      type: 'video',
+      url: '',
+      liveInput: { kind: 'display' },
+    });
+    expect(getMediaPanelPreviewSource(liveInput)).toBeNull();
+    expect(getMediaPanelLivePreviewId(liveInput)).toBe('live-display');
   });
 
   it('keeps the preview inside the viewport near edges', () => {
@@ -75,6 +85,30 @@ describe('media panel preview tooltip', () => {
       left: 532,
       top: 402,
     });
+  });
+
+  it('does not open an empty tooltip for a disconnected live input', () => {
+    const liveInput = mediaFile({
+      id: 'live-display',
+      type: 'video',
+      url: '',
+      liveInput: { kind: 'display' },
+    });
+    const host = document.createElement('div');
+    host.dataset.itemId = liveInput.id;
+    const { result } = renderHook(() => useMediaPanelPreviewTooltip({
+      itemsById: new Map([[liveInput.id, liveInput]]),
+    }));
+
+    act(() => result.current.handleMouseMove({
+      buttons: 0,
+      clientX: 20,
+      clientY: 30,
+      target: host,
+    } as Parameters<typeof result.current.handleMouseMove>[0]));
+    act(() => vi.advanceTimersByTime(400));
+
+    expect(result.current.element).toBeNull();
   });
 
   it('keeps an open preview alive while scanning across items', () => {

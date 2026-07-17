@@ -151,6 +151,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       signalRefId: c.signalRefId,
       signalRenderAdapterId: c.signalRenderAdapterId,
       sourceType: c.source?.type || c.sourceType || 'video',
+      liveInputId: c.source?.liveInputId || c.liveInputId,
       naturalDuration: c.source?.naturalDuration || c.naturalDuration,
       // MIDI note data (issue #182) — notes on the clip, instrument on the track.
       midiData: (c.source?.type === 'midi' || c.sourceType === 'midi') && c.midiData
@@ -230,6 +231,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       disabled: c.disabled || false,
       speed: c.speed,
       preservesPitch: c.preservesPitch,
+      freeRun: c.freeRun,
       // Nested composition support
       isComposition: c.isComposition || undefined,
       compositionId: c.compositionId || undefined,

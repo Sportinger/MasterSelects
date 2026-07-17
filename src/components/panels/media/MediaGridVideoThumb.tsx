@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import type { MediaFile } from '../../../stores/mediaStore';
 import { FileTypeIcon } from './FileTypeIcon';
+import { LiveInputPreviewCanvas } from './LiveInputPreviewCanvas';
 
 interface MediaGridVideoThumbProps {
   mediaFile: MediaFile;
@@ -47,6 +48,20 @@ export function MediaGridVideoThumb({ mediaFile, thumbUrl, onError }: MediaGridV
     setHovering(false);
     videoRef.current?.pause();
   }, []);
+
+  if (mediaFile.liveInput) {
+    return (
+      <div className="media-grid-video-thumb">
+        <div className="media-grid-thumb-placeholder">
+          <FileTypeIcon type="video" large />
+        </div>
+        <LiveInputPreviewCanvas
+          className="media-grid-live-preview"
+          liveInputId={mediaFile.id}
+        />
+      </div>
+    );
+  }
 
   return (
     <div

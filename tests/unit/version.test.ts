@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  FEATURED_VIDEO,
   getChangelogCalendar,
   getGroupedChangelog,
   shouldAutoShowChangelog,
   type RawChangeEntry,
 } from '../../src/version';
+
+describe('featured video', () => {
+  it('uses a same-origin source instead of an automatic third-party embed', () => {
+    expect(FEATURED_VIDEO?.source).toMatch(/^\/(?!\/)/);
+  });
+});
 
 describe('getGroupedChangelog', () => {
   it('uses granular recent buckets plus month and initial commit buckets', () => {

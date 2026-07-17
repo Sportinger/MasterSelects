@@ -11,6 +11,7 @@ import {
   revokeAllMediaObjectUrls,
   revokeMediaFileObjectUrls,
 } from '../../../services/project/mediaObjectUrlManager';
+import { liveInputRuntime } from '../../../services/mediaRuntime/liveInputRuntime';
 
 const log = Logger.create('Project');
 
@@ -43,6 +44,7 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
 
   newProject: () => {
     const previousFiles = get().files;
+    liveInputRuntime.clear();
 
     // Clear timeline first
     const timelineStore = useTimelineStore.getState();

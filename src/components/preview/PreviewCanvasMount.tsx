@@ -57,6 +57,7 @@ interface PreviewCanvasMountProps {
   isEngineReady: boolean;
   isExporting: boolean;
   layerTransformMode: boolean;
+  liveFeedbackCompositionId: string | null;
   maskEditMode: string;
   maskNavigationMode: boolean;
   maskPanelActive: boolean;
@@ -156,6 +157,7 @@ export function PreviewCanvasMount({
   isEngineReady,
   isExporting,
   layerTransformMode,
+  liveFeedbackCompositionId,
   maskEditMode,
   maskNavigationMode,
   maskPanelActive,
@@ -249,6 +251,7 @@ export function PreviewCanvasMount({
                 width={effectiveResolution.width}
                 height={effectiveResolution.height}
                 className="preview-canvas"
+                data-live-feedback-composition-id={liveFeedbackCompositionId ?? undefined}
                 style={{
                   width: canvasSize.width,
                   height: canvasSize.height,

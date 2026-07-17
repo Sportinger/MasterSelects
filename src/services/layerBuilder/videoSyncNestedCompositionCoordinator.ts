@@ -58,6 +58,8 @@ export type VideoSyncNestedCompositionCoordinatorDeps = {
     reason?: 'manual-seek' | 'scrub-stop' | 'playback-stop'
   ) => void;
   safeSeekTime: (video: HTMLVideoElement, time: number) => number;
+  activateFreeRunVideo: (video: HTMLVideoElement) => void;
+  stopFreeRunVideo: (video: HTMLVideoElement) => void;
 };
 
 export class VideoSyncNestedCompositionCoordinator {
@@ -93,6 +95,7 @@ export class VideoSyncNestedCompositionCoordinator {
       const isActive = compTime >= nestedClip.startTime && compTime < nestedClip.startTime + nestedClip.duration;
 
       if (!isActive) {
+        this.deps.stopFreeRunVideo(nestedVideo);
         if (!nestedVideo.paused) {
           nestedVideo.pause();
         }
@@ -104,6 +107,12 @@ export class VideoSyncNestedCompositionCoordinator {
       const nestedClipTime = timing.sourceTime;
 
       const video = nestedVideo;
+      if (nestedClip.freeRun) {
+        this.deps.activateFreeRunVideo(video);
+        continue;
+      }
+      this.deps.stopFreeRunVideo(video);
+      video.loop = false;
       const clipRuntimeProvider = this.deps.getClipRuntimeProvider(nestedClip);
       const useFullWebCodecsPreview =
         flags.useFullWebCodecsPlayback &&

@@ -81,6 +81,7 @@ function createSerializableClip(
     inPoint: clip.inPoint,
     outPoint: clip.outPoint,
     sourceType: dataOnlySource?.type || 'video',
+    liveInputId: dataOnlySource?.liveInputId,
     naturalDuration: dataOnlySource?.naturalDuration,
     midiData: dataOnlySource?.type === 'midi' && clip.midiData
       ? structuredClone(clip.midiData)
@@ -124,6 +125,7 @@ function createSerializableClip(
     reversed: clip.reversed || undefined,
     speed: clip.speed != null && clip.speed !== 1 ? clip.speed : undefined,
     preservesPitch: clip.preservesPitch === false ? false : undefined,
+    freeRun: clip.freeRun || undefined,
     textProperties: clip.textProperties,
     text3DProperties: clip.text3DProperties ?? dataOnlySource?.text3DProperties,
     solidColor: dataOnlySource?.type === 'solid' ? (clip.solidColor || clip.name.replace('Solid ', '')) : undefined,

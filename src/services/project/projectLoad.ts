@@ -33,6 +33,10 @@ import {
 import { hydrateDockFlashboardAndWorkspaceFromProject } from './load/loadDockFlashboardHydration';
 import { runPostLoadRestoration } from './load/loadRuntimeRelink';
 import { isUserVisibleComposition } from '../../stores/mediaStore/compositionVisibility';
+import { liveInputRuntime } from '../mediaRuntime/liveInputRuntime';
+import { collectUsedLiveInputIds } from '../liveInputTimeline';
+import { useTimelineStore } from '../../stores/timeline';
+import { useDockStore } from '../../stores/dockStore';
 
 export { setProjectLoadProgress } from './load/loadProgress';
 export { reloadNestedCompositionClips } from './load/loadTimelineHydration';
@@ -113,6 +117,7 @@ export async function loadProjectToStores(): Promise<void> {
         itemsTotal: projectData.media.length,
         blocking: true,
       });
+      liveInputRuntime.clear();
       for (const currentFile of useMediaStore.getState().files) {
         revokeMediaFileObjectUrls(currentFile);
       }
@@ -180,6 +185,23 @@ export async function loadProjectToStores(): Promise<void> {
 
       setProjectLoadProgress({ phase: 'ui', percent: 58, message: 'Restoring workspace', blocking: true });
       await hydrateDockFlashboardAndWorkspaceFromProject(projectData);
+
+      const restoredMediaState = useMediaStore.getState();
+      const usedLiveInputIds = new Set(collectUsedLiveInputIds(
+        useTimelineStore.getState().clips,
+        restoredMediaState.compositions,
+      ));
+      const reconnectRequiredIds = restoredMediaState.files.flatMap((file) => (
+        file.liveInput &&
+        file.liveInput.kind !== 'composition-feedback' &&
+        usedLiveInputIds.has(file.id)
+          ? [file.id]
+          : []
+      ));
+      liveInputRuntime.setReconnectRequiredIds(reconnectRequiredIds);
+      if (reconnectRequiredIds.length > 0) {
+        useDockStore.getState().activatePanelType('clip-properties');
+      }
 
       setProjectLoadProgress({
         phase: 'ready',

@@ -5,37 +5,11 @@
 export function ImprintEN() {
   return (
     <div className="legal-text">
-      <h3>Information according to § 5 TMG (German Telemedia Act)</h3>
-      <p>Roman Kuskowski<br />[Address to be added]</p>
+      <h3>Information according to § 5 DDG (German Digital Services Act)</h3>
+      <p>Roman Kuskowski</p>
 
       <h3>Contact</h3>
       <p>Email: admin@masterselects.com</p>
-
-      <h3>Responsible for content according to § 55 Abs. 2 RStV</h3>
-      <p>Roman Kuskowski<br />[Address to be added]</p>
-
-      <h3>EU Online Dispute Resolution</h3>
-      <p>
-        The European Commission provides a platform for online dispute resolution (ODR):{' '}
-        <a href="https://ec.europa.eu/consumers/odr/" target="_blank" rel="noopener noreferrer">
-          https://ec.europa.eu/consumers/odr/
-        </a>
-      </p>
-
-      <h3>Disclaimer</h3>
-      <h4>Liability for Content</h4>
-      <p>
-        The contents of our pages were created with the greatest care. However, we cannot guarantee the accuracy,
-        completeness, or timeliness of the content. As a service provider, we are responsible for our own content
-        on these pages under general law according to § 7 (1) TMG. According to §§ 8-10 TMG, we are not obligated
-        to monitor transmitted or stored third-party information.
-      </p>
-
-      <h4>Liability for Links</h4>
-      <p>
-        Our website contains links to external third-party websites over whose content we have no control.
-        The respective provider or operator of the linked pages is always responsible for their content.
-      </p>
 
       <h4>Copyright</h4>
       <p>
@@ -52,59 +26,82 @@ export function PrivacyEN() {
   return (
     <div className="legal-text">
       <h3>1. Privacy at a Glance</h3>
-      <h4>General Information</h4>
       <p>
-        The following provides an overview of what happens to your personal data when you use MasterSelects.
-        Personal data is any data that can be used to personally identify you.
-      </p>
-      <h4>Data Processing</h4>
-      <p>
-        <strong>MasterSelects is primarily a local application.</strong> All video, image, and audio files
-        are processed exclusively on your device. Your media files never leave your computer.
+        <strong>MasterSelects works locally by default.</strong> Projects and media are processed in your browser.
+        Apart from the technically necessary delivery of the website, data leaves your device only when you invoke a
+        feature clearly identified as a cloud, download, login, payment, or provider feature.
       </p>
 
       <h3>2. Data Controller</h3>
       <p>Roman Kuskowski<br />Email: admin@masterselects.com</p>
 
-      <h3>3. Hosting</h3>
+      <h3>3. Hosting and Website Requests</h3>
       <p>
         This website is hosted by <strong>Cloudflare, Inc.</strong> (101 Townsend St, San Francisco, CA 94107, USA).
-        Cloudflare is certified under the EU-US Data Privacy Framework (EU Commission adequacy decision per Art. 45 GDPR).
-        Standard Contractual Clauses (SCCs) are additionally in place.
+        Cloudflare processes the IP address, requested URL, timestamp, referrer, and browser/device information to
+        deliver and secure the site. Legal basis: Art. 6(1)(f) GDPR (secure and reliable delivery). Provider logs are
+        erased under the contracted and configured retention rules once no longer needed for operations or security.
       </p>
       <p>
-        When visiting the website, the hosting provider automatically collects server log data
-        (IP address, browser type, OS, referrer URL, timestamp). Legal basis: Art. 6(1)(f) GDPR (legitimate interest).
-      </p>
-      <p>
-        In addition, we temporarily process server-side visit events for operational monitoring and internal live
-        notifications when pages of this website are opened. These events may include the requested path, timestamp,
-        country and city derived from Cloudflare geo data, referrer, a shortened user agent string, and a pseudonymous
-        visitor identifier generated from the IP address and a secret salt. We do not store the plain IP address in
-        this live log ourselves. Retention for these visit events is generally about one hour. Legal basis:
-        Art. 6(1)(f) GDPR (legitimate interest in secure operation, abuse detection, and awareness of current website
-        activity).
+        For operational monitoring and abuse detection, we additionally store the path, timestamp, Cloudflare country
+        and city, referrer, shortened user agent, and a pseudonymous identifier derived from the IP address and a secret
+        salt. We do not store the plain IP in this live log. These events are automatically deleted after about one hour.
+        Legal basis: Art. 6(1)(f) GDPR.
       </p>
 
-      <h3>4. User Accounts and Payment Processing</h3>
-      <p>When you create an account or use paid services (e.g., API credits), we process:</p>
+      <h3>4. Accounts, Login, Email, and Payments</h3>
       <ul>
-        <li><strong>Account data:</strong> Email address, display name — Legal basis: Contract performance (Art. 6(1)(b) GDPR)</li>
-        <li><strong>Payment data:</strong> Processed directly by <strong>Stripe, Inc.</strong> (South San Francisco, CA, USA). Stripe is certified under the EU-US Data Privacy Framework. We do not store credit card numbers or bank details. Legal basis: Contract performance (Art. 6(1)(b) GDPR)</li>
-        <li><strong>Usage data:</strong> Credit balance, usage history — Legal basis: Contract performance (Art. 6(1)(b) GDPR)</li>
-        <li><strong>Hosted AI logs:</strong> When you use hosted AI chat or hosted media generation, prompts/messages, request payloads, assistant responses, tool calls, moderation results, token counts, credit cost, duration, status, error state, and a pseudonymous IP hash may be stored in our D1 database for account history, billing/debugging, abuse handling, and support — Legal basis: Contract performance (Art. 6(1)(b) GDPR) and legitimate interest (Art. 6(1)(f) GDPR)</li>
-        <li><strong>Billing data:</strong> Retained for 10 years per German tax law (§ 147 AO, § 257 HGB) — Legal basis: Legal obligation (Art. 6(1)(c) GDPR)</li>
+        <li><strong>Account data:</strong> Email, display name, credit balance, and usage history; Art. 6(1)(b) GDPR.</li>
+        <li><strong>Google login:</strong> If selected, we receive the identity/contact data released by Google; Art. 6(1)(b) GDPR.</li>
+        <li><strong>Transactional email:</strong> <strong>Resend</strong> processes recipient address and message content for login/account messages; Art. 6(1)(b) GDPR.</li>
+        <li><strong>Payments:</strong> <strong>Stripe, Inc.</strong> processes payment and billing data. We do not store complete card or bank details; Art. 6(1)(b) and (c) GDPR.</li>
       </ul>
-
-      <h3>5. Local Data Processing</h3>
       <p>
-        MasterSelects stores project data, settings, and media references in your browser's IndexedDB.
-        This data does not leave your computer and is not transmitted to us. AI features requiring an
-        API connection are explicitly labeled as such; hosted AI chat and media generation are processed on the Cloudflare backend
-        and can be logged as described above.
+        Login states expire after ten minutes and sessions after 30 days. Accounts and non-statutory usage data are
+        retained for the contract term and then erased when no billing, security, or legal claim requires them.
+        Invoices and accounting records are generally retained for eight years (§ 147 AO, § 14b UStG).
       </p>
 
-      <h3>6. Your Rights</h3>
+      <h3>5. Cloud and AI Features</h3>
+      <p>
+        When you start a cloud or AI feature, the selected prompts, messages, media, references, and technical metadata
+        are sent to the relevant provider. Depending on the feature, recipients include <strong>OpenAI</strong>,
+        <strong>Kie.ai</strong> and its selected model/upload providers, and <strong>ElevenLabs</strong>. When you use
+        your own API key, the browser may connect directly to OpenAI, Anthropic, AssemblyAI, Deepgram, PiAPI, Kie.ai,
+        Evolink, ElevenLabs, or the YouTube Data API. Legal basis: Art. 6(1)(b) GDPR, supplemented by Art. 6(1)(f)
+        GDPR for security and abuse prevention.
+      </p>
+      <p>
+        Hosted AI chat may store prompts, responses, tool calls, moderation results, token counts, credit cost, duration,
+        status, errors, and a pseudonymous IP hash for account history, billing, support, and abuse prevention. Content is
+        erased when no longer needed for those purposes or after a valid erasure request, without affecting statutory
+        billing records.
+      </p>
+
+      <h3>6. Local Storage and External Resources</h3>
+      <p>
+        Projects, settings, encrypted personal API keys, and media references are stored in Local Storage, IndexedDB,
+        or OPFS and can be erased through browser data controls. If you explicitly select a Google font or download an
+        AI/audio model, your browser connects to Google Fonts or Hugging Face and transmits the IP address and requested
+        resource. If you open Native Helper release information or GitHub links, your browser connects to GitHub. The
+        demo video is served by MasterSelects and makes no YouTube connection.
+      </p>
+
+      <h3>7. Cookies and Device Storage</h3>
+      <p>
+        We use no analytics or marketing cookies. Necessary cookies protect login states (up to ten minutes) and
+        sessions (up to 30 days). Only after you actively check the free-credit offer does a necessary cookie bind the
+        requested offer to that browser for up to one hour. Server-side visit monitoring stores nothing on the device.
+      </p>
+
+      <h3>8. International Transfers</h3>
+      <p>
+        Some providers process data outside the European Economic Area. Transfers take place only under an Art. 45 GDPR
+        adequacy decision or Art. 46 GDPR safeguards, particularly Standard Contractual Clauses. Information and copies
+        of relevant safeguards can be requested at admin@masterselects.com.
+      </p>
+
+      <h3>9. Your Rights</h3>
       <p>You have the right to:</p>
       <ul>
         <li><strong>Access</strong> (Art. 15 GDPR) — What data we store about you</li>
@@ -113,21 +110,20 @@ export function PrivacyEN() {
         <li><strong>Restriction</strong> (Art. 18 GDPR) — Restriction of processing</li>
         <li><strong>Data portability</strong> (Art. 20 GDPR) — Your data in machine-readable format</li>
         <li><strong>Objection</strong> (Art. 21 GDPR) — Object to processing</li>
+        <li><strong>Withdraw consent</strong> prospectively (Art. 7(3) GDPR)</li>
       </ul>
       <p>To exercise your rights, email <strong>admin@masterselects.com</strong>.</p>
       <p>You have the right to lodge a complaint with a data protection supervisory authority.</p>
 
-      <h3>7. Cookies</h3>
+      <h3>10. Required Data</h3>
       <p>
-        MasterSelects uses only technically necessary cookies for authentication and session management.
-        No tracking or marketing cookies are used. The server-side visit monitoring described above does not store
-        information on your device for this purpose and does not use marketing cookies. A cookie banner is therefore
-        not required for this specific functionality.
+        The local editor can be used without an account. Account, payment, and cloud-credit data is contractually
+        required for the relevant feature; without it, that feature cannot be provided.
       </p>
 
-      <h3>8. Changes</h3>
-      <p>This privacy policy is updated as needed. The current version is always available in the app under Info → Privacy.</p>
-      <p className="legal-meta">Last updated: May 2026</p>
+      <h3>11. Changes</h3>
+      <p>The current version is always available at <a href="/privacy">/privacy</a>.</p>
+      <p className="legal-meta">Last updated: July 17, 2026</p>
     </div>
   );
 }

@@ -46,7 +46,18 @@ describe('Pages middleware routing', () => {
   });
 
   it('keeps supported pages and real extensionless assets', async () => {
-    for (const path of ['/', '/?test=parallel-decode', '/index.html', '/landing', '/claim/code', '/credits/claim/code']) {
+    for (const path of [
+      '/',
+      '/?test=parallel-decode',
+      '/index.html',
+      '/landing',
+      '/claim/code',
+      '/credits/claim/code',
+      '/impressum',
+      '/datenschutz',
+      '/imprint',
+      '/privacy',
+    ]) {
       const { context, pending } = makeContext(path, new Response('<!doctype html>', {
         headers: { 'Content-Type': 'text/html; charset=UTF-8' },
         status: 200,

@@ -28,6 +28,8 @@ interface OptionsSectionProps {
   sceneNavNoKeyframes: boolean;
   speed: number;
   speedPct: number;
+  supportsFreeRun: boolean;
+  freeRun: boolean;
   supportsThreeDEffectorToggle: boolean;
   threeDEffectorsEnabled: boolean;
   wireframe: boolean;
@@ -43,6 +45,7 @@ interface OptionsSectionProps {
   onSceneNavNoKeyframesChange: (enabled: boolean) => void;
   onSetAllCameraKeyframes: () => void;
   onSpeedChange: (pct: number) => void;
+  onFreeRunToggle: () => void;
   onThreeDEffectorsToggle: () => void;
   onToggle3D: () => void;
   onWireframeToggle: () => void;
@@ -71,6 +74,8 @@ export function OptionsSection({
   sceneNavNoKeyframes,
   speed,
   speedPct,
+  supportsFreeRun,
+  freeRun,
   supportsThreeDEffectorToggle,
   threeDEffectorsEnabled,
   wireframe,
@@ -86,6 +91,7 @@ export function OptionsSection({
   onSceneNavNoKeyframesChange,
   onSetAllCameraKeyframes,
   onSpeedChange,
+  onFreeRunToggle,
   onThreeDEffectorsToggle,
   onToggle3D,
   onWireframeToggle,
@@ -274,6 +280,18 @@ export function OptionsSection({
             sensitivity={1}
             onDragStart={onBatchStart}
             onDragEnd={onBatchEnd}
+          />
+        </div>
+      )}
+      {supportsFreeRun && (
+        <div className="control-row transform-option-row">
+          <label className="prop-label" htmlFor={`free-run-${clipId}`}>Free Run</label>
+          <input
+            id={`free-run-${clipId}`}
+            type="checkbox"
+            checked={freeRun}
+            onChange={onFreeRunToggle}
+            title="Loop this video independently of the timeline playhead"
           />
         </div>
       )}

@@ -10,6 +10,7 @@ import { DEFAULT_COMPOSITION } from './constants';
 import { fileSystemService } from '../../services/fileSystemService';
 import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../types/splatEffector';
 import { DEFAULT_LIGHT_CLIP_SETTINGS } from '../../types/light';
+import type { LiveInputSource } from '../../types/liveInput';
 
 // Import slices
 import { createFileImportSlice, type FileImportActions } from './slices/fileImportSlice';
@@ -83,6 +84,8 @@ type MediaStoreState = MediaState &
     getItemsByFolder: (folderId: string | null) => ProjectItem[];
     getItemById: (id: string) => ProjectItem | undefined;
     getFileByName: (name: string) => MediaFile | undefined;
+    createLiveInputItem: (id: string, source: LiveInputSource, name: string, parentId?: string | null) => string;
+    updateLiveInputSource: (id: string, source: LiveInputSource) => void;
     getOrCreateTextFolder: () => string;
     createTextItem: (name?: string, parentId?: string | null) => string;
     updateTextItem: (id: string, updates: Partial<import('./types').TextItem>) => void;
@@ -226,6 +229,36 @@ export const useMediaStore = create<MediaStoreState>()(
 
     getFileByName: (name: string) => {
       return get().files.find((f) => f.name === name);
+    },
+
+    createLiveInputItem: (id, source, name, parentId) => {
+      const activeComposition = get().getActiveComposition();
+      const item: MediaFile = {
+        id,
+        name,
+        type: 'video',
+        parentId: parentId ?? null,
+        createdAt: Date.now(),
+        url: '',
+        duration: Math.max(1, activeComposition?.duration ?? 60),
+        width: activeComposition?.width,
+        height: activeComposition?.height,
+        fps: activeComposition?.frameRate,
+        hasAudio: false,
+        liveInput: structuredClone(source),
+      };
+      set({ files: [...get().files, item] });
+      return id;
+    },
+
+    updateLiveInputSource: (id, source) => {
+      set({
+        files: get().files.map((file) => (
+          file.id === id && file.liveInput
+            ? { ...file, liveInput: structuredClone(source) }
+            : file
+        )),
+      });
     },
 
     // Get or create "Text" folder for organizing text items

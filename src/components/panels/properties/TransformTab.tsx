@@ -75,6 +75,8 @@ export function TransformTab({
   const clip = useTimelineStore((s) => s.clips.find((c) => c.id === clipId));
   const wireframe = clip?.wireframe ?? false;
   const sourceType = clip?.source?.type;
+  const supportsFreeRun = sourceType === 'video' && !clip?.source?.liveInputId;
+  const freeRun = clip?.freeRun === true;
   const isModel = sourceType === 'model';
   const isCameraClip = sourceType === 'camera';
   const isLightClip = sourceType === 'light';
@@ -305,6 +307,8 @@ export function TransformTab({
         sceneNavNoKeyframes={sceneNavNoKeyframes}
         speed={speed}
         speedPct={speedPct}
+        supportsFreeRun={supportsFreeRun}
+        freeRun={freeRun}
         supportsThreeDEffectorToggle={supportsThreeDEffectorToggle}
         threeDEffectorsEnabled={threeDEffectorsEnabled}
         wireframe={wireframe}
@@ -320,6 +324,7 @@ export function TransformTab({
         onSceneNavNoKeyframesChange={setSceneNavNoKeyframes}
         onSetAllCameraKeyframes={handleSetAllCameraKeyframes}
         onSpeedChange={handleSpeedChange}
+        onFreeRunToggle={() => updateClip(clipId, { freeRun: !freeRun })}
         onThreeDEffectorsToggle={handleThreeDEffectorsToggle}
         onToggle3D={() => toggle3D(clipId)}
         onWireframeToggle={() => updateClip(clipId, { wireframe: !wireframe })}

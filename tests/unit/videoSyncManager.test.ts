@@ -122,6 +122,7 @@ function createLazyVideoClip(
   id: string,
   state: Record<string, unknown> = {},
   sourceExtras: Record<string, unknown> = {},
+  clipExtras: Record<string, unknown> = {},
 ): { clip: TimelineClip; ctx: FrameContext; video: HTMLVideoElement } {
   const mediaFileId = `${id}-media`;
   const clip = {
@@ -139,6 +140,7 @@ function createLazyVideoClip(
       ...sourceExtras,
     },
     mediaFileId,
+    ...clipExtras,
   } as unknown as TimelineClip;
   const mediaFile = { id: mediaFileId, name: `${id}.mp4`, url: `blob:${id}`, duration: 10 };
   const ctx = {
@@ -513,6 +515,8 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
       maybeRecoverScrubSettle: vi.fn(),
       beginOrQueueSettleSeek: vi.fn(),
       safeSeekTime: (_video, time) => time,
+      activateFreeRunVideo: vi.fn(),
+      stopFreeRunVideo: vi.fn(),
     });
     const ctx = {
       isPlaying: true,
@@ -622,6 +626,8 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
         maybeRecoverScrubSettle: vi.fn(),
         beginOrQueueSettleSeek: vi.fn(),
         safeSeekTime: (_video, time) => time,
+        activateFreeRunVideo: vi.fn(),
+        stopFreeRunVideo: vi.fn(),
       });
       const ctx = {
         isPlaying: false,
@@ -1353,6 +1359,61 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
 
     expect(syncFullWebCodecs).not.toHaveBeenCalled();
     expect(video.play).toHaveBeenCalled();
+  });
+
+  it('lets a free-run video loop on its own clock while the timeline is paused', () => {
+    const manager = createManager();
+    const syncFullWebCodecs = vi.spyOn(manager, 'syncFullWebCodecs');
+    const { clip, ctx, video } = createLazyVideoClip('clip-free-run', {
+      currentTime: 4.25,
+      loop: false,
+      muted: false,
+      paused: true,
+      play: vi.fn(() => Promise.resolve()) as HTMLVideoElement['play'],
+      playsInline: false,
+      readyState: 4,
+      videoHeight: 1080,
+      videoWidth: 1920,
+    });
+    clip.freeRun = true;
+
+    manager.syncClipVideo(clip, ctx);
+
+    expect(video.play).toHaveBeenCalledTimes(1);
+    expect(video.currentTime).toBe(4.25);
+    expect(video.loop).toBe(true);
+    expect(video.muted).toBe(true);
+    expect(video.playsInline).toBe(true);
+    expect(syncFullWebCodecs).not.toHaveBeenCalled();
+
+    const layerSource = resolveLayerBuilderVideoSource({
+      clip,
+      ctx,
+      targetTime: 9,
+      allowSharedPreviewSession: true,
+    });
+    expect(layerSource?.source.videoElement).toBe(video);
+    expect(layerSource?.source.mediaTime).toBeUndefined();
+  });
+
+  it('hydrates the HTML source required by free run in worker GPU mode', () => {
+    mockRenderHostMode('worker-gpu-only');
+    const { clip, ctx, video } = createLazyVideoClip(
+      'clip-worker-free-run',
+      { paused: true, play: vi.fn(() => Promise.resolve()) },
+      {},
+      { freeRun: true },
+    );
+
+    const layerSource = resolveLayerBuilderVideoSource({
+      clip,
+      ctx,
+      targetTime: 7,
+      allowSharedPreviewSession: true,
+    });
+
+    expect(layerSource?.source.videoElement).toBe(video);
+    expect(layerSource?.source.mediaTime).toBeUndefined();
   });
 
   it('suppresses live HTML video playback in worker GPU-only mode', () => {

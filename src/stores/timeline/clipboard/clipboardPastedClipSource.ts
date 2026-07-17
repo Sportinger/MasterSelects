@@ -5,6 +5,8 @@ import { DEFAULT_SCENE_CAMERA_SETTINGS } from '../../mediaStore/types';
 import { DEFAULT_LIGHT_CLIP_SETTINGS, mergeLightClipSettings } from '../../../types/light';
 import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../../types/splatEffector';
 import type { ClipboardClipData } from '../types';
+import type { LiveInputSource } from '../../../types/liveInput';
+import type { MediaFile } from '../../mediaStore/types';
 
 const SYNC_RESTORED_SOURCE_TYPES = new Set([
   'text',
@@ -16,8 +18,32 @@ const SYNC_RESTORED_SOURCE_TYPES = new Set([
   'splat-effector',
 ]);
 
+export function canPasteLiveInputInComposition(
+  clipData: ClipboardClipData,
+  source: LiveInputSource | undefined,
+  activeCompositionId: string | null,
+): boolean {
+  if (!clipData.liveInputId) return true;
+  return !!source && (
+    source.kind !== 'composition-feedback' || source.compositionId === activeCompositionId
+  );
+}
+
+export function filterPasteableClipboardData(
+  clipboardData: ClipboardClipData[],
+  mediaFiles: MediaFile[],
+  activeCompositionId: string | null,
+): ClipboardClipData[] {
+  return clipboardData.filter((clipData) => canPasteLiveInputInComposition(
+    clipData,
+    clipData.liveInputId ? mediaFiles.find((file) => file.id === clipData.liveInputId)?.liveInput : undefined,
+    activeCompositionId,
+  ));
+}
+
 export function clipRequiresAsyncMediaLoad(clipData: ClipboardClipData): boolean {
-  return !clipData.isComposition &&
+  return !clipData.liveInputId &&
+    !clipData.isComposition &&
     !SYNC_RESTORED_SOURCE_TYPES.has(clipData.sourceType) &&
     !isPrimitiveMeshClip(clipData) &&
     !isMotionClip(clipData);
@@ -37,6 +63,14 @@ export function createPastedClipSource(
   clipData: ClipboardClipData,
   text3DProperties: TimelineClip['text3DProperties'],
 ): TimelineClip['source'] {
+  if (clipData.liveInputId) {
+    return {
+      type: 'video',
+      liveInputId: clipData.liveInputId,
+      mediaFileId: clipData.mediaFileId ?? clipData.liveInputId,
+      naturalDuration: Number.MAX_SAFE_INTEGER,
+    };
+  }
   if (isPrimitiveMeshClip(clipData)) {
     return {
       type: 'model',

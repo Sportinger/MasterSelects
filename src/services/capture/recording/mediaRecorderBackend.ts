@@ -56,6 +56,8 @@ export class MediaRecorderCaptureBackend implements ScreenCaptureBackend {
   private pausedDurationMs = 0;
   private chunkIndex = 0;
   private bytes = 0;
+  private pendingWriteBytes = 0;
+  private maxPendingWriteBytes = 0;
   private artifactIds: string[] = [];
   private pendingWrite: Promise<void> = Promise.resolve();
   private writeError: Error | null = null;
@@ -91,6 +93,8 @@ export class MediaRecorderCaptureBackend implements ScreenCaptureBackend {
     this.pausedDurationMs = 0;
     this.chunkIndex = 0;
     this.bytes = 0;
+    this.pendingWriteBytes = 0;
+    this.maxPendingWriteBytes = 0;
     this.artifactIds = [];
     this.pendingWrite = Promise.resolve();
     this.writeError = null;
@@ -112,6 +116,8 @@ export class MediaRecorderCaptureBackend implements ScreenCaptureBackend {
       if (!this.acceptingChunks || event.data.size === 0) return;
       const chunkIndex = this.chunkIndex++;
       const blob = event.data;
+      this.pendingWriteBytes += blob.size;
+      this.maxPendingWriteBytes = Math.max(this.maxPendingWriteBytes, this.pendingWriteBytes);
       this.pendingWrite = this.pendingWrite.then(async () => {
         const ref = await this.blobStore.putChunk({
           sessionId: input.sessionId,
@@ -128,6 +134,8 @@ export class MediaRecorderCaptureBackend implements ScreenCaptureBackend {
       }).catch(error => {
         this.writeError = error instanceof Error ? error : new Error('Capture recovery chunk could not be saved.');
         log.error('MediaRecorder recovery chunk write failed', { chunkIndex, error });
+      }).finally(() => {
+        this.pendingWriteBytes -= blob.size;
       });
     });
     recorder.addEventListener('error', event => {
@@ -140,10 +148,25 @@ export class MediaRecorderCaptureBackend implements ScreenCaptureBackend {
   async pause(): Promise<void> {
     const recorder = this.requireRecorder();
     if (recorder.state !== 'recording') return;
-    const paused = new Promise<void>(resolve => recorder.addEventListener('pause', () => resolve(), { once: true }));
+    let pauseObserved = false;
+    const paused = new Promise<void>(resolve => recorder.addEventListener('pause', () => {
+      pauseObserved = true;
+      resolve();
+    }, { once: true }));
+    const flushed = new Promise<void>(resolve => {
+      const handleData = () => {
+        if (!pauseObserved) return;
+        recorder.removeEventListener('dataavailable', handleData);
+        resolve();
+      };
+      recorder.addEventListener('dataavailable', handleData);
+    });
     recorder.pause();
+    recorder.requestData();
     await paused;
     this.pausedAt = this.now();
+    await flushed;
+    await this.pendingWrite;
     this.updateLedger('paused');
   }
 
@@ -218,10 +241,17 @@ export class MediaRecorderCaptureBackend implements ScreenCaptureBackend {
     this.sessionId = null;
   }
 
-  getStats(): { outputBytes: number; mimeType?: string; codec?: string } {
+  getStats(): { pendingWriteBytes: number; maxPendingWriteBytes: number; artifactBytes: number; outputBytes: number; mimeType?: string; codec?: string } {
     const mimeType = this.recorder?.mimeType;
     const codec = mimeType?.match(/codecs=["']?([^;"']+)/i)?.[1] ?? mimeType;
-    return { outputBytes: this.bytes, mimeType, codec };
+    return {
+      pendingWriteBytes: this.pendingWriteBytes,
+      maxPendingWriteBytes: this.maxPendingWriteBytes,
+      artifactBytes: this.bytes,
+      outputBytes: this.bytes,
+      mimeType,
+      codec,
+    };
   }
 
   private requireRecorder(): MediaRecorder {

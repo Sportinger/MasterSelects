@@ -50,6 +50,7 @@ export interface TransitionOverlayClipDefinition {
 
 export interface TimelineClipDataSource {
   type: TimelineSourceType;
+  liveInputId?: string;
   modelUrl?: string;
   modelFileName?: string;
   modelSequence?: ModelSequenceData;
@@ -129,6 +130,7 @@ export interface TimelineClip {
   reversed?: boolean;     // True if clip plays in reverse
   speed?: number;         // Playback speed (default 1.0, 0.5 = half speed, -1.0 = reverse)
   preservesPitch?: boolean;  // Keep pitch when speed changes (default true)
+  freeRun?: boolean;      // Preview the source continuously instead of seeking with the timeline
   // Nested composition support
   isComposition?: boolean;  // True if this clip is a nested composition
   compositionId?: string;   // ID of the nested composition
@@ -229,6 +231,7 @@ export interface SerializableClip {
   inPoint: number;
   outPoint: number;
   sourceType: TimelineSourceType;
+  liveInputId?: string;
   naturalDuration?: number;
   thumbnails?: string[];
   linkedClipId?: string;
@@ -262,6 +265,7 @@ export interface SerializableClip {
   reversed?: boolean;
   speed?: number;         // Playback speed (default 1.0)
   preservesPitch?: boolean;  // Keep pitch when speed changes (default true)
+  freeRun?: boolean;
   // Text clip support
   textProperties?: TextClipProperties;
   text3DProperties?: Text3DProperties;

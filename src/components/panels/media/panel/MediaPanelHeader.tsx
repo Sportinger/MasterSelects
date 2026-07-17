@@ -39,6 +39,7 @@ export function MediaPanelHeader({
   onNewFolder,
   onNewText,
   onNewSolid,
+  onNewLiveInput,
   onNewMesh,
   onNewText3D,
   onNewCamera,
@@ -94,6 +95,7 @@ export function MediaPanelHeader({
                 onNewFolder={onNewFolder}
                 onNewText={onNewText}
                 onNewSolid={onNewSolid}
+                onNewLiveInput={onNewLiveInput}
                 onNewMesh={onNewMesh}
                 onNewText3D={onNewText3D}
                 onNewCamera={onNewCamera}

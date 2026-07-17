@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FreeOfferNotice } from '../../src/components/common/FreeOfferNotice';
 
@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 describe('FreeOfferNotice', () => {
-  it('requests the offer only ten seconds after onboarding is clear', async () => {
+  it('waits for an explicit click before requesting a browser-bound offer', async () => {
     vi.useFakeTimers();
     claimWebsiteOffer.mockResolvedValue({ offer: null, ok: true });
     const view = render(
@@ -42,6 +42,11 @@ describe('FreeOfferNotice', () => {
     await act(() => vi.advanceTimersByTimeAsync(9_999));
     expect(claimWebsiteOffer).not.toHaveBeenCalled();
     await act(() => vi.advanceTimersByTimeAsync(1));
+    expect(screen.getByRole('button', { name: /check free gift/i })).toBeInTheDocument();
+    expect(claimWebsiteOffer).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /check free gift/i }));
+    await act(() => Promise.resolve());
     expect(claimWebsiteOffer).toHaveBeenCalledTimes(1);
   });
 });

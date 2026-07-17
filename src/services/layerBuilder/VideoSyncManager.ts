@@ -37,13 +37,13 @@ import {
   getReverseWorkerRuntimeSource,
   releaseReverseWorkerRuntimeSources,
 } from './reverseWorkerWebCodecsRuntime';
+import { VideoSyncFreeRunCoordinator } from './videoSyncFreeRunCoordinator';
 
 export class VideoSyncManager {
   // Video sync throttling
   private lastVideoSyncFrame = -1;
   private lastVideoSyncPlaying = false;
   private lastVideoSyncClipsRef: TimelineClip[] | null = null;
-
   // Track per-clip playing state to detect playingâ†’paused transitions
   private clipWasPlaying = new Set<string>();
 
@@ -55,6 +55,7 @@ export class VideoSyncManager {
   private forceDecodes = new VideoSyncForceDecodeManager();
   private wcSeeks = new VideoSyncWebCodecsSeekState();
   private nativeDecoders = new VideoSyncNativeDecoderSync();
+  private freeRun = new VideoSyncFreeRunCoordinator();
 
   private handoffs = new VideoSyncHandoffManager();
   private fullWebCodecs: VideoSyncFullWebCodecsCoordinator;
@@ -141,6 +142,8 @@ export class VideoSyncManager {
       beginOrQueueSettleSeek: (clipId, video, targetTime, detail, reason) =>
         this.beginOrQueueSettleSeek(clipId, video, targetTime, detail, reason),
       safeSeekTime: (video, time) => this.safeSeekTime(video, time),
+      activateFreeRunVideo: (video) => this.freeRun.activate(video),
+      stopFreeRunVideo: (video) => this.freeRun.stop(video),
     });
     this.warmupCoordinator = new VideoSyncWarmupCoordinator({
       warmups: this.warmups,
@@ -169,6 +172,7 @@ export class VideoSyncManager {
    */
   reset(): void {
     releaseReverseWorkerRuntimeSources();
+    this.freeRun.reset();
     this.handoffs.reset();
     this.warmups.reset();
     this.htmlSeeks.reset();
@@ -449,6 +453,7 @@ export class VideoSyncManager {
     this.lastVideoSyncFrame = ctx.frameNumber;
     this.lastVideoSyncPlaying = ctx.isPlaying;
     this.lastVideoSyncClipsRef = ctx.clips;
+    this.freeRun.beginFrame();
 
     // Compute handoffs for seamless cut transitions
     this.computeHandoffs(ctx);
@@ -479,6 +484,7 @@ export class VideoSyncManager {
         this.syncNestedCompVideos(clip, ctx);
       }
     }
+    this.freeRun.prune();
 
     // Pause videos not at playhead (but don't pause videos during GPU warmup)
     for (const clip of ctx.clips) {
@@ -546,6 +552,15 @@ export class VideoSyncManager {
   private syncClipVideo(clip: TimelineClip, ctx: FrameContext): void {
     const syncMedia = resolveVideoSyncMedia(clip);
     const clipVideoElement = syncMedia.htmlVideoElement;
+
+    if (clip.freeRun && clipVideoElement) {
+      this.freeRun.activate(clipVideoElement);
+      return;
+    }
+    if (clipVideoElement) {
+      this.freeRun.stop(clipVideoElement);
+      clipVideoElement.loop = false;
+    }
 
     // Handle native decoder
     if (syncMedia.nativeDecoder) {

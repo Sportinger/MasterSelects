@@ -1,0 +1,128 @@
+@layer features {
+
+.live-input-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.live-input-heading,
+.live-input-reconnect-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.live-input-heading h4 {
+  margin-bottom: 3px;
+}
+
+.live-input-heading strong,
+.live-input-reconnect-row strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+}
+
+.live-input-heading > span {
+  padding: 3px 7px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  font-size: var(--font-xs);
+}
+
+.live-input-heading > span.connected {
+  border-color: rgba(58, 206, 128, 0.38);
+  color: #56d98f;
+  background: rgba(58, 206, 128, 0.11);
+}
+
+.live-input-heading > span.disconnected {
+  border-color: rgba(255, 123, 123, 0.35);
+  color: #ff8d8d;
+  background: rgba(255, 123, 123, 0.08);
+}
+
+.live-input-field {
+  display: grid;
+  gap: 5px;
+  margin-top: var(--sp-2);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.live-input-field select {
+  min-width: 0;
+  width: 100%;
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.live-input-help {
+  margin: var(--sp-1) 0 var(--sp-2);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  line-height: 1.45;
+}
+
+.live-input-primary-button,
+.live-input-reconnect-row button {
+  border: 1px solid rgba(74, 158, 255, 0.5);
+  border-radius: var(--radius-md);
+  background: rgba(74, 158, 255, 0.16);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.live-input-primary-button {
+  width: 100%;
+  min-height: 34px;
+}
+
+.live-input-reconnect-list {
+  display: grid;
+  gap: var(--sp-1);
+}
+
+.live-input-reconnect-row {
+  padding: 7px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+}
+
+.live-input-reconnect-row > div {
+  min-width: 0;
+}
+
+.live-input-reconnect-row span {
+  display: block;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-input-reconnect-row button {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+}
+
+.live-input-primary-button:disabled,
+.live-input-reconnect-row button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.live-input-error {
+  margin: 0;
+  color: #ff8d8d;
+  font-size: var(--font-sm);
+}
+
+}

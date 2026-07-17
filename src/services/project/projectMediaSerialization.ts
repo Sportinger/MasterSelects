@@ -52,7 +52,7 @@ export function convertMediaFiles(files: MediaFile[]): ProjectMediaFile[] {
       id: file.id,
       name: file.name,
       type: file.type as 'video' | 'audio' | 'image' | 'model' | 'gaussian-splat' | 'lottie' | 'rive',
-      sourcePath: file.filePath || file.name,
+      sourcePath: file.liveInput ? `live:${file.id}` : file.filePath || file.name,
       projectPath: file.projectPath,
       fileHash: file.fileHash,
       duration: file.duration,
@@ -86,6 +86,7 @@ export function convertMediaFiles(files: MediaFile[]): ProjectMediaFile[] {
       folderId: file.parentId,
       labelColor: file.labelColor && file.labelColor !== 'none' ? file.labelColor : undefined,
       importedAt: new Date(file.createdAt).toISOString(),
+      liveInput: file.liveInput ? structuredClone(file.liveInput) : undefined,
     };
   });
 }

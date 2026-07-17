@@ -20,6 +20,7 @@ import type { TimelineStore, TimelineToolPreview } from '../stores/timeline/type
 import { NativeHelperClient } from './nativeHelper/NativeHelperClient';
 import { createPrimaryMediaObjectUrl } from './project/mediaObjectUrlManager';
 import { Logger } from './logger';
+import { placeLiveInputOnTimeline } from './mediaRuntime/liveInputTimelineAdapter';
 
 const log = Logger.create('TimelinePlacementCommands');
 const DEFAULT_SOURCE_DURATION = 5;
@@ -600,17 +601,21 @@ async function placeSource(
   let createdClipId: string | null | undefined;
 
   if (source.kind === 'media-file') {
-    const file = await resolveMediaFileForTimeline(source.item);
-    if (!file) return null;
-    createdClipId = await state.addClip(
-      trackId,
-      file,
-      startTime,
-      clipDuration,
-      source.item.id,
-      getTimelineMediaTypeOverride(source.item),
-      { source: { naturalDuration: source.naturalDuration } },
-    );
+    if (source.item.liveInput) {
+      createdClipId = placeLiveInputOnTimeline({ item: source.item, trackId, startTime, duration: clipDuration });
+    } else {
+      const file = await resolveMediaFileForTimeline(source.item);
+      if (!file) return null;
+      createdClipId = await state.addClip(
+        trackId,
+        file,
+        startTime,
+        clipDuration,
+        source.item.id,
+        getTimelineMediaTypeOverride(source.item),
+        { source: { naturalDuration: source.naturalDuration } },
+      );
+    }
   } else if (source.kind === 'composition') {
     const beforeIds = new Set(state.clips.map((clip) => clip.id));
     await state.addCompClip(trackId, source.item, startTime);

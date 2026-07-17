@@ -2,6 +2,7 @@
 
 import type { VectorAnimationMetadata } from '../../../types/vectorAnimation';
 import type { MediaFileAudioAnalysisRefs, MediaFileStemInfo } from '../../../types/audio';
+import type { LiveInputSource } from '../../../types/liveInput';
 import type {
   ProjectGaussianSplatSequenceData,
   ProjectModelSequenceData,
@@ -56,4 +57,5 @@ export interface ProjectMediaFile {
 
   // Timestamps
   importedAt: string;
+  liveInput?: LiveInputSource;
 }

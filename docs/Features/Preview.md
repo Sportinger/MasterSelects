@@ -78,6 +78,7 @@ The engine render loop is RAF-based and has three important behaviors:
 
 ### Playback Limits
 
+- Imported video clips expose a **Free Run** checkbox in the Transform tab. While the clip is visible, its existing HTML video source loops on its own clock instead of seeking with the timeline; it keeps updating when timeline playback is paused. Offline export stays timeline-timed and deterministic.
 - Playback is rate-limited to about 60 fps.
 - Dynamic preview target FPS is derived from the active composition's
   `frameRate`; renderer RAF may still report a 60 fps loop while the visual

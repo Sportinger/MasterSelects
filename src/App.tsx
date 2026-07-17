@@ -39,6 +39,7 @@ import { useGlobalHistory } from './hooks/useGlobalHistory';
 import { useClipPanelSync } from './hooks/useClipPanelSync';
 import { useIsMobile, useForceMobile } from './hooks/useIsMobile';
 import { useMIDIRuntime } from './hooks/useMIDIRuntime';
+import { useLiveInputFeedbackCoordinator } from './hooks/useLiveInputFeedbackCoordinator';
 import { useAccountStore } from './stores/accountStore';
 import { useSettingsStore } from './stores/settingsStore';
 import { useUiSettingsStore } from './stores/uiSettingsStore';
@@ -97,6 +98,9 @@ function App() {
 
   // Browser MIDI runtime
   useMIDIRuntime();
+
+  // Keep composition-feedback streams aligned with mounted preview canvases.
+  useLiveInputFeedbackCoordinator();
 
   const audioOutputDeviceId = useUiSettingsStore((s) => s.audioOutputDeviceId);
   const audioLatencyHint = useUiSettingsStore((s) => s.audioLatencyHint);

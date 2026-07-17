@@ -299,27 +299,6 @@ export function EditableDraggableNumber({
 
     document.addEventListener('pointerlockchange', handlePointerLockChange);
 
-    if (element?.requestPointerLock) {
-      pointerLockRequested.current = true;
-      try {
-        const result = element.requestPointerLock();
-        if (result && typeof result.then === 'function') {
-          void result.then(
-            () => {
-              pointerLockActive.current = document.pointerLockElement === element;
-            },
-            () => {
-              pointerLockRequested.current = false;
-              pointerLockActive.current = false;
-            },
-          );
-        }
-      } catch {
-        pointerLockRequested.current = false;
-        pointerLockActive.current = false;
-      }
-    }
-
     const handleMouseMove = (event: MouseEvent) => {
       if ((event.buttons & 1) !== 1) {
         handleMouseUp();
@@ -335,6 +314,26 @@ export function EditableDraggableNumber({
         }
         dragStarted.current = true;
         onDragStart?.();
+        if (element?.requestPointerLock) {
+          pointerLockRequested.current = true;
+          try {
+            const result = element.requestPointerLock();
+            if (result && typeof result.then === 'function') {
+              void result.then(
+                () => {
+                  pointerLockActive.current = document.pointerLockElement === element;
+                },
+                () => {
+                  pointerLockRequested.current = false;
+                  pointerLockActive.current = false;
+                },
+              );
+            }
+          } catch {
+            pointerLockRequested.current = false;
+            pointerLockActive.current = false;
+          }
+        }
       }
 
       if (dx === 0) {

@@ -15,6 +15,7 @@ import type { SplatEffectorSettings } from '../../types/splatEffector';
 import type { LightClipSettings } from '../../types/light';
 import type { VectorAnimationMetadata, VectorAnimationProvider } from '../../types/vectorAnimation';
 import type { ShapePrimitive } from '../../types/motionDesign';
+import type { LiveInputSource } from '../../types/liveInput';
 import type {
   SignalArtifact,
   SignalAsset,
@@ -150,6 +151,7 @@ export interface MediaFile extends MediaItem {
   // Import loading state
   isImporting?: boolean;
   vectorAnimation?: VectorAnimationMetadata;
+  liveInput?: LiveInputSource;
 }
 
 // Text item (for Media Panel - can be dragged to timeline)

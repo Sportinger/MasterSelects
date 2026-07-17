@@ -35,7 +35,7 @@ export interface MediaContextActionState {
 
 function isAiReferenceMediaFile(item: ProjectItem | null | undefined): item is MediaFile {
   if (!item) return false;
-  return isImportedMediaFileItem(item) && (
+  return isImportedMediaFileItem(item) && !item.liveInput && (
     item.type === 'image' ||
     item.type === 'video' ||
     item.type === 'audio'
@@ -59,7 +59,7 @@ export function getMediaContextActionState({
   mediaFile,
   viewMode,
 }: GetMediaContextActionStateInput): MediaContextActionState {
-  const isVideoFile = mediaFile?.type === 'video';
+  const isVideoFile = mediaFile?.type === 'video' && !mediaFile.liveInput;
   const isAudioFile = mediaFile?.type === 'audio';
   const isImageFile = mediaFile?.type === 'image';
   const hasAudio = mediaFileHasAudio(mediaFile);

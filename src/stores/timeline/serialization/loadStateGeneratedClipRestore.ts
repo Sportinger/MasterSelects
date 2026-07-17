@@ -1,8 +1,6 @@
 import type { SerializableClip, TimelineClip } from '../types';
-import { clonePersistedClipAudioState } from '../../../services/audio/clipAudioStatePersistence';
 import { Logger } from '../../../services/logger';
 import { cloneClipNodeGraph } from '../../../services/nodeGraph';
-import { normalizeTransitionInstanceParams } from '../../../transitions';
 import {
   createTimelineMathSceneCanvasRuntime,
   createTimelineSolidCanvasRuntime,
@@ -13,8 +11,8 @@ import type { useMediaStore } from '../../mediaStore';
 import {
   createRestoredMotionClip,
   createRestoredPrimitiveMeshClip,
-  restorePersistedClipVideoState,
 } from '../nestedRestore';
+import { applyCommonRestoredClipFields, createLoadStateLiveInputClip } from './loadStateCommonClipRestore';
 
 const log = Logger.create('Timeline');
 type MediaStoreState = ReturnType<typeof useMediaStore.getState>;
@@ -27,48 +25,14 @@ function activeCompositionDimensions(mediaStore: MediaStoreState): { width: numb
   };
 }
 
-function applyCommonRestoredClipFields(serializedClip: SerializableClip): Pick<
-  TimelineClip,
-  | 'videoState'
-  | 'audioState'
-  | 'transform'
-  | 'effects'
-  | 'transitionIn'
-  | 'transitionOut'
-  | 'transitionSourceMap'
-  | 'transitionRecipeBlendWindows'
-  | 'colorCorrection'
-  | 'nodeGraph'
-  | 'masks'
-  | 'speed'
-  | 'preservesPitch'
-  | 'sourceRect'
-  | 'transitionRender'
-> {
-  return {
-    videoState: restorePersistedClipVideoState(serializedClip),
-    audioState: clonePersistedClipAudioState(serializedClip.audioState),
-    transform: serializedClip.transform,
-    effects: serializedClip.effects || [],
-    transitionIn: serializedClip.transitionIn ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionIn)) : undefined,
-    transitionOut: serializedClip.transitionOut ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionOut)) : undefined,
-    transitionSourceMap: serializedClip.transitionSourceMap ? structuredClone(serializedClip.transitionSourceMap) : undefined,
-    transitionRecipeBlendWindows: serializedClip.transitionRecipeBlendWindows ? structuredClone(serializedClip.transitionRecipeBlendWindows) : undefined,
-    colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
-    nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
-    masks: serializedClip.masks,
-    speed: serializedClip.speed,
-    preservesPitch: serializedClip.preservesPitch,
-    sourceRect: serializedClip.sourceRect ? { ...serializedClip.sourceRect } : undefined,
-    transitionRender: serializedClip.transitionRender ? structuredClone(serializedClip.transitionRender) : undefined,
-  };
-}
-
 export async function createLoadStateGeneratedClip(params: {
   serializedClip: SerializableClip;
   mediaStore: MediaStoreState;
 }): Promise<TimelineClip | undefined> {
   const { serializedClip, mediaStore } = params;
+  const liveInputClip = createLoadStateLiveInputClip(serializedClip);
+  if (liveInputClip) return liveInputClip;
+
   const motionClip = createRestoredMotionClip(serializedClip, serializedClip.id);
   if (motionClip) {
     log.debug('Restored motion clip', { clip: serializedClip.name, sourceType: serializedClip.sourceType });

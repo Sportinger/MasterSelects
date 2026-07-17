@@ -108,6 +108,7 @@ export interface ProjectClip {
   // Speed
   speed?: number;
   preservesPitch?: boolean;
+  freeRun?: boolean;
 
   // Nested composition support
   isComposition?: boolean;
@@ -118,6 +119,7 @@ export interface ProjectClip {
   // MIDI clip note data (issue #182); wired into save/load in the persistence phase
   midiData?: MidiClipData;
   naturalDuration?: number;
+  liveInputId?: string;
   linkedClipId?: string;
   linkedGroupId?: string;
   thumbnails?: string[];

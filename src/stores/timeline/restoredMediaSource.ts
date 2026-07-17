@@ -88,7 +88,7 @@ export function getReusableGaussianAvatarUrl(
 }
 
 export function createDataOnlyRestoredMediaSource(
-  serializedClip: Pick<SerializableClip, 'mediaFileId' | 'naturalDuration'>,
+  serializedClip: Pick<SerializableClip, 'mediaFileId' | 'naturalDuration' | 'liveInputId'>,
   fallbackDuration: number,
   mediaFile?: RestoredMediaFileInfo,
   sourceType: DataOnlyRestoredMediaType = 'video',
@@ -97,12 +97,13 @@ export function createDataOnlyRestoredMediaSource(
     type: sourceType,
     naturalDuration: serializedClip.naturalDuration || mediaFile?.duration || fallbackDuration,
     mediaFileId: serializedClip.mediaFileId,
+    liveInputId: serializedClip.liveInputId,
     ...(mediaFile?.absolutePath ? { filePath: mediaFile.absolutePath } : {}),
   };
 }
 
 export function createDataOnlyRestoredVideoSource(
-  serializedClip: Pick<SerializableClip, 'mediaFileId' | 'naturalDuration'>,
+  serializedClip: Pick<SerializableClip, 'mediaFileId' | 'naturalDuration' | 'liveInputId'>,
   fallbackDuration: number,
   mediaFile?: RestoredMediaFileInfo,
 ): NonNullable<TimelineClip['source']> {

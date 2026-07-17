@@ -322,6 +322,10 @@ export function CreditClaimPage() {
           aria-hidden="true"
         />
       </section>
+      <nav aria-label="Legal" className="credit-claim-legal-links">
+        <a href="/impressum">Impressum</a>
+        <a href="/datenschutz">Datenschutz</a>
+      </nav>
     </main>
   );
 }

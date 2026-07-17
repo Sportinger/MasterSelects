@@ -86,6 +86,7 @@ export function createPastedClipboardClipsPlan(
       reversed: clipData.reversed,
       speed: clipData.speed,
       preservesPitch: clipData.preservesPitch,
+      freeRun: clipData.freeRun,
       textProperties: clipData.textProperties ? { ...clipData.textProperties } : undefined,
       text3DProperties,
       solidColor: clipData.solidColor,

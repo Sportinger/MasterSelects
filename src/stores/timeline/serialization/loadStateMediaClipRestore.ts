@@ -120,6 +120,7 @@ function createRestoredMediaClip(params: {
     reversed: serializedClip.reversed,
     speed: serializedClip.speed,
     preservesPitch: serializedClip.preservesPitch,
+    freeRun: serializedClip.freeRun,
     is3D: serializedClip.is3D,
     meshType: serializedClip.meshType,
   };

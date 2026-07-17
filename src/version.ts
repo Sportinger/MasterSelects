@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '2.4.1';
+export const APP_VERSION = '2.4.2';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -19,16 +19,16 @@ export interface ChangelogNotice {
 
 // Featured video shown at top of changelog (set to null to hide)
 export const FEATURED_VIDEO: {
-  youtubeId: string;
+  source: string;
   title: string;
   banner?: ChangelogNotice;
 } | null = {
-  youtubeId: '5ezX5ra0RTI',
+  source: '/masterselects_github.mp4',
   title: 'MasterSelects Demo',
   banner: {
     type: 'success',
-    title: 'MasterSelects 2.4.1',
-    message: 'Hosted AI reliability release: provider-safe global generation pacing, separate secure credit links and a one-at-a-time browser-bound website gift, Account redemption polish, and quieter startup, background playback, and audio routing behavior.',
+    title: 'MasterSelects 2.4.2',
+    message: 'Live Inputs release: reusable display, camera, capture-device, and composition-feedback sources, safer capture and playback lifecycles, plus direct legal pages and privacy-conscious website defaults.',
     animated: true,
   },
 };
@@ -36,8 +36,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'MasterSelects 2.4.1',
-  message: 'Hosted AI reliability release: provider-safe global generation pacing, separate secure credit links and a one-at-a-time browser-bound website gift, Account redemption polish, and quieter startup, background playback, and audio routing behavior.',
+  title: 'MasterSelects 2.4.2',
+  message: 'Live Inputs release: reusable display, camera, capture-device, and composition-feedback sources, safer capture and playback lifecycles, plus direct legal pages and privacy-conscious website defaults.',
   animated: true,
 };
 

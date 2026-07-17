@@ -18,11 +18,11 @@ While capture is recording, a pulsing **REC** button appears immediately left of
 
 ## Capture tiers
 
-The default compatibility tier uses `MediaRecorder`, selecting the first supported VP9, VP8, WebM, H.264/MP4, or MP4 MIME type. Timeslice blobs are written sequentially to capture-specific recovery artifacts and are not retained in memory.
+The default compatibility tier uses `MediaRecorder`, selecting the first supported VP9, VP8, WebM, H.264/MP4, or MP4 MIME type. Timeslice blobs are retained only while their sequential recovery-artifact write is pending. Pausing flushes the current recorder blob and waits for pending writes so the queue settles before the paused state is reported.
 
 The experimental WebCodecs tier is controlled by `flags.screenCaptureWebCodecs`. It provides crop and output scaling, H.264 video, AAC-with-Opus-fallback audio, a shared pause-aware A/V clock, time-based keyframes, encoder-pressure frame dropping, and fragmented MP4 output. Crop coordinates are mapped through the preview's letterboxing and aligned for 4:2:0 encoding. Scaling follows the Linux/Mesa canvas rules and uses the software timeline-canvas preference where required.
 
-WebCodecs output is streamed through MediaBunny's positioned `StreamTarget` writes. Each `{position, data}` run is persisted before backpressure is released, so long sessions do not accumulate a complete MP4 in RAM. Current telemetry is available through the AI debug bridge's `getCaptureState` tool, including queued packet bytes, persisted artifact bytes, output bytes, encoder queue size, and dropped frames.
+WebCodecs output is streamed through MediaBunny's positioned `StreamTarget` writes. Each `{position, data}` run is persisted before backpressure is released, so long sessions do not accumulate a complete MP4 in RAM. Current telemetry is available through the AI debug bridge's `getCaptureState` tool, including current/peak MediaRecorder pending-write bytes, queued WebCodecs packet bytes, persisted artifact bytes, output bytes, encoder queue size, and dropped frames.
 
 ## Audio
 

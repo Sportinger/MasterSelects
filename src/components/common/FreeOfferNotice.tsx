@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   IconArrowRight,
   IconCheck,
@@ -28,43 +28,29 @@ export function FreeOfferNotice({
   onOpenAccount,
   onOpenAuth,
 }: FreeOfferNoticeProps) {
-  const requested = useRef(false);
   const [dismissed, setDismissed] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [activating, setActivating] = useState(false);
   const [offer, setOffer] = useState<NonNullable<WebsiteFreeCreditOfferResponse['offer']> | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [visible, setVisible] = useState(false);
   const expiresAt = offer?.expiresAt ? Date.parse(offer.expiresAt) : Number.NaN;
   const secondsRemaining = Number.isFinite(expiresAt) ? Math.max(0, Math.ceil((expiresAt - now) / 1_000)) : 0;
-  const canShow = Boolean(offer && secondsRemaining > 0);
+  const canShow = visible && (!offer || secondsRemaining > 0);
 
   useEffect(() => {
-    if (!ready || disabled || dismissed || requested.current) {
+    if (!ready || disabled || dismissed || visible) {
       return;
     }
 
     const timer = window.setTimeout(() => {
-      requested.current = true;
-      if (preview) {
-        setOffer({ amount: 3_000, expiresAt: new Date(Date.now() + 60 * 60 * 1_000).toISOString(), redeemCode: '123456' });
-        setVisible(true);
-        return;
-      }
-
-      void cloudApi.credits.claimWebsiteOffer()
-        .then((response) => {
-          if (response.offer) {
-            setOffer(response.offer);
-            setVisible(true);
-          }
-        })
-        .catch(() => undefined);
+      setVisible(true);
     }, 10_000);
 
     return () => {
       window.clearTimeout(timer);
     };
-  }, [disabled, dismissed, preview, ready]);
+  }, [disabled, dismissed, ready, visible]);
 
   useEffect(() => {
     if (!visible || !Number.isFinite(expiresAt)) {
@@ -83,13 +69,14 @@ export function FreeOfferNotice({
     return () => window.clearInterval(timer);
   }, [expiresAt, visible]);
 
-  if (!ready || disabled || !canShow || !visible || dismissed || !offer) {
+  if (!ready || disabled || !canShow || dismissed) {
     return null;
   }
 
   const countdown = `${String(Math.floor(secondsRemaining / 60)).padStart(2, '0')}:${String(secondsRemaining % 60).padStart(2, '0')}`;
 
   const handleCopy = async () => {
+    if (!offer) return;
     try {
       await navigator.clipboard.writeText(offer.redeemCode);
     } catch {
@@ -104,6 +91,26 @@ export function FreeOfferNotice({
     }
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1_500);
+  };
+
+  const handleActivate = async () => {
+    if (activating) return;
+    setActivating(true);
+    try {
+      const response = preview
+        ? { offer: { amount: 3_000, expiresAt: new Date(Date.now() + 60 * 60 * 1_000).toISOString(), redeemCode: '123456' } }
+        : await cloudApi.credits.claimWebsiteOffer();
+      if (response.offer) {
+        setOffer(response.offer);
+        setNow(Date.now());
+      } else {
+        setDismissed(true);
+      }
+    } catch {
+      // Keep the button available for a retry.
+    } finally {
+      setActivating(false);
+    }
   };
 
   return (
@@ -126,32 +133,43 @@ export function FreeOfferNotice({
             <IconSparkles aria-hidden="true" size={13} />
             FREE FOR YOU
           </span>
-          <span className="free-offer-notice-timer">
-            <IconClock aria-hidden="true" size={13} />
-            <span>OFFER EXPIRES IN</span>
-            <strong>{countdown}</strong>
-          </span>
+          {offer && (
+            <span className="free-offer-notice-timer">
+              <IconClock aria-hidden="true" size={13} />
+              <span>OFFER EXPIRES IN</span>
+              <strong>{countdown}</strong>
+            </span>
+          )}
         </div>
-        <div className="free-offer-notice-credits">
-          <strong>{offer.amount.toLocaleString()}</strong>
-          <span>CREDITS</span>
-        </div>
-        <div className="free-offer-notice-code-shell">
-          <span>GIFT CODE</span>
-          <code>{offer.redeemCode}</code>
-          <button className="free-offer-notice-copy-button" onClick={() => void handleCopy()} type="button">
-            {copied ? <IconCheck aria-hidden="true" size={14} /> : <IconCopy aria-hidden="true" size={14} />}
-            {copied ? 'Copied' : 'Copy'}
-          </button>
-        </div>
-        {!authenticated && <p>Create an account or sign in to claim your gift.</p>}
+        {offer ? (
+          <>
+            <div className="free-offer-notice-credits">
+              <strong>{offer.amount.toLocaleString()}</strong>
+              <span>CREDITS</span>
+            </div>
+            <div className="free-offer-notice-code-shell">
+              <span>GIFT CODE</span>
+              <code>{offer.redeemCode}</code>
+              <button className="free-offer-notice-copy-button" onClick={() => void handleCopy()} type="button">
+                {copied ? <IconCheck aria-hidden="true" size={14} /> : <IconCopy aria-hidden="true" size={14} />}
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            {!authenticated && <p>Create an account or sign in to claim your gift.</p>}
+          </>
+        ) : (
+          <p>Check whether a free browser-bound credit gift is currently available. Checking sets a necessary offer cookie for up to one hour.</p>
+        )}
       </div>
       <button
         className="free-offer-notice-action"
-        onClick={() => (authenticated ? onOpenAccount : onOpenAuth)(offer.redeemCode)}
+        disabled={activating}
+        onClick={() => offer
+          ? (authenticated ? onOpenAccount : onOpenAuth)(offer.redeemCode)
+          : void handleActivate()}
         type="button"
       >
-        <span>{authenticated ? 'Claim gift' : 'Unlock gift'}</span>
+        <span>{offer ? authenticated ? 'Claim gift' : 'Unlock gift' : activating ? 'Checking...' : 'Check free gift'}</span>
         <IconArrowRight aria-hidden="true" size={18} />
       </button>
     </aside>

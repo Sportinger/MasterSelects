@@ -2033,7 +2033,8 @@ class WorkerPresentingRenderHostPortCore {
     try {
       const previousTargetKey = this.lastTargetKeyByTarget.get(record.target.id);
       const targetMoved = previousTargetKey !== undefined && previousTargetKey !== request.targetKey;
-      const htmlFramePacket = !flags.useFullWebCodecsPlayback
+      const hasHtmlVideoLayer = request.layers.some((layer) => !!layer.source?.videoElement);
+      const htmlFramePacket = !flags.useFullWebCodecsPlayback || hasHtmlVideoLayer
         ? await this.createGpuOnlyHtmlVideoFrameLayers(request.layers)
         : null;
       if (htmlFramePacket && htmlFramePacket.layers.length > 0) {

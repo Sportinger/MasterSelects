@@ -119,7 +119,7 @@ export const DEFAULT_TEXT_DURATION = 5;
 // Default text properties for new text clips
 export const DEFAULT_TEXT_PROPERTIES: TextClipProperties = {
   text: 'Enter text',
-  fontFamily: 'Roboto',
+  fontFamily: 'Arial',
   fontSize: 72,
   fontWeight: 400,
   fontStyle: 'normal',

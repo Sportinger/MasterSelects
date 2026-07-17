@@ -86,6 +86,8 @@ class GoogleFontsService {
    * This is more reliable than FontFace API for Google Fonts
    */
   async loadFont(family: string, weight: number = 400): Promise<void> {
+    if (!POPULAR_FONTS.some((font) => font.family === family)) return;
+
     const key = `${family}-${weight}`;
 
     // Already loaded

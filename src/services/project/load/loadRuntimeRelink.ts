@@ -120,7 +120,7 @@ async function autoRelinkFromRawFolder(): Promise<void> {
   if (!projectFileService.isProjectOpen()) return;
 
   const mediaState = useMediaStore.getState();
-  const missingFiles = mediaState.files.filter(f => !f.file && !f.url);
+  const missingFiles = mediaState.files.filter(f => !f.liveInput && !f.file && !f.url);
   if (missingFiles.length === 0) {
     log.info(' No missing files to relink');
     return;
