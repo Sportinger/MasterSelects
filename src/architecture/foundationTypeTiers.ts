@@ -47,7 +47,8 @@ export const foundationTypeBoundaryBaselines = {
   // Ratcheted 755 -> 557 on 2026-06-10: the boundary test now resolves each
   // specifier and counts only true src/types barrel imports (store-local
   // types.ts files no longer miscounted). 557 is the measured global value.
-  directGlobalTypeImportHits: 557,
+  // 557 -> 559 (#298 synth panel: new files import instrument/ADSR types).
+  directGlobalTypeImportHits: 559,
   allTypesImportFiles: 776,
   sharedSchemaRuntimeHandleTokenHits: 23,
   projectSchemaProductImportHits: 0,

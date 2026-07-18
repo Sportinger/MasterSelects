@@ -86,6 +86,9 @@ function createSerializableClip(
     midiData: dataOnlySource?.type === 'midi' && clip.midiData
       ? structuredClone(clip.midiData)
       : undefined,
+    automation: dataOnlySource?.type === 'midi' && clip.automation
+      ? structuredClone(clip.automation)
+      : undefined,
     thumbnails: clip.thumbnails,
     linkedClipId: clip.linkedClipId,
     linkedGroupId: clip.linkedGroupId,

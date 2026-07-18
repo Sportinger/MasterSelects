@@ -7,9 +7,15 @@
 // (full mixer parity, no separate MIDI export path).
 
 import type { TimelineClip, TimelineTrack } from '../../types';
-import { createDefaultMidiInstrument, type MidiInstrument } from '../../types/midiClip';
+import {
+  createDefaultMidiInstrument,
+  type MidiInstrument,
+  type NoteAutomationWindow,
+} from '../../types/midiClip';
 import { createSynthForInstrument } from './createSynthForInstrument';
 import { contentTimeToClipLocal, isNoteStartInWindow } from '../../services/midi/midiClipTiming';
+import { sliceAutomationToNote } from '../../services/midi/midiAutomationWindow';
+import { capConcurrentNotes } from '../../services/midi/midiVoiceCap';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('MidiClipRenderer');
@@ -20,6 +26,10 @@ export interface PlannedMidiNote {
   startTime: number; // seconds, clip-local (0 = clip start)
   duration: number;  // seconds
   velocity: number;  // 0–1
+  // Clip automation sliced to this note's window, note-local (plan §3a). Sliced
+  // per note in BOTH paths so offline export and live playback bake identical
+  // modulation — the §2 offline-parity guarantee.
+  automation?: NoteAutomationWindow;
 }
 
 export interface MidiClipRenderPlan {
@@ -51,17 +61,28 @@ export function planMidiClipNotes(
     if (!isNoteStartInWindow(clip, note)) continue;
     const startTime = Math.max(0, contentTimeToClipLocal(clip, note.start));
     if (startTime >= durationSeconds) continue; // begins after the clip ends
+    // Don't let a note's body run past the clip edge; release may still be cut
+    // by the offline context length, same as an audio clip trimmed at its out.
+    const duration = Math.max(0.001, Math.min(note.duration, durationSeconds - startTime));
     notes.push({
       pitch: note.pitch,
       startTime,
-      // Don't let a note's body run past the clip edge; release may still be cut
-      // by the offline context length, same as an audio clip trimmed at its out.
-      duration: Math.max(0.001, Math.min(note.duration, durationSeconds - startTime)),
+      duration,
       velocity: note.velocity,
+      // Automation is stored in content time (like note.start), so slice from the
+      // note's original content start — not the clip-local startTime.
+      automation: sliceAutomationToNote(clip.automation, note.start, duration),
     });
   }
 
-  return { notes, durationSeconds, instrument };
+  // Enforce the polyphony cap analytically (no runtime stealing offline). Drops the
+  // same low-priority notes the live stealer would, so export matches playback.
+  const capped = capConcurrentNotes(notes);
+  if (capped.length < notes.length) {
+    log.debug('Voice cap dropped overlapping notes', { from: notes.length, to: capped.length });
+  }
+
+  return { notes: capped, durationSeconds, instrument };
 }
 
 function getOfflineAudioContextCtor(): typeof OfflineAudioContext | null {
@@ -97,7 +118,9 @@ export async function renderMidiClipToBuffer(
   const synth = createSynthForInstrument(plan.instrument, context, context.destination);
 
   for (const note of plan.notes) {
-    synth.scheduleNote(plan.instrument, note.pitch, note.velocity, note.startTime, note.duration);
+    synth.scheduleNote(
+      plan.instrument, note.pitch, note.velocity, note.startTime, note.duration, note.automation,
+    );
   }
 
   const buffer = await context.startRendering();

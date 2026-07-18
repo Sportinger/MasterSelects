@@ -11,10 +11,17 @@ import {
 } from '../../src/components/pianoRoll/controllerLanes/pianoRollLaneTypes';
 
 describe('pianoRollLaneTypes registry', () => {
-  it('ships a single velocity lane as a per-note property on the 0–127 scale', () => {
-    expect(LANE_TYPES).toHaveLength(1);
+  it('ships the velocity lane as a per-note property on the 0–127 scale', () => {
     const velocity = getLaneType('velocity');
     expect(velocity).toMatchObject({ id: 'velocity', kind: 'note-property', min: 0, max: 127 });
+  });
+
+  it('ships the four performed CC lanes as automation-backed cc lanes (#298)', () => {
+    const cc = LANE_TYPES.filter((l) => l.kind === 'cc');
+    expect(cc.map((l) => l.automationKey).sort()).toEqual(['cutoff', 'expression', 'mod', 'pitchBend']);
+    // Pitch bend is the only bipolar lane.
+    expect(getLaneType('cc-pitchbend')).toMatchObject({ bipolar: true });
+    expect(getLaneType('cc-cutoff')?.bipolar).toBeUndefined();
   });
 
   it('defaults the controller area to the velocity lane', () => {

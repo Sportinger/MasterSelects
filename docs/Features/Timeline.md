@@ -46,6 +46,15 @@ getTrackChildren()  // Query child tracks
 - When no thumbnail bitmap is available, clip chrome centers a height-scaled
   white outline pictogram in the currently visible clip span. Hidden track
   colors fall back to neutral gray, so every visible clip remains identifiable.
+- **Invariant — never perturb the clip previsualization:** the clip body preview
+  (waveform, spectrogram, MIDI note bars, thumbnail) is the primary way a clip is
+  read at a glance and must stay unobstructed. Any clip whose body already
+  canvas-draws its own preview MUST NOT also render a type-icon pictogram overlay
+  on top of it — the overlay is redundant clutter that hurts legibility.
+  Currently this suppresses the icon for `midi` and `audio` clips (see
+  `showIcon` in `timelineClipCanvasChromeOverlays.ts`); extend the same rule to
+  any future clip type that gains a body preview. Do not add badges, icons, or
+  chrome that sit over the previsualization area.
 - A single resolver, `getTimelineTrackColor()` (`src/components/timeline/trackColor.ts`),
   is the source of truth for a track's color. Precedence: a user-picked
   **label color** wins; otherwise a **per-type default** applies; otherwise the

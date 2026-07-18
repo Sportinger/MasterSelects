@@ -1717,6 +1717,167 @@
   grid-template-columns: minmax(68px, 90px) minmax(0, 1fr);
 }
 
+/* Classic ADSR envelope graphic (EnvelopeGraph.tsx). Stretches to fill width;
+   non-scaling strokes keep line weight uniform under the non-uniform viewBox. */
+.envelope-graph {
+  width: 100%;
+  height: 84px;
+  display: block;
+  margin: var(--sp-1) 0 var(--sp-1-5);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+.envelope-graph line,
+.envelope-graph polyline,
+.envelope-graph path {
+  vector-effect: non-scaling-stroke;
+}
+.envelope-graph-base {
+  stroke: rgba(255, 255, 255, 0.14);
+  stroke-width: 1;
+}
+.envelope-graph-guide {
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+.envelope-graph-fill {
+  fill: rgba(45, 140, 235, 0.16);
+  stroke: none;
+}
+.envelope-graph-line {
+  fill: none;
+  stroke: #2d8ceb;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.envelope-graph-dot {
+  fill: #7fbcff;
+}
+.envelope-graph-dot.editable {
+  fill: #cfe0ff;
+  r: 2;
+}
+/* Transparent, larger grab target over each editable breakpoint. */
+.envelope-graph-hit {
+  fill: transparent;
+  pointer-events: all;
+  cursor: grab;
+}
+.envelope-graph-hit:active {
+  cursor: grabbing;
+}
+
+/* Two synth sections side by side (Oscillator | Amp Envelope). Each keeps its
+   own card; they share the row width equally and can shrink to wrap their knobs. */
+.synth-section-row {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: flex-start;
+}
+.synth-section-row > .properties-section {
+  flex: 1;
+  min-width: 0;
+}
+/* LFO rack gets more room than the Mod Matrix beside it (2:1). */
+.synth-section-row--lfo-matrix > .properties-section:first-child {
+  flex: 2;
+}
+.synth-section-row--lfo-matrix > .properties-section:last-child {
+  flex: 1;
+}
+
+/* LFO rack laid out two-up: each LFO card is a grid cell that can shrink. */
+.synth-lfo-grid {
+  display: grid;
+  /* Two-up when there's room, gracefully collapsing to one column in the
+     narrower half-width column (LFO sits beside the Mod Matrix). */
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: var(--sp-2);
+  align-items: start;
+}
+.synth-lfo-grid > .synth-lfo-row {
+  min-width: 0;
+}
+/* Narrow LFO cards: give the label column less room so the Target/Shape/LFO
+   dropdowns get more width. */
+.synth-lfo-row .audio-bus-control-row-compact {
+  grid-template-columns: 46px minmax(0, 1fr);
+}
+
+/* Compact knob row for synth sections — knobs wrap and space out evenly. */
+.synth-knob-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  justify-content: space-around;
+  align-items: flex-start;
+  padding: var(--sp-1) 0 var(--sp-1-5);
+}
+
+/* Motorized-fader ghost overlay (plan §14). The middle grid cell wraps the range
+   input so a live-value ghost (fill + thumb + badge) can be positioned over it.
+   All ghost parts are pointer-events:none so the real thumb stays draggable. */
+.synth-slider-track {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+.synth-slider-track > input[type="range"] {
+  width: 100%;
+  display: block;
+  position: relative;
+  z-index: 1;
+}
+.synth-slider-ghost-fill,
+.synth-slider-ghost-thumb,
+.synth-slider-badge {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.synth-slider.is-automating .synth-slider-ghost-fill,
+.synth-slider.is-automating .synth-slider-ghost-thumb,
+.synth-slider.is-automating .synth-slider-badge {
+  opacity: 1;
+}
+.synth-slider-ghost-fill {
+  left: 0;
+  top: 50%;
+  height: 4px;
+  width: 0;
+  transform: translateY(-50%);
+  background: linear-gradient(90deg, rgba(45, 212, 191, 0.15), rgba(45, 212, 191, 0.5));
+  border-radius: 2px;
+  z-index: 2;
+}
+.synth-slider-ghost-thumb {
+  top: 50%;
+  width: 2px;
+  height: 16px;
+  transform: translate(-50%, -50%);
+  background: #2dd4bf;
+  box-shadow: 0 0 6px rgba(45, 212, 191, 0.9);
+  border-radius: 1px;
+  z-index: 3;
+}
+.synth-slider-badge {
+  bottom: calc(100% + 3px);
+  transform: translateX(-50%);
+  font-size: 10px;
+  line-height: 1;
+  padding: 1px 4px;
+  color: #04201d;
+  background: #2dd4bf;
+  border-radius: 3px;
+  white-space: nowrap;
+  z-index: 4;
+}
+
 .audio-bus-control-row input[type="range"],
 .audio-bus-control-row select {
   min-width: 0;
@@ -2557,4 +2718,59 @@
   color: var(--text-secondary);
 }
 
+}
+
+/* Simple Synth panel sections (#298) */
+.properties-hint {
+  margin: var(--sp-1) 0;
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  opacity: 0.8;
+}
+
+.synth-lfo-row,
+.synth-mod-row {
+  padding: var(--sp-1-5);
+  margin-bottom: var(--sp-1-5);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  border-radius: var(--radius-md);
+  background: var(--bg-hover, rgba(255, 255, 255, 0.03));
+}
+
+.synth-lfo-row .audio-bus-control-row:last-child,
+.synth-mod-row .audio-bus-control-row:last-child {
+  margin-bottom: 0;
+}
+
+.synth-preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin-top: var(--sp-1);
+}
+
+.synth-preset-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.synth-preset-chip > button {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.synth-preset-chip-x {
+  color: var(--text-tertiary, rgba(255, 255, 255, 0.4)) !important;
+  border-left: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12)) !important;
+}
+
+.synth-preset-chip-x:hover {
+  color: #ff6b6b !important;
 }

@@ -186,6 +186,7 @@ function createRestoredClip(
       solidColor: clip.solidColor,
       transitionOverlay: clonePlain(clip.transitionOverlay),
       midiData: clonePlain(clip.midiData),
+      automation: clonePlain(clip.automation),
       mathScene: clonePlain(clip.mathScene),
       motion: clonePlain(clip.motion),
       isComposition: clip.isComposition,

@@ -88,10 +88,19 @@ export function createTimelineClipCanvasChromeOverlays(input: {
       clip,
       getTimelineClipCanvasMediaStatus(clip, input.mediaFileStatusById),
     );
+    const iconType = clip.isComposition ? 'composition' : clip.source?.type ?? clip.trackType;
+    // INVARIANT — never perturb the clip previsualization. A clip's body preview
+    // (waveform, spectrogram, MIDI note bars, thumbnail) is how it is read at a
+    // glance and must stay unobstructed. Any clip type that canvas-draws its own
+    // body preview MUST NOT also get a type-icon pictogram overlay on top of it:
+    // the icon is redundant clutter that hurts legibility. Extend this set when a
+    // new clip type gains a body preview; do not add chrome over the preview.
+    // See docs/Features/Timeline.md ("never perturb the clip previsualization").
+    const hasBodyPreview = iconType === 'midi' || iconType === 'audio';
     overlays.push({
       id: clip.id,
-      iconType: clip.isComposition ? 'composition' : clip.source?.type ?? clip.trackType,
-      showIcon: !input.thumbnailVisibleClipIds?.has(clip.id),
+      iconType,
+      showIcon: !hasBodyPreview && !input.thumbnailVisibleClipIds?.has(clip.id),
       label: clip.name,
       left: visibleLeft - input.chromeScrollX,
       width: visibleW,
