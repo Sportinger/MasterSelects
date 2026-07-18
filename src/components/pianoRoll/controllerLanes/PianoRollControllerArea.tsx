@@ -17,8 +17,9 @@ import type { MidiNote } from '../../../types/midiClip';
 import type { MidiClipWindow } from '../../../services/midi/midiClipTiming';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { PIANO_ROLL_SCROLLBAR } from '../PianoRollScrollbars';
-import { getLaneType } from './pianoRollLaneTypes';
+import { getLaneType, LANE_TYPES } from './pianoRollLaneTypes';
 import { PianoRollVelocityLane } from './PianoRollVelocityLane';
+import { PianoRollCcLane } from './PianoRollCcLane';
 
 type UpdateMidiNote = (
   clipId: string,
@@ -161,9 +162,12 @@ export function PianoRollControllerArea({
 
   const areaH = area.height;
   const laneInnerH = Math.max(8, areaH - DIVIDER_H);
-  // Velocity is the only lane today; the map keeps the stacked-lane shape so a
-  // second lane type (CC) is a localized add, not a rewrite.
+  // Option A: one lane visible at a time, chosen via the info-column selector
+  // (persisted as the single entry in `lanes`). Velocity is a per-note property;
+  // the four CC lanes are breakpoint envelopes on clip.automation.
   const lanes = area.lanes.length > 0 ? area.lanes : ['velocity'];
+  const activeLaneId = lanes[0];
+  const activeLane = getLaneType(activeLaneId) ?? LANE_TYPES[0];
 
   return (
     <div
@@ -199,16 +203,26 @@ export function PianoRollControllerArea({
           paddingTop: DIVIDER_H, userSelect: 'none',
         }}
       >
-        <div style={{ position: 'absolute', top: DIVIDER_H + 2, left: 4, right: 3, fontSize: 9, fontWeight: 600, color: 'rgba(255,255,255,0.72)', letterSpacing: 0.2 }}>
-          Velocity
-        </div>
+        {/* Lane picker (Option A): switch the single visible lane. */}
+        <select
+          value={activeLaneId}
+          onChange={(e) => setArea({ lanes: [e.currentTarget.value] })}
+          title="Controller lane"
+          style={{
+            position: 'absolute', top: DIVIDER_H + 1, left: 3, right: 3, width: 'calc(100% - 6px)',
+            fontSize: 9, fontWeight: 600, color: 'rgba(255,255,255,0.82)',
+            background: '#232323', border: '1px solid #000', borderRadius: 3, padding: '1px 2px',
+          }}
+        >
+          {LANE_TYPES.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+        </select>
         {readout === null ? (
           <>
-            <div style={{ position: 'absolute', top: DIVIDER_H + 14, right: 3, fontSize: 8, color: 'rgba(255,255,255,0.4)' }}>127</div>
-            <div style={{ position: 'absolute', bottom: 2, right: 3, fontSize: 8, color: 'rgba(255,255,255,0.4)' }}>0</div>
+            <div style={{ position: 'absolute', top: DIVIDER_H + 18, right: 3, fontSize: 8, color: 'rgba(255,255,255,0.4)' }}>{activeLane.max}</div>
+            <div style={{ position: 'absolute', bottom: 2, right: 3, fontSize: 8, color: 'rgba(255,255,255,0.4)' }}>{activeLane.min}</div>
           </>
         ) : (
-          <div style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: '#cfe0ff' }}>
+          <div style={{ position: 'absolute', left: 0, right: 0, top: DIVIDER_H + 16, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: '#cfe0ff' }}>
             {readout}
           </div>
         )}
@@ -217,29 +231,33 @@ export function PianoRollControllerArea({
       {/* Track viewport — aligned under the grid, clips the scroll-follow track. */}
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         <div ref={velocityFollowRef} style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: gridWidth }}>
-          {lanes.map((id) => {
-            const lane = getLaneType(id);
-            if (!lane) return null;
-            // Velocity is the only lane with a body today; future CC lanes branch here.
-            if (id === 'velocity') {
-              return (
-                <PianoRollVelocityLane
-                  key={id}
-                  clipId={clipId}
-                  inWindowNotes={inWindowNotes}
-                  outOfWindowNotes={outOfWindowNotes}
-                  effWindow={effWindow}
-                  pxPerSec={pxPerSec}
-                  marginPx={marginPx}
-                  laneInnerH={laneInnerH}
-                  selectedIds={selectedIds}
-                  updateMidiNote={updateMidiNote}
-                  onReadoutChange={setReadout}
-                />
-              );
-            }
-            return null;
-          })}
+          {activeLane.kind === 'cc' && activeLane.automationKey ? (
+            <PianoRollCcLane
+              key={activeLane.id}
+              clipId={clipId}
+              lane={activeLane}
+              effWindow={effWindow}
+              pxPerSec={pxPerSec}
+              marginPx={marginPx}
+              laneInnerH={laneInnerH}
+              gridWidth={gridWidth}
+              onReadoutChange={setReadout}
+            />
+          ) : (
+            <PianoRollVelocityLane
+              key={activeLane.id}
+              clipId={clipId}
+              inWindowNotes={inWindowNotes}
+              outOfWindowNotes={outOfWindowNotes}
+              effWindow={effWindow}
+              pxPerSec={pxPerSec}
+              marginPx={marginPx}
+              laneInnerH={laneInnerH}
+              selectedIds={selectedIds}
+              updateMidiNote={updateMidiNote}
+              onReadoutChange={setReadout}
+            />
+          )}
         </div>
       </div>
 

@@ -8,6 +8,9 @@ import { apiKeyManager, type ApiKeyType } from '../services/apiKeyManager';
 import { projectFileService } from '../services/project/ProjectFileService';
 import { flags } from '../engine/featureFlags';
 import { Logger } from '../services/logger';
+import type { SimpleSynthPreset } from '../engine/audio/synth/simpleSynthPresets';
+import type { SimpleSynthInstrument } from '../types/midiClip';
+import { generateClipId } from './timeline/helpers/idGenerator';
 import {
   DEFAULT_LEMONADE_CONTEXT_SIZE,
   DEFAULT_LEMONADE_ENDPOINT,
@@ -204,6 +207,10 @@ interface SettingsState {
   // Piano-roll controller-lane area (velocity + future CC lanes, #249)
   pianoRollControllerArea: PianoRollControllerAreaState;
 
+  // User-saved Simple Synth presets (issue #298). Built-ins live in code
+  // (simpleSynthPresets.ts); these are the user's own saved patches.
+  simpleSynthUserPresets: SimpleSynthPreset[];
+
   // UI state
   isSettingsOpen: boolean;
   settingsInitialCategory: SettingsCategoryId | null;
@@ -263,6 +270,9 @@ interface SettingsState {
   saveCustomPreset: (name: string) => void;
   loadCustomPreset: (name: string) => void;
   deleteCustomPreset: (name: string) => void;
+  /** Save the given Simple Synth patch as a user preset; returns the stored preset. */
+  addSimpleSynthUserPreset: (name: string, instrument: SimpleSynthInstrument) => SimpleSynthPreset;
+  removeSimpleSynthUserPreset: (id: string) => void;
   completeTutorial: (campaignId: string) => void;
   setShowChangelogOnStartup: (show: boolean) => void;
   setLastSeenChangelogVersion: (version: string | null) => void;
@@ -350,6 +360,7 @@ export const useSettingsStore = create<SettingsState>()(
       lastSeenChangelogVersion: null, // Latest app version whose changelog was acknowledged
       webCodecsEnabled: false, // Default to HTML Video
       pianoRollControllerArea: { ...DEFAULT_PIANO_ROLL_CONTROLLER_AREA },
+      simpleSynthUserPresets: [] as SimpleSynthPreset[],
       isSettingsOpen: false,
       settingsInitialCategory: null,
 
@@ -594,6 +605,22 @@ export const useSettingsStore = create<SettingsState>()(
         set({ customPresets: get().customPresets.filter((p) => p.name !== name) });
       },
 
+      addSimpleSynthUserPreset: (name, instrument) => {
+        // Deep-clone via JSON so the stored preset can never share a reference with
+        // the live track instrument (it's plain JSON, so this is lossless).
+        const preset: SimpleSynthPreset = {
+          id: generateClipId('synth-preset'),
+          name,
+          instrument: JSON.parse(JSON.stringify(instrument)) as SimpleSynthInstrument,
+        };
+        set({ simpleSynthUserPresets: [...get().simpleSynthUserPresets, preset] });
+        return preset;
+      },
+
+      removeSimpleSynthUserPreset: (id) => {
+        set({ simpleSynthUserPresets: get().simpleSynthUserPresets.filter((p) => p.id !== id) });
+      },
+
       completeTutorial: (campaignId) => {
         const current = get().completedTutorials;
         if (!current.includes(campaignId)) {
@@ -737,6 +764,7 @@ export const useSettingsStore = create<SettingsState>()(
         fps: state.fps,
         webCodecsEnabled: state.webCodecsEnabled,
         pianoRollControllerArea: state.pianoRollControllerArea,
+        simpleSynthUserPresets: state.simpleSynthUserPresets,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {

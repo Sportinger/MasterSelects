@@ -103,6 +103,7 @@ export interface HistoryTimelineClipEditState {
   solidColor?: string;
   transitionOverlay?: TimelineClip['transitionOverlay'];
   midiData?: TimelineClip['midiData'];
+  automation?: TimelineClip['automation'];
   vectorAnimationSettings?: SerializableClip['vectorAnimationSettings'];
   mathScene?: TimelineClip['mathScene'];
   motion?: TimelineClip['motion'];
@@ -254,7 +255,13 @@ export function findHistoryStateBoundaryViolations(value: unknown): string[] {
 
     for (const [key, child] of Object.entries(candidate)) {
       const childPath = `${path}.${key}`;
-      if (HISTORY_RUNTIME_PAYLOAD_KEYS.has(key)) {
+      // Runtime-payload key names (source, videoElement, file, …) hold handles
+      // that must never enter history — but only guard them when the value is an
+      // actual object handle. A plain primitive under the same name is
+      // serializable and must pass: e.g. the mod-matrix route's string
+      // `source: 'velocity'` shares the name of a media clip's runtime `source`
+      // handle but is durable JSON (#298).
+      if (HISTORY_RUNTIME_PAYLOAD_KEYS.has(key) && child !== null && typeof child === 'object') {
         violations.push(`${childPath}: runtime payload key`);
         continue;
       }
@@ -499,6 +506,7 @@ export function toHistoryTimelineClipEditState(
     solidColor: clip.solidColor,
     transitionOverlay: clip.transitionOverlay ?? clip.source?.transitionOverlay,
     midiData: clip.midiData,
+    automation: clip.automation,
     vectorAnimationSettings: clip.source?.vectorAnimationSettings,
     mathScene: clip.mathScene,
     motion: clip.motion,

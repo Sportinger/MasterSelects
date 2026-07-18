@@ -7,13 +7,19 @@
 // `WavetableSynth` (GM samples) both implement this; `createSynthForInstrument`
 // picks the right one from a track's instrument.
 
-import type { MidiInstrument } from '../../types/midiClip';
+import type { MidiInstrument, NoteAutomationWindow } from '../../types/midiClip';
 import type { GmSoundRef } from './GmSampleBank';
 
 export interface IMidiSynth {
   /**
    * Schedule a complete note (with its envelope) at AudioContext time `when` for
    * `duration` seconds. Safe to call ahead of time (look-ahead scheduling).
+   *
+   * `automation` is the clip's automation sliced to this note's window with
+   * note-local point times (plan §3a) — the simple synth bakes it onto the voice;
+   * the wavetable synth ignores it. Optional so preview / legacy callers compile
+   * unchanged and a future compiled DSP core can consume note + modulation in one
+   * call without reshaping this seam.
    */
   scheduleNote(
     inst: MidiInstrument,
@@ -21,6 +27,7 @@ export interface IMidiSynth {
     velocity: number,
     when: number,
     duration: number,
+    automation?: NoteAutomationWindow,
   ): void;
 
   /** Play an immediate short note (piano-roll draw/click preview). */

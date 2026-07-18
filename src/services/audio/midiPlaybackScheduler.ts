@@ -26,6 +26,7 @@ import { createSynthForInstrument } from '../../engine/audio/createSynthForInstr
 import { getGmSampleBank, type GmSoundRef } from '../../engine/audio/GmSampleBank';
 import { createDefaultMidiInstrument, type MidiInstrument } from '../../types/midiClip';
 import { isNoteStartInWindow, noteAbsoluteStart } from '../midi/midiClipTiming';
+import { sliceAutomationToNote } from '../midi/midiAutomationWindow';
 import { audioRoutingManager } from '../audioRoutingManager';
 import {
   createTrackLiveAudioRouteSettings,
@@ -367,7 +368,11 @@ class MidiPlaybackScheduler {
           this.scheduled.add(key);
 
           const when = this.timelineToContextTime(absStart);
-          bus.synth.scheduleNote(instrument, note.pitch, note.velocity, when, duration);
+          // Slice the clip's performed automation to this note's window (content
+          // time) so the synth bakes it onto the voice (plan §3a). The scheduler
+          // already holds `clip`, so the data is in hand.
+          const automation = sliceAutomationToNote(clip.automation, note.start, duration);
+          bus.synth.scheduleNote(instrument, note.pitch, note.velocity, when, duration, automation);
         }
       }
     }
