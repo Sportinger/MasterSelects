@@ -12,7 +12,7 @@ import {
   type SynthLfoTarget,
 } from '../../../../types/midiClip';
 import { generateSynthLfoId } from '../../../../stores/timeline/helpers/idGenerator';
-import { SynthSlider } from './SynthSlider';
+import { SynthKnob } from './SynthKnob';
 import type { SynthSectionProps } from './synthSectionTypes';
 
 export function LfoSection({ instrument, onChange }: SynthSectionProps) {
@@ -30,6 +30,7 @@ export function LfoSection({ instrument, onChange }: SynthSectionProps) {
         </button>
       </div>
       {lfos.length === 0 && <p className="properties-hint">No LFOs. Add one for vibrato, filter wobble, or tremolo.</p>}
+      <div className="synth-lfo-grid">
       {lfos.map((lfo, index) => {
         const targetOption = SYNTH_LFO_TARGET_OPTIONS.find((t) => t.value === lfo.target);
         return (
@@ -50,21 +51,24 @@ export function LfoSection({ instrument, onChange }: SynthSectionProps) {
                 {SYNTH_LFO_SHAPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </label>
-            <SynthSlider label="Rate" unit="Hz" value={lfo.rate} min={0.01} max={20} scale="log"
-              onChange={(rate) => patchLfo(lfo.id, { rate })} />
-            <SynthSlider label="Depth" unit={targetOption?.depthUnit}
-              value={lfo.depth} min={0} max={lfo.target === 'amp' ? 1 : lfo.target === 'pitch' ? 100 : 5000}
-              step={lfo.target === 'amp' ? 0.01 : 1}
-              scale={lfo.target === 'filter' ? 'power' : 'linear'}
-              paramId={lfo.target === 'pitch' ? `lfo.${lfo.id}.depth` : undefined}
-              onChange={(depth) => patchLfo(lfo.id, { depth })} />
+            <div className="synth-knob-row">
+              <SynthKnob label="Rate" unit="Hz" value={lfo.rate} min={0.01} max={20} scale="log"
+                onChange={(rate) => patchLfo(lfo.id, { rate })} />
+              <SynthKnob label="Depth" unit={targetOption?.depthUnit}
+                value={lfo.depth} min={0} max={lfo.target === 'amp' ? 1 : lfo.target === 'pitch' ? 100 : 5000}
+                step={lfo.target === 'amp' ? 0.01 : 1}
+                scale={lfo.target === 'filter' ? 'power' : 'linear'}
+                paramId={lfo.target === 'pitch' ? `lfo.${lfo.id}.depth` : undefined}
+                onChange={(depth) => patchLfo(lfo.id, { depth })} />
+            </div>
             <label className="audio-bus-control-row audio-bus-control-row-compact">
-              <span>Global (shared)</span>
+              <span>Global</span>
               <input type="checkbox" checked={lfo.global} onChange={(e) => patchLfo(lfo.id, { global: e.currentTarget.checked })} />
             </label>
           </div>
         );
       })}
+      </div>
     </div>
   );
 }

@@ -11,7 +11,7 @@ import {
   type ModMatrixRoute,
   type ModSource,
 } from '../../../../types/midiClip';
-import { SynthSlider } from './SynthSlider';
+import { Knob } from '../../../common/Knob';
 import type { SynthSectionProps } from './synthSectionTypes';
 
 export function ModMatrixSection({ instrument, onChange }: SynthSectionProps) {
@@ -70,8 +70,10 @@ export function ModMatrixSection({ instrument, onChange }: SynthSectionProps) {
                 )}
               </label>
             )}
-            <SynthSlider label="Amount" value={route.amount} min={-1} max={1}
-              onChange={(amount) => patchRoute(index, { amount })} />
+            <div className="synth-knob-row">
+              <Knob label="Amount" value={route.amount} min={-1} max={1} step={0.01} defaultValue={1}
+                onChange={(amount) => patchRoute(index, { amount })} />
+            </div>
           </div>
         );
       })}

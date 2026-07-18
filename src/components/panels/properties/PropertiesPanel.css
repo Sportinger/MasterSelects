@@ -1721,10 +1721,9 @@
    non-scaling strokes keep line weight uniform under the non-uniform viewBox. */
 .envelope-graph {
   width: 100%;
-  max-width: 200px;
-  height: 54px;
+  height: 84px;
   display: block;
-  margin: var(--sp-1) auto var(--sp-1-5);
+  margin: var(--sp-1) 0 var(--sp-1-5);
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 4px;
@@ -1768,6 +1767,31 @@
 .synth-section-row > .properties-section {
   flex: 1;
   min-width: 0;
+}
+/* LFO rack gets more room than the Mod Matrix beside it (2:1). */
+.synth-section-row--lfo-matrix > .properties-section:first-child {
+  flex: 2;
+}
+.synth-section-row--lfo-matrix > .properties-section:last-child {
+  flex: 1;
+}
+
+/* LFO rack laid out two-up: each LFO card is a grid cell that can shrink. */
+.synth-lfo-grid {
+  display: grid;
+  /* Two-up when there's room, gracefully collapsing to one column in the
+     narrower half-width column (LFO sits beside the Mod Matrix). */
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: var(--sp-2);
+  align-items: start;
+}
+.synth-lfo-grid > .synth-lfo-row {
+  min-width: 0;
+}
+/* Narrow LFO cards: give the label column less room so the Target/Shape/LFO
+   dropdowns get more width. */
+.synth-lfo-row .audio-bus-control-row-compact {
+  grid-template-columns: 46px minmax(0, 1fr);
 }
 
 /* Compact knob row for synth sections — knobs wrap and space out evenly. */

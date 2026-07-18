@@ -37,10 +37,9 @@ export function MidiInstrumentTab({ track }: MidiInstrumentTabProps) {
   // value to the bus while playing; the animated SynthSliders subscribe (plan §14).
   useLiveInstrumentParams(track.id, instrument, isPlaying);
 
-  return (
-    <div className="properties-tab-content audio-bus-properties-tab">
-      <div className="properties-section">
-        <h4>Instrument</h4>
+  const instrumentCard = (
+    <div className="properties-section">
+      <h4>Instrument</h4>
         <label className="audio-bus-control-row audio-bus-control-row-compact">
           <span>Synth</span>
           <select
@@ -107,12 +106,23 @@ export function MidiInstrumentTab({ track }: MidiInstrumentTabProps) {
           </label>
         )}
       </div>
+  );
 
-      {instrument.kind === 'simple-synth' && (
-        <SimpleSynthSections
-          instrument={instrument}
-          onChange={(patch) => setTrackMidiInstrument(track.id, patch)}
-        />
+  return (
+    <div className="properties-tab-content audio-bus-properties-tab">
+      {instrument.kind === 'simple-synth' ? (
+        <>
+          <div className="synth-section-row">
+            {instrumentCard}
+            <PresetSection instrument={instrument} onChange={(patch) => setTrackMidiInstrument(track.id, patch)} />
+          </div>
+          <SimpleSynthSections
+            instrument={instrument}
+            onChange={(patch) => setTrackMidiInstrument(track.id, patch)}
+          />
+        </>
+      ) : (
+        instrumentCard
       )}
     </div>
   );
@@ -131,17 +141,18 @@ function SimpleSynthSections({
   const filterEnv: MidiAdsr = instrument.filterEnv ?? { attack: 0.01, decay: 0.25, sustain: 0.5, release: 0.25 };
   return (
     <>
-      <PresetSection instrument={instrument} onChange={onChange} />
       <div className="synth-section-row">
         <OscillatorSection instrument={instrument} onChange={onChange} />
-        <EnvelopeSection title="Amp Envelope" adsr={ampAdsr} onChange={(adsr) => onChange({ adsr })} />
+        <FilterSection instrument={instrument} onChange={onChange} />
       </div>
       <div className="synth-section-row">
-        <FilterSection instrument={instrument} onChange={onChange} />
+        <EnvelopeSection title="Amp Envelope" adsr={ampAdsr} onChange={(adsr) => onChange({ adsr })} />
         <EnvelopeSection title="Filter Envelope" adsr={filterEnv} onChange={(env) => onChange({ filterEnv: env })} />
       </div>
-      <LfoSection instrument={instrument} onChange={onChange} />
-      <ModMatrixSection instrument={instrument} onChange={onChange} />
+      <div className="synth-section-row synth-section-row--lfo-matrix">
+        <LfoSection instrument={instrument} onChange={onChange} />
+        <ModMatrixSection instrument={instrument} onChange={onChange} />
+      </div>
     </>
   );
 }
