@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-07-18",
+    "type": "new",
+    "title": "MasterSelects 2.4.3",
+    "description": "Simple Synth release: the oscillator instrument gains a subtractive filter, dedicated amp and filter envelopes, LFO and modulation routing, built-in and user presets, performed CC automation lanes, perceptual knobs, motorized live-value readouts, and an editable ADSR graph; live playback and offline export now share chronological, track-wide voice stealing with matching release-tail fades; redundant piano and speaker pictograms no longer cover MIDI note bars or audio waveforms on timeline clips.",
+    "section": "Release"
+  },
+  {
     "date": "2026-07-17",
     "type": "new",
     "title": "MasterSelects 2.4.2",

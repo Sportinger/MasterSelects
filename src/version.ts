@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '2.4.2';
+export const APP_VERSION = '2.4.3';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -27,8 +27,8 @@ export const FEATURED_VIDEO: {
   title: 'MasterSelects Demo',
   banner: {
     type: 'success',
-    title: 'MasterSelects 2.4.2',
-    message: 'Live Inputs release: reusable display, camera, capture-device, and composition-feedback sources, safer capture and playback lifecycles, plus direct legal pages and privacy-conscious website defaults.',
+    title: 'MasterSelects 2.4.3',
+    message: 'Simple Synth release: subtractive filters, envelopes, LFO modulation, presets, CC automation, ergonomic knobs and interactive ADSR editing, plus cleaner audio/MIDI clip previews and playback/export-matched voice stealing.',
     animated: true,
   },
 };
@@ -36,8 +36,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'MasterSelects 2.4.2',
-  message: 'Live Inputs release: reusable display, camera, capture-device, and composition-feedback sources, safer capture and playback lifecycles, plus direct legal pages and privacy-conscious website defaults.',
+  title: 'MasterSelects 2.4.3',
+  message: 'Simple Synth release: subtractive filters, envelopes, LFO modulation, presets, CC automation, ergonomic knobs and interactive ADSR editing, plus cleaner audio/MIDI clip previews and playback/export-matched voice stealing.',
   animated: true,
 };
 
