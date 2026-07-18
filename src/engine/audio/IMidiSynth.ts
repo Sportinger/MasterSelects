@@ -28,6 +28,7 @@ export interface IMidiSynth {
     when: number,
     duration: number,
     automation?: NoteAutomationWindow,
+    forcedStopAt?: number,
   ): void;
 
   /** Play an immediate short note (piano-roll draw/click preview). */

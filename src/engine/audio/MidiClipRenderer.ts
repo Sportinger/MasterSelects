@@ -15,8 +15,12 @@ import {
 import { createSynthForInstrument } from './createSynthForInstrument';
 import { contentTimeToClipLocal, isNoteStartInWindow } from '../../services/midi/midiClipTiming';
 import { sliceAutomationToNote } from '../../services/midi/midiAutomationWindow';
-import { capConcurrentNotes } from '../../services/midi/midiVoiceCap';
+import {
+  DEFAULT_MAX_VOICES,
+  planConcurrentNoteStops,
+} from '../../services/midi/midiVoiceCap';
 import { Logger } from '../../services/logger';
+import { getSimpleSynthVoiceTiming } from './synth/synthVoiceMath';
 
 const log = Logger.create('MidiClipRenderer');
 
@@ -26,6 +30,8 @@ export interface PlannedMidiNote {
   startTime: number; // seconds, clip-local (0 = clip start)
   duration: number;  // seconds
   velocity: number;  // 0–1
+  /** Clip-local context time at which voice stealing starts its short fade. */
+  forcedStopAt?: number;
   // Clip automation sliced to this note's window, note-local (plan §3a). Sliced
   // per note in BOTH paths so offline export and live playback bake identical
   // modulation — the §2 offline-parity guarantee.
@@ -49,6 +55,7 @@ export interface MidiClipRenderPlan {
 export function planMidiClipNotes(
   clip: TimelineClip,
   track: TimelineTrack | undefined,
+  applyVoiceCap = true,
 ): MidiClipRenderPlan {
   const instrument = track?.midiInstrument ?? createDefaultMidiInstrument();
   const durationSeconds = Math.max(0.001, clip.duration);
@@ -75,14 +82,85 @@ export function planMidiClipNotes(
     });
   }
 
-  // Enforce the polyphony cap analytically (no runtime stealing offline). Drops the
-  // same low-priority notes the live stealer would, so export matches playback.
-  const capped = capConcurrentNotes(notes);
-  if (capped.length < notes.length) {
-    log.debug('Voice cap dropped overlapping notes', { from: notes.length, to: capped.length });
+  // Enforce the Simple Synth polyphony cap analytically (no runtime stealing
+  // offline). The shared envelope lifetime + arrival-time victim selector includes
+  // release tails exactly as the live look-ahead synth does. GM playback has no
+  // live cap, so its offline plan must remain uncapped too.
+  let plannedNotes = notes;
+  if (applyVoiceCap && instrument.kind === 'simple-synth') {
+    const forcedStops = planConcurrentNoteStops(notes, DEFAULT_MAX_VOICES, (note) => {
+      const timing = getSimpleSynthVoiceTiming(instrument.adsr, note.startTime, note.duration);
+      return { noteOffTime: timing.noteOffTime, endsAt: timing.endsAt };
+    });
+    plannedNotes = notes.flatMap((note) => {
+      const forcedStopAt = forcedStops.get(note);
+      if (forcedStopAt === undefined) return [note];
+      if (forcedStopAt <= note.startTime) return [];
+      return [{ ...note, forcedStopAt }];
+    });
+    if (forcedStops.size > 0) {
+      log.debug('Voice cap planned forced stops', { count: forcedStops.size });
+    }
   }
 
-  return { notes: capped, durationSeconds, instrument };
+  return { notes: plannedNotes, durationSeconds, instrument };
+}
+
+interface TrackPlannedMidiNote extends PlannedMidiNote {
+  clipId: string;
+  clipStartTime: number;
+  note: PlannedMidiNote;
+}
+
+/**
+ * Plan every MIDI clip on a track under one shared polyphony ceiling. Live
+ * playback owns one synth bus per track, so export must make admission decisions
+ * over the same absolute-time note stream instead of capping each clip alone.
+ */
+export function planMidiTrackClips(
+  clips: readonly TimelineClip[],
+  track: TimelineTrack,
+): Map<string, MidiClipRenderPlan> {
+  const plans = new Map<string, MidiClipRenderPlan>();
+  for (const clip of clips) {
+    plans.set(clip.id, planMidiClipNotes(clip, track, false));
+  }
+
+  const instrument = track.midiInstrument ?? createDefaultMidiInstrument();
+  if (instrument.kind !== 'simple-synth') return plans;
+
+  const trackNotes: TrackPlannedMidiNote[] = [];
+  for (const clip of clips) {
+    const plan = plans.get(clip.id);
+    if (!plan) continue;
+    for (const note of plan.notes) {
+      trackNotes.push({
+        ...note,
+        clipId: clip.id,
+        clipStartTime: clip.startTime,
+        note,
+        startTime: clip.startTime + note.startTime,
+      });
+    }
+  }
+
+  const forcedStops = planConcurrentNoteStops(trackNotes, DEFAULT_MAX_VOICES, (note) => {
+    const timing = getSimpleSynthVoiceTiming(instrument.adsr, note.startTime, note.duration);
+    return { noteOffTime: timing.noteOffTime, endsAt: timing.endsAt };
+  });
+  const entryByNote = new Map(trackNotes.map((entry) => [entry.note, entry]));
+  for (const [clipId, plan] of plans) {
+    const plannedNotes = plan.notes.flatMap((note) => {
+      const entry = entryByNote.get(note);
+      const absoluteStopAt = entry ? forcedStops.get(entry) : undefined;
+      if (absoluteStopAt === undefined || !entry) return [note];
+      const forcedStopAt = absoluteStopAt - entry.clipStartTime;
+      if (forcedStopAt <= note.startTime) return [];
+      return [{ ...note, forcedStopAt }];
+    });
+    plans.set(clipId, { ...plan, notes: plannedNotes });
+  }
+  return plans;
 }
 
 function getOfflineAudioContextCtor(): typeof OfflineAudioContext | null {
@@ -101,8 +179,9 @@ export async function renderMidiClipToBuffer(
   clip: TimelineClip,
   track: TimelineTrack | undefined,
   sampleRate: number,
+  preparedPlan?: MidiClipRenderPlan,
 ): Promise<AudioBuffer | null> {
-  const plan = planMidiClipNotes(clip, track);
+  const plan = preparedPlan ?? planMidiClipNotes(clip, track);
   if (plan.notes.length === 0) {
     return null;
   }
@@ -119,7 +198,13 @@ export async function renderMidiClipToBuffer(
 
   for (const note of plan.notes) {
     synth.scheduleNote(
-      plan.instrument, note.pitch, note.velocity, note.startTime, note.duration, note.automation,
+      plan.instrument,
+      note.pitch,
+      note.velocity,
+      note.startTime,
+      note.duration,
+      note.automation,
+      note.forcedStopAt,
     );
   }
 

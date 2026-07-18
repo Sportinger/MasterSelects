@@ -22,6 +22,7 @@ import {
   clampFilterHz,
   clampFilterQ,
   CUTOFF_CC_RANGE_HZ,
+  getSimpleSynthVoiceTiming,
   keytrackCutoffHz,
   midiPitchToFrequency,
   MOD_WHEEL_VIBRATO_CENTS,
@@ -48,6 +49,21 @@ export interface VoiceHandle {
   disconnect(): void;
   /** Fire `cb` when the voice has finished sounding (osc `onended`). */
   onEnded(cb: () => void): void;
+}
+
+const VOICE_STEAL_FADE_SECONDS = 0.02;
+
+/** Schedule the same click-free voice-steal fade in live and offline contexts. */
+export function scheduleVoiceGainFade(gain: AudioParam, atTime: number): number {
+  try {
+    gain.cancelAndHoldAtTime(atTime);
+  } catch {
+    gain.cancelScheduledValues(atTime);
+    gain.setValueAtTime(Math.max(0.0001, gain.value), atTime);
+  }
+  const fadeEnd = atTime + VOICE_STEAL_FADE_SECONDS;
+  gain.exponentialRampToValueAtTime(0.0001, fadeEnd);
+  return fadeEnd;
 }
 
 /** Sample a note-local automation lane into a Float32Array for setValueCurveAtTime. */
@@ -82,6 +98,7 @@ export function buildSimpleSynthVoice(
   when: number,
   duration: number,
   automation?: NoteAutomationWindow,
+  forcedStopAt?: number,
 ): VoiceHandle | null {
   const startAt = Math.max(when, ctx.currentTime);
   const freq = midiPitchToFrequency(pitch);
@@ -93,9 +110,8 @@ export function buildSimpleSynthVoice(
   const nodes: AudioNode[] = [];
 
   // --- Amp ADSR (intrinsic, single writer — keeps exponential ramps) -----------
-  const attack = Math.max(0.001, instrument.adsr.attack);
-  const decay = Math.max(0.001, instrument.adsr.decay);
-  const release = Math.max(0.005, instrument.adsr.release);
+  const voiceTiming = getSimpleSynthVoiceTiming(instrument.adsr, startAt, duration);
+  const { attack, decay } = voiceTiming;
   const sustain = clamp01(instrument.adsr.sustain);
   const sustainLevel = Math.max(0.0001, peak * sustain);
 
@@ -106,10 +122,16 @@ export function buildSimpleSynthVoice(
   ampGain.gain.exponentialRampToValueAtTime(peak, attackEnd);
   const decayEnd = attackEnd + decay;
   ampGain.gain.exponentialRampToValueAtTime(sustainLevel, decayEnd);
-  const noteOff = Math.max(decayEnd, startAt + Math.max(0.02, duration));
+  const noteOff = voiceTiming.noteOffTime;
   ampGain.gain.setValueAtTime(sustainLevel, noteOff);
-  const releaseEnd = noteOff + release;
+  const releaseEnd = voiceTiming.endsAt;
   ampGain.gain.exponentialRampToValueAtTime(0.0001, releaseEnd);
+  const forcedFadeStart = forcedStopAt !== undefined && forcedStopAt < releaseEnd
+    ? Math.max(startAt, forcedStopAt)
+    : null;
+  const forcedFadeEnd = forcedFadeStart === null
+    ? null
+    : scheduleVoiceGainFade(ampGain.gain, forcedFadeStart);
   // Latest time any source must keep running (extended by a longer filter release).
   let latestEnd = releaseEnd;
 
@@ -241,7 +263,8 @@ export function buildSimpleSynthVoice(
   }
 
   // --- Start / stop every source deterministically -----------------------------
-  const stopAt = latestEnd + 0.02;
+  if (forcedFadeEnd !== null) latestEnd = forcedFadeEnd;
+  const stopAt = forcedFadeStart === null ? latestEnd + 0.02 : forcedFadeStart + 0.03;
   for (const src of sources) {
     src.start(startAt);
     src.stop(stopAt);
@@ -251,8 +274,8 @@ export function buildSimpleSynthVoice(
     ampGain,
     velocity: clamp01(velocity),
     startAt,
-    noteOff,
-    endsAt: releaseEnd,
+    noteOff: forcedFadeStart === null ? noteOff : Math.min(noteOff, forcedFadeStart),
+    endsAt: forcedFadeEnd ?? releaseEnd,
     stop(atTime: number) {
       for (const src of sources) {
         try { src.stop(atTime); } catch { /* already stopped */ }
