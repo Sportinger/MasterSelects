@@ -3,7 +3,10 @@
 // the note/timing resolution that decides what actually gets rendered.
 
 import { describe, expect, it } from 'vitest';
-import { planMidiClipNotes } from '../../src/engine/audio/MidiClipRenderer';
+import {
+  planMidiClipNotes,
+  planMidiTrackClips,
+} from '../../src/engine/audio/MidiClipRenderer';
 import type { TimelineClip, TimelineTrack } from '../../src/types';
 import { createDefaultMidiInstrument } from '../../src/types/midiClip';
 
@@ -67,6 +70,91 @@ describe('planMidiClipNotes', () => {
     const plan = planMidiClipNotes(clip, midiTrack({ midiInstrument: undefined }));
 
     expect(plan.instrument).toEqual(createDefaultMidiInstrument());
+  });
+
+  it('uses the live Simple Synth release lifetime for offline voice stealing', () => {
+    const instrument = createDefaultMidiInstrument('simple-synth');
+    if (instrument.kind !== 'simple-synth') throw new Error('Expected Simple Synth');
+    const releaseHeavyInstrument = {
+      ...instrument,
+      adsr: { ...instrument.adsr, release: 1 },
+    };
+    const releaseTailNotes = Array.from({ length: 32 }, (_, index) => ({
+      id: `release-${index}`,
+      pitch: 40 + index,
+      start: 0,
+      duration: 0.1,
+      velocity: 0.5,
+    }));
+    const arrival = { id: 'arrival', pitch: 100, start: 0.2, duration: 0.5, velocity: 0.8 };
+
+    const plan = planMidiClipNotes(
+      midiClip([...releaseTailNotes, arrival]),
+      midiTrack({ midiInstrument: releaseHeavyInstrument }),
+    );
+
+    expect(plan.notes).toHaveLength(33);
+    expect(plan.notes.find((note) => note.pitch === 40)?.forcedStopAt).toBe(0.2);
+    expect(plan.notes.map((note) => note.pitch)).toContain(100);
+  });
+
+  it('keeps a stolen note audible before a much later arrival', () => {
+    const instrument = createDefaultMidiInstrument('simple-synth');
+    const heldNotes = Array.from({ length: 32 }, (_, index) => ({
+      id: `held-${index}`,
+      pitch: 40 + index,
+      start: 0,
+      duration: 12,
+      velocity: 0.5,
+    }));
+    const arrival = { id: 'late-arrival', pitch: 100, start: 10, duration: 1, velocity: 0.8 };
+
+    const plan = planMidiClipNotes(
+      midiClip([...heldNotes, arrival], 12),
+      midiTrack({ midiInstrument: instrument }),
+    );
+
+    expect(plan.notes).toHaveLength(33);
+    expect(plan.notes.find((note) => note.pitch === 40)?.forcedStopAt).toBe(10);
+  });
+
+  it('does not apply the Simple Synth cap to uncapped GM playback', () => {
+    const notes = Array.from({ length: 33 }, (_, index) => ({
+      id: `gm-${index}`,
+      pitch: 40 + index,
+      start: 0,
+      duration: 1,
+      velocity: 0.5,
+    }));
+    expect(planMidiClipNotes(midiClip(notes), midiTrack()).notes).toHaveLength(33);
+  });
+
+  it('shares one offline Simple Synth cap across overlapping track clips', () => {
+    const instrument = createDefaultMidiInstrument('simple-synth');
+    const notesA = Array.from({ length: 20 }, (_, index) => ({
+      id: `a-${index}`,
+      pitch: 30 + index,
+      start: 0,
+      duration: 1,
+      velocity: 0.5,
+    }));
+    const notesB = Array.from({ length: 20 }, (_, index) => ({
+      id: `b-${index}`,
+      pitch: 60 + index,
+      start: 0,
+      duration: 1,
+      velocity: 0.5,
+    }));
+    const clipA = { ...midiClip(notesA), id: 'clip-a' };
+    const clipB = { ...midiClip(notesB), id: 'clip-b' };
+
+    const plans = planMidiTrackClips(
+      [clipA, clipB],
+      midiTrack({ midiInstrument: instrument }),
+    );
+
+    const keptCount = [...plans.values()].reduce((sum, plan) => sum + plan.notes.length, 0);
+    expect(keptCount).toBe(32);
   });
 
   it('returns no notes for an empty clip', () => {

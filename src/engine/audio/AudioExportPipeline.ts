@@ -19,7 +19,12 @@ import { renderAudioGraph } from './AudioGraphRenderer';
 import type { AudioGraphRenderPlan } from './AudioGraphTypes';
 import { AudioEffectRenderer } from './AudioEffectRenderer';
 import { ClipAudioRenderService } from '../../services/audio/ClipAudioRenderService';
-import { renderMidiClipToBuffer } from './MidiClipRenderer';
+import {
+  planMidiClipNotes,
+  planMidiTrackClips,
+  renderMidiClipToBuffer,
+  type MidiClipRenderPlan,
+} from './MidiClipRenderer';
 import { getGmSampleBank } from './GmSampleBank';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
@@ -485,6 +490,24 @@ export class AudioExportPipeline {
       await getGmSampleBank().ensureLoaded([...gmSounds.values()]);
     }
 
+    // Match the live scheduler's one-synth-per-track voice ceiling. Planning all
+    // MIDI clips together prevents overlapping clips from each claiming a full
+    // independent cap during export.
+    const midiPlans = new Map<string, MidiClipRenderPlan>();
+    for (const track of tracks) {
+      if (track.type !== 'midi') continue;
+      const trackClips = clips.filter(
+        (clip) => clip.trackId === track.id && clip.source?.type === 'midi',
+      );
+      for (const [clipId, plan] of planMidiTrackClips(trackClips, track)) {
+        midiPlans.set(clipId, plan);
+      }
+    }
+    for (const clip of clips) {
+      if (clip.source?.type !== 'midi' || midiPlans.has(clip.id)) continue;
+      midiPlans.set(clip.id, planMidiClipNotes(clip, undefined));
+    }
+
     for (let i = 0; i < clips.length; i++) {
       const clip = clips[i];
 
@@ -504,7 +527,12 @@ export class AudioExportPipeline {
         // to decode). Flows through the rest of the pipeline like any audio clip.
         if (clip.source?.type === 'midi') {
           const track = tracks.find(t => t.id === clip.trackId);
-          const midiBuffer = await renderMidiClipToBuffer(clip, track, this.settings.sampleRate);
+          const midiBuffer = await renderMidiClipToBuffer(
+            clip,
+            track,
+            this.settings.sampleRate,
+            midiPlans.get(clip.id),
+          );
           const buffer = midiBuffer ?? this.extractor.createSilentBuffer(Math.max(clip.duration, 0.001));
           this.assertAudioBufferAdmission('source-buffer', buffer, clip);
           buffers.set(clip.id, buffer);

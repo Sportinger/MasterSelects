@@ -16,6 +16,32 @@ export function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
+interface AdsrTimingInput {
+  attack: number;
+  decay: number;
+  release: number;
+}
+
+/** Exact amp-envelope lifetime shared by voice construction and cap planning. */
+export function getSimpleSynthVoiceTiming(
+  adsr: AdsrTimingInput,
+  startAt: number,
+  duration: number,
+) {
+  const attack = Math.max(0.001, adsr.attack);
+  const decay = Math.max(0.001, adsr.decay);
+  const release = Math.max(0.005, adsr.release);
+  const decayEnd = startAt + attack + decay;
+  const noteOffTime = Math.max(decayEnd, startAt + Math.max(0.02, duration));
+  return {
+    attack,
+    decay,
+    release,
+    noteOffTime,
+    endsAt: noteOffTime + release,
+  };
+}
+
 /**
  * Hz delta equivalent to shifting `freqHz` by `cents`. Web Audio sums a Hz offset
  * onto `osc.frequency`, but musical pitch is logarithmic; linearizing around the

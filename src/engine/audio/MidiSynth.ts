@@ -15,9 +15,18 @@
 
 import type { MidiInstrument, NoteAutomationWindow } from '../../types/midiClip';
 import type { IMidiSynth } from './IMidiSynth';
-import { buildSimpleSynthVoice, type VoiceHandle } from './synth/MidiSynthVoice';
+import {
+  buildSimpleSynthVoice,
+  scheduleVoiceGainFade,
+  type VoiceHandle,
+} from './synth/MidiSynthVoice';
 import { midiPitchToFrequency } from './synth/synthVoiceMath';
-import { DEFAULT_MAX_VOICES } from '../../services/midi/midiVoiceCap';
+import {
+  DEFAULT_MAX_VOICES,
+  findMidiVoiceStealCandidateIndex,
+  isMidiVoiceActiveAt,
+  type MidiVoiceLifecycleCandidate,
+} from '../../services/midi/midiVoiceCap';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('MidiSynth');
@@ -34,6 +43,7 @@ export class MidiSynth implements IMidiSynth {
   private readonly context: BaseAudioContext;
   private readonly destination: AudioNode;
   private readonly voices = new Set<VoiceHandle>();
+  private readonly scheduledStops = new Map<VoiceHandle, number>();
   private readonly maxVoices: number;
   // OfflineAudioContext exposes `length`; a live AudioContext does not. Offline,
   // currentTime stays 0 during scheduling and voices never end mid-render, so
@@ -60,17 +70,29 @@ export class MidiSynth implements IMidiSynth {
     when: number,
     duration: number,
     automation?: NoteAutomationWindow,
+    forcedStopAt?: number,
   ): void {
     // This synth only renders the oscillator instrument; GM instruments go to
     // WavetableSynth via the factory. Narrowing keeps the field access type-safe.
     if (instrument.kind !== 'simple-synth') return;
+    const startAt = Math.max(this.context.currentTime, when);
 
-    // Live voice cap: steal before building so we never exceed the ceiling. (The
-    // offline path caps analytically at plan time — see midiVoiceCap.)
-    if (!this.isOffline && this.voices.size >= this.maxVoices) this.stealVoice();
+    // Live voice cap: evaluate overlap at the incoming note's scheduled time,
+    // not AudioContext.currentTime. Look-ahead scheduling may hold future voices
+    // and release tails in the set; only voices sounding at `when` compete. The
+    // offline planner uses the same lifecycle and victim selector.
+    if (!this.isOffline) this.stealVoiceForArrival(startAt);
 
     const voice = buildSimpleSynthVoice(
-      this.context, this.destination, instrument, pitch, velocity, when, duration, automation,
+      this.context,
+      this.destination,
+      instrument,
+      pitch,
+      velocity,
+      startAt,
+      duration,
+      automation,
+      forcedStopAt,
     );
     if (!voice) return;
 
@@ -78,6 +100,7 @@ export class MidiSynth implements IMidiSynth {
     voice.onEnded(() => {
       voice.disconnect();
       this.voices.delete(voice);
+      this.scheduledStops.delete(voice);
     });
   }
 
@@ -87,32 +110,30 @@ export class MidiSynth implements IMidiSynth {
    * steal doesn't click. Shares the "quietest, then oldest" ordering with the
    * offline analytic cap so playback and export drop the same notes (plan §5).
    */
-  private stealVoice(): void {
-    const now = this.context.currentTime;
-    let victim: VoiceHandle | null = null;
-    for (const voice of this.voices) {
-      if (!victim || this.stealRank(voice, now) < this.stealRank(victim, now)) {
-        victim = voice;
-      }
-    }
-    if (!victim) return;
-    this.fadeAndStop(victim, now);
-    this.voices.delete(victim);
-  }
+  private stealVoiceForArrival(when: number): void {
+    const candidates = Array.from(this.voices, (voice): MidiVoiceLifecycleCandidate & {
+      voice: VoiceHandle;
+    } => ({
+      voice,
+      startTime: voice.startAt,
+      noteOffTime: voice.noteOff,
+      endsAt: Math.min(voice.endsAt, this.scheduledStops.get(voice) ?? Number.POSITIVE_INFINITY),
+      velocity: voice.velocity,
+    }));
+    const active = candidates.filter((candidate) => isMidiVoiceActiveAt(candidate, when));
+    if (active.length < this.maxVoices) return;
 
-  /** Lower rank = stolen first: releasing before held, then quieter, then older. */
-  private stealRank(voice: VoiceHandle, now: number): number {
-    const releasing = now >= voice.noteOff ? 0 : 1_000_000;
-    // velocity dominates within a release class; startAt breaks ties (older wins).
-    return releasing + voice.velocity * 1000 + voice.startAt * 0.001;
+    const victimIndex = findMidiVoiceStealCandidateIndex(active, when);
+    if (victimIndex === null) return;
+    const victim = active[victimIndex].voice;
+    const stopAt = Math.max(this.context.currentTime, when);
+    this.scheduledStops.set(victim, stopAt);
+    this.fadeAndStop(victim, stopAt);
   }
 
   private fadeAndStop(voice: VoiceHandle, now: number): void {
     try {
-      const g = voice.ampGain.gain;
-      g.cancelScheduledValues(now);
-      g.setValueAtTime(Math.max(0.0001, g.value), now);
-      g.exponentialRampToValueAtTime(0.0001, now + 0.02);
+      scheduleVoiceGainFade(voice.ampGain.gain, now);
       voice.stop(now + 0.03);
     } catch {
       // voice already stopped
@@ -138,6 +159,7 @@ export class MidiSynth implements IMidiSynth {
     const now = this.context.currentTime;
     const count = this.voices.size;
     for (const voice of this.voices) {
+      this.scheduledStops.set(voice, now);
       this.fadeAndStop(voice, now);
     }
     log.debug('stopAll: flushed voices', { count });

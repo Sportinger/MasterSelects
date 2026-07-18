@@ -24,7 +24,11 @@ import type { TimelineClip, TimelineTrack } from '../../types';
 import type { IMidiSynth } from '../../engine/audio/IMidiSynth';
 import { createSynthForInstrument } from '../../engine/audio/createSynthForInstrument';
 import { getGmSampleBank, type GmSoundRef } from '../../engine/audio/GmSampleBank';
-import { createDefaultMidiInstrument, type MidiInstrument } from '../../types/midiClip';
+import {
+  createDefaultMidiInstrument,
+  type MidiInstrument,
+  type MidiNote,
+} from '../../types/midiClip';
 import { isNoteStartInWindow, noteAbsoluteStart } from '../midi/midiClipTiming';
 import { sliceAutomationToNote } from '../midi/midiAutomationWindow';
 import { audioRoutingManager } from '../audioRoutingManager';
@@ -55,6 +59,20 @@ interface TrackBus {
   sourceGain: GainNode;
   /** Instrument kind the synth was built for; a change rebuilds the synth. */
   kind: MidiInstrument['kind'];
+}
+
+interface PendingMidiNote {
+  clip: TimelineClip;
+  note: MidiNote;
+  absStart: number;
+  duration: number;
+  key: string;
+}
+
+export function sortMidiScheduleEventsByStart<T extends { absStart: number }>(
+  events: readonly T[],
+): T[] {
+  return events.toSorted((a, b) => a.absStart - b.absStart);
 }
 
 class MidiPlaybackScheduler {
@@ -346,6 +364,7 @@ class MidiPlaybackScheduler {
 
       if (silenced) continue;
 
+      const pendingNotes: PendingMidiNote[] = [];
       for (const clip of state.clips) {
         if (clip.trackId !== track.id || clip.source?.type !== 'midi') continue;
         const notes = clip.midiData?.notes;
@@ -365,15 +384,29 @@ class MidiPlaybackScheduler {
 
           const key = `${clip.id}:${note.id}:${absStart.toFixed(3)}`;
           if (this.scheduled.has(key)) continue;
-          this.scheduled.add(key);
-
-          const when = this.timelineToContextTime(absStart);
-          // Slice the clip's performed automation to this note's window (content
-          // time) so the synth bakes it onto the voice (plan §3a). The scheduler
-          // already holds `clip`, so the data is in hand.
-          const automation = sliceAutomationToNote(clip.automation, note.start, duration);
-          bus.synth.scheduleNote(instrument, note.pitch, note.velocity, when, duration, automation);
+          pendingNotes.push({ clip, note, absStart, duration, key });
         }
+      }
+
+      // Stored notes are append-ordered and edits do not reorder them. Voice-cap
+      // admission must nevertheless follow timeline order, exactly like the
+      // offline planner's stable start-time sweep.
+      for (const pending of sortMidiScheduleEventsByStart(pendingNotes)) {
+        this.scheduled.add(pending.key);
+        const when = this.timelineToContextTime(pending.absStart);
+        const automation = sliceAutomationToNote(
+          pending.clip.automation,
+          pending.note.start,
+          pending.duration,
+        );
+        bus.synth.scheduleNote(
+          instrument,
+          pending.note.pitch,
+          pending.note.velocity,
+          when,
+          pending.duration,
+          automation,
+        );
       }
     }
 
