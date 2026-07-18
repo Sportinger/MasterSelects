@@ -13,6 +13,7 @@
 
 import { useEffect, useRef } from 'react';
 import { liveParamBus } from '../../../../services/midi/instrumentParams/liveParamBus';
+import { positionToValue, valueToPosition, type SliderScale } from './sliderScale';
 
 interface SynthSliderProps {
   label: string;
@@ -22,10 +23,17 @@ interface SynthSliderProps {
   step?: number;
   /** Optional unit shown after the label (e.g. "Hz", "s", "cents"). */
   unit?: string;
+  /** Perceptual taper: 'log' (frequency/rate), 'power' (gain/time), else linear. */
+  scale?: SliderScale;
+  /** Exponent for the 'power' taper (default 2). */
+  gamma?: number;
   /** Bind to the live-value bus under this id to show the motorized ghost. */
   paramId?: string;
   onChange: (value: number) => void;
 }
+
+// Position steps for a non-linear range input — fine enough to feel continuous.
+const POSITION_STEP = 0.0001;
 
 function formatLive(value: number, unit?: string, max?: number): string {
   if (unit === 'Hz') return value >= 1000 ? `${(value / 1000).toFixed(1)}k` : String(Math.round(value));
@@ -33,8 +41,9 @@ function formatLive(value: number, unit?: string, max?: number): string {
   return String(Math.round(value));
 }
 
-export function SynthSlider({ label, value, min, max, step = 0.01, unit, paramId, onChange }: SynthSliderProps) {
+export function SynthSlider({ label, value, min, max, step = 0.01, unit, scale = 'linear', gamma = 2, paramId, onChange }: SynthSliderProps) {
   const clamp = (v: number) => Math.max(min, Math.min(max, Number.isFinite(v) ? v : min));
+  const isLinear = scale === 'linear';
   const rowRef = useRef<HTMLLabelElement | null>(null);
   const fillRef = useRef<HTMLDivElement | null>(null);
   const thumbRef = useRef<HTMLDivElement | null>(null);
@@ -49,7 +58,7 @@ export function SynthSlider({ label, value, min, max, step = 0.01, unit, paramId
         row.classList.remove('is-automating');
         return;
       }
-      const pct = Math.max(0, Math.min(1, (live - min) / (max - min))) * 100;
+      const pct = valueToPosition(live, min, max, scale, gamma) * 100;
       row.classList.add('is-automating');
       if (fillRef.current) fillRef.current.style.width = `${pct}%`;
       if (thumbRef.current) thumbRef.current.style.left = `${pct}%`;
@@ -58,20 +67,33 @@ export function SynthSlider({ label, value, min, max, step = 0.01, unit, paramId
         badgeRef.current.textContent = formatLive(live, unit, max);
       }
     });
-  }, [paramId, min, max, unit]);
+  }, [paramId, min, max, unit, scale, gamma]);
 
   return (
     <label ref={rowRef} className={`audio-bus-control-row synth-slider${paramId ? ' synth-slider-live' : ''}`}>
       <span>{unit ? `${label} (${unit})` : label}</span>
       <div className="synth-slider-track">
-        <input
-          type="range"
-          min={min}
-          max={max}
-          step={step}
-          value={value}
-          onChange={(e) => onChange(clamp(Number(e.currentTarget.value)))}
-        />
+        {isLinear ? (
+          <input
+            type="range"
+            min={min}
+            max={max}
+            step={step}
+            value={value}
+            onChange={(e) => onChange(clamp(Number(e.currentTarget.value)))}
+          />
+        ) : (
+          // Non-linear taper: the range runs on normalized position [0,1]; the
+          // real value is mapped through the scale so travel is perceptual.
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={POSITION_STEP}
+            value={valueToPosition(value, min, max, scale, gamma)}
+            onChange={(e) => onChange(clamp(positionToValue(Number(e.currentTarget.value), min, max, scale, gamma)))}
+          />
+        )}
         {paramId && (
           <>
             <div ref={fillRef} className="synth-slider-ghost-fill" />

@@ -28,7 +28,7 @@ export function FilterSection({ instrument, onChange }: SynthSectionProps) {
       {filter && (
         <>
           <SynthSlider label="Cutoff" unit="Hz" step={1} value={filter.cutoff} min={20} max={18000}
-            paramId="filter.cutoff" onChange={(cutoff) => set({ cutoff })} />
+            scale="log" paramId="filter.cutoff" onChange={(cutoff) => set({ cutoff })} />
           <SynthSlider label="Resonance" unit="Q" value={filter.resonance} min={0.1} max={24}
             onChange={(resonance) => set({ resonance })} />
           <SynthSlider label="Env Amount" unit="Hz" step={10} value={filter.envAmount} min={-8000} max={8000}

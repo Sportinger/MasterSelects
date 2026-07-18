@@ -50,11 +50,12 @@ export function LfoSection({ instrument, onChange }: SynthSectionProps) {
                 {SYNTH_LFO_SHAPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </label>
-            <SynthSlider label="Rate" unit="Hz" value={lfo.rate} min={0.01} max={20}
+            <SynthSlider label="Rate" unit="Hz" value={lfo.rate} min={0.01} max={20} scale="log"
               onChange={(rate) => patchLfo(lfo.id, { rate })} />
             <SynthSlider label="Depth" unit={targetOption?.depthUnit}
               value={lfo.depth} min={0} max={lfo.target === 'amp' ? 1 : lfo.target === 'pitch' ? 100 : 5000}
               step={lfo.target === 'amp' ? 0.01 : 1}
+              scale={lfo.target === 'filter' ? 'power' : 'linear'}
               paramId={lfo.target === 'pitch' ? `lfo.${lfo.id}.depth` : undefined}
               onChange={(depth) => patchLfo(lfo.id, { depth })} />
             <label className="audio-bus-control-row audio-bus-control-row-compact">

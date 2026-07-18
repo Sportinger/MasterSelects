@@ -19,13 +19,13 @@ export function EnvelopeSection({ title, adsr, onChange, timeMax = 4 }: Envelope
   return (
     <div className="properties-section">
       <h4>{title}</h4>
-      <SynthSlider label="Attack" unit="s" value={adsr.attack} min={0} max={timeMax}
+      <SynthSlider label="Attack" unit="s" value={adsr.attack} min={0} max={timeMax} scale="power"
         onChange={(attack) => set({ attack })} />
-      <SynthSlider label="Decay" unit="s" value={adsr.decay} min={0} max={timeMax}
+      <SynthSlider label="Decay" unit="s" value={adsr.decay} min={0} max={timeMax} scale="power"
         onChange={(decay) => set({ decay })} />
       <SynthSlider label="Sustain" value={adsr.sustain} min={0} max={1}
         onChange={(sustain) => set({ sustain })} />
-      <SynthSlider label="Release" unit="s" value={adsr.release} min={0} max={timeMax}
+      <SynthSlider label="Release" unit="s" value={adsr.release} min={0} max={timeMax} scale="power"
         onChange={(release) => set({ release })} />
     </div>
   );

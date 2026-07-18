@@ -20,7 +20,7 @@ export function OscillatorSection({ instrument, onChange }: SynthSectionProps) {
         </select>
       </label>
       <SynthSlider
-        label="Gain" value={instrument.gain} min={0} max={1} paramId="gain"
+        label="Gain" value={instrument.gain} min={0} max={1} scale="power" paramId="gain"
         onChange={(gain) => onChange({ gain })}
       />
       <SynthSlider

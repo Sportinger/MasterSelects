@@ -1028,7 +1028,7 @@ export function PianoRoll({ clipId }: PianoRollProps) {
           type="button"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => setControllerArea({ visible: !controllerArea.visible })}
-          title={controllerArea.visible ? 'Hide the velocity lane' : 'Show the velocity lane'}
+          title={controllerArea.visible ? 'Hide the controller lanes' : 'Show the controller lanes'}
           style={{
             display: 'inline-flex', alignItems: 'center', height: 24, padding: '0 8px',
             borderRadius: 3, cursor: 'pointer', fontSize: 11, fontWeight: 600, outline: 'none',
@@ -1037,7 +1037,7 @@ export function PianoRoll({ clipId }: PianoRollProps) {
             color: controllerArea.visible ? TOOL_ACCENT : 'rgba(255,255,255,0.72)',
           }}
         >
-          Velocity
+          Controllers
         </button>
         <span style={{ fontSize: 11, color: '#777' }}>{notes.length} notes · {clipDuration.toFixed(2)}s</span>
         <strong style={{ fontSize: 13, color: '#e0e0e0' }}>{clip.name || 'MIDI Clip'}</strong>
