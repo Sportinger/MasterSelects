@@ -12,6 +12,8 @@ import type {
   TransitionOverlayClipDefinition,
 } from '../../../types';
 import type { MotionLayerDefinition } from '../../../types/motionDesign';
+import type { LightClipSettings } from '../../../types/light';
+import type { ModelMaterialSettings } from '../../../types/modelMaterial';
 import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
 import type { MeshPrimitiveType, SceneCameraSettings } from '../../mediaStore/types';
 
@@ -21,6 +23,7 @@ export interface ClipboardClipData {
   trackType: 'video' | 'audio' | 'midi';
   name: string;
   mediaFileId?: string;
+  liveInputId?: string;
   signalAssetId?: string;
   signalRefId?: string;
   signalRenderAdapterId?: string;
@@ -40,6 +43,7 @@ export interface ClipboardClipData {
   reversed?: boolean;
   speed?: number;
   preservesPitch?: boolean;
+  freeRun?: boolean;
   textProperties?: import('../../../types').TextClipProperties;
   text3DProperties?: import('../../../types').Text3DProperties;
   solidColor?: string;
@@ -48,7 +52,10 @@ export interface ClipboardClipData {
   motion?: MotionLayerDefinition;
   vectorAnimationSettings?: VectorAnimationClipSettings;
   cameraSettings?: SceneCameraSettings;
+  lightSettings?: LightClipSettings;
   meshType?: MeshPrimitiveType;
+  modelPrimitiveIndex?: number;
+  modelMaterialSettings?: ModelMaterialSettings;
   splatEffectorSettings?: import('../../../types/splatEffector').SplatEffectorSettings;
   threeDEffectorsEnabled?: boolean;
   thumbnails?: string[];

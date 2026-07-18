@@ -1332,12 +1332,26 @@ describe('timeline edit operations kernel', () => {
     expect(useTimelineStore.getState().timelineToolPreview).toBeNull();
   });
 
-  it('applies a typed transition operation with reciprocal clip metadata', () => {
+  it('materializes one hidden transition composition for media-backed typed transition clips', () => {
     useTimelineStore.setState({
       tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
       clips: [
-        createMockClip({ id: 'clip-a', trackId: 'video-1', startTime: 0, duration: 10 }),
-        createMockClip({ id: 'clip-b', trackId: 'video-1', startTime: 10, duration: 8 }),
+        createMockClip({
+          id: 'clip-a',
+          trackId: 'video-1',
+          startTime: 0,
+          duration: 10,
+          mediaFileId: 'media-a',
+          source: { type: 'video', mediaFileId: 'media-a', naturalDuration: 10 },
+        }),
+        createMockClip({
+          id: 'clip-b',
+          trackId: 'video-1',
+          startTime: 10,
+          duration: 8,
+          mediaFileId: 'media-b',
+          source: { type: 'video', mediaFileId: 'media-b', naturalDuration: 8 },
+        }),
       ],
     });
     installActiveParentComposition();

@@ -103,6 +103,7 @@ export function TimelineToolButton({
       aria-haspopup="menu"
       aria-expanded={open}
       title={title}
+      onMouseDown={(event) => event.stopPropagation()}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
       onContextMenu={(event) => {

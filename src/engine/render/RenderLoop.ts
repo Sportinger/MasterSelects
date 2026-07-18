@@ -46,6 +46,11 @@ export class RenderLoop {
   private lastSuccessfulRender = 0;
   private watchdogTimer: ReturnType<typeof setInterval> | null = null;
   private renderCount = 0;
+  // Hidden tabs pause requestAnimationFrame, so render gaps accumulated there
+  // are expected browser behavior. Stall time is measured against this
+  // baseline, which advances while the document is hidden.
+  private watchdogStallBaseline = 0;
+  private watchdogSawHiddenDocument = false;
 
   private readonly IDLE_TIMEOUT = 1000; // 1s before idle
   private readonly IDLE_SUPPRESSION_TIMEOUT = 3000; // bounded reload warmup
@@ -239,6 +244,13 @@ export class RenderLoop {
     this.watchdogTimer = setInterval(() => {
       this.checkHealth();
     }, this.WATCHDOG_INTERVAL);
+    // Watchdog ticks can be throttled or frozen entirely while the tab is
+    // hidden, so visibility transitions also refresh the stall baseline
+    // directly — otherwise the first tick after a restore could measure a
+    // render gap that is really just paused-RAF time.
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    }
   }
 
   private stopWatchdog(): void {
@@ -246,7 +258,15 @@ export class RenderLoop {
       clearInterval(this.watchdogTimer);
       this.watchdogTimer = null;
     }
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+    }
   }
+
+  private readonly handleVisibilityChange = (): void => {
+    this.watchdogStallBaseline = performance.now();
+    this.watchdogSawHiddenDocument = document.hidden;
+  };
 
   /**
    * Check render loop health - detect and recover from stalls.
@@ -257,11 +277,28 @@ export class RenderLoop {
     if (!this.isRunning) return;
 
     const now = performance.now();
-    const timeSinceRender = now - this.lastSuccessfulRender;
 
     // During recovery or export, don't interfere
     if (this.callbacks.isRecovering()) return;
     if (this.callbacks.isExporting()) return;
+
+    // Hidden tab: RAF is paused by the browser, so a growing render gap is
+    // not a stall. Warning here would also re-arm renderRequested on every
+    // (throttled) tick and spam the log for as long as the tab stays hidden.
+    if (typeof document !== 'undefined' && document.hidden) {
+      this.watchdogStallBaseline = now;
+      this.watchdogSawHiddenDocument = true;
+      return;
+    }
+    if (this.watchdogSawHiddenDocument) {
+      // First check after the tab became visible again: give the resumed RAF
+      // loop one watchdog interval to produce a frame before stall detection.
+      this.watchdogSawHiddenDocument = false;
+      this.watchdogStallBaseline = now;
+      return;
+    }
+
+    const timeSinceRender = now - Math.max(this.lastSuccessfulRender, this.watchdogStallBaseline);
 
     // Check if we're stalled (no render for too long while we should be rendering)
     if (timeSinceRender > this.WATCHDOG_STALL_THRESHOLD) {

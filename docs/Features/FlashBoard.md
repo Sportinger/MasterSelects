@@ -34,6 +34,8 @@ FlashBoard is composed of:
 
 Boards are persisted inside the project state. The active board is restored on project load, generation metadata is serialized alongside the board state, and the prompt book keeps the project's generated and chat prompts available for review and copy. Prompt book generation pages group outputs by user prompt, show the Magic Wand prompt when one produced the final request, and preview generated images/videos directly on the page.
 
+The prompt book is presented as a "magic book": it opens with a one-shot fall-open animation, page navigation flips a blank textured overlay sheet across the spread, a short glitter burst accompanies opening and turning, and the pages carry a static paper-grain texture over a leather cover body. All effects are transform/opacity-only CSS animations that are time-boxed and removed from the DOM afterwards (the idle book is fully static), they are skipped entirely under `prefers-reduced-motion` and in the single-column mobile layout, and the animation state lives in `promptBookAnimations.ts` / `PromptBookSparkles.tsx` next to the book component.
+
 ---
 
 ## Node Lifecycle
@@ -124,7 +126,7 @@ Completed assets are imported under:
 
 The bridge stores generation metadata keyed by imported media file ID so project save/restore can round-trip the generated asset provenance. The imported asset can be dragged to the timeline or inserted directly at the playhead, and generated media items and timeline clips expose `Copy Prompt` in their context menus when prompt metadata exists. Audio nodes use the same external drag payload as Media Panel audio and route to audio tracks.
 
-Media Panel image, video, and audio files can also be dragged onto the prompt composer to append them to the ordered reference strip or assign visible IN/OUT/REF/VID/AUD ghost slots, with a short ghost-to-card transition on drop. Right-clicking supported media files in Classic, Icons, or Board view toggles the same reference state and opens the generator tray. In Board view, right-button dragging media onto the expanded FlashBoard composer uses the highlighted ghost slot when one is targeted, otherwise appends references without moving the board item. Double-clicking a reference card opens that media in the Source Monitor.
+Media Panel image, video, and audio files can also be dragged onto the prompt composer to append them to the ordered reference strip or assign visible IN/OUT/REF/VID/AUD ghost slots, with a short ghost-to-card transition on drop. The tray keeps its reference strip in the left column; on narrow layouts it hides that strip while retaining the selection, so the composer remains fully visible. Right-clicking supported media files in Classic, Icons, or Board view toggles the same reference state and opens the generator tray. In Board view, right-button dragging media onto the expanded FlashBoard composer uses the highlighted ghost slot when one is targeted, otherwise appends references without moving the board item. Double-clicking a reference card opens that media in the Source Monitor.
 
 ---
 

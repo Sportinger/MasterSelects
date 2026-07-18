@@ -75,6 +75,26 @@ function getAuthFromEmail(env: Env): string {
   return fromEmail;
 }
 
+function getCreditClaimNotifyEmail(env: Env): string {
+  const email = trimOrNull(env.CREDIT_CLAIM_NOTIFY_EMAIL);
+
+  if (!email) {
+    throw new Error('CREDIT_CLAIM_NOTIFY_EMAIL is not configured');
+  }
+
+  return email;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character] ?? character);
+}
+
 async function parseJsonResponse<T>(response: Response): Promise<T | null> {
   try {
     return (await response.json()) as T;
@@ -189,6 +209,48 @@ export async function sendMagicLinkEmail(
         : typeof payload.error === 'string'
           ? payload.error
           : `Magic link email failed with status ${response.status}`;
+    throw new Error(message);
+  }
+}
+
+export async function sendFreeCreditClaimNotification(
+  env: Env,
+  input: {
+    amount: number;
+    claimId: string;
+    claimedAt: string;
+    claimedEmail: string;
+  },
+): Promise<void> {
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${getResendApiKey(env)}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: getAuthFromEmail(env),
+      html: `
+        <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
+          <h2 style="margin:0 0 12px">Free credits claimed</h2>
+          <p style="margin:0 0 8px"><strong>${input.amount.toLocaleString()} credits</strong> were claimed by ${escapeHtml(input.claimedEmail)}.</p>
+          <p style="margin:0;font-size:13px;color:#64748b">Claim ${escapeHtml(input.claimId)} at ${escapeHtml(input.claimedAt)}. Free-credit offers are now disarmed.</p>
+        </div>
+      `,
+      subject: `MasterSelects: ${input.amount.toLocaleString()} free credits claimed`,
+      text: `${input.amount} free credits were claimed by ${input.claimedEmail}. Claim ${input.claimId} at ${input.claimedAt}. Free-credit offers are now disarmed.`,
+      to: [getCreditClaimNotifyEmail(env)],
+    }),
+  });
+  const payload = (await parseJsonResponse<Record<string, unknown>>(response)) ?? {};
+
+  if (!response.ok) {
+    const message =
+      typeof payload.message === 'string'
+        ? payload.message
+        : typeof payload.error === 'string'
+          ? payload.error
+          : `Free credit claim notification failed with status ${response.status}`;
     throw new Error(message);
   }
 }

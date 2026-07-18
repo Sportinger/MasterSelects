@@ -1,7 +1,7 @@
 import { renderScheduler } from '../renderScheduler';
 import { useRenderTargetStore } from '../../stores/renderTargetStore';
 import { useTimelineStore } from '../../stores/timeline';
-import type { RenderSource } from '../../types/renderTarget';
+import type { RenderSource, RenderTargetViewportOverride } from '../../types/renderTarget';
 import { renderHostPort } from './renderHostPort';
 
 export interface RegisterPreviewTargetOptions {
@@ -43,7 +43,6 @@ export function registerPreviewTarget({
     renderHostPort.clearVideoCache();
     renderHostPort.clearScrubbingCache();
     renderHostPort.clearCompositeCache();
-    renderHostPort.requestRender();
   }
 
   if (isIndependent) {
@@ -51,17 +50,37 @@ export function registerPreviewTarget({
     onIndependentRegistered?.();
   }
 
+  renderHostPort.requestRender();
+
   return true;
 }
 
 export function unregisterPreviewTarget(id: string, source: RenderSource): void {
-  const isIndependent = source.type !== 'activeComp';
+  const target = useRenderTargetStore.getState().targets.get(id);
+  const isIndependent = source.type !== 'activeComp' || Boolean(target?.viewportOverride);
 
   if (isIndependent) {
     renderScheduler.unregister(id);
   }
   useRenderTargetStore.getState().unregisterTarget(id);
   renderHostPort.unregisterTargetCanvas(id);
+}
+
+export function setPreviewTargetViewportOverride(
+  id: string,
+  viewportOverride: RenderTargetViewportOverride | null,
+): void {
+  const store = useRenderTargetStore.getState();
+  const target = store.targets.get(id);
+  if (!target) return;
+
+  const wasIndependent = target.source.type !== 'activeComp' || Boolean(target.viewportOverride);
+  const isIndependent = target.source.type !== 'activeComp' || Boolean(viewportOverride);
+  store.setTargetViewportOverride(id, viewportOverride);
+
+  if (!wasIndependent && isIndependent) renderScheduler.register(id);
+  if (wasIndependent && !isIndependent) renderScheduler.unregister(id);
+  renderHostPort.requestRender();
 }
 
 export function setPreviewTargetTransparency(id: string, showTransparencyGrid: boolean): void {

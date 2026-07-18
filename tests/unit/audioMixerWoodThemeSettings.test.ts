@@ -43,6 +43,7 @@ async function importSettingsStoreWithMocks() {
   }));
   vi.doMock('../../src/services/lemonadeProvider', () => ({
     DEFAULT_LEMONADE_ENDPOINT: 'http://localhost:13305/api/v1',
+    DEFAULT_LEMONADE_CONTEXT_SIZE: -1,
     DEFAULT_LEMONADE_MODEL: 'local-model',
   }));
   vi.doMock('../../src/services/logger', () => ({
@@ -66,13 +67,14 @@ describe('audio mixer wood theme settings', () => {
     localStorage.clear();
   });
 
-  it('enables the wooden mixer theme by default and lets users disable it', async () => {
+  it('disables the wooden mixer theme by default and lets users enable it', async () => {
     const { useSettingsStore } = await importSettingsStoreWithMocks();
 
-    expect(useSettingsStore.getState().audioMixerWoodThemeEnabled).toBe(true);
-
-    useSettingsStore.getState().setAudioMixerWoodThemeEnabled(false);
-
     expect(useSettingsStore.getState().audioMixerWoodThemeEnabled).toBe(false);
+    expect(useSettingsStore.getState().mediaPanelWoodThemeEnabled).toBe(false);
+
+    useSettingsStore.getState().setAudioMixerWoodThemeEnabled(true);
+
+    expect(useSettingsStore.getState().audioMixerWoodThemeEnabled).toBe(true);
   });
 });

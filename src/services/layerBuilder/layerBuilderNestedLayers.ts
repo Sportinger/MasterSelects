@@ -12,8 +12,17 @@ import { useTimelineStore } from '../../stores/timeline';
 import { getInterpolatedClipTransform } from '../../utils/keyframeInterpolation';
 import { getInterpolatedMotionLayer } from '../../utils/motionInterpolation';
 import { getEffectiveScale } from '../../utils/transformScale';
-import { evaluateCompositionClipMasks } from '../compositionRender/keyframeEvaluation';
+import { evaluateTransitionRenderState } from '../../utils/transitionRenderInterpolation';
+import { evaluateCompositionClipEffects, evaluateCompositionClipMasks } from '../compositionRender/keyframeEvaluation';
+import { evaluateTransitionMappedAnimation } from '../compositionRender/transitionMappedAnimation';
+import { resolveTransitionRecipeBlendMode } from '../timeline/transitionRecipeBlendWindows';
 import type { FrameContext } from './types';
+
+export {
+  getNestedClipSourceTime,
+  getNestedClipSourceTiming,
+  type NestedClipSourceTiming,
+} from './layerBuilderNestedSourceTiming';
 
 export type NestedLayerBase = {
   baseLayer: Omit<Layer, 'source'>;
@@ -50,56 +59,27 @@ function buildNestedBaseTransform(nestedClip: TimelineClip): ClipTransform {
   };
 }
 
-function interpolateNestedEffects(
-  nestedClip: TimelineClip,
-  keyframes: Keyframe[],
-  nestedClipLocalTime: number,
-): TimelineClip['effects'] {
-  const effectKeyframes = keyframes.filter(k => k.property.startsWith('effect.'));
-  let effects = nestedClip.effects || [];
-  if (effectKeyframes.length === 0 || effects.length === 0) return effects;
-
-  effects = effects.map(effect => {
-    const newParams = { ...effect.params };
-    Object.keys(effect.params).forEach(paramName => {
-      if (typeof effect.params[paramName] !== 'number') return;
-      const propertyKey = `effect.${effect.id}.${paramName}`;
-      const paramKeyframes = effectKeyframes.filter(k => k.property === propertyKey);
-      if (paramKeyframes.length === 0) return;
-
-      const sorted = [...paramKeyframes].sort((a, b) => a.time - b.time);
-      if (nestedClipLocalTime <= sorted[0].time) {
-        newParams[paramName] = sorted[0].value;
-      } else if (nestedClipLocalTime >= sorted[sorted.length - 1].time) {
-        newParams[paramName] = sorted[sorted.length - 1].value;
-      } else {
-        for (let i = 0; i < sorted.length - 1; i++) {
-          if (nestedClipLocalTime >= sorted[i].time && nestedClipLocalTime <= sorted[i + 1].time) {
-            const t = (nestedClipLocalTime - sorted[i].time) / (sorted[i + 1].time - sorted[i].time);
-            newParams[paramName] = sorted[i].value + t * (sorted[i + 1].value - sorted[i].value);
-            break;
-          }
-        }
-      }
-    });
-    return { ...effect, params: newParams };
-  });
-
-  return effects;
-}
-
 export function buildNestedLayerBase(
   nestedClip: TimelineClip,
   nestedClipLocalTime: number,
-): NestedLayerBase {
+): NestedLayerBase | null {
   const keyframes = getNestedClipKeyframes(nestedClip);
+  const mappedAnimation = nestedClip.transitionSourceMap?.version === 2
+    ? evaluateTransitionMappedAnimation(nestedClip, keyframes, nestedClipLocalTime)
+    : undefined;
+  if (mappedAnimation === null) return null;
   const baseTransform = buildNestedBaseTransform(nestedClip);
-  const transform = keyframes.length > 0
+  const transform = mappedAnimation?.transform ?? (keyframes.length > 0
     ? getInterpolatedClipTransform(keyframes, nestedClipLocalTime, baseTransform, {
         rotationMode: nestedClip.source?.type === 'camera' ? 'shortest' : 'linear',
       })
-    : baseTransform;
+    : baseTransform);
   const renderScale = getEffectiveScale(transform.scale);
+  const transitionRender = evaluateTransitionRenderState(
+    nestedClip.transitionRender,
+    keyframes,
+    nestedClipLocalTime,
+  );
 
   const baseLayer: Omit<Layer, 'source'> = {
     id: `nested-layer-${nestedClip.id}`,
@@ -107,8 +87,12 @@ export function buildNestedLayerBase(
     sourceClipId: nestedClip.id,
     visible: true,
     opacity: transform.opacity ?? 1,
-    blendMode: (transform.blendMode || 'normal') as BlendMode,
-    effects: interpolateNestedEffects(nestedClip, keyframes, nestedClipLocalTime),
+    blendMode: resolveTransitionRecipeBlendMode(
+      nestedClip.transitionRecipeBlendWindows,
+      nestedClip.startTime + nestedClipLocalTime,
+      (transform.blendMode || 'normal') as BlendMode,
+    ),
+    effects: mappedAnimation?.effects ?? evaluateCompositionClipEffects(nestedClip.effects, keyframes, nestedClipLocalTime),
     colorCorrection: compileRuntimeColorGrade(nestedClip.colorCorrection),
     position: {
       x: transform.position?.x || 0,
@@ -122,9 +106,11 @@ export function buildNestedLayerBase(
       z: ((transform.rotation?.z || 0) * Math.PI) / 180,
     },
     sourceRect: nestedClip.sourceRect ? { ...nestedClip.sourceRect } : undefined,
+    ...(transitionRender ? { transitionRender } : {}),
+    ...(nestedClip.is3D ? { is3D: true } : {}),
   };
 
-  const masks = evaluateCompositionClipMasks(nestedClip.masks, keyframes, nestedClipLocalTime);
+  const masks = mappedAnimation?.masks ?? evaluateCompositionClipMasks(nestedClip.masks, keyframes, nestedClipLocalTime);
   if (masks?.some(m => m.enabled !== false)) {
     baseLayer.maskClipId = nestedClip.id;
     baseLayer.maskInvert = false;
@@ -137,7 +123,7 @@ export function buildNestedLayerBase(
 export function buildNestedCompositionSourceLayer(
   baseLayer: Omit<Layer, 'source'>,
   nestedClip: TimelineClip,
-  nestedClipLocalTime: number,
+  nestedClipTime: number,
   subLayers: Layer[],
   ctx: FrameContext,
 ): Layer {
@@ -147,14 +133,14 @@ export function buildNestedCompositionSourceLayer(
     layers: subLayers,
     width: subComp?.width || 1920,
     height: subComp?.height || 1080,
-    currentTime: nestedClipLocalTime,
+    currentTime: nestedClipTime,
     sceneClips: nestedClip.nestedClips,
     sceneTracks: nestedClip.nestedTracks,
   };
 
   return {
     ...baseLayer,
-    source: { type: 'image', mediaTime: nestedClipLocalTime, nestedComposition: nestedCompData },
+    source: { type: 'image', mediaTime: nestedClipTime, nestedComposition: nestedCompData },
   };
 }
 
@@ -171,15 +157,4 @@ export function buildNestedMotionSourceLayer(
       motion: getInterpolatedMotionLayer(nestedClip, keyframes, nestedClipLocalTime) ?? nestedClip.motion,
     },
   };
-}
-
-export function getNestedClipSourceTime(nestedClip: TimelineClip, nestedClipLocalTime: number): number {
-  const inPoint = nestedClip.inPoint ?? 0;
-  const outPoint = nestedClip.outPoint ?? nestedClip.duration;
-  const sourceOverride = nestedClip.transitionSourceTimeOverride;
-  if (Number.isFinite(sourceOverride)) return sourceOverride!;
-  if (nestedClip.transitionSourceHold) return inPoint;
-  return nestedClip.reversed
-    ? outPoint - nestedClipLocalTime
-    : nestedClipLocalTime + inPoint;
 }

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { MediaFile, ProjectItem } from '../../src/stores/mediaStore';
 import {
+  getMediaPanelLivePreviewId,
   getMediaPanelPreviewSource,
   getMediaPanelPreviewTooltipPosition,
   useMediaPanelPreviewTooltip,
@@ -38,6 +39,10 @@ function tooltipImageSrc(node: ReactNode): string | null {
   return isValidElement(child) ? (child.props as { src?: string }).src ?? null : null;
 }
 
+function tooltipMedia(node: ReactNode): ReactNode {
+  return isValidElement(node) ? (node.props as { children?: ReactNode }).children : null;
+}
+
 describe('media panel preview tooltip', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -47,12 +52,13 @@ describe('media panel preview tooltip', () => {
     vi.useRealTimers();
   });
 
-  it('uses thumbnails first and falls back to image sources only', () => {
+  it('uses playable video sources and falls back to image thumbnails', () => {
     expect(getMediaPanelPreviewSource(mediaFile({
       type: 'video',
       thumbnailUrl: 'blob:thumb',
       url: 'blob:video',
-    }))).toBe('blob:thumb');
+      proxyVideoUrl: 'blob:proxy',
+    }))).toBe('blob:proxy');
 
     expect(getMediaPanelPreviewSource(mediaFile({
       type: 'image',
@@ -62,7 +68,16 @@ describe('media panel preview tooltip', () => {
     expect(getMediaPanelPreviewSource(mediaFile({
       type: 'video',
       url: 'blob:video',
-    }))).toBeNull();
+    }))).toBe('blob:video');
+
+    const liveInput = mediaFile({
+      id: 'live-display',
+      type: 'video',
+      url: '',
+      liveInput: { kind: 'display' },
+    });
+    expect(getMediaPanelPreviewSource(liveInput)).toBeNull();
+    expect(getMediaPanelLivePreviewId(liveInput)).toBe('live-display');
   });
 
   it('keeps the preview inside the viewport near edges', () => {
@@ -70,6 +85,30 @@ describe('media panel preview tooltip', () => {
       left: 532,
       top: 402,
     });
+  });
+
+  it('does not open an empty tooltip for a disconnected live input', () => {
+    const liveInput = mediaFile({
+      id: 'live-display',
+      type: 'video',
+      url: '',
+      liveInput: { kind: 'display' },
+    });
+    const host = document.createElement('div');
+    host.dataset.itemId = liveInput.id;
+    const { result } = renderHook(() => useMediaPanelPreviewTooltip({
+      itemsById: new Map([[liveInput.id, liveInput]]),
+    }));
+
+    act(() => result.current.handleMouseMove({
+      buttons: 0,
+      clientX: 20,
+      clientY: 30,
+      target: host,
+    } as Parameters<typeof result.current.handleMouseMove>[0]));
+    act(() => vi.advanceTimersByTime(400));
+
+    expect(result.current.element).toBeNull();
   });
 
   it('keeps an open preview alive while scanning across items', () => {
@@ -99,7 +138,9 @@ describe('media panel preview tooltip', () => {
     expect(result.current.element).toBeNull();
 
     act(() => vi.advanceTimersByTime(400));
-    expect(tooltipImageSrc(result.current.element)).toBe('blob:first');
+    const preview = tooltipMedia(result.current.element);
+    expect(isValidElement(preview) && preview.type).toBe('video');
+    expect(isValidElement(preview) && preview.props).toMatchObject({ autoPlay: true, loop: true, muted: true });
     expect(tooltipClassName(result.current.element)).toContain('visible');
 
     move(host);

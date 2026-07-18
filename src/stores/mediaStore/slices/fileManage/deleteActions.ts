@@ -19,6 +19,7 @@ import {
   removeMediaClipsFromAllCompositions,
   revokeMediaFileUrls,
 } from './deleteRuntimeCleanup';
+import { liveInputRuntime } from '../../../../services/mediaRuntime/liveInputRuntime';
 
 export interface DeleteMediaFilesEverywhereResult {
   deletedMediaFileIds: string[];
@@ -34,6 +35,7 @@ export const createFileDeleteActions: MediaSliceCreator<Pick<
   removeFile: (id: string) => {
     const file = get().files.find((f) => f.id === id);
     if (file) {
+      if (file.liveInput) liveInputRuntime.release(id);
       thumbnailCacheService.evictFromMemory(id);
       revokeMediaFileUrls(file);
     }
@@ -59,6 +61,9 @@ export const createFileDeleteActions: MediaSliceCreator<Pick<
     const mediaFileIds = new Set(uniqueIds);
     const state = get();
     const filesToDelete = state.files.filter(file => mediaFileIds.has(file.id));
+    filesToDelete.forEach((file) => {
+      if (file.liveInput) liveInputRuntime.release(file.id);
+    });
     const matcher = createMediaFileDeleteMatcher(filesToDelete, state.files);
     const clipsByMediaFileId = collectMediaClipsByMatcherForCacheInvalidation(
       filesToDelete,

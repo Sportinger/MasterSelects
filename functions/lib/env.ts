@@ -34,15 +34,28 @@ export interface AppR2Bucket {
   put(key: string, value: unknown, options?: Record<string, unknown>): Promise<unknown>;
 }
 
+export type AppDurableObjectId = object;
+
+export interface AppDurableObjectStub {
+  fetch(input: Request | string, init?: RequestInit): Promise<Response>;
+}
+
+export interface AppDurableObjectNamespace {
+  get(id: AppDurableObjectId): AppDurableObjectStub;
+  idFromName(name: string): AppDurableObjectId;
+}
+
 export interface Env {
   ANTHROPIC_API_KEY?: string;
   AUTH_EMAIL_FROM?: string;
+  CREDIT_CLAIM_NOTIFY_EMAIL?: string;
   DB: AppD1Database;
   ENVIRONMENT?: string;
   ELEVENLABS_API_KEY?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   KIEAI_API_KEY?: string;
+  KIEAI_GENERATION_RATE_LIMITER?: AppDurableObjectNamespace;
   KV: AppKVNamespace;
   MEDIA: AppR2Bucket;
   OPENAI_API_KEY?: string;

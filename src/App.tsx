@@ -21,6 +21,7 @@ import { LinuxVulkanWarning } from './components/common/LinuxVulkanWarning';
 import { ProjectLoadProgressOverlay } from './components/common/ProjectLoadProgressOverlay';
 import { PricingDialog } from './components/common/PricingDialog';
 import { HistoryActionToast } from './components/common/HistoryActionToast';
+import { FreeOfferNotice } from './components/common/FreeOfferNotice';
 import { ShortcutDisplayOverlay } from './components/common/ShortcutDisplayOverlay';
 import { GuidedActionOverlay } from './components/guidedActions/GuidedActionOverlay';
 import { TutorialOverlay } from './components/common/TutorialOverlay';
@@ -38,6 +39,7 @@ import { useGlobalHistory } from './hooks/useGlobalHistory';
 import { useClipPanelSync } from './hooks/useClipPanelSync';
 import { useIsMobile, useForceMobile } from './hooks/useIsMobile';
 import { useMIDIRuntime } from './hooks/useMIDIRuntime';
+import { useLiveInputFeedbackCoordinator } from './hooks/useLiveInputFeedbackCoordinator';
 import { useAccountStore } from './stores/accountStore';
 import { useSettingsStore } from './stores/settingsStore';
 import { useUiSettingsStore } from './stores/uiSettingsStore';
@@ -64,6 +66,10 @@ function App() {
   // Check for test mode via URL param
   const urlParams = new URLSearchParams(window.location.search);
   const testMode = urlParams.get('test');
+  const freeOfferPreview = import.meta.env.DEV
+    && /^\d{6}$/.test(urlParams.get('redeem')?.trim() ?? '');
+  const [redeemCode, setRedeemCode] = useState(() => urlParams.get('redeem')?.trim() ?? '');
+  const [freeOfferRedeemed, setFreeOfferRedeemed] = useState(false);
 
   // === ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS ===
 
@@ -92,6 +98,9 @@ function App() {
 
   // Browser MIDI runtime
   useMIDIRuntime();
+
+  // Keep composition-feedback streams aligned with mounted preview canvases.
+  useLiveInputFeedbackCoordinator();
 
   const audioOutputDeviceId = useUiSettingsStore((s) => s.audioOutputDeviceId);
   const audioLatencyHint = useUiSettingsStore((s) => s.audioLatencyHint);
@@ -201,7 +210,9 @@ function App() {
   const closeAccountDialog = useAccountStore((s) => s.closeDialog);
   const isAccountInitialized = useAccountStore((s) => s.isInitialized);
   const loadAccountState = useAccountStore((s) => s.loadAccountState);
+  const openAuthDialog = useAccountStore((s) => s.openAuthDialog);
   const openAccountDialog = useAccountStore((s) => s.openAccountDialog);
+  const accountSession = useAccountStore((s) => s.session);
   const [billingSuccessCelebration, setBillingSuccessCelebration] = useState<{
     planId: string | null;
     token: number;
@@ -249,6 +260,24 @@ function App() {
 
     void finalize();
   }, [isAccountInitialized, loadAccountState, openAccountDialog]);
+
+  const clearRedeemCode = useCallback(() => {
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.delete('offer');
+    currentUrl.searchParams.delete('offerPreview');
+    currentUrl.searchParams.delete('redeem');
+    window.history.replaceState({}, document.title, `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`);
+    setRedeemCode('');
+    setFreeOfferRedeemed(true);
+  }, []);
+
+  const openFreeOffer = useCallback((code: string, openDialog: () => void) => {
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.set('redeem', code);
+    window.history.replaceState({}, document.title, `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`);
+    setRedeemCode(code);
+    openDialog();
+  }, []);
 
   // Check for stored project on mount, then poll for changes
   // This handles the case where Toolbar's restore fails and clears handles
@@ -305,6 +334,15 @@ function App() {
   const showWelcome = !isChecking && !hasStoredProject && !manuallyDismissed;
   const shouldShowChangelogOnStartup = SHOW_CHANGELOG
     && shouldAutoShowChangelog(showChangelogOnStartup, lastSeenChangelogVersion, APP_VERSION);
+  const freeOfferNoticeReady = !isChecking
+    && !showWelcome
+    && !showSplash
+    && !showChangelog
+    && !showTutorial
+    && !showCampaignDialog
+    && !activeCampaign
+    && !showIndexedDBError
+    && !accountDialog;
 
   // Show Splash screen after initial check (when no welcome overlay)
   // This effect intentionally sets state based on derived conditions
@@ -467,6 +505,14 @@ function App() {
       <ShortcutDisplayOverlay />
       <ProjectLoadProgressOverlay />
       <HistoryActionToast notice={historyNotice} onDone={clearHistoryNotice} />
+      <FreeOfferNotice
+        authenticated={Boolean(accountSession?.authenticated)}
+        disabled={freeOfferRedeemed}
+        onOpenAccount={(code) => openFreeOffer(code, openAccountDialog)}
+        onOpenAuth={(code) => openFreeOffer(code, openAuthDialog)}
+        preview={freeOfferPreview}
+        ready={freeOfferNoticeReady}
+      />
       {showWelcome && (
         <WelcomeOverlay onComplete={handleWelcomeComplete} noFadeOnClose />
       )}
@@ -506,7 +552,13 @@ function App() {
       ) : null}
       {accountDialog === 'auth' && <AuthDialog onClose={closeAccountDialog} />}
       {accountDialog === 'pricing' && <PricingDialog onClose={closeAccountDialog} />}
-      {accountDialog === 'account' && <AccountDialog onClose={closeAccountDialog} />}
+      {accountDialog === 'account' && (
+        <AccountDialog
+          initialRedeemCode={redeemCode}
+          onClose={closeAccountDialog}
+          onRedeemed={clearRedeemCode}
+        />
+      )}
       {billingSuccessCelebration && (
         <BillingSuccessCelebration
           creditBalance={accountCreditBalance}

@@ -10,6 +10,7 @@ const mockFactory = vi.hoisted(() => {
   const state = {
     scenario: 'browser-gif' as Scenario,
     throwRenderFrame: false,
+    exportMismatch: false,
   };
 
   class MockExportFrameCaptureUnavailableError extends Error {
@@ -77,6 +78,10 @@ const mockFactory = vi.hoisted(() => {
   const setFfmpegProgress = vi.fn();
   const setExportPhase = vi.fn();
   const setExporter = vi.fn();
+  const setCustomWidth = vi.fn();
+  const setCustomHeight = vi.fn();
+  const setUseCustomResolution = vi.fn();
+  const handleResolutionChange = vi.fn();
   const setVisualMode = vi.fn();
   const setVideoEnabled = vi.fn();
   const setIncludeAudio = vi.fn();
@@ -113,6 +118,7 @@ const mockFactory = vi.hoisted(() => {
     savePreset: vi.fn(),
     updatePreset: vi.fn(),
     loadPreset: vi.fn(),
+    setSettings: vi.fn(),
     settings: {
       useInOut: false,
     },
@@ -131,14 +137,14 @@ const mockFactory = vi.hoisted(() => {
     return {
       encoder: state.scenario === 'ffmpeg-video' ? 'ffmpeg' : 'webcodecs',
       setEncoder: vi.fn(),
-      width: 32,
+      width: state.exportMismatch ? 16 : 32,
       height: 18,
       customWidth: 32,
-      setCustomWidth: vi.fn(),
+      setCustomWidth,
       customHeight: 18,
-      setCustomHeight: vi.fn(),
+      setCustomHeight,
       useCustomResolution: false,
-      setUseCustomResolution: vi.fn(),
+      setUseCustomResolution,
       fps: 1,
       setFps: vi.fn(),
       customFps: 1,
@@ -230,7 +236,7 @@ const mockFactory = vi.hoisted(() => {
       audioCodec: 'aac',
       isFFmpegSupported: true,
       isFFmpegMultiThreaded: false,
-      handleResolutionChange: vi.fn(),
+      handleResolutionChange,
       loadFFmpeg: vi.fn(async () => undefined),
       handleFFmpegContainerChange: vi.fn(),
       handleFFmpegCodecChange: vi.fn(),
@@ -262,6 +268,10 @@ const mockFactory = vi.hoisted(() => {
     setAudioOnlyFormat,
     setVideoEnabled,
     setVisualMode,
+    setCustomWidth,
+    setCustomHeight,
+    setUseCustomResolution,
+    handleResolutionChange,
     state,
     timelineState,
   };
@@ -378,13 +388,17 @@ vi.mock('../../src/stores/timeline', () => {
 });
 
 vi.mock('../../src/stores/mediaStore', () => {
+  const composition = {
+    id: 'comp-1',
+    name: 'Test Composition',
+    width: 32,
+    height: 18,
+    frameRate: 1,
+  };
   const state = {
-    getActiveComposition: vi.fn(() => ({
-      name: 'Test Composition',
-      width: 32,
-      height: 18,
-      frameRate: 1,
-    })),
+    activeCompositionId: composition.id,
+    compositions: [composition],
+    getActiveComposition: vi.fn(() => composition),
   };
   const useMediaStore = Object.assign(
     vi.fn((selector?: (value: typeof state) => unknown) => (selector ? selector(state) : state)),
@@ -450,12 +464,14 @@ beforeEach(() => {
   mockFactory.sessionInstances.length = 0;
   mockFactory.frameRendererInstances.length = 0;
   mockFactory.state.throwRenderFrame = false;
+  mockFactory.state.exportMismatch = false;
   mockFactory.downloadBlob.mockClear();
   mockFactory.checkBrowserGifExportSize.mockClear();
   mockFactory.encodeBrowserGif.mockClear();
   mockFactory.createImageSequenceZip.mockClear();
   mockFactory.ffmpegBridge.encode.mockClear();
   mockFactory.ffmpegBridge.cancel.mockClear();
+  mockFactory.exportStoreState.setSettings.mockClear();
   mockFactory.setError.mockClear();
   mockFactory.setIsExporting.mockClear();
   mockFactory.setProgress.mockClear();
@@ -466,6 +482,10 @@ beforeEach(() => {
   mockFactory.setAudioOnlyFormat.mockClear();
   mockFactory.setVideoEnabled.mockClear();
   mockFactory.setVisualMode.mockClear();
+  mockFactory.setCustomWidth.mockClear();
+  mockFactory.setCustomHeight.mockClear();
+  mockFactory.setUseCustomResolution.mockClear();
+  mockFactory.handleResolutionChange.mockClear();
   mockFactory.endExport.mockClear();
 
   if (typeof globalThis.ImageData === 'undefined') {
@@ -481,6 +501,21 @@ afterEach(() => {
 });
 
 describe('ExportPanel render-session adoption', () => {
+  it('offers composition settings first and applies them when export differs', () => {
+    mockFactory.state.exportMismatch = true;
+
+    const { getByRole } = render(<ExportPanel />);
+    fireEvent.click(getByRole('button', { name: 'Use composition resolution and frame rate' }));
+
+    expect(mockFactory.exportStoreState.setSettings).toHaveBeenCalledWith({
+      customWidth: 32,
+      customHeight: 18,
+      useCustomResolution: true,
+      customFps: 1,
+      useCustomFps: true,
+    });
+  });
+
   it('leaves GIF mode when selecting MP3 audio-only output', () => {
     setScenario('browser-gif', false);
 
@@ -495,6 +530,47 @@ describe('ExportPanel render-session adoption', () => {
     expect(mockFactory.setVideoEnabled).toHaveBeenCalledWith(false);
     expect(mockFactory.setIncludeAudio).toHaveBeenCalledWith(true);
     expect(mockFactory.setAudioOnlyFormat).toHaveBeenCalledWith('mp3');
+  });
+
+  it('toggles a video preset to portrait without making it custom', () => {
+    setScenario('ffmpeg-video', false);
+    const { getByRole } = render(<ExportPanel />);
+
+    fireEvent.click(getByRole('button', { name: 'Switch to 9:16 portrait' }));
+
+    expect(mockFactory.handleResolutionChange).toHaveBeenCalledWith('18x32');
+    expect(mockFactory.setUseCustomResolution).toHaveBeenCalledWith(false);
+    expect(mockFactory.setCustomWidth).not.toHaveBeenCalled();
+    expect(mockFactory.setCustomHeight).not.toHaveBeenCalled();
+  });
+
+  it('shows size in the export button and scopes summary navigation to its panel', () => {
+    setScenario('ffmpeg-video', false);
+    const strayTarget = document.createElement('div');
+    strayTarget.dataset.exportTarget = 'video-codec';
+    document.body.append(strayTarget);
+
+    try {
+      const { container } = render(<ExportPanel />);
+      const scrollContainer = container.querySelector<HTMLElement>('.export-form');
+      const codecTarget = container.querySelector<HTMLElement>('[data-export-target="video-codec"]');
+      expect(scrollContainer).not.toBeNull();
+      expect(codecTarget).not.toBeNull();
+      scrollContainer!.scrollTo = vi.fn();
+
+      const codecPills = Array.from(container.querySelectorAll<HTMLButtonElement>('.export-pill'))
+        .filter((button) => button.textContent?.trim() === 'H.264');
+      expect(codecPills).toHaveLength(1);
+      fireEvent.click(codecPills[0]);
+
+      expect(scrollContainer!.scrollTo).toHaveBeenCalledWith({ behavior: 'smooth', top: expect.any(Number) });
+      expect(codecTarget).toHaveClass('export-scroll-highlight');
+      expect(strayTarget).not.toHaveClass('export-scroll-highlight');
+      expect(container.querySelector('.export-summary-cta-size')?.textContent).toMatch(/^~\d+ MB$/);
+      expect(Array.from(container.querySelectorAll('.export-pill:not(.export-summary-cta)')).some((pill) => /\b(?:MB|GB)\b/.test(pill.textContent ?? ''))).toBe(false);
+    } finally {
+      strayTarget.remove();
+    }
   });
 
   it.each<ExportPanelScenario>([

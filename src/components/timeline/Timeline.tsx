@@ -4,7 +4,6 @@
 import './Timeline.css';
 import './TimelineTracks.css';
 import './TimelineClip.css';
-
 import { TimelineAuxiliaryLayer } from './components/TimelineAuxiliaryLayer';
 import { TimelineBodySurface } from './components/TimelineBodySurface';
 import { TimelineNavigatorChrome } from './components/TimelineNavigatorChrome';
@@ -191,6 +190,7 @@ export function Timeline() {
     addCompositionVideoBakeRegion: timelineActions.addCompositionVideoBakeRegion,
     addMarker: timelineActions.addMarker,
     addMathSceneClip: timelineActions.addMathSceneClip,
+    addLightClip: timelineActions.addLightClip,
     addMeshClip: timelineActions.addMeshClip,
     addMotionShapeClip: timelineActions.addMotionShapeClip,
     addSolidClip: timelineActions.addSolidClip,
@@ -354,6 +354,7 @@ export function Timeline() {
     toolMode,
     tracks,
     videoTracks,
+    zoom,
   });
 
   const {
@@ -687,7 +688,6 @@ export function Timeline() {
     <TimelineRootShell {...rootShellProps}>
       <TimelineToolbarChrome {...timelineToolbarProps} />
       <TimelineSlotGridChrome {...slotGridChromeProps} />
-
       <TimelineBodySurface {...bodySurfaceProps} />
 
       <TimelineNavigatorChrome {...navigatorChromeProps} />

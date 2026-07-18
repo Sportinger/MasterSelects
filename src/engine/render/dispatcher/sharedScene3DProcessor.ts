@@ -7,6 +7,7 @@ import { getSharedSceneDefaultCameraDistance, resolveRenderableSharedSceneCamera
 import { resolveSceneClipCameraSettings, resolveSceneClipTransform, type SceneTimelineContext } from '../../scene/SceneTimelineUtils';
 import type {
   SceneGizmoRenderOptions,
+  SceneCameraConfig,
   SceneSplatEffectorRuntimeData,
   SceneSplatLayer,
   SceneVector3,
@@ -112,7 +113,14 @@ export class SharedScene3DProcessor {
     this.options = options;
   }
 
-  process3DLayers(layerData: LayerRenderData[], device: GPUDevice, width: number, height: number): void {
+  process3DLayers(
+    layerData: LayerRenderData[],
+    device: GPUDevice,
+    width: number,
+    height: number,
+    cameraOverride?: SceneCameraConfig | null,
+    targetId?: string,
+  ): void {
     const indices3D: number[] = [];
     for (let i = 0; i < layerData.length; i++) {
       const source = layerData[i].layer.source;
@@ -147,7 +155,6 @@ export class SharedScene3DProcessor {
       }
       return;
     }
-
     const includedLayers = new Set(indices3D.map((index) => layerData[index]));
     const layers3D = collectScene3DLayers(layerData, {
       width,
@@ -160,6 +167,7 @@ export class SharedScene3DProcessor {
     const camera = resolveRenderableSharedSceneCamera(
       { width, height },
       this.options.getEffectiveTimelineTime(),
+      cameraOverride ? { previewCameraOverride: cameraOverride } : undefined,
     );
     const activeSplatEffectors = this.options.collectActiveSplatEffectors(width, height);
     const renderLayers3D = layers3D.map((layer) => {
@@ -191,18 +199,25 @@ export class SharedScene3DProcessor {
     const nativeRenderer = getGaussianSplatGpuRenderer();
     const timelineState = useTimelineStore.getState();
     const engineState = useEngineStore.getState();
+    const effectivePreviewCameraOverride = cameraOverride === undefined
+      ? engineState.previewCameraOverride
+      : cameraOverride;
     const isDraggingPlayhead = timelineState.isDraggingPlayhead;
     const primarySelectedClipId = timelineState.primarySelectedClipId && timelineState.selectedClipIds.has(timelineState.primarySelectedClipId)
       ? timelineState.primarySelectedClipId
       : timelineState.selectedClipIds.values().next().value as string | undefined;
     const sceneGizmoVisible = engineState.sceneGizmoVisible !== false;
     const sceneGizmoClipId = sceneGizmoVisible
-      ? engineState.sceneGizmoClipIdOverride ?? (engineState.previewCameraOverride ? null : primarySelectedClipId ?? null)
+      ? engineState.sceneGizmoClipIdOverride ?? (
+          cameraOverride !== undefined
+            ? primarySelectedClipId ?? null
+            : effectivePreviewCameraOverride ? null : primarySelectedClipId ?? null
+        )
       : null;
     const sceneGizmoClip = sceneGizmoClipId
       ? timelineState.clips.find((clip) => clip.id === sceneGizmoClipId) ?? null
       : null;
-    const sceneGizmoCameraTransform = engineState.sceneGizmoClipIdOverride && sceneGizmoClip
+    const sceneGizmoCameraTransform = sceneGizmoClip?.source?.type === 'camera'
       ? buildCameraGizmoTransform(
           sceneGizmoClip,
           timelineState.playheadPosition,
@@ -284,9 +299,10 @@ export class SharedScene3DProcessor {
       isRealtimePlayback,
       sceneGizmo,
       d.maskTextureManager,
+      targetId ?? 'main',
     );
     const hasSplatSequence = nativeSplatLayers.some((layer) => layer.gaussianSplatIsSequence === true);
-    if (textureView && hasSplatSequence) {
+    if (textureView && hasSplatSequence && !targetId) {
       this.options.gaussianSequenceFacet.setLastSharedFrame({
         textureView,
         sceneKey: sequenceRenderedSceneKey ?? sequenceTargetSceneKey ?? '',
@@ -297,6 +313,7 @@ export class SharedScene3DProcessor {
     if (!textureView) {
       const lastSharedSplatSequenceFrame = this.options.gaussianSequenceFacet.getLastSharedFrame();
       const canHoldLastSplatSequenceFrame =
+        !targetId &&
         hasSplatSequence &&
         lastSharedSplatSequenceFrame !== null &&
         lastSharedSplatSequenceFrame.width === width &&

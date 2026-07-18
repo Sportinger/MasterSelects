@@ -11,6 +11,11 @@ function getClaimCode(): string {
   return params.get('code')?.trim() || params.get('token')?.trim() || '';
 }
 
+function getRedeemCode(): string {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('redeem')?.trim() || '';
+}
+
 function formatDate(value: string | null): string | null {
   if (!value) {
     return null;
@@ -46,6 +51,7 @@ function getStatusLabel(status: CreditClaimStatusResponse['claim']['status']): s
 
 export function CreditClaimPage() {
   const code = useMemo(getClaimCode, []);
+  const redeemCode = useMemo(getRedeemCode, []);
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [status, setStatus] = useState<CreditClaimStatusResponse | null>(null);
   const [email, setEmail] = useState('');
@@ -86,9 +92,18 @@ export function CreditClaimPage() {
   const authenticated = Boolean(status?.session.authenticated);
   const expiresLabel = formatDate(claim?.expiresAt ?? null);
   const claimedLabel = formatDate(claim?.claimedAt ?? null);
-  const canSubmit = Boolean(!redeemed && claim && claim.status === 'available' && email.trim() && !submitting);
-  const buttonLabel = 'Claim Credits';
-  const headline = claim ? `Claim ${claim.amount.toLocaleString()} Credits` : 'Credit Claim';
+  const canSubmit = Boolean(
+    !redeemed
+    && claim
+    && claim.status === 'available'
+    && email.trim()
+    && !submitting
+    && (!claim.freeOffer || redeemCode),
+  );
+  const buttonLabel = claim?.freeOffer
+    ? authenticated ? 'Open account to redeem' : 'Sign in to redeem'
+    : 'Claim Credits';
+  const headline = claim ? claim.freeOffer ? 'FREE FOR YOU' : `Claim ${claim.amount.toLocaleString()} Credits` : 'Credit Claim';
   const claimedRecipient = claimedEmail || status?.session.email || email.trim();
 
   const handleBackgroundClick = useCallback(() => {
@@ -112,6 +127,38 @@ export function CreditClaimPage() {
     setMessage(null);
 
     try {
+      if (claim.freeOffer) {
+        if (!redeemCode) {
+          setError('This gift link is missing its redeem code.');
+          return;
+        }
+
+        const redirectTo = `/?redeem=${encodeURIComponent(redeemCode)}`;
+        if (authenticated) {
+          window.location.assign(redirectTo);
+          return;
+        }
+
+        const login = await cloudApi.auth.login({
+          email: email.trim(),
+          provider: 'magic_link',
+          redirectTo,
+        });
+
+        if (login.authorizationUrl) {
+          window.location.href = login.authorizationUrl;
+          return;
+        }
+
+        if (login.verificationUrl && login.delivery === 'debug_link') {
+          window.location.assign(login.verificationUrl);
+          return;
+        }
+
+        setMessage(login.message ?? 'Check your email to finish signing in, then redeem your gift in Account.');
+        return;
+      }
+
       if (!authenticated) {
         const login = await cloudApi.auth.login({
           email: email.trim(),
@@ -208,7 +255,7 @@ export function CreditClaimPage() {
                 <div className="credit-claim-heading">
                   <div>
                     <span className={`credit-claim-status credit-claim-status-${claim.status}`}>
-                      {getStatusLabel(claim.status)}
+                      {claim.freeOffer ? 'Personal gift' : getStatusLabel(claim.status)}
                     </span>
                     <h1 id="credit-claim-title">{headline}</h1>
                   </div>
@@ -218,6 +265,16 @@ export function CreditClaimPage() {
                   <strong>{claim.amount.toLocaleString()}</strong>
                   <span>credits</span>
                 </div>
+
+                {claim.freeOffer && (
+                  <>
+                    <p className="credit-claim-free-expiry">ONE HOUR</p>
+                    <div className="credit-claim-gift-code">
+                      <span>Your six-digit gift code</span>
+                      <strong>{redeemCode}</strong>
+                    </div>
+                  </>
+                )}
 
                 {claim.description && <p className="credit-claim-description">{claim.description}</p>}
 
@@ -265,6 +322,10 @@ export function CreditClaimPage() {
           aria-hidden="true"
         />
       </section>
+      <nav aria-label="Legal" className="credit-claim-legal-links">
+        <a href="/impressum">Impressum</a>
+        <a href="/datenschutz">Datenschutz</a>
+      </nav>
     </main>
   );
 }

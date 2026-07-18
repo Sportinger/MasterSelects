@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { liveInputRuntime } from '../../../../services/mediaRuntime/liveInputRuntime';
 import type { ProjectItem } from '../../../../stores/mediaStore';
+import { LiveInputPreviewCanvas } from '../LiveInputPreviewCanvas';
 import { isImportedMediaFileItem } from '../itemTypeGuards';
 
 const HOVER_REST_MS = 400;
@@ -10,8 +12,10 @@ const TOOLTIP_HEIGHT = 170;
 const VIEWPORT_PADDING = 8;
 
 interface MediaPanelPreviewTooltipState {
+  isVideo: boolean;
   itemId: string;
   left: number;
+  liveInputId: string | null;
   name: string;
   src: string;
   top: number;
@@ -27,7 +31,15 @@ export function getMediaPanelPreviewSource(item: ProjectItem | undefined): strin
     return null;
   }
 
+  if (item.liveInput) return null;
+  if (item.type === 'video') return item.proxyVideoUrl || item.url || null;
   return item.thumbnailUrl || (item.type === 'image' ? item.url : null);
+}
+
+export function getMediaPanelLivePreviewId(item: ProjectItem | undefined): string | null {
+  return item && isImportedMediaFileItem(item) && item.liveInput && !item.isImporting
+    ? item.id
+    : null;
 }
 
 export function getMediaPanelPreviewTooltipPosition(
@@ -89,7 +101,12 @@ export function useMediaPanelPreviewTooltip({
     pendingRef.current = pending;
     showTimerRef.current = window.setTimeout(() => {
       const current = pendingRef.current;
-      if (!current || current.itemId !== pending.itemId || current.src !== pending.src) {
+      if (
+        !current ||
+        current.itemId !== pending.itemId ||
+        current.src !== pending.src ||
+        current.liveInputId !== pending.liveInputId
+      ) {
         return;
       }
 
@@ -113,15 +130,21 @@ export function useMediaPanelPreviewTooltip({
     const itemNode = event.target.closest<HTMLElement>('[data-item-id]');
     const item = itemNode?.dataset.itemId ? itemsById.get(itemNode.dataset.itemId) : undefined;
     const src = getMediaPanelPreviewSource(item);
-    if (!item || !src) {
+    const candidateLiveInputId = getMediaPanelLivePreviewId(item);
+    const liveInputId = candidateLiveInputId && liveInputRuntime.getVideoElement(candidateLiveInputId)
+      ? candidateLiveInputId
+      : null;
+    if (!item || (!src && !liveInputId)) {
       hide();
       return;
     }
 
     const next = {
+      isVideo: isImportedMediaFileItem(item) && item.type === 'video',
       itemId: item.id,
+      liveInputId,
       name: item.name,
-      src,
+      src: src ?? '',
       visible: false,
       ...getMediaPanelPreviewTooltipPosition(event.clientX, event.clientY),
     };
@@ -146,7 +169,25 @@ export function useMediaPanelPreviewTooltip({
         className={`media-panel-preview-tooltip ${tooltip.visible ? 'visible' : ''}`}
         style={{ left: tooltip.left, top: tooltip.top }}
       >
-        <img src={tooltip.src} alt="" draggable={false} onError={hide} />
+        {tooltip.liveInputId ? (
+          <LiveInputPreviewCanvas
+            className="media-panel-live-preview"
+            frameIntervalMs={250}
+            liveInputId={tooltip.liveInputId}
+          />
+        ) : tooltip.isVideo ? (
+          <video
+            src={tooltip.src}
+            autoPlay
+            loop
+            muted
+            playsInline
+            onLoadedMetadata={(event) => { event.currentTarget.playbackRate = 2; }}
+            onError={hide}
+          />
+        ) : (
+          <img src={tooltip.src} alt="" draggable={false} onError={hide} />
+        )}
       </div>
     ) : null,
     handleMouseLeave: hide,

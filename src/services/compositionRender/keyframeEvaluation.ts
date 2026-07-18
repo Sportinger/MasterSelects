@@ -1,7 +1,13 @@
 import type { ClipMask } from '../../types/masks';
 import type { ClipTransform } from '../../types/timelineCore';
 import type { Keyframe } from '../../types/keyframes';
+import type { Effect } from '../../types/effects';
 import { createMaskEdgeFeatherProperty, createMaskPathProperty, parseMaskProperty } from '../../types/animationProperties';
+import {
+  getLegacyEffectKeyframeBaseValue,
+  mergeLegacyEffectParamPatch,
+  parseEffectKeyframeProperty,
+} from '../../stores/timeline/keyframes/audioEffectKeyframeValues';
 import {
   getInterpolatedMaskPathValue,
   getMaskPathValue,
@@ -19,6 +25,50 @@ export function evaluateCompositionClipTransform(
 ): ClipTransform {
   if (!keyframes?.length) return baseTransform;
   return getInterpolatedClipTransform([...keyframes], localTime, baseTransform);
+}
+
+export function evaluateCompositionClipEffects(
+  effects: Effect[] | undefined,
+  keyframes: readonly Keyframe[] | undefined,
+  localTime: number,
+): Effect[] {
+  if (!effects?.length || !keyframes?.length) return effects ?? [];
+
+  const effectKeyframes = keyframes.filter((keyframe) => keyframe.property.startsWith('effect.'));
+  if (effectKeyframes.length === 0) return effects;
+
+  const interpolationKeyframes = [...keyframes];
+  return effects.map((effect) => {
+    let params = { ...effect.params };
+    const paramNames = new Set<string>();
+
+    Object.keys(effect.params).forEach((paramName) => {
+      if (typeof effect.params[paramName] === 'number') {
+        paramNames.add(paramName);
+      }
+    });
+    effectKeyframes.forEach((keyframe) => {
+      const effectProperty = parseEffectKeyframeProperty(keyframe.property);
+      if (effectProperty?.effectId === effect.id) {
+        paramNames.add(effectProperty.paramName);
+      }
+    });
+
+    paramNames.forEach((paramName) => {
+      const property = `effect.${effect.id}.${paramName}` as Keyframe['property'];
+      if (!effectKeyframes.some((keyframe) => keyframe.property === property)) return;
+
+      const baseValue = getLegacyEffectKeyframeBaseValue(effect, paramName);
+      if (baseValue === undefined) return;
+
+      params = mergeLegacyEffectParamPatch(
+        { ...effect, params },
+        { [paramName]: interpolateKeyframes(interpolationKeyframes, property, localTime, baseValue) },
+      );
+    });
+
+    return { ...effect, params };
+  });
 }
 
 export function evaluateCompositionClipMasks(

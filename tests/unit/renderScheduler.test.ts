@@ -16,6 +16,7 @@ type MockRenderTargetState = {
     id: string;
     source: RenderSource;
     enabled: boolean;
+    viewportOverride?: { width: number; height: number; cameraOverride: null } | null;
   }>;
   resolveSourceToCompId: (source: RenderSource) => string | null;
 };
@@ -35,6 +36,7 @@ const hoisted = vi.hoisted(() => ({
       if (source.type === 'composition') {
         return source.compositionId;
       }
+      if (source.type === 'activeComp') return hoisted.mediaState.activeCompositionId;
       return null;
     },
   } as MockRenderTargetState,
@@ -89,6 +91,14 @@ vi.mock('../../src/engine/WebGPUEngine', () => ({
   },
 }));
 
+vi.mock('../../src/services/render/renderHostPort', () => ({
+  renderHostPort: {
+    getIsExporting: vi.fn(() => false),
+    copyNestedCompTextureToPreview: hoisted.copyNestedCompTextureToPreview,
+    renderToPreviewCanvas: hoisted.renderToPreviewCanvas,
+  },
+}));
+
 vi.mock('../../src/utils/renderTargetVisibility', () => ({
   isRenderTargetRenderable: vi.fn(() => true),
 }));
@@ -136,6 +146,7 @@ describe('renderScheduler playback timing', () => {
         if (source.type === 'composition') {
           return source.compositionId;
         }
+        if (source.type === 'activeComp') return hoisted.mediaState.activeCompositionId;
         return null;
       },
     };
@@ -189,5 +200,24 @@ describe('renderScheduler playback timing', () => {
     expect(normalized[0]).toBe(original[0]);
     expect(normalized[1]).not.toBe(original[1]);
     expect(normalized[1].blendMode).toBe('normal');
+  });
+
+  it('renders an active-comp viewport override with the main loop layers', () => {
+    const layers = [{ id: 'active-layer', blendMode: 'screen' }] as Layer[];
+    hoisted.renderTargetState.targets.set('preview-edit', {
+      id: 'preview-edit',
+      source: { type: 'activeComp' },
+      enabled: true,
+      viewportOverride: { width: 640, height: 480, cameraOverride: null },
+    });
+    const scheduler = renderScheduler as unknown as RenderSchedulerTestAccess;
+    scheduler.registeredTargets.add('preview-edit');
+    scheduler.activeCompLayers = layers;
+
+    renderScheduler.forceRender();
+
+    expect(hoisted.renderToPreviewCanvas).toHaveBeenCalledWith('preview-edit', layers);
+    expect(hoisted.renderToPreviewCanvas.mock.calls.at(-1)?.[1]).toBe(layers);
+    expect(hoisted.evaluateAtTime).not.toHaveBeenCalled();
   });
 });

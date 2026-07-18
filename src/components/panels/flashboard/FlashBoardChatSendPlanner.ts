@@ -22,6 +22,7 @@ interface BuildFlashBoardChatSendPlanInput {
   hasHostedSession: boolean;
   hostedAIEnabled: boolean;
   isChatting: boolean;
+  lemonadeContextSize: number;
   lemonadeEndpoint: string;
   openAiApiKey: string;
   openAiReasoningEffort: FlashBoardOpenAiReasoningEffort;
@@ -61,6 +62,7 @@ export function buildFlashBoardChatSendPlan({
   hasHostedSession,
   hostedAIEnabled,
   isChatting,
+  lemonadeContextSize,
   lemonadeEndpoint,
   openAiApiKey,
   openAiReasoningEffort,
@@ -104,6 +106,7 @@ export function buildFlashBoardChatSendPlan({
     request: {
       anthropicApiKey,
       hostedAvailable: shouldUseHostedChat,
+      lemonadeContextSize: chatProvider === 'lemonade' ? lemonadeContextSize : undefined,
       lemonadeEndpoint,
       model: activeChatModelId,
       openAiApiKey,
@@ -124,9 +127,10 @@ export function buildFlashBoardChatOptimisticMessages({
   userMessageId: string;
   userPrompt: string;
 }): FlashBoardChatMessage[] {
+  const createdAt = Date.now();
   return [
-    { id: userMessageId, role: 'user', text: userPrompt },
-    { id: assistantMessageId, role: 'assistant', text: 'Thinking...', isPending: true },
+    { createdAt, id: userMessageId, role: 'user', text: userPrompt },
+    { createdAt, id: assistantMessageId, role: 'assistant', text: 'Thinking...', isPending: true },
   ];
 }
 
@@ -134,10 +138,12 @@ export function buildFlashBoardChatCompletionMessages(
   messages: FlashBoardChatMessage[],
   assistantMessageId: string,
   response: string,
+  editOptions: FlashBoardChatMessage['editOptions'] = undefined,
+  toolCalls: FlashBoardChatMessage['toolCalls'] = undefined,
 ): FlashBoardChatMessage[] {
   return messages.map((message) => (
     message.id === assistantMessageId
-      ? { ...message, text: response || 'Empty response.', isPending: false }
+      ? { ...message, text: response || 'Empty response.', editOptions, toolCalls, isPending: false }
       : message
   ));
 }

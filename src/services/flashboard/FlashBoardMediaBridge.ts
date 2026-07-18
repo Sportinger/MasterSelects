@@ -173,6 +173,8 @@ class FlashBoardMediaBridge {
       version: record.request.version,
       outputType: record.request.outputType,
       mediaType,
+      mode: record.request.mode,
+      originalPrompt: record.request.originalPrompt,
       prompt: record.request.prompt,
       negativePrompt: record.request.negativePrompt,
       duration: record.request.duration,

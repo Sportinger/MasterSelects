@@ -3,7 +3,7 @@
 
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import type { RenderTarget, RenderSource } from '../types/renderTarget';
+import type { RenderTarget, RenderSource, RenderTargetViewportOverride } from '../types/renderTarget';
 import { useMediaStore } from './mediaStore';
 import { isRenderTargetRenderable } from '../utils/renderTargetVisibility';
 import {
@@ -26,6 +26,7 @@ interface RenderTargetActions {
   updateTargetSource: (id: string, source: RenderSource) => void;
   updateTargetName: (id: string, name: string) => void;
   setTargetEnabled: (id: string, enabled: boolean) => void;
+  setTargetViewportOverride: (id: string, override: RenderTargetViewportOverride | null) => void;
 
   // Canvas binding (runtime GPU context)
   setTargetCanvas: (id: string, canvas: HTMLCanvasElement, context: GPUCanvasContext) => void;
@@ -128,6 +129,16 @@ export const useRenderTargetStore = create<RenderTargetState & RenderTargetActio
       if (nextTarget) reportRenderTargetResource(nextTarget);
     },
 
+    setTargetViewportOverride: (id, viewportOverride) => {
+      set((state) => {
+        const target = state.targets.get(id);
+        if (!target) return state;
+        const next = new Map(state.targets);
+        next.set(id, { ...target, viewportOverride });
+        return { targets: next };
+      });
+    },
+
     setTargetCanvas: (id, canvas, context) => {
       let nextTarget: RenderTarget | null = null;
       set((state) => {
@@ -199,6 +210,7 @@ export const useRenderTargetStore = create<RenderTargetState & RenderTargetActio
       const result: RenderTarget[] = [];
       for (const target of targets.values()) {
         if (!isRenderTargetRenderable(target)) continue;
+        if (target.viewportOverride) continue;
         if (target.source.type === 'activeComp' || target.source.type === 'program') {
           result.push(target);
         }
@@ -221,6 +233,10 @@ export const useRenderTargetStore = create<RenderTargetState & RenderTargetActio
       const result: RenderTarget[] = [];
       for (const target of targets.values()) {
         if (!isRenderTargetRenderable(target)) continue;
+        if (target.viewportOverride) {
+          result.push(target);
+          continue;
+        }
         if (target.source.type === 'composition' && target.source.compositionId !== activeCompId) {
           result.push(target);
         }

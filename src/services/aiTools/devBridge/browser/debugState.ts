@@ -54,6 +54,10 @@ export function collectDebugState(scope: string = 'all') {
     sourceClipId?: string;
     is3D: boolean;
     hasNestedComposition: boolean;
+    modelUrl?: string;
+    modelFileName?: string;
+    modelMediaFileId?: string;
+    hasModelFile?: boolean;
   }> = [];
 
   if (scope === 'all' || scope === 'preview') {
@@ -67,6 +71,14 @@ export function collectDebugState(scope: string = 'all') {
           sourceClipId: layer.sourceClipId,
           is3D: layer.is3D === true,
           hasNestedComposition: !!layer.source?.nestedComposition,
+          ...(layer.source?.type === 'model'
+            ? {
+                modelUrl: layer.source.modelUrl,
+                modelFileName: layer.source.modelFileName,
+                modelMediaFileId: layer.source.mediaFileId,
+                hasModelFile: layer.source.file instanceof File,
+              }
+            : {}),
         }));
     } catch (error) {
       builtLayers = [{

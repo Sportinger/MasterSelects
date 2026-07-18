@@ -20,6 +20,7 @@ interface UseMediaPanelAddImportCommandsInput {
   importFiles: MediaStoreState['importFiles'];
   importFilesWithPicker: MediaStoreState['importFilesWithPicker'];
   createComposition: MediaStoreState['createComposition'];
+  openCompositionTab: MediaStoreState['openCompositionTab'];
   createFolder: MediaStoreState['createFolder'];
   createTextItem: MediaStoreState['createTextItem'];
   getOrCreateTextFolder: MediaStoreState['getOrCreateTextFolder'];
@@ -29,6 +30,8 @@ interface UseMediaPanelAddImportCommandsInput {
   getOrCreateMeshFolder: MediaStoreState['getOrCreateMeshFolder'];
   createCameraItem: MediaStoreState['createCameraItem'];
   getOrCreateCameraFolder: MediaStoreState['getOrCreateCameraFolder'];
+  createLightItem: MediaStoreState['createLightItem'];
+  getOrCreateLightFolder: MediaStoreState['getOrCreateLightFolder'];
   createSplatEffectorItem: MediaStoreState['createSplatEffectorItem'];
   getOrCreateSplatEffectorFolder: MediaStoreState['getOrCreateSplatEffectorFolder'];
   createMathSceneItem: MediaStoreState['createMathSceneItem'];
@@ -51,6 +54,7 @@ export function useMediaPanelAddImportCommands({
   importFiles,
   importFilesWithPicker,
   createComposition,
+  openCompositionTab,
   createFolder,
   createTextItem,
   getOrCreateTextFolder,
@@ -60,6 +64,8 @@ export function useMediaPanelAddImportCommands({
   getOrCreateMeshFolder,
   createCameraItem,
   getOrCreateCameraFolder,
+  createLightItem,
+  getOrCreateLightFolder,
   createSplatEffectorItem,
   getOrCreateSplatEffectorFolder,
   createMathSceneItem,
@@ -79,6 +85,7 @@ export function useMediaPanelAddImportCommands({
   handleNewSolid: () => void;
   handleNewMesh: (meshType: MeshPrimitiveType) => void;
   handleNewCamera: () => void;
+  handleNewLight: () => void;
   handleNewSplatEffector: () => void;
   handleNewMathScene: () => void;
   handleNewMotionShape: (primitive: ShapePrimitive) => void;
@@ -118,8 +125,9 @@ export function useMediaPanelAddImportCommands({
   const handleNewComposition = useCallback(() => {
     const composition = createComposition(`Comp ${compositionCount + 1}`, { parentId: getActiveParentId() });
     placeCreatedItems([composition.id]);
+    openCompositionTab(composition.id);
     closeContextMenu();
-  }, [closeContextMenu, compositionCount, createComposition, getActiveParentId, placeCreatedItems]);
+  }, [closeContextMenu, compositionCount, createComposition, getActiveParentId, openCompositionTab, placeCreatedItems]);
 
   const handleNewFolder = useCallback(() => {
     const folder = createFolder('New Folder', getActiveParentId());
@@ -161,6 +169,13 @@ export function useMediaPanelAddImportCommands({
     placeCreatedItems([id]);
     closeContextMenu();
   }, [boardPosition, closeContextMenu, createCameraItem, getActiveParentId, getOrCreateCameraFolder, placeCreatedItems]);
+
+  const handleNewLight = useCallback(() => {
+    const lightFolderId = boardPosition ? getActiveParentId() : getOrCreateLightFolder();
+    const id = createLightItem(undefined, lightFolderId);
+    placeCreatedItems([id]);
+    closeContextMenu();
+  }, [boardPosition, closeContextMenu, createLightItem, getActiveParentId, getOrCreateLightFolder, placeCreatedItems]);
 
   const handleNewSplatEffector = useCallback(() => {
     const effectorFolderId = boardPosition ? getActiveParentId() : getOrCreateSplatEffectorFolder();
@@ -212,6 +227,7 @@ export function useMediaPanelAddImportCommands({
     handleNewSolid,
     handleNewMesh,
     handleNewCamera,
+    handleNewLight,
     handleNewSplatEffector,
     handleNewMathScene,
     handleNewMotionShape,

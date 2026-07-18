@@ -12,6 +12,7 @@ import { lookAt, orthographic, perspective } from './cameraUtils/projectionMatri
 import {
   addVector,
   crossVector,
+  dotVector,
   lerpVector,
   normalizeVector,
   quaternionFromCameraBasis,
@@ -118,6 +119,15 @@ function cameraPoseSegmentUsesContinuousRotation(
   return false;
 }
 
+function getCameraOrbitRadius(frame: ReturnType<typeof resolveOrbitCameraFrame>): number | null {
+  const offset = subtractVector(frame.eye, frame.center);
+  const radius = Math.hypot(offset.x, offset.y, offset.z);
+  if (radius <= CAMERA_POSE_TIME_EPSILON) return null;
+
+  const outward = scaleVector(offset, 1 / radius);
+  return dotVector(outward, frame.forward) < -0.999 ? radius : null;
+}
+
 function getCameraPoseInterpolationT(
   keyframes: Keyframe[],
   startTime: number,
@@ -161,9 +171,11 @@ function buildPoseInterpolatedCameraConfigFromClip(
   if (!segment) {
     return null;
   }
-  if (cameraPoseSegmentUsesContinuousRotation(keyframes, segment.startTime, segment.endTime)) {
-    return null;
-  }
+  const usesContinuousRotation = cameraPoseSegmentUsesContinuousRotation(
+    keyframes,
+    segment.startTime,
+    segment.endTime,
+  );
 
   const cameraSettings = resolveSceneClipCameraSettings(cameraClip, clipLocalTime, context);
   const defaultDistance = getSharedSceneDefaultCameraDistance(cameraSettings.fov);
@@ -211,6 +223,39 @@ function buildPoseInterpolatedCameraConfigFromClip(
     segment.endTime,
     clipLocalTime,
   );
+  if (usesContinuousRotation) {
+    const startRadius = getCameraOrbitRadius(startFrame);
+    const endRadius = getCameraOrbitRadius(endFrame);
+    if (startRadius === null || endRadius === null) return null;
+
+    const currentTransform = resolveSceneClipTransform(
+      cameraClip,
+      clipLocalTime,
+      cameraClip.startTime + clipLocalTime,
+      context,
+    );
+    const currentFrame = resolveOrbitCameraFrame(
+      {
+        position: currentTransform.position,
+        scale: currentTransform.scale,
+        rotation: currentTransform.rotation,
+      },
+      settings,
+      viewport,
+    );
+    const radius = startRadius + (endRadius - startRadius) * t;
+
+    return {
+      position: addVector(currentFrame.center, scaleVector(currentFrame.forward, -radius)),
+      target: currentFrame.center,
+      up: currentFrame.cameraUp,
+      fov: cameraSettings.fov,
+      near: cameraSettings.near,
+      far: cameraSettings.far,
+      applyDefaultDistance: false,
+    };
+  }
+
   const startOrientation = quaternionFromCameraBasis(startFrame.right, startFrame.cameraUp, startFrame.forward);
   const endOrientation = quaternionFromCameraBasis(endFrame.right, endFrame.cameraUp, endFrame.forward);
   const orientation = slerpQuaternion(startOrientation, endOrientation, t);

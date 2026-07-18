@@ -507,19 +507,47 @@ describe('addCompClip nested restore', () => {
     expect(harness.setCalls).toHaveLength(0);
   });
 
-  it('treats empty nested clip keyframe maps as a non-blocking no-op', () => {
+  it('removes stale nested keyframes when a refreshed composition has none', () => {
     const harness = createStoreHarness();
+    const staleNestedKeyframe = {
+      id: 'kf-stale',
+      clipId: 'nested-comp-clip-video',
+      property: 'opacity',
+      time: 1,
+      value: 0.5,
+      interpolation: 'linear',
+    } as Keyframe;
+    const otherParentKeyframe = {
+      ...staleNestedKeyframe,
+      id: 'kf-other-parent',
+      clipId: 'nested-comp-clip-video-other-parent',
+    };
+    const normalKeyframe = {
+      ...staleNestedKeyframe,
+      id: 'kf-normal',
+      clipId: 'normal-clip',
+    };
+    harness.state.clips = [{
+      id: 'comp-clip',
+      nestedClips: [{ id: staleNestedKeyframe.clipId, nestedClips: [] } as TimelineClip],
+    } as TimelineClip];
+    harness.state.clipKeyframes = new Map([
+      [staleNestedKeyframe.clipId, [staleNestedKeyframe]],
+      [otherParentKeyframe.clipId, [otherParentKeyframe]],
+      [normalKeyframe.clipId, [normalKeyframe]],
+    ]);
 
     const merged = mergeNestedClipKeyframes({
       compClipId: 'comp-clip',
       nestedKeyframes: new Map(),
       get: harness.get,
       set: harness.set,
-      isCurrentTimelineSession: () => false,
     });
 
     expect(merged).toBe(true);
-    expect(harness.setCalls).toHaveLength(0);
+    expect(harness.state.clipKeyframes.has(staleNestedKeyframe.clipId)).toBe(false);
+    expect(harness.state.clipKeyframes.get(otherParentKeyframe.clipId)).toEqual([otherParentKeyframe]);
+    expect(harness.state.clipKeyframes.get(normalKeyframe.clipId)).toEqual([normalKeyframe]);
   });
 
   it('restores direct nested video and audio as data-only sources', async () => {

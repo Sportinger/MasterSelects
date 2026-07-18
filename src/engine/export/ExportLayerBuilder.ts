@@ -8,12 +8,13 @@ import type { ExportClipState, FrameContext } from './types';
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
 import {
   buildGaussianSplatSource,
+  buildLightSource,
   buildModelSource,
   buildMotionSource,
   getCompositionSize,
   getExportImageElement,
 } from './layerBuilder/sourceLookup';
-import { getClipSourceWindowTime } from './layerBuilder/timing';
+import { getClipSourceWindowTime, getMappedClipSourceTime } from './layerBuilder/timing';
 import { buildBaseLayerProps } from './layerBuilder/baseLayers';
 import {
   buildNestedLayersForExport,
@@ -62,21 +63,22 @@ function buildExportLayerForClip(
 ): Layer | null {
   const { time } = ctx;
   const clipLocalTime = time - clip.startTime;
-  const baseLayerProps = withOpacityOverride(
-    buildBaseLayerProps(
-      clip,
-      clipLocalTime,
-      trackIndex,
-      ctx,
-    ),
-    opacityOverride,
+  const baseLayer = buildBaseLayerProps(
+    clip,
+    clipLocalTime,
+    trackIndex,
+    ctx,
   );
+  if (!baseLayer) return null;
+  const baseLayerProps = withOpacityOverride(baseLayer, opacityOverride);
 
   // Handle nested compositions
   if (clip.isComposition && clip.nestedClips && clip.nestedClips.length > 0) {
+    const nestedTime = getMappedClipSourceTime(clip, clipLocalTime)
+      ?? clipLocalTime + (clip.inPoint || 0);
     const nestedLayers = buildNestedLayersForExport(
       clip,
-      clipLocalTime + (clip.inPoint || 0),
+      nestedTime,
       time,
       clipStates,
       parallelDecoder,
@@ -93,7 +95,7 @@ function buildExportLayerForClip(
         layers: nestedLayers,
         width: compWidth,
         height: compHeight,
-        currentTime: clipLocalTime + (clip.inPoint || 0),
+        currentTime: nestedTime,
         sceneClips: clip.nestedClips,
         sceneTracks: clip.nestedTracks,
       };
@@ -161,6 +163,14 @@ function buildExportLayerForClip(
       is3D: true,
     };
   }
+  // Handle scene light clips
+  if (clip.source?.type === 'light') {
+    return {
+      ...baseLayerProps,
+      source: buildLightSource(clip, clipLocalTime, ctx),
+      is3D: true,
+    };
+  }
   // Handle text, solid, vector animation, and Math Scene clips
   if (isTextLikeClipSource(clip)) {
     return buildTextLikeLayer(
@@ -221,6 +231,9 @@ export function buildLayersAtTime(
         useParallelDecode,
         mediaFiles,
         mediaCompositions,
+        outputWidth: ctx.outputWidth,
+        outputHeight: ctx.outputHeight,
+        frameRate: ctx.fps,
       });
       if (transitionCompLayer) {
         layers.push(transitionCompLayer);

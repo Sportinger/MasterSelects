@@ -18,6 +18,7 @@ import { DOCK_LAYOUT_TRANSITION_EVENT } from './layoutTransition';
 import type { DockStoreState } from './storeTypes';
 
 export {
+  FACTORY_3D_EDIT_LAYOUT_ID,
   FACTORY_AUDIO_EDIT_LAYOUT_ID,
   FACTORY_VIDEO_EDIT_LAYOUT_ID,
   CAN_EDIT_FACTORY_DOCK_LAYOUTS,

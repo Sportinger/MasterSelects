@@ -42,6 +42,7 @@ import type {
 const log = Logger.create('ExportPanel');
 
 export function ExportPanel() {
+  const panelRef = useRef<HTMLDivElement>(null);
   const summaryHighlightTimeoutsRef = useRef<Map<HTMLElement, number>>(new Map());
   const [setupStatus, setSetupStatus] = useState<string | null>(null);
   const { duration, inPoint, outPoint, playheadPosition, startExport, setExportProgress, endExport } = useTimelineStore(useShallow(s => ({
@@ -53,10 +54,10 @@ export function ExportPanel() {
     setExportProgress: s.setExportProgress,
     endExport: s.endExport,
   })));
-  const { getActiveComposition } = useMediaStore(useShallow(s => ({
+  const { composition, getActiveComposition } = useMediaStore(useShallow(s => ({
+    composition: s.compositions.find((candidate) => candidate.id === s.activeCompositionId),
     getActiveComposition: s.getActiveComposition,
   })));
-  const composition = getActiveComposition();
   const {
     presets,
     selectedPresetId,
@@ -64,6 +65,7 @@ export function ExportPanel() {
     savePreset,
     updatePreset,
     loadPreset,
+    setSettings,
   } = useExportStore(useShallow((state) => ({
     presets: state.presets,
     selectedPresetId: state.selectedPresetId,
@@ -71,6 +73,7 @@ export function ExportPanel() {
     savePreset: state.savePreset,
     updatePreset: state.updatePreset,
     loadPreset: state.loadPreset,
+    setSettings: state.setSettings,
   })));
 
   // All export state, effects, and simple handlers extracted to hook
@@ -245,6 +248,22 @@ export function ExportPanel() {
     setFps(value);
   }, [setFps, setUseCustomFps]);
 
+  const sameAsComposition = !!composition &&
+    actualWidth === composition.width &&
+    actualHeight === composition.height &&
+    actualFps === composition.frameRate;
+
+  const syncCompositionSettings = useCallback(() => {
+    if (!composition || sameAsComposition) return;
+    setSettings({
+      customWidth: composition.width,
+      customHeight: composition.height,
+      useCustomResolution: true,
+      customFps: composition.frameRate,
+      useCustomFps: true,
+    });
+  }, [composition, sameAsComposition, setSettings]);
+
   const handleQuickBitratePreset = useCallback((value: number) => {
     setRateControl('vbr');
     setBitrate(value);
@@ -309,18 +328,18 @@ export function ExportPanel() {
   }, [loadPreset, presets.length, selectedPresetId]);
 
   const scrollToSummaryTarget = useCallback((target: ExportSummaryTarget) => {
-    if (typeof document === 'undefined') {
+    const scrollContainer = panelRef.current?.querySelector<HTMLElement>('.export-form');
+    const node = panelRef.current?.querySelector<HTMLElement>(`[data-export-target="${target}"]`);
+    if (!scrollContainer || !node) {
       return;
     }
 
-    const node = document.querySelector<HTMLElement>(`[data-export-target="${target}"]`);
-    if (!node) {
-      return;
-    }
-
-    node.scrollIntoView({
-      behavior: 'smooth',
-      block: 'center',
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const nodeRect = node.getBoundingClientRect();
+    const stickySummaryHeight = panelRef.current?.querySelector<HTMLElement>('.export-summary-sticky')?.offsetHeight ?? 0;
+    scrollContainer.scrollTo({
+      behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      top: Math.max(0, scrollContainer.scrollTop + nodeRect.top - containerRect.top - stickySummaryHeight - 12),
     });
 
     const existingTimeout = summaryHighlightTimeoutsRef.current.get(node);
@@ -515,14 +534,18 @@ export function ExportPanel() {
   }
 
   return (
-    <div className="export-panel">
+    <div className="export-panel" ref={panelRef}>
       {!isExporting ? (
         <div className="export-form">
           <ExportSummaryBadgesSection
+            showCompositionSync={isVideoMode || isImageMode}
+            sameAsComposition={sameAsComposition}
             summaryBadges={summaryBadges}
             primaryExportLabel={primaryExportLabel}
+            estimatedSizeLabel={estimatedSizeLabel}
             exportDisabled={exportDisabled}
             onPrimaryExport={handlePrimaryExport}
+            onSyncComposition={syncCompositionSettings}
             onScrollToSummaryTarget={scrollToSummaryTarget}
           />
 

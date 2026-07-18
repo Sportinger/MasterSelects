@@ -25,6 +25,7 @@ import {
   parseVectorAnimationStateProperty,
 } from '../../types/vectorAnimation';
 import { isMotionProperty } from '../../types/motionDesign';
+import { mergeLightClipSettings, parseLightProperty, setLightSettingValue } from '../../types/light';
 import { propertyRegistry } from '../../services/properties';
 import { calculateTimelineDuration } from '../../utils/speedIntegration';
 import { dispatchKeyframeRecordingFeedback } from '../../utils/keyframeRecordingFeedback';
@@ -258,6 +259,26 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
         return;
       }
 
+      const lightProperty = parseLightProperty(property);
+      if (lightProperty && clip.source?.type === 'light') {
+        set({
+          clips: clips.map(c => c.id === clipId ? {
+            ...c,
+            source: c.source ? {
+              ...c.source,
+              lightSettings: setLightSettingValue(
+                mergeLightClipSettings(c.source.lightSettings),
+                lightProperty,
+                value,
+              ),
+            } : c.source,
+          } : c),
+        });
+        get().invalidateCache();
+        renderHostPort.requestRender();
+        return;
+      }
+
       const nodeGraphParamProperty = parseNodeGraphParamProperty(property);
       if (nodeGraphParamProperty) {
         set({
@@ -439,6 +460,21 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
           source: c.source ? {
             ...c.source,
             cameraSettings: buildCameraSettingsPatch(c.source.cameraSettings, cameraProperty, currentValue),
+          } : c.source,
+        } : c),
+      });
+      } else if (parseLightProperty(property) && clip.source?.type === 'light') {
+      const lightProperty = parseLightProperty(property)!;
+      set({
+        clips: get().clips.map(c => c.id === clipId ? {
+          ...c,
+          source: c.source ? {
+            ...c.source,
+            lightSettings: setLightSettingValue(
+              mergeLightClipSettings(c.source.lightSettings),
+              lightProperty,
+              currentValue,
+            ),
           } : c.source,
         } : c),
       });

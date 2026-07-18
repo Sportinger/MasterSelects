@@ -98,10 +98,12 @@ export type TransitionRenderState =
     };
 
 export interface LayerSource {
-  type: 'video' | 'image' | 'camera' | 'color' | 'text' | 'solid' | 'model' | 'gaussian-avatar' | 'gaussian-splat' | 'motion';
+  type: 'video' | 'image' | 'camera' | 'light' | 'color' | 'text' | 'solid' | 'model' | 'gaussian-avatar' | 'gaussian-splat' | 'motion';
   modelUrl?: string;  // Blob URL to 3D model file (OBJ/glTF/GLB)
   modelFileName?: string;
   modelSequence?: ModelSequenceData;
+  modelPrimitiveIndex?: number;
+  modelMaterialSettings?: import('./modelMaterial').ModelMaterialSettings;
   gaussianSplatSequence?: GaussianSplatSequenceData;
   threeDEffectorsEnabled?: boolean;  // Whether shared-scene 3D effectors can affect this layer
   meshType?: import('../stores/mediaStore/types').MeshPrimitiveType;  // Primitive mesh type (cube, sphere, etc.)
@@ -142,6 +144,7 @@ export interface LayerSource {
   gaussianSplatRuntimeKey?: string;
   gaussianSplatSettings?: import('../engine/gaussian/types').GaussianSplatSettings;
   cameraSettings?: import('../stores/mediaStore/types').SceneCameraSettings;
+  lightSettings?: import('./light').LightClipSettings;
   // Nested composition support - pre-rendered layers from nested comp
   nestedComposition?: NestedCompositionData;
   // Text clip support

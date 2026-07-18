@@ -19,19 +19,18 @@ interface OpenAIModerationPayload {
 }
 
 function toModerationText(value: unknown): string {
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string') {
+    return /^data:image\/[a-z0-9.+-]+;base64,/i.test(value) ? '' : value;
+  }
   if (Array.isArray(value)) return value.map(toModerationText).filter(Boolean).join('\n');
   if (value && typeof value === 'object') {
     const record = value as Record<string, unknown>;
     if (typeof record.text === 'string') return record.text;
     if (typeof record.prompt === 'string') return record.prompt;
+    return Object.values(record).map(toModerationText).filter(Boolean).join('\n');
   }
 
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return '';
-  }
+  return '';
 }
 
 export function buildModerationInput(value: unknown): string {

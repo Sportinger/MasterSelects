@@ -1,5 +1,3 @@
-// Clipboard-related actions slice for copy/paste functionality
-
 import type { ClipboardActions, SliceCreator, ClipboardClipData, ClipboardKeyframeData, Keyframe } from './types';
 import type { EasingType, AnimatableProperty } from '../../types';
 import {
@@ -18,6 +16,8 @@ import {
 } from '../../services/timeline/timelineGeneratedCanvasRuntime';
 import { createClipboardMediaReloadPatch } from '../../services/timeline/timelineMediaSourceRuntimeRestore';
 import { createPastedClipboardClipsPlan } from './clipboard/clipboardClipPastePlanner';
+import { filterPasteableClipboardData } from './clipboard/clipboardPastedClipSource';
+import { useMediaStore } from '../mediaStore';
 import {
   clampClipboardKeyframeTime,
   cloneClipboardEffect,
@@ -28,15 +28,10 @@ import {
 } from './clipboard/clipboardEffectKeyframes';
 
 const log = Logger.create('Clipboard');
-
-function randomSuffix(): string {
-  return Math.random().toString(36).substr(2, 5);
-}
-
+function randomSuffix(): string { return Math.random().toString(36).substr(2, 5); }
 export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) => ({
   copyClips: () => {
     const { clips, selectedClipIds, clipKeyframes, tracks } = get();
-
     if (selectedClipIds.size === 0) {
       log.debug('No clips selected to copy');
       return;
@@ -73,6 +68,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         trackType,
         name: clip.name,
         mediaFileId: dataOnlySource?.mediaFileId || clip.mediaFileId,
+        liveInputId: dataOnlySource?.liveInputId,
         signalAssetId: clip.signalAssetId,
         signalRefId: clip.signalRefId,
         signalRenderAdapterId: clip.signalRenderAdapterId,
@@ -88,7 +84,12 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         cameraSettings: dataOnlySource?.type === 'camera' && dataOnlySource.cameraSettings
           ? { ...dataOnlySource.cameraSettings }
           : undefined,
+        lightSettings: dataOnlySource?.type === 'light' && dataOnlySource.lightSettings
+          ? { ...dataOnlySource.lightSettings }
+          : undefined,
         meshType: clip.meshType || dataOnlySource?.meshType,
+        modelPrimitiveIndex: dataOnlySource?.type === 'model' ? dataOnlySource.modelPrimitiveIndex : undefined,
+        modelMaterialSettings: dataOnlySource?.type === 'model' ? dataOnlySource.modelMaterialSettings : undefined,
         threeDEffectorsEnabled: dataOnlySource?.threeDEffectorsEnabled,
         splatEffectorSettings: dataOnlySource?.type === 'splat-effector' && dataOnlySource.splatEffectorSettings
           ? { ...dataOnlySource.splatEffectorSettings }
@@ -106,6 +107,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         reversed: clip.reversed,
         speed: clip.speed,
         preservesPitch: clip.preservesPitch,
+        freeRun: clip.freeRun,
         textProperties: clip.textProperties ? { ...clip.textProperties } : undefined,
         text3DProperties: clip.text3DProperties
           ? { ...clip.text3DProperties }
@@ -153,11 +155,18 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
       return;
     }
 
+    const mediaStore = useMediaStore.getState();
+    const pasteableClipboardData = filterPasteableClipboardData(clipboardData, mediaStore.files, mediaStore.activeCompositionId);
+    if (pasteableClipboardData.length === 0) {
+      log.warn('Live feedback can only be pasted into its source composition');
+      return;
+    }
+
     // Capture snapshot for undo before making changes
     captureSnapshot('Paste clips');
 
     const { idMapping, newClips, newKeyframes } = createPastedClipboardClipsPlan({
-      clipboardData,
+      clipboardData: pasteableClipboardData,
       playheadPosition,
       tracks,
       clipKeyframes,
@@ -187,10 +196,9 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
     log.info('Pasted clips', { count: newClips.length, ids: newClips.map(c => c.id) });
 
     // Reload media for pasted clips asynchronously
-    import('../mediaStore').then(async ({ useMediaStore }) => {
-      const mediaStore = useMediaStore.getState();
-
+    Promise.resolve().then(async () => {
       for (const newClip of newClips) {
+        if (newClip.source?.liveInputId) continue;
         // Skip text clips - they need special handling
         if (newClip.textProperties) {
           createTimelineTextCanvasRuntime({
@@ -219,6 +227,10 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         }
 
         if (newClip.source?.type === 'camera') {
+          continue;
+        }
+
+        if (newClip.source?.type === 'light') {
           continue;
         }
 

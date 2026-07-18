@@ -66,10 +66,12 @@ export function readOpenAiChatCompletionText(data: unknown): string {
 
 export function parseOpenAiChatCompletion(data: unknown): {
   content: string | null;
+  finishReason: string | null;
   toolCalls: FlashBoardToolCall[];
 } {
   const payload = data as {
     choices?: Array<{
+      finish_reason?: unknown;
       message?: {
         content?: string | null;
         tool_calls?: Array<{
@@ -85,6 +87,9 @@ export function parseOpenAiChatCompletion(data: unknown): {
   const message = payload.choices?.[0]?.message;
   return {
     content: typeof message?.content === 'string' ? message.content.trim() : null,
+    finishReason: typeof payload.choices?.[0]?.finish_reason === 'string'
+      ? payload.choices[0].finish_reason
+      : null,
     toolCalls: (message?.tool_calls ?? [])
       .map((toolCall, index): FlashBoardToolCall => ({
         id: toolCall.id || `flashboard-tool-${index}`,

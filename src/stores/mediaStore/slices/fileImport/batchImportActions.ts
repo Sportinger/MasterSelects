@@ -22,12 +22,51 @@ import {
 } from './placeholderLifecycle';
 import { splitModelSequenceEntries } from './sequencePlanning';
 import { fileImportLog as log } from './log';
+import { importPremiereProject, isPremiereProjectFile } from '../../../../importers/premiereProject';
 
 type MediaSliceSet = (
   partial: Partial<MediaState> | ((state: MediaState) => Partial<MediaState>)
 ) => void;
 
 type MediaSliceGet = () => MediaState;
+
+async function commitPremiereProjects(
+  set: MediaSliceSet,
+  get: MediaSliceGet,
+  files: File[],
+  parentId?: string | null,
+): Promise<void> {
+  for (const file of files) {
+    try {
+      const result = await importPremiereProject(file, get().files, parentId ?? null);
+      set((state) => {
+        const existingFolderIds = new Set(state.folders.map((folder) => folder.id));
+        const existingFileIds = new Set(state.files.map((media) => media.id));
+        const existingCompositionIds = new Set(state.compositions.map((composition) => composition.id));
+        return {
+          folders: existingFolderIds.has(result.folder.id) ? state.folders : [...state.folders, result.folder],
+          files: [...state.files, ...result.mediaFiles.filter((media) => !existingFileIds.has(media.id))],
+          compositions: [
+            ...state.compositions,
+            ...result.compositions.filter((composition) => !existingCompositionIds.has(composition.id)),
+          ],
+          expandedFolderIds: state.expandedFolderIds.includes(result.folder.id)
+            ? state.expandedFolderIds
+            : [...state.expandedFolderIds, result.folder.id],
+        };
+      });
+      log.info(`Imported Premiere project: ${file.name}`, {
+        compositions: result.compositions.length,
+        missingMedia: result.mediaFiles.length,
+        reusedMedia: result.reusedMediaCount,
+        skippedClips: result.skippedClipCount,
+        speedAdjustedClips: result.speedAdjustedClipCount,
+      });
+    } catch (error) {
+      log.error(`Premiere project import failed: ${file.name}`, error);
+    }
+  }
+}
 
 function splitResolvedEntries(entries: ResolvedImportEntry[]): {
   signalEntries: ResolvedSignalImportEntry[];
@@ -237,9 +276,11 @@ export const createBatchFileImportActions: MediaSliceCreator<Pick<
 >> = (set, get) => ({
   importFiles: async (files: FileList | File[], parentId?: string | null) => {
     const fileArray = Array.from(files);
+    const premiereProjects = fileArray.filter(isPremiereProjectFile);
+    const regularFiles = fileArray.filter((file) => !isPremiereProjectFile(file));
     const imported: FileImportResult[] = [];
 
-    const entries = await Promise.all(fileArray.map(async (file) => resolveImportEntry(file)));
+    const entries = await Promise.all(regularFiles.map(async (file) => resolveImportEntry(file)));
     const groups = splitResolvedEntries(entries);
 
     addLegacyPlaceholders(set, groups, parentId);
@@ -249,6 +290,7 @@ export const createBatchFileImportActions: MediaSliceCreator<Pick<
       includeParentId: true,
       handleSingles: false,
     });
+    await commitPremiereProjects(set, get, premiereProjects, parentId);
 
     return imported;
   },
@@ -258,7 +300,9 @@ export const createBatchFileImportActions: MediaSliceCreator<Pick<
     if (!result || result.length === 0) return [];
 
     const imported: FileImportResult[] = [];
-    const entries = await Promise.all(result.map(async ({ file, handle }) => (
+    const premiereProjects = result.filter(({ file }) => isPremiereProjectFile(file)).map(({ file }) => file);
+    const regularFiles = result.filter(({ file }) => !isPremiereProjectFile(file));
+    const entries = await Promise.all(regularFiles.map(async ({ file, handle }) => (
       resolveImportEntry(file, { handle })
     )));
     const groups = splitResolvedEntries(entries);
@@ -269,14 +313,19 @@ export const createBatchFileImportActions: MediaSliceCreator<Pick<
       includeParentId: false,
       handleSingles: true,
     });
+    await commitPremiereProjects(set, get, premiereProjects);
 
     return imported;
   },
 
   importFilesWithHandles: async (filesWithHandles, parentId?: string | null) => {
     const imported: FileImportResult[] = [];
+    const premiereProjects = filesWithHandles
+      .filter(({ file }) => isPremiereProjectFile(file))
+      .map(({ file }) => file);
+    const regularFiles = filesWithHandles.filter(({ file }) => !isPremiereProjectFile(file));
 
-    const entries = await Promise.all(filesWithHandles.map(async ({ file, handle, absolutePath }) => (
+    const entries = await Promise.all(regularFiles.map(async ({ file, handle, absolutePath }) => (
       resolveImportEntry(file, { handle, absolutePath })
     )));
     const groups = splitResolvedEntries(entries);
@@ -289,6 +338,7 @@ export const createBatchFileImportActions: MediaSliceCreator<Pick<
       handleSingles: true,
       includeAbsolutePath: true,
     });
+    await commitPremiereProjects(set, get, premiereProjects, parentId);
 
     return imported;
   },

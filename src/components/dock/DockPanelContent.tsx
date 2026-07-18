@@ -17,7 +17,6 @@ const ExportPanel = lazy(() => import('../export/ExportPanel').then(m => ({ defa
 const AudioMixerPanel = lazy(importAudioMixerPanel);
 const NodeWorkspacePanel = lazy(() => import('../panels/nodes/NodeWorkspacePanel').then(m => ({ default: m.NodeWorkspacePanel })));
 const MultiCamPanel = lazy(() => import('../panels/MultiCamPanel').then(m => ({ default: m.MultiCamPanel })));
-const AIChatPanel = lazy(() => import('../panels/AIChatPanel').then(m => ({ default: m.AIChatPanel })));
 const MIDIMappingPanel = lazy(() => import('../panels/MIDIMappingPanel').then(m => ({ default: m.MIDIMappingPanel })));
 const TransitionsPanel = lazy(() => import('../panels/TransitionsPanel').then(m => ({ default: m.TransitionsPanel })));
 const SAM2Panel = lazy(() => import('../panels/SAM2Panel').then(m => ({ default: m.SAM2Panel })));
@@ -27,6 +26,7 @@ const HistogramPanel = lazy(() => import('../panels/scopes/HistogramPanel').then
 const VectorscopePanel = lazy(() => import('../panels/scopes/VectorscopePanel').then(m => ({ default: m.VectorscopePanel })));
 const MultiPreviewPanel = lazy(() => import('../preview/MultiPreviewPanel').then(m => ({ default: m.MultiPreviewPanel })));
 const HistoryPanel = lazy(() => import('../panels/HistoryPanel').then(m => ({ default: m.HistoryPanel })));
+const CapturePanel = lazy(() => import('../panels/capture/CapturePanel').then(m => ({ default: m.CapturePanel })));
 
 const DEFAULT_MULTI_PREVIEW_DATA: MultiPreviewPanelData = {
   sourceCompositionId: null,
@@ -51,6 +51,7 @@ export function DockPanelContent({ panel }: DockPanelContentProps) {
           panelId={panel.id}
           source={normalizePreviewPanelSource(previewData)}
           showTransparencyGrid={previewData?.showTransparencyGrid ?? false}
+          initialEdit={previewData}
         />
       );
     }
@@ -76,8 +77,8 @@ export function DockPanelContent({ panel }: DockPanelContentProps) {
       return <Suspense fallback={<PanelLoading />}><MIDIMappingPanel /></Suspense>;
     case 'multicam':
       return <Suspense fallback={<PanelLoading />}><MultiCamPanel /></Suspense>;
-    case 'ai-chat':
-      return <Suspense fallback={<PanelLoading />}><AIChatPanel /></Suspense>;
+    case 'capture':
+      return <Suspense fallback={<PanelLoading />}><CapturePanel /></Suspense>;
     case 'ai-segment':
       return <Suspense fallback={<PanelLoading />}><SAM2Panel /></Suspense>;
     case 'transitions':

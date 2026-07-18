@@ -82,6 +82,8 @@ function createRestoredNestedClipCommon(
     effects: serializedClip.effects || [],
     transitionIn: serializedClip.transitionIn ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionIn)) : undefined,
     transitionOut: serializedClip.transitionOut ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionOut)) : undefined,
+    transitionSourceMap: serializedClip.transitionSourceMap ? structuredClone(serializedClip.transitionSourceMap) : undefined,
+    transitionRecipeBlendWindows: serializedClip.transitionRecipeBlendWindows ? structuredClone(serializedClip.transitionRecipeBlendWindows) : undefined,
     colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
     nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
     masks: serializedClip.masks || [],
@@ -170,6 +172,7 @@ export function createRestoredPrimitiveMeshClip(
       source: {
         type: 'model',
         meshType: serializedClip.meshType,
+        modelMaterialSettings: serializedClip.modelMaterialSettings,
         mediaFileId: serializedClip.mediaFileId || undefined,
         naturalDuration: Number.MAX_SAFE_INTEGER,
         threeDEffectorsEnabled: serializedClip.threeDEffectorsEnabled ?? true,

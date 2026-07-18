@@ -4,6 +4,7 @@
 import { Logger } from '../logger';
 import type { Layer, TimelineClip, TimelineTrack } from '../../types';
 import type { FrameContext } from './types';
+import { liveInputRuntime } from '../mediaRuntime/liveInputRuntime';
 
 const log = Logger.create('LayerCache');
 
@@ -30,6 +31,7 @@ export class LayerCache {
   private lastIsPlaying = false;
   private lastPlaybackSpeed = 1;
   private lastProxyEnabled = false;
+  private lastLiveInputRevision = -1;
 
   // Stats for debugging
   private cacheHits = 0;
@@ -56,6 +58,8 @@ export class LayerCache {
     const playingChanged = ctx.isPlaying !== this.lastIsPlaying;
     const playbackSpeedChanged = ctx.playbackSpeed !== this.lastPlaybackSpeed;
     const proxyChanged = ctx.proxyEnabled !== this.lastProxyEnabled;
+    const liveInputRevision = liveInputRuntime.getRevision();
+    const liveInputChanged = liveInputRevision !== this.lastLiveInputRevision;
 
     const needsRebuild = !this.cacheValid ||
       clipsChanged ||
@@ -64,6 +68,7 @@ export class LayerCache {
       playingChanged ||
       playbackSpeedChanged ||
       proxyChanged ||
+      liveInputChanged ||
       frameChanged;
 
     // Log cache stats periodically
@@ -85,6 +90,7 @@ export class LayerCache {
     this.lastIsPlaying = ctx.isPlaying;
     this.lastPlaybackSpeed = ctx.playbackSpeed;
     this.lastProxyEnabled = ctx.proxyEnabled;
+    this.lastLiveInputRevision = liveInputRevision;
 
     return { useCache: false, layers: [] };
   }

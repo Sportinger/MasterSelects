@@ -9,6 +9,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import {
   resetFlashBoardActiveGenerationState,
   subscribeFlashBoardActiveGenerationRecords,
+  subscribeFlashBoardChatMessages,
   subscribeFlashBoardComposerState,
   subscribeFlashBoardPromptHistory,
 } from '../../stores/flashboardStore/activeGenerationRecords';
@@ -334,6 +335,9 @@ export function setupAutoSync(): void {
     markProjectDirtyAndMaybeSave();
   }));
   registerAutoSyncDisposer(subscribeFlashBoardPromptHistory(() => {
+    markProjectDirtyAndMaybeSave();
+  }));
+  registerAutoSyncDisposer(subscribeFlashBoardChatMessages(() => {
     markProjectDirtyAndMaybeSave();
   }));
 

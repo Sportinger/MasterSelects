@@ -39,7 +39,7 @@ export function ExportVisualChannelCard({
       <div className="export-channel-head">
         <div className="export-channel-title">
           <span>{mode.isXmlMode ? 'XML' : mode.isImageMode ? 'Image' : 'Video'}</span>
-          <strong>{mode.isXmlMode ? 'Timeline interchange' : mode.videoEnabled ? `${video.actualWidth}x${video.outputHeight}` : 'Disabled'}</strong>
+          {mode.isXmlMode && <strong>Timeline interchange</strong>}
         </div>
         {mode.isXmlMode ? (
           <span className="export-chip export-chip-static">FCPXML</span>

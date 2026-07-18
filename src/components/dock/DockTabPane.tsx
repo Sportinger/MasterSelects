@@ -18,8 +18,6 @@ import { useDockPaneDropTarget } from './tabPane/useDockPaneDropTarget';
 import { useDockTabHoldDrag } from './tabPane/useDockTabHoldDrag';
 import { useTabBarScrollZoom } from './tabPane/useTabBarScrollZoom';
 import { useTabPaneMenus } from './tabPane/useTabPaneMenus';
-import '../panels/audio-mixer/wood-theme/wood-theme.css';
-import '../panels/audio-mixer/wood-theme/wood-center-well.css';
 
 interface DockTabPaneProps {
   group: DockTabGroup;

@@ -1,5 +1,11 @@
 import type { Keyframe, EasingType, AnimatableProperty, ClipTransform, BezierHandle } from '../types';
 import { DEFAULT_SCENE_CAMERA_SETTINGS, type SceneCameraSettings } from '../stores/mediaStore/types';
+import {
+  hexToRgb01,
+  mergeLightClipSettings,
+  rgb01ToHex,
+  type LightClipSettings,
+} from '../types/light';
 import { clampCameraFov } from './cameraLens';
 import { normalizeEasingType } from './easing';
 
@@ -333,6 +339,33 @@ export function getInterpolatedClipCameraSettings(
   )));
 
   return { ...baseSettings, fov, near, far, resolutionWidth, resolutionHeight };
+}
+
+export function getInterpolatedClipLightSettings(
+  keyframes: Keyframe[],
+  time: number,
+  baseSettings: LightClipSettings,
+): LightClipSettings {
+  if (!keyframes.some((keyframe) => keyframe.property.startsWith('light.'))) {
+    return baseSettings;
+  }
+
+  const [baseR, baseG, baseB] = hexToRgb01(baseSettings.color);
+  const intensity = Math.max(0, interpolateKeyframes(keyframes, 'light.intensity', time, baseSettings.intensity));
+  const diameter = Math.max(0.01, interpolateKeyframes(keyframes, 'light.diameter', time, baseSettings.diameter));
+  const shadowStrength = Math.min(1, Math.max(0, interpolateKeyframes(
+    keyframes,
+    'light.shadowStrength',
+    time,
+    baseSettings.shadowStrength,
+  )));
+  const color = rgb01ToHex(
+    interpolateKeyframes(keyframes, 'light.color.r', time, baseR),
+    interpolateKeyframes(keyframes, 'light.color.g', time, baseG),
+    interpolateKeyframes(keyframes, 'light.color.b', time, baseB),
+  );
+
+  return mergeLightClipSettings({ ...baseSettings, intensity, diameter, shadowStrength, color });
 }
 
 // Check if a property has keyframes

@@ -23,7 +23,7 @@ import { scrubSettleState } from '../../services/scrubSettleState';
 import { flags } from '../featureFlags';
 import type { NativeSceneRenderer } from '../native3d/NativeSceneRenderer';
 import { collectActiveSceneSplatEffectors } from '../scene/SceneEffectorUtils';
-import type { SceneSplatEffectorRuntimeData } from '../scene/types';
+import type { SceneCameraConfig, SceneSplatEffectorRuntimeData } from '../scene/types';
 import { resolveSharedSplatSceneKey } from '../scene/runtime/SharedSplatRuntimeUtils';
 import type { MotionRenderer } from '../motion/MotionRenderer';
 import { getMotionRenderSize } from '../motion/MotionTypes';
@@ -186,7 +186,17 @@ export class RenderDispatcher {
     const recordMainPreviewFrame = this.recordMainPreviewFrame.bind(this);
     this.cachedFrameRenderer = new CachedFrameRenderer(this.deps, this.outputRouter, recordMainPreviewFrame);
     this.emptyFrameRenderer = new EmptyFrameRenderer(this.deps, this.outputRouter, recordMainPreviewFrame);
-    this.targetPreviewRenderer = new TargetPreviewRenderer(this.deps, recordMainPreviewFrame);
+    this.targetPreviewRenderer = new TargetPreviewRenderer(
+      this.deps,
+      recordMainPreviewFrame,
+      (layerData, device, width, height, cameraOverride, targetId) => {
+        if (flags.use3DLayers) {
+          this.process3DLayers(layerData, device, width, height, cameraOverride, targetId);
+        }
+      },
+      () => this.getEffectiveTimelineTime(),
+      () => this.getTimelineState().isDraggingPlayhead,
+    );
   }
 
   setRenderTimeOverride(time: number | null): void {
@@ -197,7 +207,11 @@ export class RenderDispatcher {
     if (this.renderTimeOverride !== null) {
       return this.renderTimeOverride;
     }
-    return useTimelineStore.getState().playheadPosition;
+    return this.getTimelineState().playheadPosition;
+  }
+
+  private getTimelineState() {
+    return useTimelineStore.getState();
   }
 
   private getNativeGaussianSplatSceneKey(
@@ -266,7 +280,6 @@ export class RenderDispatcher {
   render(layers: Layer[]): void {
     const d = this.deps;
     if (d.isRecovering()) return;
-
     const device = d.getDevice();
     if (!device || !d.compositorPipeline || !d.outputPipeline || !d.sampler) return;
     if (!d.renderTargetManager || !d.layerCollector || !d.compositor || !d.textureManager) return;
@@ -433,6 +446,11 @@ export class RenderDispatcher {
         );
         if (view) {
           data.textureView = view;
+          if (nc.layers.some((layer) => !!layer.source?.videoElement)) {
+            data.displayedMediaTime = nc.currentTime;
+            data.targetMediaTime = nc.currentTime;
+            data.previewPath = 'nested-composite';
+          }
         } else {
           hasDeferredNestedComp = true;
           layerData.splice(i, 1);
@@ -542,8 +560,15 @@ export class RenderDispatcher {
    * Process 3D layers through the shared scene renderer and replace them
    * with a single synthetic LayerRenderData entry.
    */
-  private process3DLayers(layerData: LayerRenderData[], device: GPUDevice, width: number, height: number): void {
-    this.sharedScene3DProcessor.process3DLayers(layerData, device, width, height);
+  private process3DLayers(
+    layerData: LayerRenderData[],
+    device: GPUDevice,
+    width: number,
+    height: number,
+    cameraOverride?: SceneCameraConfig | null,
+    targetId?: string,
+  ): void {
+    this.sharedScene3DProcessor.process3DLayers(layerData, device, width, height, cameraOverride, targetId);
   }
 
   private renderHeldCompositeFrame(device: GPUDevice): boolean {
@@ -586,6 +611,11 @@ export class RenderDispatcher {
    */
   renderToPreviewCanvas(canvasId: string, layers: Layer[]): void {
     this.targetPreviewRenderer.renderToPreviewCanvas(canvasId, layers);
+  }
+
+  releasePreviewTarget(canvasId: string): void {
+    this.targetPreviewRenderer.releaseTarget(canvasId);
+    this.deps.sceneRenderer?.releaseSceneTarget(canvasId);
   }
 
   renderCachedFrame(time: number): boolean {

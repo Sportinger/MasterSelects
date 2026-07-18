@@ -40,6 +40,7 @@ interface WorkerTotals {
 
 interface PostedWorkerMessage {
   type: string;
+  trackColor?: string;
   requestId?: number;
   paintResources?: {
     schemaVersion?: number;
@@ -260,6 +261,7 @@ function renderWorkerCanvas(options: {
   clipDrag?: ClipDragState | null;
   clipDragPreview?: TimelineClipDragPreview | null;
   clipTrim?: ClipTrimState | null;
+  trackColor?: string;
 } = {}) {
   return render(
     <TimelineClipCanvas
@@ -270,7 +272,7 @@ function renderWorkerCanvas(options: {
       timeToPixel={(time) => time * 10}
       selectedClipIds={options.selectedClipIds ?? new Set(['clip-solid'])}
       hoveredClipId={options.hoveredClipId ?? 'clip-solid'}
-      trackColor="#4c9aff"
+      trackColor={options.trackColor ?? '#4c9aff'}
       scrollX={0}
       viewportWidth={200}
       waveformsEnabled={options.waveformsEnabled ?? false}
@@ -323,6 +325,22 @@ describe('TimelineClipCanvas worker runtime', () => {
     } else {
       delete (HTMLCanvasElement.prototype as Partial<HTMLCanvasElement>).transferControlToOffscreen;
     }
+  });
+
+  it('shows a type pictogram and neutral clip body when thumbnails and track colors are absent', async () => {
+    const { container } = renderWorkerCanvas({
+      clips: [createClip({ name: 'Camera', source: { type: 'camera', naturalDuration: 3 } })],
+      trackColor: 'transparent',
+    });
+
+    const typeIcon = container.querySelector('[data-clip-type="camera"] svg');
+    expect(typeIcon).toHaveAttribute('stroke', 'currentColor');
+    expect(typeIcon).toHaveStyle({ width: '22px', height: '22px' });
+    await waitFor(() => expect(workers).toHaveLength(1));
+    await act(async () => workers[0].emit({ type: 'ready' }));
+    await waitFor(() => expect(workers[0].postedMessages.some((message) => message.type === 'draw')).toBe(true));
+
+    expect(workers[0].postedMessages.find((message) => message.type === 'draw')?.trackColor).toBe('#303030');
   });
 
   it('queues the first draw until ready, records draw acks, and falls back after worker failure', async () => {
@@ -848,7 +866,7 @@ describe('TimelineClipCanvas worker runtime', () => {
     vi.spyOn(thumbnailBitmapCache, 'hasThumbnailBitmap').mockReturnValue(true);
     vi.spyOn(thumbnailBitmapCache, 'getThumbnailBitmap').mockReturnValue(cacheBitmap);
 
-    renderWorkerCanvas({
+    const { container } = renderWorkerCanvas({
       clips: [createClip({
         id: 'clip-video',
         name: 'Video Clip',
@@ -860,6 +878,7 @@ describe('TimelineClipCanvas worker runtime', () => {
       selectedClipIds: new Set(),
       hoveredClipId: null,
     });
+    expect(container.querySelector('[data-clip-type="video"]')).toBeNull();
 
     await waitFor(() => expect(workers).toHaveLength(1));
     const worker = workers[0];
@@ -889,6 +908,73 @@ describe('TimelineClipCanvas worker runtime', () => {
     expect(worker.postedTransferables[drawIndex]).toEqual([thumbnailStrip?.bitmap]);
     expect(worker.postedTransferables[drawIndex]).not.toContain(cacheBitmap);
     expect(cacheBitmap.close).not.toHaveBeenCalled();
+  });
+
+  it('hides fallback pictograms for partial and composition thumbnail caches', () => {
+    vi.spyOn(thumbnailCacheService, 'getThumbnailsForRange').mockReturnValue([
+      'blob:video-ready',
+      'blob:video-pending',
+    ]);
+    vi.spyOn(thumbnailBitmapCache, 'hasThumbnailBitmap').mockImplementation((url) => (
+      url === 'blob:video-ready' || url === 'blob:composition-ready'
+    ));
+
+    const { container } = renderWorkerCanvas({
+      clips: [
+        createClip({
+          id: 'clip-video-partial',
+          name: 'Partially Loaded Video',
+          duration: 16,
+          mediaFileId: 'media-partial',
+          source: { type: 'video', mediaFileId: 'media-partial', naturalDuration: 16 },
+        }),
+        createClip({
+          id: 'clip-composition-cached',
+          name: 'Composition With Cached Thumbnail',
+          duration: 16,
+          isComposition: true,
+          compositionId: 'composition-cached',
+          clipSegments: [{
+            clipId: 'nested-ready',
+            clipName: 'Nested Ready',
+            startNorm: 0,
+            endNorm: 1,
+            thumbnails: ['blob:composition-ready'],
+          }],
+        }),
+      ],
+      selectedClipIds: new Set(),
+      hoveredClipId: null,
+    });
+
+    expect(container.querySelector('[data-clip-type="video"]')).toBeNull();
+    expect(container.querySelector('[data-clip-type="composition"]')).toBeNull();
+  });
+
+  it('keeps the composition pictogram when only an unselected thumbnail slot is cached', () => {
+    vi.spyOn(thumbnailBitmapCache, 'hasThumbnailBitmap').mockImplementation((url) => (
+      url === 'blob:composition-unselected-ready'
+    ));
+
+    const { container } = renderWorkerCanvas({
+      clips: [createClip({
+        id: 'clip-composition-unselected-cache',
+        name: 'Composition Without Drawable Thumbnail',
+        isComposition: true,
+        compositionId: 'composition-unselected-cache',
+        clipSegments: [{
+          clipId: 'nested-unselected-cache',
+          clipName: 'Nested Unselected Cache',
+          startNorm: 0,
+          endNorm: 1,
+          thumbnails: ['blob:composition-selected-pending', 'blob:composition-unselected-ready'],
+        }],
+      })],
+      selectedClipIds: new Set(),
+      hoveredClipId: null,
+    });
+
+    expect(container.querySelector('[data-clip-type="composition"]')).not.toBeNull();
   });
 
   it('posts simple passive badge decorations for eligible clips', async () => {

@@ -1,6 +1,5 @@
 // CompositionRenderer - Evaluates any composition at a given time and returns renderable layers
 // This enables multiple previews showing different compositions simultaneously
-
 import { Logger } from './logger';
 import type {
   SerializableClip,
@@ -24,6 +23,15 @@ import {
   evaluateNestedComposition,
   type BackgroundVideoPlaybackOptions,
 } from './compositionRender/layerEvaluation';
+import {
+  cleanupExpiredCompositionCaches,
+  disposeCompositionCache,
+  getPreparedCompositionIds,
+  invalidateAllCompositionCaches,
+  invalidateAllCompositionCachesExceptActive,
+  invalidateCompositionCache,
+  invalidateCompositionCacheAndParents,
+} from './compositionRender/compositionCacheLifecycle';
 import {
   buildSerializableMathSceneClip,
   getBackgroundSessionKey,
@@ -568,6 +576,7 @@ class CompositionRendererService {
           mediaFiles: mediaStore.files,
           proxyEnabled: mediaStore.proxyEnabled,
           getVectorAnimationSettings,
+          getClipKeyframes,
           playbackOptions: options?.playbackOptions,
           getComposition: (transitionCompositionId) =>
             mediaStore.compositions.find((candidate) => candidate.id === transitionCompositionId),
@@ -584,11 +593,8 @@ class CompositionRendererService {
 
       const source = sources.clipSources.get(clipAtTime.id);
       if (!source) continue;
-      if (source.videoElement) {
-        activeVideoSourceClipIds.add(source.clipId);
-      }
 
-      layers.push(buildEvaluatedClipLayer({
+      const layer = buildEvaluatedClipLayer({
         compositionId,
         time,
         clipAtTime,
@@ -597,7 +603,13 @@ class CompositionRendererService {
         getVectorAnimationSettings,
         getClipKeyframes,
         playbackOptions: options?.playbackOptions,
-      }));
+      });
+      if (layer) {
+        if (source.videoElement) {
+          activeVideoSourceClipIds.add(source.clipId);
+        }
+        layers.push(layer);
+      }
     }
 
     pauseInactiveCompositionVideos(sources, activeVideoSourceClipIds);
@@ -630,35 +642,21 @@ class CompositionRendererService {
    * Dispose of a composition's sources
    */
   disposeComposition(compositionId: string): void {
-    const sources = this.compositionSources.get(compositionId);
-    if (!sources) return;
-
-    disposeCompositionSources(sources, {
-      deleteFromCache: true,
-      cache: this.compositionSources,
-    });
-    log.debug(`Disposed composition: ${compositionId}`);
+    disposeCompositionCache(this.compositionSources, compositionId);
   }
 
   /**
    * Get list of prepared compositions
    */
   getPreparedCompositions(): string[] {
-    return Array.from(this.compositionSources.keys()).filter(id =>
-      this.compositionSources.get(id)?.isReady
-    );
+    return getPreparedCompositionIds(this.compositionSources);
   }
 
   /**
    * Cleanup unused compositions (those not accessed recently)
    */
   cleanup(maxAgeMs: number = 60000): void {
-    const now = Date.now();
-    for (const [id, sources] of this.compositionSources.entries()) {
-      if (now - sources.lastAccessTime > maxAgeMs) {
-        this.disposeComposition(id);
-      }
-    }
+    cleanupExpiredCompositionCaches(this.compositionSources, maxAgeMs);
   }
 
   /**
@@ -666,11 +664,7 @@ class CompositionRendererService {
    * Call this when a composition's timelineData changes
    */
   invalidateComposition(compositionId: string): void {
-    const sources = this.compositionSources.get(compositionId);
-    if (sources) {
-      log.debug(`Invalidating composition: ${compositionId}`);
-      disposeCompositionSources(sources);
-    }
+    invalidateCompositionCache(this.compositionSources, compositionId);
   }
 
   /**
@@ -678,13 +672,7 @@ class CompositionRendererService {
    * Call this when switching active compositions (timelineData may have changed)
    */
   invalidateAllExceptActive(): void {
-    const { activeCompositionId } = useMediaStore.getState();
-    for (const [id, sources] of this.compositionSources.entries()) {
-      if (id !== activeCompositionId) {
-        disposeCompositionSources(sources);
-      }
-    }
-    log.debug('Invalidated all non-active compositions');
+    invalidateAllCompositionCachesExceptActive(this.compositionSources, useMediaStore.getState().activeCompositionId);
   }
 
   /**
@@ -692,40 +680,18 @@ class CompositionRendererService {
    * Call this when a composition's content changes (clips added/removed/modified)
    */
   invalidateCompositionAndParents(compositionId: string): void {
-    // First invalidate the composition itself
-    this.invalidateComposition(compositionId);
-
-    // Find all parent compositions that contain this as a nested comp
-    const { compositions } = useMediaStore.getState();
-
-    for (const comp of compositions) {
-      if (comp.id === compositionId) continue;
-
-      // Check if this composition contains the changed one as a nested clip
-      const clips = comp.timelineData?.clips || [];
-      const hasNested = clips.some(clip =>
-        (clip.isComposition && clip.compositionId === compositionId) ||
-        clip.transitionOut?.compositionId === compositionId ||
-        clip.transitionIn?.compositionId === compositionId
-      );
-
-      if (hasNested) {
-        log.debug(`Invalidating parent composition: ${comp.name} (contains ${compositionId})`);
-        this.invalidateComposition(comp.id);
-        // Recursively invalidate grandparents
-        this.invalidateCompositionAndParents(comp.id);
-      }
-    }
+    invalidateCompositionCacheAndParents(
+      this.compositionSources,
+      compositionId,
+      useMediaStore.getState().compositions,
+    );
   }
 
   /**
    * Invalidate ALL cached compositions - use when major changes occur
    */
   invalidateAll(): void {
-    for (const [, sources] of this.compositionSources.entries()) {
-      disposeCompositionSources(sources);
-    }
-    log.debug('Invalidated ALL compositions');
+    invalidateAllCompositionCaches(this.compositionSources);
   }
 }
 

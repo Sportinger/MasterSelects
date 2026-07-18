@@ -3,6 +3,17 @@ import {
   DEFAULT_MESH_COLOR,
   WIREFRAME_COLOR,
 } from './constants';
+import { mergeModelMaterialSettings } from '../../../../types/modelMaterial';
+
+export interface MeshMaterialPlan {
+  color: readonly [number, number, number, number];
+  unlit: boolean;
+  textureEnabled: boolean;
+  uvScaleX: number;
+  uvScaleY: number;
+  uvOffsetX: number;
+  uvOffsetY: number;
+}
 
 export function resolveMeshLayerColor(
   layer: SceneNativeMeshLayer,
@@ -18,6 +29,28 @@ export function resolveMeshLayerColor(
     return modelBaseColor;
   }
   return DEFAULT_MESH_COLOR;
+}
+
+export function resolveMeshMaterialPlan(
+  layer: SceneNativeMeshLayer,
+  modelBaseColor?: readonly [number, number, number, number],
+  modelUnlit = false,
+): MeshMaterialPlan {
+  const settings = layer.kind === 'model'
+    ? mergeModelMaterialSettings(layer.modelMaterialSettings)
+    : mergeModelMaterialSettings();
+  const color = layer.kind === 'model' && settings.overrideBaseColor
+    ? parseColor(settings.baseColor)
+    : resolveMeshLayerColor(layer, modelBaseColor);
+  return {
+    color,
+    unlit: settings.shading === 'unlit' || (settings.shading === 'asset' && modelUnlit),
+    textureEnabled: settings.useEmbeddedTexture,
+    uvScaleX: settings.uvScaleX,
+    uvScaleY: settings.uvScaleY,
+    uvOffsetX: settings.uvOffsetX,
+    uvOffsetY: settings.uvOffsetY,
+  };
 }
 
 function parseColor(color: string | undefined): readonly [number, number, number, number] {

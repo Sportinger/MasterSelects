@@ -7,6 +7,7 @@ import { useTimelineStore } from '../../src/stores/timeline';
 import { DEFAULT_PRIMARY_COLOR_PARAMS } from '../../src/types';
 import type { RenderDeps } from '../../src/engine/render/RenderDispatcher';
 import type { Layer, LayerRenderData } from '../../src/engine/core/types';
+import type { SceneCameraConfig } from '../../src/engine/scene/types';
 
 const mockGaussianSplatRenderer = vi.hoisted(() => ({
   isInitialized: true,
@@ -24,8 +25,16 @@ type RenderDispatcherTestAccess = {
   lastPreviewTargetTimeMs?: number;
   lastPreviewDisplayedTimeMs?: number;
   render: RenderDispatcher['render'];
+  renderToPreviewCanvas: RenderDispatcher['renderToPreviewCanvas'];
   collectActiveSplatEffectors: (width: number, height: number) => unknown[];
-  process3DLayers: (layerData: LayerRenderData[], device: GPUDevice, width: number, height: number) => void;
+  process3DLayers: (
+    layerData: LayerRenderData[],
+    device: GPUDevice,
+    width: number,
+    height: number,
+    cameraOverride?: SceneCameraConfig | null,
+    targetId?: string,
+  ) => void;
   renderEmptyFrame: RenderDispatcher['renderEmptyFrame'];
   setRenderTimeOverride: RenderDispatcher['setRenderTimeOverride'];
   recordMainPreviewFrame: () => void;
@@ -154,6 +163,7 @@ describe('RenderDispatcher empty playback hold', () => {
       sceneGizmoVisible: true,
       sceneGizmoClipIdOverride: null,
       sceneGizmoHoveredAxis: null,
+      previewCameraOverride: null,
     });
     useMediaStore.setState({
       files: [],
@@ -214,6 +224,31 @@ describe('RenderDispatcher empty playback hold', () => {
     expect(recordMainPreviewFrame).toHaveBeenCalledWith('empty', undefined, {});
     expect(deps.performanceStats.setLayerCount).toHaveBeenCalledWith(0);
     expect(dispatcher.lastRenderHadContent).toBe(false);
+  });
+
+  it('holds an independent preview canvas during empty scrub frames', () => {
+    const { dispatcher, deps } = createDispatcher(false);
+    const createCommandEncoder = vi.fn(() => ({ finish: vi.fn(() => ({})) }));
+    deps.getDevice = vi.fn(() => ({
+      limits: { maxTextureDimension2D: 8192 },
+      createCommandEncoder,
+      queue: { submit: vi.fn() },
+    })) as RenderDeps['getDevice'];
+    deps.targetCanvases.set('edit-preview', { context: {} });
+    deps.renderTargetManager.getIndependentPingView = vi.fn(() => ({}));
+    deps.renderTargetManager.getIndependentPongView = vi.fn(() => ({}));
+    deps.renderTargetManager.getBlackTexture = vi.fn(() => null);
+    deps.outputPipeline.updateResolution = vi.fn();
+    useTimelineStore.setState({ isDraggingPlayhead: true });
+
+    dispatcher.renderToPreviewCanvas('edit-preview', []);
+
+    expect(deps.outputPipeline.updateResolution).toHaveBeenCalledWith(1920, 1080);
+    expect(createCommandEncoder).not.toHaveBeenCalled();
+
+    useTimelineStore.setState({ isDraggingPlayhead: false });
+    dispatcher.renderToPreviewCanvas('edit-preview', []);
+    expect(createCommandEncoder).toHaveBeenCalledTimes(1);
   });
 
   it('clears the stale preview canvas on large target jumps with empty layer data', () => {
@@ -371,8 +406,8 @@ describe('RenderDispatcher empty playback hold', () => {
     });
   });
 
-  it('routes native gaussian splats through the shared scene renderer with the shared camera and effectors', () => {
-    const { dispatcher, deps } = createDispatcher(false);
+  it('routes native gaussian splats through the shared scene renderer with a viewport-local camera and effectors during playback', () => {
+    const { dispatcher, deps } = createDispatcher(true);
     deps.sceneRenderer = {
       isInitialized: true,
       renderScene: vi.fn(() => ({ label: 'shared-scene-view' })),
@@ -446,7 +481,15 @@ describe('RenderDispatcher empty playback hold', () => {
       },
     ] as unknown as LayerRenderData[];
 
-    dispatcher.process3DLayers(layerData, {} as GPUDevice, 1920, 1080);
+    dispatcher.process3DLayers(layerData, {} as GPUDevice, 477, 696, {
+      position: { x: 2, y: 3, z: 4 },
+      target: { x: 0, y: 0, z: 0 },
+      up: { x: 0, y: 1, z: 0 },
+      fov: 60,
+      near: 0.1,
+      far: 1000,
+      applyDefaultDistance: false,
+    }, 'preview-target');
 
     expect(deps.sceneRenderer.renderScene).toHaveBeenCalledTimes(1);
     const [deviceArg, layers3D, camera, effectors, isRealtimePlayback] =
@@ -462,18 +505,15 @@ describe('RenderDispatcher empty playback hold', () => {
     expect(layers3D[0].worldMatrix[12]).toBeCloseTo(0.25);
     expect(layers3D[0].worldMatrix[13]).toBeCloseTo(-0.5);
     expect(layers3D[0].worldMatrix[14]).toBeCloseTo(3);
-    const defaultDistance = getSharedSceneDefaultCameraDistance(50);
-    expect(camera.cameraPosition.x).toBeCloseTo(0);
-    expect(camera.cameraPosition.y).toBeCloseTo(0);
-    expect(camera.cameraPosition.z).toBeCloseTo(defaultDistance);
-    expect(camera.viewMatrix[14]).toBeCloseTo(-defaultDistance);
+    expect(camera.cameraPosition).toEqual({ x: 2, y: 3, z: 4 });
+    expect(camera.viewport).toEqual({ width: 477, height: 696 });
     expect(effectors).toHaveLength(1);
     expect(effectors[0]).toMatchObject({
       clipId: 'effector-1',
       mode: 'swirl',
       strength: 45,
     });
-    expect(isRealtimePlayback).toBe(false);
+    expect(isRealtimePlayback).toBe(true);
 
     expect(layerData).toHaveLength(1);
     expect(layerData[0]?.textureView).toEqual({ label: 'shared-scene-view' });
@@ -543,6 +583,19 @@ describe('RenderDispatcher empty playback hold', () => {
 
     useEngineStore.getState().setSceneGizmoVisible(true);
     dispatcher.process3DLayers(createLayerData(), {} as GPUDevice, 1920, 1080);
+    expect(deps.sceneRenderer.renderScene.mock.calls[0][5]).toMatchObject({
+      clipId: 'native-splat-clip',
+    });
+
+    deps.sceneRenderer.renderScene.mockClear();
+    dispatcher.process3DLayers(createLayerData(), {} as GPUDevice, 477, 696, {
+      position: { x: 2, y: 3, z: 4 },
+      target: { x: 0, y: 0, z: 0 },
+      up: { x: 0, y: 1, z: 0 },
+      fov: 50,
+      near: 0.1,
+      far: 1000,
+    });
     expect(deps.sceneRenderer.renderScene.mock.calls[0][5]).toMatchObject({
       clipId: 'native-splat-clip',
     });

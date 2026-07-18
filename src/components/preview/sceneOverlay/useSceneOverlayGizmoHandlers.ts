@@ -43,7 +43,6 @@ interface UseSceneOverlayGizmoHandlersParams {
   axisHandles: SceneAxisScreenHandle[];
   rotateRings: ProjectedRotateRing[];
   selectClip: (id: string | null, addToSelection?: boolean, setPrimaryOnly?: boolean) => void;
-  onSetObjectOrbitPivot?: (object: PreviewSceneObject) => boolean;
   getObjectTransform: (object: PreviewSceneObject, clip: TimelineClip) => ClipTransform;
   resetObjectTransform: (
     clipId: string,
@@ -62,7 +61,6 @@ export function useSceneOverlayGizmoHandlers({
   axisHandles,
   rotateRings,
   selectClip,
-  onSetObjectOrbitPivot,
   getObjectTransform,
   resetObjectTransform,
   startGizmoDrag,
@@ -80,10 +78,7 @@ export function useSceneOverlayGizmoHandlers({
 
     event.preventDefault();
     event.stopPropagation();
-    if (event.detail > 1) {
-      onSetObjectOrbitPivot?.(selectedObject);
-      return;
-    }
+    if (event.detail > 1) return;
 
     startGizmoDrag({
       clientX: event.clientX,
@@ -96,16 +91,10 @@ export function useSceneOverlayGizmoHandlers({
       pixelsPerUnit: handle.pixelsPerUnit,
       freePixelsPerUnit: { x: handle.pixelsPerUnit, y: handle.pixelsPerUnit },
     });
-  }, [onSetObjectOrbitPivot, selectedObject, startGizmoDrag]);
+  }, [selectedObject, startGizmoDrag]);
 
   const handleAxisDoubleClick = useCallback((event: ReactMouseEvent<Element>, handle: SceneAxisScreenHandle) => {
     if (!selectedObject) return;
-
-    if (onSetObjectOrbitPivot?.(selectedObject)) {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
 
     const clip = clips.find((candidate) => candidate.id === selectedObject.clipId);
     if (!clip) return;
@@ -117,7 +106,7 @@ export function useSceneOverlayGizmoHandlers({
       mode,
       buildAxisResetTransform(mode, handle.axis, selectedObject, getObjectTransform(selectedObject, clip)),
     );
-  }, [clips, getObjectTransform, mode, onSetObjectOrbitPivot, resetObjectTransform, selectedObject]);
+  }, [clips, getObjectTransform, mode, resetObjectTransform, selectedObject]);
 
   const resolveRotateRingFromEvent = useCallback((event: ReactMouseEvent<SVGSVGElement>) => (
     resolveNearestRotateRing(getRotateRingEventPoint(event), rotateRings)
@@ -139,10 +128,7 @@ export function useSceneOverlayGizmoHandlers({
 
     event.preventDefault();
     event.stopPropagation();
-    if (event.detail > 1) {
-      onSetObjectOrbitPivot?.(selectedObject);
-      return;
-    }
+    if (event.detail > 1) return;
 
     const point = getRotateRingEventPoint(event);
     const startAngle = getPointToRingAngle(point, ring);
@@ -171,7 +157,7 @@ export function useSceneOverlayGizmoHandlers({
           }
         : {}),
     });
-  }, [onSetObjectOrbitPivot, resolveRotateRingFromEvent, selectedObject, startGizmoDrag, updateHoveredAxis]);
+  }, [resolveRotateRingFromEvent, selectedObject, startGizmoDrag, updateHoveredAxis]);
 
   const handleRotateRingDoubleClick = useCallback((event: ReactMouseEvent<SVGSVGElement>) => {
     const ring = resolveRotateRingFromEvent(event);
@@ -188,7 +174,6 @@ export function useSceneOverlayGizmoHandlers({
     if (event.button !== 0) return;
 
     if (event.detail > 1) {
-      onSetObjectOrbitPivot?.(object);
       event.preventDefault();
       event.stopPropagation();
       return;
@@ -213,15 +198,9 @@ export function useSceneOverlayGizmoHandlers({
       pixelsPerUnit: getAveragePixelsPerUnit(freePixelsPerUnit),
       freePixelsPerUnit,
     });
-  }, [axisHandles, handleObjectPointerDown, mode, onSetObjectOrbitPivot, selectedClipId, startGizmoDrag]);
+  }, [axisHandles, handleObjectPointerDown, mode, selectedClipId, startGizmoDrag]);
 
   const handleCenterDoubleClick = useCallback((event: ReactMouseEvent<HTMLButtonElement>, object: PreviewSceneObject) => {
-    if (onSetObjectOrbitPivot?.(object)) {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-
     if (object.clipId !== selectedClipId) return;
     const clip = clips.find((candidate) => candidate.id === object.clipId);
     if (!clip) return;
@@ -233,7 +212,7 @@ export function useSceneOverlayGizmoHandlers({
       mode,
       buildCenterResetTransform(mode, object, getObjectTransform(object, clip)),
     );
-  }, [clips, getObjectTransform, mode, onSetObjectOrbitPivot, resetObjectTransform, selectedClipId]);
+  }, [clips, getObjectTransform, mode, resetObjectTransform, selectedClipId]);
 
   return {
     handleObjectPointerDown,

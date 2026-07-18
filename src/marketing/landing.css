@@ -59,9 +59,22 @@
 }
 
 .landing-header,
-.landing-main {
+.landing-main,
+.landing-legal-links {
   position: relative;
   z-index: 1;
+}
+
+.landing-legal-links {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  padding: 0 1.2rem 2rem;
+}
+
+.landing-legal-links a {
+  color: var(--landing-muted);
+  font-size: 0.82rem;
 }
 
 .landing-header {

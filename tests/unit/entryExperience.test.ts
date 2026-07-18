@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildEditorHref,
   buildLandingHref,
+  isSupportedPagePath,
   resolveEntryExperience,
 } from '../../src/routing/entryExperience';
 
@@ -28,6 +29,16 @@ describe('entry experience routing', () => {
       pathname: '/landing',
       search: '',
     })).toBe('landing');
+  });
+
+  it.each([
+    ['/impressum', 'imprint'],
+    ['/impressum/', 'imprint'],
+    ['/datenschutz', 'privacy'],
+    ['/privacy', 'privacy'],
+  ] as const)('serves the legal route %s', (pathname, experience) => {
+    expect(resolveEntryExperience({ hostname: 'www.masterselects.com', pathname })).toBe(experience);
+    expect(isSupportedPagePath(pathname)).toBe(true);
   });
 
   it('forces the editor when test mode is requested', () => {

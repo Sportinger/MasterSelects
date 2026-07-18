@@ -109,6 +109,7 @@ export interface CreditClaimStatusResponse {
     description: string | null;
     emailLocked: boolean;
     expiresAt: string | null;
+    freeOffer: boolean;
     status: CreditClaimStatus;
     title: string;
   };
@@ -128,6 +129,15 @@ export interface CreditClaimRedeemResponse {
   message?: string;
   ok: boolean;
   status: CreditClaimStatus | 'redeemed';
+}
+
+export interface WebsiteFreeCreditOfferResponse {
+  offer: {
+    amount: number;
+    expiresAt: string;
+    redeemCode: string;
+  } | null;
+  ok: boolean;
 }
 
 export interface CloudAiGatewayError {

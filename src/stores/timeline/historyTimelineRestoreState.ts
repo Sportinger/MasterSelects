@@ -92,7 +92,11 @@ function isReusableSourceForRuntimeRef(
 
   if (runtimeRef.kind === 'media-file') {
     const mediaFileId = clip.mediaFileId ?? source.mediaFileId;
-    return Boolean(runtimeRef.mediaFileId && mediaFileId === runtimeRef.mediaFileId);
+    return Boolean(
+      runtimeRef.mediaFileId &&
+      mediaFileId === runtimeRef.mediaFileId &&
+      (!runtimeRef.liveInputId || source.liveInputId === runtimeRef.liveInputId)
+    );
   }
 
   if (runtimeRef.kind === 'composition') {
@@ -121,6 +125,7 @@ function createDataOnlyClipSource(
     type: clip.sourceType,
     naturalDuration: clip.naturalDuration ?? clip.runtimeRef.naturalDuration ?? clip.outPoint,
     mediaFileId: clip.mediaFileId ?? clip.runtimeRef.mediaFileId,
+    liveInputId: clip.liveInputId ?? clip.runtimeRef.liveInputId,
     vectorAnimationSettings: clip.vectorAnimationSettings,
     text3DProperties: clip.text3DProperties,
     meshType: clip.meshType,
@@ -175,6 +180,7 @@ function createRestoredClip(
       reversed: clip.reversed,
       speed: clip.speed,
       preservesPitch: clip.preservesPitch,
+      freeRun: clip.freeRun,
       textProperties: clonePlain(clip.textProperties),
       text3DProperties: clonePlain(clip.text3DProperties),
       solidColor: clip.solidColor,
@@ -190,7 +196,7 @@ function createRestoredClip(
       is3D: clip.is3D,
       wireframe: clip.wireframe,
       meshType: clip.meshType,
-      needsReload: !reusedRuntime && clip.runtimeRef.kind !== 'inline-data'
+      needsReload: !reusedRuntime && !(clip.liveInputId ?? clip.runtimeRef.liveInputId) && clip.runtimeRef.kind !== 'inline-data'
         ? true
         : clip.runtimeRef.needsReload,
       isLoading: false,
@@ -278,7 +284,7 @@ export function createHistoryTimelineRestoreState(
     const restored = createRestoredClip(clip, currentClipsById.get(clip.id), options);
     if (restored.reusedRuntime) {
       reusedRuntimeClipIds.push(clip.id);
-    } else {
+    } else if (!(clip.liveInputId ?? clip.runtimeRef.liveInputId)) {
       deferredRuntimeClipIds.push(clip.id);
     }
     return restored.clip;

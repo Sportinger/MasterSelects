@@ -1,4 +1,5 @@
 export type SourceMediaFile = {
+  duration?: number;
   transcript?: import('../../../types').TranscriptWord[];
   transcriptStatus?: string;
   modelSequence?: import('../../../types').ModelSequenceData;

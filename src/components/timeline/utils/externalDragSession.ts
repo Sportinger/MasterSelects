@@ -14,6 +14,7 @@ export interface ExternalDragPayload {
     | 'solid'
     | 'mesh'
     | 'camera'
+    | 'light'
     | 'splat-effector'
     | 'math-scene'
     | 'motion-shape'
@@ -131,6 +132,19 @@ export function createExternalDragPayloadForProjectItem(
     };
   }
 
+  if (item.type === 'light') {
+    return {
+      kind: 'light',
+      id: item.id,
+      duration: item.duration,
+      hasAudio: false,
+      isAudio: false,
+      isVideo: true,
+      label: item.name,
+      mediaType: item.type,
+    };
+  }
+
   if (item.type === 'splat-effector') {
     return {
       kind: 'splat-effector',
@@ -224,6 +238,8 @@ export function getExternalDragPayloadMimeTypes(payload: ExternalDragPayload): s
       return ['application/x-mesh-item-id'];
     case 'camera':
       return ['application/x-camera-item-id'];
+    case 'light':
+      return ['application/x-light-item-id'];
     case 'splat-effector':
       return ['application/x-splat-effector-item-id'];
     case 'math-scene':
@@ -248,6 +264,7 @@ export function getExternalDragPayloadMimeData(
   if (mimeType === 'application/x-solid-item-id' && payload.kind === 'solid') return payload.id;
   if (mimeType === 'application/x-mesh-item-id' && payload.kind === 'mesh') return payload.id;
   if (mimeType === 'application/x-camera-item-id' && payload.kind === 'camera') return payload.id;
+  if (mimeType === 'application/x-light-item-id' && payload.kind === 'light') return payload.id;
   if (mimeType === 'application/x-splat-effector-item-id' && payload.kind === 'splat-effector') return payload.id;
   if (mimeType === 'application/x-math-scene-item-id' && payload.kind === 'math-scene') return payload.id;
   if (mimeType === 'application/x-motion-shape-item-id' && payload.kind === 'motion-shape') return payload.id;
@@ -297,6 +314,7 @@ function isImportedMediaFileProjectItem(item: ProjectItem): item is MediaFile {
     item.type === 'text' ||
     item.type === 'solid' ||
     item.type === 'camera' ||
+    item.type === 'light' ||
     item.type === 'splat-effector' ||
     item.type === 'math-scene' ||
     item.type === 'motion-shape'

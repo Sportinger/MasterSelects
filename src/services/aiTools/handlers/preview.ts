@@ -102,8 +102,16 @@ export async function handleGetFramesAtTimes(
   args: Record<string, unknown>,
   timelineStore: TimelineStore
 ): Promise<ToolResult> {
-  const times = (args.times as number[]).slice(0, 8); // Max 8 frames
-  const columns = (args.columns as number) || 4;
+  const times = Array.isArray(args.times)
+    ? args.times.filter((time): time is number => typeof time === 'number' && Number.isFinite(time)).slice(0, 8)
+    : [];
+  if (times.length === 0) {
+    return { success: false, error: 'Provide at least one finite frame time.' };
+  }
+  const requestedColumns = typeof args.columns === 'number' && Number.isFinite(args.columns)
+    ? Math.round(args.columns)
+    : 4;
+  const columns = Math.max(1, Math.min(times.length, requestedColumns));
   const settleMs = typeof args.settleMs === 'number' ? args.settleMs : undefined;
   const mode = args.mode === 'dom' || args.mode === 'gpu' || args.mode === 'auto'
     ? args.mode

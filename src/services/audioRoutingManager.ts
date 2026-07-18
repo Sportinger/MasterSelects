@@ -530,11 +530,33 @@ class AudioRoutingManager {
   }
 
   private async applyContextOutputDevice(context: AudioContext): Promise<boolean> {
-    return applyAudioContextOutputDevice(context, this.outputDeviceId, (message, error) => log.warn(message, error));
+    return applyAudioContextOutputDevice(
+      context,
+      this.outputDeviceId,
+      this.makeOutputDeviceErrorReporter(this.outputDeviceId),
+    );
   }
 
   private async applyElementOutputDevice(element: HTMLMediaElement): Promise<boolean> {
-    return applyMediaElementOutputDevice(element, this.outputDeviceId, (message, error) => log.warn(message, error));
+    return applyMediaElementOutputDevice(
+      element,
+      this.outputDeviceId,
+      this.makeOutputDeviceErrorReporter(this.outputDeviceId),
+    );
+  }
+
+  // An AbortError whose attempt lost to a newer device selection is expected
+  // switch churn; an AbortError for the still-current device means the switch
+  // genuinely failed and stays a warning.
+  private makeOutputDeviceErrorReporter(attemptedDeviceId: string): (message: string, error: unknown) => void {
+    return (message, error) => {
+      const superseded = attemptedDeviceId !== this.outputDeviceId;
+      if (superseded && error instanceof DOMException && error.name === 'AbortError') {
+        log.debug(message, error);
+        return;
+      }
+      log.warn(message, error);
+    };
   }
 
   private disconnectMasterRoute(): void {

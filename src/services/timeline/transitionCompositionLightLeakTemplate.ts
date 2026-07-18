@@ -4,10 +4,10 @@ import type { TimelineTransition, TransitionCompositionLink } from '../../types/
 import type { TransitionPlan } from '../../stores/timeline/editOperations/transitionPlanner';
 import { buildIncomingRevealMask } from './transitionCompositionMasks';
 import { makeKeyframe, mergeGeneratedKeyframes, sliceGeneratedKeyframesForSegment } from './transitionCompositionKeyframes';
-import { buildLinkedCoverageClips, getSerializableClip } from './transitionCompositionSourceClips';
+import { buildLinkedMappedClip, getSerializableClip } from './transitionCompositionSourceClips';
 import { getTransitionTemplateParamsKey, mergeTransitionMarkers } from './transitionCompositionRecipeTemplate';
 
-const TRANSITION_TEMPLATE_VERSION = 2;
+const TRANSITION_TEMPLATE_VERSION = 3;
 
 export function getTransitionColor(transition: TimelineTransition): string {
   const color = transition.params?.color;
@@ -20,8 +20,18 @@ export function buildMaterializedLightLeakTimelineData(input: {
   transition: TimelineTransition;
   plan: TransitionPlan;
   serializableClips: readonly SerializableClip[];
+  outgoingMediaDuration: number;
+  incomingMediaDuration: number;
 }): { timelineData: CompositionTimelineData; link: Omit<TransitionCompositionLink, 'parentCompositionId'> } {
-  const { outgoingClip, incomingClip, transition, plan, serializableClips } = input;
+  const {
+    outgoingClip,
+    incomingClip,
+    transition,
+    plan,
+    serializableClips,
+    outgoingMediaDuration,
+    incomingMediaDuration,
+  } = input;
   const duration = Math.max(0.0001, transition.duration);
   const bodyStart = 0;
   const bodyEnd = duration;
@@ -81,26 +91,28 @@ export function buildMaterializedLightLeakTimelineData(input: {
       ),
     };
   };
-  const outgoingLinkedClips = buildLinkedCoverageClips({
+  const outgoingLinkedClips = [buildLinkedMappedClip({
     base: baseOutgoing,
     baseId: outgoingClipId,
     trackId: outgoingTrackId,
     nameSuffix: '[OUT linked]',
-    participant: plan.outgoing,
     bodyStart: plan.bodyStart,
+    bodyEnd: plan.bodyEnd,
     duration,
+    mediaDuration: outgoingMediaDuration,
     materialize: materializeOutgoingClip,
-  });
-  const incomingLinkedClips = buildLinkedCoverageClips({
+  })];
+  const incomingLinkedClips = [buildLinkedMappedClip({
     base: baseIncoming,
     baseId: incomingClipId,
     trackId: incomingTrackId,
     nameSuffix: '[IN linked]',
-    participant: plan.incoming,
     bodyStart: plan.bodyStart,
+    bodyEnd: plan.bodyEnd,
     duration,
+    mediaDuration: incomingMediaDuration,
     materialize: materializeIncomingClip,
-  });
+  })];
   const overlayClip: SerializableClip = {
     id: overlayClipId,
     trackId: overlayTrackId,
@@ -135,6 +147,7 @@ export function buildMaterializedLightLeakTimelineData(input: {
   return {
     link: {
       kind: 'transition-comp',
+      sourceLayout: 'mapped-v3',
       parentTransitionId: transition.id,
       parentOutgoingClipId: outgoingClip.id,
       parentIncomingClipId: incomingClip.id,

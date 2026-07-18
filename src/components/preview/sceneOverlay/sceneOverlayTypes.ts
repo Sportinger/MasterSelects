@@ -104,9 +104,3 @@ export interface ProjectedRotateRing {
   path: string;
   points: ProjectedRotateRingPoint[];
 }
-
-export interface ObjectContextMenuState {
-  x: number;
-  y: number;
-  object: PreviewSceneObject;
-}

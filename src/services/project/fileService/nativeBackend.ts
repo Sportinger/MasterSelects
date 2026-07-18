@@ -8,6 +8,7 @@ import {
   parseRawRelativePath,
 } from '../core/rawPath';
 import { getAudioProxyFileName } from '../domains/ProxyStorageService';
+import { setRelinkHandlePath } from '../relink/relinkMatching';
 
 const log = Logger.create('ProjectFileService');
 
@@ -236,17 +237,17 @@ function createNativeFileHandle(fullPath: string, name: string): FileSystemFileH
 export async function scanNativeFolder(rootPath: string): Promise<Map<string, FileSystemFileHandle>> {
   const foundFiles = new Map<string, FileSystemFileHandle>();
 
-  const scanDirectory = async (directoryPath: string): Promise<void> => {
+  const scanDirectory = async (directoryPath: string, parentPath = ''): Promise<void> => {
     const entries = await NativeHelperClient.listDir(directoryPath);
     for (const entry of entries) {
       const fullPath = joinProjectPath(directoryPath, entry.name);
+      const relativePath = parentPath ? `${parentPath}/${entry.name}` : entry.name;
       if (entry.kind === 'file') {
-        const key = entry.name.toLowerCase();
-        if (!foundFiles.has(key)) {
-          foundFiles.set(key, createNativeFileHandle(fullPath, entry.name));
-        }
+        const handle = createNativeFileHandle(fullPath, entry.name);
+        setRelinkHandlePath(handle, relativePath);
+        foundFiles.set(fullPath.toLowerCase(), handle);
       } else if (entry.kind === 'directory') {
-        await scanDirectory(fullPath);
+        await scanDirectory(fullPath, relativePath);
       }
     }
   };
@@ -263,15 +264,14 @@ export async function scanNativeFolder(rootPath: string): Promise<Map<string, Fi
 export async function scanDirectoryHandle(root: FileSystemDirectoryHandle): Promise<Map<string, FileSystemFileHandle>> {
   const foundFiles = new Map<string, FileSystemFileHandle>();
 
-  const scanDirectory = async (directory: FileSystemDirectoryHandle): Promise<void> => {
+  const scanDirectory = async (directory: FileSystemDirectoryHandle, parentPath = ''): Promise<void> => {
     for await (const entry of (directory as IterableDirectoryHandle).values()) {
+      const relativePath = parentPath ? `${parentPath}/${entry.name}` : entry.name;
       if (entry.kind === 'file') {
-        const key = entry.name.toLowerCase();
-        if (!foundFiles.has(key)) {
-          foundFiles.set(key, entry);
-        }
+        setRelinkHandlePath(entry, relativePath);
+        foundFiles.set(relativePath.toLowerCase(), entry);
       } else if (entry.kind === 'directory') {
-        await scanDirectory(entry);
+        await scanDirectory(entry, relativePath);
       }
     }
   };

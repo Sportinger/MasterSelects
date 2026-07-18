@@ -34,6 +34,7 @@ export {
   createRelinkCandidateMapFromHandles,
   findRelinkMatch,
   getRelinkExpectedFileNames,
+  setRelinkHandlePath,
 } from './relink/relinkMatching';
 export type {
   RelinkCandidate,
@@ -44,7 +45,15 @@ export type {
 export type RelinkApplyOptions = Pick<UpdateTimelineClipsOptions, 'generateThumbnails'>;
 
 function isAbsolutePath(value: string | undefined): boolean {
-  return Boolean(value && (value.startsWith('/') || /^[A-Za-z]:[/\\]/.test(value)));
+  if (!value) return false;
+  const platform = typeof navigator === 'undefined'
+    ? ''
+    : ((navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform
+      ?? navigator.platform
+      ?? navigator.userAgent);
+  return /win/i.test(platform)
+    ? /^[A-Za-z]:[/\\]/.test(value) || value.startsWith('\\\\')
+    : value.startsWith('/');
 }
 
 async function storeHandle(cacheKey: string, handle: FileSystemFileHandle | undefined): Promise<void> {
@@ -87,6 +96,16 @@ function buildSequenceRawTarget(
     .slice(0, 40) || fallbackFolder;
 
   return `${folderName}/${candidateFileName}`;
+}
+
+function getSingleRelinkTarget(mediaFile: MediaFile, candidate: RelinkCandidate): string {
+  if (mediaFile.projectPath) return mediaFile.projectPath;
+  const relativePath = candidate.relativePath
+    ?.replace(/\\/g, '/')
+    .split('/')
+    .filter((segment) => segment && segment !== '.' && segment !== '..')
+    .join('/');
+  return relativePath || candidate.name;
 }
 
 async function copyCandidateToProject(
@@ -162,7 +181,7 @@ export function isNativeProjectLinkedMedia(mediaFile: MediaFile): boolean {
 }
 
 export function mediaNeedsRelink(mediaFile: MediaFile): boolean {
-  return !mediaFile.file && !isNativeProjectLinkedMedia(mediaFile);
+  return !mediaFile.liveInput && !mediaFile.file && !isNativeProjectLinkedMedia(mediaFile);
 }
 
 function replaceMediaFile(mediaFileId: string, nextFile: Partial<MediaFile>): void {
@@ -205,7 +224,7 @@ async function applyNativeSingleRelink(
   mediaFile: MediaFile,
   match: Extract<RelinkMatch, { kind: 'single' }>,
 ): Promise<boolean> {
-  const targetPath = mediaFile.projectPath ?? match.candidate.name;
+  const targetPath = getSingleRelinkTarget(mediaFile, match.candidate);
   const absolutePath =
     match.candidate.absolutePath ??
     projectFileService.resolveRawFilePath(targetPath) ??
@@ -236,7 +255,7 @@ async function applySingleRelink(
     return applyNativeSingleRelink(mediaFile, match);
   }
 
-  const targetPath = mediaFile.projectPath ?? match.candidate.name;
+  const targetPath = getSingleRelinkTarget(mediaFile, match.candidate);
   const restored = await copyCandidateToProject(match.candidate, targetPath);
   const url = createPrimaryMediaObjectUrl(mediaFile.id, restored.file, { revokeExisting: false });
   const sourceReplacementPatch = await createMediaSourceReplacementPatch(restored.file);

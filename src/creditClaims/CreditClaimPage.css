@@ -18,6 +18,19 @@
   cursor: pointer;
 }
 
+.credit-claim-legal-links {
+  bottom: 16px;
+  display: flex;
+  gap: 14px;
+  position: absolute;
+  z-index: 3;
+}
+
+.credit-claim-legal-links a {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 12px;
+}
+
 .credit-claim-live-background {
   background: #05070b;
   inset: -14px;
@@ -302,6 +315,34 @@
   color: rgba(255, 255, 255, 0.7);
   font-size: 13px;
   font-weight: 600;
+}
+
+.credit-claim-free-expiry {
+  color: #ff5a68;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  margin: 18px 0 0;
+}
+
+.credit-claim-gift-code {
+  display: grid;
+  gap: 5px;
+  margin: 16px auto 0;
+}
+
+.credit-claim-gift-code span {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.credit-claim-gift-code strong {
+  color: #ffffff;
+  font-size: 28px;
+  letter-spacing: 0.24em;
+  line-height: 1;
 }
 
 .credit-claim-panel-claimed {

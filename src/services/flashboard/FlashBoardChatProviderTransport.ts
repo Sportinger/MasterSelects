@@ -1,13 +1,16 @@
 import {
   createLemonadeChatCompletionStream,
   DEFAULT_LEMONADE_MODEL,
+  loadLemonadeModel,
 } from '../lemonadeProvider';
 import { cloudAiService } from '../cloudAiService';
 import { AI_TOOLS } from '../aiTools';
 import {
   FLASHBOARD_CHAT_MAX_TOOL_ITERATIONS,
   FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS,
+  FLASHBOARD_LEMONADE_INITIAL_RESPONSE_TIMEOUT_MS,
   FLASHBOARD_LEMONADE_MAX_TOOL_RESULT_CHARS,
+  FLASHBOARD_LEMONADE_STREAM_IDLE_TIMEOUT_MS,
   clampTemperature,
   isOpenAiReasoningEffortSupported,
   isTemperatureSupported,
@@ -27,6 +30,8 @@ import {
   OPENAI_RESPONSES_TOOLS,
   executeFlashBoardToolCalls,
   formatToolFollowupFallback,
+  getFlashBoardToolResultImage,
+  prepareFlashBoardToolCallsForHistory,
   runChatCompletionToolLoop,
 } from './FlashBoardChatTools';
 import type { AnthropicMessage, AnthropicToolResultBlock, FlashBoardChatCompletionMessage, FlashBoardChatRequest, FlashBoardExecutedToolCall } from './FlashBoardChatTypes';
@@ -58,6 +63,20 @@ const FLASHBOARD_LEMONADE_TOOLS = AI_TOOLS.filter((tool) => FLASHBOARD_LEMONADE_
 function createHostedChatRoundIdempotencyKey(): string {
   return `flashboard-chat:${Date.now()}:${crypto.randomUUID()}`;
 }
+
+function serializeHostedOpenAiMessage(message: FlashBoardChatCompletionMessage): Record<string, unknown> {
+  const { imageDataUrl, ...serialized } = message;
+  return imageDataUrl
+    ? {
+        ...serialized,
+        content: [
+          { type: 'text', text: message.content },
+          { type: 'image_url', image_url: { detail: 'high', url: imageDataUrl } },
+        ],
+      }
+    : serialized;
+}
+
 export async function sendHostedOpenAiChat(request: FlashBoardChatRequest, systemPrompt: string): Promise<string> {
   const messages: FlashBoardChatCompletionMessage[] = [
     { role: 'system', content: systemPrompt },
@@ -67,7 +86,7 @@ export async function sendHostedOpenAiChat(request: FlashBoardChatRequest, syste
   return runChatCompletionToolLoop(messages, async (currentMessages) => {
     const body: Record<string, unknown> = {
       model: request.model,
-      messages: currentMessages,
+      messages: currentMessages.map(serializeHostedOpenAiMessage),
       tools: AI_TOOLS,
       tool_choice: 'auto',
       max_completion_tokens: 2048,
@@ -76,18 +95,24 @@ export async function sendHostedOpenAiChat(request: FlashBoardChatRequest, syste
     if (isTemperatureSupported('openai', request.model)) {
       body.temperature = clampTemperature(request.temperature);
     }
+    if (isOpenAiReasoningEffortSupported(request.model)) {
+      body.reasoning_effort = normalizeOpenAiReasoningEffort(request.model, request.openAiReasoningEffort);
+    }
 
     body.idempotencyKey = createHostedChatRoundIdempotencyKey();
 
     const data = await cloudAiService.createChatCompletion(body);
     const parsed = parseOpenAiChatCompletion(data);
+    if (parsed.finishReason === 'length' && !parsed.content && parsed.toolCalls.length === 0) {
+      throw new Error('OpenAI used the full 2048-token round budget before returning a result. Lower reasoning effort or try again.');
+    }
     return parsed.toolCalls.length > 0
       ? parsed
       : {
         content: parsed.content || readOpenAiChatCompletionText(data) || readOpenAiResponseText(data) || null,
         toolCalls: [],
       };
-  }, 'OpenAI');
+  }, 'OpenAI', FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS, request.onExecutedToolCalls, true);
 }
 
 export async function sendOpenAiResponsesChat(request: FlashBoardChatRequest, systemPrompt: string): Promise<string> {
@@ -148,12 +173,25 @@ export async function sendOpenAiResponsesChat(request: FlashBoardChatRequest, sy
     input.push(...getOpenAiResponsesOutput(data));
     const toolResults = await executeFlashBoardToolCalls(toolCalls, FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS);
     executedToolCalls.push(...toolResults);
+    request.onExecutedToolCalls?.(prepareFlashBoardToolCallsForHistory(toolResults));
     for (const toolResult of toolResults) {
       input.push({
         type: 'function_call_output',
         call_id: toolResult.toolCall.id,
         output: toolResult.modelContent,
       });
+    }
+    for (const toolResult of toolResults) {
+      const image = getFlashBoardToolResultImage(toolResult);
+      if (image) {
+        input.push({
+          role: 'user',
+          content: [
+            { type: 'input_text', text: `Visual output from ${toolResult.toolCall.name}:` },
+            { type: 'input_image', image_url: image.dataUrl, detail: 'high' },
+          ],
+        });
+      }
     }
   }
 
@@ -212,14 +250,23 @@ export async function sendAnthropicChat(request: FlashBoardChatRequest, systemPr
     messages.push({ role: 'assistant', content: parsed.contentBlocks });
     const toolResults = await executeFlashBoardToolCalls(parsed.toolCalls, FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS);
     executedToolCalls.push(...toolResults);
+    request.onExecutedToolCalls?.(prepareFlashBoardToolCallsForHistory(toolResults));
     messages.push({
       role: 'user',
-      content: toolResults.map((toolResult): AnthropicToolResultBlock => ({
-        type: 'tool_result',
-        tool_use_id: toolResult.toolCall.id,
-        content: toolResult.modelContent,
-        is_error: !toolResult.result.success,
-      })),
+      content: toolResults.map((toolResult): AnthropicToolResultBlock => {
+        const image = getFlashBoardToolResultImage(toolResult);
+        return {
+          type: 'tool_result',
+          tool_use_id: toolResult.toolCall.id,
+          content: image
+            ? [
+                { type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.base64 } },
+                { type: 'text', text: toolResult.modelContent },
+              ]
+            : toolResult.modelContent,
+          is_error: !toolResult.result.success,
+        };
+      }),
     });
   }
 
@@ -227,6 +274,14 @@ export async function sendAnthropicChat(request: FlashBoardChatRequest, systemPr
 }
 
 export async function sendLemonadeChat(request: FlashBoardChatRequest, systemPrompt: string): Promise<string> {
+  await loadLemonadeModel({
+    contextSize: request.lemonadeContextSize,
+    endpoint: request.lemonadeEndpoint ?? '',
+    model: request.model || DEFAULT_LEMONADE_MODEL,
+    signal: request.signal,
+    timeoutMs: FLASHBOARD_LEMONADE_INITIAL_RESPONSE_TIMEOUT_MS,
+  });
+
   const messages: FlashBoardChatCompletionMessage[] = [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: request.prompt },
@@ -241,7 +296,8 @@ export async function sendLemonadeChat(request: FlashBoardChatRequest, systemPro
       maxTokens: 1024,
       temperature: clampTemperature(request.temperature),
       signal: request.signal,
-      timeoutMs: 45_000,
+      timeoutMs: FLASHBOARD_LEMONADE_INITIAL_RESPONSE_TIMEOUT_MS,
+      streamIdleTimeoutMs: FLASHBOARD_LEMONADE_STREAM_IDLE_TIMEOUT_MS,
     })
-  ), 'Lemonade', FLASHBOARD_LEMONADE_MAX_TOOL_RESULT_CHARS);
+  ), 'Lemonade', FLASHBOARD_LEMONADE_MAX_TOOL_RESULT_CHARS, request.onExecutedToolCalls);
 }

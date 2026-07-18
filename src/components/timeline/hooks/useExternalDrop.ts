@@ -80,6 +80,14 @@ interface UseExternalDropProps {
   addSolidClip: (trackId: string, startTime: number, color?: string, duration?: number, skipMediaItem?: boolean) => string | null;
   addMeshClip: (trackId: string, startTime: number, meshType: import('../../../stores/mediaStore/types').MeshPrimitiveType, duration?: number, skipMediaItem?: boolean) => string | null;
   addCameraClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
+  addLightClip: (
+    trackId: string,
+    startTime: number,
+    duration?: number,
+    skipMediaItem?: boolean,
+    lightSettings?: import('../../../types/light').LightClipSettings,
+    mediaItemId?: string,
+  ) => string | null;
   addSplatEffectorClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
   addMathSceneClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
   addMotionShapeClip: (trackId: string, startTime: number, options?: { primitive?: ShapePrimitive; duration?: number; name?: string }) => string | null;
@@ -154,6 +162,7 @@ export function useExternalDrop({
   addSolidClip,
   addMeshClip,
   addCameraClip,
+  addLightClip,
   addSplatEffectorClip,
   addMathSceneClip,
   addMotionShapeClip,
@@ -514,6 +523,7 @@ export function useExternalDrop({
           addSolidClip,
           addMeshClip,
           addCameraClip,
+          addLightClip,
           addSplatEffectorClip,
           addMathSceneClip,
           addMotionShapeClip,
@@ -540,7 +550,7 @@ export function useExternalDrop({
         filePath,
       });
     },
-    [scrollX, pixelToTime, addTrack, addCompClip, addClip, addTextClip, addSignalAssetClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, placeDroppedTimelineMediaFiles, externalDrag, timelineRef, clearExternalDragSession, updateVideoNewTrackGesture, rejectDropDuringExport]
+    [scrollX, pixelToTime, addTrack, addCompClip, addClip, addTextClip, addSignalAssetClip, addSolidClip, addMeshClip, addCameraClip, addLightClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, placeDroppedTimelineMediaFiles, externalDrag, timelineRef, clearExternalDragSession, updateVideoNewTrackGesture, rejectDropDuringExport]
   );
 
   // Handle external file drop on track
@@ -591,6 +601,7 @@ export function useExternalDrop({
           addSolidClip,
           addMeshClip,
           addCameraClip,
+          addLightClip,
           addSplatEffectorClip,
           addMathSceneClip,
           addMotionShapeClip,
@@ -627,7 +638,7 @@ export function useExternalDrop({
         },
       });
     },
-    [addCompClip, addClip, addTextClip, addSignalAssetClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, placeDroppedTimelineMediaFiles, externalDrag, tracks, rejectDropDuringExport, getDesiredStartTime, resolveTrackStartTime, prepareDropPlacement, clearExternalDragSession]
+    [addCompClip, addClip, addTextClip, addSignalAssetClip, addSolidClip, addMeshClip, addCameraClip, addLightClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, placeDroppedTimelineMediaFiles, externalDrag, tracks, rejectDropDuringExport, getDesiredStartTime, resolveTrackStartTime, prepareDropPlacement, clearExternalDragSession]
   );
 
   useExternalDragBridgeRouting({

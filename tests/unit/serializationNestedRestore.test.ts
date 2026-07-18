@@ -180,6 +180,7 @@ function mediaStoreState(overrides: Partial<MediaStoreState> = {}): MediaStoreSt
 
 describe('serialization nested video restore', () => {
   beforeEach(() => {
+    vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Win32');
     useTimelineStore.setState(initialTimelineState);
     vi.mocked(useMediaStore.getState).mockReturnValue(mediaStoreState());
     compositionAudioMixerMocks.mixdownComposition.mockReset();
@@ -229,6 +230,67 @@ describe('serialization nested video restore', () => {
       mediaFileId: 'media-audio',
       filePath: 'C:/media/Audio.mp3',
     });
+  });
+
+  it('round-trips v3 transition source fields through composition restore', async () => {
+    const transitionSourceMap = {
+      version: 1 as const,
+      segments: [
+        { kind: 'linear' as const, compStart: 0, compEnd: 1, sourceStart: 2, sourceEnd: 3 },
+        { kind: 'hold' as const, compStart: 1, compEnd: 2, sourceTime: 3 },
+      ],
+    };
+    const transitionRecipeBlendWindows = [{ compStart: 0.5, compEnd: 1.5, blendMode: 'add' as const }];
+    const comp = composition({ timelineData: timelineData({ clips: [] }) });
+    vi.mocked(useMediaStore.getState).mockReturnValue(mediaStoreState({ compositions: [comp] }));
+
+    await useTimelineStore.getState().loadState(timelineData({
+      clips: [clip({
+        id: 'transition-comp-clip',
+        mediaFileId: '',
+        isComposition: true,
+        compositionId: comp.id,
+        transitionSourceMap,
+        transitionRecipeBlendWindows,
+      })],
+    }));
+
+    const restored = useTimelineStore.getState().clips.find((candidate) => candidate.id === 'transition-comp-clip');
+    const serialized = useTimelineStore.getState().getSerializableState().clips.find((candidate) => candidate.id === 'transition-comp-clip');
+
+    expect(restored?.transitionSourceMap).toEqual(transitionSourceMap);
+    expect(restored?.transitionRecipeBlendWindows).toEqual(transitionRecipeBlendWindows);
+    expect(serialized?.transitionSourceMap).toEqual(transitionSourceMap);
+    expect(serialized?.transitionRecipeBlendWindows).toEqual(transitionRecipeBlendWindows);
+  });
+
+  it('round-trips v3 transition source fields through normal media restore without shared references', async () => {
+    const transitionSourceMap = {
+      version: 1 as const,
+      segments: [{ kind: 'linear' as const, compStart: 0, compEnd: 1, sourceStart: 2, sourceEnd: 3 }],
+    };
+    const transitionRecipeBlendWindows = [{ compStart: 0.5, compEnd: 1.5, blendMode: 'add' as const }];
+    const file = mediaFile();
+    vi.mocked(useMediaStore.getState).mockReturnValue(mediaStoreState({ files: [file] }));
+
+    await useTimelineStore.getState().loadState(timelineData({
+      clips: [clip({ transitionSourceMap, transitionRecipeBlendWindows })],
+    }));
+
+    const restored = useTimelineStore.getState().clips.find((candidate) => candidate.id === 'clip-video');
+    expect(restored?.transitionSourceMap).toEqual(transitionSourceMap);
+    expect(restored?.transitionRecipeBlendWindows).toEqual(transitionRecipeBlendWindows);
+    expect(restored?.transitionSourceMap).not.toBe(transitionSourceMap);
+    expect(restored?.transitionRecipeBlendWindows).not.toBe(transitionRecipeBlendWindows);
+
+    transitionSourceMap.segments[0].sourceStart = 99;
+    transitionRecipeBlendWindows[0].compStart = 99;
+
+    const serialized = useTimelineStore.getState().getSerializableState().clips.find((candidate) => candidate.id === 'clip-video');
+    expect(restored?.transitionSourceMap?.segments[0]).toMatchObject({ sourceStart: 2 });
+    expect(restored?.transitionRecipeBlendWindows?.[0]).toMatchObject({ compStart: 0.5 });
+    expect(serialized?.transitionSourceMap?.segments[0]).toMatchObject({ sourceStart: 2 });
+    expect(serialized?.transitionRecipeBlendWindows?.[0]).toMatchObject({ compStart: 0.5 });
   });
 
   it('rejects stale model blob URLs without a usable file', () => {

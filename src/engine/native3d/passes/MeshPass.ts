@@ -1,6 +1,7 @@
 import type {
   SceneCamera,
   SceneLayer3DData,
+  SceneLightLayer,
   ScenePrimitiveLayer,
   SceneSplatEffectorRuntimeData,
   SceneText3DLayer,
@@ -15,7 +16,7 @@ import {
   type PrimitiveGeometryData,
 } from './meshPass/primitiveGeometry';
 import { createMeshPipelineResources } from './meshPass/pipelineResources';
-import { resolveMeshLayerColor } from './meshPass/materials';
+import { resolveMeshMaterialPlan } from './meshPass/materials';
 import { buildMeshMatrixPlan } from './meshPass/transforms';
 import { buildMeshUniformData } from './meshPass/uniforms';
 
@@ -32,6 +33,16 @@ interface PrimitiveGpuResources {
   unlit?: boolean;
   texture?: GPUTexture;
   textureView?: GPUTextureView;
+}
+
+function getSelectedModelPrimitiveIndex(layer: SceneNativeMeshLayer): number | undefined {
+  return layer.kind === 'model' && Number.isInteger(layer.modelPrimitiveIndex)
+    ? layer.modelPrimitiveIndex
+    : undefined;
+}
+
+function getModelCacheSourceUrl(cacheKey: string): string {
+  return cacheKey.split('|primitive:')[0] ?? cacheKey;
 }
 
 export class MeshPass {
@@ -68,10 +79,12 @@ export class MeshPass {
       return true;
     }
     if (layer.kind === 'model' && layer.modelUrl) {
-      return !!modelRuntimeCache
-        ?.get(layer.modelUrl)
-        ?.primitives
-        .some((primitive) => primitive.baseColor[3] < 0.999);
+      const primitives = modelRuntimeCache?.get(layer.modelUrl)?.primitives ?? [];
+      const selectedIndex = getSelectedModelPrimitiveIndex(layer);
+      if (selectedIndex !== undefined) {
+        return (primitives[selectedIndex]?.baseColor[3] ?? 1) < 0.999;
+      }
+      return primitives.some((primitive) => primitive.baseColor[3] < 0.999);
     }
     return false;
   }
@@ -103,6 +116,7 @@ export class MeshPass {
     layers: SceneNativeMeshLayer[],
     camera: SceneCamera,
     effectors: SceneSplatEffectorRuntimeData[],
+    lights: SceneLightLayer[],
     modelRuntimeCache: ModelRuntimeCache,
     temporaryBuffers: GPUBuffer[],
     transparent: boolean,
@@ -150,7 +164,7 @@ export class MeshPass {
 
       for (let resourceIndex = 0; resourceIndex < resourcesList.length; resourceIndex += 1) {
         const resources = resourcesList[resourceIndex]!;
-        const color = resolveMeshLayerColor(layer, resources.baseColor);
+        const material = resolveMeshMaterialPlan(layer, resources.baseColor, resources.unlit === true);
         const uniformBuffer = device.createBuffer({
           size: MESH_UNIFORM_SIZE,
           usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -160,9 +174,11 @@ export class MeshPass {
         const uniformData = buildMeshUniformData(
           mvp,
           modelMatrix,
-          color,
+          material.color,
           layer.opacity,
-          resources.unlit === true,
+          material.unlit,
+          material,
+          lights,
         );
         device.queue.writeBuffer(
           uniformBuffer,
@@ -231,14 +247,14 @@ export class MeshPass {
   }
 
   pruneModelCache(activeModelUrls: Set<string>): void {
-    for (const [modelUrl, resourcesList] of this.modelCache) {
-      if (activeModelUrls.has(modelUrl)) {
+    for (const [modelCacheKey, resourcesList] of this.modelCache) {
+      if (activeModelUrls.has(getModelCacheSourceUrl(modelCacheKey))) {
         continue;
       }
       for (const resources of resourcesList) {
         this.destroyResources(resources);
       }
-      this.modelCache.delete(modelUrl);
+      this.modelCache.delete(modelCacheKey);
     }
   }
 
@@ -280,7 +296,11 @@ export class MeshPass {
       return null;
     }
 
-    const cached = this.modelCache.get(layer.modelUrl);
+    const selectedIndex = getSelectedModelPrimitiveIndex(layer);
+    const cacheKey = selectedIndex === undefined
+      ? layer.modelUrl
+      : `${layer.modelUrl}|primitive:${selectedIndex}`;
+    const cached = this.modelCache.get(cacheKey);
     if (cached) {
       return cached;
     }
@@ -288,6 +308,24 @@ export class MeshPass {
     const runtime = modelRuntimeCache.get(layer.modelUrl);
     if (!runtime || runtime.primitives.length === 0) {
       return null;
+    }
+
+    const selectedPrimitive = selectedIndex !== undefined ? runtime.primitives[selectedIndex] : undefined;
+    if (selectedPrimitive) {
+      const resources = this.createGpuResources(
+        device,
+        {
+          vertices: selectedPrimitive.centeredVertices ?? selectedPrimitive.vertices,
+          indices: selectedPrimitive.indices,
+          edgeIndices: buildEdgeIndices(selectedPrimitive.indices),
+        },
+        `native-scene-model-${layer.layerId}-${selectedIndex}`,
+        selectedPrimitive.baseColor,
+        selectedPrimitive.baseColorTexture,
+        selectedPrimitive.unlit,
+      );
+      this.modelCache.set(cacheKey, [resources]);
+      return [resources];
     }
 
     const resourcesList = runtime.primitives.map((primitive, primitiveIndex) => this.createGpuResources(
@@ -302,7 +340,7 @@ export class MeshPass {
       primitive.baseColorTexture,
       primitive.unlit,
     ));
-    this.modelCache.set(layer.modelUrl, resourcesList);
+    this.modelCache.set(cacheKey, resourcesList);
     return resourcesList;
   }
 

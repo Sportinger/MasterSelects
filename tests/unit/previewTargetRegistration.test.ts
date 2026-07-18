@@ -4,9 +4,11 @@ import type { RenderSource } from '../../src/types/renderTarget';
 const mocks = vi.hoisted(() => {
   const gpuContext = { label: 'gpu-context' };
   const renderTargetState = {
+    targets: new Map<string, { source: RenderSource; viewportOverride?: unknown }>(),
     registerTarget: vi.fn(),
     unregisterTarget: vi.fn(),
     setTargetTransparencyGrid: vi.fn(),
+    setTargetViewportOverride: vi.fn(),
   };
   const timelineState = { isPlaying: false };
   const renderHostPort = {
@@ -41,6 +43,7 @@ vi.mock('../../src/stores/timeline', () => ({ useTimelineStore: mocks.useTimelin
 import {
   registerPreviewTarget,
   setPreviewTargetTransparency,
+  setPreviewTargetViewportOverride,
   unregisterPreviewTarget,
 } from '../../src/services/render/previewTargetRegistration';
 
@@ -61,6 +64,7 @@ function expectOrdered(...fns: MockFn[]): void {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.timelineState.isPlaying = false;
+  mocks.renderTargetState.targets.clear();
   mocks.renderHostPort.registerTargetCanvas.mockReturnValue(mocks.gpuContext);
 });
 
@@ -102,9 +106,9 @@ describe('preview target registration', () => {
       mocks.renderHostPort.clearVideoCache,
       mocks.renderHostPort.clearScrubbingCache,
       mocks.renderHostPort.clearCompositeCache,
-      mocks.renderHostPort.requestRender,
       mocks.renderScheduler.register,
       onIndependentRegistered,
+      mocks.renderHostPort.requestRender,
     );
   });
 
@@ -131,7 +135,7 @@ describe('preview target registration', () => {
     expect(mocks.renderScheduler.register).not.toHaveBeenCalled();
     expect(onIndependentRegistered).not.toHaveBeenCalled();
     expect(mocks.renderHostPort.clearVideoCache).not.toHaveBeenCalled();
-    expect(mocks.renderHostPort.requestRender).not.toHaveBeenCalled();
+    expect(mocks.renderHostPort.requestRender).toHaveBeenCalledOnce();
   });
 
   it('preserves the early return when engine canvas registration fails', () => {
@@ -180,5 +184,23 @@ describe('preview target registration', () => {
       mocks.renderTargetState.setTargetTransparencyGrid,
       mocks.renderHostPort.requestRender,
     );
+  });
+
+  it('moves an active-comp viewport override into and out of the scheduler', () => {
+    const source: RenderSource = { type: 'activeComp' };
+    const target = { source, viewportOverride: null };
+    mocks.renderTargetState.targets.set('preview-active', target);
+    const override = { width: 640, height: 480, cameraOverride: null };
+
+    setPreviewTargetViewportOverride('preview-active', override);
+
+    expect(mocks.renderTargetState.setTargetViewportOverride).toHaveBeenCalledWith('preview-active', override);
+    expect(mocks.renderScheduler.register).toHaveBeenCalledWith('preview-active');
+
+    target.viewportOverride = override;
+    setPreviewTargetViewportOverride('preview-active', null);
+
+    expect(mocks.renderScheduler.unregister).toHaveBeenCalledWith('preview-active');
+    expect(mocks.renderHostPort.requestRender).toHaveBeenCalledTimes(2);
   });
 });

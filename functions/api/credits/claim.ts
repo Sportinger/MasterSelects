@@ -1,14 +1,19 @@
 import {
+  getCreditClaimByRedeemCode,
   getCreditClaimByToken,
+  isFreeCreditOffer,
   redeemCreditClaim,
   toCreditClaimPublicStatus,
 } from '../../lib/creditClaims';
+import { sendFreeCreditClaimNotification } from '../../lib/authProviders';
 import { getCurrentUser, hasTrustedOrigin, json, methodNotAllowed, parseJson } from '../../lib/db';
+import { hasMatchingWebsiteFreeCreditOfferCookie } from '../../lib/websiteFreeCreditOffer';
 import type { AppContext, AppRouteHandler } from '../../lib/env';
 
 interface ClaimBody {
   code?: string;
   email?: string;
+  redeemCode?: boolean;
   token?: string;
 }
 
@@ -83,7 +88,9 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     );
   }
 
-  const claim = await getCreditClaimByToken(context.env.DB, body.code ?? body.token);
+  const claim = body.redeemCode === true
+    ? await getCreditClaimByRedeemCode(context.env.DB, body.code)
+    : await getCreditClaimByToken(context.env.DB, body.code ?? body.token);
   if (!claim) {
     return json(
       {
@@ -92,6 +99,17 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
         ok: false,
       },
       { status: 404 },
+    );
+  }
+
+  if (!await hasMatchingWebsiteFreeCreditOfferCookie(context.env, context.request, claim)) {
+    return json(
+      {
+        error: 'offer_browser_mismatch',
+        message: 'This website gift belongs to the browser that received it.',
+        ok: false,
+      },
+      { status: 403 },
     );
   }
 
@@ -117,6 +135,19 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
               : 'This credit claim is no longer redeemable.',
       },
       { status },
+    );
+  }
+
+  if (isFreeCreditOffer(claim)) {
+    context.waitUntil(
+      sendFreeCreditClaimNotification(context.env, {
+        amount: result.amount,
+        claimId: claim.id,
+        claimedAt: result.claimedAt ?? new Date().toISOString(),
+        claimedEmail: currentUser.email,
+      }).catch((error) => {
+        console.error('Free credit claim notification failed', error);
+      }),
     );
   }
 

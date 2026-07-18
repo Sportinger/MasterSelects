@@ -1,5 +1,8 @@
 import type { BlendMode, Layer, TimelineClip } from '../../types';
 import { canUseSharedPreviewRuntimeSession } from '../mediaRuntime/runtimePlayback';
+import { evaluateTransitionMappedAnimation } from '../compositionRender/transitionMappedAnimation';
+import { resolveTransitionRecipeBlendMode } from '../timeline/transitionRecipeBlendWindows';
+import { evaluateTransitionRenderState } from '../../utils/transitionRenderInterpolation';
 import type { NativeDecoder } from '../nativeHelper/NativeDecoder';
 import { getClipTimeInfo, getMediaFileForClip } from './FrameContext';
 import type { LayerBuilderProxyFrames } from './layerBuilderProxyFrames';
@@ -9,15 +12,10 @@ import {
 import {
   resolveLayerBuilderVideoSource,
 } from './layerBuilderVideoSources';
+import { getFinalOpacity, getLayerSourceMetadata } from './layerBuilderVideoSourceMetadata';
 import { addLayerBuilderMaskProperties, withLayerBuilderMaskProperties } from './layerBuilderLayerPostProcessing';
 import type { TransformCache } from './TransformCache';
 import type { FrameContext } from './types';
-
-type LayerSourceMetadata = {
-  mediaFileId?: string;
-  intrinsicWidth?: number;
-  intrinsicHeight?: number;
-};
 
 type BuildVideoLayerParams = {
   clip: TimelineClip;
@@ -37,30 +35,6 @@ type BuildTimelineVideoLayerParams = BuildVideoLayerParams & {
     getPreviewContinuationVideoElement(clip: TimelineClip, clipTime: number): HTMLVideoElement | null;
   };
 };
-
-function getPositiveDimension(value: number | undefined): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0
-    ? value
-    : undefined;
-}
-
-function getLayerSourceMetadata(
-  clip: TimelineClip,
-  mediaFile?: { id?: string; width?: number; height?: number },
-  fallback?: { width?: number; height?: number },
-): LayerSourceMetadata {
-  return {
-    mediaFileId: mediaFile?.id ?? clip.mediaFileId ?? clip.source?.mediaFileId,
-    intrinsicWidth: getPositiveDimension(mediaFile?.width) ?? getPositiveDimension(fallback?.width),
-    intrinsicHeight: getPositiveDimension(mediaFile?.height) ?? getPositiveDimension(fallback?.height),
-  };
-}
-
-function getFinalOpacity(transformOpacity: number, opacityOverride?: number): number {
-  return opacityOverride !== undefined
-    ? transformOpacity * opacityOverride
-    : transformOpacity;
-}
 
 export function buildLayerBuilderNativeDecoderLayer(params: BuildNativeDecoderLayerParams): Layer {
   const { clip, nativeDecoder, layerIndex, ctx, transformCache, opacityOverride } = params;
@@ -104,6 +78,10 @@ export function buildLayerBuilderVideoLayer(params: BuildTimelineVideoLayerParam
   const timeInfo = getClipTimeInfo(ctx, clip);
   const visualClipTime = timeInfo.visualClipTime;
   const visualClipLocalTime = timeInfo.visualClipLocalTime;
+  const mappedAnimation = clip.transitionSourceMap?.version === 2
+    ? evaluateTransitionMappedAnimation(clip, ctx.getClipKeyframes?.(clip.id), visualClipLocalTime)
+    : undefined;
+  if (mappedAnimation === null) return null;
   const mediaFile = getMediaFileForClip(ctx, clip);
   const videoSource = resolveLayerBuilderVideoSource({
     clip,
@@ -151,26 +129,46 @@ export function buildLayerBuilderVideoLayer(params: BuildTimelineVideoLayerParam
 
   const transform = transformCache.getTransform(
     `${ctx.activeCompId}_${layerIndex}`,
-    ctx.getInterpolatedTransform(clip.id, visualClipLocalTime),
+    mappedAnimation?.transform ?? ctx.getInterpolatedTransform(clip.id, visualClipLocalTime),
   );
+  const transitionRender = mappedAnimation
+    ? evaluateTransitionRenderState(
+        clip.transitionRender,
+        ctx.getClipKeyframes?.(clip.id),
+        visualClipLocalTime,
+      )
+    : undefined;
   const layer: Layer = {
     id: `${ctx.activeCompId}_layer_${layerIndex}`,
     name: clip.name,
     sourceClipId: clip.id,
     visible: true,
     opacity: getFinalOpacity(transform.opacity, opacityOverride),
-    blendMode: transform.blendMode as BlendMode,
+    blendMode: mappedAnimation
+      ? resolveTransitionRecipeBlendMode(
+          clip.transitionRecipeBlendWindows,
+          clip.startTime + visualClipLocalTime,
+          transform.blendMode as BlendMode,
+        )
+      : transform.blendMode as BlendMode,
     source: {
       ...videoSource.source,
       ...sourceMetadata,
     },
-    effects: ctx.getInterpolatedEffects(clip.id, visualClipLocalTime),
+    effects: mappedAnimation?.effects ?? ctx.getInterpolatedEffects(clip.id, visualClipLocalTime),
     colorCorrection: ctx.getInterpolatedColorCorrection(clip.id, visualClipLocalTime),
     position: transform.position,
     scale: transform.scale,
     rotation: transform.rotation,
+    ...(transitionRender ? { transitionRender } : {}),
   };
 
-  addLayerBuilderMaskProperties(layer, clip, visualClipLocalTime, ctx.getClipKeyframes?.(clip.id));
+  if (mappedAnimation?.masks?.some(mask => mask.enabled !== false)) {
+    layer.maskClipId = clip.id;
+    layer.maskInvert = false;
+    layer.masks = mappedAnimation.masks;
+  } else {
+    addLayerBuilderMaskProperties(layer, clip, visualClipLocalTime, ctx.getClipKeyframes?.(clip.id));
+  }
   return layer;
 }

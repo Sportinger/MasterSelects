@@ -543,21 +543,6 @@
   background: #000;
 }
 
-.changelog-video-fallback {
-  align-self: flex-start;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  color: rgba(255, 255, 255, 0.54);
-  text-decoration: none;
-  transition: color 0.12s ease;
-}
-
-.changelog-video-fallback:hover {
-  color: rgba(255, 255, 255, 0.82);
-  text-decoration: underline;
-}
-
 .changelog-calendar {
   width: 100%;
   display: flex;

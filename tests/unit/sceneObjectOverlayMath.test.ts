@@ -157,6 +157,43 @@ describe('sceneObjectOverlayMath', () => {
     expect(squareBounds.height).toBeCloseTo(wideBounds.height, 3);
   });
 
+  it('projects the camera wireframe as a world-sized object', () => {
+    const viewport = { width: 1920, height: 1080 };
+    const canvasSize = { width: 960, height: 540 };
+    const makeRenderCamera = (z: number) => resolveRenderableSharedSceneCamera(viewport, 0, {
+      previewCameraOverride: {
+        position: { x: 0, y: 0, z },
+        target: { x: 0, y: 0, z: 0 },
+        up: { x: 0, y: 1, z: 0 },
+        fov: 50,
+        near: 0.1,
+        far: 1000,
+        applyDefaultDistance: false,
+      },
+    });
+    const object = {
+      clipId: 'camera',
+      name: 'Camera',
+      kind: 'camera' as const,
+      transformSpace: 'world' as const,
+      worldPosition: { x: 0, y: 0, z: 0 },
+      axisBasis: {
+        x: { x: 1, y: 0, z: 0 },
+        y: { x: 0, y: 1, z: 0 },
+        z: { x: 0, y: 0, z: -1 },
+      },
+      cameraSettings: { fov: 50, near: 0.1, far: 1000, resolutionWidth: 1920, resolutionHeight: 1080 },
+      screen: { x: 0, y: 0, visible: true, depth: 1 },
+    };
+    const projectedWidth = (z: number) => {
+      const points = buildCameraWireframeLines(object, makeRenderCamera(z), canvasSize)
+        .flatMap((line) => [line.from.x, line.to.x]);
+      return Math.max(...points) - Math.min(...points);
+    };
+
+    expect(projectedWidth(8)).toBeLessThan(projectedWidth(4) * 0.6);
+  });
+
   it('keeps axis hitboxes aligned with the GPU gizmo length while leaving the center grip free', () => {
     const camera = resolveRenderableSharedSceneCamera({ width: 1920, height: 1080 }, 0);
     const canvasSize = { width: 960, height: 540 };

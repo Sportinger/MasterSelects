@@ -3,7 +3,7 @@ on:
   pull_request:
     branches: [master, staging]
   push:
-    branches: [staging]
+    branches: [master, staging]
 
 jobs:
   security-tests:

@@ -92,16 +92,21 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
     activeGenerationRecords.forEach((record) => {
       const request = record.request;
       const remoteTaskId = record.job?.remoteTaskId;
-      const isResumable = request
-        && remoteTaskId
-        && !record.result
-        && (record.job?.status === 'queued' || record.job?.status === 'processing');
-      if (isResumable) {
+      const isPending = !record.result && (record.job?.status === 'queued' || record.job?.status === 'processing');
+      if (!request || !isPending) return;
+      if (remoteTaskId) {
         flashBoardJobService.resume({
           recordId: record.id,
           request,
           remoteTaskId,
         });
+        return;
+      }
+      if (!flashBoardJobService.hasJob(record.id)) {
+        failFlashBoardActiveGenerationRecord(
+          record.id,
+          'Generation was interrupted before a provider task id was created.',
+        );
       }
     });
   }, [activeGenerationRecords]);

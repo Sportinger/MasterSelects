@@ -13,6 +13,7 @@ import {
   renderHostPort,
 } from '../../src/services/render/renderHostPort';
 import { VideoSyncHandoffManager } from '../../src/services/layerBuilder/videoSyncHandoffs';
+import { VideoSyncNestedCompositionCoordinator } from '../../src/services/layerBuilder/videoSyncNestedCompositionCoordinator';
 import type { VideoSyncHtmlSeekState } from '../../src/services/layerBuilder/videoSyncHtmlSeekState';
 import type { VideoSyncWarmupState } from '../../src/services/layerBuilder/videoSyncWarmupState';
 import type { VideoSyncWebCodecsSeekState } from '../../src/services/layerBuilder/videoSyncWebCodecsSeekState';
@@ -121,6 +122,7 @@ function createLazyVideoClip(
   id: string,
   state: Record<string, unknown> = {},
   sourceExtras: Record<string, unknown> = {},
+  clipExtras: Record<string, unknown> = {},
 ): { clip: TimelineClip; ctx: FrameContext; video: HTMLVideoElement } {
   const mediaFileId = `${id}-media`;
   const clip = {
@@ -138,6 +140,7 @@ function createLazyVideoClip(
       ...sourceExtras,
     },
     mediaFileId,
+    ...clipExtras,
   } as unknown as TimelineClip;
   const mediaFile = { id: mediaFileId, name: `${id}.mp4`, url: `blob:${id}`, duration: 10 };
   const ctx = {
@@ -329,6 +332,318 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
     expect(provider.seek).not.toHaveBeenCalled();
     expect(video.play).not.toHaveBeenCalled();
   });
+
+  it('switches Full WebCodecs transition holds per mapped segment and keeps legacy holds', () => {
+    const manager = createManager();
+    const provider = {
+      advanceToTime: vi.fn(),
+      currentTime: 4,
+      getCurrentFrame: () => ({ timestamp: 4_000_000 }),
+      getPendingSeekTime: () => null,
+      hasFrame: () => true,
+      isFullMode: () => true,
+      isPlaying: false,
+      pause: vi.fn(),
+      seek: vi.fn(),
+    };
+    const { clip, ctx, video } = createLazyVideoClip(
+      'clip-mapped-full-hold',
+      {
+        currentTime: 4,
+        muted: true,
+        paused: false,
+        seeking: false,
+        readyState: 4,
+        pause: vi.fn() as HTMLVideoElement['pause'],
+        play: vi.fn(() => Promise.resolve()) as HTMLVideoElement['play'],
+      },
+      { webCodecsPlayer: provider },
+    );
+    clip.transitionSourceMap = {
+      version: 1,
+      segments: [
+        { kind: 'hold', compStart: 0, compEnd: 1, sourceTime: 4 },
+        { kind: 'linear', compStart: 1, compEnd: 3, sourceStart: 4, sourceEnd: 10 },
+      ],
+    };
+    ctx.isPlaying = true;
+    ctx.playheadPosition = 0.5;
+
+    manager.syncFullWebCodecs(clip, ctx);
+    expect(video.pause).toHaveBeenCalledTimes(1);
+    expect(provider.advanceToTime).not.toHaveBeenCalled();
+
+    manager.syncFullWebCodecs(clip, { ...ctx, playheadPosition: 2 } as FrameContext);
+    expect(provider.advanceToTime).toHaveBeenCalledWith(7);
+
+    const { clip: legacyClip, ctx: legacyCtx, video: legacyVideo } = createLazyVideoClip(
+      'clip-legacy-full-hold',
+      { currentTime: 1.5, muted: true, paused: false, seeking: false, readyState: 4, pause: vi.fn() },
+      { webCodecsPlayer: provider },
+    );
+    legacyClip.transitionSourceHold = true;
+    legacyCtx.isPlaying = true;
+    manager.syncFullWebCodecs(legacyClip, legacyCtx);
+    expect(legacyVideo.pause).toHaveBeenCalledTimes(1);
+  });
+
+  it('switches HTML transition holds per mapped segment and keeps legacy holds', () => {
+    flags.useFullWebCodecsPlayback = false;
+    const manager = createManager();
+    const { clip, ctx, video } = createLazyVideoClip('clip-mapped-html-hold', {
+      currentTime: 4,
+      muted: true,
+      paused: false,
+      seeking: false,
+      readyState: 4,
+      pause: vi.fn() as HTMLVideoElement['pause'],
+      play: vi.fn(() => Promise.resolve()) as HTMLVideoElement['play'],
+      playbackRate: 1,
+      played: { length: 1 } as TimeRanges,
+    });
+    clip.transitionSourceMap = {
+      version: 1,
+      segments: [
+        { kind: 'hold', compStart: 0, compEnd: 1, sourceTime: 4 },
+        { kind: 'linear', compStart: 1, compEnd: 3, sourceStart: 4, sourceEnd: 10 },
+      ],
+    };
+    ctx.isPlaying = true;
+    ctx.playheadPosition = 0.5;
+
+    manager.syncClipVideo(clip, ctx);
+    expect(video.pause).toHaveBeenCalledTimes(1);
+
+    setVideoState(video, { paused: true });
+    manager.syncClipVideo(clip, { ...ctx, playheadPosition: 2 } as FrameContext);
+    expect(video.play).toHaveBeenCalledTimes(1);
+
+    const { clip: legacyClip, ctx: legacyCtx, video: legacyVideo } = createLazyVideoClip(
+      'clip-legacy-html-hold',
+      { currentTime: 1.5, muted: true, paused: false, seeking: false, readyState: 4, pause: vi.fn() },
+    );
+    legacyClip.transitionSourceHold = true;
+    legacyCtx.isPlaying = true;
+    manager.syncClipVideo(legacyClip, legacyCtx);
+    expect(legacyVideo.pause).toHaveBeenCalledTimes(1);
+  });
+
+  it('syncs mapped wrapper and child times through nested HTML and Full WebCodecs hold-to-linear playback', () => {
+    const htmlVideo = {
+      currentTime: 1,
+      paused: false,
+      seeking: false,
+      readyState: 4,
+      playbackRate: 1,
+      pause: vi.fn(),
+      play: vi.fn(() => Promise.resolve()),
+    } as unknown as HTMLVideoElement;
+    const fullVideo = {
+      currentTime: 1,
+      paused: false,
+      seeking: false,
+      readyState: 4,
+      playbackRate: 1,
+      pause: vi.fn(),
+      play: vi.fn(() => Promise.resolve()),
+    } as unknown as HTMLVideoElement;
+    const fullProvider = {
+      advanceToTime: vi.fn(),
+      currentTime: 1,
+      isFullMode: () => true,
+      isPlaying: true,
+      pause: vi.fn(),
+      seek: vi.fn(),
+    };
+    const syncPausedWebCodecsProvider = vi.fn();
+    const throttledSeek = vi.fn();
+    const sourceMap = {
+      version: 1 as const,
+      segments: [
+        { kind: 'hold' as const, compStart: 0, compEnd: 1, sourceTime: 4 },
+        { kind: 'linear' as const, compStart: 1, compEnd: 3, sourceStart: 4, sourceEnd: 10 },
+      ],
+    };
+    const htmlClip = {
+      id: 'nested-html',
+      trackId: 'nested-html-track',
+      startTime: 1,
+      duration: 3,
+      inPoint: 0,
+      outPoint: 10,
+      source: { type: 'video', videoElement: htmlVideo },
+      transitionSourceMap: sourceMap,
+    } as TimelineClip;
+    const fullClip = {
+      id: 'nested-full',
+      trackId: 'nested-full-track',
+      startTime: 1,
+      duration: 3,
+      inPoint: 0,
+      outPoint: 10,
+      source: { type: 'video', videoElement: fullVideo },
+      transitionSourceMap: sourceMap,
+    } as TimelineClip;
+    const wrapper = {
+      id: 'wrapper',
+      startTime: 0,
+      duration: 3,
+      inPoint: 0,
+      outPoint: 4,
+      isComposition: true,
+      nestedTracks: [
+        { id: htmlClip.trackId, type: 'video', visible: true },
+        { id: fullClip.trackId, type: 'video', visible: true },
+      ],
+      nestedClips: [htmlClip, fullClip],
+      transitionSourceMap: {
+        version: 1,
+        segments: [{ kind: 'linear', compStart: 0, compEnd: 3, sourceStart: 1, sourceEnd: 4 }],
+      },
+    } as TimelineClip;
+    const coordinator = new VideoSyncNestedCompositionCoordinator({
+      getClipHtmlVideoElement: (clip) => clip.id === htmlClip.id ? htmlVideo : fullVideo,
+      getClipRuntimeProvider: (clip) => clip.id === fullClip.id ? fullProvider : null,
+      isPlaybackProviderReadyForAudioStart: () => true,
+      shouldCorrectPlaybackAudioDrift: () => false,
+      getPausedWebCodecsProvider: (clipProvider, runtimeProvider) => clipProvider ?? runtimeProvider ?? null,
+      syncPausedWebCodecsProvider,
+      shouldSeekPausedWebCodecsProvider: () => false,
+      forceVideoFrameDecode: vi.fn(),
+      isForceDecodeInProgress: () => false,
+      throttledSeek,
+      maybeRecoverScrubSettle: vi.fn(),
+      beginOrQueueSettleSeek: vi.fn(),
+      safeSeekTime: (_video, time) => time,
+      activateFreeRunVideo: vi.fn(),
+      stopFreeRunVideo: vi.fn(),
+    });
+    const ctx = {
+      isPlaying: true,
+      isDraggingPlayhead: false,
+      hasClipDragPreview: false,
+      playbackSpeed: 1,
+      playheadPosition: 0.5,
+    } as FrameContext;
+
+    coordinator.syncNestedCompVideos(wrapper, ctx);
+    expect(htmlVideo.pause).toHaveBeenCalledTimes(1);
+    expect(throttledSeek).toHaveBeenCalledWith(htmlClip.id, htmlVideo, 4, ctx);
+    expect(fullProvider.pause).toHaveBeenCalledTimes(1);
+    expect(syncPausedWebCodecsProvider).toHaveBeenCalledWith(fullProvider, expect.any(String), 4, false, true, true);
+
+    setVideoState(htmlVideo, { paused: true });
+    setVideoState(fullVideo, { paused: true });
+    coordinator.syncNestedCompVideos(wrapper, { ...ctx, playheadPosition: 2 } as FrameContext);
+
+    expect(htmlVideo.playbackRate).toBe(3);
+    expect(htmlVideo.play).toHaveBeenCalledTimes(1);
+    expect(fullVideo.playbackRate).toBe(3);
+    expect(fullProvider.advanceToTime).toHaveBeenCalledWith(7);
+  });
+
+  for (const [mapDescription, transitionSourceMap] of [
+    ['without a source map', undefined],
+    ['with an invalid source map', { version: 1, segments: [] } as unknown as TimelineClip['transitionSourceMap']],
+  ] as const) {
+    it(`keeps legacy two-stage composition timing ${mapDescription}`, () => {
+      const activeVideo = {
+        currentTime: 0,
+        paused: true,
+        seeking: false,
+        readyState: 4,
+        playbackRate: 1,
+        pause: vi.fn(),
+        play: vi.fn(() => Promise.resolve()),
+        addEventListener: vi.fn(),
+      } as unknown as HTMLVideoElement;
+      const inactiveVideo = {
+        currentTime: 0,
+        paused: false,
+        seeking: false,
+        readyState: 4,
+        playbackRate: 1,
+        pause: vi.fn(),
+        play: vi.fn(() => Promise.resolve()),
+      } as unknown as HTMLVideoElement;
+      const activeChild = {
+        id: 'legacy-active-child',
+        trackId: 'legacy-active-track',
+        startTime: 10,
+        duration: 2,
+        inPoint: 3,
+        outPoint: 8,
+        source: { type: 'video', videoElement: activeVideo },
+      } as TimelineClip;
+      const inactiveChild = {
+        id: 'legacy-inactive-child',
+        trackId: 'legacy-inactive-track',
+        startTime: 5,
+        duration: 4,
+        inPoint: 0,
+        outPoint: 8,
+        source: { type: 'video', videoElement: inactiveVideo },
+      } as TimelineClip;
+      const nestedComposition = {
+        id: 'legacy-nested-composition',
+        startTime: 5,
+        duration: 6,
+        inPoint: 4,
+        outPoint: 12,
+        isComposition: true,
+        nestedTracks: [
+          { id: activeChild.trackId, type: 'video', visible: true },
+          { id: inactiveChild.trackId, type: 'video', visible: true },
+        ],
+        nestedClips: [activeChild, inactiveChild],
+        transitionSourceMap,
+      } as TimelineClip;
+      const outerComposition = {
+        id: 'legacy-outer-composition',
+        startTime: 10,
+        duration: 12,
+        inPoint: 3,
+        outPoint: 15,
+        isComposition: true,
+        nestedTracks: [{ id: 'legacy-nested-track', type: 'video', visible: true }],
+        nestedClips: [nestedComposition],
+        transitionSourceMap,
+      } as TimelineClip;
+      const throttledSeek = vi.fn();
+      const coordinator = new VideoSyncNestedCompositionCoordinator({
+        getClipHtmlVideoElement: (clip) => clip.id === activeChild.id
+          ? activeVideo
+          : clip.id === inactiveChild.id ? inactiveVideo : null,
+        getClipRuntimeProvider: () => null,
+        isPlaybackProviderReadyForAudioStart: () => true,
+        shouldCorrectPlaybackAudioDrift: () => false,
+        getPausedWebCodecsProvider: () => null,
+        syncPausedWebCodecsProvider: vi.fn(),
+        shouldSeekPausedWebCodecsProvider: () => false,
+        forceVideoFrameDecode: vi.fn(),
+        isForceDecodeInProgress: () => false,
+        throttledSeek,
+        maybeRecoverScrubSettle: vi.fn(),
+        beginOrQueueSettleSeek: vi.fn(),
+        safeSeekTime: (_video, time) => time,
+        activateFreeRunVideo: vi.fn(),
+        stopFreeRunVideo: vi.fn(),
+      });
+      const ctx = {
+        isPlaying: false,
+        isDraggingPlayhead: false,
+        hasClipDragPreview: false,
+        playbackSpeed: 1,
+        playheadPosition: 13,
+      } as FrameContext;
+
+      coordinator.syncNestedCompVideos(outerComposition, ctx);
+
+      expect(throttledSeek).toHaveBeenCalledTimes(1);
+      expect(throttledSeek).toHaveBeenCalledWith(activeChild.id, activeVideo, 3, ctx);
+      expect(inactiveVideo.pause).toHaveBeenCalledTimes(1);
+    });
+  }
 
   it('prefers the shared runtime when its frame is closer to the paused target than the clip player', () => {
     const manager = createManager();
@@ -837,6 +1152,37 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
     expect(throttledSeek).toHaveBeenCalledTimes(1);
   });
 
+  it('routes a negative source-map rate through the reverse WebCodecs path', () => {
+    const manager = createManager();
+    const syncFullWebCodecs = vi.spyOn(manager, 'syncFullWebCodecs').mockImplementation(() => {});
+    mockRenderHostMode('worker-presenting');
+    const { clip, ctx } = createLazyVideoClip('clip-worker-mapped-reverse', {
+      currentTime: 7,
+      muted: false,
+      paused: true,
+      seeking: false,
+      readyState: 4,
+      played: { length: 1 } as TimeRanges,
+      pause: vi.fn() as HTMLVideoElement['pause'],
+      play: vi.fn(() => Promise.resolve()) as HTMLVideoElement['play'],
+      playbackRate: 1,
+    }, {
+      runtimeSourceId: 'media:worker-mapped-reverse',
+      runtimeSessionKey: 'interactive:clip-worker-mapped-reverse',
+    });
+    clip.transitionSourceMap = {
+      version: 1,
+      segments: [{ kind: 'linear', compStart: 0, compEnd: 2, sourceStart: 10, sourceEnd: 4 }],
+    };
+    ctx.isPlaying = true;
+    ctx.playbackSpeed = 1;
+    ctx.playheadPosition = 1;
+
+    manager.syncClipVideo(clip, ctx);
+
+    expect(syncFullWebCodecs).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps reverse worker playback on HTML fallback when full WebCodecs preview is disabled', () => {
     flags.useFullWebCodecsPlayback = false;
 
@@ -1013,6 +1359,61 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
 
     expect(syncFullWebCodecs).not.toHaveBeenCalled();
     expect(video.play).toHaveBeenCalled();
+  });
+
+  it('lets a free-run video loop on its own clock while the timeline is paused', () => {
+    const manager = createManager();
+    const syncFullWebCodecs = vi.spyOn(manager, 'syncFullWebCodecs');
+    const { clip, ctx, video } = createLazyVideoClip('clip-free-run', {
+      currentTime: 4.25,
+      loop: false,
+      muted: false,
+      paused: true,
+      play: vi.fn(() => Promise.resolve()) as HTMLVideoElement['play'],
+      playsInline: false,
+      readyState: 4,
+      videoHeight: 1080,
+      videoWidth: 1920,
+    });
+    clip.freeRun = true;
+
+    manager.syncClipVideo(clip, ctx);
+
+    expect(video.play).toHaveBeenCalledTimes(1);
+    expect(video.currentTime).toBe(4.25);
+    expect(video.loop).toBe(true);
+    expect(video.muted).toBe(true);
+    expect(video.playsInline).toBe(true);
+    expect(syncFullWebCodecs).not.toHaveBeenCalled();
+
+    const layerSource = resolveLayerBuilderVideoSource({
+      clip,
+      ctx,
+      targetTime: 9,
+      allowSharedPreviewSession: true,
+    });
+    expect(layerSource?.source.videoElement).toBe(video);
+    expect(layerSource?.source.mediaTime).toBeUndefined();
+  });
+
+  it('hydrates the HTML source required by free run in worker GPU mode', () => {
+    mockRenderHostMode('worker-gpu-only');
+    const { clip, ctx, video } = createLazyVideoClip(
+      'clip-worker-free-run',
+      { paused: true, play: vi.fn(() => Promise.resolve()) },
+      {},
+      { freeRun: true },
+    );
+
+    const layerSource = resolveLayerBuilderVideoSource({
+      clip,
+      ctx,
+      targetTime: 7,
+      allowSharedPreviewSession: true,
+    });
+
+    expect(layerSource?.source.videoElement).toBe(video);
+    expect(layerSource?.source.mediaTime).toBeUndefined();
   });
 
   it('suppresses live HTML video playback in worker GPU-only mode', () => {
@@ -1218,6 +1619,44 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
       expect(testEngine.captureVideoFrameAtTime).not.toHaveBeenCalledWith(video, 1.7, clip.id);
       expect(testEngine.ensureVideoFrameCached).not.toHaveBeenCalled();
       expect(testEngine.requestNewFrameRender).toHaveBeenCalled();
+    } finally {
+      useTimelineStore.setState({ playheadPosition: previousPlayheadPosition });
+    }
+  });
+
+  it('keeps a nearby decoded stop frame instead of starting another seek', () => {
+    flags.useFullWebCodecsPlayback = false;
+
+    const manager = createManager();
+    mockRenderHostMode('main');
+    const previousPlayheadPosition = useTimelineStore.getState().playheadPosition;
+    const { clip, ctx, video } = createLazyVideoClip('clip-stop-near', {
+      currentTime: 1.5,
+      paused: false,
+      seeking: false,
+      readyState: 4,
+      duration: 10,
+      played: { length: 1 } as TimeRanges,
+      pause: vi.fn() as HTMLVideoElement['pause'],
+      play: vi.fn(() => Promise.resolve()) as HTMLVideoElement['play'],
+      playbackRate: 1,
+      src: 'blob:clip-stop-near',
+    });
+
+    try {
+      useTimelineStore.setState({ playheadPosition: 1.5 });
+      ctx.isPlaying = true;
+      ctx.playheadPosition = 1.5;
+      ctx.getSourceTimeForClip = () => 1.5;
+      manager.syncClipVideo(clip, ctx);
+
+      const pausedCtx = { ...ctx, isPlaying: false } as FrameContext;
+      video.currentTime = 1.47;
+      manager.syncClipVideo(clip, pausedCtx);
+
+      expect(video.currentTime).toBe(1.47);
+      expect(useTimelineStore.getState().playheadPosition).toBe(1.47);
+      expect(testEngine.markVideoFramePresented).toHaveBeenCalledWith(video, 1.47, clip.id);
     } finally {
       useTimelineStore.setState({ playheadPosition: previousPlayheadPosition });
     }

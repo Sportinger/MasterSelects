@@ -13,8 +13,8 @@ const fcOptions = {
   seed: 20260518,
 };
 
-const representativeMediaExtensions = ['mp4', 'wav', 'png', 'glb', 'ply', 'lottie'] as const;
-const representativeModelExtensions = ['obj', 'glb'] as const;
+const representativeMediaExtensions = ['mp4', 'wav', 'png', 'obj', 'fbx', 'gltf', 'glb', 'ply', 'lottie'] as const;
+const representativeModelExtensions = ['obj', 'fbx', 'gltf', 'glb'] as const;
 const representativeGaussianSplatExtensions = ['ply', 'splat'] as const;
 
 const knownVideoExtension = 'mp4';

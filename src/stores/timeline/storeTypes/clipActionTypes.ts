@@ -107,6 +107,17 @@ export interface CameraClipActions {
   addCameraClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
 }
 
+export interface LightClipActions {
+  addLightClip: (
+    trackId: string,
+    startTime: number,
+    duration?: number,
+    skipMediaItem?: boolean,
+    lightSettings?: import('../../../types/light').LightClipSettings,
+    mediaItemId?: string,
+  ) => string | null;
+}
+
 export interface SplatEffectorClipActions {
   addSplatEffectorClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
 }
@@ -223,6 +234,7 @@ export type ClipActions =
   MotionClipActions &
   MeshClipActions &
   CameraClipActions &
+  LightClipActions &
   SplatEffectorClipActions &
   ClipEffectActions &
   ColorCorrectionActions &

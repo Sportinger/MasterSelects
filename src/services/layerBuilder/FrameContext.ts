@@ -10,6 +10,7 @@ import { applyClipDragPreview } from '../../stores/timeline/clipDragPreview';
 import { getPlayheadPosition } from './PlayheadState';
 import type { Composition, MediaFile } from '../../stores/mediaStore/types';
 import { getTrackAudioMuted, getTrackAudioSolo, hasAnyAudibleSolo } from '../audio/audioGraphRouteSettings';
+import { resolveTransitionSourceMapTime } from '../timeline/transitionSourceMap';
 
 function getClipsAtTime(clips: TimelineClip[], playheadPosition: number): TimelineClip[] {
   const EPSILON = 1e-6;
@@ -94,6 +95,7 @@ export function createFrameContext(): FrameContext {
     getInterpolatedColorCorrection,
     getInterpolatedVectorAnimationSettings,
     getInterpolatedTextBounds,
+    getInterpolatedLightSettings,
     getInterpolatedSpeed,
     getSourceTimeForClip,
     hasKeyframes,
@@ -150,6 +152,7 @@ export function createFrameContext(): FrameContext {
     getInterpolatedColorCorrection,
     getInterpolatedVectorAnimationSettings,
     getInterpolatedTextBounds,
+    getInterpolatedLightSettings,
     getInterpolatedSpeed,
     getSourceTimeForClip,
     hasKeyframes,
@@ -325,6 +328,9 @@ export function getClipForTrack(ctx: FrameContext, trackId: string): TimelineCli
 const clipTimeCacheByContext = new WeakMap<FrameContext, Map<string, ClipTimeInfo>>();
 
 function getClipTimeCacheKey(clip: TimelineClip): string {
+  if (clip.transitionSourceMap) {
+    return `${clip.id}:transition-map:${clip.startTime.toFixed(6)}`;
+  }
   const sourceOverride = clip.transitionSourceTimeOverride;
   return Number.isFinite(sourceOverride)
     ? `${clip.id}:transition:${sourceOverride!.toFixed(6)}:${clip.startTime.toFixed(6)}`
@@ -349,29 +355,52 @@ export function getClipTimeInfo(ctx: FrameContext, clip: TimelineClip): ClipTime
 
   // Calculate
   const clipLocalTime = ctx.playheadPosition - clip.startTime;
-  const isTransitionHold = clip.transitionSourceHold === true;
-  const speed = isTransitionHold ? 0 : ctx.getInterpolatedSpeed(clip.id, clipLocalTime);
-  const absSpeed = Math.abs(speed);
-  const initialSpeed = isTransitionHold ? 1 : ctx.getInterpolatedSpeed(clip.id, 0);
-  const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
-  const sourceOverride = clip.transitionSourceTimeOverride;
-  const baseSourceTime = Number.isFinite(sourceOverride)
-    ? sourceOverride! - startPoint
-    : ctx.getSourceTimeForClip(clip.id, clipLocalTime);
-  const clipTime = Number.isFinite(sourceOverride)
-    ? sourceOverride!
-    : Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + baseSourceTime));
   const visualPlayheadPosition =
     typeof ctx.visualPlayheadPosition === 'number' && Number.isFinite(ctx.visualPlayheadPosition)
       ? ctx.visualPlayheadPosition
       : ctx.playheadPosition;
   const visualClipLocalTime = visualPlayheadPosition - clip.startTime;
-  const visualBaseSourceTime = Number.isFinite(sourceOverride)
-    ? sourceOverride! - startPoint
-    : ctx.getSourceTimeForClip(clip.id, visualClipLocalTime);
-  const visualClipTime = Number.isFinite(sourceOverride)
-    ? sourceOverride!
-    : Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + visualBaseSourceTime));
+  const mappedTime = resolveTransitionSourceMapTime(clip.transitionSourceMap, clipLocalTime);
+  const visualMappedTime = resolveTransitionSourceMapTime(
+    clip.transitionSourceMap,
+    visualClipLocalTime,
+  );
+  const isHold = mappedTime
+    ? mappedTime.isHold || mappedTime.sourceRate === 0
+    : clip.transitionSourceHold === true;
+  const speed = mappedTime
+    ? mappedTime.sourceRate
+    : isHold
+      ? 0
+      : ctx.getInterpolatedSpeed(clip.id, clipLocalTime);
+  const absSpeed = Math.abs(speed);
+  const initialSpeed = mappedTime
+    ? mappedTime.sourceRate
+    : !mappedTime && clip.transitionSourceHold
+      ? 1
+      : ctx.getInterpolatedSpeed(clip.id, 0);
+  const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
+  const sourceOverride = clip.transitionSourceTimeOverride;
+  const baseSourceTime = mappedTime
+    ? mappedTime.sourceTime - startPoint
+    : Number.isFinite(sourceOverride)
+      ? sourceOverride! - startPoint
+      : ctx.getSourceTimeForClip(clip.id, clipLocalTime);
+  const clipTime = mappedTime
+    ? mappedTime.sourceTime
+    : Number.isFinite(sourceOverride)
+      ? sourceOverride!
+      : Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + baseSourceTime));
+  const visualBaseSourceTime = visualMappedTime
+    ? visualMappedTime.sourceTime - startPoint
+    : Number.isFinite(sourceOverride)
+      ? sourceOverride! - startPoint
+      : ctx.getSourceTimeForClip(clip.id, visualClipLocalTime);
+  const visualClipTime = visualMappedTime
+    ? visualMappedTime.sourceTime
+    : Number.isFinite(sourceOverride)
+      ? sourceOverride!
+      : Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + visualBaseSourceTime));
 
   const info: ClipTimeInfo = {
     clipLocalTime,
@@ -380,6 +409,8 @@ export function getClipTimeInfo(ctx: FrameContext, clip: TimelineClip): ClipTime
     visualClipLocalTime,
     visualSourceTime: visualBaseSourceTime,
     visualClipTime,
+    isHold,
+    sourceRate: mappedTime?.sourceRate ?? speed,
     speed,
     absSpeed,
   };

@@ -3,6 +3,7 @@ import { drawTimelineClipCanvasMainThread } from '../../src/components/timeline/
 import { resolveTimelineClipCanvasPaintVisuals } from '../../src/components/timeline/utils/timelineClipCanvasPaintVisualContributors';
 import { getTimelineClipCanvasThumbnailMediaFileId } from '../../src/components/timeline/utils/timelineClipCanvasThumbnailPreparation';
 import { createTimelineClipCanvasWorkerPaintClipInput } from '../../src/components/timeline/utils/timelineClipCanvasWorkerPaintClip';
+import { createTimelineClipCanvasChromeOverlays } from '../../src/components/timeline/utils/timelineClipCanvasChromeOverlays';
 import type { TimelinePaintSourceClip } from '../../src/timeline';
 
 function createContext(): CanvasRenderingContext2D {
@@ -45,6 +46,52 @@ describe('timeline clip canvas main-thread draw', () => {
     } as TimelinePaintSourceClip & { solidColor: string };
 
     expect(createTimelineClipCanvasWorkerPaintClipInput(clip).bodyFill).toBe('#e2d0b0');
+  });
+
+  it('keeps a type pictogram model for clips without thumbnails', () => {
+    const clips = [
+      { ...createClip(), id: 'camera', source: { type: 'camera' } },
+      { ...createClip(), id: 'light', source: { type: 'light' } },
+      { ...createClip(), id: 'splat', source: { type: 'gaussian-splat' } },
+      { ...createClip(), id: 'midi', source: { type: 'midi' } },
+      { ...createClip(), id: 'transition', source: { type: 'transition-overlay' } },
+      { ...createClip(), id: 'null', source: { type: 'motion-null' } },
+      { ...createClip(), id: 'adjustment', source: { type: 'motion-adjustment' } },
+      { ...createClip(), id: 'unknown', source: null, trackType: 'audio' as const },
+    ];
+    const overlays = createTimelineClipCanvasChromeOverlays({
+      chromeScrollX: 0,
+      chromeViewportWidth: 100,
+      clips,
+      geometryProps: { trackId: 'track-1' },
+      mediaFileStatusById: new Map(),
+      minLabelWidthPx: 1,
+      timeToPixel: (time) => time * 10,
+    });
+
+    expect(overlays.map((overlay) => overlay.iconType)).toEqual([
+      'camera',
+      'light',
+      'gaussian-splat',
+      'midi',
+      'transition-overlay',
+      'motion-null',
+      'motion-adjustment',
+      'audio',
+    ]);
+    expect(overlays.every((overlay) => overlay.showIcon)).toBe(true);
+
+    const [thumbnailOverlay] = createTimelineClipCanvasChromeOverlays({
+      chromeScrollX: 0,
+      chromeViewportWidth: 100,
+      clips: [clips[0]],
+      geometryProps: { trackId: 'track-1' },
+      mediaFileStatusById: new Map(),
+      minLabelWidthPx: 1,
+      thumbnailVisibleClipIds: new Set(['camera']),
+      timeToPixel: (time) => time * 10,
+    });
+    expect(thumbnailOverlay.showIcon).toBe(false);
   });
 
   it('skips drawing when a comp switch briefly gives the track no drawable height', () => {

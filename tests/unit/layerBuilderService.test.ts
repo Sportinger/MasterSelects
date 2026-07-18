@@ -37,7 +37,11 @@ type LayerBuilderServiceTestAccess = {
 };
 type NestedCompositionSource = {
   nestedComposition?: {
+    compositionId?: string;
     layers?: unknown[];
+    sceneClips?: Array<{
+      transitionSourceMap?: { version?: number };
+    }>;
   };
 };
 
@@ -431,7 +435,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
     expect(layers[0]?.source?.webCodecsPlayer).toBe(clipPlayer);
   });
 
-  it('does not synthesize legacy transition layers without a hidden transition composition', () => {
+  it('builds one transient mapped-v3 transition composition when materialization is unavailable', () => {
     const service = new LayerBuilderService();
     const outgoingPlayer = createTestWebCodecsPlayer(9);
     const incomingPlayer = createTestWebCodecsPlayer(0.5);
@@ -483,8 +487,12 @@ describe('LayerBuilderService paused visual provider selection', () => {
     });
 
     const layers = service.buildLayersFromStore();
+    const nestedComposition = (layers[0]?.source as NestedCompositionSource | undefined)?.nestedComposition;
 
-    expect(layers).toHaveLength(0);
+    expect(layers).toHaveLength(1);
+    expect(layers[0]?.sourceClipId).toBe('transition-existing');
+    expect(nestedComposition?.compositionId).toBe('transition-preview:default:transition-existing');
+    expect(nestedComposition?.sceneClips?.filter((clip) => clip.transitionSourceMap?.version === 2)).toHaveLength(2);
   });
 
   it('hydrates transition composition playback with parent clip runtime sources', () => {

@@ -121,6 +121,42 @@ describe('direct video/audio add runtime sources', () => {
     expect(webCodecsHelperMocks.releaseTemporaryMediaElement).toHaveBeenCalledWith(videoElement);
   });
 
+  it('keeps an imported WebM duration when browser metadata reports only a short fragment', async () => {
+    const videoElement = {
+      duration: 1.3281195640563965,
+      removeAttribute: vi.fn(),
+      load: vi.fn(),
+    } as unknown as HTMLVideoElement;
+    webCodecsHelperMocks.createVideoElement.mockReturnValue(videoElement);
+    mp4MetadataMocks.getMP4MetadataFast.mockResolvedValue(null);
+
+    const updates = new Map<string, Partial<TimelineClip>>();
+    await loadVideoMedia({
+      clipId: 'video-clip',
+      audioClipId: 'audio-clip',
+      file: createFile('Screen Recording.webm', 'video/webm'),
+      mediaFileId: 'media-video',
+      authoritativeNaturalDuration: 24.585,
+      thumbnailsEnabled: false,
+      waveformsEnabled: false,
+      updateClip: (id, patch) => {
+        updates.set(id, { ...(updates.get(id) ?? {}), ...patch });
+      },
+      setClips: vi.fn(),
+    });
+
+    expect(updates.get('video-clip')).toEqual(expect.objectContaining({
+      duration: 24.585,
+      outPoint: 24.585,
+      source: { type: 'video', naturalDuration: 24.585, mediaFileId: 'media-video' },
+    }));
+    expect(updates.get('audio-clip')).toEqual(expect.objectContaining({
+      duration: 24.585,
+      outPoint: 24.585,
+      source: { type: 'audio', naturalDuration: 24.585, mediaFileId: 'media-video' },
+    }));
+  });
+
   it('loads audio metadata without persisting an audio element on the clip source', async () => {
     const audioElement = {
       duration: 8,

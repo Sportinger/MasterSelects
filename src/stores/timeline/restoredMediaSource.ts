@@ -88,7 +88,7 @@ export function getReusableGaussianAvatarUrl(
 }
 
 export function createDataOnlyRestoredMediaSource(
-  serializedClip: Pick<SerializableClip, 'mediaFileId' | 'naturalDuration'>,
+  serializedClip: Pick<SerializableClip, 'mediaFileId' | 'naturalDuration' | 'liveInputId'>,
   fallbackDuration: number,
   mediaFile?: RestoredMediaFileInfo,
   sourceType: DataOnlyRestoredMediaType = 'video',
@@ -97,12 +97,13 @@ export function createDataOnlyRestoredMediaSource(
     type: sourceType,
     naturalDuration: serializedClip.naturalDuration || mediaFile?.duration || fallbackDuration,
     mediaFileId: serializedClip.mediaFileId,
+    liveInputId: serializedClip.liveInputId,
     ...(mediaFile?.absolutePath ? { filePath: mediaFile.absolutePath } : {}),
   };
 }
 
 export function createDataOnlyRestoredVideoSource(
-  serializedClip: Pick<SerializableClip, 'mediaFileId' | 'naturalDuration'>,
+  serializedClip: Pick<SerializableClip, 'mediaFileId' | 'naturalDuration' | 'liveInputId'>,
   fallbackDuration: number,
   mediaFile?: RestoredMediaFileInfo,
 ): NonNullable<TimelineClip['source']> {
@@ -115,6 +116,8 @@ export function createDataOnlyRestoredModelSource(
     | 'mediaFileId'
     | 'naturalDuration'
     | 'modelSequence'
+    | 'modelPrimitiveIndex'
+    | 'modelMaterialSettings'
     | 'threeDEffectorsEnabled'
     | 'meshType'
     | 'text3DProperties'
@@ -142,6 +145,8 @@ export function createDataOnlyRestoredModelSource(
     naturalDuration: serializedClip.naturalDuration || mediaFile?.duration || fallbackDuration || 3600,
     mediaFileId: serializedClip.mediaFileId,
     threeDEffectorsEnabled: serializedClip.threeDEffectorsEnabled ?? true,
+    ...(serializedClip.modelPrimitiveIndex !== undefined ? { modelPrimitiveIndex: serializedClip.modelPrimitiveIndex } : {}),
+    ...(serializedClip.modelMaterialSettings ? { modelMaterialSettings: { ...serializedClip.modelMaterialSettings } } : {}),
     ...(serializedClip.meshType ? { meshType: serializedClip.meshType } : {}),
     ...(serializedClip.text3DProperties ? { text3DProperties: { ...serializedClip.text3DProperties } } : {}),
   };

@@ -1,6 +1,7 @@
 import type { Composition } from '../../stores/mediaStore/types';
 import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import type { ActiveTransitionPlan } from '../../stores/timeline/editOperations/transitionPlanner';
+import type { Keyframe } from '../../types/keyframes';
 import type {
   Layer,
   SerializableClip,
@@ -9,12 +10,19 @@ import type {
   TimelineTrack,
 } from '../../types';
 import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
+import { getRuntimeTransition } from '../../transitions';
 import {
   createTimelineMathSceneCanvasRuntime,
   createTimelineTransitionOverlayCanvasRuntime,
   renderTimelineSolidCanvasRuntime,
   renderTimelineTextCanvasRuntime,
 } from '../timeline/timelineGeneratedCanvasRuntime';
+import { buildMaterializedLightLeakTimelineData } from '../timeline/transitionCompositionLightLeakTemplate';
+import { buildTransitionTimelineData } from '../timeline/transitionCompositionRecipeTemplate';
+import {
+  resolveTransitionCompositionMediaDuration,
+  serializeFallbackClip,
+} from '../timeline/transitionCompositionSourceClips';
 import { buildLayerBuilderNestedLayers } from './layerBuilderNestedLayerBuilder';
 import type { LayerBuilderProxyFrames } from './layerBuilderProxyFrames';
 import { createTransitionNestedCompositionLayer } from './transitionNestedCompositionLayer';
@@ -23,6 +31,16 @@ import type { FrameContext } from './types';
 const generatedCanvasCache = new Map<string, HTMLCanvasElement>();
 
 type TransitionCompositionMediaFileLike = { file?: File };
+
+export interface TransientTransitionCompositionInput {
+  activeTransition: ActiveTransitionPlan;
+  parentCompositionId: string;
+  width: number;
+  height: number;
+  frameRate: number;
+  getMediaDuration: (mediaFileId: string) => number | undefined;
+  getClipKeyframes?: (clipId: string) => readonly Keyframe[] | undefined;
+}
 
 export type TransitionCompositionSourceResolver = (
   clip: SerializableClip,
@@ -42,6 +60,76 @@ function clone<T>(value: T): T {
 
 function optionalClone<T>(value: T | undefined): T | undefined {
   return value === undefined ? undefined : clone(value);
+}
+
+function serializeTransitionSource(
+  clip: TimelineClip,
+  getClipKeyframes: TransientTransitionCompositionInput['getClipKeyframes'],
+): SerializableClip {
+  const keyframes = getClipKeyframes?.(clip.id);
+  return {
+    ...serializeFallbackClip(clip),
+    ...(keyframes?.length ? { keyframes: clone([...keyframes]) } : {}),
+  };
+}
+
+/** Builds the same mapped-v3 scene used by a saved transition without persisting it. */
+export function createTransientTransitionComposition(
+  input: TransientTransitionCompositionInput,
+): Composition | null {
+  const { activeTransition, parentCompositionId, width, height, frameRate, getMediaDuration, getClipKeyframes } = input;
+  const transition = activeTransition.outgoingClip.transitionOut;
+  if (!transition) return null;
+
+  const outgoingSource = serializeTransitionSource(activeTransition.outgoingClip, getClipKeyframes);
+  const incomingSource = serializeTransitionSource(activeTransition.incomingClip, getClipKeyframes);
+  const outgoingMediaDuration = resolveTransitionCompositionMediaDuration(outgoingSource, getMediaDuration);
+  const incomingMediaDuration = resolveTransitionCompositionMediaDuration(incomingSource, getMediaDuration);
+  if (outgoingMediaDuration === null || incomingMediaDuration === null) return null;
+
+  const resolvedTransition = { ...transition, duration: activeTransition.plan.resolvedDuration };
+  const generated = transition.type === 'light-leak'
+    ? buildMaterializedLightLeakTimelineData({
+        outgoingClip: activeTransition.outgoingClip,
+        incomingClip: activeTransition.incomingClip,
+        transition: resolvedTransition,
+        plan: activeTransition.plan,
+        serializableClips: [outgoingSource, incomingSource],
+        outgoingMediaDuration,
+        incomingMediaDuration,
+      })
+    : buildTransitionTimelineData({
+        outgoingClip: activeTransition.outgoingClip,
+        incomingClip: activeTransition.incomingClip,
+        transition: resolvedTransition,
+        plan: activeTransition.plan,
+        serializableClips: [outgoingSource, incomingSource],
+        outgoingMediaDuration,
+        incomingMediaDuration,
+      });
+  const timelineData = generated.timelineData;
+
+  return {
+    id: `transition-preview:${parentCompositionId}:${transition.id}`,
+    name: `Transition - ${getRuntimeTransition(transition.type)?.name ?? transition.type}`,
+    type: 'composition',
+    parentId: parentCompositionId,
+    createdAt: 0,
+    width,
+    height,
+    frameRate,
+    duration: timelineData.duration,
+    backgroundColor: '#000000',
+    timelineData,
+    transitionComp: {
+      ...generated.link,
+      parentCompositionId,
+      bodyStart: 0,
+      bodyEnd: timelineData.duration,
+      paddingBefore: 0,
+      paddingAfter: 0,
+    },
+  };
 }
 
 function matchesLinkedClipId(clipId: string, baseId: string): boolean {
@@ -244,6 +332,8 @@ function hydrateTransitionClip(
     transitionOut: optionalClone(clip.transitionOut),
     transitionSourceTimeOverride: clip.transitionSourceTimeOverride,
     transitionSourceHold: clip.transitionSourceHold,
+    transitionSourceMap: optionalClone(clip.transitionSourceMap),
+    transitionRecipeBlendWindows: optionalClone(clip.transitionRecipeBlendWindows),
     is3D: clip.is3D,
     meshType: clip.meshType,
     isLoading: false,
@@ -293,9 +383,20 @@ export function buildLayerBuilderTransitionCompositionLayer(
 ): Layer | null {
   const transition = activeTransition.outgoingClip.transitionOut;
   const compositionId = transition?.compositionId;
-  if (!transition || !compositionId || compositionId === ctx.activeCompId) return null;
+  if (!transition || compositionId === ctx.activeCompId) return null;
 
-  const composition = ctx.compositionById.get(compositionId);
+  const activeComposition = ctx.compositionById.get(ctx.activeCompId);
+  const composition = compositionId
+    ? ctx.compositionById.get(compositionId)
+    : createTransientTransitionComposition({
+        activeTransition,
+        parentCompositionId: ctx.activeCompId,
+        width: activeComposition?.width ?? 1920,
+        height: activeComposition?.height ?? 1080,
+        frameRate: ctx.frameRate ?? 30,
+        getMediaDuration: (mediaFileId) => ctx.mediaFileById.get(mediaFileId)?.duration,
+        getClipKeyframes: ctx.getClipKeyframes,
+      });
   if (!composition?.timelineData || composition.transitionComp?.kind !== 'transition-comp') {
     return null;
   }

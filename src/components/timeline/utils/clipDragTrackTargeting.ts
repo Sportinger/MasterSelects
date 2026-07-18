@@ -15,6 +15,7 @@ const VISUAL_SOURCE_TYPES = new Set([
   'solid',
   'model',
   'camera',
+  'light',
   'gaussian-avatar',
   'gaussian-splat',
   'splat-effector',

@@ -229,7 +229,7 @@ The data model also supports `bezier` easing. A keyframe becomes Bezier-driven o
 Rotation keyframes also expose a segment path option in the right-click context menu:
 
 - Shortest Path: rotate through the smallest angular difference. Camera clips use this by default.
-- Continuous / Orbit: preserve the raw angle delta, so values like `1x + 0deg` produce a full 360-degree turn.
+- Continuous / Orbit: preserve the raw angle delta, so values like `1x + 0deg` produce a full 360-degree turn. Camera positions recorded with Preview Orbit follow the circular path around the shared world pivot instead of cutting straight between the keyed eye positions.
 
 Like easing, the rotation path is stored on the keyframe that starts the segment leading into the next keyframe. This lets one camera move use shortest-path aiming while the next segment performs a deliberate orbit.
 

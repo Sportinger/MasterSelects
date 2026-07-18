@@ -2,7 +2,7 @@
 
 MasterSelects authorable 3D content now resolves through one shared scene contract.
 
-- The native WebGPU scene is the primary runtime for 3D planes, primitive meshes, 3D text, imported OBJ/glTF/GLB models, camera clips, and native gaussian-splat scene objects.
+- The native WebGPU scene is the primary runtime for 3D planes, primitive meshes, 3D text, imported OBJ/FBX/glTF/GLB models, camera clips, and native gaussian-splat scene objects.
 - Gaussian splat clips render through the native WebGPU scene path and stay inside the same scene camera, object-transform, and effector contract as the rest of the 3D system.
 - The old `three.js` bridge has been removed. Native shared-scene rendering is the only active 3D runtime.
 
@@ -14,9 +14,10 @@ Legacy gaussian-avatar support still exists in code for migration and old projec
 |---|---|---|
 | Per-layer 3D toggle | Stable | Any normal video/image layer can be switched between 2D and 3D. |
 | 3D video/image planes | Stable | `clip.is3D` video and image layers render as scene planes. |
-| OBJ / glTF / GLB model import | Stable | Model clips are always 3D and render as shared-scene objects. |
+| OBJ / FBX / glTF / GLB model import | Stable | Model clips are always 3D and render as shared-scene objects. |
 | Primitive mesh clips | Stable | Cube, sphere, plane, cylinder, torus, cone, and 3D text render through the native shared scene. |
 | Scene camera clips | Stable | Timeline camera clips drive preview and export scene navigation. |
+| Scene light clips | Initial stable surface | Point, panel, and environment lights are timeline clips that light native 3D meshes. Shadow settings are stored/keyframeable, but shadow-map rendering is not implemented yet. |
 | Gaussian splat clips | Stable | They render as normal shared-scene objects under the native WebGPU path. |
 | Splat effector clips | Stable but specialized | They deform scene-driven splats live at playback time; 3D planes remain excluded in phase 1. |
 | Gaussian avatar import | Legacy only | Import is blocked; existing projects may still expose blendshape editing. |
@@ -50,12 +51,16 @@ Prepared splat runtime metadata, native splat rasterization, preview, nested com
 
 ### 3D Model Import
 
-- Supported import formats are `.obj`, `.gltf`, and `.glb`.
+- Supported import formats are `.obj`, `.fbx`, `.gltf`, and `.glb`.
 - Model clips are automatically marked `is3D: true` and cannot be switched back to 2D.
 - Models are auto-centered and normalized to fit the viewport.
+- ASCII and binary FBX mesh geometry, UVs, and per-model translation/scale are parsed into the native model runtime; animation, rigs, and materials remain out of scope for this loader. Binary FBX supports both 32-bit and 64-bit record formats (FBX version 7500+) including zlib-compressed attribute arrays.
+- FBX model clips with multiple parsed meshes expose a Transform-tab mesh selector for `All Meshes` or one mesh primitive; solo meshes render centered on their own bounds so the clip transform acts from that mesh's local center.
+- OBJ imports parse `vt`, `usemtl`, MTL `Kd`, and MTL `map_Kd` base-color textures. Relative sidecar `.mtl`, `.bin`, and texture URLs resolve for normal web URLs and native-helper local file references.
 - glTF / GLB base color textures are loaded from data URIs, external image URIs, or embedded bufferViews when `baseColorTexture` and `TEXCOORD_0` are present.
 - Textured glTF / GLB materials render unlit in the native pass, matching scan/photogrammetry assets better than the simple fallback directional light.
-- GLB sequences normalize every frame against the first renderable frame's bounds and preload nearby playback frames, avoiding per-frame center/scale jumps and visible current-frame loading flicker.
+- The CLIP 3D tab exposes imported-model material controls: base color override, embedded texture enable/disable, lit/unlit/asset shading mode, and UV scale/offset.
+- GLB sequences normalize every frame against the first renderable frame's bounds and preload nearby playback frames; during playback, the main preview and independent edit-camera previews hold the last renderable frame while the next frame loads, avoiding center/scale jumps and black flicker.
 - GLB sequences imported into an open project are copied to `Raw/<sequence-name>/` using the original frame names; existing same-size frame files are reused instead of written again.
 - Untextured models use ambient plus directional fallback lighting.
 - The Transform panel exposes a wireframe debug toggle for model clips.
@@ -110,9 +115,23 @@ Camera clips expose camera settings inside the Transform tab:
 The Transform tab becomes scene-navigation controls for the active camera clip. In FPS mode, the preview accepts WASD/QE navigation plus uncapped mouse look. Free scene navigation now belongs to camera clips rather than gaussian-splat clips.
 Lens controls change the projection/FOV without rewriting camera position fields. Camera Position X/Y/Z is the real camera eye position in world space. The camera Edit view draws the timeline-camera frame from FOV/mm and Resolution X/Y, so the front frame grows for wider lenses, shrinks for tele lenses, and follows the configured gate aspect. The preview wheel in Scene Nav moves that camera position along the current view direction and does not edit `camera.fov` or the full-frame-equivalent mm field. The old camera `scale.all` Zoom and Distance controls are hidden from the camera UI to avoid a second focal-length-like orbit-rig surface next to camera Position/Rotation.
 
-When Edit mode is enabled while the playhead is over a camera clip, the preview switches to a temporary edit-view camera with its own 35 mm default lens, independent from the timeline camera's lens. Orbiting, panning, and zooming this view does not write transform changes back to the real camera clip; entering and leaving Edit mode blends between the edit-view camera and the timeline camera. In that edit-view, shortcuts `1`, `2`, and `3` animate to orthographic Front, Side, and Top views, and `4` animates back to the normal edit-view camera. Edit views draw a projected Blender-style world grid that animates with the camera view instead of snapping as a screen overlay: Front uses XY at `z=0`, Side uses YZ at `x=0`, and Top/free camera uses XZ at `y=0`. In the camera edit views, wheel zoom and Shift-drag/MMB/RMB pan only move the temporary viewport, regular 3D object handles stay visible and selectable, and selecting a non-camera 3D object activates the same native scene gizmo used by the normal preview. Double-clicking a non-camera 3D object handle in camera Edit mode retargets the temporary orbit pivot to that object, so subsequent free-camera orbiting rotates around it. Right-clicking a non-camera object handle or its selected gizmo opens a small menu with `Set Orbit Pivot` for the same retarget action. The real timeline camera is drawn as a small projected camera wireframe with a direction/frustum indicator. The full viewport gizmo appears only when that camera clip is selected in the normal edit-view camera, and explicit gizmo drags still edit the camera clip through the normal transform/keyframe path. Camera clips do not show a viewport gizmo in the normal view. The 2D layer bounding-box editor is only active in Edit mode when no camera clip is active at the playhead.
+Camera Edit mode uses a temporary edit-view camera with its own 35 mm default lens, independent from the timeline camera's lens. Factory `3D EDIT` previews activate it even before a timeline camera is available; regular previews activate it while the playhead is over a camera clip, preserving normal 2D layer editing elsewhere. Orbiting, panning, and zooming this view does not write transform changes back to the real camera clip; entering and leaving Edit mode blends between the edit-view camera and the timeline camera. The free camera always orbits the scene origin `(0, 0, 0)` and is not retargeted by timeline or viewport selection. In that edit-view, shortcuts `1`, `2`, and `3` animate to orthographic Front, Side, and Top views, and `4` animates back to the normal edit-view camera. Edit views draw a projected Blender-style world grid that animates with the camera view instead of snapping as a screen overlay: Front uses XY at `z=0`, Side uses YZ at `x=0`, and Top/free camera uses XZ at `y=0`. In the camera edit views, wheel zoom and Shift-drag/MMB/RMB pan only move the temporary viewport, regular 3D object handles stay visible and selectable, and selecting a non-camera 3D object activates the same native scene gizmo used by the normal preview. The real timeline camera is drawn as a small projected camera wireframe with a direction/frustum indicator. The full viewport gizmo appears only when that camera clip is selected in the normal edit-view camera, and explicit gizmo drags still edit the camera clip through the normal transform/keyframe path. Camera clips do not show a viewport gizmo in the normal view.
 
 Camera rotation keyframes interpolate through the shortest angular path so timeline flights do not spin the long way around when yaw, pitch, or roll crosses a 360-degree wrap. Camera Position X/Y/Z and rotation keyframes render through world-pose interpolation: the camera eye and target are interpolated between keyed world poses, while legacy camera scale keyframes are ignored by the camera pose.
+
+### Scene Lights
+
+Light clips can be created from the Media Panel via `+ Add > 3D > Light` and dragged to the timeline.
+
+- Light clips are always 3D scene controller clips and do not render visible geometry in the final frame.
+- Supported light types are `Point`, `Panel`, and `Environment`.
+- Point and panel lights affect native primitive meshes, 3D text, and imported OBJ/FBX/glTF/GLB meshes in the shared native mesh shader.
+- Environment lights contribute ambient scene light instead of having a position.
+- Environment lights can reference an image media item as an environment map. The current implementation samples the image's average color and applies it as ambient light; it is not full image-based lighting.
+- The Light tab exposes type, color, environment map, intensity, diameter, shadow toggle, and shadow strength.
+- Intensity, diameter, color, and shadow strength are keyframeable.
+- The Transform tab controls the light position and rotation; panel lights emit along their local negative Z direction.
+- Shadow fields are persisted for projects and keyframes, but real shadow-map rendering is not part of this first pass.
 
 ## Gaussian Splats
 
@@ -165,6 +184,8 @@ If you see avatar-specific code paths in the renderer or AI tooling, treat them 
 |---|---|
 | Regular 2D clip | Transform, Effects, Masks, Transcript, Analysis |
 | Camera clip | Transform |
+| Light clip | Transform, Light |
+| Imported model clip | Transform, 3D, Color, Effects, Masks, Transcript, Analysis |
 | Gaussian splat clip | Transform, Gaussian, Effects, Masks, Transcript, Analysis |
 | Splat effector clip | Transform, Effector, Effects, Masks, Transcript, Analysis |
 | 3D text clip | 3D Text, Transform, Effects, Masks |
@@ -193,7 +214,7 @@ The Transform tab is context-sensitive:
 |---|---|
 | `src/engine/native3d/NativeSceneRenderer.ts` | Shared native 3D scene renderer entrypoint |
 | `src/engine/native3d/passes/MeshPass.ts` | Native primitive mesh, imported model, and 3D text render pass |
-| `src/engine/native3d/assets/ModelRuntimeCache.ts` | Native OBJ / glTF / GLB runtime cache, centering, and normalization |
+| `src/engine/native3d/assets/ModelRuntimeCache.ts` | Native OBJ / FBX / glTF / GLB runtime cache, centering, and normalization |
 | `src/engine/native3d/assets/TextMeshCache.ts` | Native font-outline text mesh cache and extrusion generator |
 | `src/engine/scene/types.ts` | Shared scene runtime and effector types |
 | `src/engine/scene/SceneCameraUtils.ts` | Shared scene camera resolution |
@@ -207,6 +228,8 @@ The Transform tab is context-sensitive:
 | `src/engine/export/ExportLayerBuilder.ts` | Export layer building for shared scene content |
 | `src/engine/export/preloadGaussianSplats.ts` | Shared splat preload and export preparation |
 | `src/components/panels/properties/TransformTab.tsx` | Context-sensitive 3D transform and scene-navigation controls |
+| `src/components/panels/properties/Model3DTab.tsx` | Imported model material, texture, shading, and UV controls |
+| `src/components/panels/properties/LightTab.tsx` | Light clip type, color, environment map, intensity, diameter, and shadow controls |
 | `src/components/panels/properties/GaussianSplatTab.tsx` | Gaussian splat render settings tab |
 | `src/components/panels/properties/SplatEffectorTab.tsx` | Splat effector settings tab |
 
@@ -215,9 +238,9 @@ The Transform tab is context-sensitive:
 | Format | Current support | Notes |
 |---|---|---|
 | `.obj` | Supported | Imported as a 3D model clip in the shared scene contract. |
+| `.fbx` | Supported | ASCII and binary mesh geometry is imported as a 3D model clip in the shared scene contract. |
 | `.gltf` | Supported | Imported as a 3D model clip in the shared scene contract. |
 | `.glb` | Supported | Imported as a 3D model clip in the shared scene contract. |
-| `.fbx` | Not supported | Do not rely on FBX import; no native FBX loader ships today. |
 | `.ply` / `.compressed.ply` | Supported | Gaussian splat import with Morton ordering where needed. |
 | `.splat` | Supported | Gaussian splat import. |
 | `.ksplat` | Supported | Loaded through `@playcanvas/splat-transform`. |
@@ -231,4 +254,5 @@ The Transform tab is context-sensitive:
 - Temporal and particle splat controls are still only partially surfaced in the UI.
 - Composition-level camera settings still remain available alongside camera clips.
 - Legacy gaussian-avatar import is disabled.
+- Environment maps currently drive ambient color only; full image-based lighting, reflections, and HDR sampling are not implemented.
 - Higher-order spherical harmonics are preserved during import, but the current native shader still renders the DC color path only.

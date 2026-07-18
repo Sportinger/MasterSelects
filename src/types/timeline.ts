@@ -19,6 +19,8 @@ import type {
 import type { Effect } from './effects';
 import type { Keyframe } from './keyframes';
 import type { LayerSourceRect, TransitionRenderState } from './layers';
+import type { LightClipSettings } from './light';
+import type { ModelMaterialSettings } from './modelMaterial';
 import type { MathSceneDefinition } from './mathScene';
 import type { ClipMask } from './masks';
 import type {
@@ -28,7 +30,12 @@ import type {
 import type { MotionLayerDefinition } from './motionDesign';
 import type { ClipNodeGraph } from './nodeGraph';
 import type { Text3DProperties, TextClipProperties } from './text';
-import type { ClipTransform, TimelineTransition } from './timelineCore';
+import type {
+  ClipTransform,
+  TimelineTransition,
+  TransitionRecipeBlendWindow,
+  TransitionSourceMap,
+} from './timelineCore';
 import type { TimelineSourceType } from './timelineSource';
 import type { TransitionOverlayPattern } from '../transitions';
 import type { VectorAnimationClipSettings } from './vectorAnimation';
@@ -43,14 +50,18 @@ export interface TransitionOverlayClipDefinition {
 
 export interface TimelineClipDataSource {
   type: TimelineSourceType;
+  liveInputId?: string;
   modelUrl?: string;
   modelFileName?: string;
   modelSequence?: ModelSequenceData;
+  modelPrimitiveIndex?: number;
+  modelMaterialSettings?: ModelMaterialSettings;
   gaussianSplatSequence?: GaussianSplatSequenceData;
   threeDEffectorsEnabled?: boolean;
   meshType?: import('../stores/mediaStore/types').MeshPrimitiveType;
   text3DProperties?: Text3DProperties;
   cameraSettings?: import('../stores/mediaStore/types').SceneCameraSettings;
+  lightSettings?: LightClipSettings;
   splatEffectorSettings?: import('./splatEffector').SplatEffectorSettings;
   gaussianAvatarUrl?: string;
   gaussianBlendshapes?: Record<string, number>;
@@ -119,6 +130,7 @@ export interface TimelineClip {
   reversed?: boolean;     // True if clip plays in reverse
   speed?: number;         // Playback speed (default 1.0, 0.5 = half speed, -1.0 = reverse)
   preservesPitch?: boolean;  // Keep pitch when speed changes (default true)
+  freeRun?: boolean;      // Preview the source continuously instead of seeking with the timeline
   // Nested composition support
   isComposition?: boolean;  // True if this clip is a nested composition
   compositionId?: string;   // ID of the nested composition
@@ -173,6 +185,8 @@ export interface TimelineClip {
   transitionOut?: TimelineTransition;  // Transition to next clip
   transitionSourceTimeOverride?: number; // Runtime-only source time for virtual transition participant clips
   transitionSourceHold?: boolean; // Runtime-only: freeze a virtual transition participant on the override frame
+  transitionSourceMap?: TransitionSourceMap;
+  transitionRecipeBlendWindows?: TransitionRecipeBlendWindow[];
   // 3D layer support (AE-style per-layer toggle)
   is3D?: boolean;
   wireframe?: boolean;  // Debug: show 3D model as wireframe
@@ -220,6 +234,7 @@ export interface SerializableClip {
   inPoint: number;
   outPoint: number;
   sourceType: TimelineSourceType;
+  liveInputId?: string;
   naturalDuration?: number;
   thumbnails?: string[];
   linkedClipId?: string;
@@ -253,6 +268,7 @@ export interface SerializableClip {
   reversed?: boolean;
   speed?: number;         // Playback speed (default 1.0)
   preservesPitch?: boolean;  // Keep pitch when speed changes (default true)
+  freeRun?: boolean;
   // Text clip support
   textProperties?: TextClipProperties;
   text3DProperties?: Text3DProperties;
@@ -272,13 +288,18 @@ export interface SerializableClip {
   transitionOut?: TimelineTransition;
   transitionSourceTimeOverride?: number;
   transitionSourceHold?: boolean;
+  transitionSourceMap?: TransitionSourceMap;
+  transitionRecipeBlendWindows?: TransitionRecipeBlendWindow[];
   // 3D layer support
   is3D?: boolean;
   modelSequence?: ModelSequenceData;
+  modelPrimitiveIndex?: number;
+  modelMaterialSettings?: ModelMaterialSettings;
   gaussianSplatSequence?: GaussianSplatSequenceData;
   threeDEffectorsEnabled?: boolean;
   meshType?: import('../stores/mediaStore/types').MeshPrimitiveType;
   cameraSettings?: import('../stores/mediaStore/types').SceneCameraSettings;
+  lightSettings?: LightClipSettings;
   splatEffectorSettings?: import('./splatEffector').SplatEffectorSettings;
   // Gaussian avatar blendshape state
   gaussianBlendshapes?: Record<string, number>;

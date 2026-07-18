@@ -120,6 +120,7 @@ describe('transition composition load migration', () => {
 
     expect(transitionComps).toHaveLength(1);
     expect(transitionComps[0]?.id).not.toBe('orphan-transition-comp');
+    expect(transitionComps[0]?.transitionComp?.sourceLayout).toBe('mapped-v3');
     expect(normalizedOut?.transitionOut?.compositionId).toBe(transitionComps[0]?.id);
     expect(normalizedIn?.transitionIn?.compositionId).toBe(transitionComps[0]?.id);
 
@@ -212,6 +213,116 @@ describe('transition composition load migration', () => {
     )).toBe(true);
   });
 
+  it('reuses missing-layout and explicit legacy segmented comps unchanged', () => {
+    for (const sourceLayout of [undefined, 'legacy-segmented'] as const) {
+      const id = `legacy-${sourceLayout ?? 'missing'}`;
+      const outgoing = clip('out', 0);
+      const incoming = clip('in', 2);
+      outgoing.transitionOut = {
+        id: 'transition-1',
+        type: 'crossfade',
+        duration: 1,
+        linkedClipId: 'in',
+        compositionId: id,
+      };
+      incoming.transitionIn = {
+        id: 'transition-1',
+        type: 'crossfade',
+        duration: 1,
+        linkedClipId: 'out',
+        compositionId: id,
+      };
+      const parent: Composition = {
+        id: 'parent',
+        name: 'Parent',
+        type: 'composition',
+        parentId: null,
+        createdAt: 1,
+        width: 1920,
+        height: 1080,
+        frameRate: 30,
+        duration: 4,
+        backgroundColor: '#000000',
+        timelineData: { tracks: [], clips: [outgoing, incoming], duration: 4 },
+      };
+      const base = hiddenTransitionComp(id);
+      const legacy: Composition = {
+        ...base,
+        timelineData: { tracks: [], clips: [clip('legacy-source', 0)], duration: 1 },
+        transitionComp: {
+          ...base.transitionComp!,
+          ...(sourceLayout ? { sourceLayout } : {}),
+          parentCompositionId: 'parent',
+          parentTransitionId: 'transition-1',
+          parentOutgoingClipId: 'out',
+          parentIncomingClipId: 'in',
+          linkedOutgoingClipId: 'legacy-out',
+          linkedIncomingClipId: 'legacy-in',
+        },
+      };
+      const before = structuredClone(legacy);
+      useMediaStore.setState({
+        compositions: [parent, legacy],
+        activeCompositionId: 'parent',
+        openCompositionIds: ['parent'],
+      });
+
+      normalizeLoadedTransitionCompositions();
+
+      expect(useMediaStore.getState().compositions.find((composition) => composition.id === id)).toEqual(before);
+    }
+  });
+
+  it('retains a linked legacy backup while normalizing the active mapped transition comp', () => {
+    const outgoing = clip('out', 0);
+    const incoming = clip('in', 2);
+    outgoing.transitionOut = {
+      id: 'transition-1', type: 'crossfade', duration: 1, linkedClipId: 'in', compositionId: 'mapped',
+    };
+    incoming.transitionIn = {
+      id: 'transition-1', type: 'crossfade', duration: 1, linkedClipId: 'out', compositionId: 'mapped',
+    };
+    const parent: Composition = {
+      id: 'parent', name: 'Parent', type: 'composition', parentId: null, createdAt: 1,
+      width: 1920, height: 1080, frameRate: 30, duration: 4, backgroundColor: '#000000',
+      timelineData: { tracks: [], clips: [outgoing, incoming], duration: 4 },
+    };
+    const active = hiddenTransitionComp('mapped');
+    active.transitionComp = {
+      ...active.transitionComp!,
+      sourceLayout: 'mapped-v3',
+      legacyBackupCompositionId: 'legacy-backup',
+      parentCompositionId: parent.id,
+      parentTransitionId: 'transition-1',
+      parentOutgoingClipId: 'out',
+      parentIncomingClipId: 'in',
+    };
+    const backup = hiddenTransitionComp('legacy-backup');
+    backup.transitionComp = {
+      ...backup.transitionComp!,
+      sourceLayout: 'legacy-segmented',
+      parentCompositionId: parent.id,
+      parentTransitionId: 'transition-1',
+      parentOutgoingClipId: 'out',
+      parentIncomingClipId: 'in',
+    };
+    useMediaStore.setState({
+      compositions: [parent, active, backup],
+      activeCompositionId: parent.id,
+      openCompositionIds: [parent.id],
+    });
+
+    normalizeLoadedTransitionCompositions();
+
+    expect(useMediaStore.getState().compositions.map((composition) => composition.id)).toEqual([
+      parent.id,
+      active.id,
+      backup.id,
+    ]);
+    expect(useMediaStore.getState().compositions.find((composition) => composition.id === active.id)
+      ?.transitionComp?.legacyBackupCompositionId).toBe(backup.id);
+  });
+
   it('hydrates transition comp clip render fields from project data', () => {
     const projectComposition: ProjectComposition = {
       id: 'transition-comp',
@@ -222,7 +333,10 @@ describe('transition composition load migration', () => {
       duration: 1,
       backgroundColor: '#000000',
       folderId: null,
-      transitionComp: hiddenTransitionComp('transition-comp').transitionComp,
+      transitionComp: {
+        ...hiddenTransitionComp('transition-comp').transitionComp!,
+        sourceLayout: 'mapped-v3',
+      },
       tracks: [{
         id: 'track-1',
         name: 'Video 1',
@@ -268,6 +382,14 @@ describe('transition composition load migration', () => {
         sourceType: 'video',
         transitionSourceTimeOverride: 2.5,
         transitionSourceHold: true,
+        transitionSourceMap: {
+          version: 1,
+          segments: [
+            { kind: 'linear', compStart: 0, compEnd: 0.5, sourceStart: 2.5, sourceEnd: 3 },
+            { kind: 'hold', compStart: 0.5, compEnd: 1, sourceTime: 3 },
+          ],
+        },
+        transitionRecipeBlendWindows: [{ compStart: 0.25, compEnd: 0.75, blendMode: 'add' }],
       }],
       markers: [],
     };
@@ -279,5 +401,8 @@ describe('transition composition load migration', () => {
     expect(clip.transitionRender).toEqual({ kind: 'distortion', progress: 0.4, distortion: 'swirl', seed: 7 });
     expect(clip.transitionSourceTimeOverride).toBe(2.5);
     expect(clip.transitionSourceHold).toBe(true);
+    expect(clip.transitionSourceMap).toEqual(projectComposition.clips[0].transitionSourceMap);
+    expect(clip.transitionRecipeBlendWindows).toEqual(projectComposition.clips[0].transitionRecipeBlendWindows);
+    expect(composition.transitionComp?.sourceLayout).toBe('mapped-v3');
   });
 });

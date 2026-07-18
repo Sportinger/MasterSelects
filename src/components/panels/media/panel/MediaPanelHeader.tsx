@@ -39,9 +39,11 @@ export function MediaPanelHeader({
   onNewFolder,
   onNewText,
   onNewSolid,
+  onNewLiveInput,
   onNewMesh,
   onNewText3D,
   onNewCamera,
+  onNewLight,
   onNewSplatEffector,
   onImportGaussianSplat,
   onNewMathScene,
@@ -93,9 +95,11 @@ export function MediaPanelHeader({
                 onNewFolder={onNewFolder}
                 onNewText={onNewText}
                 onNewSolid={onNewSolid}
+                onNewLiveInput={onNewLiveInput}
                 onNewMesh={onNewMesh}
                 onNewText3D={onNewText3D}
                 onNewCamera={onNewCamera}
+                onNewLight={onNewLight}
                 onNewSplatEffector={onNewSplatEffector}
                 onImportGaussianSplat={onImportGaussianSplat}
                 onNewMathScene={onNewMathScene}

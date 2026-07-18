@@ -1,8 +1,6 @@
 import type { SerializableClip, TimelineClip } from '../types';
-import { clonePersistedClipAudioState } from '../../../services/audio/clipAudioStatePersistence';
 import { Logger } from '../../../services/logger';
 import { cloneClipNodeGraph } from '../../../services/nodeGraph';
-import { normalizeTransitionInstanceParams } from '../../../transitions';
 import {
   createTimelineMathSceneCanvasRuntime,
   createTimelineSolidCanvasRuntime,
@@ -13,11 +11,10 @@ import type { useMediaStore } from '../../mediaStore';
 import {
   createRestoredMotionClip,
   createRestoredPrimitiveMeshClip,
-  restorePersistedClipVideoState,
 } from '../nestedRestore';
+import { applyCommonRestoredClipFields, createLoadStateLiveInputClip } from './loadStateCommonClipRestore';
 
 const log = Logger.create('Timeline');
-
 type MediaStoreState = ReturnType<typeof useMediaStore.getState>;
 
 function activeCompositionDimensions(mediaStore: MediaStoreState): { width: number; height: number } {
@@ -28,44 +25,14 @@ function activeCompositionDimensions(mediaStore: MediaStoreState): { width: numb
   };
 }
 
-function applyCommonRestoredClipFields(serializedClip: SerializableClip): Pick<
-  TimelineClip,
-  | 'videoState'
-  | 'audioState'
-  | 'transform'
-  | 'effects'
-  | 'transitionIn'
-  | 'transitionOut'
-  | 'colorCorrection'
-  | 'nodeGraph'
-  | 'masks'
-  | 'speed'
-  | 'preservesPitch'
-  | 'sourceRect'
-  | 'transitionRender'
-> {
-  return {
-    videoState: restorePersistedClipVideoState(serializedClip),
-    audioState: clonePersistedClipAudioState(serializedClip.audioState),
-    transform: serializedClip.transform,
-    effects: serializedClip.effects || [],
-    transitionIn: serializedClip.transitionIn ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionIn)) : undefined,
-    transitionOut: serializedClip.transitionOut ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionOut)) : undefined,
-    colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
-    nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
-    masks: serializedClip.masks,
-    speed: serializedClip.speed,
-    preservesPitch: serializedClip.preservesPitch,
-    sourceRect: serializedClip.sourceRect ? { ...serializedClip.sourceRect } : undefined,
-    transitionRender: serializedClip.transitionRender ? structuredClone(serializedClip.transitionRender) : undefined,
-  };
-}
-
 export async function createLoadStateGeneratedClip(params: {
   serializedClip: SerializableClip;
   mediaStore: MediaStoreState;
 }): Promise<TimelineClip | undefined> {
   const { serializedClip, mediaStore } = params;
+  const liveInputClip = createLoadStateLiveInputClip(serializedClip);
+  if (liveInputClip) return liveInputClip;
+
   const motionClip = createRestoredMotionClip(serializedClip, serializedClip.id);
   if (motionClip) {
     log.debug('Restored motion clip', { clip: serializedClip.name, sourceType: serializedClip.sourceType });
@@ -208,12 +175,17 @@ export async function createLoadStateGeneratedClip(params: {
     log.debug('Restored camera clip', { clip: serializedClip.name });
     return {
       ...createTimelineControlClipBase(serializedClip, serializedClip.name || 'Camera', 'camera-clip.dat'),
-      source: {
-        type: 'camera',
-        cameraSettings: serializedClip.cameraSettings || { ...DEFAULT_SCENE_CAMERA_SETTINGS },
-        mediaFileId: serializedClip.mediaFileId || undefined,
-        naturalDuration: Number.MAX_SAFE_INTEGER,
-      },
+      source: { type: 'camera', cameraSettings: serializedClip.cameraSettings || { ...DEFAULT_SCENE_CAMERA_SETTINGS }, mediaFileId: serializedClip.mediaFileId || undefined, naturalDuration: Number.MAX_SAFE_INTEGER },
+    };
+  }
+
+  if (serializedClip.sourceType === 'light') {
+    const { mergeLightClipSettings } = await import('../../../types/light');
+    log.debug('Restored light clip', { clip: serializedClip.name });
+    return {
+      ...createTimelineControlClipBase(serializedClip, serializedClip.name || 'Light', 'light-clip.dat'),
+      source: { type: 'light', lightSettings: mergeLightClipSettings(serializedClip.lightSettings), mediaFileId: serializedClip.mediaFileId || undefined, naturalDuration: Number.MAX_SAFE_INTEGER },
+      is3D: serializedClip.is3D ?? true,
     };
   }
 
@@ -222,12 +194,7 @@ export async function createLoadStateGeneratedClip(params: {
     log.debug('Restored splat effector clip', { clip: serializedClip.name });
     return {
       ...createTimelineControlClipBase(serializedClip, serializedClip.name || '3D Effector', 'splat-effector.dat'),
-      source: {
-        type: 'splat-effector',
-        splatEffectorSettings: serializedClip.splatEffectorSettings || { ...DEFAULT_SPLAT_EFFECTOR_SETTINGS },
-        mediaFileId: serializedClip.mediaFileId || undefined,
-        naturalDuration: Number.MAX_SAFE_INTEGER,
-      },
+      source: { type: 'splat-effector', splatEffectorSettings: serializedClip.splatEffectorSettings || { ...DEFAULT_SPLAT_EFFECTOR_SETTINGS }, mediaFileId: serializedClip.mediaFileId || undefined, naturalDuration: Number.MAX_SAFE_INTEGER },
       is3D: serializedClip.is3D ?? true,
     };
   }
@@ -263,6 +230,8 @@ export async function createLoadStateGeneratedClip(params: {
       audioState: serializedClip.audioState ? structuredClone(serializedClip.audioState) : undefined,
       midiData: serializedClip.midiData ? structuredClone(serializedClip.midiData) : { notes: [] },
       automation: serializedClip.automation ? structuredClone(serializedClip.automation) : undefined,
+      transitionSourceMap: serializedClip.transitionSourceMap ? structuredClone(serializedClip.transitionSourceMap) : undefined,
+      transitionRecipeBlendWindows: serializedClip.transitionRecipeBlendWindows ? structuredClone(serializedClip.transitionRecipeBlendWindows) : undefined,
       masks: serializedClip.masks,
       isLoading: false,
     };

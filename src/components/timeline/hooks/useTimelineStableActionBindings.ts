@@ -10,6 +10,7 @@ export function useTimelineStableActionBindings() {
     addCompClip: store.addCompClip,
     addCompositionVideoBakeRegion: store.addCompositionVideoBakeRegion,
     addKeyframe: store.addKeyframe,
+    addLightClip: store.addLightClip,
     addMarker: store.addMarker,
     addMathSceneClip: store.addMathSceneClip,
     addMeshClip: store.addMeshClip,

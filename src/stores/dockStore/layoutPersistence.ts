@@ -7,10 +7,12 @@ import type {
   PanelType,
   SavedDockLayout,
 } from '../../types/dock';
-import { DEFAULT_LAYOUT, FACTORY_SAVED_DOCK_LAYOUTS } from './layoutDefaults';
+import { DEFAULT_LAYOUT, FACTORY_3D_EDIT_PREVIEW_DEFAULTS, FACTORY_SAVED_DOCK_LAYOUTS } from './layoutDefaults';
 import { cleanupSavedTimelineLayout } from './timelineLayoutPersistence';
 import {
   CAN_EDIT_FACTORY_DOCK_LAYOUTS,
+  FACTORY_3D_EDIT_LAYOUT_ID,
+  FACTORY_VIDEO_EDIT_LAYOUT_ID,
   FACTORY_DOCK_LAYOUT_IDS,
   FACTORY_DOCK_LAYOUT_NAMES,
   FACTORY_DOCK_LAYOUT_NAME_TO_ID,
@@ -197,6 +199,43 @@ export function getFactoryDockLayouts(): SavedDockLayout[] {
   return FACTORY_SAVED_DOCK_LAYOUTS.map(cloneSavedDockLayout);
 }
 
+export function applyFactory3DEditPreviewDefaults(layout: DockLayout): DockLayout {
+  const positions: Array<{ id: string; x: number; y: number }> = [];
+  const visit = (node: DockNode, x: number, y: number, width: number, height: number) => {
+    if (node.kind === 'tab-group') {
+      node.panels.forEach((panel) => {
+        if (panel.type === 'preview') positions.push({ id: panel.id, x, y });
+      });
+      return;
+    }
+    const ratio = Math.min(1, Math.max(0, node.ratio));
+    if (node.direction === 'horizontal') {
+      visit(node.children[0], x, y, width * ratio, height);
+      visit(node.children[1], x + width * ratio, y, width * (1 - ratio), height);
+    } else {
+      visit(node.children[0], x, y, width, height * ratio);
+      visit(node.children[1], x, y + height * ratio, width, height * (1 - ratio));
+    }
+  };
+  visit(layout.root, 0, 0, 1, 1);
+  const defaultsById = new Map(
+    positions
+      .toSorted((left, right) => left.y - right.y || left.x - right.x)
+      .slice(0, 4)
+      .map((position, index) => [position.id, Object.values(FACTORY_3D_EDIT_PREVIEW_DEFAULTS)[index]]),
+  );
+  const apply = (node: DockNode): DockNode => node.kind === 'tab-group'
+    ? {
+        ...node,
+        panels: node.panels.map((panel) => {
+          const defaults = defaultsById.get(panel.id);
+          return defaults ? { ...panel, data: { ...panel.data, ...defaults } } : panel;
+        }),
+      }
+    : { ...node, children: [apply(node.children[0]), apply(node.children[1])] };
+  return { ...layout, root: apply(layout.root) };
+}
+
 export function mergeFactoryDockLayouts(savedLayouts: SavedDockLayout[]): SavedDockLayout[] {
   const devOverrides = new Map<string, SavedDockLayout>();
   const factoryFavoriteOverrides = new Map<string, boolean>();
@@ -211,6 +250,11 @@ export function mergeFactoryDockLayouts(savedLayouts: SavedDockLayout[]): SavedD
           ...savedLayout,
           id: factoryId,
           name: FACTORY_DOCK_LAYOUT_NAMES.get(factoryId) ?? savedLayout.name,
+          layout: factoryId === FACTORY_VIDEO_EDIT_LAYOUT_ID
+            ? DEFAULT_LAYOUT
+            : factoryId === FACTORY_3D_EDIT_LAYOUT_ID
+              ? applyFactory3DEditPreviewDefaults(savedLayout.layout)
+              : savedLayout.layout,
           factory: true,
           favorite: savedLayout.favorite === true,
         });
@@ -281,7 +325,7 @@ function isLegacyFactoryDefaultLayout(layout: DockLayout): boolean {
   const timelineGroup = findTabGroupById(layout.root, 'timeline-group');
   const leftPanelTypes = panelTypesForGroup(layout, 'left-group');
   return (
-    arePanelTypeListsEqual(leftPanelTypes, ['media', 'ai-chat'])
+    arePanelTypeListsEqual(leftPanelTypes, ['media'])
     && arePanelTypeListsEqual(panelTypesForGroup(layout, 'preview-group'), ['preview'])
     && arePanelTypeListsEqual(panelTypesForGroup(layout, 'timeline-group'), ['timeline'])
     && leftGroup?.activeIndex === 0

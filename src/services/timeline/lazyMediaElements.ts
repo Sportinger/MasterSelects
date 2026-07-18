@@ -21,6 +21,7 @@ import {
   planTransition,
 } from '../../stores/timeline/editOperations/transitionPlanner';
 import { getRuntimeTransition, transitionIncludesAudio } from '../../transitions';
+import { clipTreeNeedsLiveVideoElement } from './liveInputClipTree';
 
 type LazyMediaKind = 'video' | 'audio';
 
@@ -207,7 +208,10 @@ function updateNaturalDuration(
   if (!clip.source) return;
 
   const mediaFile = getMediaFileForLazyClip(ctx, clip);
-  const naturalDuration = element.duration;
+  const importedDuration = mediaFile?.duration;
+  const naturalDuration = importedDuration !== undefined && Number.isFinite(importedDuration) && importedDuration > 0
+    ? importedDuration
+    : element.duration;
   clip.source.naturalDuration = naturalDuration;
   if (!Number.isFinite(mediaFile?.duration) && naturalDuration > 0) {
     // Media store duration updates are handled by project/import code. This keeps
@@ -386,7 +390,12 @@ function replaceLazyRecord(key: string, record: LazyMediaRecord, ctx: FrameConte
 }
 
 function attachVideoElement(ctx: FrameContext, clip: TimelineClip, now: number): void {
-  if (!clip.source || clip.source.type !== 'video' || clip.source.videoElement || hasNativeDecoderForTimelineClip(clip)) return;
+  if (
+    !clip.source ||
+    clip.source.type !== 'video' ||
+    clip.source.videoElement ||
+    (hasNativeDecoderForTimelineClip(clip) && !clip.freeRun)
+  ) return;
   if (!canAttachLazyMedia(ctx, clip, 'video')) return;
 
   const source = getLazySource(ctx, clip, 'video');
@@ -949,7 +958,8 @@ export function hydrateTimelineMediaWindow(ctx: FrameContext): void {
   const now = ctx.now;
   const desired = new Set<string>();
   const hydrateVideo = renderHostPort.getTelemetry().mode !== 'worker-gpu-only' ||
-    !flags.useFullWebCodecsPlayback;
+    !flags.useFullWebCodecsPlayback ||
+    ctx.clipsAtTime.some((clip) => ctx.visibleVideoTrackIds.has(clip.trackId) && clipTreeNeedsLiveVideoElement(clip));
   const videoStart = ctx.playheadPosition - VIDEO_LOOKBEHIND_SECONDS;
   const videoEnd = ctx.playheadPosition + (ctx.isPlaying ? VIDEO_LOOKAHEAD_SECONDS : 0.8);
   const audioStart = ctx.playheadPosition - AUDIO_LOOKBEHIND_SECONDS;

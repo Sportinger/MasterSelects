@@ -14,6 +14,7 @@ export function createGeneratedMediaItemsForLoad(
     solidItems: normalizeItemFolderParents(projectData.solidItems || [], validFolderIds, 'solid items'),
     meshItems: normalizeItemFolderParents(projectData.meshItems || [], validFolderIds, 'mesh items'),
     cameraItems: normalizeItemFolderParents(projectData.cameraItems || [], validFolderIds, 'camera items'),
+    lightItems: normalizeItemFolderParents(projectData.lightItems || [], validFolderIds, 'light items'),
     splatEffectorItems: normalizeItemFolderParents(projectData.splatEffectorItems || [], validFolderIds, 'splat effector items'),
     mathSceneItems: normalizeItemFolderParents(projectData.mathSceneItems || [], validFolderIds, 'math scene items'),
     motionShapeItems: normalizeItemFolderParents(projectData.motionShapeItems || [], validFolderIds, 'motion shape items'),

@@ -8,12 +8,14 @@ import { usePreviewRenderTargetRegistration } from '../../src/components/preview
 const mocks = vi.hoisted(() => ({
   registerPreviewTarget: vi.fn(() => true),
   setPreviewTargetTransparency: vi.fn(),
+  setPreviewTargetViewportOverride: vi.fn(),
   unregisterPreviewTarget: vi.fn(),
 }));
 
 vi.mock('../../src/services/render/previewTargetRegistration', () => ({
   registerPreviewTarget: mocks.registerPreviewTarget,
   setPreviewTargetTransparency: mocks.setPreviewTargetTransparency,
+  setPreviewTargetViewportOverride: mocks.setPreviewTargetViewportOverride,
   unregisterPreviewTarget: mocks.unregisterPreviewTarget,
 }));
 
@@ -30,9 +32,10 @@ const setCompReady = vi.fn();
 
 interface HarnessProps {
   showTransparencyGrid: boolean;
+  viewportOverride?: { width: number; height: number; cameraOverride: null } | null;
 }
 
-function Harness({ showTransparencyGrid }: HarnessProps) {
+function Harness({ showTransparencyGrid, viewportOverride }: HarnessProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   usePreviewRenderTargetRegistration({
     canvasRef,
@@ -41,6 +44,7 @@ function Harness({ showTransparencyGrid }: HarnessProps) {
     setCompReady,
     showTransparencyGrid,
     stableRenderSource: source,
+    viewportOverride,
   });
   return <canvas ref={canvasRef} />;
 }
@@ -75,5 +79,21 @@ describe('usePreviewRenderTargetRegistration', () => {
     unmount();
 
     expect(mocks.unregisterPreviewTarget).toHaveBeenCalledWith('preview-a', source);
+  });
+
+  it('updates the local viewport override without re-registering the canvas target', async () => {
+    const override = { width: 640, height: 480, cameraOverride: null } as const;
+    const { rerender } = render(<Harness showTransparencyGrid={false} />);
+
+    await waitFor(() => expect(mocks.registerPreviewTarget).toHaveBeenCalledTimes(1));
+    expect(mocks.setPreviewTargetViewportOverride).toHaveBeenLastCalledWith('preview-a', null);
+
+    rerender(<Harness showTransparencyGrid={false} viewportOverride={override} />);
+
+    await waitFor(() => {
+      expect(mocks.setPreviewTargetViewportOverride).toHaveBeenLastCalledWith('preview-a', override);
+    });
+    expect(mocks.setPreviewTargetViewportOverride).toHaveBeenCalledTimes(2);
+    expect(mocks.registerPreviewTarget).toHaveBeenCalledTimes(1);
   });
 });

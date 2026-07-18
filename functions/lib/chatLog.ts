@@ -1,3 +1,4 @@
+import { stringifyAiPayloadForStorage } from './aiAudit';
 import type { AppD1Database } from './env';
 
 export interface ChatLogRow {
@@ -115,9 +116,9 @@ export async function insertChatLog(
       input.requestId,
       input.idempotencyKey,
       input.model,
-      JSON.stringify(input.messages),
-      JSON.stringify(input.response),
-      toolCalls ? JSON.stringify(toolCalls) : null,
+      stringifyAiPayloadForStorage(input.messages),
+      stringifyAiPayloadForStorage(input.response),
+      toolCalls ? stringifyAiPayloadForStorage(toolCalls) : null,
       finishReason,
       tokensIn,
       tokensOut,

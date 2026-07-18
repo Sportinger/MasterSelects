@@ -87,6 +87,7 @@ export function TimelineToolPalette() {
     solidItems: state.solidItems,
     meshItems: state.meshItems,
     cameraItems: state.cameraItems,
+    lightItems: state.lightItems,
     splatEffectorItems: state.splatEffectorItems,
     mathSceneItems: state.mathSceneItems,
     motionShapeItems: state.motionShapeItems,

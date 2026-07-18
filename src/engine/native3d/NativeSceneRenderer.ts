@@ -6,6 +6,7 @@ import type {
   SceneCamera,
   SceneGizmoRenderOptions,
   SceneLayer3DData,
+  SceneLightLayer,
   ScenePlaneLayer,
   SceneSplatEffectorRuntimeData,
   SceneSplatLayer,
@@ -42,7 +43,7 @@ import {
 } from './sceneRenderer/pipelineResources';
 import { buildPlaneMvp, buildPlaneUniformData } from './sceneRenderer/planeUniforms';
 import { resolvePlaneTextureSource, type CachedPlaneTexture } from './sceneRenderer/planeTextureSources';
-import { createSceneTargets, hasMatchingSceneTargets } from './sceneRenderer/targets';
+import { createSceneTargets, hasMatchingSceneTargets, type SceneTargets } from './sceneRenderer/targets';
 
 const log = Logger.create('NativeSceneRenderer');
 
@@ -52,6 +53,7 @@ export class NativeSceneRenderer {
   private sceneView: GPUTextureView | null = null;
   private sceneDepthTexture: GPUTexture | null = null;
   private sceneDepthView: GPUTextureView | null = null;
+  private readonly sceneTargets = new Map<string, SceneTargets>();
   private compositePipeline: GPURenderPipeline | null = null;
   private compositeBindGroupLayout: GPUBindGroupLayout | null = null;
   private compositeSampler: GPUSampler | null = null;
@@ -95,6 +97,23 @@ export class NativeSceneRenderer {
     return this.modelRuntimeCache.preload(url, fileName, getModelSequencePreloadOptions(modelSequence));
   }
 
+  pruneSceneTargets(activeTargetKeys: ReadonlySet<string>): void {
+    for (const [key, targets] of this.sceneTargets) {
+      if (activeTargetKeys.has(key)) continue;
+      targets.texture.destroy();
+      targets.depthTexture.destroy();
+      this.sceneTargets.delete(key);
+    }
+  }
+
+  releaseSceneTarget(targetKey: string): void {
+    const targets = this.sceneTargets.get(targetKey);
+    if (!targets) return;
+    targets.texture.destroy();
+    targets.depthTexture.destroy();
+    this.sceneTargets.delete(targetKey);
+  }
+
   renderScene(
     device: GPUDevice,
     layers: SceneLayer3DData[],
@@ -103,6 +122,7 @@ export class NativeSceneRenderer {
     realtimePlayback: boolean,
     gizmo?: SceneGizmoRenderOptions | null,
     maskTextureManager?: MaskTextureManager | null,
+    targetKey: string = 'main',
   ): GPUTextureView | null {
     if (!this.initialized) {
       return null;
@@ -111,6 +131,7 @@ export class NativeSceneRenderer {
     const planeLayers = this.planePass.collect(layers);
     const meshLayers = this.meshPass.collect(layers);
     const splatLayers = this.splatPass.collect(layers);
+    const lightLayers = layers.filter((layer): layer is SceneLightLayer => layer.kind === 'light');
     const preparedMeshLayers = meshLayers.map((layer) =>
       layer.kind === 'model'
         ? prepareModelLayerForRender(
@@ -123,7 +144,7 @@ export class NativeSceneRenderer {
     );
     const nativeMeshLayers = this.meshPass.collectNativeLayers(preparedMeshLayers);
 
-    if (!canRenderNativeScene(layers, planeLayers, nativeMeshLayers, splatLayers)) {
+    if (!canRenderNativeScene(layers, planeLayers, nativeMeshLayers, splatLayers, lightLayers)) {
       return null;
     }
 
@@ -132,11 +153,13 @@ export class NativeSceneRenderer {
       planeLayers,
       nativeMeshLayers,
       splatLayers,
+      lightLayers,
       camera,
       effectors,
       realtimePlayback,
       gizmo,
       maskTextureManager,
+      targetKey,
     );
     if (!nativeSceneView) {
       return null;
@@ -147,15 +170,19 @@ export class NativeSceneRenderer {
       planes: planeLayers.length,
       meshes: meshLayers.length,
       splats: splatLayers.length,
+      lights: lightLayers.length,
     });
     return nativeSceneView;
   }
 
   dispose(): void {
-    this.sceneTexture?.destroy();
+    for (const targets of this.sceneTargets.values()) {
+      targets.texture.destroy();
+      targets.depthTexture.destroy();
+    }
+    this.sceneTargets.clear();
     this.sceneTexture = null;
     this.sceneView = null;
-    this.sceneDepthTexture?.destroy();
     this.sceneDepthTexture = null;
     this.sceneDepthView = null;
     this.compositePipeline = null;
@@ -178,19 +205,14 @@ export class NativeSceneRenderer {
     this.modelRuntimeCache.clear();
   }
 
-  private ensureSceneTargets(device: GPUDevice, width: number, height: number): void {
-    if (hasMatchingSceneTargets({
-      texture: this.sceneTexture,
-      view: this.sceneView,
-      depthTexture: this.sceneDepthTexture,
-      depthView: this.sceneDepthView,
-    }, width, height)) {
-      return;
+  private ensureSceneTargets(device: GPUDevice, targetKey: string, width: number, height: number): void {
+    let targets = this.sceneTargets.get(targetKey);
+    if (!targets || !hasMatchingSceneTargets(targets, width, height)) {
+      targets?.texture.destroy();
+      targets?.depthTexture.destroy();
+      targets = createSceneTargets(device, width, height);
+      this.sceneTargets.set(targetKey, targets);
     }
-
-    this.sceneTexture?.destroy();
-    this.sceneDepthTexture?.destroy();
-    const targets = createSceneTargets(device, width, height);
     this.sceneTexture = targets.texture;
     this.sceneView = targets.view;
     this.sceneDepthTexture = targets.depthTexture;
@@ -202,11 +224,13 @@ export class NativeSceneRenderer {
     planeLayers: ScenePlaneLayer[],
     nativeMeshLayers: SceneNativeMeshLayer[],
     layers: SceneSplatLayer[],
+    lightLayers: SceneLightLayer[],
     camera: SceneCamera,
     effectors: SceneSplatEffectorRuntimeData[],
     realtimePlayback: boolean,
     gizmo?: SceneGizmoRenderOptions | null,
     maskTextureManager?: MaskTextureManager | null,
+    targetKey: string = 'main',
   ): GPUTextureView | null {
     const renderer = getGaussianSplatGpuRenderer();
     if (layers.length > 0 && !renderer.isInitialized) {
@@ -217,7 +241,7 @@ export class NativeSceneRenderer {
       return null;
     }
 
-    this.ensureSceneTargets(device, camera.viewport.width, camera.viewport.height);
+    this.ensureSceneTargets(device, targetKey, camera.viewport.width, camera.viewport.height);
     this.ensureCompositeResources(device);
     this.ensurePlaneResources(device);
     this.meshPass.initialize(device, SCENE_DEPTH_FORMAT);
@@ -289,6 +313,7 @@ export class NativeSceneRenderer {
       opaqueMeshes,
       camera,
       effectors,
+      lightLayers,
       this.modelRuntimeCache,
       temporaryBuffers,
       false,
@@ -379,6 +404,7 @@ export class NativeSceneRenderer {
       transparentMeshes,
       camera,
       effectors,
+      lightLayers,
       this.modelRuntimeCache,
       temporaryBuffers,
       true,
@@ -390,7 +416,7 @@ export class NativeSceneRenderer {
       return null;
     }
     const gizmoLayer = gizmo
-      ? [...planeLayers, ...nativeMeshLayers, ...layers].find((layer) => layer.clipId === gizmo.clipId) ??
+      ? [...planeLayers, ...nativeMeshLayers, ...layers, ...lightLayers].find((layer) => layer.clipId === gizmo.clipId) ??
         (gizmo.worldMatrix && gizmo.worldTransform
           ? {
               clipId: gizmo.clipId,

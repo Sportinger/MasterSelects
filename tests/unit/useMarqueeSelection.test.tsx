@@ -71,6 +71,14 @@ function MarqueeHarness({
           value: 0.5,
           easing: 'linear',
         },
+        {
+          id: 'keyframe-opacity-2',
+          clipId: 'clip-video',
+          time: 2,
+          property: 'opacity' as AnimatableProperty,
+          value: 0.75,
+          easing: 'linear',
+        },
       ],
     ],
   ]);
@@ -136,7 +144,7 @@ describe('useMarqueeSelection', () => {
     });
   });
 
-  it('selects keyframes from row data without querying rendered keyframe diamond nodes', async () => {
+  it('marquee-selects multiple keyframes from row data without rendered diamond nodes', async () => {
     const selectKeyframe = vi.fn();
     const deselectAllKeyframes = vi.fn();
     const { container, getByTestId } = render(
@@ -164,6 +172,7 @@ describe('useMarqueeSelection', () => {
     await waitFor(() => {
       expect(deselectAllKeyframes).toHaveBeenCalled();
       expect(selectKeyframe).toHaveBeenCalledWith('keyframe-opacity', true);
+      expect(selectKeyframe).toHaveBeenCalledWith('keyframe-opacity-2', true);
     });
   });
 
@@ -201,14 +210,14 @@ describe('useMarqueeSelection', () => {
     });
   });
 
-  it('uses kernel row geometry data for keyframe marquee hit testing when present', async () => {
+  it('offsets kernel row geometry by the timeline content origin', async () => {
     const selectKeyframe = vi.fn();
     const deselectAllKeyframes = vi.fn();
     const { container, getByTestId } = render(
       <MarqueeHarness
         selectKeyframe={selectKeyframe}
         deselectAllKeyframes={deselectAllKeyframes}
-        geometryX={0}
+        geometryX={4}
       />,
     );
 
@@ -217,17 +226,18 @@ describe('useMarqueeSelection', () => {
     const keyframeTrack = container.querySelector<HTMLElement>('.keyframe-track');
 
     lanes.getBoundingClientRect = () => rect(0, 0, 1_000, 200);
-    if (clipRow) clipRow.getBoundingClientRect = () => rect(0, 0, 1_000, 64);
+    if (clipRow) clipRow.getBoundingClientRect = () => rect(120, 0, 1_000, 64);
     if (keyframeTrack) keyframeTrack.getBoundingClientRect = () => rect(120, 64, 1_000, 18);
 
-    fireEvent.mouseDown(keyframeTrack as HTMLElement, { button: 0, clientX: 20, clientY: 70 });
+    fireEvent.mouseDown(keyframeTrack as HTMLElement, { button: 0, clientX: 145, clientY: 70 });
     await waitFor(() => expect(getByTestId('marquee-state').textContent).toBe('marquee'));
 
-    fireEvent.mouseMove(document, { clientX: 40, clientY: 80 });
+    fireEvent.mouseMove(document, { clientX: 166, clientY: 80 });
 
     await waitFor(() => {
       expect(deselectAllKeyframes).toHaveBeenCalled();
       expect(selectKeyframe).toHaveBeenCalledWith('keyframe-opacity', true);
+      expect(selectKeyframe).toHaveBeenCalledWith('keyframe-opacity-2', true);
     });
   });
 });

@@ -22,188 +22,19 @@ import {
   persistTimelineTrackHeaderWidth,
 } from './viewPreferences';
 import { stopTimelineAudioPlayback } from '../../services/audio/timelineAudioPlaybackStopper';
-import { getTimelinePlaybackWarmupVideo } from '../../services/timeline/timelinePlaybackWarmupRuntime';
 import {
-  hasWorkerGpuPlaybackStartVideoSource,
   shouldWarmWorkerGpuForwardPlaybackStart,
   waitForWorkerGpuPlaybackStartFrame,
 } from '../../services/timeline/workerGpuPlaybackStartWarmup';
 import {
-  createTransitionSourceClip,
-  DEFAULT_TRANSITION_PLACEMENT,
-  planTransition,
-} from './editOperations/transitionPlanner';
-import { createTimelineTransitionMediaDurationResolver } from '../../services/timeline/timelineTransitionMediaDurations';
-import type { TimelineClip, TimelineTrack } from '../../types';
+  closeSourceMonitorForTimelinePlayback,
+  createPlaybackWarmupState,
+  preparePlaybackStartWarmup,
+  primeReverseWorkerWebCodecsPlaybackForState,
+  waitForPlaybackWarmupFrame,
+} from './playbackWarmup';
 
-function createPlaybackWarmupRequestId(): string {
-  return `playback-warmup-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function getWarmupTimestamp(): number {
-  return typeof performance !== 'undefined' ? performance.now() : Date.now();
-}
-
-function waitForPlaybackWarmupFrame(): Promise<void> {
-  if (typeof requestAnimationFrame === 'function') {
-    return new Promise((resolve) => {
-      let settled = false;
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeoutId);
-        resolve();
-      };
-      const timeoutId = setTimeout(finish, 16);
-      requestAnimationFrame(finish);
-    });
-  }
-  return new Promise((resolve) => setTimeout(resolve, 16));
-}
-
-function getMediaStoreState() {
-  return useMediaStore.getState();
-}
-
-function getTransitionWarmupClipsAtTime(
-  clips: readonly TimelineClip[],
-  visibleVideoTrackIds: ReadonlySet<string>,
-  time: number,
-): TimelineClip[] {
-  const clipsById = new Map<string, TimelineClip>();
-  const getMediaDuration = createTimelineTransitionMediaDurationResolver();
-
-  for (const outgoingClip of clips) {
-    const transition = outgoingClip.transitionOut;
-    if (!transition || !visibleVideoTrackIds.has(outgoingClip.trackId)) continue;
-
-    const incomingClip = clips.find(clip => clip.id === transition.linkedClipId);
-    if (!incomingClip || !visibleVideoTrackIds.has(incomingClip.trackId)) continue;
-
-    const junctionTime = outgoingClip.startTime + outgoingClip.duration;
-    const plan = planTransition({
-      outgoingClip,
-      incomingClip,
-      transitionType: transition.type,
-      requestedDuration: transition.duration,
-      params: transition.params,
-      placement: DEFAULT_TRANSITION_PLACEMENT,
-      edgePolicy: 'hold',
-      junctionTime,
-      bodyOffset: transition.offset ?? 0,
-      getMediaDuration,
-    });
-    if (!plan || time < plan.bodyStart || time >= plan.bodyEnd) continue;
-
-    clipsById.set(outgoingClip.id, createTransitionSourceClip(outgoingClip, plan.outgoing, time));
-    clipsById.set(incomingClip.id, createTransitionSourceClip(incomingClip, plan.incoming, time));
-  }
-
-  return [...clipsById.values()];
-}
-
-function getVisibleVideoTrackIds(tracks: readonly TimelineTrack[]): Set<string> {
-  return new Set(
-    tracks
-      .filter((track) => track.type === 'video' && track.visible !== false)
-      .map((track) => track.id)
-  );
-}
-
-function closeSourceMonitorForTimelinePlayback(): void {
-  const { sourceMonitorFileId, setSourceMonitorFile } = getMediaStoreState();
-  if (sourceMonitorFileId) {
-    setSourceMonitorFile(null);
-  }
-}
-
-function getReversePrimeClipsAtTime(
-  clips: readonly TimelineClip[],
-  visibleVideoTrackIds: ReadonlySet<string>,
-  time: number,
-): TimelineClip[] {
-  const clipsAtPlayhead = clips.filter(clip => {
-    if (!visibleVideoTrackIds.has(clip.trackId)) return false;
-    const isAtPlayhead = time >= clip.startTime &&
-                         time < clip.startTime + clip.duration;
-    const hasVideo = getTimelinePlaybackWarmupVideo(clip.source) !== null;
-    return isAtPlayhead && hasVideo;
-  });
-  const transitionClipsAtPlayhead = getTransitionWarmupClipsAtTime(
-    clips,
-    visibleVideoTrackIds,
-    time,
-  ).filter(clip => getTimelinePlaybackWarmupVideo(clip.source) !== null);
-  return [...clipsAtPlayhead, ...transitionClipsAtPlayhead];
-}
-
-type ReverseWorkerRuntimeModule = typeof import('../../services/layerBuilder/reverseWorkerWebCodecsRuntime');
-
-let reverseWorkerRuntimeModulePromise: Promise<ReverseWorkerRuntimeModule> | null = null;
-
-function loadReverseWorkerRuntimeModule(): Promise<ReverseWorkerRuntimeModule> {
-  reverseWorkerRuntimeModulePromise ??= import('../../services/layerBuilder/reverseWorkerWebCodecsRuntime');
-  return reverseWorkerRuntimeModulePromise;
-}
-
-if (typeof window !== 'undefined' && import.meta.env?.MODE !== 'test') {
-  void loadReverseWorkerRuntimeModule().catch(() => {
-    reverseWorkerRuntimeModulePromise = null;
-  });
-}
-
-function primeReverseWorkerWebCodecsPlayback(input: {
-  readonly clips: readonly TimelineClip[];
-  readonly playbackSpeed: number;
-  readonly playheadPosition: number;
-  readonly getSourceTimeForClip: (clipId: string, clipLocalTime: number) => number;
-  readonly getInterpolatedSpeed: (clipId: string, clipLocalTime: number) => number;
-}): Promise<number> {
-  if (input.playbackSpeed >= 0 && !input.clips.some((clip) => clip.reversed === true)) {
-    return Promise.resolve(0);
-  }
-  return loadReverseWorkerRuntimeModule()
-    .then(({ primeReverseWorkerRuntimeSourcesForPlayback }) => {
-      return primeReverseWorkerRuntimeSourcesForPlayback({
-        clips: input.clips,
-        playheadPosition: input.playheadPosition,
-        playbackSpeed: input.playbackSpeed,
-        getSourceTimeForClip: input.getSourceTimeForClip,
-        getInterpolatedSpeed: input.getInterpolatedSpeed,
-      });
-    })
-    .catch(() => {
-      reverseWorkerRuntimeModulePromise = null;
-      return 0;
-    });
-}
-
-function primeReverseWorkerWebCodecsPlaybackForState(input: {
-  readonly clips: readonly TimelineClip[];
-  readonly tracks: readonly TimelineTrack[];
-  readonly playbackSpeed: number;
-  readonly playheadPosition: number;
-  readonly getSourceTimeForClip: (clipId: string, clipLocalTime: number) => number;
-  readonly getInterpolatedSpeed: (clipId: string, clipLocalTime: number) => number;
-}): Promise<number> {
-  const visibleVideoTrackIds = getVisibleVideoTrackIds(input.tracks);
-  const primeTimes = input.playbackSpeed < 0
-    ? [input.playheadPosition, input.playheadPosition - 0.35, input.playheadPosition - 0.75]
-    : [input.playheadPosition];
-  const clipsById = new Map<string, TimelineClip>();
-  for (const time of primeTimes) {
-    for (const clip of getReversePrimeClipsAtTime(input.clips, visibleVideoTrackIds, time)) {
-      clipsById.set(clip.id, clip);
-    }
-  }
-  return primeReverseWorkerWebCodecsPlayback({
-    clips: [...clipsById.values()],
-    playbackSpeed: input.playbackSpeed,
-    playheadPosition: input.playheadPosition,
-    getSourceTimeForClip: input.getSourceTimeForClip,
-    getInterpolatedSpeed: input.getInterpolatedSpeed,
-  });
-}
+const getMediaStoreState = () => useMediaStore.getState();
 
 // Playback actions only (RAM preview and proxy cache in separate slices)
 export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => ({
@@ -257,7 +88,8 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
       getInterpolatedSpeed,
     } = get();
     set({ playbackWarmup: null });
-    closeSourceMonitorForTimelinePlayback();
+    const { sourceMonitorFileId, setSourceMonitorFile } = getMediaStoreState();
+    closeSourceMonitorForTimelinePlayback({ sourceMonitorFileId, setSourceMonitorFile });
     const effectivePlaybackSpeed = typeof playbackSpeed === 'number' && Number.isFinite(playbackSpeed)
       ? playbackSpeed
       : 1;
@@ -282,97 +114,38 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
       playheadState.position = playbackStartPosition;
     }
 
-    const visibleVideoTrackIds = getVisibleVideoTrackIds(tracks);
-
-    // Find visible video clips at current playhead position that need to be ready.
-    // Audio-only / hidden-video playback must not wake video decoders.
-    const visibleClipsAtPlaybackStart = clips.filter(clip => {
-      if (!visibleVideoTrackIds.has(clip.trackId)) return false;
-      const isAtPlayhead = playbackStartPosition >= clip.startTime &&
-                           playbackStartPosition < clip.startTime + clip.duration;
-      return isAtPlayhead;
-    });
-    const clipsAtPlayhead = visibleClipsAtPlaybackStart.filter(
-      clip => getTimelinePlaybackWarmupVideo(clip.source) !== null,
-    );
-    const transitionWarmupClipsAtPlayhead = getTransitionWarmupClipsAtTime(
+    const {
+      hasWorkerGpuStartVideo,
+      reverseWorkerPrimeReady,
+      videosToCheck,
+    } = preparePlaybackStartWarmup({
       clips,
-      visibleVideoTrackIds,
-      playbackStartPosition,
-    );
-    const transitionClipsAtPlayhead = transitionWarmupClipsAtPlayhead.filter(
-      clip => getTimelinePlaybackWarmupVideo(clip.source) !== null,
-    );
-    const hasTopLevelWorkerGpuStartVideo = [
-      ...visibleClipsAtPlaybackStart,
-      ...transitionWarmupClipsAtPlayhead,
-    ].some(hasWorkerGpuPlaybackStartVideoSource);
-
-    const reverseWorkerPrimeReady = primeReverseWorkerWebCodecsPlayback({
-      clips: [...clipsAtPlayhead, ...transitionClipsAtPlayhead],
+      tracks,
       playbackSpeed: effectivePlaybackSpeed,
       playheadPosition: playbackStartPosition,
       getSourceTimeForClip,
       getInterpolatedSpeed,
     });
 
-    // Also check nested composition clips
-    const nestedVideos: HTMLVideoElement[] = [];
-    for (const clip of clips) {
-      if (clip.isComposition && clip.nestedClips && visibleVideoTrackIds.has(clip.trackId)) {
-        const isAtPlayhead = playbackStartPosition >= clip.startTime &&
-                             playbackStartPosition < clip.startTime + clip.duration;
-        if (isAtPlayhead) {
-          const compTime = playbackStartPosition - clip.startTime + clip.inPoint;
-          for (const nestedClip of clip.nestedClips) {
-            const warmupVideo = getTimelinePlaybackWarmupVideo(nestedClip.source);
-            if (warmupVideo) {
-              const isNestedAtTime = compTime >= nestedClip.startTime &&
-                                     compTime < nestedClip.startTime + nestedClip.duration;
-              if (isNestedAtTime) {
-                nestedVideos.push(warmupVideo);
-              }
-            }
-          }
-        }
-      }
-    }
-    const hasWorkerGpuStartVideo = hasTopLevelWorkerGpuStartVideo || nestedVideos.length > 0;
-
-    // Collect all videos that need to be ready
-    const videosToCheck = Array.from(new Set([
-      ...clipsAtPlayhead.flatMap(c => {
-        const warmupVideo = getTimelinePlaybackWarmupVideo(c.source);
-        return warmupVideo ? [warmupVideo] : [];
-      }),
-      ...transitionClipsAtPlayhead.flatMap(c => {
-        const warmupVideo = getTimelinePlaybackWarmupVideo(c.source);
-        return warmupVideo ? [warmupVideo] : [];
-      }),
-      ...nestedVideos
-    ]));
-
-    const videosNeedingWarmup = videosToCheck.filter((video) => video.readyState < 3);
+    const videosNeedingWarmup = videosToCheck.filter((video) => video.readyState < 2 || video.seeking);
 
     if (videosNeedingWarmup.length > 0) {
-      const warmupRequestId = createPlaybackWarmupRequestId();
-      set({
-        playbackWarmup: {
-          requestId: warmupRequestId,
-          startedAt: getWarmupTimestamp(),
-          targetTime: playbackStartPosition,
-          pendingVideoCount: videosNeedingWarmup.length,
-          totalVideoCount: videosToCheck.length,
-        },
+      const playbackWarmup = createPlaybackWarmupState({
+        targetTime: playbackStartPosition,
+        pendingVideoCount: videosNeedingWarmup.length,
+        totalVideoCount: videosToCheck.length,
       });
+      const { requestId: warmupRequestId } = playbackWarmup;
+      set({ playbackWarmup });
 
-      // Wait for all videos to be ready (readyState >= 3 means HAVE_FUTURE_DATA)
+      // A settled current frame is enough to start; normal playback buffering
+      // handles subsequent frames without showing a false warmup after scrubs.
       const waitForReady = async (video: HTMLVideoElement): Promise<void> => {
-        if (video.readyState >= 3) return;
+        if (video.readyState >= 2 && !video.seeking) return;
 
         return new Promise((resolve) => {
           const checkReady = () => {
-            if (video.readyState >= 3) {
+            if (video.readyState >= 2 && !video.seeking) {
               resolve();
               return;
             }
@@ -380,7 +153,7 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
             video.play().then(() => {
               setTimeout(() => {
                 video.pause();
-                if (video.readyState >= 3) {
+                if (video.readyState >= 2 && !video.seeking) {
                   resolve();
                 } else {
                   // Check again after a short delay
@@ -418,16 +191,13 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
       hasVideoAtPlaybackStart: hasWorkerGpuStartVideo,
       playbackSpeed: effectivePlaybackSpeed,
     })) {
-      const warmupRequestId = createPlaybackWarmupRequestId();
-      set({
-        playbackWarmup: {
-          requestId: warmupRequestId,
-          startedAt: getWarmupTimestamp(),
-          targetTime: playbackStartPosition,
-          pendingVideoCount: 1,
-          totalVideoCount: 1,
-        },
+      const playbackWarmup = createPlaybackWarmupState({
+        targetTime: playbackStartPosition,
+        pendingVideoCount: 1,
+        totalVideoCount: 1,
       });
+      const { requestId: warmupRequestId } = playbackWarmup;
+      set({ playbackWarmup });
       renderHostPort.requestNewFrameRender();
       await waitForWorkerGpuPlaybackStartFrame({
         targetTime: playbackStartPosition,

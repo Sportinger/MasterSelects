@@ -47,7 +47,6 @@ interface PreviewCanvasMountProps {
   exportPreviewCanvasRef: React.RefObject<HTMLCanvasElement | null>;
   exportPreviewDisplaySize: { width: number; height: number };
   exportPreviewFrame: ImageBitmap | null;
-  focusEditCameraOnSceneObject: (object: { clipId: string; kind: string; worldPosition: { x: number; y: number; z: number } }) => boolean;
   getCursorForHandle: (handle: string | null) => string;
   handleOverlayMouseDown: (event: React.MouseEvent<HTMLCanvasElement>) => void;
   handleOverlayMouseMove: (event: React.MouseEvent<HTMLCanvasElement>) => void;
@@ -58,6 +57,7 @@ interface PreviewCanvasMountProps {
   isEngineReady: boolean;
   isExporting: boolean;
   layerTransformMode: boolean;
+  liveFeedbackCompositionId: string | null;
   maskEditMode: string;
   maskNavigationMode: boolean;
   maskPanelActive: boolean;
@@ -147,7 +147,6 @@ export function PreviewCanvasMount({
   exportPreviewCanvasRef,
   exportPreviewDisplaySize,
   exportPreviewFrame,
-  focusEditCameraOnSceneObject,
   getCursorForHandle,
   handleOverlayMouseDown,
   handleOverlayMouseMove,
@@ -158,6 +157,7 @@ export function PreviewCanvasMount({
   isEngineReady,
   isExporting,
   layerTransformMode,
+  liveFeedbackCompositionId,
   maskEditMode,
   maskNavigationMode,
   maskPanelActive,
@@ -251,6 +251,7 @@ export function PreviewCanvasMount({
                 width={effectiveResolution.width}
                 height={effectiveResolution.height}
                 className="preview-canvas"
+                data-live-feedback-composition-id={liveFeedbackCompositionId ?? undefined}
                 style={{
                   width: canvasSize.width,
                   height: canvasSize.height,
@@ -301,8 +302,6 @@ export function PreviewCanvasMount({
                   worldGridPlane={worldGridPlane}
                   toolbarPortalTarget={sceneGizmoToolbarTarget}
                   enabled
-                  canSetObjectOrbitPivot={editCameraModeActive}
-                  onSetObjectOrbitPivot={focusEditCameraOnSceneObject}
                 />
               )}
             </>

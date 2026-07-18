@@ -1,4 +1,5 @@
-import type { Keyframe, SerializableClip } from '../types';
+import type { Keyframe } from '../../../types/keyframes';
+import type { SerializableClip, TimelineClip } from '../../../types/timeline';
 import { MAX_NESTING_DEPTH } from '../constants';
 import { generateNestedClipId } from '../helpers/idGenerator';
 import { Logger } from '../../../services/logger';
@@ -71,6 +72,20 @@ export interface MergeNestedClipKeyframesParams {
   isCurrentTimelineSession?: () => boolean;
 }
 
+function collectLoadedNestedClipIds(compClip: TimelineClip | undefined): Set<string> {
+  const clipIds = new Set<string>();
+
+  const collect = (clips: readonly TimelineClip[] | undefined): void => {
+    for (const clip of clips ?? []) {
+      clipIds.add(clip.id);
+      collect(clip.nestedClips);
+    }
+  };
+
+  collect(compClip?.nestedClips);
+  return clipIds;
+}
+
 export function mergeNestedClipKeyframes(params: MergeNestedClipKeyframesParams): boolean {
   const {
     compClipId,
@@ -80,9 +95,12 @@ export function mergeNestedClipKeyframes(params: MergeNestedClipKeyframesParams)
     isCurrentTimelineSession,
   } = params;
 
-  if (nestedKeyframes.size === 0) {
-    return true;
-  }
+  const state = get();
+  const nestedClipIds = collectLoadedNestedClipIds(
+    state.clips.find((clip) => clip.id === compClipId),
+  );
+
+  if (nestedKeyframes.size === 0 && nestedClipIds.size === 0) return true;
 
   if (isCurrentTimelineSession && !isCurrentTimelineSession()) {
     log.debug('Skipped stale nested keyframe merge', {
@@ -92,8 +110,10 @@ export function mergeNestedClipKeyframes(params: MergeNestedClipKeyframesParams)
     return false;
   }
 
-  const currentKeyframes = get().clipKeyframes ?? new Map<string, Keyframe[]>();
-  const mergedKeyframes = new Map(currentKeyframes);
+  const mergedKeyframes = new Map(state.clipKeyframes ?? new Map<string, Keyframe[]>());
+  nestedClipIds.forEach((clipId) => {
+    mergedKeyframes.delete(clipId);
+  });
   nestedKeyframes.forEach((keyframes, clipId) => {
     mergedKeyframes.set(clipId, keyframes);
   });

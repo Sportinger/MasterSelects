@@ -14,10 +14,20 @@ export function useFlashBoardComposerAccessState() {
   const elevenLabsApiKey = normalizeApiKeyValue(useSettingsStore((s) => s.apiKeys.elevenlabs));
   const apiKeysUnlocked = useSettingsStore((s) => s.apiKeysUnlocked);
   const apiKeyDefaults = useSettingsStore((s) => s.apiKeyDefaults);
+  const aiSystemPromptOverrides = useSettingsStore((s) => s.aiSystemPromptOverrides);
+  const aiSystemPromptSendContext = useSettingsStore((s) => s.aiSystemPromptSendContext);
+  const aiProvider = useSettingsStore((s) => s.aiProvider);
+  const lemonadeContextSize = useSettingsStore((s) => s.lemonadeContextSize);
   const lemonadeEndpoint = useSettingsStore((s) => s.lemonadeEndpoint);
+  const lemonadeModel = useSettingsStore((s) => s.lemonadeModel);
   const openSettings = useSettingsStore((s) => s.openSettings);
   const aiApprovalMode = useSettingsStore((s) => s.aiApprovalMode);
   const setAiApprovalMode = useSettingsStore((s) => s.setAiApprovalMode);
+  const setAiProvider = useSettingsStore((s) => s.setAiProvider);
+  const setAiSystemPromptOverride = useSettingsStore((s) => s.setAiSystemPromptOverride);
+  const setAiSystemPromptSendContext = useSettingsStore((s) => s.setAiSystemPromptSendContext);
+  const setLemonadeContextSize = useSettingsStore((s) => s.setLemonadeContextSize);
+  const setLemonadeModel = useSettingsStore((s) => s.setLemonadeModel);
   const useOpenAiKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.openai && openAiApiKey.trim());
   const useAnthropicKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.anthropic && anthropicApiKey.trim());
   const usePiApiKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.piapi && piApiKey.trim());
@@ -37,6 +47,9 @@ export function useFlashBoardComposerAccessState() {
   return {
     accountSession,
     aiApprovalMode,
+    aiProvider,
+    aiSystemPromptSendContext,
+    aiSystemPromptOverrides,
     anthropicApiKey,
     canUseByoPromptRefiner,
     canUseHostedPromptRefiner,
@@ -49,12 +62,19 @@ export function useFlashBoardComposerAccessState() {
     hasKieAiKey: useKieAiKeyByDefault,
     hasOpenAiKey: useOpenAiKeyByDefault,
     hostedAIEnabled,
+    lemonadeContextSize,
     lemonadeEndpoint,
+    lemonadeModel,
     openAiApiKey,
     openAuthDialog,
     openPricingDialog,
     openSettings,
     setAiApprovalMode,
+    setAiProvider,
+    setAiSystemPromptOverride,
+    setAiSystemPromptSendContext,
+    setLemonadeContextSize,
+    setLemonadeModel,
     useElevenLabsKeyByDefault,
     useEvolinkKeyByDefault,
     useHostedProductionProviders,

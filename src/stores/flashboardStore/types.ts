@@ -3,6 +3,7 @@ export interface FlashBoardStoreState {
   selectedActiveGenerationRecordIds: string[];
   composer: FlashBoardComposerState;
   promptHistory: FlashBoardPromptHistoryEntry[];
+  chatMessages: FlashBoardChatMessage[];
   hoveredComposerReference: FlashBoardHoveredComposerReference | null;
 }
 
@@ -11,6 +12,7 @@ export const FLASHBOARD_STORE_STATE_KEYS = [
   'selectedActiveGenerationRecordIds',
   'composer',
   'promptHistory',
+  'chatMessages',
   'hoveredComposerReference',
 ] as const satisfies readonly (keyof FlashBoardStoreState)[];
 
@@ -21,6 +23,7 @@ export const FLASHBOARD_ACTIVE_GENERATION_STATE_KEYS = [
   'selectedActiveGenerationRecordIds',
   'composer',
   'promptHistory',
+  'chatMessages',
   'hoveredComposerReference',
 ] as const satisfies readonly FlashBoardStoreStateKey[];
 
@@ -62,6 +65,41 @@ export interface FlashBoardPromptHistoryEntry {
   kind: FlashBoardPromptHistoryKind;
   prompt: string;
   createdAt: number;
+}
+
+export interface FlashBoardChatEditOption {
+  index: number;
+  title: string;
+  description: string;
+}
+
+export interface FlashBoardChatToolCall {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+export interface FlashBoardChatToolResult {
+  success: boolean;
+  data?: unknown;
+  error?: string;
+}
+
+export interface FlashBoardChatExecutedToolCall {
+  modelContent: string;
+  result: FlashBoardChatToolResult;
+  toolCall: FlashBoardChatToolCall;
+}
+
+export interface FlashBoardChatMessage {
+  createdAt?: number;
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  editOptions?: FlashBoardChatEditOption[];
+  isError?: boolean;
+  isPending?: boolean;
+  toolCalls?: FlashBoardChatExecutedToolCall[];
 }
 
 export interface FlashBoardComposerModelSettings {
@@ -191,6 +229,7 @@ export interface FlashBoardGenerationMetadata {
   version: string;
   outputType?: FlashBoardOutputType;
   mediaType?: FlashBoardMediaType;
+  mode?: string;
   originalPrompt?: string;
   prompt: string;
   negativePrompt?: string;

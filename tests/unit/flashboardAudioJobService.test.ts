@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsStore } from '../../src/stores/settingsStore';
+import type { FlashBoardGenerationRequest } from '../../src/stores/flashboardStore/types';
 import { flashBoardJobService } from '../../src/services/flashboard/FlashBoardJobService';
 
 const elevenLabsMock = vi.hoisted(() => ({
@@ -25,6 +26,27 @@ vi.mock('../../src/services/elevenLabsService', () => ({
 vi.mock('../../src/services/cloudAiService', () => ({
   cloudAiService: cloudAiMock,
 }));
+
+function createHostedSpeechRequest(): FlashBoardGenerationRequest {
+  return {
+    service: 'cloud',
+    providerId: 'cloud-elevenlabs-tts',
+    version: 'eleven_multilingual_v2',
+    outputType: 'audio',
+    prompt: 'Hello from the board',
+    voiceId: 'voice-1',
+    voiceName: 'Narrator',
+    outputFormat: 'mp3_44100_128',
+    voiceSettings: {
+      speed: 1,
+      stability: 0.5,
+      similarityBoost: 0.75,
+      style: 0,
+      useSpeakerBoost: true,
+    },
+    referenceMediaFileIds: [],
+  };
+}
 
 describe('FlashBoardJobService ElevenLabs audio jobs', () => {
   beforeEach(() => {
@@ -161,5 +183,26 @@ describe('FlashBoardJobService ElevenLabs audio jobs', () => {
     );
     expect(update.mediaType).toBe('audio');
     expect(update.assetUrl).toBe('https://cdn.example.com/song.mp3');
+  });
+
+  it('keeps 100 hosted jobs active before applying the local queue', () => {
+    cloudAiMock.createElevenLabsSpeech.mockImplementation(() => new Promise(() => undefined));
+
+    for (let index = 0; index <= 100; index += 1) {
+      flashBoardJobService.submit({
+        recordId: `record-hosted-${index}`,
+        request: createHostedSpeechRequest(),
+      });
+    }
+
+    expect(flashBoardJobService.getRunningCount()).toBe(100);
+    expect(flashBoardJobService.getQueueLength()).toBe(1);
+
+    for (let index = 0; index <= 100; index += 1) {
+      flashBoardJobService.cancel(`record-hosted-${index}`);
+    }
+
+    expect(flashBoardJobService.getRunningCount()).toBe(0);
+    expect(flashBoardJobService.getQueueLength()).toBe(0);
   });
 });

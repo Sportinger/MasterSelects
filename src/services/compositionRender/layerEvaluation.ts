@@ -5,7 +5,10 @@ import { isVectorAnimationSourceType, type VectorAnimationClipSettings } from '.
 import type { Composition } from '../../stores/mediaStore/types';
 import { calculateSourceTime } from '../../utils/speedIntegration';
 import { getEffectiveScale } from '../../utils/transformScale';
+import { evaluateTransitionRenderState } from '../../utils/transitionRenderInterpolation';
 import { mathSceneRenderer } from '../mathScene/MathSceneRenderer';
+import { resolveTransitionRecipeBlendMode } from '../timeline/transitionRecipeBlendWindows';
+import { resolveTransitionSourceMapTime } from '../timeline/transitionSourceMap';
 import {
   getRuntimeFrameProvider,
   updateRuntimePlaybackTime,
@@ -14,9 +17,11 @@ import { proxyFrameCache } from '../proxyFrameCache';
 import { vectorAnimationRuntimeManager } from '../vectorAnimation/VectorAnimationRuntimeManager';
 import { getBackgroundSessionKey, getBaseLayerSource } from './sourceSetup';
 import {
+  evaluateCompositionClipEffects,
   evaluateCompositionClipMasks,
   evaluateCompositionClipTransform,
 } from './keyframeEvaluation';
+import { evaluateTransitionMappedAnimation } from './transitionMappedAnimation';
 import type {
   CompositionClipSourceEntry,
   CompositionInfo,
@@ -28,6 +33,16 @@ import { buildCompositionTransitionLayersForTrack } from './transitionEvaluation
 
 type VectorSettingsReader = (clipId: string, localTime: number) => VectorAnimationClipSettings | undefined;
 type ClipKeyframesReader = (clipId: string) => readonly Keyframe[] | undefined;
+
+function getCompositionClipKeyframes(
+  clip: TimelineClip,
+  getClipKeyframes?: ClipKeyframesReader,
+): Keyframe[] {
+  const keyframes = getClipKeyframes?.(clip.id);
+  if (keyframes?.length) return [...keyframes];
+  const embeddedKeyframes = (clip as TimelineClip & { keyframes?: readonly Keyframe[] }).keyframes;
+  return embeddedKeyframes ? [...embeddedKeyframes] : keyframes ? [...keyframes] : [];
+}
 
 export interface BackgroundVideoPlaybackOptions {
   isPlaying?: boolean;
@@ -119,7 +134,7 @@ export function buildEvaluatedClipLayer(params: {
   getClipKeyframes?: ClipKeyframesReader;
   opacityOverride?: number;
   playbackOptions?: BackgroundVideoPlaybackOptions;
-}): EvaluatedLayer {
+}): EvaluatedLayer | null {
   const {
     compositionId,
     time,
@@ -133,19 +148,37 @@ export function buildEvaluatedClipLayer(params: {
   } = params;
   const timelineClip = clipAtTime as TimelineClip;
   const timelineLocalTime = time - clipAtTime.startTime;
+  const keyframes = isActiveComposition
+    ? getClipKeyframes?.(clipAtTime.id)
+    : (clipAtTime as SerializableClip).keyframes;
+  const mappedAnimation = timelineClip.transitionSourceMap?.version === 2
+    ? evaluateTransitionMappedAnimation(timelineClip, keyframes, timelineLocalTime)
+    : undefined;
+  if (mappedAnimation === null) return null;
+  const mappedTime = resolveTransitionSourceMapTime(
+    timelineClip.transitionSourceMap,
+    timelineLocalTime,
+  );
   const sourceOverride = timelineClip.transitionSourceTimeOverride;
-  const defaultSpeed = timelineClip.transitionSourceHold
-    ? 0
-    : clipAtTime.speed ?? (clipAtTime.reversed ? -1 : 1);
+  const isHold = mappedTime
+    ? mappedTime.isHold || mappedTime.sourceRate === 0
+    : timelineClip.transitionSourceHold === true;
+  const defaultSpeed = mappedTime
+    ? mappedTime.sourceRate
+    : isHold
+      ? 0
+      : clipAtTime.speed ?? (clipAtTime.reversed ? -1 : 1);
   const sourceTime = Number.isFinite(sourceOverride)
     ? sourceOverride! - (defaultSpeed >= 0 ? (clipAtTime.inPoint || 0) : (clipAtTime.outPoint || source.naturalDuration))
     : calculateSourceTime([], timelineLocalTime, defaultSpeed);
   const startPoint = defaultSpeed >= 0
     ? (clipAtTime.inPoint || 0)
     : (clipAtTime.outPoint || source.naturalDuration);
-  const clipTime = Number.isFinite(sourceOverride)
-    ? Math.max(0, Math.min(source.naturalDuration, sourceOverride!))
-    : Math.max(0, Math.min(source.naturalDuration, startPoint + sourceTime));
+  const clipTime = mappedTime
+    ? mappedTime.sourceTime
+    : Number.isFinite(sourceOverride)
+      ? Math.max(0, Math.min(source.naturalDuration, sourceOverride!))
+      : Math.max(0, Math.min(source.naturalDuration, startPoint + sourceTime));
 
   const baseTransform = clipAtTime.transform || {
     position: { x: 0, y: 0, z: 0 },
@@ -154,18 +187,21 @@ export function buildEvaluatedClipLayer(params: {
     anchor: { x: 0.5, y: 0.5 },
     opacity: 1,
   };
-  const keyframes = isActiveComposition
-    ? getClipKeyframes?.(clipAtTime.id)
-    : (clipAtTime as SerializableClip).keyframes;
-  const transform = evaluateCompositionClipTransform(baseTransform, keyframes, timelineLocalTime);
-  const masks = evaluateCompositionClipMasks(clipAtTime.masks, keyframes, timelineLocalTime);
+  const transform = mappedAnimation?.transform ?? evaluateCompositionClipTransform(baseTransform, keyframes, timelineLocalTime);
+  const masks = mappedAnimation?.masks ?? evaluateCompositionClipMasks(clipAtTime.masks, keyframes, timelineLocalTime);
+  const effects = mappedAnimation?.effects ?? evaluateCompositionClipEffects(clipAtTime.effects, keyframes, timelineLocalTime);
+  const transitionRender = evaluateTransitionRenderState(
+    timelineClip.transitionRender,
+    keyframes,
+    timelineLocalTime,
+  );
 
   let layerSource: EvaluatedLayer['source'] = null;
   if (source.videoElement) {
     layerSource = buildBackgroundVideoLayerSource(source, clipTime, {
       ...playbackOptions,
       playbackRate: Math.abs(defaultSpeed),
-      continuousPlayback: !timelineClip.transitionSourceHold && defaultSpeed > 0,
+      continuousPlayback: !isHold && defaultSpeed > 0,
     });
   } else if (source.imageElement) {
     layerSource = getBaseLayerSource(source);
@@ -204,9 +240,13 @@ export function buildEvaluatedClipLayer(params: {
     name: clipAtTime.name,
     visible: true,
     opacity: (transform.opacity ?? 1) * (opacityOverride ?? 1),
-    blendMode: transform.blendMode || 'normal',
+    blendMode: resolveTransitionRecipeBlendMode(
+      timelineClip.transitionRecipeBlendWindows,
+      time,
+      transform.blendMode || 'normal',
+    ),
     source: layerSource,
-    effects: clipAtTime.effects || [],
+    effects,
     position: transform.position || { x: 0, y: 0, z: 0 },
     scale: getEffectiveScale(transform.scale),
     rotation: typeof transform.rotation === 'number'
@@ -214,6 +254,8 @@ export function buildEvaluatedClipLayer(params: {
       : transform.rotation?.z || 0,
     sourceRect: clipAtTime.sourceRect ? { ...clipAtTime.sourceRect } : undefined,
     ...(masks?.some((mask) => mask.enabled !== false) ? { maskClipId: clipAtTime.id, maskInvert: false, masks } : {}),
+    ...(transitionRender ? { transitionRender } : {}),
+    ...(timelineClip.is3D ? { is3D: true } : {}),
   };
 }
 
@@ -226,6 +268,7 @@ export function evaluateNestedComposition(params: {
   mediaFiles: CompositionMediaFile[];
   proxyEnabled: boolean;
   getVectorAnimationSettings: VectorSettingsReader;
+  getClipKeyframes?: ClipKeyframesReader;
   playbackOptions?: BackgroundVideoPlaybackOptions;
   getComposition: (compositionId: string) => Composition | null | undefined;
   isCompositionReady: (compositionId: string) => boolean;
@@ -245,6 +288,7 @@ export function evaluateNestedComposition(params: {
     mediaFiles,
     proxyEnabled,
     getVectorAnimationSettings,
+    getClipKeyframes,
     playbackOptions,
     getComposition,
     isCompositionReady,
@@ -257,7 +301,15 @@ export function evaluateNestedComposition(params: {
   }
 
   const clipLocalTime = parentTime - clip.startTime;
-  const nestedTime = clipLocalTime + (clip.inPoint || 0);
+  const keyframes = getCompositionClipKeyframes(clip, getClipKeyframes);
+  const mappedAnimation = clip.transitionSourceMap?.version === 2
+    ? evaluateTransitionMappedAnimation(clip, keyframes, clipLocalTime)
+    : undefined;
+  if (mappedAnimation === null) return null;
+  const nestedTime = resolveTransitionSourceMapTime(
+    clip.transitionSourceMap,
+    clipLocalTime,
+  )?.sourceTime ?? clipLocalTime + (clip.inPoint || 0);
   const nestedComp = compositions.find(c => c.id === clip.compositionId);
   const compWidth = nestedComp?.width || 1920;
   const compHeight = nestedComp?.height || 1080;
@@ -278,6 +330,7 @@ export function evaluateNestedComposition(params: {
       height: compHeight,
       isActiveComposition: false,
       getVectorAnimationSettings,
+      getClipKeyframes,
       playbackOptions,
       getComposition,
       isCompositionReady,
@@ -299,26 +352,49 @@ export function evaluateNestedComposition(params: {
     if (!nestedClip) continue;
 
     const nestedLocalTime = nestedTime - nestedClip.startTime;
-    const nestedClipTime = nestedClip.reversed
+    const nestedKeyframes = getCompositionClipKeyframes(nestedClip, getClipKeyframes);
+    const nestedAnimation = nestedClip.transitionSourceMap?.version === 2
+      ? evaluateTransitionMappedAnimation(nestedClip, nestedKeyframes, nestedLocalTime)
+      : undefined;
+    if (nestedAnimation === null) continue;
+    const nestedMappedTime = resolveTransitionSourceMapTime(
+      nestedClip.transitionSourceMap,
+      nestedLocalTime,
+    );
+    const nestedSpeed = nestedMappedTime?.sourceRate ??
+      (nestedClip.speed ?? (nestedClip.reversed ? -1 : 1));
+    const nestedClipTime = nestedMappedTime?.sourceTime ?? (nestedClip.reversed
       ? nestedClip.outPoint - nestedLocalTime
-      : nestedLocalTime + nestedClip.inPoint;
+      : nestedLocalTime + nestedClip.inPoint);
+    const nestedIsHold = nestedMappedTime
+      ? nestedMappedTime.isHold || nestedMappedTime.sourceRate === 0
+      : false;
 
-    const transform = nestedClip.transform || {
+    const transform = nestedAnimation?.transform ?? (nestedClip.transform || {
       position: { x: 0, y: 0, z: 0 },
       scale: { x: 1, y: 1 },
       rotation: { x: 0, y: 0, z: 0 },
       anchor: { x: 0.5, y: 0.5 },
       opacity: 1,
       blendMode: 'normal' as const,
-    };
+    });
+    const transitionRender = evaluateTransitionRenderState(
+      nestedClip.transitionRender,
+      nestedKeyframes,
+      nestedLocalTime,
+    );
 
     const baseLayer = {
       id: `${parentCompId}-nested-${nestedClip.id}`,
       name: nestedClip.name,
       visible: true,
       opacity: transform.opacity ?? 1,
-      blendMode: transform.blendMode || 'normal',
-      effects: nestedClip.effects || [],
+      blendMode: resolveTransitionRecipeBlendMode(
+        nestedClip.transitionRecipeBlendWindows,
+        nestedTime,
+        transform.blendMode || 'normal',
+      ),
+      effects: nestedAnimation?.effects ?? evaluateCompositionClipEffects(nestedClip.effects, nestedKeyframes, nestedLocalTime),
       position: {
         x: transform.position?.x || 0,
         y: transform.position?.y || 0,
@@ -330,6 +406,11 @@ export function evaluateNestedComposition(params: {
         y: ((transform.rotation?.y || 0) * Math.PI) / 180,
         z: ((transform.rotation?.z || 0) * Math.PI) / 180,
       },
+      ...(nestedAnimation?.masks?.some((mask) => mask.enabled !== false)
+        ? { maskClipId: nestedClip.id, maskInvert: false, masks: nestedAnimation.masks }
+        : {}),
+      ...(transitionRender ? { transitionRender } : {}),
+      ...(nestedClip.is3D ? { is3D: true } : {}),
     };
 
     if (nestedClip.source?.videoElement) {
@@ -386,11 +467,11 @@ export function evaluateNestedComposition(params: {
           nestedClipTime,
           {
             ...playbackOptions,
-            playbackRate: Math.abs(nestedClip.speed ?? (nestedClip.reversed ? -1 : 1)),
+            playbackRate: nestedIsHold ? 0 : Math.abs(nestedSpeed),
             continuousPlayback:
               playbackOptions?.continuousPlayback === true &&
-              !nestedClip.reversed &&
-              (nestedClip.speed ?? 1) > 0,
+              !nestedIsHold &&
+              nestedSpeed > 0,
           }
         ),
       } as Layer);
@@ -447,23 +528,38 @@ export function evaluateNestedComposition(params: {
     opacity: 1,
     blendMode: 'normal' as const,
   };
+  const transform = mappedAnimation?.transform ?? clipTransform;
+  const transitionRender = evaluateTransitionRenderState(
+    clip.transitionRender,
+    keyframes,
+    clipLocalTime,
+  );
 
   return {
     id: `${parentCompId}-${clip.id}`,
     clipId: clip.id,
     name: clip.name,
     visible: true,
-    opacity: clipTransform.opacity ?? 1,
-    blendMode: clipTransform.blendMode || 'normal',
+    opacity: transform.opacity ?? 1,
+    blendMode: resolveTransitionRecipeBlendMode(
+      clip.transitionRecipeBlendWindows,
+      parentTime,
+      transform.blendMode || 'normal',
+    ),
     source: {
       type: 'video',
       nestedComposition: nestedCompData,
     },
-    effects: clip.effects || [],
-    position: clipTransform.position || { x: 0, y: 0, z: 0 },
-    scale: getEffectiveScale(clipTransform.scale),
-    rotation: typeof clipTransform.rotation === 'number'
-      ? clipTransform.rotation
-      : (clipTransform.rotation?.z || 0) * Math.PI / 180,
+    effects: mappedAnimation?.effects ?? evaluateCompositionClipEffects(clip.effects, keyframes, clipLocalTime),
+    position: transform.position || { x: 0, y: 0, z: 0 },
+    scale: getEffectiveScale(transform.scale),
+    rotation: typeof transform.rotation === 'number'
+      ? transform.rotation
+      : (transform.rotation?.z || 0) * Math.PI / 180,
+    ...(mappedAnimation?.masks?.some((mask) => mask.enabled !== false)
+      ? { maskClipId: clip.id, maskInvert: false, masks: mappedAnimation.masks }
+      : {}),
+    ...(transitionRender ? { transitionRender } : {}),
+    ...(clip.is3D ? { is3D: true } : {}),
   };
 }

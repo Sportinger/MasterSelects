@@ -1,7 +1,7 @@
 // Settings Dialog - After Effects style preferences with sidebar navigation
 
 import { useState, useCallback, useMemo, useRef } from 'react';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { useSettingsStore, type SettingsCategoryId } from '../../stores/settingsStore';
 import { useDraggableDialog } from './settings/useDraggableDialog';
 import { AppearanceSettings } from './settings/AppearanceSettings';
 import { AudioSettings } from './settings/AudioSettings';
@@ -17,18 +17,8 @@ interface SettingsDialogProps {
   onClose: () => void;
 }
 
-type SettingsCategory =
-  | 'general'
-  | 'midi'
-  | 'shortcuts'
-  | 'appearance'
-  | 'audio'
-  | 'transcription'
-  | 'nativeHelper'
-  | 'apiKeys';
-
 interface CategoryConfig {
-  id: SettingsCategory;
+  id: SettingsCategoryId;
   label: string;
   icon: string;
 }
@@ -45,7 +35,8 @@ const categories: CategoryConfig[] = [
 ];
 
 export function SettingsDialog({ onClose }: SettingsDialogProps) {
-  const [activeCategory, setActiveCategory] = useState<SettingsCategory>('general');
+  const settingsInitialCategory = useSettingsStore((s) => s.settingsInitialCategory);
+  const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>(settingsInitialCategory ?? 'general');
   const dialogRef = useRef<HTMLDivElement>(null);
   const { position, isDragging, handleMouseDown } = useDraggableDialog(dialogRef);
 

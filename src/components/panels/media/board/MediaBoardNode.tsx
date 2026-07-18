@@ -2,6 +2,7 @@ import React from 'react';
 import type { Composition, MediaFile, ProjectItem, SolidItem, TextItem } from '../../../../stores/mediaStore';
 import { mediaNeedsRelink } from '../../../../services/project/relinkMedia';
 import { FileTypeIcon } from '../FileTypeIcon';
+import { LiveInputPreviewCanvas } from '../LiveInputPreviewCanvas';
 import { MediaWaveformThumb } from '../MediaWaveformThumb';
 import { getItemImportProgress, getItemWaveformProgress, isImportedMediaFileItem } from '../itemTypeGuards';
 import { getLabelHex } from '../labelColors';
@@ -81,6 +82,7 @@ export function MediaBoardNode({
   const isSelected = selectedIdSet.has(item.id);
   const isMediaFile = isImportedMediaFileItem(item);
   const mediaFile = isMediaFile ? item : null;
+  const isLiveInput = Boolean(mediaFile?.liveInput);
   const [isVideoHoverPreviewActive, setIsVideoHoverPreviewActive] = React.useState(false);
   const [isVideoPosterReady, setIsVideoPosterReady] = React.useState(false);
   const [videoScrubRatio, setVideoScrubRatio] = React.useState(0.5);
@@ -279,6 +281,7 @@ export function MediaBoardNode({
       && !isSelected
       && !placement.isDraggingPreview
       && !shouldRenderVideoPosterFallback
+      && !isLiveInput
     )
   ) {
     return null;
@@ -337,6 +340,16 @@ export function MediaBoardNode({
           <div className="media-board-text-preview" style={{ color: textItem.color, fontFamily: textItem.fontFamily }}>
             {textItem.text}
           </div>
+        ) : isLiveInput && mediaFile ? (
+          <>
+            <div className="media-board-node-placeholder media-board-node-video-placeholder">
+              <FileTypeIcon type="video" large />
+            </div>
+            <LiveInputPreviewCanvas
+              className="media-board-node-live-preview"
+              liveInputId={mediaFile.id}
+            />
+          </>
         ) : shouldRenderVideoPreview && mediaFile ? (
           <>
             {shouldRenderThumb ? (

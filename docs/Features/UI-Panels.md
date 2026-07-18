@@ -68,7 +68,8 @@ Dockable desktop panel system with an After Effects-style menu bar, unified clip
 - **Timeline Tour** starts the timeline deep dive campaign
 - **Changelog** opens the changelog dialog
 - **About** shows app and version information
-- **Imprint / Privacy Policy / Contact** open the legal dialog pages
+- **Imprint / Privacy Policy** open the directly addressable `/impressum` and `/datenschutz` pages in a new tab
+- **Contact** opens the legal dialog; German and English legal texts can be selected there
 
 The welcome/onboarding chooser can also apply shortcut-preset defaults based on the editor background the user selects.
 
@@ -441,9 +442,9 @@ same source-handle edges.
 
 ### Built-In Layouts
 
-The built-in `VIDEO EDIT` layout is the default desktop layout:
+The built-in `VIDEO EDIT` layout is the default desktop layout; its left tab group always contains `Media` followed by `Transitions`:
 
-- Left column: Media
+- Left column: Media / Transitions tabs
 - Center: Preview
 - Right column: Properties, Export, History (Export active)
 - Bottom: Timeline
@@ -452,6 +453,8 @@ Its timeline defaults to balanced video/audio focus with two visible 70 px video
 On a first empty load, `VIDEO EDIT` is also the active named layout, so the header switcher and Layouts menu show it as current.
 
 The built-in `AUDIO EDIT` layout keeps Timeline above Media, Audio Mixer, and Properties/History. Its timeline defaults to audio focus with two visible 40 px video context tracks and one visible 96 px full-height audio track.
+
+The built-in `3D EDIT` layout keeps four independent Preview panels in a 2x2 grid above the Timeline, with Media and Properties/Export/History on the right. The previews open directly in Edit mode as Front, Side, Top, and Perspective views. Loading the layout keeps the current playhead when it is already covered by a camera clip, jumps to the earliest camera when cameras exist elsewhere in the composition, and creates one composition-length camera only when none exists.
 
 Multi Preview, scopes, and other panels are available from the View menu and can be floated or docked.
 
@@ -476,6 +479,7 @@ control, `Hide` removes that tab, and `Change to` replaces the tab slot with ano
 target panel is already open elsewhere, it is moved into the clicked slot instead of creating a
 duplicate. The Timeline panel uses composition tabs instead of a normal panel tab; right-click the
 empty part of its tab bar next to the composition tabs to open the Timeline panel menu.
+Closing the active composition tab switches directly to its neighbor without running the normal composition-change animation.
 
 ### Layout Actions
 

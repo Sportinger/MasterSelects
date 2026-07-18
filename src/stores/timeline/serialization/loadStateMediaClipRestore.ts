@@ -66,6 +66,8 @@ function createInitialRestoredMediaSource(
     vectorAnimationSettings: serializedClip.vectorAnimationSettings,
     threeDEffectorsEnabled: serializedClip.threeDEffectorsEnabled ?? true,
     modelSequence: restoredModelSource?.modelSequence,
+    modelPrimitiveIndex: restoredModelSource?.modelPrimitiveIndex,
+    modelMaterialSettings: restoredModelSource?.modelMaterialSettings,
   };
 }
 
@@ -105,6 +107,8 @@ function createRestoredMediaClip(params: {
     effects: serializedClip.effects || [],
     transitionIn: serializedClip.transitionIn ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionIn)) : undefined,
     transitionOut: serializedClip.transitionOut ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionOut)) : undefined,
+    transitionSourceMap: serializedClip.transitionSourceMap ? structuredClone(serializedClip.transitionSourceMap) : undefined,
+    transitionRecipeBlendWindows: serializedClip.transitionRecipeBlendWindows ? structuredClone(serializedClip.transitionRecipeBlendWindows) : undefined,
     colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
     nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
     isLoading: !needsReload,
@@ -116,6 +120,7 @@ function createRestoredMediaClip(params: {
     reversed: serializedClip.reversed,
     speed: serializedClip.speed,
     preservesPitch: serializedClip.preservesPitch,
+    freeRun: serializedClip.freeRun,
     is3D: serializedClip.is3D,
     meshType: serializedClip.meshType,
   };

@@ -267,72 +267,72 @@ export class TargetPreviewLayerCollector {
             });
             continue;
           }
+        }
 
-          const notReadyCachedFrame = filterPausedHtmlTargetFrame(
-            scrubbingCache?.getCachedFrameEntry(video.src, targetTime) ??
-            (shouldGuardPausedTargetFrames
-              ? null
-              : scrubbingCache?.getNearestCachedFrameEntry(video.src, targetTime, cacheSearchDistanceFrames)),
-            targetTime,
-            shouldGuardPausedTargetFrames
-          );
-          if (notReadyCachedFrame) {
-            layerData.push({
-              layer,
-              isVideo: false,
-              externalTexture: null,
-              textureView: notReadyCachedFrame.view,
-              sourceWidth: video.videoWidth,
-              sourceHeight: video.videoHeight,
-              displayedMediaTime: notReadyCachedFrame.mediaTime,
-              targetMediaTime: targetTime,
-              previewPath: 'not-ready-scrub-cache',
-            });
-            continue;
-          }
+        const notReadyCachedFrame = filterPausedHtmlTargetFrame(
+          scrubbingCache?.getCachedFrameEntry(video.src, targetTime) ??
+          (shouldGuardPausedTargetFrames
+            ? null
+            : scrubbingCache?.getNearestCachedFrameEntry(video.src, targetTime, cacheSearchDistanceFrames)),
+          targetTime,
+          shouldGuardPausedTargetFrames
+        );
+        if (notReadyCachedFrame) {
+          layerData.push({
+            layer,
+            isVideo: false,
+            externalTexture: null,
+            textureView: notReadyCachedFrame.view,
+            sourceWidth: video.videoWidth,
+            sourceHeight: video.videoHeight,
+            displayedMediaTime: notReadyCachedFrame.mediaTime,
+            targetMediaTime: targetTime,
+            previewPath: 'not-ready-scrub-cache',
+          });
+          continue;
+        }
 
-          if (safeFallback) {
-            layerData.push({
-              layer,
-              isVideo: false,
-              externalTexture: null,
-              textureView: safeFallback.view,
-              sourceWidth: safeFallback.width,
-              sourceHeight: safeFallback.height,
-              displayedMediaTime: safeFallback.mediaTime,
-              targetMediaTime: targetTime,
-              previewPath: 'final-cache',
-            });
-            continue;
-          }
-          if (emergencyHoldFrame) {
-            layerData.push({
-              layer,
-              isVideo: false,
-              externalTexture: null,
-              textureView: emergencyHoldFrame.view,
-              sourceWidth: emergencyHoldFrame.width,
-              sourceHeight: emergencyHoldFrame.height,
-              displayedMediaTime: emergencyHoldFrame.mediaTime,
-              targetMediaTime: targetTime,
-              previewPath: 'emergency-hold',
-            });
-            continue;
-          }
-          if (sameClipHoldFrame) {
-            layerData.push({
-              layer,
-              isVideo: false,
-              externalTexture: null,
-              textureView: sameClipHoldFrame.view,
-              sourceWidth: sameClipHoldFrame.width,
-              sourceHeight: sameClipHoldFrame.height,
-              displayedMediaTime: sameClipHoldFrame.mediaTime,
-              targetMediaTime: targetTime,
-              previewPath: 'same-clip-hold',
-            });
-            continue;
-          }
+        if (safeFallback) {
+          layerData.push({
+            layer,
+            isVideo: false,
+            externalTexture: null,
+            textureView: safeFallback.view,
+            sourceWidth: safeFallback.width,
+            sourceHeight: safeFallback.height,
+            displayedMediaTime: safeFallback.mediaTime,
+            targetMediaTime: targetTime,
+            previewPath: 'final-cache',
+          });
+          continue;
+        }
+        if (emergencyHoldFrame) {
+          layerData.push({
+            layer,
+            isVideo: false,
+            externalTexture: null,
+            textureView: emergencyHoldFrame.view,
+            sourceWidth: emergencyHoldFrame.width,
+            sourceHeight: emergencyHoldFrame.height,
+            displayedMediaTime: emergencyHoldFrame.mediaTime,
+            targetMediaTime: targetTime,
+            previewPath: 'emergency-hold',
+          });
+          continue;
+        }
+        if (sameClipHoldFrame) {
+          layerData.push({
+            layer,
+            isVideo: false,
+            externalTexture: null,
+            textureView: sameClipHoldFrame.view,
+            sourceWidth: sameClipHoldFrame.width,
+            sourceHeight: sameClipHoldFrame.height,
+            displayedMediaTime: sameClipHoldFrame.mediaTime,
+            targetMediaTime: targetTime,
+            previewPath: 'same-clip-hold',
+          });
+          continue;
         }
       }
       if (layer.source.imageElement) {
@@ -360,6 +360,31 @@ export class TargetPreviewLayerCollector {
         if (texture) {
           layerData.push({ layer, isVideo: false, externalTexture: null, textureView: d.textureManager!.getImageView(texture), sourceWidth: canvas.width, sourceHeight: canvas.height });
         }
+      }
+      if (layer.source.nestedComposition && !layer.source.imageElement) {
+        layerData.push({
+          layer,
+          isVideo: false,
+          externalTexture: null,
+          textureView: null,
+          sourceWidth: layer.source.nestedComposition.width,
+          sourceHeight: layer.source.nestedComposition.height,
+        });
+      }
+      if (
+        layer.source.type === 'model' ||
+        layer.source.type === 'light' ||
+        layer.source.type === 'gaussian-avatar' ||
+        layer.source.type === 'gaussian-splat'
+      ) {
+        layerData.push({
+          layer,
+          isVideo: false,
+          externalTexture: null,
+          textureView: null,
+          sourceWidth: 0,
+          sourceHeight: 0,
+        });
       }
       if (layer.source.type === 'motion') {
         const size = getMotionRenderSize(layer.source.motion);

@@ -743,4 +743,58 @@ describe('SceneCameraUtils', () => {
     expect(config.target.y).toBeCloseTo(expected.target.y, 5);
     expect(config.target.z).toBeCloseTo(expected.target.z, 5);
   });
+
+  it('keeps continuous camera segments on the keyed orbit around their shared pivot', () => {
+    const viewport = { width: 1920, height: 1080 };
+    const cameraClip = {
+      id: 'mouse-orbit-camera',
+      trackId: 'camera-track',
+      startTime: 0,
+      duration: 2,
+      transform: {
+        position: { x: 0, y: 0, z: 5 },
+        scale: { x: 1, y: 1, z: 0 },
+        rotation: { x: 0, y: 0, z: 0 },
+        opacity: 1,
+        blendMode: 'normal',
+      },
+      source: {
+        type: 'camera',
+        cameraSettings: { fov: 60, near: 0.1, far: 1000 },
+      },
+    };
+
+    const config = resolveSharedSceneCameraConfig(viewport, 1, {
+      sceneNavClipId: 'mouse-orbit-camera',
+      tracks: [{ id: 'camera-track', type: 'video', visible: true }],
+      clips: [cameraClip as unknown as TimelineClip],
+      clipKeyframes: new Map([[
+        'mouse-orbit-camera',
+        [
+          { id: 'px0', clipId: 'mouse-orbit-camera', property: 'position.x', time: 0, value: 0, easing: 'linear' },
+          { id: 'px1', clipId: 'mouse-orbit-camera', property: 'position.x', time: 2, value: 5, easing: 'linear' },
+          { id: 'pz0', clipId: 'mouse-orbit-camera', property: 'position.z', time: 0, value: 5, easing: 'linear' },
+          { id: 'pz1', clipId: 'mouse-orbit-camera', property: 'position.z', time: 2, value: 0, easing: 'linear' },
+          {
+            id: 'ry0',
+            clipId: 'mouse-orbit-camera',
+            property: 'rotation.y',
+            time: 0,
+            value: 0,
+            easing: 'linear',
+            rotationInterpolation: 'continuous',
+          },
+          { id: 'ry1', clipId: 'mouse-orbit-camera', property: 'rotation.y', time: 2, value: 90, easing: 'linear' },
+        ],
+      ]]),
+    });
+
+    const radiusAtMidpoint = 5 / Math.sqrt(2);
+    expect(config.position.x).toBeCloseTo(radiusAtMidpoint, 5);
+    expect(config.position.y).toBeCloseTo(0, 5);
+    expect(config.position.z).toBeCloseTo(radiusAtMidpoint, 5);
+    expect(config.target.x).toBeCloseTo(0, 5);
+    expect(config.target.y).toBeCloseTo(0, 5);
+    expect(config.target.z).toBeCloseTo(0, 5);
+  });
 });

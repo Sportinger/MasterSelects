@@ -2,6 +2,7 @@ import { hasThumbnailBitmap } from '../../../services/timeline/thumbnailBitmapCa
 import { thumbnailCacheService } from '../../../services/thumbnailCacheService';
 import type { TimelinePaintSourceClip } from '../../../timeline';
 import {
+  getTimelineClipCanvasCompositionThumbnailSlotUrls,
   TIMELINE_CLIP_CANVAS_COMPOSITION_SEGMENT_MAX_COUNT,
 } from './timelineClipCanvasCompositionResource';
 import type { TimelineClipCanvasTrimGeometry } from './timelineClipCanvasTrimResource';
@@ -14,6 +15,7 @@ import {
 export interface TimelineClipCanvasWorkerThumbnailPreparation {
   handledClipIds: ReadonlySet<string>;
   plansByClipId: ReadonlyMap<string, TimelineClipCanvasWorkerThumbnailStripPlan>;
+  visibleBitmapClipIds: ReadonlySet<string>;
   missingBitmapRefs: readonly { url: string; mediaFileId?: string }[];
 }
 
@@ -40,6 +42,7 @@ export function collectTimelineClipCanvasWorkerThumbnailPreparation(input: {
 }): TimelineClipCanvasWorkerThumbnailPreparation {
   const handledClipIds = new Set<string>();
   const plansByClipId = new Map<string, TimelineClipCanvasWorkerThumbnailStripPlan>();
+  const visibleBitmapClipIds = new Set<string>();
   const missingBitmapRefsByUrl = new Map<string, { url: string; mediaFileId?: string }>();
   const thumbVisibleLeft = input.scrollX - input.thumbnailViewportOverscanPx;
   const thumbVisibleRight = input.scrollX + input.viewportWidth + input.thumbnailViewportOverscanPx;
@@ -60,8 +63,20 @@ export function collectTimelineClipCanvasWorkerThumbnailPreparation(input: {
         const inThumbWindow = absoluteRight > thumbVisibleLeft && absoluteX < thumbVisibleRight;
         if (absoluteW > 0 && visibleW >= input.minThumbnailWidth && inThumbWindow) {
           clip.clipSegments.slice(0, TIMELINE_CLIP_CANVAS_COMPOSITION_SEGMENT_MAX_COUNT).forEach((segment) => {
-            segment.thumbnails.forEach((url) => {
-              if (!url || hasThumbnailBitmap(url)) return;
+            const startNorm = Math.max(0, Math.min(1, segment.startNorm));
+            const endNorm = Math.max(startNorm, Math.min(1, segment.endNorm));
+            const segmentWidth = Math.max(1, (endNorm - startNorm) * absoluteW);
+            getTimelineClipCanvasCompositionThumbnailSlotUrls(
+              segment.thumbnails,
+              segmentWidth,
+              input.thumbnailSlotPx,
+              input.maxThumbnailSlots,
+            ).forEach((url) => {
+              if (!url) return;
+              if (hasThumbnailBitmap(url)) {
+                visibleBitmapClipIds.add(clip.id);
+                return;
+              }
               missingBitmapRefsByUrl.set(url, { url, mediaFileId: clip.mediaFileId ?? clip.source?.mediaFileId });
             });
           });
@@ -120,7 +135,11 @@ export function collectTimelineClipCanvasWorkerThumbnailPreparation(input: {
     }
     let hasMissingBitmap = false;
     urls.forEach((url) => {
-      if (!url || hasThumbnailBitmap(url)) return;
+      if (!url) return;
+      if (hasThumbnailBitmap(url)) {
+        visibleBitmapClipIds.add(clip.id);
+        return;
+      }
       hasMissingBitmap = true;
       missingBitmapRefsByUrl.set(url, { url, mediaFileId });
     });
@@ -145,6 +164,7 @@ export function collectTimelineClipCanvasWorkerThumbnailPreparation(input: {
   return {
     handledClipIds,
     plansByClipId,
+    visibleBitmapClipIds,
     missingBitmapRefs: [...missingBitmapRefsByUrl.values()],
   };
 }

@@ -17,6 +17,7 @@ import {
   type NativeHelperPublishedRelease,
 } from '../../services/nativeHelper/releases';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { OPEN_NATIVE_HELPER_DIALOG_EVENT } from './nativeHelperDialog';
 
 type Platform = 'mac' | 'windows' | 'linux' | 'unknown';
 
@@ -157,6 +158,13 @@ export function NativeHelperStatus({ variant = 'toolbar' }: NativeHelperStatusPr
   } = useSettingsStore();
 
   const helperEnabled = turboModeEnabled;
+
+  useEffect(() => {
+    if (variant !== 'toolbar') return undefined;
+    const openDialog = () => setShowDialog(true);
+    window.addEventListener(OPEN_NATIVE_HELPER_DIALOG_EVENT, openDialog);
+    return () => window.removeEventListener(OPEN_NATIVE_HELPER_DIALOG_EVENT, openDialog);
+  }, [variant]);
 
   const checkConnection = useCallback(async () => {
     if (!helperEnabled) {
@@ -380,6 +388,9 @@ function NativeHelperDialog({
     >
       <div
         className="welcome-overlay native-helper-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="native-helper-dialog-title"
         style={{
           animation: 'none',
           opacity: isClosing ? 0 : 1,
@@ -394,7 +405,7 @@ function NativeHelperDialog({
                 <span className="native-helper-status-dot" />
                 <span>{statusLabel}</span>
               </div>
-              <h1 className="native-helper-title">Native Helper</h1>
+              <h1 id="native-helper-dialog-title" className="native-helper-title">Native Helper</h1>
             </div>
             <span className="native-helper-version-pill">v{NATIVE_HELPER_VERSION}</span>
           </div>

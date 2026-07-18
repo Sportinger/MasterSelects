@@ -1,5 +1,12 @@
-import type { DockDragState, DockLayout, SavedDockLayout, SavedDockTimelineLayout } from '../../types/dock';
-import { FACTORY_AUDIO_EDIT_LAYOUT_ID, FACTORY_VIDEO_EDIT_LAYOUT_ID } from './panelRegistry';
+import type { DockDragState, DockLayout, PreviewPanelData, SavedDockLayout, SavedDockTimelineLayout } from '../../types/dock';
+import { FACTORY_3D_EDIT_LAYOUT_ID, FACTORY_AUDIO_EDIT_LAYOUT_ID, FACTORY_VIDEO_EDIT_LAYOUT_ID } from './panelRegistry';
+
+export const FACTORY_3D_EDIT_PREVIEW_DEFAULTS: Record<string, Pick<PreviewPanelData, 'initialEditMode' | 'initialEditCameraView'>> = {
+  '3d-preview-front': { initialEditMode: true, initialEditCameraView: 'front' },
+  '3d-preview-side': { initialEditMode: true, initialEditCameraView: 'side' },
+  '3d-preview-top': { initialEditMode: true, initialEditCameraView: 'top' },
+  '3d-preview-perspective': { initialEditMode: true, initialEditCameraView: 'camera' },
+};
 
 // Default editing layout: Media left, Preview center, Export active on the right, Timeline bottom.
 export const DEFAULT_LAYOUT: DockLayout = {
@@ -20,6 +27,7 @@ export const DEFAULT_LAYOUT: DockLayout = {
             id: 'left-group',
             panels: [
               { id: 'media', type: 'media', title: 'Media' },
+              { id: 'transitions', type: 'transitions', title: 'Transitions' },
             ],
             activeIndex: 0,
           },
@@ -131,6 +139,109 @@ const AUDIO_EDIT_LAYOUT: DockLayout = {
   },
 };
 
+const THREE_D_EDIT_LAYOUT: DockLayout = {
+  root: {
+    kind: 'split',
+    id: '3d-edit-root-split',
+    direction: 'horizontal',
+    ratio: 0.77,
+    children: [
+      {
+        kind: 'split',
+        id: '3d-edit-left-split',
+        direction: 'vertical',
+        ratio: 0.74,
+        children: [
+          {
+            kind: 'split',
+            id: '3d-edit-preview-rows',
+            direction: 'vertical',
+            ratio: 0.5,
+            children: [
+              {
+                kind: 'split',
+                id: '3d-edit-preview-top-row',
+                direction: 'horizontal',
+                ratio: 0.5,
+                children: [
+                  {
+                    kind: 'tab-group',
+                    id: '3d-edit-front-group',
+                    panels: [{ id: '3d-preview-front', type: 'preview', title: 'Preview', data: FACTORY_3D_EDIT_PREVIEW_DEFAULTS['3d-preview-front'] }],
+                    activeIndex: 0,
+                  },
+                  {
+                    kind: 'tab-group',
+                    id: '3d-edit-side-group',
+                    panels: [{ id: '3d-preview-side', type: 'preview', title: 'Preview', data: FACTORY_3D_EDIT_PREVIEW_DEFAULTS['3d-preview-side'] }],
+                    activeIndex: 0,
+                  },
+                ],
+              },
+              {
+                kind: 'split',
+                id: '3d-edit-preview-bottom-row',
+                direction: 'horizontal',
+                ratio: 0.5,
+                children: [
+                  {
+                    kind: 'tab-group',
+                    id: '3d-edit-top-group',
+                    panels: [{ id: '3d-preview-top', type: 'preview', title: 'Preview', data: FACTORY_3D_EDIT_PREVIEW_DEFAULTS['3d-preview-top'] }],
+                    activeIndex: 0,
+                  },
+                  {
+                    kind: 'tab-group',
+                    id: '3d-edit-perspective-group',
+                    panels: [{ id: '3d-preview-perspective', type: 'preview', title: 'Preview', data: FACTORY_3D_EDIT_PREVIEW_DEFAULTS['3d-preview-perspective'] }],
+                    activeIndex: 0,
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            kind: 'tab-group',
+            id: 'timeline-group',
+            panels: [{ id: 'timeline', type: 'timeline', title: 'Timeline' }],
+            activeIndex: 0,
+          },
+        ],
+      },
+      {
+        kind: 'split',
+        id: '3d-edit-right-split',
+        direction: 'vertical',
+        ratio: 0.62,
+        children: [
+          {
+            kind: 'tab-group',
+            id: 'left-group',
+            panels: [{ id: 'media', type: 'media', title: 'Media' }],
+            activeIndex: 0,
+          },
+          {
+            kind: 'tab-group',
+            id: 'right-group',
+            panels: [
+              { id: 'clip-properties', type: 'clip-properties', title: 'Properties' },
+              { id: 'export', type: 'export', title: 'Export' },
+              { id: 'history', type: 'history', title: 'History' },
+            ],
+            activeIndex: 0,
+          },
+        ],
+      },
+    ],
+  },
+  floatingPanels: [],
+  panelZoom: {
+    'clip-properties': 1,
+    export: 1,
+    history: 1,
+  },
+};
+
 const VIDEO_EDIT_TIMELINE_LAYOUT: SavedDockTimelineLayout = {
   audioDisplayMode: 'detailed',
   audioLayerAdvancedMode: true,
@@ -209,6 +320,16 @@ export const FACTORY_SAVED_DOCK_LAYOUTS: SavedDockLayout[] = [
     timeline: AUDIO_EDIT_TIMELINE_LAYOUT,
     createdAt: 0,
     updatedAt: 3,
+    favorite: true,
+    factory: true,
+  },
+  {
+    id: FACTORY_3D_EDIT_LAYOUT_ID,
+    name: '3D EDIT',
+    layout: THREE_D_EDIT_LAYOUT,
+    timeline: VIDEO_EDIT_TIMELINE_LAYOUT,
+    createdAt: 0,
+    updatedAt: 2,
     favorite: true,
     factory: true,
   },

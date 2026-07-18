@@ -96,6 +96,7 @@ export interface LoadVideoMediaParams {
   audioClipId?: string;
   file: File;
   mediaFileId?: string;
+  authoritativeNaturalDuration?: number;
   thumbnailsEnabled: boolean;
   waveformsEnabled: boolean;
   updateClip: (id: string, updates: Partial<TimelineClip>) => void;
@@ -111,6 +112,7 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
     audioClipId,
     file,
     mediaFileId,
+    authoritativeNaturalDuration,
     thumbnailsEnabled,
     waveformsEnabled,
     updateClip,
@@ -154,7 +156,7 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
         throw new Error(`Could not resolve file path for "${file.name}"`);
       }
       nativeDecoder = await NativeDecoder.open(filePath);
-      naturalDuration = nativeDecoder.duration;
+      naturalDuration = authoritativeNaturalDuration ?? nativeDecoder.duration;
 
       log.debug('Native Helper ready', { width: nativeDecoder.width, height: nativeDecoder.height, fps: nativeDecoder.fps });
 
@@ -206,9 +208,12 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
       waitForVideoMetadata(video, 8000),
     ]);
 
-    // Prefer MP4Box duration (works with any codec, reads moov from end)
-    // Fall back to video element, then file size estimate
-    if (mp4Meta?.duration && mp4Meta.duration > 0) {
+    // Prefer the duration already established by media import. WebM recordings
+    // can expose a short initial duration through HTMLVideoElement metadata.
+    if (authoritativeNaturalDuration && Number.isFinite(authoritativeNaturalDuration) && authoritativeNaturalDuration > 0) {
+      naturalDuration = authoritativeNaturalDuration;
+      log.debug('Using imported media duration', { file: file.name, duration: naturalDuration.toFixed(2) });
+    } else if (mp4Meta?.duration && mp4Meta.duration > 0) {
       naturalDuration = mp4Meta.duration;
       log.debug('Using MP4Box duration', { file: file.name, duration: naturalDuration.toFixed(2) });
     } else if (video.duration && isFinite(video.duration)) {

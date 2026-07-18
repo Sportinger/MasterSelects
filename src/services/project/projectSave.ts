@@ -1,7 +1,7 @@
 // Project Save — sync stores to project file format
 
 import { Logger } from '../logger';
-import { useMediaStore, type MediaFile, type Composition, type MediaFolder } from '../../stores/mediaStore';
+import { useMediaStore, type Composition } from '../../stores/mediaStore';
 import {
   mergeSignalArtifacts,
   signalAssetItemToProjectMetadata,
@@ -11,24 +11,26 @@ import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import {
   getFlashBoardActiveGenerationRecords,
+  getFlashBoardChatMessages,
   getFlashBoardComposerState,
   getFlashBoardPromptHistory,
   type FlashBoardActiveGenerationRecord,
 } from '../../stores/flashboardStore/activeGenerationRecords';
-import type { FlashBoardComposerState, FlashBoardPromptHistoryEntry } from '../../stores/flashboardStore/types';
+import type { FlashBoardChatMessage, FlashBoardComposerState, FlashBoardPromptHistoryEntry } from '../../stores/flashboardStore/types';
 import { getExportStoreData, useExportStore } from '../../stores/exportStore';
 import { useMIDIStore } from '../../stores/midiStore';
 import { recordHistoryEvent, serializeHistoryStateForProject } from '../../stores/historyStore';
-import { isProxyFrameCountComplete } from '../../stores/mediaStore/helpers/proxyCompleteness';
 import { buildProjectAudioStateIndex } from '../audio/projectAudioState';
 import { createCurrentAudioArtifactStore } from '../audio/timelineWaveformPyramidCache';
 import { clonePersistedClipAudioState } from '../audio/clipAudioStatePersistence';
 import { flashBoardMediaBridge } from '../flashboard/FlashBoardMediaBridge';
+import { redactFlashBoardChatImageData } from '../flashboard/FlashBoardChatImageData';
 import { cloneClipNodeGraph } from '../nodeGraph';
 import { normalizeTransitionInstanceParams } from '../../transitions';
 import { syncTransitionCompositionTimelineToParent } from '../../stores/mediaStore/slices/composition/transitionCompositionSync';
 import type {
   ProjectFlashBoardComposerState,
+  ProjectFlashBoardChatMessage,
   ProjectFlashBoardGenerationMetadata,
   ProjectFlashBoardGenerationRecord,
   ProjectFlashBoardPromptHistoryEntry,
@@ -36,17 +38,21 @@ import type {
 } from './types/flashboard.types';
 import {
   projectFileService,
-  type ProjectMediaFile,
   type ProjectComposition,
   type ProjectTrack,
   type ProjectClip,
   type ProjectMarker,
-  type ProjectFolder,
 } from '../projectFileService';
 import { toProjectTransform } from './transformSerialization';
 import { serializeMaskEdgeFeathers, serializeMaskKeyframeProperty } from './maskSerialization';
 import { normalizeRulerLaneState } from '../../timeline/tempo/rulerDefaults';
 import { shouldBlockDestructiveStoreSync } from './destructiveStoreSyncGuard';
+import {
+  convertFolders,
+  convertMediaFiles,
+  serializeGaussianSplatSequence,
+  serializeModelSequence,
+} from './projectMediaSerialization';
 import {
   isProjectStoreSyncInProgress,
   withProjectStoreSyncGuard,
@@ -103,10 +109,6 @@ function serializeProjectClipVideoState(videoState: ClipVideoState | undefined):
   };
 }
 
-function shouldPersistMediaWaveform(file: MediaFile): boolean {
-  return !file.audioAnalysisRefs?.waveformPyramidId;
-}
-
 function shouldPersistClipWaveform(clip: ProjectSaveClip): boolean {
   return !clip.audioState?.sourceAnalysisRefs?.waveformPyramidId &&
     !clip.audioState?.processedAnalysisRefs?.processedWaveformPyramidId;
@@ -115,104 +117,6 @@ function shouldPersistClipWaveform(clip: ProjectSaveClip): boolean {
 // ============================================
 // CONVERTER HELPERS (store → project format)
 // ============================================
-
-function serializeModelSequence(sequence: MediaFile['modelSequence'] | ProjectClip['modelSequence']) {
-  return sequence
-    ? {
-        ...sequence,
-        frames: sequence.frames.map((frame) => ({
-          name: frame.name,
-          projectPath: frame.projectPath,
-          sourcePath: frame.sourcePath,
-          absolutePath: frame.absolutePath,
-        })),
-      }
-    : undefined;
-}
-
-function serializeGaussianSplatSequence(
-  sequence: MediaFile['gaussianSplatSequence'] | ProjectClip['gaussianSplatSequence'],
-) {
-  return sequence
-    ? {
-        ...sequence,
-        frames: sequence.frames.map((frame) => ({
-          name: frame.name,
-          projectPath: frame.projectPath,
-          sourcePath: frame.sourcePath,
-          absolutePath: frame.absolutePath,
-          splatCount: frame.splatCount,
-          fileSize: frame.fileSize,
-          container: frame.container,
-          codec: frame.codec,
-        })),
-      }
-    : undefined;
-}
-
-/**
- * Convert mediaStore files to ProjectMediaFile format
- */
-function convertMediaFiles(files: MediaFile[]): ProjectMediaFile[] {
-  return files.map((file) => {
-    const hasProxy =
-      file.proxyStatus === 'ready' &&
-      file.proxyFormat === 'jpeg-sequence' &&
-      isProxyFrameCountComplete(file.proxyFrameCount, file.duration, file.proxyFps ?? file.fps);
-
-    return {
-      id: file.id,
-      name: file.name,
-      type: file.type as 'video' | 'audio' | 'image' | 'model' | 'gaussian-splat' | 'lottie' | 'rive',
-      sourcePath: file.filePath || file.name,
-      projectPath: file.projectPath,
-      fileHash: file.fileHash,
-      duration: file.duration,
-      width: file.width,
-      height: file.height,
-      frameRate: file.fps,
-      codec: file.codec ?? file.gaussianSplatSequence?.codec,
-      audioCodec: file.audioCodec,
-      container: file.container ?? (file.gaussianSplatSequence?.container ? `${file.gaussianSplatSequence.container} Seq` : undefined),
-      bitrate: file.bitrate,
-      fileSize: file.fileSize ?? file.gaussianSplatSequence?.totalFileSize,
-      hasAudio: file.hasAudio,
-      splatCount: file.splatCount ?? file.gaussianSplatSequence?.frames[0]?.splatCount,
-      totalSplatCount: file.totalSplatCount ?? file.gaussianSplatSequence?.totalSplatCount,
-      splatFrameCount: file.splatFrameCount ?? file.gaussianSplatSequence?.frameCount,
-      hasProxy,
-      proxyFormat: hasProxy ? file.proxyFormat : undefined,
-      hasAudioProxy: file.hasProxyAudio === true || file.audioProxyStatus === 'ready',
-      audioProxyStorageKey: file.audioProxyStorageKey || file.fileHash || file.id,
-      audioAnalysisRefs: file.audioAnalysisRefs ? structuredClone(file.audioAnalysisRefs) : undefined,
-      stemInfo: file.stemInfo ? structuredClone(file.stemInfo) : undefined,
-      waveform: shouldPersistMediaWaveform(file) && file.waveformStatus === 'ready' && file.waveform
-        ? [...file.waveform]
-        : undefined,
-      waveformChannels: shouldPersistMediaWaveform(file) && file.waveformStatus === 'ready'
-        ? file.waveformChannels?.map(channel => [...channel])
-        : undefined,
-      vectorAnimation: file.vectorAnimation,
-      modelSequence: serializeModelSequence(file.modelSequence),
-      gaussianSplatSequence: serializeGaussianSplatSequence(file.gaussianSplatSequence),
-      folderId: file.parentId,
-      labelColor: file.labelColor && file.labelColor !== 'none' ? file.labelColor : undefined,
-      importedAt: new Date(file.createdAt).toISOString(),
-    };
-  });
-}
-
-/**
- * Convert mediaStore folders to ProjectFolder format
- */
-function convertFolders(folders: MediaFolder[]): ProjectFolder[] {
-  return folders.map((folder) => ({
-    id: folder.id,
-    name: folder.name,
-    parentId: folder.parentId,
-    labelColor: folder.labelColor && folder.labelColor !== 'none' ? folder.labelColor : undefined,
-  }));
-}
 
 /**
  * Convert compositions to ProjectComposition format
@@ -248,6 +152,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       signalRefId: c.signalRefId,
       signalRenderAdapterId: c.signalRenderAdapterId,
       sourceType: c.source?.type || c.sourceType || 'video',
+      liveInputId: c.source?.liveInputId || c.liveInputId,
       naturalDuration: c.source?.naturalDuration || c.naturalDuration,
       // MIDI note data (issue #182) — notes on the clip, instrument on the track.
       midiData: (c.source?.type === 'midi' || c.sourceType === 'midi') && c.midiData
@@ -267,8 +172,11 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       modelSequence: serializeModelSequence(c.source?.modelSequence || c.modelSequence),
       gaussianSplatSequence: serializeGaussianSplatSequence(c.source?.gaussianSplatSequence || c.gaussianSplatSequence),
       meshType: c.source?.meshType || c.meshType,
+      modelPrimitiveIndex: c.source?.modelPrimitiveIndex ?? c.modelPrimitiveIndex,
+      modelMaterialSettings: c.source?.modelMaterialSettings || c.modelMaterialSettings,
       text3DProperties: c.source?.text3DProperties || c.text3DProperties,
       cameraSettings: c.source?.cameraSettings || c.cameraSettings,
+      lightSettings: c.source?.lightSettings || c.lightSettings,
       splatEffectorSettings: c.source?.splatEffectorSettings || c.splatEffectorSettings,
       threeDEffectorsEnabled: c.source?.threeDEffectorsEnabled,
       gaussianBlendshapes: c.source?.gaussianBlendshapes || c.gaussianBlendshapes,
@@ -292,6 +200,8 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       transitionOut: c.transitionOut ? normalizeTransitionInstanceParams(structuredClone(c.transitionOut)) : undefined,
       transitionSourceTimeOverride: c.transitionSourceTimeOverride,
       transitionSourceHold: c.transitionSourceHold,
+      transitionSourceMap: c.transitionSourceMap ? structuredClone(c.transitionSourceMap) : undefined,
+      transitionRecipeBlendWindows: c.transitionRecipeBlendWindows ? structuredClone(c.transitionRecipeBlendWindows) : undefined,
       colorCorrection: c.colorCorrection ? structuredClone(c.colorCorrection) : undefined,
       nodeGraph: cloneClipNodeGraph(c.nodeGraph),
       masks: (c.masks || []).map((m) => ({
@@ -326,6 +236,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       disabled: c.disabled || false,
       speed: c.speed,
       preservesPitch: c.preservesPitch,
+      freeRun: c.freeRun,
       // Nested composition support
       isComposition: c.isComposition || undefined,
       compositionId: c.compositionId || undefined,
@@ -460,10 +371,24 @@ function serializeFlashBoardPromptHistoryEntry(
   };
 }
 
+function serializeFlashBoardChatMessage(message: FlashBoardChatMessage): ProjectFlashBoardChatMessage {
+  return {
+    id: message.id,
+    role: message.role,
+    text: message.text,
+    createdAt: message.createdAt ? new Date(message.createdAt).toISOString() : undefined,
+    editOptions: message.editOptions,
+    isError: message.isError,
+    isPending: message.isPending,
+    toolCalls: redactFlashBoardChatImageData(message.toolCalls),
+  };
+}
+
 function serializeFlashBoardState(
   records: FlashBoardActiveGenerationRecord[],
   composer: FlashBoardComposerState,
   promptHistory: FlashBoardPromptHistoryEntry[],
+  chatMessages: FlashBoardChatMessage[],
 ): ProjectFlashBoardState {
   const generationMetadataByMediaId: Record<string, ProjectFlashBoardGenerationMetadata> = {
     ...flashBoardMediaBridge.serializeMetadata(),
@@ -478,6 +403,7 @@ function serializeFlashBoardState(
         version: record.request.version,
         outputType: record.request.outputType,
         mediaType: record.result.mediaType,
+        mode: record.request.mode,
         originalPrompt: record.request.originalPrompt,
         prompt: record.request.prompt,
         negativePrompt: record.request.negativePrompt,
@@ -514,6 +440,7 @@ function serializeFlashBoardState(
     version: 1,
     composer: serializeFlashBoardComposerState(composer),
     promptHistory: promptHistory.map(serializeFlashBoardPromptHistoryEntry),
+    chatMessages: chatMessages.map(serializeFlashBoardChatMessage),
     generationRecords: records.map(serializeFlashBoardGenerationRecord),
     generationMetadataByMediaId,
   };
@@ -730,6 +657,7 @@ export async function syncStoresToProject(): Promise<void> {
       projectData.solidItems = freshState.solidItems;
       projectData.meshItems = freshState.meshItems;
       projectData.cameraItems = freshState.cameraItems;
+      projectData.lightItems = freshState.lightItems;
       projectData.splatEffectorItems = freshState.splatEffectorItems;
       projectData.mathSceneItems = freshState.mathSceneItems;
       projectData.motionShapeItems = freshState.motionShapeItems;
@@ -738,6 +666,7 @@ export async function syncStoresToProject(): Promise<void> {
         getFlashBoardActiveGenerationRecords(),
         getFlashBoardComposerState(),
         getFlashBoardPromptHistory(),
+        getFlashBoardChatMessages(),
       );
     }
 

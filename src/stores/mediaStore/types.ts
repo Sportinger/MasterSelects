@@ -12,8 +12,10 @@ import type {
 } from '../../types';
 import type { TransitionCompositionLink } from '../../types/timelineCore';
 import type { SplatEffectorSettings } from '../../types/splatEffector';
+import type { LightClipSettings } from '../../types/light';
 import type { VectorAnimationMetadata, VectorAnimationProvider } from '../../types/vectorAnimation';
 import type { ShapePrimitive } from '../../types/motionDesign';
+import type { LiveInputSource } from '../../types/liveInput';
 import type {
   SignalArtifact,
   SignalAsset,
@@ -41,6 +43,7 @@ export type MediaType =
   | 'math-scene'
   | 'motion-shape'
   | 'camera'
+  | 'light'
   | 'splat-effector'
   | 'signal';
 
@@ -148,6 +151,7 @@ export interface MediaFile extends MediaItem {
   // Import loading state
   isImporting?: boolean;
   vectorAnimation?: VectorAnimationMetadata;
+  liveInput?: LiveInputSource;
 }
 
 // Text item (for Media Panel - can be dragged to timeline)
@@ -211,6 +215,12 @@ export interface CameraItem extends MediaItem {
   type: 'camera';
   duration: number;
   cameraSettings: SceneCameraSettings;
+}
+
+export interface LightItem extends MediaItem {
+  type: 'light';
+  duration: number;
+  lightSettings: LightClipSettings;
 }
 
 export interface SplatEffectorItem extends MediaItem {
@@ -325,6 +335,7 @@ export type ProjectItem =
   | SolidItem
   | MeshItem
   | CameraItem
+  | LightItem
   | SplatEffectorItem
   | MathSceneItem
   | MotionShapeItem
@@ -346,6 +357,7 @@ export interface MediaState {
   solidItems: SolidItem[];
   meshItems: MeshItem[];
   cameraItems: CameraItem[];
+  lightItems: LightItem[];
   splatEffectorItems: SplatEffectorItem[];
   mathSceneItems: MathSceneItem[];
   motionShapeItems: MotionShapeItem[];

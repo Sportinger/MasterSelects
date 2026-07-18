@@ -79,6 +79,7 @@ interface BuildTransitionExportLayersOptions {
   outputWidth?: number;
   outputHeight?: number;
   transitionParams?: Record<string, TransitionParamValue>;
+  materialize?: boolean;
 }
 
 function buildTransitionExportLayers({
@@ -93,6 +94,7 @@ function buildTransitionExportLayers({
   outputWidth = 1280,
   outputHeight = 720,
   transitionParams,
+  materialize = true,
 }: BuildTransitionExportLayersOptions) {
   const track = createVideoTrack();
   const outgoingClip = {
@@ -102,7 +104,7 @@ function buildTransitionExportLayers({
       type: transitionType,
       duration: requestedDuration,
       linkedClipId: 'incoming',
-      compositionId: `transition-comp-${transitionType}`,
+      ...(materialize ? { compositionId: `transition-comp-${transitionType}` } : {}),
       ...(transitionParams ? { params: transitionParams } : {}),
     },
     ...outgoingOverrides,
@@ -114,7 +116,7 @@ function buildTransitionExportLayers({
       type: transitionType,
       duration: requestedDuration,
       linkedClipId: 'outgoing',
-      compositionId: `transition-comp-${transitionType}`,
+      ...(materialize ? { compositionId: `transition-comp-${transitionType}` } : {}),
       ...(transitionParams ? { params: transitionParams } : {}),
     },
     ...incomingOverrides,
@@ -165,7 +167,7 @@ function buildTransitionExportLayers({
 
   return {
     layers: withMediaStoreState(
-      { compositions: [transitionComposition] },
+      { compositions: materialize ? [transitionComposition] : [] },
       () => buildLayersAtTime(ctx, clipStates, null, false),
     ),
     plan: plan!,
@@ -286,6 +288,73 @@ describe('ExportLayerBuilder', () => {
 
   afterEach(() => {
     cleanupLayerBuilder();
+  });
+
+  it('builds scene light layers for export', () => {
+    const track = createVideoTrack();
+    const clip = {
+      id: 'light-clip',
+      name: 'Keyed Light',
+      trackId: track.id,
+      startTime: 1,
+      duration: 5,
+      source: {
+        type: 'light',
+        lightSettings: {
+          kind: 'point',
+          color: '#ffffff',
+          intensity: 1,
+          diameter: 2,
+          castsShadows: false,
+          shadowStrength: 0.5,
+        },
+      },
+      transform: {},
+      is3D: true,
+    } as unknown as TimelineClip;
+    const getInterpolatedLightSettings = vi.fn(() => ({
+      kind: 'panel' as const,
+      color: '#ff3300',
+      intensity: 20,
+      diameter: 4,
+      castsShadows: true,
+      shadowStrength: 0.75,
+    }));
+    const ctx: FrameContext = {
+      time: 2,
+      fps: 30,
+      frameTolerance: 50_000,
+      clipsAtTime: [clip],
+      trackMap: new Map([[track.id, track]]),
+      clipsByTrack: new Map([[track.id, clip]]),
+      getInterpolatedTransform: createDefaultTransform,
+      getInterpolatedEffects: () => [],
+      getInterpolatedColorCorrection: () => undefined,
+      getInterpolatedVectorAnimationSettings: () => ({}),
+      getInterpolatedTextBounds: () => undefined,
+      getInterpolatedLightSettings,
+      getSourceTimeForClip: (_clipId, localTime) => localTime,
+      getInterpolatedSpeed: () => 1,
+    };
+
+    initializeLayerBuilder([track]);
+
+    const layers = buildLayersAtTime(ctx, new Map(), null, false);
+
+    expect(getInterpolatedLightSettings).toHaveBeenCalledWith('light-clip', 1);
+    expect(layers).toHaveLength(1);
+    expect(layers[0]?.is3D).toBe(true);
+    expect(layers[0]?.source).toEqual({
+      type: 'light',
+      lightSettings: {
+        kind: 'panel',
+        color: '#ff3300',
+        intensity: 20,
+        diameter: 4,
+        castsShadows: true,
+        shadowStrength: 0.75,
+      },
+    });
   });
 
   it('builds a nested composition layer for an active transition', () => {
@@ -523,6 +592,23 @@ describe('ExportLayerBuilder', () => {
       expect(layers[0]?.source?.nestedComposition?.compositionId).toBe(`transition-comp-${transitionType}`);
       expect(layers[0]?.source?.nestedComposition?.layers).toHaveLength(2);
     }
+  });
+
+  it('builds the mapped transition scene for export before a composition is materialized', () => {
+    const { layers } = buildTransitionExportLayers({
+      transitionType: 'blur-dissolve',
+      materialize: false,
+      outgoingClip: { transform: createDefaultTransform() },
+      incomingClip: { transform: createDefaultTransform() },
+    });
+
+    const nested = layers[0]?.source?.nestedComposition;
+    expect(layers).toHaveLength(1);
+    expect(nested?.compositionId).toBe('transition-preview:export:transition-blur-dissolve');
+    expect(nested?.layers).toHaveLength(2);
+    expect(nested?.sceneClips).toEqual(expect.arrayContaining([
+      expect.objectContaining({ transitionSourceMap: expect.objectContaining({ version: 2 }) }),
+    ]));
   });
 
   it('hydrates transition composition export layers from prepared parent video states', () => {

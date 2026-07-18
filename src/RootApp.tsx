@@ -1,4 +1,5 @@
 import { lazy, Suspense, type CSSProperties } from 'react';
+import { LegalDialog } from './components/common/LegalDialog';
 import { LandingPage } from './marketing/LandingPage';
 import type { EntryExperience } from './routing/entryExperience';
 
@@ -24,6 +25,17 @@ const loadingShellStyle: CSSProperties = {
 };
 
 export function RootApp({ initialExperience }: RootAppProps) {
+  if (initialExperience === 'imprint' || initialExperience === 'privacy') {
+    const legalPath = window.location.pathname.replace(/\/$/, '');
+    return (
+      <LegalDialog
+        initialLang={legalPath === '/imprint' || legalPath === '/privacy' ? 'en' : 'de'}
+        initialPage={initialExperience}
+        onClose={() => window.location.assign('/')}
+      />
+    );
+  }
+
   if (initialExperience === 'landing') {
     return <LandingPage />;
   }

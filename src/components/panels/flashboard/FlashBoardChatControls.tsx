@@ -1,4 +1,5 @@
 import type { RefObject } from 'react';
+import { LEMONADE_CONTEXT_SIZE_OPTIONS } from '../../../services/lemonadeProvider';
 import type {
   FlashBoardChatModelOption,
   FlashBoardChatProvider,
@@ -6,9 +7,8 @@ import type {
   FlashBoardOpenAiReasoningEffort,
 } from '../../../services/flashboard/FlashBoardChatService';
 
-type ChatControlsPopover = 'chatProvider' | 'chatModel' | 'chatTemperature' | 'chatReasoning' | null;
+type ChatControlsPopover = 'chatProvider' | 'chatModel' | 'chatContext' | 'chatTemperature' | 'chatReasoning' | null;
 type RenderedPopover = string | null;
-type ChatApprovalMode = 'auto' | 'confirm-destructive' | 'confirm-all-mutating';
 type LemonadeStatus = 'idle' | 'checking' | 'online' | 'offline';
 
 interface ChatReasoningOption {
@@ -20,31 +20,35 @@ interface FlashBoardChatControlsProps {
   activeChatModel?: FlashBoardChatModelOption;
   activeChatModelId: string;
   activePopover: RenderedPopover;
-  aiApprovalMode: ChatApprovalMode;
   chatError: string | null;
   chatModelOptions: FlashBoardChatModelOption[];
   chatPrompt: string;
   chatProvider: FlashBoardChatProvider;
   chatProviderLabel: string;
   chatProviderOptions: FlashBoardChatProviderOption[];
+  editOptionsMode: boolean;
+  editOptionsModeEnabled: boolean;
   chatReasoningEffortOptions: ChatReasoningOption[];
   chatReasoningSupported: boolean;
   chatTemperature: number;
   chatTemperatureSupported: boolean;
   hasChatMessages: boolean;
   isChatting: boolean;
+  lemonadeContextSize: number;
   lemonadeStatus: LemonadeStatus;
   openAiReasoningEffort: FlashBoardOpenAiReasoningEffort;
   popoverHostClassName: string;
   popoverRef: RefObject<HTMLDivElement | null>;
   renderedPopover: RenderedPopover;
-  onAiApprovalModeChange: (mode: ChatApprovalMode) => void;
   onChatErrorClear: () => void;
   onChatModelChange: (modelId: string) => void;
   onChatProviderSelect: (provider: FlashBoardChatProvider) => void;
   onChatTemperatureChange: (temperature: number) => void;
   onClearChatHistory: () => void;
   onClosePopover: (popover: NonNullable<ChatControlsPopover>) => void;
+  onEditOptionsModeToggle: () => void;
+  onLemonadeContextSizeChange: (contextSize: number) => void;
+  onOpenPromptBook: () => void;
   onOpenPopover: (popover: NonNullable<ChatControlsPopover>) => void;
   onReasoningEffortChange: (effort: FlashBoardOpenAiReasoningEffort) => void;
 }
@@ -53,58 +57,74 @@ export function FlashBoardChatControls({
   activeChatModel,
   activeChatModelId,
   activePopover,
-  aiApprovalMode,
   chatError,
   chatModelOptions,
   chatPrompt,
   chatProvider,
   chatProviderLabel,
   chatProviderOptions,
+  editOptionsMode,
+  editOptionsModeEnabled,
   chatReasoningEffortOptions,
   chatReasoningSupported,
   chatTemperature,
   chatTemperatureSupported,
   hasChatMessages,
   isChatting,
+  lemonadeContextSize,
   lemonadeStatus,
   openAiReasoningEffort,
   popoverHostClassName,
   popoverRef,
   renderedPopover,
-  onAiApprovalModeChange,
   onChatErrorClear,
   onChatModelChange,
   onChatProviderSelect,
   onChatTemperatureChange,
   onClearChatHistory,
   onClosePopover,
+  onEditOptionsModeToggle,
+  onLemonadeContextSizeChange,
+  onOpenPromptBook,
   onOpenPopover,
   onReasoningEffortChange,
 }: FlashBoardChatControlsProps) {
+  const lemonadeContextLabel = LEMONADE_CONTEXT_SIZE_OPTIONS.find((option) => option.value === lemonadeContextSize)?.label ?? `${Math.round(lemonadeContextSize / 1024)}K`;
+
   return (
-    <div className="fb-control-stack">
+    <div className="fb-control-stack fb-chat-control-stack">
       <div className={popoverHostClassName} ref={popoverRef}>
         <button
           className={`fb-pill ${activePopover === 'chatProvider' ? 'active' : ''}`}
           onClick={() => onOpenPopover('chatProvider')}
           title={`Provider: ${chatProviderLabel}`}
         >
-          {chatProviderLabel}
+          <span className="fb-pill-label">{chatProviderLabel}</span>
         </button>
         <button
           className={`fb-pill ${activePopover === 'chatModel' ? 'active' : ''}`}
           onClick={() => onOpenPopover('chatModel')}
           title={`Model: ${activeChatModel?.label ?? activeChatModelId}`}
         >
-          {activeChatModel?.label ?? activeChatModelId}
+          <span className="fb-pill-label">{activeChatModel?.label ?? activeChatModelId}</span>
         </button>
+        {chatProvider === 'lemonade' && (
+          <button
+            className={`fb-pill ${activePopover === 'chatContext' ? 'active' : ''}`}
+            onClick={() => onOpenPopover('chatContext')}
+            title={`Lemonade context size: ${lemonadeContextLabel}`}
+            disabled={isChatting}
+          >
+            <span className="fb-pill-label">Ctx {lemonadeContextLabel}</span>
+          </button>
+        )}
         {chatReasoningSupported && (
           <button
             className={`fb-pill ${activePopover === 'chatReasoning' ? 'active' : ''}`}
             onClick={() => onOpenPopover('chatReasoning')}
             title={`Reasoning effort: ${openAiReasoningEffort}`}
           >
-            {openAiReasoningEffort}
+            <span className="fb-pill-label">{openAiReasoningEffort}</span>
           </button>
         )}
         <button
@@ -112,17 +132,28 @@ export function FlashBoardChatControls({
           onClick={() => onOpenPopover('chatTemperature')}
           title={chatTemperatureSupported ? `Temperature: ${chatTemperature.toFixed(1)}` : 'Temperature fixed for this model'}
         >
-          {chatTemperatureSupported ? `Temp ${chatTemperature.toFixed(1)}` : 'Fixed temp'}
+          <span className="fb-pill-label">{chatTemperatureSupported ? `Temp ${chatTemperature.toFixed(1)}` : 'Fixed temp'}</span>
         </button>
+        {editOptionsModeEnabled && (
+          <button
+            className={`fb-pill fb-chat-options-pill ${editOptionsMode ? 'active' : ''}`}
+            type="button"
+            onClick={onEditOptionsModeToggle}
+            disabled={isChatting}
+            title={editOptionsMode
+              ? 'Plan 3 mode on - next prompt proposes three edit choices before applying.'
+              : 'Plan 3 mode off - click to propose three edit choices before applying.'}
+          >
+            <span className="fb-pill-label">Plan 3</span>
+          </button>
+        )}
         <button
-          className={`fb-pill fb-chat-approval-pill ${aiApprovalMode === 'auto' ? 'active' : ''}`}
+          className="fb-pill fb-prompt-book-pill"
           type="button"
-          onClick={() => onAiApprovalModeChange(aiApprovalMode === 'auto' ? 'confirm-destructive' : 'auto')}
-          title={aiApprovalMode === 'auto'
-            ? 'Auto-approve ON - the chat runs edits (incl. executeBatch and imports) without asking. Click to require confirmation.'
-            : 'Auto-approve OFF - edits that need confirmation (executeBatch, local imports) are blocked in chat. Click to let the chat run them automatically.'}
+          onClick={onOpenPromptBook}
+          title="Open chat Prompt Book"
         >
-          {aiApprovalMode === 'auto' ? 'Auto on' : 'Auto off'}
+          <span className="fb-pill-label">Prompt Book</span>
         </button>
         <button
           className="fb-pill fb-chat-clear-pill"
@@ -131,7 +162,7 @@ export function FlashBoardChatControls({
           disabled={!hasChatMessages && !chatPrompt && !chatError}
           title="Clear chat history and start a new chat"
         >
-          New
+          <span className="fb-pill-label">New</span>
         </button>
 
         {renderedPopover === 'chatProvider' && (
@@ -179,6 +210,28 @@ export function FlashBoardChatControls({
                   title={model.id}
                 >
                   <span className="fb-popover-pill-label">{model.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {renderedPopover === 'chatContext' && (
+          <div className="fb-popover">
+            <div className="fb-popover-title">Lemonade context</div>
+            <div className="fb-popover-pills">
+              {LEMONADE_CONTEXT_SIZE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  className={`fb-popover-pill ${lemonadeContextSize === option.value ? 'active' : ''}`}
+                  type="button"
+                  onClick={() => {
+                    onLemonadeContextSizeChange(option.value);
+                    onClosePopover('chatContext');
+                  }}
+                  disabled={isChatting}
+                >
+                  <span className="fb-popover-pill-label">{option.label}</span>
                 </button>
               ))}
             </div>

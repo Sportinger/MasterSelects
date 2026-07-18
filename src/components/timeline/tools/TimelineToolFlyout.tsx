@@ -201,6 +201,7 @@ export function TimelineToolFlyout({
       tabIndex={-1}
       style={{ left: position.left, top: position.top, bottom: position.bottom, maxHeight: position.maxHeight }}
       onKeyDown={handleKeyDown}
+      onMouseDown={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
       onPointerLeave={onClearPreview}

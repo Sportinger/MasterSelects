@@ -20,7 +20,6 @@ import {
   SceneAxisGizmoLayers,
   SceneCameraWireframeSvg,
   SceneGizmoToolbar,
-  SceneObjectContextMenu,
   SceneObjectHandles,
   SceneRotateGizmo,
   SceneWorldGridSvg,
@@ -41,7 +40,6 @@ import {
 } from './sceneOverlay/sceneOverlayTransformPlans';
 import { createAxisPlaneDrag } from './sceneOverlay/sceneOverlayDragGeometry';
 import { applyDragTransform } from './sceneOverlay/sceneOverlayDragTransformPlans';
-import { useSceneObjectContextMenu } from './sceneOverlay/useSceneObjectContextMenu';
 import { useSceneOverlayGizmoHandlers } from './sceneOverlay/useSceneOverlayGizmoHandlers';
 import { useSceneOverlayKeybindings } from './sceneOverlay/useSceneOverlayKeybindings';
 import type {
@@ -72,8 +70,6 @@ interface SceneObjectOverlayProps {
   worldGridPlane?: WorldGridPlane;
   toolbarPortalTarget?: HTMLElement | null;
   enabled: boolean;
-  canSetObjectOrbitPivot?: boolean;
-  onSetObjectOrbitPivot?: (object: PreviewSceneObject) => boolean;
 }
 
 const OVERLAY_REFRESH_MS = 125;
@@ -122,8 +118,6 @@ export function SceneObjectOverlay({
   worldGridPlane = 'xz',
   toolbarPortalTarget,
   enabled,
-  canSetObjectOrbitPivot = false,
-  onSetObjectOrbitPivot,
 }: SceneObjectOverlayProps) {
   const [mode, setMode] = useState<SceneGizmoMode>('move');
   const setSceneGizmoMode = useEngineStore((state) => state.setSceneGizmoMode);
@@ -347,17 +341,6 @@ export function SceneObjectOverlay({
     updateHoveredAxis(null);
   }, [enabled, selectedObject?.clipId, selectedObject?.screen.visible, updateHoveredAxis]);
 
-  const {
-    contextMenuRef,
-    objectContextMenu,
-    openObjectContextMenu,
-    setContextMenuObjectOrbitPivot,
-  } = useSceneObjectContextMenu({
-    canSetObjectOrbitPivot,
-    overlayRef,
-    onSetObjectOrbitPivot,
-  });
-
   useEffect(() => {
     if (!dragState) return;
 
@@ -513,7 +496,6 @@ export function SceneObjectOverlay({
     axisHandles,
     rotateRings,
     selectClip,
-    onSetObjectOrbitPivot,
     getObjectTransform,
     resetObjectTransform,
     startGizmoDrag,
@@ -550,7 +532,6 @@ export function SceneObjectOverlay({
               onMouseMove={handleRotateRingMouseMove}
               onMouseDown={handleRotateRingMouseDown}
               onDoubleClick={handleRotateRingDoubleClick}
-              onContextMenu={(event) => openObjectContextMenu(event, selectedObject)}
               onMouseLeave={() => handleAxisHover(null)}
             />
           ) : (
@@ -561,7 +542,6 @@ export function SceneObjectOverlay({
               onAxisHover={handleAxisHover}
               onAxisMouseDown={handleAxisMouseDown}
               onAxisDoubleClick={handleAxisDoubleClick}
-              onContextMenu={(event) => openObjectContextMenu(event, selectedObject)}
             />
           )}
         </>
@@ -573,12 +553,6 @@ export function SceneObjectOverlay({
         mode={mode}
         onPointerDown={handleCenterPointerDown}
         onDoubleClick={handleCenterDoubleClick}
-        onContextMenu={openObjectContextMenu}
-      />
-      <SceneObjectContextMenu
-        menu={objectContextMenu}
-        menuRef={contextMenuRef}
-        onSetObjectOrbitPivot={setContextMenuObjectOrbitPivot}
       />
       {toolbarPortalTarget && toolbar ? createPortal(toolbar, toolbarPortalTarget) : null}
     </div>

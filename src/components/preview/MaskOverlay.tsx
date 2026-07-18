@@ -48,6 +48,11 @@ type FeatherPreviewOverlay = {
   phase: 'in' | 'out';
 };
 
+interface FeatherPreviewState {
+  lastSource: Omit<FeatherPreviewOverlay, 'phase'> | null;
+  overlay: FeatherPreviewOverlay | null;
+}
+
 function isTypingTarget(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLInputElement ||
@@ -63,7 +68,11 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
   const [hoveredVertexId, setHoveredVertexId] = useState<string | null>(null);
   const [hoveredEdgeKey, setHoveredEdgeKey] = useState<string | null>(null);
   const [penInsertPreview, setPenInsertPreview] = useState<PenEdgeInsertPreview | null>(null);
-  const [featherPreviewOverlay, setFeatherPreviewOverlay] = useState<FeatherPreviewOverlay | null>(null);
+  const [featherPreviewState, setFeatherPreviewState] = useState<FeatherPreviewState>({
+    lastSource: null,
+    overlay: null,
+  });
+  const featherPreviewOverlay = featherPreviewState.overlay;
 
   const {
     clips,
@@ -90,6 +99,24 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
     getInterpolatedMasks,
     getInterpolatedTransform,
   } = useTimelineStore();
+
+  if (maskFeatherPreview) {
+    if (
+      featherPreviewState.lastSource?.maskId !== maskFeatherPreview.maskId
+      || featherPreviewState.lastSource.edgeId !== maskFeatherPreview.edgeId
+      || featherPreviewState.lastSource.changedAt !== maskFeatherPreview.changedAt
+    ) {
+      setFeatherPreviewState({
+        lastSource: maskFeatherPreview,
+        overlay: { ...maskFeatherPreview, phase: 'in' },
+      });
+    }
+  } else if (featherPreviewOverlay?.phase === 'in') {
+    setFeatherPreviewState({
+      ...featherPreviewState,
+      overlay: { ...featherPreviewOverlay, phase: 'out' },
+    });
+  }
 
   // Get first selected clip for mask editing
   const selectedClipId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
@@ -160,41 +187,33 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
 
   useEffect(() => {
     if (!maskFeatherPreview) {
-      setFeatherPreviewOverlay(current => current ? { ...current, phase: 'out' } : current);
       const clearTimer = window.setTimeout(() => {
-        setFeatherPreviewOverlay(null);
+        setFeatherPreviewState(current => ({ ...current, overlay: null }));
       }, 500);
       return () => {
         window.clearTimeout(clearTimer);
       };
     }
-    const overlay: FeatherPreviewOverlay = {
-      maskId: maskFeatherPreview.maskId,
-      edgeId: maskFeatherPreview.edgeId,
-      changedAt: maskFeatherPreview.changedAt,
-      phase: 'in' as const,
-    };
-    setFeatherPreviewOverlay(current => ({
-      ...overlay,
-      phase: current?.maskId === overlay.maskId && current.edgeId === overlay.edgeId && current.phase === 'in'
-        ? current.phase
-        : 'in',
-    }));
+    const overlay = maskFeatherPreview;
 
     const fadeOutTimer = window.setTimeout(() => {
-      setFeatherPreviewOverlay(current =>
-        current?.maskId === overlay.maskId && current.edgeId === overlay.edgeId
-          && current.changedAt === overlay.changedAt
-          ? { ...current, phase: 'out' }
-          : current
-      );
+      setFeatherPreviewState(current => ({
+        ...current,
+        overlay: current.overlay?.maskId === overlay.maskId && current.overlay.edgeId === overlay.edgeId
+          && current.overlay.changedAt === overlay.changedAt
+          ? { ...current.overlay, phase: 'out' }
+          : current.overlay,
+      }));
     }, 500);
     const clearTimer = window.setTimeout(() => {
-      setFeatherPreviewOverlay(current =>
-        current?.maskId === overlay.maskId && current.edgeId === overlay.edgeId && current.changedAt === overlay.changedAt ? null : current
-      );
+      setFeatherPreviewState(current => ({
+        ...current,
+        overlay: current.overlay?.maskId === overlay.maskId && current.overlay.edgeId === overlay.edgeId
+          && current.overlay.changedAt === overlay.changedAt
+          ? null
+          : current.overlay,
+      }));
     }, 1000);
-
     return () => {
       window.clearTimeout(fadeOutTimer);
       window.clearTimeout(clearTimer);

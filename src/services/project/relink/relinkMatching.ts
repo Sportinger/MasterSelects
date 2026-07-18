@@ -11,9 +11,10 @@ export interface RelinkCandidate {
   file?: File;
   handle?: FileSystemFileHandle;
   absolutePath?: string;
+  relativePath?: string;
 }
 
-export type RelinkCandidateMap = Map<string, RelinkCandidate>;
+export type RelinkCandidateMap = Map<string, RelinkCandidate[]>;
 
 export type RelinkMatch =
   | {
@@ -37,6 +38,17 @@ function getNativeHandlePath(handle: FileSystemFileHandle | undefined): string |
   return (handle as (FileSystemFileHandle & { __nativePath?: string }) | undefined)?.__nativePath;
 }
 
+function getRelinkHandlePath(handle: FileSystemFileHandle | undefined): string | undefined {
+  return (handle as (FileSystemFileHandle & { __relinkPath?: string }) | undefined)?.__relinkPath;
+}
+
+export function setRelinkHandlePath(handle: FileSystemFileHandle, path: string): void {
+  (handle as FileSystemFileHandle & { __relinkPath?: string }).__relinkPath = normalizePath(path)
+    .split('/')
+    .filter((segment) => segment && segment !== '.' && segment !== '..')
+    .join('/');
+}
+
 function getBaseName(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const normalized = normalizePath(value);
@@ -48,32 +60,71 @@ function normalizeKey(value: string | undefined): string | undefined {
   return value?.trim().toLowerCase() || undefined;
 }
 
-function uniqueNames(values: Array<string | undefined>): string[] {
+function uniqueValues(values: Array<string | undefined>): string[] {
   const seen = new Set<string>();
-  const names: string[] = [];
+  const unique: string[] = [];
 
   for (const value of values) {
-    const name = getBaseName(value) ?? value;
-    if (!name) continue;
-    const key = normalizeKey(name);
+    const normalized = value?.trim();
+    if (!normalized) continue;
+    const key = normalizeKey(normalizePath(normalized));
     if (!key || seen.has(key)) continue;
     seen.add(key);
-    names.push(name);
+    unique.push(normalized);
   }
 
-  return names;
+  return unique;
 }
 
-function findCandidate(names: string[], candidates: RelinkCandidateMap): RelinkCandidate | undefined {
-  for (const name of names) {
-    const candidate = candidates.get(name.toLowerCase());
-    if (candidate) return candidate;
+function commonPathSuffixLength(left: string, right: string): number {
+  const leftParts = normalizePath(left).toLowerCase().split('/').filter(Boolean);
+  const rightParts = normalizePath(right).toLowerCase().split('/').filter(Boolean);
+  let count = 0;
+  while (
+    count < leftParts.length &&
+    count < rightParts.length &&
+    leftParts[leftParts.length - 1 - count] === rightParts[rightParts.length - 1 - count]
+  ) {
+    count++;
   }
-  return undefined;
+  return count;
+}
+
+function getCandidatePath(candidate: RelinkCandidate): string {
+  return candidate.absolutePath ?? candidate.relativePath ?? candidate.name;
+}
+
+function findCandidate(values: string[], candidates: RelinkCandidateMap): RelinkCandidate | undefined {
+  const matches = new Set<RelinkCandidate>();
+  for (const value of values) {
+    const name = getBaseName(value) ?? value;
+    for (const candidate of candidates.get(name.toLowerCase()) ?? []) {
+      matches.add(candidate);
+    }
+  }
+
+  if (matches.size === 1) return matches.values().next().value;
+  if (matches.size === 0) return undefined;
+
+  let best: RelinkCandidate | undefined;
+  let bestScore = 1;
+  let tied = false;
+  for (const candidate of matches) {
+    const score = Math.max(...values.map((value) => commonPathSuffixLength(value, getCandidatePath(candidate))));
+    if (score > bestScore) {
+      best = candidate;
+      bestScore = score;
+      tied = false;
+    } else if (score === bestScore) {
+      tied = true;
+    }
+  }
+
+  return bestScore >= 2 && !tied ? best : undefined;
 }
 
 function getModelFrameExpectedNames(frame: ModelSequenceFrame): string[] {
-  return uniqueNames([
+  return uniqueValues([
     frame.name,
     frame.sourcePath,
     frame.absolutePath,
@@ -82,7 +133,7 @@ function getModelFrameExpectedNames(frame: ModelSequenceFrame): string[] {
 }
 
 function getGaussianFrameExpectedNames(frame: GaussianSplatSequenceFrame): string[] {
-  return uniqueNames([
+  return uniqueValues([
     frame.name,
     frame.sourcePath,
     frame.absolutePath,
@@ -92,14 +143,28 @@ function getGaussianFrameExpectedNames(frame: GaussianSplatSequenceFrame): strin
 
 export function getRelinkExpectedFileNames(mediaFile: MediaFile): string[] {
   if (mediaFile.modelSequence?.frames.length) {
-    return mediaFile.modelSequence.frames.flatMap(getModelFrameExpectedNames);
+    return mediaFile.modelSequence.frames
+      .flatMap(getModelFrameExpectedNames)
+      .map((value) => getBaseName(value) ?? value);
   }
 
   if (mediaFile.gaussianSplatSequence?.frames.length) {
-    return mediaFile.gaussianSplatSequence.frames.flatMap(getGaussianFrameExpectedNames);
+    return mediaFile.gaussianSplatSequence.frames
+      .flatMap(getGaussianFrameExpectedNames)
+      .map((value) => getBaseName(value) ?? value);
   }
 
-  return uniqueNames([
+  return uniqueValues([
+    mediaFile.name,
+    mediaFile.filePath,
+    mediaFile.absolutePath,
+    mediaFile.projectPath,
+    mediaFile.file?.name,
+  ]).map((value) => getBaseName(value) ?? value);
+}
+
+function getSingleExpectedValues(mediaFile: MediaFile): string[] {
+  return uniqueValues([
     mediaFile.name,
     mediaFile.filePath,
     mediaFile.absolutePath,
@@ -141,7 +206,7 @@ export function findRelinkMatch(
     return { kind: 'gaussian-splat-sequence', frames };
   }
 
-  const matched = findCandidate(getRelinkExpectedFileNames(mediaFile), candidates)
+  const matched = findCandidate(getSingleExpectedValues(mediaFile), candidates)
     ?? options?.directCandidate;
 
   return matched ? { kind: 'single', candidate: matched } : null;
@@ -157,8 +222,10 @@ export async function createRelinkCandidateMapFromHandles(
       name: handle.name,
       handle,
       absolutePath: getNativeHandlePath(handle),
+      relativePath: getRelinkHandlePath(handle),
     };
-    candidates.set(candidate.name.toLowerCase(), candidate);
+    const key = candidate.name.toLowerCase();
+    candidates.set(key, [...(candidates.get(key) ?? []), candidate]);
   }
 
   return candidates;

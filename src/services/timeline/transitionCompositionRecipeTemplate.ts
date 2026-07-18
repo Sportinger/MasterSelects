@@ -9,9 +9,13 @@ import type { TransitionPlan } from '../../stores/timeline/editOperations/transi
 import { createTransitionMultiPanelLayerStates } from '../layerBuilder/transitionMultiPanelLayers';
 import { buildMaskMaterializationFromRecipe } from './transitionCompositionMasks';
 import { makeKeyframe, mergeGeneratedKeyframes, sliceGeneratedKeyframesForSegment } from './transitionCompositionKeyframes';
-import { buildLinkedCoverageClips, getSerializableClip } from './transitionCompositionSourceClips';
+import {
+  buildLinkedMappedClip,
+  cloneTransitionSourceMapForClip,
+  getSerializableClip,
+} from './transitionCompositionSourceClips';
 
-const TRANSITION_TEMPLATE_VERSION = 2;
+const TRANSITION_TEMPLATE_VERSION = 4;
 
 export function clone<T>(value: T): T {
   return structuredClone(value);
@@ -113,9 +117,9 @@ export function buildTransformKeyframesFromRecipe(
     addRangeKeyframes(keyframes, clip.id, 'position.z', duration, primitive.translateZ, primitive, value => (clip.transform.position.z ?? 0) + value);
     addRangeKeyframes(keyframes, clip.id, 'scale.x', duration, primitive.scaleX, primitive, value => clip.transform.scale.x * value);
     addRangeKeyframes(keyframes, clip.id, 'scale.y', duration, primitive.scaleY, primitive, value => clip.transform.scale.y * value);
-    addRangeKeyframes(keyframes, clip.id, 'rotation.x', duration, primitive.rotateX, primitive, value => clip.transform.rotation.x + value);
-    addRangeKeyframes(keyframes, clip.id, 'rotation.y', duration, primitive.rotateY, primitive, value => clip.transform.rotation.y + value);
-    addRangeKeyframes(keyframes, clip.id, 'rotation.z', duration, primitive.rotateZ, primitive, value => clip.transform.rotation.z + value);
+    addRangeKeyframes(keyframes, clip.id, 'rotation.x', duration, primitive.rotateX, primitive, value => clip.transform.rotation.x + radiansToDegrees(value));
+    addRangeKeyframes(keyframes, clip.id, 'rotation.y', duration, primitive.rotateY, primitive, value => clip.transform.rotation.y + radiansToDegrees(value));
+    addRangeKeyframes(keyframes, clip.id, 'rotation.z', duration, primitive.rotateZ, primitive, value => clip.transform.rotation.z + radiansToDegrees(value));
   }
   return keyframes;
 }
@@ -190,42 +194,61 @@ export function buildEffectMaterializationFromRecipe(
   return { effects, keyframes };
 }
 
-export function getBlendModeFromRecipe(
+export function buildTransitionRecipeBlendWindows(
   recipe: readonly TransitionPrimitive[],
   target: 'outgoing' | 'incoming',
-  startTime: number,
   duration: number,
-  transitionDuration: number,
-): SerializableClip['transform']['blendMode'] | undefined {
-  const primitive = recipe.find((candidate) =>
-    candidate.kind === 'blend' && candidate.target === target
-  );
-  if (primitive?.kind !== 'blend') return undefined;
-  const activeStart = (primitive.startProgress ?? 0) * transitionDuration;
-  const activeEnd = (primitive.endProgress ?? 1) * transitionDuration;
-  const midpoint = startTime + duration * 0.5;
-  if (midpoint < activeStart || midpoint >= activeEnd) return undefined;
-  return primitive?.kind === 'blend'
-    ? primitive.mode as SerializableClip['transform']['blendMode']
-    : undefined;
-}
-
-export function getBlendBoundaries(recipe: readonly TransitionPrimitive[], target: 'outgoing' | 'incoming', duration: number): number[] {
-  return recipe
+  baseBlendMode: SerializableClip['transform']['blendMode'],
+): SerializableClip['transitionRecipeBlendWindows'] {
+  const blends = recipe
     .filter((primitive): primitive is Extract<TransitionPrimitive, { kind: 'blend' }> =>
       primitive.kind === 'blend' && primitive.target === target
     )
-    .flatMap((primitive) => [
-      (primitive.startProgress ?? 0) * duration,
-      (primitive.endProgress ?? 1) * duration,
-    ])
-    .filter((time) => time > 0.0001 && time < duration - 0.0001);
+    .map((primitive) => ({
+      ...primitive,
+      startTime: Math.max(0, Math.min(duration, (primitive.startProgress ?? 0) * duration)),
+      endTime: Math.max(0, Math.min(duration, (primitive.endProgress ?? 1) * duration)),
+    }))
+    .filter((primitive) => primitive.endTime > primitive.startTime);
+  if (blends.length === 0) return undefined;
+
+  const points = [0, duration, ...blends.flatMap((blend) => [blend.startTime, blend.endTime])]
+    .toSorted((a, b) => a - b)
+    .filter((point, index, values) => index === 0 || point !== values[index - 1]);
+  const windows: NonNullable<SerializableClip['transitionRecipeBlendWindows']> = [];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const compStart = points[index];
+    const compEnd = points[index + 1];
+    let blendMode = baseBlendMode;
+    for (const blend of blends) {
+      if (compStart >= blend.startTime && compStart < blend.endTime) {
+        blendMode = blend.mode as SerializableClip['transform']['blendMode'];
+      }
+    }
+    if (blendMode === baseBlendMode) continue;
+
+    const previous = windows[windows.length - 1];
+    if (previous?.compEnd === compStart && previous.blendMode === blendMode) {
+      previous.compEnd = compEnd;
+    } else {
+      windows.push({ compStart, compEnd, blendMode });
+    }
+  }
+  return windows.length > 0 ? windows : undefined;
 }
 
 export type MultiPanelPrimitive = Extract<TransitionPrimitive, { kind: 'multi-panel' }>;
 
 export function clamp01(value: number): number {
   return Math.min(Math.max(value, 0), 1);
+}
+
+export function radiansToDegrees(value: number): number {
+  return value * 180 / Math.PI;
+}
+
+export function degreesToRadians(value: number): number {
+  return value * Math.PI / 180;
 }
 
 export function easeProgress(progress: number, curve: { curve?: string } | undefined): number {
@@ -277,7 +300,11 @@ export function createClipBaseLayer(clip: SerializableClip): Layer {
     effects: clip.effects ?? [],
     position: { ...clip.transform.position },
     scale: { x: clip.transform.scale.x, y: clip.transform.scale.y, z: clip.transform.scale.z },
-    rotation: { ...clip.transform.rotation },
+    rotation: {
+      x: degreesToRadians(clip.transform.rotation.x),
+      y: degreesToRadians(clip.transform.rotation.y),
+      z: degreesToRadians(clip.transform.rotation.z),
+    },
   };
 }
 
@@ -334,7 +361,7 @@ export function buildPanelKeyframes(
       makeKeyframe(panelClipId, 'position.z', time, state.position.z, primitive.curve ?? 'linear'),
       makeKeyframe(panelClipId, 'scale.x', time, state.scale.x, primitive.curve ?? 'linear'),
       makeKeyframe(panelClipId, 'scale.y', time, state.scale.y, primitive.curve ?? 'linear'),
-      makeKeyframe(panelClipId, 'rotation.z', time, getLayerRotationZ(state.rotation), primitive.curve ?? 'linear'),
+      makeKeyframe(panelClipId, 'rotation.z', time, radiansToDegrees(getLayerRotationZ(state.rotation)), primitive.curve ?? 'linear'),
     );
   }
 
@@ -381,9 +408,14 @@ export function expandMultiPanelClips(
           },
           rotation: {
             ...clip.transform.rotation,
-            z: getLayerRotationZ(state.rotation),
+            z: radiansToDegrees(getLayerRotationZ(state.rotation)),
           },
         },
+        transitionSourceMap: cloneTransitionSourceMapForClip(
+          clip.transitionSourceMap,
+          clip.id,
+          state.id,
+        ),
       };
       const panelKeyframes = buildPanelKeyframes(state.id, duration, primitive, baseLayer, seed);
       return {
@@ -419,8 +451,18 @@ export function buildTransitionTimelineData(input: {
   transition: TimelineTransition;
   plan: TransitionPlan;
   serializableClips: readonly SerializableClip[];
+  outgoingMediaDuration: number;
+  incomingMediaDuration: number;
 }): { timelineData: CompositionTimelineData; link: Omit<TransitionCompositionLink, 'parentCompositionId'> } {
-  const { outgoingClip, incomingClip, transition, plan, serializableClips } = input;
+  const {
+    outgoingClip,
+    incomingClip,
+    transition,
+    plan,
+    serializableClips,
+    outgoingMediaDuration,
+    incomingMediaDuration,
+  } = input;
   const duration = Math.max(0.0001, transition.duration);
   const bodyStart = 0;
   const bodyEnd = duration;
@@ -438,18 +480,27 @@ export function buildTransitionTimelineData(input: {
     primitive.kind === 'overlay'
   ) ?? [];
   const recipe = definition?.recipe ?? [];
+  const isScene3D = definition?.renderMode === 'scene-3d-panel';
   const materializeRecipeClip = (clip: SerializableClip, target: 'outgoing' | 'incoming'): SerializableClip => {
     const opacityKeyframes = buildOpacityKeyframesFromRecipe(recipe, target, clip.id, duration);
     const transformKeyframes = buildTransformKeyframesFromRecipe(recipe, target, clip, duration);
     const effects = buildEffectMaterializationFromRecipe(recipe, target, clip.id, duration);
-    const masks = buildMaskMaterializationFromRecipe(recipe, target, clip.id, duration);
-    const blendMode = getBlendModeFromRecipe(recipe, target, clip.startTime, clip.duration, duration);
+    const masks = buildMaskMaterializationFromRecipe(recipe, target, clip.id, duration, getTransitionSeed(transition));
+    const transitionRecipeBlendWindows = buildTransitionRecipeBlendWindows(
+      recipe,
+      target,
+      duration,
+      clip.transform.blendMode,
+    );
     const clipWithGeneratedProperties: SerializableClip = {
       ...clip,
       transform: {
         ...clip.transform,
-        blendMode: blendMode ?? clip.transform.blendMode,
+        blendMode: clip.transform.blendMode,
       },
+      transitionRecipeBlendWindows,
+      transitionRender: masks.transitionRender,
+      is3D: isScene3D || clip.is3D,
       effects: [...(clip.effects ?? []), ...effects.effects],
       masks: [...(clip.masks ?? []), ...masks.masks],
     };
@@ -472,28 +523,28 @@ export function buildTransitionTimelineData(input: {
       ),
     };
   };
-  const outgoingLinkedClips = expandMultiPanelClips(buildLinkedCoverageClips({
+  const outgoingLinkedClips = expandMultiPanelClips([buildLinkedMappedClip({
     base: baseOutgoing,
     baseId: outgoingClipId,
     trackId: outgoingTrackId,
     nameSuffix: '[OUT linked]',
-    participant: plan.outgoing,
     bodyStart: plan.bodyStart,
+    bodyEnd: plan.bodyEnd,
     duration,
-    splitBoundaries: getBlendBoundaries(recipe, 'outgoing', duration),
+    mediaDuration: outgoingMediaDuration,
     materialize: (clip) => materializeRecipeClip(clip, 'outgoing'),
-  }), recipe, 'outgoing', transition, duration);
-  const incomingLinkedClips = expandMultiPanelClips(buildLinkedCoverageClips({
+  })], recipe, 'outgoing', transition, duration);
+  const incomingLinkedClips = expandMultiPanelClips([buildLinkedMappedClip({
     base: baseIncoming,
     baseId: incomingClipId,
     trackId: incomingTrackId,
     nameSuffix: '[IN linked]',
-    participant: plan.incoming,
     bodyStart: plan.bodyStart,
+    bodyEnd: plan.bodyEnd,
     duration,
-    splitBoundaries: getBlendBoundaries(recipe, 'incoming', duration),
+    mediaDuration: incomingMediaDuration,
     materialize: (clip) => materializeRecipeClip(clip, 'incoming'),
-  }), recipe, 'incoming', transition, duration);
+  })], recipe, 'incoming', transition, duration);
   const clips: SerializableClip[] = [
     ...outgoingLinkedClips,
     ...incomingLinkedClips,
@@ -590,6 +641,7 @@ export function buildTransitionTimelineData(input: {
   return {
     link: {
       kind: 'transition-comp',
+      sourceLayout: 'mapped-v3',
       parentTransitionId: transition.id,
       parentOutgoingClipId: outgoingClip.id,
       parentIncomingClipId: incomingClip.id,

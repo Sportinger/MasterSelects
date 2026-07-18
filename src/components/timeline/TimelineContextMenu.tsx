@@ -7,6 +7,8 @@ import type { ContextMenuState } from './types';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
+import { useSettingsStore, type TranscriptionProvider } from '../../stores/settingsStore';
+import { useAccountStore } from '../../stores/accountStore';
 import { projectFileService } from '../../services/projectFileService';
 import { thumbnailCacheService } from '../../services/thumbnailCacheService';
 import { captureCurrentPreviewFrameJpegBlob } from '../../services/previewFrameCapture';
@@ -34,6 +36,12 @@ import {
 
 const log = Logger.create('TimelineContextMenu');
 const COPY_PROMPT_TOAST_MS = 900;
+const TRANSCRIPTION_PROVIDER_LABELS: Record<TranscriptionProvider, string> = {
+  local: 'Local Whisper Base',
+  openai: 'OpenAI Whisper API',
+  assemblyai: 'AssemblyAI',
+  deepgram: 'Deepgram',
+};
 
 function getFrameExportFilename(clip: TimelineClip | null | undefined, playheadPosition: number): string {
   const baseName = (clip?.name ?? 'current-frame')
@@ -204,6 +212,12 @@ export function TimelineContextMenu({
   const copiedPromptToast = showCopiedPromptToast ? (
     <div className="timeline-copy-prompt-toast" role="status" aria-live="polite">Copied</div>
   ) : null;
+  const transcriptionProvider = useSettingsStore((state) => state.transcriptionProvider);
+  const openSettings = useSettingsStore((state) => state.openSettings);
+  const isSignedIn = useAccountStore((state) => Boolean(state.session?.authenticated));
+  const activeTranscriptionProviderLabel = isSignedIn
+    ? 'OpenAI Whisper Cloud'
+    : TRANSCRIPTION_PROVIDER_LABELS[transcriptionProvider];
 
   if (!contextMenu) return copiedPromptToast;
 
@@ -738,8 +752,17 @@ export function TimelineContextMenu({
             {clip?.transcriptStatus === 'transcribing'
               ? `Transcribing... ${clip?.transcriptProgress || 0}%`
               : clip?.transcriptStatus === 'ready'
-              ? 'Re-transcribe'
-              : 'Transcribe'}
+              ? `Re-transcribe (${activeTranscriptionProviderLabel})`
+              : `Transcribe (${activeTranscriptionProviderLabel})`}
+          </div>
+          <div
+            className="context-menu-item"
+            onClick={() => {
+              openSettings('transcription');
+              setContextMenu(null);
+            }}
+          >
+            Transcription Settings...
           </div>
         </>
       )}

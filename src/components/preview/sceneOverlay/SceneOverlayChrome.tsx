@@ -1,7 +1,6 @@
 import type {
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
-  RefObject,
 } from 'react';
 import type {
   PreviewSceneObject,
@@ -15,7 +14,6 @@ import type {
   DisplayCameraWireframePath,
   DisplaySceneObject,
   DisplayWorldGridPath,
-  ObjectContextMenuState,
   ProjectedRotateRing,
 } from './sceneOverlayTypes';
 
@@ -81,7 +79,6 @@ interface SceneRotateGizmoProps {
   onMouseMove: (event: ReactMouseEvent<SVGSVGElement>) => void;
   onMouseDown: (event: ReactMouseEvent<SVGSVGElement>) => void;
   onDoubleClick: (event: ReactMouseEvent<SVGSVGElement>) => void;
-  onContextMenu: (event: ReactMouseEvent<SVGSVGElement>) => void;
   onMouseLeave: () => void;
 }
 
@@ -92,7 +89,6 @@ export function SceneRotateGizmo({
   onMouseMove,
   onMouseDown,
   onDoubleClick,
-  onContextMenu,
   onMouseLeave,
 }: SceneRotateGizmoProps) {
   return (
@@ -109,7 +105,6 @@ export function SceneRotateGizmo({
       onMouseMove={onMouseMove}
       onMouseDown={onMouseDown}
       onDoubleClick={onDoubleClick}
-      onContextMenu={onContextMenu}
       onMouseLeave={onMouseLeave}
     >
       {rotateRings.map((ring) => (
@@ -132,7 +127,6 @@ interface SceneAxisGizmoLayerProps {
   onAxisHover: (axis: SceneGizmoAxis | null) => void;
   onAxisMouseDown: (event: ReactMouseEvent<Element>, handle: SceneAxisScreenHandle) => void;
   onAxisDoubleClick: (event: ReactMouseEvent<Element>, handle: SceneAxisScreenHandle) => void;
-  onContextMenu: (event: ReactMouseEvent<Element>) => void;
 }
 
 export function SceneAxisGizmoLayers({
@@ -142,7 +136,6 @@ export function SceneAxisGizmoLayers({
   onAxisHover,
   onAxisMouseDown,
   onAxisDoubleClick,
-  onContextMenu,
 }: SceneAxisGizmoLayerProps) {
   return (
     <>
@@ -157,7 +150,6 @@ export function SceneAxisGizmoLayers({
             onMouseLeave={() => onAxisHover(null)}
             onMouseDown={(event) => onAxisMouseDown(event, handle)}
             onDoubleClick={(event) => onAxisDoubleClick(event, handle)}
-            onContextMenu={onContextMenu}
           >
             <span className="preview-scene-gizmo-axis-line" />
             <span className="preview-scene-gizmo-end" />
@@ -183,7 +175,6 @@ interface SceneObjectHandlesProps {
   mode: SceneGizmoMode;
   onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>, object: PreviewSceneObject) => void;
   onDoubleClick: (event: ReactMouseEvent<HTMLButtonElement>, object: PreviewSceneObject) => void;
-  onContextMenu: (event: ReactMouseEvent<Element>, object: PreviewSceneObject) => void;
 }
 
 export function SceneObjectHandles({
@@ -192,7 +183,6 @@ export function SceneObjectHandles({
   mode,
   onPointerDown,
   onDoubleClick,
-  onContextMenu,
 }: SceneObjectHandlesProps) {
   return (
     <>
@@ -215,52 +205,12 @@ export function SceneObjectHandles({
             aria-label={label}
             onPointerDown={(event) => onPointerDown(event, object)}
             onDoubleClick={(event) => onDoubleClick(event, object)}
-            onContextMenu={(event) => onContextMenu(event, object)}
           >
             <span>{getObjectBadge(object.kind)}</span>
           </button>
         );
       })}
     </>
-  );
-}
-
-interface SceneObjectContextMenuProps {
-  menu: ObjectContextMenuState | null;
-  menuRef: RefObject<HTMLDivElement | null>;
-  onSetObjectOrbitPivot: () => void;
-}
-
-export function SceneObjectContextMenu({
-  menu,
-  menuRef,
-  onSetObjectOrbitPivot,
-}: SceneObjectContextMenuProps) {
-  if (!menu) return null;
-
-  return (
-    <div
-      ref={menuRef}
-      className="preview-scene-object-context-menu"
-      style={{ left: menu.x, top: menu.y }}
-      role="menu"
-      onContextMenu={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-      }}
-    >
-      <button
-        type="button"
-        role="menuitem"
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onSetObjectOrbitPivot();
-        }}
-      >
-        Set Orbit Pivot
-      </button>
-    </div>
   );
 }
 

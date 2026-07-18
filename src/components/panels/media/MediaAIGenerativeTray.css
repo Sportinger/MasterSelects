@@ -256,12 +256,9 @@
 }
 
 .media-ai-tray-expanded .fb-bubble.has-references .fb-reference-strip.is-loose {
-  overflow: visible;
-  scrollbar-width: none;
-}
-
-.media-ai-tray-expanded .fb-bubble.has-references .fb-reference-strip.is-loose::-webkit-scrollbar {
-  display: none;
+  /* Keep short reference lists inside their column. */
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .media-ai-tray-expanded .fb-bubble.has-references .fb-bubble-input {
@@ -336,11 +333,8 @@
   }
 
   .media-ai-tray-expanded .fb-bubble.has-references {
-    --media-ai-tray-reference-width: 108px;
     position: relative;
-    grid-template-columns:
-      minmax(108px, var(--media-ai-tray-reference-width))
-      minmax(260px, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     width: 100%;
   }
 
@@ -348,24 +342,14 @@
     display: contents;
   }
 
+  .media-ai-tray-expanded .fb-bubble.has-references .fb-bubble-prompt,
+  .media-ai-tray-expanded .fb-bubble.has-references > .fb-bubble-bar,
+  .media-ai-tray-expanded .fb-bubble.has-references > .fb-audio-warning {
+    grid-column: 1;
+  }
+
   .media-ai-tray-expanded .fb-bubble.has-references .fb-reference-strip {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    flex-direction: column;
-    align-items: center;
-    width: var(--media-ai-tray-reference-width);
-    height: auto;
-    max-height: none;
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior-y: contain;
-    padding: 18px 16px;
-    scroll-padding: 18px;
-    scrollbar-gutter: stable;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.34) transparent;
+    display: none;
   }
 
   .media-ai-tray-expanded .fb-bubble.has-references .fb-reference-card {
@@ -457,7 +441,7 @@
 }
 
 .media-download-status-pill {
-  cursor: default;
+  font-family: inherit;
 }
 
 .media-download-status-pill.ready {

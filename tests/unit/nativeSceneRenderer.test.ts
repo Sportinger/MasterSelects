@@ -15,6 +15,12 @@ type RenderPassEntry = {
 };
 type NativeSceneRendererTestAccess = NativeSceneRenderer & {
   sceneView: GPUTextureView;
+  sceneTargets: Map<string, {
+    texture: GPUTexture;
+    view: GPUTextureView;
+    depthTexture: GPUTexture;
+    depthView: GPUTextureView;
+  }>;
   modelRuntimeCache: {
     runtimes: Map<string, unknown>;
     loading: Map<string, Promise<unknown>>;
@@ -317,6 +323,32 @@ describe('NativeSceneRenderer shared depth contract', () => {
     mockGaussianRenderer.renderToTexture.mockImplementation((clipId: string) => ({
       label: `splat-view-${clipId}`,
     }));
+  });
+
+  it('keeps size-dependent scene targets isolated per viewport', async () => {
+    const renderer = await createInitializedRenderer();
+    const { device } = createFakeDevice();
+    const layer = makeSplatLayer('shared-splat', 2, 1);
+    const mainCamera = makeCamera();
+    const panelCamera = {
+      ...makeCamera(),
+      viewport: { width: 477, height: 696 },
+    };
+
+    const mainView = renderer.renderScene(device, [layer], mainCamera, [], false, null, null, 'main');
+    renderer.renderScene(device, [layer], panelCamera, [], false, null, null, 'panel-a');
+    const mainViewAgain = renderer.renderScene(device, [layer], mainCamera, [], false, null, null, 'main');
+    const targets = (renderer as NativeSceneRendererTestAccess).sceneTargets;
+
+    expect(targets.size).toBe(2);
+    expect(targets.get('main')?.view).toBe(mainView);
+    expect(mainViewAgain).toBe(mainView);
+    expect(targets.get('main')?.texture.destroy).not.toHaveBeenCalled();
+
+    const panelTexture = targets.get('panel-a')?.texture;
+    renderer.pruneSceneTargets(new Set(['main']));
+    expect(panelTexture?.destroy).toHaveBeenCalledOnce();
+    expect(targets.has('panel-a')).toBe(false);
   });
 
   it('clears one shared depth target and routes all native splat layers through it', async () => {

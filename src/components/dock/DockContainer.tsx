@@ -1,10 +1,8 @@
 // Root dock container - wraps docked panels and renders floating panels
 
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 
 import { useDockStore } from '../../stores/dockStore';
-import { useSettingsStore } from '../../stores/settingsStore';
-import { scheduleAudioMixerWarmup } from '../panels/audio-mixer/audioMixerWarmup';
 import { DockNode } from './DockNode';
 import { DetachedPanelWindow } from './DetachedPanelWindow';
 import { FloatingPanel } from './FloatingPanel';
@@ -18,7 +16,6 @@ import './dock.css';
 
 export function DockContainer() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const audioMixerWoodThemeEnabled = useSettingsStore(state => state.audioMixerWoodThemeEnabled);
   const {
     layout,
     browserWindowPanels,
@@ -53,10 +50,6 @@ export function DockContainer() {
     toggleHoveredTabMaximized,
     getRootEdgeDropTarget,
   });
-
-  useEffect(() => {
-    scheduleAudioMixerWarmup({ includeWoodThemeImages: audioMixerWoodThemeEnabled });
-  }, [audioMixerWoodThemeEnabled]);
 
   return (
     <div

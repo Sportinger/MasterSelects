@@ -169,6 +169,7 @@ export async function restoreLegacyStartupMediaState(
     let restoredSolidItems: SolidItem[] = [];
     let restoredMeshItems: MeshItem[] = [];
     let restoredCameraItems: CameraItem[] = [];
+    let restoredLightItems: import('./types').LightItem[] = [];
     let restoredSplatEffectorItems: SplatEffectorItem[] = [];
     let restoredMathSceneItems: MathSceneItem[] = [];
     let restoredMotionShapeItems: MotionShapeItem[] = [];
@@ -187,6 +188,10 @@ export async function restoreLegacyStartupMediaState(
     try {
       const storedCamera = localStorage.getItem('ms-cameraItems');
       if (storedCamera) restoredCameraItems = JSON.parse(storedCamera);
+    } catch { /* ignore parse errors */ }
+    try {
+      const storedLights = localStorage.getItem('ms-lightItems');
+      if (storedLights) restoredLightItems = JSON.parse(storedLights);
     } catch { /* ignore parse errors */ }
     try {
       const storedSplatEffectors = localStorage.getItem('ms-splatEffectorItems');
@@ -208,6 +213,7 @@ export async function restoreLegacyStartupMediaState(
       ...(restoredSolidItems.length > 0 && { solidItems: restoredSolidItems }),
       ...(restoredMeshItems.length > 0 && { meshItems: restoredMeshItems }),
       ...(restoredCameraItems.length > 0 && { cameraItems: restoredCameraItems }),
+      ...(restoredLightItems.length > 0 && { lightItems: restoredLightItems }),
       ...(restoredSplatEffectorItems.length > 0 && { splatEffectorItems: restoredSplatEffectorItems }),
       ...(restoredMathSceneItems.length > 0 && { mathSceneItems: restoredMathSceneItems }),
       ...(restoredMotionShapeItems.length > 0 && { motionShapeItems: restoredMotionShapeItems }),

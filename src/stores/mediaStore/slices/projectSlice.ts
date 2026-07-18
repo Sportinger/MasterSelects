@@ -11,6 +11,7 @@ import {
   revokeAllMediaObjectUrls,
   revokeMediaFileObjectUrls,
 } from '../../../services/project/mediaObjectUrlManager';
+import { liveInputRuntime } from '../../../services/mediaRuntime/liveInputRuntime';
 
 const log = Logger.create('Project');
 
@@ -43,6 +44,7 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
 
   newProject: () => {
     const previousFiles = get().files;
+    liveInputRuntime.clear();
 
     // Clear timeline first
     const timelineStore = useTimelineStore.getState();
@@ -73,6 +75,7 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
       solidItems: [],
       meshItems: [],
       cameraItems: [],
+      lightItems: [],
       splatEffectorItems: [],
       mathSceneItems: [],
       motionShapeItems: [],
@@ -102,6 +105,7 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
     localStorage.removeItem('ms-solidItems');
     localStorage.removeItem('ms-meshItems');
     localStorage.removeItem('ms-cameraItems');
+    localStorage.removeItem('ms-lightItems');
     localStorage.removeItem('ms-splatEffectorItems');
     localStorage.removeItem('ms-mathSceneItems');
     localStorage.removeItem('ms-motionShapeItems');

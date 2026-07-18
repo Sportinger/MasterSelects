@@ -2,6 +2,7 @@ import { resolveOrbitCameraPose } from '../../engine/gaussian/core/SplatCameraUt
 import type { SceneCameraLiveOverride } from '../../stores/engineStore';
 import { DEFAULT_SCENE_CAMERA_SETTINGS, type SceneCameraSettings } from '../../stores/mediaStore/types';
 import { useTimelineStore } from '../../stores/timeline';
+import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import type { SceneCameraConfig, SceneVector3, SceneViewport } from '../../engine/scene/types';
 import type { TimelineClip } from '../../types/timeline';
 import type { ClipTransform } from '../../types/timelineCore';
@@ -27,7 +28,7 @@ export const DEFAULT_EDIT_CAMERA_SETTINGS: SceneCameraSettings = {
 };
 
 export const EDIT_CAMERA_VIEW_LABELS: Record<EditCameraViewMode, string> = {
-  camera: 'Camera',
+  camera: 'Perspective',
   front: 'Front',
   side: 'Side',
   top: 'Top',
@@ -50,6 +51,27 @@ export type SceneNavCameraValues = {
 
 export type CameraProperty = 'position.x' | 'position.y' | 'position.z' | 'rotation.x' | 'rotation.y';
 
+export function createPreviewEditorCameraClip(panelId: string): TimelineClip {
+  return {
+    id: `preview-editor-camera-${panelId}`,
+    trackId: '',
+    name: 'Editor Camera',
+    file: new File([], 'editor-camera.dat', { type: 'application/octet-stream' }),
+    startTime: 0,
+    duration: Number.MAX_SAFE_INTEGER,
+    inPoint: 0,
+    outPoint: Number.MAX_SAFE_INTEGER,
+    source: { type: 'camera', cameraSettings: { ...DEFAULT_EDIT_CAMERA_SETTINGS } },
+    transform: {
+      ...DEFAULT_TRANSFORM,
+      position: { ...DEFAULT_TRANSFORM.position, z: 1 },
+      scale: { ...DEFAULT_TRANSFORM.scale },
+      rotation: { ...DEFAULT_TRANSFORM.rotation },
+    },
+    effects: [],
+  };
+}
+
 export function cloneClipTransform(transform: ClipTransform): ClipTransform {
   return {
     opacity: transform.opacity,
@@ -57,6 +79,42 @@ export function cloneClipTransform(transform: ClipTransform): ClipTransform {
     position: { ...transform.position },
     scale: { ...transform.scale },
     rotation: { ...transform.rotation },
+  };
+}
+
+export function createDefaultEditorCameraTransform(
+  sceneCamera: SceneCameraConfig,
+  baseTransform: ClipTransform,
+): ClipTransform {
+  const sceneDistance = Math.hypot(
+    sceneCamera.position.x - sceneCamera.target.x,
+    sceneCamera.position.y - sceneCamera.target.y,
+    sceneCamera.position.z - sceneCamera.target.z,
+  );
+  const distance = Math.max(
+    getSharedSceneDefaultCameraDistance(DEFAULT_EDIT_CAMERA_SETTINGS.fov),
+    sceneDistance * 0.75,
+  );
+  const diagonalLength = Math.hypot(1, 0.65, 1);
+  const position = {
+    x: distance / diagonalLength,
+    y: distance * 0.65 / diagonalLength,
+    z: distance / diagonalLength,
+  };
+  const forward = {
+    x: -position.x / distance,
+    y: -position.y / distance,
+    z: -position.z / distance,
+  };
+
+  return {
+    ...cloneClipTransform(baseTransform),
+    position,
+    rotation: {
+      x: Math.asin(-forward.y) * 180 / Math.PI,
+      y: Math.atan2(-forward.x, -forward.z) * 180 / Math.PI,
+      z: 0,
+    },
   };
 }
 

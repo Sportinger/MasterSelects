@@ -1,8 +1,7 @@
 import type { Keyframe } from '../../types/keyframes';
 import type { SerializableClip, TimelineClip } from '../../types/timeline';
-import type { TimelineTransition } from '../../types/timelineCore';
-import type { TransitionCoverageRange, TransitionParticipantPlan } from '../../stores/timeline/editOperations/transitionPlanner';
-import { freezeClipKeyframes, sliceGeneratedKeyframesForSegment } from './transitionCompositionKeyframes';
+import type { TransitionSourceMap, TransitionSourceMapV2 } from '../../types/timelineCore';
+import type { TransitionSourceDurationResolver } from '../../stores/timeline/editOperations/transitionPlanner';
 
 export function clone<T>(value: T): T {
   return structuredClone(value);
@@ -66,7 +65,9 @@ export function serializeFallbackClip(clip: TimelineClip): SerializableClip {
     gaussianSplatSequence: clip.source?.gaussianSplatSequence,
     threeDEffectorsEnabled: clip.source?.threeDEffectorsEnabled,
     meshType: clip.meshType ?? clip.source?.meshType,
+    modelMaterialSettings: clip.source?.type === 'model' ? clip.source.modelMaterialSettings : undefined,
     cameraSettings: clip.source?.cameraSettings,
+    lightSettings: clip.source?.type === 'light' ? clip.source.lightSettings : undefined,
     splatEffectorSettings: clip.source?.splatEffectorSettings,
     gaussianBlendshapes: clip.source?.gaussianBlendshapes,
     gaussianSplatSettings: clip.source?.gaussianSplatSettings,
@@ -80,181 +81,143 @@ export function getSerializableClip(
   return clone(serializableClips.find((clip) => clip.id === runtimeClip.id) ?? serializeFallbackClip(runtimeClip));
 }
 
-export function retimeKeyframes(
+function isPositiveFinite(value: number | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+const MEDIA_DURATION_ROUNDING_TOLERANCE = 0.05;
+
+/** Returns a durable media bound; mapped video/audio clips may not guess one. */
+export function resolveTransitionCompositionMediaDuration(
   clip: SerializableClip,
+  getMediaDuration: TransitionSourceDurationResolver,
+): number | null {
+  const resolved = getMediaDuration(clip.mediaFileId);
+  const mediaDuration = isPositiveFinite(resolved)
+    ? resolved
+    : isPositiveFinite(clip.naturalDuration)
+      ? clip.naturalDuration
+      : clip.sourceType === 'video' || clip.sourceType === 'audio'
+        ? undefined
+        : isPositiveFinite(clip.outPoint)
+          ? clip.outPoint
+          : undefined;
+
+  return mediaDuration !== undefined &&
+    Number.isFinite(clip.duration) && clip.duration > 0 &&
+    Number.isFinite(clip.inPoint) && Number.isFinite(clip.outPoint) &&
+    clip.inPoint >= 0 && clip.inPoint <= mediaDuration &&
+    clip.outPoint >= clip.inPoint && clip.outPoint <= mediaDuration + MEDIA_DURATION_ROUNDING_TOLERANCE
+    ? mediaDuration
+    : null;
+}
+
+function rebaseKeyframes(
+  keyframes: readonly Keyframe[],
   targetClipId: string,
-  nextInPoint: number,
-  nextDuration: number,
-): SerializableClip['keyframes'] {
-  const sourceShift = nextInPoint - clip.inPoint;
-  return clip.keyframes
-    ?.map((keyframe) => ({
-      ...clone(keyframe),
-      id: `${targetClipId}:${keyframe.id}`,
-      clipId: targetClipId,
-      time: keyframe.time - sourceShift,
-    }))
-    .filter((keyframe) => keyframe.time >= 0 && keyframe.time <= nextDuration);
-}
-
-export function buildLinkedClip(input: {
-  base: SerializableClip;
-  id: string;
-  trackId: string;
-  nameSuffix: string;
-  startTime: number;
-  duration: number;
-  inPoint: number;
-  outPoint: number;
-  transitionIn?: TimelineTransition;
-  transitionOut?: TimelineTransition;
-  transitionSourceTimeOverride?: number;
-  transitionSourceHold?: boolean;
-  freezeKeyframesAtSourceTime?: number;
-}): SerializableClip {
-  const {
-    base,
-    id,
-    trackId,
-    nameSuffix,
-    startTime,
-    duration,
-    inPoint,
-    outPoint,
-    transitionIn,
-    transitionOut,
-    transitionSourceTimeOverride,
-    transitionSourceHold,
-    freezeKeyframesAtSourceTime,
-  } = input;
-  return {
-    ...clone(base),
-    id,
-    trackId,
-    name: `${base.name} ${nameSuffix}`,
-    startTime,
-    duration,
-    inPoint,
-    outPoint,
-    linkedClipId: undefined,
-    transitionIn,
-    transitionOut,
-    transitionSourceTimeOverride,
-    transitionSourceHold,
-    keyframes: Number.isFinite(freezeKeyframesAtSourceTime)
-      ? freezeClipKeyframes(base, id, freezeKeyframesAtSourceTime!, duration)
-      : retimeKeyframes(base, id, inPoint, duration),
-  };
-}
-
-export function getSegmentClipId(baseId: string, index: number, total: number): string {
-  return index === 0 || total <= 1 ? baseId : `${baseId}:seg:${index}`;
-}
-
-export function getCoverageCompRange(
-  coverage: TransitionCoverageRange,
-  bodyStart: number,
-  duration: number,
-): { startTime: number; duration: number; sourceStart: number; sourceEnd: number } | null {
-  const rawStart = coverage.startTime - bodyStart;
-  const rawEnd = coverage.endTime - bodyStart;
-  const startTime = Math.max(0, Math.min(duration, rawStart));
-  const endTime = Math.max(0, Math.min(duration, rawEnd));
-  const segmentDuration = endTime - startTime;
-  if (segmentDuration <= 0.000001) return null;
-
-  const clippedStartOffset = Math.max(0, startTime - rawStart);
-  if (coverage.kind === 'hold') {
+  sourceClipId?: string,
+): Keyframe[] {
+  const sourcePrefix = sourceClipId ? `${sourceClipId}:` : '';
+  return keyframes.map((keyframe) => {
+    const originalId = sourcePrefix && keyframe.id.startsWith(sourcePrefix)
+      ? keyframe.id.slice(sourcePrefix.length)
+      : keyframe.id;
     return {
-      startTime,
-      duration: segmentDuration,
-      sourceStart: coverage.sourceStart,
-      sourceEnd: coverage.sourceStart,
+      ...clone(keyframe),
+      id: `${targetClipId}:${originalId}`,
+      clipId: targetClipId,
     };
-  }
+  });
+}
 
-  const sourceStart = coverage.sourceStart + clippedStartOffset;
+function buildTransitionSourceMap(input: {
+  base: SerializableClip;
+  targetClipId: string;
+  bodyStart: number;
+  bodyEnd: number;
+  duration: number;
+  mediaDuration: number;
+}): TransitionSourceMapV2 {
+  const { base, targetClipId, bodyStart, bodyEnd, duration, mediaDuration } = input;
   return {
-    startTime,
-    duration: segmentDuration,
-    sourceStart,
-    sourceEnd: sourceStart + segmentDuration,
+    version: 2,
+    mediaDuration,
+    parent: {
+      duration: base.duration,
+      inPoint: base.inPoint,
+      outPoint: Math.min(base.outPoint, mediaDuration),
+      defaultSpeed: base.speed ?? (base.reversed ? -1 : 1),
+      animation: {
+        baseTransform: clone(base.transform),
+        keyframes: rebaseKeyframes(base.keyframes ?? [], targetClipId),
+        sourceEffectIds: (base.effects ?? []).map((effect) => effect.id),
+        sourceMaskIds: (base.masks ?? []).map((mask) => mask.id),
+      },
+    },
+    segments: [{
+      kind: 'parent-linear',
+      compStart: 0,
+      compEnd: duration,
+      parentStart: bodyStart - base.startTime,
+      parentEnd: bodyEnd - base.startTime,
+    }],
   };
 }
 
-export function buildLinkedCoverageClips(input: {
+/** Gives each multi-panel copy its own v2 animation namespace and snapshot. */
+export function cloneTransitionSourceMapForClip(
+  sourceMap: TransitionSourceMap | undefined,
+  sourceClipId: string,
+  targetClipId: string,
+): TransitionSourceMap | undefined {
+  if (sourceMap?.version !== 2) return sourceMap ? clone(sourceMap) : undefined;
+  return {
+    ...clone(sourceMap),
+    parent: {
+      ...clone(sourceMap.parent),
+      animation: {
+        ...clone(sourceMap.parent.animation),
+        keyframes: rebaseKeyframes(sourceMap.parent.animation.keyframes, targetClipId, sourceClipId),
+      },
+    },
+  };
+}
+
+export function buildLinkedMappedClip(input: {
   base: SerializableClip;
   baseId: string;
   trackId: string;
   nameSuffix: string;
-  participant: TransitionParticipantPlan;
   bodyStart: number;
+  bodyEnd: number;
   duration: number;
-  splitBoundaries?: readonly number[];
+  mediaDuration: number;
   materialize: (clip: SerializableClip) => SerializableClip;
-}): SerializableClip[] {
-  const ranges = input.participant.coverage
-    .map((coverage) => ({ coverage, range: getCoverageCompRange(coverage, input.bodyStart, input.duration) }))
-    .filter((entry): entry is { coverage: TransitionCoverageRange; range: NonNullable<ReturnType<typeof getCoverageCompRange>> } =>
-      entry.range !== null
-    );
-  const sourceRanges = ranges.length > 0
-    ? ranges
-    : [{
-        coverage: {
-          kind: 'visible' as const,
-          startTime: input.bodyStart,
-          endTime: input.bodyStart + input.duration,
-          duration: input.duration,
-          sourceStart: input.base.inPoint,
-          sourceEnd: input.base.inPoint + input.duration,
-        },
-        range: {
-          startTime: 0,
-          duration: input.duration,
-          sourceStart: input.base.inPoint,
-          sourceEnd: input.base.inPoint + input.duration,
-        },
-      }];
-
-  return sourceRanges.flatMap(({ coverage, range }, index) => {
-    const clip = buildLinkedClip({
-      base: input.base,
-      id: getSegmentClipId(input.baseId, index, sourceRanges.length),
-      trackId: input.trackId,
-      nameSuffix: sourceRanges.length > 1 ? `${input.nameSuffix} ${index + 1}` : input.nameSuffix,
-      startTime: range.startTime,
-      duration: range.duration,
-      inPoint: range.sourceStart,
-      outPoint: Math.max(range.sourceStart + 0.0001, range.sourceEnd),
-      transitionSourceTimeOverride: coverage.kind === 'hold' ? range.sourceStart : undefined,
-      transitionSourceHold: coverage.kind === 'hold' || undefined,
-      freezeKeyframesAtSourceTime: coverage.kind === 'hold' ? range.sourceStart - input.base.inPoint : undefined,
-    });
-    return splitClipAtBoundaries(clip, input.splitBoundaries ?? []).map(input.materialize);
+}): SerializableClip {
+  const transitionSourceMap = buildTransitionSourceMap({
+    base: input.base,
+    targetClipId: input.baseId,
+    bodyStart: input.bodyStart,
+    bodyEnd: input.bodyEnd,
+    duration: input.duration,
+    mediaDuration: input.mediaDuration,
   });
-}
-
-export function splitClipAtBoundaries(clip: SerializableClip, boundaries: readonly number[]): SerializableClip[] {
-  const localBoundaries = boundaries
-    .filter((time) => time > clip.startTime + 0.0001 && time < clip.startTime + clip.duration - 0.0001)
-    .toSorted((a, b) => a - b);
-  if (localBoundaries.length === 0) return [clip];
-
-  const points = [clip.startTime, ...localBoundaries, clip.startTime + clip.duration];
-  return points.slice(0, -1).map((start, index) => {
-    const end = points[index + 1];
-    const offset = start - clip.startTime;
-    const duration = Math.max(0.0001, end - start);
-    return {
-      ...clone(clip),
-      id: index === 0 ? clip.id : `${clip.id}:part:${index}`,
-      name: index === 0 ? clip.name : `${clip.name} ${index + 1}`,
-      startTime: start,
-      duration,
-      inPoint: clip.transitionSourceHold ? clip.inPoint : clip.inPoint + offset,
-      outPoint: clip.transitionSourceHold ? clip.outPoint : clip.inPoint + offset + duration,
-      keyframes: sliceGeneratedKeyframesForSegment(clip, clip.keyframes ?? [], offset, duration),
-    };
+  return input.materialize({
+    ...clone(input.base),
+    id: input.baseId,
+    trackId: input.trackId,
+    name: `${input.base.name} ${input.nameSuffix}`,
+    startTime: 0,
+    duration: input.duration,
+    linkedClipId: undefined,
+    transitionIn: undefined,
+    transitionOut: undefined,
+    transitionSourceTimeOverride: undefined,
+    transitionSourceHold: undefined,
+    transitionSourceMap,
+    transitionRecipeBlendWindows: undefined,
+    keyframes: undefined,
+    reversed: false,
+    speed: 1,
   });
 }

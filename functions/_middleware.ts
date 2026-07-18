@@ -1,8 +1,7 @@
 import { loadUserFromSession } from './lib/auth';
 import { buildRequestId } from './lib/db';
 import type { AppContext, AppRouteHandler } from './lib/env';
-
-const ASSET_EXTENSIONS = /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff2?|ttf|eot|map|wasm|webp|avif|mp4|webm)$/i;
+import { isSupportedPagePath } from '../src/routing/entryExperience';
 
 function withHeaders(response: Response, request: Request): Response {
   const headers = new Headers(response.headers);
@@ -21,15 +20,27 @@ function withHeaders(response: Response, request: Request): Response {
   });
 }
 
-function shouldTrackVisit(request: Request): boolean {
+function isHtmlResponse(response: Response): boolean {
+  return response.headers.get('content-type')?.toLowerCase().startsWith('text/html') === true;
+}
+
+function shouldTrackVisit(request: Request, response: Response): boolean {
   const url = new URL(request.url);
   if (request.method !== 'GET') return false;
   if (url.pathname.startsWith('/api/')) return false;
-  if (ASSET_EXTENSIONS.test(url.pathname)) return false;
+  if (response.status !== 200 || !isHtmlResponse(response)) return false;
   // Skip known bots
   const ua = request.headers.get('user-agent') ?? '';
   if (/bot|crawl|spider|slurp|facebookexternalhit|preview/i.test(ua)) return false;
   return true;
+}
+
+function isUnknownPageFallback(request: Request, response: Response): boolean {
+  if (request.method !== 'GET' && request.method !== 'HEAD') return false;
+  if (isSupportedPagePath(new URL(request.url).pathname)) return false;
+
+  return response.status === 200
+    && isHtmlResponse(response);
 }
 
 interface VisitEntry {
@@ -107,11 +118,22 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     });
   }
 
-  // Track page visits in background (non-blocking)
-  if (shouldTrackVisit(context.request)) {
+  const response = await context.next();
+
+  if (isUnknownPageFallback(context.request, response)) {
+    return withHeaders(new Response(context.request.method === 'HEAD' ? null : 'Not Found', {
+      headers: {
+        'Cache-Control': 'no-store',
+        'Content-Type': 'text/plain; charset=UTF-8',
+      },
+      status: 404,
+    }), context.request);
+  }
+
+  // Track valid page visits in background (non-blocking)
+  if (shouldTrackVisit(context.request, response)) {
     context.waitUntil(trackVisit(context));
   }
 
-  const response = await context.next();
   return withHeaders(response, context.request);
 };

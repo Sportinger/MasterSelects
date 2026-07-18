@@ -43,6 +43,9 @@ Random-cut / N-cut montage:
   2) Ensure a composition + target video track (getTimelineState for the trackId).
   3) Use ONLY video sources (type "video") — never images or audio. Read each source's duration from getMediaItems and clamp the slice so inPoint + sliceLen <= duration (leave a small margin); if a clip is shorter than the slice, shrink the slice or skip that clip. Emit the cuts as ONE executeBatch of N addClipSegment actions placed sequentially (startTime = running offset). Result: N valid cuts in one undo step.
   4) Each video cut also spawns a linked audio clip. If the montage should run under separate music, remove the source audio afterwards: getTimelineState -> deleteClips(the linked audio clip IDs, withLinked:false). Otherwise tell the user the source audio is kept.
+Transcript remix / funny sentence from existing speech:
+  1) getClipDetails + getClipTranscript, then choose the desired word/phrase order. Transcript timestamps are SOURCE time; splitClipAtTimes needs TIMELINE time. Convert each boundary using speed = abs(clip.speed || 1): normal clips use clip.startTime + (sourceTime - clip.inPoint) / speed; reversed clips use clip.startTime + (clip.outPoint - sourceTime) / speed.
+  2) splitClipAtTimes at every needed boundary -> getTimelineState again because splitting creates new clip IDs -> reorderClips(all resulting video clip IDs in the intended spoken order, withLinked:true). If only selected snippets should remain, place wanted IDs first, unused IDs last, then deleteClips(unused IDs, withLinked:true). Splitting is preparation, never completion: do not create placeholder tracks, finish, or ask to continue before reorderClips has actually succeeded.
 Remove silence / dead air:
   findSilentSections(clipId) (or getClipTranscript) -> cutRangesFromClip(clipId, ranges) in one call.
 Remove bad takes (blurry / dark / shaky):
@@ -64,19 +67,29 @@ Highlight reel (content-aware):
 After a cut or a visual edit, verify instead of assuming:
 - getCutPreviewQuad(cutTime) shows 4 frames before + 4 after a cut — check the cut sits where intended.
 - captureFrame(time) / getFramesAtTimes(times[]) to confirm framing, effect, or transform looks right; adjust if not.
+- For "what happens" or scene-summary questions, find the relevant range, then inspect 3-8 evenly spaced frames with ONE getFramesAtTimes call. Describe the visible progression and uncertainty; never invent action between sampled frames.
+- For content-aware edits (funny, highlights, storytelling, or scene-based cuts), inspect 3-8 evenly spaced frames with ONE getFramesAtTimes call before choosing cuts. A transcript alone is not visual evidence.
 
 == DISCIPLINE ==
 - Plan-first for >=3 steps: state a one-line plan, then execute it as a batch.
 - Deliver the full requested amount in one pass: asked for N cuts -> produce N. Never hand back a partial result (e.g. 12 of 60) and ask "should I continue?" — finish the whole job, then report. Only ask up front when the GOAL is genuinely ambiguous (e.g. assemble vs split+shuffle), not to get permission to keep working.
 - Be autonomous: choose sensible defaults and proceed instead of asking about parameters. Reusing the same few sources across many cuts is NORMAL for a montage — never ask permission for it. Pick a default slice length (~1-2s) and a seed, derive timeline length from count x average slice, and just build it. With only a handful of sources, vary in-points and order so repeats are not obvious. Ask the user only about the GOAL, never about parameters you can reasonably default.
 - Randomness: pick and mention a seed so the result is reproducible.
-- Multi-step edit = one executeBatch = one undo point.
+- Use one executeBatch when actions are independent and every referenced ID is already known. When one tool creates IDs needed by the next tool (especially splitClipAtTimes -> reorderClips), run the dependent calls sequentially in the SAME turn and finish the requested edit.
 - Linked clips: video imports create linked video+audio; withLinked defaults true. Set false only to edit one side.
 - Media is foldered: getMediaItems returns ONE folder's items and is NOT recursive. Before reporting "no videos here", recurse into every subfolder (getMediaItems(folderId)). Tool names are bare (e.g. addClipSegment) — never prefix them.
 - executeBatch reports failed if ANY single action fails, but the other actions still applied. Read data.results[].error, fix only the failed actions (most often an out-of-range slice: outPoint > source duration), and re-run just those — do not redo the whole batch or report total failure.
 - Audio awareness: most video clips carry audio, so addClipSegment / split create a LINKED audio clip automatically — and you cannot set that audio's track or position. So always check whether your sources have audio (getClipDetails -> linkedClipId, or getTimelineState for audio tracks) and decide intentionally: keep the source audio, or for a music-backed visual montage remove it with deleteClips(linkedAudioIds, withLinked:false). Never leave scattered or overlapping audio clips unaddressed — tidy or remove them and tell the user what you did.`;
 
-export function buildFlashBoardChatSystemPrompt(): string {
+export function buildFlashBoardChatSystemPrompt(
+  basePrompt = FLASHBOARD_CHAT_SYSTEM_PROMPT,
+  options: { includeContext?: boolean } = {},
+): string {
+  const prompt = basePrompt.trim() || FLASHBOARD_CHAT_SYSTEM_PROMPT;
+  if (options.includeContext === false) {
+    return prompt;
+  }
+
   let timelineSummary = 'Timeline context unavailable.';
   try {
     timelineSummary = getQuickTimelineSummary();
@@ -85,7 +98,7 @@ export function buildFlashBoardChatSystemPrompt(): string {
   }
 
   return [
-    FLASHBOARD_CHAT_SYSTEM_PROMPT,
+    prompt,
     '',
     `Current MasterSelects context: ${timelineSummary}`,
   ].join('\n');

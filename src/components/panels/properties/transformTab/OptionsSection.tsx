@@ -18,6 +18,8 @@ interface OptionsSectionProps {
   isEffectively3D: boolean;
   isLocked3D: boolean;
   isModel: boolean;
+  modelPrimitiveIndex?: number;
+  modelPrimitiveOptions: readonly { index: number; label: string }[];
   opacity: number;
   opacityPct: number;
   sceneNavFpsMode: boolean;
@@ -26,6 +28,8 @@ interface OptionsSectionProps {
   sceneNavNoKeyframes: boolean;
   speed: number;
   speedPct: number;
+  supportsFreeRun: boolean;
+  freeRun: boolean;
   supportsThreeDEffectorToggle: boolean;
   threeDEffectorsEnabled: boolean;
   wireframe: boolean;
@@ -33,6 +37,7 @@ interface OptionsSectionProps {
   onBatchEnd: () => void;
   onBatchStart: () => void;
   onBlendModeChange: (blendMode: string) => void;
+  onModelPrimitiveIndexChange: (index: number | undefined) => void;
   onOpacityChange: (pct: number) => void;
   onResetAll: () => void;
   onSceneNavFpsModeChange: (enabled: boolean) => void;
@@ -40,6 +45,7 @@ interface OptionsSectionProps {
   onSceneNavNoKeyframesChange: (enabled: boolean) => void;
   onSetAllCameraKeyframes: () => void;
   onSpeedChange: (pct: number) => void;
+  onFreeRunToggle: () => void;
   onThreeDEffectorsToggle: () => void;
   onToggle3D: () => void;
   onWireframeToggle: () => void;
@@ -58,6 +64,8 @@ export function OptionsSection({
   isEffectively3D,
   isLocked3D,
   isModel,
+  modelPrimitiveIndex,
+  modelPrimitiveOptions,
   opacity,
   opacityPct,
   sceneNavFpsMode,
@@ -66,6 +74,8 @@ export function OptionsSection({
   sceneNavNoKeyframes,
   speed,
   speedPct,
+  supportsFreeRun,
+  freeRun,
   supportsThreeDEffectorToggle,
   threeDEffectorsEnabled,
   wireframe,
@@ -73,6 +83,7 @@ export function OptionsSection({
   onBatchEnd,
   onBatchStart,
   onBlendModeChange,
+  onModelPrimitiveIndexChange,
   onOpacityChange,
   onResetAll,
   onSceneNavFpsModeChange,
@@ -80,6 +91,7 @@ export function OptionsSection({
   onSceneNavNoKeyframesChange,
   onSetAllCameraKeyframes,
   onSpeedChange,
+  onFreeRunToggle,
   onThreeDEffectorsToggle,
   onToggle3D,
   onWireframeToggle,
@@ -170,6 +182,25 @@ export function OptionsSection({
           )}
         </div>
       )}
+      {isModel && modelPrimitiveOptions.length > 1 && (
+        <div className="control-row transform-option-row">
+          <label className="prop-label">Mesh</label>
+          <select
+            value={modelPrimitiveIndex ?? ''}
+            onChange={(event) => {
+              const value = event.target.value;
+              onModelPrimitiveIndexChange(value === '' ? undefined : Number(value));
+            }}
+          >
+            <option value="">All Meshes</option>
+            {modelPrimitiveOptions.map((option) => (
+              <option key={option.index} value={option.index}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       {supportsThreeDEffectorToggle && (
         <div className="control-row transform-option-row">
           <label className="prop-label">3D Effector</label>
@@ -249,6 +280,18 @@ export function OptionsSection({
             sensitivity={1}
             onDragStart={onBatchStart}
             onDragEnd={onBatchEnd}
+          />
+        </div>
+      )}
+      {supportsFreeRun && (
+        <div className="control-row transform-option-row">
+          <label className="prop-label" htmlFor={`free-run-${clipId}`}>Free Run</label>
+          <input
+            id={`free-run-${clipId}`}
+            type="checkbox"
+            checked={freeRun}
+            onChange={onFreeRunToggle}
+            title="Loop this video independently of the timeline playhead"
           />
         </div>
       )}

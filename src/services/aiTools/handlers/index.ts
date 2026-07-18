@@ -140,6 +140,7 @@ import {
 } from './stats';
 import { handleSamplePlaybackFramePacing } from './framePacing';
 import { handleSetRenderHostMode } from './renderHost';
+import { handleGetCaptureState } from './capture';
 import { handleRunWorkerFirstRenderCapabilityProbe } from '../workerFirstCapabilityProbeBridge';
 import { handleRunWorkerFirstBakeGoldenFixture } from '../workerFirstBakeGoldenFixture';
 import { handleRunWorkerFirstBakeShadowParity } from '../workerFirstBakeShadowParity';
@@ -299,6 +300,7 @@ const selfContainedHandlers: Record<string, (args: Record<string, unknown>, call
   },
   // Stats
   getStats: handleGetStats,
+  getCaptureState: handleGetCaptureState,
   getAudioDiagnostics: handleGetAudioDiagnostics,
   getStatsHistory: handleGetStatsHistory,
   getLogs: handleGetLogs,

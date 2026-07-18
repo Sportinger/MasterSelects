@@ -142,6 +142,7 @@ function modelExtensionFromMime(mimeType: string | undefined): string | undefine
   if (normalized === 'model/gltf-binary' || normalized.includes('gltf-binary')) return 'glb';
   if (normalized === 'model/gltf+json' || normalized.includes('gltf+json')) return 'gltf';
   if (normalized === 'model/obj' || normalized.includes('wavefront') || normalized.includes('obj')) return 'obj';
+  if (normalized === 'model/fbx' || normalized.includes('fbx')) return 'fbx';
   return undefined;
 }
 

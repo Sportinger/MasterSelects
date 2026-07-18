@@ -1,5 +1,54 @@
 [
   {
+    "date": "2026-07-17",
+    "type": "new",
+    "title": "MasterSelects 2.4.2",
+    "description": "Live Inputs release: reusable display, camera and capture-device streams plus composition feedback become normal Media Panel items and timeline clips with reconnect, persistence, live thumbnails, hover previews, properties, transforms and effects; capture, media hydration, clipboard, history and nested playback lifecycles are hardened; direct imprint/privacy routes, a self-hosted demo, user-activated free-credit checks and system-font defaults reduce unnecessary third-party requests; related editor interactions, documentation and tests are updated.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-07-15",
+    "type": "new",
+    "title": "MasterSelects 2.4.1",
+    "description": "Hosted AI reliability release: Kie.ai generation starts are globally paced through Cloudflare to avoid provider bursts; manual high-entropy credit links remain independent from a secure one-at-a-time 3,000-credit website gift with delayed onboarding-aware display, browser-bound redemption, and operator re-arming; the Account dialog gains gift-code redemption and cleaner usage controls; startup, hidden-tab playback monitoring, and audio output routing are quieter and more stable.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-07-14",
+    "type": "new",
+    "title": "MasterSelects 2.4.0",
+    "description": "3D release: scene light clips (point, panel, and environment) light native meshes, 3D text, and imported models with keyframeable intensity, diameter, color, and shadow strength; FBX model import supports ASCII and binary files with a per-mesh selector for multi-mesh models; OBJ/MTL base-color materials and textures arrive together with the new Model 3D properties tab for material, shading, and UV controls; plus a first Premiere project import pass and editor workflow polish.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-07-12",
+    "type": "new",
+    "title": "MasterSelects 2.3.9",
+    "description": "Screen Capture release: record a browser tab, window, or display directly into the open project with mixed captured and microphone audio, pause/resume, capture-specific durable recovery, optional timeline placement, and browser Stop Sharing finalization. The feature-flagged WebCodecs tier adds object-fit-aware crop, Mesa-safe scaling, H.264 plus AAC/Opus encoding, pause-aware A/V sync, pressure relief, and long-session fragmented MP4 streaming through positioned artifact writes.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-07-12",
+    "type": "new",
+    "title": "MasterSelects 2.3.7",
+    "description": "Transition Compositions & Edge Scrubbing release: editable mapped transition subcompositions keep outgoing and incoming sources continuous across timing, speed, reverse, holds, keyframes, recipes, masks, light leaks, preview, and export; legacy transitions upgrade safely, transition subcomps open reliably, black or empty fallbacks recover from rounded media durations and transient or dangling compositions, nested playback stays fresh, and edge playhead dragging autoscrolls smoothly while preserving snapping.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-07-09",
+    "type": "fix",
+    "title": "MasterSelects 2.3.6",
+    "description": "Keyframe and licensing release: marquee selection now selects multiple keyframes at the correct timeline position, Continuous / Orbit camera segments follow their world-pivot arc, and the project uses the MIT License across source and Windows installer metadata.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-07-09",
+    "type": "new",
+    "title": "MasterSelects 2.3.5",
+    "description": "FlashBoard AI release with Prompt Book browsing, local Lemonade controls, longer chat timeouts, and project-saved system prompt context settings.",
+    "section": "Release"
+  },
+  {
     "date": "2026-07-03",
     "type": "fix",
     "title": "MasterSelects 2.3.4",

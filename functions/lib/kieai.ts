@@ -1,4 +1,5 @@
 import type { Env } from './env';
+import { waitForHostedKieAiGenerationStart } from './kieAiGenerationRateLimiter';
 
 const KIEAI_BASE_URL = 'https://api.kie.ai';
 const KIEAI_UPLOAD_URL = 'https://kieai.redpandaai.co/api/file-stream-upload';
@@ -314,6 +315,10 @@ async function kieAiJsonRequest<T>(
   method: 'GET' | 'POST',
   body?: object,
 ): Promise<T> {
+  if (method === 'POST') {
+    await waitForHostedKieAiGenerationStart(env);
+  }
+
   const response = await fetch(`${KIEAI_BASE_URL}${endpoint}`, {
     method,
     headers: {

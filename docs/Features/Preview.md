@@ -35,6 +35,7 @@ Current preview-related overlays and modes include:
 - Non-active compositions are rendered as independent targets.
 - `renderScheduler` drives those targets without depending on the main editor preview loop.
 - Each target can toggle its own transparency grid state.
+- During edit-mode scrubbing, independent previews keep their last visible frame while the video decoder seeks instead of flashing black.
 - Edit mode is panel-local: the Edit button only affects that preview, and the global `Tab` shortcut targets the focused preview or, with no focused preview, the first editable preview.
 
 ### Output Windows
@@ -77,6 +78,7 @@ The engine render loop is RAF-based and has three important behaviors:
 
 ### Playback Limits
 
+- Imported video clips expose a **Free Run** checkbox in the Transform tab. While the clip is visible, its existing HTML video source loops on its own clock instead of seeking with the timeline; it keeps updating when timeline playback is paused. Offline export stays timeline-timed and deterministic.
 - Playback is rate-limited to about 60 fps.
 - Dynamic preview target FPS is derived from the active composition's
   `frameRate`; renderer RAF may still report a 60 fps loop while the visual
@@ -133,6 +135,8 @@ RAM preview is implemented by `RamPreviewEngine` and the timeline RAM preview sl
 - Slots can follow the active composition or pin a specific composition.
 - The auto-distribute mode maps the first four layers of a chosen composition to the four slots.
 - Isolated layer slots render the layer as its source by normalizing non-normal blend modes for that slot only. The original composition layer keeps its stored blend mode.
+- Every editable Preview panel owns its viewport camera and panel-sized render surface. Any number of visible panels can therefore show different live perspectives of the same composition while sharing timeline, selection, object transforms, and gizmo state.
+- A panel in Edit mode is rendered as an independent target; non-edit panels continue to show the timeline camera instead of inheriting or freezing the edited panel's view.
 
 ### Output Routing
 
@@ -151,12 +155,12 @@ Edit mode is a canvas overlay for layer transforms.
 - Selects a layer from the preview and syncs the corresponding clip in the timeline.
 - Shows bounding boxes and drag handles for the selected layer.
 - Supports zoom, pan, and transform gestures.
-- Uses a full-container overlay canvas so pasteboard space outside the composition remains interactive.
-- Multiple preview panels can mix edit and non-edit views at the same time.
+- Uses the full panel viewport instead of constraining the edit surface to the composition aspect ratio, including for 2D layers.
+- Multiple preview panels can mix edit and non-edit views at the same time. Camera and object changes update every visible view immediately, while each panel keeps its own perspective.
 - 3D object handles remain visible across preview modes; selecting one activates the native 3D scene gizmo for that clip.
-- In camera Edit mode, double-clicking a non-camera 3D object handle moves the temporary free-camera orbit pivot onto that object. The same action is available from the object's right-click `Set Orbit Pivot` menu item.
-- Camera Edit mode uses a separate free-camera lens with a 35 mm default. Timeline camera lens settings and keyframes do not change that edit-view lens.
-- The projected timeline-camera frame in camera Edit mode is drawn from the camera's FOV/mm and Resolution X/Y, so wide lenses draw a larger front frame, tele lenses draw a smaller one, and the frame aspect follows the camera resolution.
+- In camera Edit mode, the independent editor camera always orbits the scene origin `(0, 0, 0)`; timeline and viewport selection do not change its pivot.
+- Camera Edit mode uses an independent editor camera with a 35 mm default, initially offset so the timeline camera is visible as an object. Navigating the editor view never changes the timeline camera; dragging the timeline camera's object gizmo updates its output live in every normal Preview.
+- The projected timeline-camera frame in camera Edit mode is a world-space object drawn from the camera's FOV/mm and Resolution X/Y. It becomes smaller with distance, wide lenses draw a larger front frame, tele lenses draw a smaller one, and the frame aspect follows the camera resolution.
 - Edit views can render a projected world grid that follows camera-view animation instead of snapping as a screen overlay. The grid plane matches the edit view: Front uses XY at `z=0`, Side uses YZ at `x=0`, and Top/free camera uses XZ at `y=0`.
 - Holding Shift while dragging a layer in Edit mode enables snapping for that drag. The layer can snap to composition edges/center and to the bounds of other visible layers; without Shift, layer movement stays free.
 

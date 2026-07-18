@@ -18,9 +18,14 @@ export interface AiAuditInput {
   userId: string;
 }
 
-function safeJson(value: unknown): string {
+export function stringifyAiPayloadForStorage(value: unknown, maxLength?: number): string {
   try {
-    return JSON.stringify(value).slice(0, 24_000);
+    const serialized = JSON.stringify(value, (_key, nestedValue) => (
+      typeof nestedValue === 'string' && /^data:image\/[a-z0-9.+-]+;base64,/i.test(nestedValue)
+        ? '[image data omitted]'
+        : nestedValue
+    ));
+    return typeof maxLength === 'number' ? serialized.slice(0, maxLength) : serialized;
   } catch {
     return '"[unserializable]"';
   }
@@ -62,10 +67,10 @@ export async function insertAiAuditEvent(context: AppContext, input: AiAuditInpu
       input.provider,
       input.model ?? null,
       input.status,
-      safeJson(input.prompt),
+      stringifyAiPayloadForStorage(input.prompt, 24_000),
       input.moderation.status,
       input.moderation.flagged ? 1 : 0,
-      safeJson(input.moderation.categories),
+      stringifyAiPayloadForStorage(input.moderation.categories, 24_000),
       input.providerTaskId ?? null,
       input.creditCost ?? 0,
       input.errorMessage ?? input.moderation.errorMessage ?? null,

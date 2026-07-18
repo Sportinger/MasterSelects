@@ -40,6 +40,7 @@ export interface HistoryTimelineRuntimeRef {
   kind: HistoryTimelineRuntimeRefKind;
   sourceType: SerializableClip['sourceType'];
   mediaFileId?: string;
+  liveInputId?: string;
   compositionId?: string;
   signalAssetId?: string;
   signalRefId?: string;
@@ -74,6 +75,7 @@ export interface HistoryTimelineClipEditState {
   sourceType: SerializableClip['sourceType'];
   runtimeRef: HistoryTimelineRuntimeRef;
   mediaFileId?: string;
+  liveInputId?: string;
   signalAssetId?: string;
   signalRefId?: string;
   signalRenderAdapterId?: string;
@@ -95,6 +97,7 @@ export interface HistoryTimelineClipEditState {
   reversed?: boolean;
   speed?: number;
   preservesPitch?: boolean;
+  freeRun?: boolean;
   textProperties?: TimelineClip['textProperties'];
   text3DProperties?: TimelineClip['text3DProperties'];
   solidColor?: string;
@@ -315,6 +318,7 @@ export function createHistoryTimelineRuntimeRef(clip: TimelineClip): HistoryTime
       kind: 'media-file',
       sourceType,
       mediaFileId,
+      liveInputId: clip.source?.liveInputId,
       naturalDuration: clip.source?.naturalDuration,
       needsReload: clip.needsReload,
     };
@@ -474,6 +478,7 @@ export function toHistoryTimelineClipEditState(
     sourceType,
     runtimeRef: createHistoryTimelineRuntimeRef(clip),
     mediaFileId,
+    liveInputId: clip.source?.liveInputId,
     signalAssetId: clip.signalAssetId,
     signalRefId: clip.signalRefId,
     signalRenderAdapterId: clip.signalRenderAdapterId,
@@ -495,6 +500,7 @@ export function toHistoryTimelineClipEditState(
     reversed: clip.reversed,
     speed: clip.speed,
     preservesPitch: clip.preservesPitch,
+    freeRun: clip.freeRun,
     textProperties: clip.textProperties,
     text3DProperties: clip.text3DProperties ?? clip.source?.text3DProperties,
     solidColor: clip.solidColor,

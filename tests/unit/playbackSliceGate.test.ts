@@ -5,6 +5,7 @@ import type { TimelineStore } from '../../src/stores/timeline/types';
 
 const getRuntimeFrameProvider = vi.fn();
 const requestNewFrameRender = vi.fn();
+const primeReverseWorkerRuntimeSourcesForPlayback = vi.hoisted(() => vi.fn().mockResolvedValue(0));
 
 const mediaStoreMock = vi.hoisted(() => ({
   sourceMonitorFileId: null as string | null,
@@ -25,6 +26,10 @@ vi.mock('../../src/stores/mediaStore', () => ({
 
 vi.mock('../../src/services/mediaRuntime/runtimePlayback', () => ({
   getRuntimeFrameProvider: (...args: unknown[]) => getRuntimeFrameProvider(...args),
+}));
+
+vi.mock('../../src/services/layerBuilder/reverseWorkerWebCodecsRuntime', () => ({
+  primeReverseWorkerRuntimeSourcesForPlayback,
 }));
 
 vi.mock('../../src/engine/WebGPUEngine', () => ({
@@ -57,6 +62,8 @@ describe('playbackSlice HTML readiness gate', () => {
   beforeEach(() => {
     getRuntimeFrameProvider.mockReset();
     requestNewFrameRender.mockReset();
+    primeReverseWorkerRuntimeSourcesForPlayback.mockReset();
+    primeReverseWorkerRuntimeSourcesForPlayback.mockResolvedValue(0);
     mediaStoreMock.sourceMonitorFileId = null;
     mediaStoreMock.setSourceMonitorFile.mockReset();
     mediaStoreMock.setSourceMonitorFile.mockImplementation((id: string | null) => {
@@ -114,6 +121,37 @@ describe('playbackSlice HTML readiness gate', () => {
     expect(htmlVideo.pause).not.toHaveBeenCalled();
   }, 10_000);
 
+  it('primes a negative source-map rate at playback start without treating positive maps as reverse', async () => {
+    const video = { readyState: 4 } as HTMLVideoElement;
+    const createState = (sourceEnd: number) => createPlaybackTestStore({
+      clips: [{
+        id: `mapped-${sourceEnd}`,
+        trackId: 'video-1',
+        startTime: 0,
+        duration: 2,
+        source: { type: 'video', videoElement: video },
+        transitionSourceMap: {
+          version: 1,
+          segments: [{ kind: 'linear', compStart: 0, compEnd: 2, sourceStart: 10, sourceEnd }],
+        },
+      }],
+      tracks: [{ id: 'video-1', type: 'video', visible: true }],
+      playheadPosition: 0,
+      duration: 60,
+      isPlaying: false,
+    } as Partial<TimelineStore>);
+
+    await createState(4).play();
+    expect(primeReverseWorkerRuntimeSourcesForPlayback).toHaveBeenCalledWith(expect.objectContaining({
+      playheadPosition: 0,
+      playbackSpeed: 1,
+    }));
+
+    primeReverseWorkerRuntimeSourcesForPlayback.mockClear();
+    await createState(16).play();
+    expect(primeReverseWorkerRuntimeSourcesForPlayback).not.toHaveBeenCalled();
+  });
+
   it('exposes playback warmup state while HTML video readiness is pending', async () => {
     vi.useFakeTimers();
     getRuntimeFrameProvider.mockReturnValue(null);
@@ -124,7 +162,7 @@ describe('playbackSlice HTML readiness gate', () => {
       pause: vi.fn(),
     };
     htmlVideo.play.mockImplementation(() => {
-      htmlVideo.readyState = 3;
+      htmlVideo.readyState = 2;
       return Promise.resolve();
     });
 
@@ -164,6 +202,37 @@ describe('playbackSlice HTML readiness gate', () => {
     expect(htmlVideo.pause).toHaveBeenCalled();
   });
 
+  it('starts immediately when a scrubbed HTML video already has the settled target frame', async () => {
+    getRuntimeFrameProvider.mockReturnValue(null);
+
+    const htmlVideo = {
+      readyState: 2,
+      seeking: false,
+      play: vi.fn(),
+      pause: vi.fn(),
+    };
+    const state = createPlaybackTestStore({
+      clips: [{
+        id: 'clip-1',
+        trackId: 'video-1',
+        startTime: 0,
+        duration: 10,
+        source: { videoElement: htmlVideo },
+      }],
+      tracks: [{ id: 'video-1', type: 'video', visible: true }],
+      playheadPosition: 1,
+      duration: 60,
+      isPlaying: false,
+      playbackWarmup: null,
+    } as Partial<TimelineStore>);
+
+    await state.play();
+
+    expect(state.isPlaying).toBe(true);
+    expect(state.playbackWarmup).toBeNull();
+    expect(htmlVideo.play).not.toHaveBeenCalled();
+  });
+
   it('does not start playback when a pending warmup was canceled', async () => {
     vi.useFakeTimers();
     getRuntimeFrameProvider.mockReturnValue(null);
@@ -197,7 +266,7 @@ describe('playbackSlice HTML readiness gate', () => {
     expect(state.playbackWarmup).not.toBeNull();
 
     state.pause();
-    htmlVideo.readyState = 3;
+    htmlVideo.readyState = 2;
     await vi.advanceTimersByTimeAsync(60);
     await playPromise;
 

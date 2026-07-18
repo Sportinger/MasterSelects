@@ -80,6 +80,10 @@ export function refreshLinkedSourceClip(
     preservesPitch: generated.preservesPitch,
     transitionSourceTimeOverride: generated.transitionSourceTimeOverride,
     transitionSourceHold: generated.transitionSourceHold,
+    transitionSourceMap: generated.transitionSourceMap ? clone(generated.transitionSourceMap) : undefined,
+    transitionRecipeBlendWindows: generated.transitionRecipeBlendWindows
+      ? clone(generated.transitionRecipeBlendWindows)
+      : undefined,
   };
   if (!sourceSignatureChanged) return refreshed;
 
@@ -103,6 +107,8 @@ export function getLinkedSourceSignature(clip: SerializableClip): string {
     sourceType: clip.sourceType,
     hold: clip.transitionSourceHold === true,
     override: clip.transitionSourceTimeOverride,
+    sourceMap: clip.transitionSourceMap,
+    blendWindows: clip.transitionRecipeBlendWindows,
   });
 }
 
@@ -188,6 +194,7 @@ export function reuseExistingTimelineData(
   materialized: boolean,
 ): CompositionTimelineData {
   if (!existing?.timelineData) return generated.timelineData;
+  if (existing.transitionComp?.sourceLayout !== 'mapped-v3') return existing.timelineData;
   if (materialized && !existing.transitionComp?.materialized) return generated.timelineData;
   if (existing.transitionComp?.templateType !== generated.link.templateType) return generated.timelineData;
   if (existing.transitionComp?.templateVersion !== generated.link.templateVersion) return generated.timelineData;

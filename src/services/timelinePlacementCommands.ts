@@ -3,6 +3,7 @@ import { createSignalTimelineAdapterPlan, placeSignalAssetOnTimeline } from '../
 import { useMediaStore } from '../stores/mediaStore';
 import type {
   CameraItem,
+  LightItem,
   Composition,
   MathSceneItem,
   MediaFile,
@@ -19,6 +20,7 @@ import type { TimelineStore, TimelineToolPreview } from '../stores/timeline/type
 import { NativeHelperClient } from './nativeHelper/NativeHelperClient';
 import { createPrimaryMediaObjectUrl } from './project/mediaObjectUrlManager';
 import { Logger } from './logger';
+import { placeLiveInputOnTimeline } from './mediaRuntime/liveInputTimelineAdapter';
 
 const log = Logger.create('TimelinePlacementCommands');
 const DEFAULT_SOURCE_DURATION = 5;
@@ -32,6 +34,7 @@ type PlacementSource =
   | { kind: 'solid'; item: SolidItem; duration: number; naturalDuration: number; sourceInPoint: number; trackType: 'video'; hasAudio: false }
   | { kind: 'mesh'; item: MeshItem; duration: number; naturalDuration: number; sourceInPoint: number; trackType: 'video'; hasAudio: false }
   | { kind: 'camera'; item: CameraItem; duration: number; naturalDuration: number; sourceInPoint: number; trackType: 'video'; hasAudio: false }
+  | { kind: 'light'; item: LightItem; duration: number; naturalDuration: number; sourceInPoint: number; trackType: 'video'; hasAudio: false }
   | { kind: 'splat-effector'; item: SplatEffectorItem; duration: number; naturalDuration: number; sourceInPoint: number; trackType: 'video'; hasAudio: false }
   | { kind: 'math-scene'; item: MathSceneItem; duration: number; naturalDuration: number; sourceInPoint: number; trackType: 'video'; hasAudio: false }
   | { kind: 'motion-shape'; item: MotionShapeItem; duration: number; naturalDuration: number; sourceInPoint: number; trackType: 'video'; hasAudio: false }
@@ -228,6 +231,12 @@ function findSourceById(id: string, range?: { inPoint: number | null; outPoint: 
   if (camera) {
     const duration = finiteDuration(camera.duration, DEFAULT_3D_SOURCE_DURATION);
     return { kind: 'camera', item: camera, duration, naturalDuration: duration, sourceInPoint: 0, trackType: 'video', hasAudio: false };
+  }
+
+  const light = media.lightItems.find((item) => item.id === id);
+  if (light) {
+    const duration = finiteDuration(light.duration, DEFAULT_3D_SOURCE_DURATION);
+    return { kind: 'light', item: light, duration, naturalDuration: duration, sourceInPoint: 0, trackType: 'video', hasAudio: false };
   }
 
   const splatEffector = media.splatEffectorItems.find((item) => item.id === id);
@@ -592,17 +601,21 @@ async function placeSource(
   let createdClipId: string | null | undefined;
 
   if (source.kind === 'media-file') {
-    const file = await resolveMediaFileForTimeline(source.item);
-    if (!file) return null;
-    createdClipId = await state.addClip(
-      trackId,
-      file,
-      startTime,
-      clipDuration,
-      source.item.id,
-      getTimelineMediaTypeOverride(source.item),
-      { source: { naturalDuration: source.naturalDuration } },
-    );
+    if (source.item.liveInput) {
+      createdClipId = placeLiveInputOnTimeline({ item: source.item, trackId, startTime, duration: clipDuration });
+    } else {
+      const file = await resolveMediaFileForTimeline(source.item);
+      if (!file) return null;
+      createdClipId = await state.addClip(
+        trackId,
+        file,
+        startTime,
+        clipDuration,
+        source.item.id,
+        getTimelineMediaTypeOverride(source.item),
+        { source: { naturalDuration: source.naturalDuration } },
+      );
+    }
   } else if (source.kind === 'composition') {
     const beforeIds = new Set(state.clips.map((clip) => clip.id));
     await state.addCompClip(trackId, source.item, startTime);
@@ -627,6 +640,8 @@ async function placeSource(
     createdClipId = state.addMeshClip(trackId, startTime, source.item.meshType, clipDuration, true);
   } else if (source.kind === 'camera') {
     createdClipId = state.addCameraClip(trackId, startTime, clipDuration, true);
+  } else if (source.kind === 'light') {
+    createdClipId = state.addLightClip(trackId, startTime, clipDuration, true, source.item.lightSettings, source.item.id);
   } else if (source.kind === 'splat-effector') {
     createdClipId = state.addSplatEffectorClip(trackId, startTime, clipDuration, true);
   } else if (source.kind === 'math-scene') {

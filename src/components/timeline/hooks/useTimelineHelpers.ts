@@ -57,21 +57,24 @@ export function useTimelineHelpers({ zoom, frameRate, clips, getClipKeyframes }:
     [clips]
   );
 
-  // Get all snap target times (clip edges + keyframes)
-  const getSnapTargetTimes = useCallback(() => {
+  // Get all snap target times (clip edges + keyframes). Playhead snapping uses
+  // the last visible frame because clip end times are exclusive.
+  const getSnapTargetTimes = useCallback((mode: 'edge' | 'last-frame' = 'edge') => {
     const snapTimes: number[] = [];
     clips.forEach((clip) => {
+      const endTime = clip.startTime + clip.duration;
+      const lastFrameTime = Math.max(clip.startTime, endTime - gridPlan.frameIntervalSeconds);
       snapTimes.push(clip.startTime);
-      snapTimes.push(clip.startTime + clip.duration);
+      snapTimes.push(mode === 'last-frame' ? lastFrameTime : endTime);
 
       const kfs = getClipKeyframes(clip.id);
       kfs.forEach((kf) => {
         const absTime = clip.startTime + kf.time;
-        snapTimes.push(absTime);
+        snapTimes.push(mode === 'last-frame' && absTime >= endTime ? lastFrameTime : absTime);
       });
     });
     return snapTimes;
-  }, [clips, getClipKeyframes]);
+  }, [clips, getClipKeyframes, gridPlan.frameIntervalSeconds]);
 
   return {
     timeToPixel,

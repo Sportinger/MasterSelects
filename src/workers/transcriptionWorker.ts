@@ -47,10 +47,10 @@ interface TranscriptWord {
 
 function getModelName(language: string): string {
   if (language === 'en') {
-    return 'Xenova/whisper-tiny.en';
+    return 'Xenova/whisper-base.en';
   }
   // 'auto' and all other languages use multilingual model
-  return 'onnx-community/whisper-tiny';
+  return 'Xenova/whisper-base';
 }
 
 /**

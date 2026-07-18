@@ -22,12 +22,16 @@ import { useMediaPanelStoreBindings } from './media/panel/useMediaPanelStoreBind
 import { useMediaBoardAnnotationState } from './media/board/useMediaBoardAnnotationState';
 import { useMediaBoardController } from './media/board/useMediaBoardController';
 import { useMediaPanelPreviewTooltip } from './media/panel/useMediaPanelPreviewTooltip';
+import { LiveInputDialog } from './media/LiveInputDialog';
+import { requestMediaBoardPlacement } from './media/board/placementRequests';
 
 import { useMediaStore } from '../../stores/mediaStore';
 import { isUserVisibleComposition } from '../../stores/mediaStore/compositionVisibility';
 import { useFlashBoardStore } from '../../stores/flashboardStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { useSettingsStore } from '../../stores/settingsStore';
+import type { LiveInputSource } from '../../types/liveInput';
+import { liveInputRuntime } from '../../services/mediaRuntime/liveInputRuntime';
 
 const MEDIA_PANEL_PROJECT_UI_LOADED_EVENT = 'media-panel-project-ui-loaded';
 
@@ -40,6 +44,7 @@ export function MediaPanel() {
     solidItems,
     meshItems,
     cameraItems,
+    lightItems,
     splatEffectorItems,
     mathSceneItems,
     motionShapeItems,
@@ -68,6 +73,7 @@ export function MediaPanel() {
     importFilesWithHandles,
     createComposition,
     createFolder,
+    createLiveInputItem,
     getMediaFileUsages,
     deleteMediaFilesEverywhere,
     removeSignalAsset,
@@ -106,6 +112,9 @@ export function MediaPanel() {
     createCameraItem,
     getOrCreateCameraFolder,
     removeCameraItem,
+    createLightItem,
+    getOrCreateLightFolder,
+    removeLightItem,
     createSplatEffectorItem,
     getOrCreateSplatEffectorFolder,
     removeSplatEffectorItem,
@@ -139,6 +148,10 @@ export function MediaPanel() {
   const [isExternalDragOver, setIsExternalDragOver] = useState(false);
   const [labelPickerItemId, setLabelPickerItemId] = useState<string | null>(null);
   const [labelPickerPos, setLabelPickerPos] = useState<{ x: number; y: number } | null>(null);
+  const [liveInputDialog, setLiveInputDialog] = useState<{
+    parentId: string | null;
+    boardPosition?: { x: number; y: number };
+  } | null>(null);
   const {
     addDropdownOpen,
     setAddDropdownOpen,
@@ -177,6 +190,34 @@ export function MediaPanel() {
     itemListRef,
     viewMode,
   });
+  const handleNewLiveInput = useCallback(() => {
+    setLiveInputDialog({
+      parentId: contextMenu?.parentId ?? (viewMode === 'icons' ? gridFolderId : null),
+      boardPosition: contextMenu?.boardPosition,
+    });
+    closeContextMenu();
+  }, [closeContextMenu, contextMenu, gridFolderId, viewMode]);
+
+  const handleCreateLiveInput = useCallback(async (source: LiveInputSource) => {
+    if (!liveInputDialog) return;
+    const id = `live-${crypto.randomUUID()}`;
+    const connected = await liveInputRuntime.connect(id, source);
+    const persistedSource = source.kind === 'video-device' && !source.deviceLabel
+      ? { ...source, deviceLabel: connected.label }
+      : source;
+    const activeComposition = compositions.find((composition) => composition.id === activeCompositionId);
+    const name = source.kind === 'composition-feedback'
+      ? `${activeComposition?.name ?? 'Composition'} Feedback`
+      : connected.label === 'Live Input'
+        ? source.kind === 'display' ? 'Live Display' : 'Live Camera'
+        : connected.label;
+    createLiveInputItem(id, persistedSource, name, liveInputDialog.parentId);
+    if (liveInputDialog.boardPosition) {
+      requestMediaBoardPlacement({ itemIds: [id], point: liveInputDialog.boardPosition });
+    }
+    setLiveInputDialog(null);
+  }, [activeCompositionId, compositions, createLiveInputItem, liveInputDialog]);
+
   const {
     renamingId,
     renameValue,
@@ -200,6 +241,7 @@ export function MediaPanel() {
     solidItems,
     meshItems,
     cameraItems,
+    lightItems,
     splatEffectorItems,
     mathSceneItems,
     motionShapeItems,
@@ -217,6 +259,7 @@ export function MediaPanel() {
     removeSolidItem,
     removeMeshItem,
     removeCameraItem,
+    removeLightItem,
     removeSplatEffectorItem,
     removeMathSceneItem,
     removeMotionShapeItem,
@@ -275,6 +318,7 @@ export function MediaPanel() {
     handleNewSolid,
     handleNewMesh,
     handleNewCamera,
+    handleNewLight,
     handleNewSplatEffector,
     handleNewMathScene,
     handleNewMotionShape,
@@ -350,6 +394,8 @@ export function MediaPanel() {
     getOrCreateMeshFolder,
     createCameraItem,
     getOrCreateCameraFolder,
+    createLightItem,
+    getOrCreateLightFolder,
     createSplatEffectorItem,
     getOrCreateSplatEffectorFolder,
     createMathSceneItem,
@@ -394,6 +440,7 @@ export function MediaPanel() {
     solidItems,
     meshItems,
     cameraItems,
+    lightItems,
     splatEffectorItems,
     mathSceneItems,
     motionShapeItems,
@@ -562,9 +609,11 @@ export function MediaPanel() {
         onNewFolder={handleNewFolder}
         onNewText={handleNewText}
         onNewSolid={handleNewSolid}
+        onNewLiveInput={handleNewLiveInput}
         onNewMesh={handleNewMesh}
         onNewText3D={handleNewText3D}
         onNewCamera={handleNewCamera}
+        onNewLight={handleNewLight}
         onNewSplatEffector={handleNewSplatEffector}
         onImportGaussianSplat={handleImportGaussianSplat}
         onNewMathScene={handleNewMathScene}
@@ -677,9 +726,11 @@ export function MediaPanel() {
           onNewFolder: handleNewFolder,
           onNewText: handleNewText,
           onNewSolid: handleNewSolid,
+          onNewLiveInput: handleNewLiveInput,
           onNewMesh: handleNewMesh,
           onNewText3D: handleNewText3D,
           onNewCamera: handleNewCamera,
+          onNewLight: handleNewLight,
           onNewSplatEffector: handleNewSplatEffector,
           onImportGaussianSplat: handleImportGaussianSplat,
           onNewMathScene: handleNewMathScene,
@@ -703,6 +754,13 @@ export function MediaPanel() {
         showRelinkDialog={showRelinkDialog}
         closeRelinkDialog={closeRelinkDialog}
       />
+      {liveInputDialog && (
+        <LiveInputDialog
+          activeComposition={compositions.find((composition) => composition.id === activeCompositionId) ?? null}
+          onCreate={handleCreateLiveInput}
+          onCancel={() => setLiveInputDialog(null)}
+        />
+      )}
     </div>
   );
 }

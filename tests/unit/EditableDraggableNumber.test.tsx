@@ -75,11 +75,12 @@ describe('EditableDraggableNumber drag behavior', () => {
       pointerLockTarget = valueElement;
 
       fireEvent.mouseDown(valueElement, { button: 0, clientX: 100, buttons: 1 });
-      expect(requestPointerLock).toHaveBeenCalledTimes(1);
+      expect(requestPointerLock).not.toHaveBeenCalled();
       expect(onChange).not.toHaveBeenCalled();
 
-      dispatchMouseMove(window, { clientX: 0, movementX: 3, buttons: 1 });
+      dispatchMouseMove(window, { clientX: 103, movementX: 3, buttons: 1 });
 
+      expect(requestPointerLock).toHaveBeenCalledTimes(1);
       expect(lastChangedValue(onChange)).toBeGreaterThan(102);
       expect(lastChangedValue(onChange)).toBeLessThan(103);
 

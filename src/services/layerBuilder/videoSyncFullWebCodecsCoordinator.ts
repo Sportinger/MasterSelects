@@ -194,7 +194,7 @@ export class VideoSyncFullWebCodecsCoordinator {
     const suppressHtmlVideoPlayback =
       renderHostPort.getTelemetry().mode === 'worker-gpu-only';
 
-    if (clip.transitionSourceHold === true) {
+    if (timeInfo.isHold) {
       syncTransitionSourceHold({
         clip,
         video,

@@ -8,6 +8,7 @@ export type TimelineSourceType =
   | 'solid'
   | 'model'
   | 'camera'
+  | 'light'
   | 'gaussian-avatar'
   | 'gaussian-splat'
   | 'splat-effector'

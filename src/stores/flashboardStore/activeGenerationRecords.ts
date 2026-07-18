@@ -3,6 +3,7 @@ import { useFlashBoardStore } from './index';
 import { createDefaultFlashBoardComposer } from './defaults';
 import type {
   FlashBoardActiveGenerationRecord,
+  FlashBoardChatMessage,
   FlashBoardComposerState,
   FlashBoardGenerationRequest,
   FlashBoardJobRefund,
@@ -133,6 +134,19 @@ export function getFlashBoardPromptHistory(): FlashBoardPromptHistoryEntry[] {
   return getFlashBoardState().promptHistory;
 }
 
+export function getFlashBoardChatMessages(): FlashBoardChatMessage[] {
+  return getFlashBoardState().chatMessages;
+}
+
+export function subscribeFlashBoardChatMessages(
+  listener: () => void,
+): () => void {
+  return useFlashBoardStore.subscribe(
+    (state) => state.chatMessages,
+    () => listener(),
+  );
+}
+
 export function appendFlashBoardPromptHistoryEntry(input: {
   kind: FlashBoardPromptHistoryKind;
   prompt: string;
@@ -210,6 +224,7 @@ export function resetFlashBoardActiveGenerationState(): void {
     selectedActiveGenerationRecordIds: [],
     composer: createDefaultFlashBoardComposer(),
     promptHistory: [],
+    chatMessages: [],
     hoveredComposerReference: null,
   });
 }
@@ -218,12 +233,14 @@ export function hydrateFlashBoardActiveGenerationRecords(
   records: FlashBoardActiveGenerationRecord[],
   composer: FlashBoardComposerState = createDefaultFlashBoardComposer(),
   promptHistory: FlashBoardPromptHistoryEntry[] = [],
+  chatMessages: FlashBoardChatMessage[] = [],
 ): void {
   useFlashBoardStore.setState({
     activeGenerationRecords: records,
     selectedActiveGenerationRecordIds: [],
     composer,
     promptHistory,
+    chatMessages,
     hoveredComposerReference: null,
   });
 }

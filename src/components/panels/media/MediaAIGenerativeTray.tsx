@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState, type SyntheticEvent } from 'react';
+import { lazy, Suspense, useCallback, useState, type SyntheticEvent } from 'react';
 import { useFlashBoardRuntime } from '../flashboard/useFlashBoardRuntime';
 import './MediaAIGenerativeTray.css';
 
@@ -27,27 +27,10 @@ export function MediaAIGenerativeTray({
     event.stopPropagation();
   }, []);
 
-  // Warm the heavy expanded chunk while collapsed (on idle), and on button
-  // hover, so the first expand doesn't pay the parse cost on the click (#199).
+  // Warm on hover only. Startup stays lazy until the user interacts with AI.
   const prefetchExpanded = useCallback(() => {
     void importExpandedTray();
   }, []);
-
-  useEffect(() => {
-    if (expanded) return undefined;
-    let cancelled = false;
-    const warm = () => { if (!cancelled) prefetchExpanded(); };
-    const win = window as Window & {
-      requestIdleCallback?: (cb: () => void) => number;
-      cancelIdleCallback?: (id: number) => void;
-    };
-    if (typeof win.requestIdleCallback === 'function') {
-      const id = win.requestIdleCallback(warm);
-      return () => { cancelled = true; win.cancelIdleCallback?.(id); };
-    }
-    const id = window.setTimeout(warm, 200);
-    return () => { cancelled = true; window.clearTimeout(id); };
-  }, [expanded, prefetchExpanded]);
 
   const openTray = useCallback((mode: MediaAITrayMode) => {
     setTrayMode(mode);

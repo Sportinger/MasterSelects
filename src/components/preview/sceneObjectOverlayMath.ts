@@ -336,22 +336,10 @@ export function buildCameraWireframeLines(
   const right = normalizeSceneVector(object.axisBasis.x);
   const up = normalizeSceneVector(object.axisBasis.y);
   const forward = normalizeSceneVector(object.axisBasis.z);
-  const distance = Math.max(
-    0.01,
-    Math.hypot(
-      origin.x - camera.cameraPosition.x,
-      origin.y - camera.cameraPosition.y,
-      origin.z - camera.cameraPosition.z,
-    ),
-  );
-  const worldPerPixel = camera.projection === 'orthographic'
-    ? (camera.orthographicScale ?? 2) / Math.max(1, camera.viewport.height)
-    : (2 * distance * Math.tan((camera.fov * Math.PI / 180) * 0.5)) /
-      Math.max(1, camera.viewport.height);
-  const bodyWidth = worldPerPixel * 38;
-  const bodyHeight = worldPerPixel * 24;
-  const bodyDepth = worldPerPixel * 22;
-  const frustumDistance = worldPerPixel * 82;
+  const bodyWidth = 0.18;
+  const bodyHeight = 0.12;
+  const bodyDepth = 0.1;
+  const frustumDistance = 0.36;
   const cameraSettings = object.cameraSettings ?? DEFAULT_SCENE_CAMERA_SETTINGS;
   const frameFovRadians = (cameraSettings.fov * Math.PI) / 180;
   const frustumHeight = 2 * Math.tan(frameFovRadians * 0.5) * frustumDistance;

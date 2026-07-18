@@ -37,6 +37,7 @@ function asTransitionTimelineClip(clip: CompositionTimelineData['clips'][number]
       type: clip.sourceType,
       mediaFileId: clip.mediaFileId || undefined,
       naturalDuration: clip.naturalDuration,
+      liveInputId: clip.liveInputId,
       transitionOverlay: clip.transitionOverlay,
       vectorAnimationSettings: clip.vectorAnimationSettings,
     },
@@ -66,7 +67,13 @@ function collectAttachedTransitionCompositionIds(compositions: readonly Composit
   }
 
   while (pending.length > 0) {
-    collectFromTimeline(byId.get(pending.pop()!)?.timelineData);
+    const composition = byId.get(pending.pop()!);
+    collectFromTimeline(composition?.timelineData);
+    const backupCompositionId = composition?.transitionComp?.legacyBackupCompositionId;
+    if (backupCompositionId && !ids.has(backupCompositionId)) {
+      ids.add(backupCompositionId);
+      pending.push(backupCompositionId);
+    }
   }
   return ids;
 }
@@ -181,6 +188,7 @@ export function convertProjectCompositionToStore(
         signalRefId: c.signalRefId,
         signalRenderAdapterId: c.signalRenderAdapterId,
         sourceType: c.sourceType || 'video',
+        liveInputId: c.liveInputId,
         naturalDuration: c.naturalDuration,
         midiData: c.midiData ? structuredClone(c.midiData) : undefined,
         automation: c.automation ? structuredClone(c.automation) : undefined,
@@ -195,7 +203,10 @@ export function convertProjectCompositionToStore(
         gaussianSplatSequence: c.gaussianSplatSequence,
         threeDEffectorsEnabled: c.threeDEffectorsEnabled,
         meshType: c.meshType,
+        modelPrimitiveIndex: c.modelPrimitiveIndex,
+        modelMaterialSettings: c.modelMaterialSettings,
         cameraSettings: c.cameraSettings,
+        lightSettings: c.lightSettings,
         splatEffectorSettings: c.splatEffectorSettings,
         gaussianBlendshapes: c.gaussianBlendshapes,
         gaussianSplatSettings: c.gaussianSplatSettings,
@@ -217,6 +228,8 @@ export function convertProjectCompositionToStore(
         transitionOut: c.transitionOut ? normalizeTransitionInstanceParams(structuredClone(c.transitionOut)) : undefined,
         transitionSourceTimeOverride: c.transitionSourceTimeOverride,
         transitionSourceHold: c.transitionSourceHold,
+        transitionSourceMap: c.transitionSourceMap ? structuredClone(c.transitionSourceMap) : undefined,
+        transitionRecipeBlendWindows: c.transitionRecipeBlendWindows ? structuredClone(c.transitionRecipeBlendWindows) : undefined,
         colorCorrection: c.colorCorrection ? structuredClone(c.colorCorrection) : undefined,
         nodeGraph: cloneClipNodeGraph(c.nodeGraph),
         masks: c.masks.map((mask): ClipMask => ({
@@ -274,6 +287,7 @@ export function convertProjectCompositionToStore(
         disabled: c.disabled,
         speed: c.speed,
         preservesPitch: c.preservesPitch,
+        freeRun: c.freeRun,
         isComposition: c.isComposition,
         compositionId: c.compositionId,
         textProperties: c.textProperties,

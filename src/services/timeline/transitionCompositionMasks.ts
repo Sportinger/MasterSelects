@@ -1,7 +1,9 @@
 import type { ClipMask } from '../../types/masks';
 import type { Keyframe } from '../../types/keyframes';
+import type { TransitionRenderState } from '../../types/layers';
 import type { TransitionPrimitive } from '../../transitions';
 import { makeKeyframe, makeMaskPathKeyframe } from './transitionCompositionKeyframes';
+import { TRANSITION_RENDER_PROGRESS_PROPERTY } from '../../utils/transitionRenderInterpolation';
 
 export function makeMaskVertex(maskId: string, index: number, x: number, y: number): ClipMask['vertices'][number] {
   return {
@@ -101,8 +103,14 @@ export function buildGenericRevealMask(maskId: string, primitive: Extract<Transi
     ? buildPolygonMaskVertices(maskId, [[0.5, -1.8], [2.5, 2.2], [-1.5, 2.2]])
     : shape === 'diamond'
       ? buildPolygonMaskVertices(maskId, [[0.5, -1.8], [2.8, 0.5], [0.5, 2.8], [-1.8, 0.5]])
-      : shape === 'star' || shape === 'cross'
-        ? buildPolygonMaskVertices(maskId, [[0.5, -1.8], [1.0, -0.1], [2.8, -0.1], [1.3, 0.9], [1.9, 2.8], [0.5, 1.6], [-0.9, 2.8], [-0.3, 0.9], [-1.8, -0.1], [0, -0.1]])
+    : shape === 'cross'
+        ? buildPolygonMaskVertices(maskId, [[-0.35, -2], [1.35, -2], [1.35, -0.35], [3, -0.35], [3, 1.35], [1.35, 1.35], [1.35, 3], [-0.35, 3], [-0.35, 1.35], [-2, 1.35], [-2, -0.35], [-0.35, -0.35]])
+      : shape === 'star'
+        ? buildPolygonMaskVertices(maskId, Array.from({ length: 10 }, (_, index) => {
+            const angle = -Math.PI / 2 + index * Math.PI / 5;
+            const radius = index % 2 === 0 ? 2.5 : 1.05;
+            return [0.5 + Math.cos(angle) * radius, 0.5 + Math.sin(angle) * radius] as [number, number];
+          }))
         : buildRectMaskVertices(maskId, -2, -2, 3, 3);
 
   return {
@@ -128,11 +136,31 @@ export function buildMaskMaterializationFromRecipe(
   target: 'outgoing' | 'incoming',
   clipId: string,
   duration: number,
-): { masks: ClipMask[]; keyframes: Keyframe[] } {
+  seed?: number,
+): { masks: ClipMask[]; keyframes: Keyframe[]; transitionRender?: TransitionRenderState } {
   const masks: ClipMask[] = [];
   const keyframes: Keyframe[] = [];
+  let transitionRender: TransitionRenderState | undefined;
   recipe.forEach((primitive, index) => {
     if (primitive.kind !== 'mask' || primitive.target !== target) return;
+
+    if (primitive.mask === 'clock' || primitive.mask === 'procedural' || primitive.mask === 'pattern') {
+      transitionRender = primitive.mask === 'clock'
+        ? {
+            kind: 'clock-mask',
+            progress: 0,
+            clockwise: primitive.clockwise ?? true,
+            angleOffset: primitive.angleOffset ?? 0,
+          }
+        : primitive.mask === 'procedural'
+          ? { kind: 'procedural-mask', procedural: primitive.procedural, progress: 0, seed }
+          : { kind: 'pattern-mask', pattern: primitive.pattern, progress: 0 };
+      keyframes.push(
+        makeKeyframe(clipId, TRANSITION_RENDER_PROGRESS_PROPERTY, 0, 0),
+        makeKeyframe(clipId, TRANSITION_RENDER_PROGRESS_PROPERTY, duration, 1, 'ease-in-out'),
+      );
+      return;
+    }
 
     const maskId = `transition-comp:${clipId}:mask:${index}`;
     if (primitive.mask === 'wipe') {
@@ -156,5 +184,5 @@ export function buildMaskMaterializationFromRecipe(
     keyframes.push(makeMaskPathKeyframe(clipId, maskId, 0, collapsed));
     keyframes.push(makeMaskPathKeyframe(clipId, maskId, duration, mask.vertices, 'ease-in-out'));
   });
-  return { masks, keyframes };
+  return { masks, keyframes, transitionRender };
 }

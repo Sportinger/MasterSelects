@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createElement } from 'react';
+import { render, waitFor } from '@testing-library/react';
 import { useFlashBoardStore } from '../../src/stores/flashboardStore';
 import {
   appendFlashBoardPromptHistoryEntry,
@@ -7,6 +9,7 @@ import {
   completeFlashBoardActiveGenerationRecord,
   getFlashBoardActiveGenerationRecord,
   getFlashBoardActiveGenerationRecords,
+  getFlashBoardChatMessages,
   getFlashBoardPromptHistory,
   hydrateFlashBoardActiveGenerationRecords,
   resetFlashBoardActiveGenerationState,
@@ -17,6 +20,7 @@ import {
 } from '../../src/stores/flashboardStore/activeGenerationRecords';
 import { createDefaultFlashBoardComposer } from '../../src/stores/flashboardStore/defaults';
 import { flashBoardJobService } from '../../src/services/flashboard/FlashBoardJobService';
+import { useFlashBoardRuntime } from '../../src/components/panels/flashboard/useFlashBoardRuntime';
 
 const generationRecord = {
   id: 'generation-video',
@@ -33,6 +37,11 @@ const generationRecord = {
     referenceMediaFileIds: ['frame-ref'],
   },
 };
+
+function FlashBoardRuntimeHarness() {
+  useFlashBoardRuntime({ enableKeyboardDelete: false });
+  return null;
+}
 
 describe('FlashBoard active generation record adapter', () => {
   beforeEach(() => {
@@ -216,6 +225,30 @@ describe('FlashBoard active generation record adapter', () => {
     ]);
   });
 
+  it('hydrates persisted chat messages with tool calls', () => {
+    hydrateFlashBoardActiveGenerationRecords([], createDefaultFlashBoardComposer(), [], [{
+      createdAt: 20,
+      id: 'assistant-1',
+      role: 'assistant',
+      text: 'Done.',
+      toolCalls: [{
+        modelContent: '{"success":true}',
+        result: { success: true },
+        toolCall: {
+          arguments: '{"trackId":0}',
+          id: 'call-1',
+          name: 'addClipSegment',
+        },
+      }],
+    }]);
+
+    expect(getFlashBoardChatMessages()).toMatchObject([{
+      id: 'assistant-1',
+      role: 'assistant',
+      toolCalls: [{ toolCall: { name: 'addClipSegment' } }],
+    }]);
+  });
+
   it('stores multishot prompts when the generation is submitted', () => {
     vi.spyOn(flashBoardJobService, 'submit').mockReturnValue(null);
 
@@ -241,5 +274,27 @@ describe('FlashBoard active generation record adapter', () => {
 
   it('returns undefined for unknown records', () => {
     expect(getFlashBoardActiveGenerationRecord('missing')).toBeUndefined();
+  });
+
+  it('fails orphaned in-flight generation records after reload', async () => {
+    vi.spyOn(flashBoardJobService, 'hasJob').mockReturnValue(false);
+    useFlashBoardStore.setState({
+      activeGenerationRecords: [{
+        ...generationRecord,
+        id: 'orphaned-generation',
+        job: { status: 'queued' },
+      }],
+      selectedActiveGenerationRecordIds: [],
+      composer: createDefaultFlashBoardComposer(),
+      promptHistory: [],
+      hoveredComposerReference: null,
+    });
+
+    render(createElement(FlashBoardRuntimeHarness));
+
+    await waitFor(() => expect(getFlashBoardActiveGenerationRecord('orphaned-generation')?.job).toMatchObject({
+      status: 'failed',
+      error: 'Generation was interrupted before a provider task id was created.',
+    }));
   });
 });

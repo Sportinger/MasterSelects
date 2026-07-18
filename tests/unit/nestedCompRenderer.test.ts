@@ -2,12 +2,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { LayerRenderData } from '../../src/engine/core/types';
 import { NestedCompRenderer } from '../../src/engine/render/NestedCompRenderer';
+import {
+  getCompatibleNestedVideoOwnerId,
+  getNestedVideoOwnerId,
+  getNestedVideoReuseKey,
+} from '../../src/engine/render/nestedComp/htmlVideoPreview';
 import type { CompositorPipeline } from '../../src/engine/pipeline/CompositorPipeline';
 import type { EffectsPipeline } from '../../src/effects/EffectsPipeline';
 import type { TextureManager } from '../../src/engine/texture/TextureManager';
 import type { MaskTextureManager } from '../../src/engine/texture/MaskTextureManager';
-import type { Layer, TimelineClip, TimelineTrack } from '../../src/types';
-import { DEFAULT_PRIMARY_COLOR_PARAMS } from '../../src/types';
+import type { Layer } from '../../src/types/layers';
+import type { TimelineClip, TimelineTrack } from '../../src/types/timeline';
+import { DEFAULT_PRIMARY_COLOR_PARAMS } from '../../src/types/colorCorrection';
 import {
   getSharedSceneDefaultCameraDistance,
   resolveRenderableSharedSceneCamera,
@@ -23,6 +29,10 @@ const { mockNativeSceneRenderer } = vi.hoisted(() => ({
   },
 }));
 
+const { mockCompositeNestedLayers } = vi.hoisted(() => ({
+  mockCompositeNestedLayers: vi.fn((params: { texturePair: { pingTexture: GPUTexture } }) => params.texturePair.pingTexture),
+}));
+
 vi.mock('../../src/services/logger', () => ({
   Logger: {
     create: vi.fn(() => ({
@@ -36,6 +46,10 @@ vi.mock('../../src/services/logger', () => ({
 
 vi.mock('../../src/engine/native3d/NativeSceneRenderer', () => ({
   getNativeSceneRenderer: vi.fn(() => mockNativeSceneRenderer),
+}));
+
+vi.mock('../../src/engine/render/nestedComp/compositeNestedLayers', () => ({
+  compositeNestedLayers: mockCompositeNestedLayers,
 }));
 
 const initialMediaState = useMediaStore.getState();
@@ -54,6 +68,15 @@ type NestedCompRendererTestAccess = NestedCompRenderer & {
 
 function createMockTexture() {
   return {
+    createView: vi.fn(() => ({ label: 'texture-view' })),
+    destroy: vi.fn(),
+  };
+}
+
+function createSizedMockTexture(width = 16, height = 16) {
+  return {
+    width,
+    height,
     createView: vi.fn(() => ({ label: 'texture-view' })),
     destroy: vi.fn(),
   };
@@ -112,6 +135,47 @@ describe('NestedCompRenderer shared-scene integration', () => {
     useTimelineStore.setState(initialTimelineState);
   });
 
+  it('reuses one preview-frame owner across transition coverage segments', () => {
+    const baseId = 'transition-comp:transition-1:outgoing';
+
+    expect(getNestedVideoOwnerId({ sourceClipId: baseId })).toBe(baseId);
+    expect(getNestedVideoOwnerId({ sourceClipId: `${baseId}:seg:1` })).toBe(baseId);
+    expect(getNestedVideoOwnerId({ sourceClipId: `${baseId}:seg:1:part:2` })).toBe(baseId);
+    expect(getNestedVideoOwnerId({ sourceClipId: `${baseId}:part:1` })).toBe(baseId);
+    expect(getNestedVideoOwnerId({ sourceClipId: 'user-clip:seg:1' })).toBe('user-clip:seg:1');
+    expect(getNestedVideoReuseKey({ id: `nested-layer-${baseId}`, sourceClipId: baseId })).toBe(baseId);
+    expect(getNestedVideoReuseKey({
+      id: `nested-layer-${baseId}:seg:1`,
+      sourceClipId: `${baseId}:seg:1`,
+    })).toBe(baseId);
+    const panelId = `${baseId}:panel:0:0`;
+    expect(getNestedVideoOwnerId({ sourceClipId: `${baseId}:seg:1:part:2:panel:0:0` })).toBe(panelId);
+    expect(getNestedVideoReuseKey({ id: `nested-layer-${panelId}`, sourceClipId: panelId })).toBe(panelId);
+    expect(getNestedVideoReuseKey({
+      id: `nested-layer-${baseId}:seg:1:panel:0:0`,
+      sourceClipId: `${baseId}:seg:1:panel:0:0`,
+    })).toBe(panelId);
+    expect(getCompatibleNestedVideoOwnerId(
+      { sourceClipId: `${baseId}:seg:1` },
+      'parent-clip',
+      10.05,
+      10,
+    )).toBe('parent-clip');
+    expect(getCompatibleNestedVideoOwnerId(
+      { sourceClipId: `${baseId}:seg:1` },
+      'parent-clip',
+      9,
+      10,
+    )).toBe(baseId);
+    expect(getCompatibleNestedVideoOwnerId(
+      { sourceClipId: `${baseId}:seg:1` },
+      'parent-clip',
+      9,
+      10,
+      10.05,
+    )).toBe('parent-clip');
+  });
+
   it('does not cache a deferred nested frame at the target time', () => {
     const previousGPUTextureUsage = (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
     Object.defineProperty(globalThis, 'GPUTextureUsage', {
@@ -142,6 +206,56 @@ describe('NestedCompRenderer shared-scene integration', () => {
 
       expect(view).toBeNull();
       expect((renderer as unknown as { lastRenderTime: Map<string, number> }).lastRenderTime.has('transition-comp')).toBe(false);
+    } finally {
+      if (previousGPUTextureUsage === undefined) {
+        delete (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+      } else {
+        Object.defineProperty(globalThis, 'GPUTextureUsage', {
+          configurable: true,
+          value: previousGPUTextureUsage,
+        });
+      }
+    }
+  });
+
+  it('recollects dynamic nested video when its target time has not advanced', () => {
+    const previousGPUTextureUsage = (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+    Object.defineProperty(globalThis, 'GPUTextureUsage', {
+      configurable: true,
+      value: { RENDER_ATTACHMENT: 1, TEXTURE_BINDING: 2, COPY_SRC: 4, COPY_DST: 8 },
+    });
+    const device = { createTexture: vi.fn(() => createSizedMockTexture()) } as unknown as GPUDevice;
+    const textureManager = { importVideoTexture: vi.fn(() => ({})) } as unknown as TextureManager;
+    const renderer = new NestedCompRenderer(
+      device,
+      {} as CompositorPipeline,
+      {} as EffectsPipeline,
+      textureManager,
+      {} as MaskTextureManager,
+    );
+    const encoder = { copyTextureToTexture: vi.fn() } as unknown as GPUCommandEncoder;
+    const layers = [{
+      id: 'nested-video',
+      name: 'Nested Video',
+      sourceClipId: 'transition-comp:transition-1:outgoing',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1 },
+      rotation: { x: 0, y: 0, z: 0 },
+      source: {
+        type: 'video',
+        videoFrame: { displayWidth: 16, displayHeight: 16 },
+      },
+    }] as unknown as Layer[];
+
+    try {
+      renderer.preRender('transition-comp', layers, 16, 16, encoder, {} as GPUSampler, 1);
+      renderer.preRender('transition-comp', layers, 16, 16, encoder, {} as GPUSampler, 1);
+
+      expect(mockCompositeNestedLayers).toHaveBeenCalledTimes(2);
     } finally {
       if (previousGPUTextureUsage === undefined) {
         delete (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;

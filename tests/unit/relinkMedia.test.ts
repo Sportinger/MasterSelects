@@ -15,7 +15,7 @@ function candidate(name: string): RelinkCandidate {
 }
 
 function candidateMap(...names: string[]): RelinkCandidateMap {
-  return new Map(names.map((name) => [name.toLowerCase(), candidate(name)]));
+  return new Map(names.map((name) => [name.toLowerCase(), [candidate(name)]]));
 }
 
 describe('relink media matching', () => {
@@ -107,5 +107,42 @@ describe('relink media matching', () => {
     } as MediaFile;
 
     expect(findRelinkMatch(mediaFile, candidateMap('clip-b.mp4'))).toBeNull();
+  });
+
+  it('uses matching parent folders when recursive scans contain duplicate names', () => {
+    const mediaFile = {
+      id: 'media-video',
+      name: '1.mp4',
+      type: 'video',
+      parentId: null,
+      createdAt: 1,
+      url: '',
+      filePath: '../../Copy of Copy of Mother/1.mp4',
+    } as MediaFile;
+    const wrong = { ...candidate('1.mp4'), relativePath: 'Other Edit/1.mp4' };
+    const right = { ...candidate('1.mp4'), relativePath: 'Copy of Copy of Mother/1.mp4' };
+    const candidates: RelinkCandidateMap = new Map([['1.mp4', [wrong, right]]]);
+
+    expect(findRelinkMatch(mediaFile, candidates)).toEqual({ kind: 'single', candidate: right });
+  });
+
+  it('leaves duplicate basenames unresolved when no path distinguishes them', () => {
+    const mediaFile = {
+      id: 'media-video',
+      name: '1.mp4',
+      type: 'video',
+      parentId: null,
+      createdAt: 1,
+      url: '',
+    } as MediaFile;
+    const candidates: RelinkCandidateMap = new Map([[
+      '1.mp4',
+      [
+        { ...candidate('1.mp4'), relativePath: 'Folder A/1.mp4' },
+        { ...candidate('1.mp4'), relativePath: 'Folder B/1.mp4' },
+      ],
+    ]]);
+
+    expect(findRelinkMatch(mediaFile, candidates)).toBeNull();
   });
 });

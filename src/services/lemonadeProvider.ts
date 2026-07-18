@@ -2,6 +2,18 @@ import type { ToolDefinition } from './aiTools/types';
 
 export const DEFAULT_LEMONADE_ENDPOINT = 'http://localhost:13305/api/v1';
 export const DEFAULT_LEMONADE_MODEL = 'gemma4-it-e2b-FLM';
+export const DEFAULT_LEMONADE_CONTEXT_SIZE = -1;
+
+export const LEMONADE_CONTEXT_SIZE_OPTIONS = [
+  { value: DEFAULT_LEMONADE_CONTEXT_SIZE, label: 'Auto' },
+  { value: 4096, label: '4K' },
+  { value: 8192, label: '8K' },
+  { value: 16384, label: '16K' },
+  { value: 32768, label: '32K' },
+  { value: 65536, label: '64K' },
+  { value: 131072, label: '128K' },
+  { value: 262144, label: '256K' },
+] as const;
 
 export const LEMONADE_MODEL_PRESETS = [
   { id: 'gemma4-it-e2b-FLM', name: 'Gemma 4 Edge E2B', description: 'Fast FLM/NPU chat model' },
@@ -33,6 +45,7 @@ export interface LemonadeToolCall {
 
 export interface LemonadeChatResult {
   content: string | null;
+  finishReason?: string | null;
   toolCalls: LemonadeToolCall[];
 }
 
@@ -63,6 +76,14 @@ interface LemonadeChatOptions {
 interface LemonadeChatStreamOptions extends LemonadeChatOptions {
   onContentDelta?: (delta: string) => void;
   streamIdleTimeoutMs?: number;
+}
+
+interface LemonadeLoadModelOptions {
+  contextSize?: number;
+  endpoint: string;
+  model: string;
+  signal?: AbortSignal;
+  timeoutMs?: number;
 }
 
 function normalizeEndpoint(endpoint: string): string {
@@ -97,12 +118,14 @@ function lemonadeHeaders(): HeadersInit {
 }
 
 function createRequestController(signal?: AbortSignal, timeoutMs?: number): {
+  clearTimeout: () => void;
   cleanup: () => void;
   didTimeout: () => boolean;
   signal: AbortSignal | undefined;
 } {
   if (!signal && (!timeoutMs || timeoutMs <= 0)) {
     return {
+      clearTimeout: () => undefined,
       cleanup: () => undefined,
       didTimeout: () => false,
       signal: undefined,
@@ -130,6 +153,12 @@ function createRequestController(signal?: AbortSignal, timeoutMs?: number): {
   }
 
   return {
+    clearTimeout: () => {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+        timeoutHandle = undefined;
+      }
+    },
     cleanup: () => {
       if (timeoutHandle) {
         clearTimeout(timeoutHandle);
@@ -145,7 +174,7 @@ function createRequestController(signal?: AbortSignal, timeoutMs?: number): {
 
 function getRequestErrorMessage(error: unknown, requestController: { didTimeout: () => boolean }): string {
   if (requestController.didTimeout()) {
-    return 'Lemonade request timed out.';
+    return 'Lemonade request timed out. The local model may still be loading; stop and retry when it is ready.';
   }
 
   if (error instanceof Error) {
@@ -216,6 +245,24 @@ function parseErrorPayload(data: unknown): string | null {
   return null;
 }
 
+function getEmptyLemonadeResponseMessage(finishReason?: string | null): string {
+  if (finishReason === 'length') {
+    return 'Lemonade stopped before returning text because the model hit its output or context limit. Try fewer requested items, a shorter prompt, or increase the loaded model Context Size in Lemonade.';
+  }
+
+  if (finishReason === 'content_filter') {
+    return 'Lemonade stopped the response because the model reported a content filter.';
+  }
+
+  if (finishReason === 'tool_calls') {
+    return 'Lemonade requested tool calls, but none were usable by MasterSelects. Try the request again or switch to OpenAI for this edit.';
+  }
+
+  return finishReason
+    ? `Lemonade finished with "${finishReason}" but returned no text. Try a shorter prompt or reload the model with a larger context size.`
+    : 'Lemonade returned no text. Try a shorter prompt or reload the model with a larger context size.';
+}
+
 export function parseLemonadeChatCompletion(data: unknown): LemonadeChatResult {
   const payload = data as {
     choices?: Array<{
@@ -226,6 +273,7 @@ export function parseLemonadeChatCompletion(data: unknown): LemonadeChatResult {
           function?: { name?: string; arguments?: string };
         }>;
       };
+      finish_reason?: string | null;
     }>;
   };
 
@@ -244,6 +292,7 @@ export function parseLemonadeChatCompletion(data: unknown): LemonadeChatResult {
 
   return {
     content: choice.message.content || null,
+    finishReason: choice.finish_reason ?? null,
     toolCalls,
   };
 }
@@ -270,7 +319,7 @@ function readStreamChunk(
     reader.read(),
     new Promise<never>((_, reject) => {
       timeoutHandle = setTimeout(() => {
-        reject(new Error('Lemonade stream stalled.'));
+        reject(new Error('Lemonade stream stalled. Stop and retry when the local model is ready.'));
       }, idleTimeoutMs);
     }),
   ]).finally(() => {
@@ -375,9 +424,11 @@ export async function createLemonadeChatCompletionStream(
     requestController.cleanup();
     throw new Error(parseErrorPayload(data) || `Lemonade API error: ${response.status}`);
   }
+  requestController.clearTimeout();
 
   const toolCallParts = new Map<number, LemonadeToolCall>();
   let content = '';
+  let finishReason: string | null = null;
 
   try {
     for await (const payload of readLemonadeSsePayloads(response, options.streamIdleTimeoutMs)) {
@@ -392,6 +443,7 @@ export async function createLemonadeChatCompletionStream(
 
       const chunk = payload as {
         choices?: Array<{
+          finish_reason?: string | null;
           delta?: {
             content?: string | null;
             tool_calls?: Array<{
@@ -406,7 +458,11 @@ export async function createLemonadeChatCompletionStream(
         }>;
       };
 
-      const delta = chunk.choices?.[0]?.delta;
+      const choice = chunk.choices?.[0];
+      if (typeof choice?.finish_reason === 'string' && choice.finish_reason.length > 0) {
+        finishReason = choice.finish_reason;
+      }
+      const delta = choice?.delta;
       if (!delta) {
         continue;
       }
@@ -437,13 +493,20 @@ export async function createLemonadeChatCompletionStream(
     requestController.cleanup();
   }
 
-  return {
+  const result = {
     content: content || null,
+    finishReason,
     toolCalls: Array.from(toolCallParts.entries())
       .sort(([left], [right]) => left - right)
       .map(([, toolCall]) => toolCall)
       .filter((toolCall) => toolCall.name.length > 0),
   };
+
+  if (!result.content && result.toolCalls.length === 0) {
+    throw new Error(getEmptyLemonadeResponseMessage(finishReason));
+  }
+
+  return result;
 }
 
 export async function checkLemonadeHealth(endpoint: string): Promise<LemonadeHealthResult> {
@@ -492,6 +555,39 @@ export async function checkLemonadeHealth(endpoint: string): Promise<LemonadeHea
       models: [],
       error: error instanceof Error ? error.message : 'Unable to reach Lemonade Server',
     };
+  }
+}
+
+export async function loadLemonadeModel(options: LemonadeLoadModelOptions): Promise<void> {
+  const contextSize = Math.trunc(options.contextSize ?? DEFAULT_LEMONADE_CONTEXT_SIZE);
+  if (!Number.isFinite(contextSize) || contextSize <= 0) {
+    return;
+  }
+
+  const baseUrl = getValidatedEndpoint(options.endpoint);
+  const requestController = createRequestController(options.signal, options.timeoutMs);
+  let response: Response;
+
+  try {
+    response = await fetch(`${baseUrl}/load`, {
+      method: 'POST',
+      headers: lemonadeHeaders(),
+      body: JSON.stringify({
+        ctx_size: contextSize,
+        model_name: options.model.trim() || DEFAULT_LEMONADE_MODEL,
+      }),
+      signal: requestController.signal,
+    });
+  } catch (error) {
+    requestController.cleanup();
+    throw new Error(getRequestErrorMessage(error, requestController));
+  }
+
+  const data = await response.json().catch(() => null);
+  requestController.cleanup();
+
+  if (!response.ok) {
+    throw new Error(parseErrorPayload(data) || `Lemonade model load failed: ${response.status}`);
   }
 }
 

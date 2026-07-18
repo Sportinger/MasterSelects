@@ -8,7 +8,7 @@ import type {
 
 // Panel types that can be docked
 // Note: Effects, Transcript, Analysis are now integrated into Properties panel
-export type PanelType = 'preview' | 'multi-preview' | 'timeline' | 'clip-properties' | 'history' | 'audio-mixer' | 'node-workspace' | 'media' | 'export' | 'midi-mapping' | 'multicam' | 'ai-chat' | 'ai-segment' | 'scene-description' | 'transitions' | 'scope-waveform' | 'scope-histogram' | 'scope-vectorscope';
+export type PanelType = 'preview' | 'multi-preview' | 'timeline' | 'clip-properties' | 'history' | 'audio-mixer' | 'node-workspace' | 'media' | 'export' | 'midi-mapping' | 'multicam' | 'capture' | 'ai-segment' | 'scene-description' | 'transitions' | 'scope-waveform' | 'scope-histogram' | 'scope-vectorscope';
 
 // Scope panel types for filtering in View menu
 export const SCOPE_PANEL_TYPES: PanelType[] = ['scope-waveform', 'scope-histogram', 'scope-vectorscope'];
@@ -22,7 +22,7 @@ export const WIP_PANEL_TYPES: PanelType[] = ['multicam'];
 export const MULTI_INSTANCE_PANEL_TYPES: PanelType[] = ['preview'];
 
 // AI panel types for View menu grouping
-export const AI_PANEL_TYPES: PanelType[] = ['ai-chat', 'ai-segment', 'scene-description'];
+export const AI_PANEL_TYPES: PanelType[] = ['ai-segment', 'scene-description'];
 
 export type PreviewPanelSource =
   | RenderSourceActiveComp
@@ -34,6 +34,8 @@ export interface PreviewPanelData {
   source?: PreviewPanelSource;
   compositionId?: string | null; // legacy: null = active composition
   showTransparencyGrid?: boolean; // per-tab transparency grid toggle (default false)
+  initialEditMode?: boolean;
+  initialEditCameraView?: 'camera' | 'front' | 'side' | 'top';
 }
 
 export interface MultiPreviewSlotData {
@@ -254,11 +256,11 @@ export const PANEL_CONFIGS: Record<PanelType, PanelConfig> = {
     minHeight: 400,
     closable: false,
   },
-  'ai-chat': {
-    type: 'ai-chat',
-    title: 'AI Chat',
-    minWidth: 300,
-    minHeight: 300,
+  capture: {
+    type: 'capture',
+    title: 'Capture',
+    minWidth: 320,
+    minHeight: 420,
     closable: false,
   },
   transitions: {

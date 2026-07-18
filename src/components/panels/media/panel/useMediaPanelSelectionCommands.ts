@@ -9,6 +9,7 @@ import type { MediaPanelViewMode } from './types';
 import { DEFAULT_TRACKS, useTimelineStore } from '../../../../stores/timeline';
 import { DEFAULT_COMPOSITION } from '../../../../stores/mediaStore/constants';
 import { requestMediaBoardPlacement } from '../board/placementRequests';
+import { liveInputRuntime } from '../../../../services/mediaRuntime/liveInputRuntime';
 
 const log = Logger.create('MediaPanel');
 
@@ -282,6 +283,7 @@ export function useMediaPanelSelectionCommands({
   const addTimelineClip = useTimelineStore((state) => state.addClip);
   const setTimelineDuration = useTimelineStore((state) => state.setDuration);
   const getSerializableTimelineState = useTimelineStore((state) => state.getSerializableState);
+  const invalidateTimelineCache = useTimelineStore((state) => state.invalidateCache);
 
   const showFloatingText = useCallback((text: string) => {
     const { x, y } = lastPointerRef.current;
@@ -320,6 +322,13 @@ export function useMediaPanelSelectionCommands({
       }
     } else if (item.type === 'composition') {
       openCompositionTab(item.id);
+    } else if ('liveInput' in item && item.liveInput) {
+      try {
+        await liveInputRuntime.connect(item.id, item.liveInput);
+        invalidateTimelineCache();
+      } catch (error) {
+        log.warn('Could not connect live input', { id: item.id, error });
+      }
     } else if ((item.type === 'video' || item.type === 'image' || item.type === 'audio') && 'file' in item && (item as MediaFile).file) {
       setSourceMonitorFile(item.id);
     } else if ('file' in item && mediaNeedsRelink(item as MediaFile)) {
@@ -328,7 +337,7 @@ export function useMediaPanelSelectionCommands({
         log.info('File reloaded successfully');
       }
     }
-  }, [openCompositionTab, reloadFile, setGridFolderId, setSourceMonitorFile, toggleFolderExpanded, viewMode]);
+  }, [invalidateTimelineCache, openCompositionTab, reloadFile, setGridFolderId, setSourceMonitorFile, toggleFolderExpanded, viewMode]);
 
   const handleContextMenu = useCallback((
     e: ReactMouseEvent,

@@ -1,16 +1,70 @@
 // File-type icons (AE style) - inline SVGs
 // Small (14px) for list view, large for grid thumbnails
+import {
+  type Icon,
+  IconAdjustmentsHorizontal,
+  IconArrowsShuffle,
+  IconBlur,
+  IconBulb,
+  IconCamera,
+  IconCircleDashed,
+  IconCube,
+  IconFile,
+  IconFocusCentered,
+  IconMath,
+  IconMovie,
+  IconPhoto,
+  IconPiano,
+  IconShape,
+  IconSparkles,
+  IconSquare,
+  IconStack,
+  IconTypography,
+  IconVector,
+  IconWaveSine,
+} from '@tabler/icons-react';
 import React, { memo } from 'react';
+import type { TimelineSourceType } from '../../../types';
 
 interface FileTypeIconProps {
   type?: string;
   /** Render larger version for grid thumbnail placeholder */
   large?: boolean;
+  outline?: boolean;
+  size?: number;
 }
 
-export const FileTypeIcon = memo(({ type, large }: FileTypeIconProps) => {
-  const size = large ? 48 : 14;
-  const style: React.CSSProperties = { width: size, height: size, flexShrink: 0, display: 'block' };
+const OUTLINE_FILE_TYPE_ICONS = {
+  video: IconMovie,
+  audio: IconWaveSine,
+  image: IconPhoto,
+  text: IconTypography,
+  solid: IconSquare,
+  model: IconCube,
+  camera: IconCamera,
+  light: IconBulb,
+  'gaussian-avatar': IconSparkles,
+  'gaussian-splat': IconBlur,
+  'splat-effector': IconFocusCentered,
+  'math-scene': IconMath,
+  'transition-overlay': IconArrowsShuffle,
+  'motion-shape': IconShape,
+  'motion-null': IconCircleDashed,
+  'motion-adjustment': IconAdjustmentsHorizontal,
+  midi: IconPiano,
+  lottie: IconVector,
+  rive: IconVector,
+  composition: IconStack,
+} satisfies Record<TimelineSourceType | 'composition', Icon>;
+
+export const FileTypeIcon = memo(({ type, large, outline, size }: FileTypeIconProps) => {
+  const iconSize = size ?? (large ? 48 : 14);
+  const style: React.CSSProperties = { width: iconSize, height: iconSize, flexShrink: 0, display: 'block' };
+
+  if (outline) {
+    const OutlineIcon = OUTLINE_FILE_TYPE_ICONS[type as keyof typeof OUTLINE_FILE_TYPE_ICONS] ?? IconFile;
+    return <OutlineIcon style={style} fill="none" stroke="currentColor" strokeWidth={1.6} aria-hidden="true" />;
+  }
 
   if (large) {
     return <LargeIcon type={type} style={style} />;
@@ -110,6 +164,14 @@ export const FileTypeIcon = memo(({ type, large }: FileTypeIconProps) => {
           <path d="M5 5.2L6 4h4l1 1.2" stroke="#d5bf84" strokeWidth="0.7" strokeLinecap="round"/>
         </svg>
       );
+    case 'light':
+      return (
+        <svg style={style} viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#5a5530" stroke="#d8c75d" strokeWidth="0.7"/>
+          <circle cx="8" cy="7" r="2.4" fill="#f3dd6b"/>
+          <path d="M8 2.9v1.4M8 9.7v1.4M3.9 7H5M11 7h1.1M5.1 4.1l0.8 0.8M10.1 9.1l0.8 0.8M10.9 4.1l-0.8 0.8M5.9 9.1l-0.8 0.8" stroke="#fff0a3" strokeWidth="0.8" strokeLinecap="round"/>
+        </svg>
+      );
     case 'splat-effector':
       return (
         <svg style={style} viewBox="0 0 16 16" fill="none">
@@ -132,6 +194,38 @@ export const FileTypeIcon = memo(({ type, large }: FileTypeIconProps) => {
           <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#6a4b5b" stroke="#d28aae" strokeWidth="0.7"/>
           <rect x="4" y="5" width="5" height="5" rx="0.8" fill="#f0b1cb" opacity="0.9"/>
           <circle cx="10.6" cy="9.6" r="2.2" fill="#8bd6d0" opacity="0.88"/>
+        </svg>
+      );
+    case 'motion-null':
+      return (
+        <svg style={style} viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#454b61" stroke="#8d98c7" strokeWidth="0.7"/>
+          <circle cx="8" cy="8" r="3" stroke="#c7d0f4" strokeWidth="0.9" strokeDasharray="1.4 1.2"/>
+          <path d="M8 4v8M4 8h8" stroke="#aeb9e8" strokeWidth="0.7"/>
+        </svg>
+      );
+    case 'motion-adjustment':
+      return (
+        <svg style={style} viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#514563" stroke="#ad8bd0" strokeWidth="0.7"/>
+          <path d="M4 6h8M4 10h8" stroke="#e0c9f5" strokeWidth="0.9" strokeLinecap="round"/>
+          <circle cx="7" cy="6" r="1.2" fill="#cba8eb"/>
+          <circle cx="10" cy="10" r="1.2" fill="#cba8eb"/>
+        </svg>
+      );
+    case 'transition-overlay':
+      return (
+        <svg style={style} viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#65474f" stroke="#cf8799" strokeWidth="0.7"/>
+          <path d="M3.5 5h6l3 3-3 3h-6l3-3-3-3Z" fill="#eba8b8" opacity="0.9"/>
+        </svg>
+      );
+    case 'midi':
+      return (
+        <svg style={style} viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#42485c" stroke="#8791b4" strokeWidth="0.7"/>
+          <path d="M3 5h10v6H3z" fill="#d7dcf0"/>
+          <path d="M5 5v3M7 5v3M9 5v3M11 5v3" stroke="#51586f" strokeWidth="1.1"/>
         </svg>
       );
     case 'signal':
@@ -331,6 +425,15 @@ const LargeIcon = memo(({ type, style }: { type?: string; style: React.CSSProper
           <circle cx="24" cy="24" r="6.5" fill="#d8bc82" opacity="0.9"/>
           <circle cx="24" cy="24" r="3" fill="#6c5a36"/>
           <circle cx="34" cy="19" r="1.5" fill="#d8bc82" opacity="0.85"/>
+        </svg>
+      );
+    case 'light':
+      return (
+        <svg style={style} viewBox="0 0 48 48" fill="none">
+          <rect x="4" y="8" width="40" height="32" rx="3" fill="#5a5530" stroke="#d8c75d" strokeWidth="1"/>
+          <circle cx="24" cy="22" r="8" fill="#f3dd6b"/>
+          <circle cx="24" cy="22" r="13" stroke="#f3dd6b" strokeWidth="2" opacity="0.35"/>
+          <path d="M24 7v6M24 31v6M9 22h6M33 22h6M13.5 11.5l4.2 4.2M30.3 28.3l4.2 4.2M34.5 11.5l-4.2 4.2M17.7 28.3l-4.2 4.2" stroke="#fff0a3" strokeWidth="2" strokeLinecap="round"/>
         </svg>
       );
     case 'splat-effector':

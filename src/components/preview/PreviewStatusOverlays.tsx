@@ -148,8 +148,8 @@ export function PreviewEditHints({
       {sceneNavEnabled && (
         <div className="preview-edit-hint">
           {effectiveSceneNavFpsMode
-            ? 'Scene Nav: 1 Front | 2 Side | 3 Top | 4 Camera | click preview, hold LMB to look, WASD/QE move, MMB/RMB/Shift+LMB pan, wheel moves camera'
-            : 'Scene Nav: 1 Front | 2 Side | 3 Top | 4 Camera | WASD move, Q/E up-down, LMB orbit, MMB/RMB/Shift+LMB pan, wheel moves camera'}
+            ? 'Editor View: 1 Front | 2 Side | 3 Top | 4 Perspective | click preview, hold LMB to look, WASD/QE move, MMB/RMB/Shift+LMB pan, wheel dolly'
+            : 'Editor View: 1 Front | 2 Side | 3 Top | 4 Perspective | WASD move, Q/E up-down, LMB orbit, MMB/RMB/Shift+LMB pan, wheel dolly'}
         </div>
       )}
     </>

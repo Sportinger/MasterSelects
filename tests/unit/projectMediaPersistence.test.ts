@@ -339,7 +339,28 @@ describe('project media persistence', () => {
     ]);
   }, 10_000);
 
-  it('persists transition comp clip render fields when syncing stores to the project file', async () => {
+  it('persists transition source fields through project save/load without shared references', async () => {
+    const transitionSourceMap = {
+      version: 1 as const,
+      segments: [{ kind: 'linear' as const, compStart: 0, compEnd: 1, sourceStart: 2, sourceEnd: 3 }],
+    };
+    const transitionRecipeBlendWindows = [{ compStart: 0.25, compEnd: 0.75, blendMode: 'add' as const }];
+    const transitionComp = {
+      kind: 'transition-comp' as const,
+      sourceLayout: 'mapped-v3' as const,
+      legacyBackupCompositionId: 'legacy-backup',
+      parentCompositionId: 'parent',
+      parentTransitionId: 'transition-1',
+      parentOutgoingClipId: 'out',
+      parentIncomingClipId: 'in',
+      linkedOutgoingClipId: 'out',
+      linkedIncomingClipId: 'in',
+      innerTransitionId: '',
+      paddingBefore: 0,
+      paddingAfter: 0,
+      bodyStart: 0,
+      bodyEnd: 1,
+    };
     mocks.mediaState.compositions = [{
       id: 'transition-comp',
       name: 'Transition Comp',
@@ -351,20 +372,7 @@ describe('project media persistence', () => {
       frameRate: 30,
       duration: 1,
       backgroundColor: '#000000',
-      transitionComp: {
-        kind: 'transition-comp',
-        parentCompositionId: 'parent',
-        parentTransitionId: 'transition-1',
-        parentOutgoingClipId: 'out',
-        parentIncomingClipId: 'in',
-        linkedOutgoingClipId: 'out',
-        linkedIncomingClipId: 'in',
-        innerTransitionId: '',
-        paddingBefore: 0,
-        paddingAfter: 0,
-        bodyStart: 0,
-        bodyEnd: 1,
-      },
+      transitionComp,
       timelineData: {
         duration: 1,
         tracks: [],
@@ -390,6 +398,8 @@ describe('project media persistence', () => {
           transitionRender: { kind: 'distortion', progress: 0.4, distortion: 'swirl', seed: 7 },
           transitionSourceTimeOverride: 2.5,
           transitionSourceHold: true,
+          transitionSourceMap,
+          transitionRecipeBlendWindows,
           effects: [],
           masks: [],
           keyframes: [],
@@ -401,23 +411,48 @@ describe('project media persistence', () => {
       },
     }];
 
-    const { syncStoresToProject } = await import('../../src/services/project/projectSave');
-    await syncStoresToProject();
+    const { saveCurrentProject } = await import('../../src/services/project/projectSave');
+    await expect(saveCurrentProject()).resolves.toBe(true);
+    expect(mocks.saveProject).toHaveBeenCalledTimes(1);
 
-    expect(mocks.updateCompositions).toHaveBeenCalledWith([
-      expect.objectContaining({
-        id: 'transition-comp',
-        clips: [
-          expect.objectContaining({
-            sourceRect: { x: 0.25, y: 0, width: 0.5, height: 1 },
-            transitionRender: { kind: 'distortion', progress: 0.4, distortion: 'swirl', seed: 7 },
-            transitionSourceTimeOverride: 2.5,
-            transitionSourceHold: true,
-          }),
-        ],
-      }),
-    ]);
-  });
+    const [savedComposition] = mocks.updateCompositions.mock.calls[0][0];
+    const savedClip = savedComposition.clips[0];
+    expect(savedClip).toEqual(expect.objectContaining({
+      sourceRect: { x: 0.25, y: 0, width: 0.5, height: 1 },
+      transitionRender: { kind: 'distortion', progress: 0.4, distortion: 'swirl', seed: 7 },
+      transitionSourceTimeOverride: 2.5,
+      transitionSourceHold: true,
+      transitionSourceMap,
+      transitionRecipeBlendWindows,
+    }));
+    expect(savedComposition.transitionComp?.sourceLayout).toBe('mapped-v3');
+    expect(savedComposition.transitionComp?.legacyBackupCompositionId).toBe('legacy-backup');
+
+    transitionSourceMap.segments[0].sourceStart = 99;
+    transitionRecipeBlendWindows[0].compStart = 99;
+    transitionComp.sourceLayout = 'legacy-segmented';
+    expect(savedClip.transitionSourceMap?.segments[0]).toMatchObject({ sourceStart: 2 });
+    expect(savedClip.transitionRecipeBlendWindows?.[0]).toMatchObject({ compStart: 0.25 });
+    expect(savedComposition.transitionComp?.sourceLayout).toBe('mapped-v3');
+
+    const { convertProjectCompositionToStore } = await import('../../src/services/project/load/loadTimelineHydration');
+    const [restoredComposition] = convertProjectCompositionToStore([savedComposition]);
+    const restoredClip = restoredComposition.timelineData!.clips[0];
+    expect(restoredClip.transitionSourceMap).toEqual(savedClip.transitionSourceMap);
+    expect(restoredClip.transitionRecipeBlendWindows).toEqual(savedClip.transitionRecipeBlendWindows);
+    expect(restoredComposition.transitionComp?.sourceLayout).toBe('mapped-v3');
+    expect(restoredComposition.transitionComp?.legacyBackupCompositionId).toBe('legacy-backup');
+    expect(restoredClip.transitionSourceMap).not.toBe(savedClip.transitionSourceMap);
+    expect(restoredClip.transitionRecipeBlendWindows).not.toBe(savedClip.transitionRecipeBlendWindows);
+    expect(restoredComposition.transitionComp).not.toBe(savedComposition.transitionComp);
+
+    restoredClip.transitionSourceMap!.segments[0].sourceStart = 42;
+    restoredClip.transitionRecipeBlendWindows![0].compStart = 42;
+    restoredComposition.transitionComp!.sourceLayout = 'legacy-segmented';
+    expect(savedClip.transitionSourceMap?.segments[0]).toMatchObject({ sourceStart: 2 });
+    expect(savedClip.transitionRecipeBlendWindows?.[0]).toMatchObject({ compStart: 0.25 });
+    expect(savedComposition.transitionComp?.sourceLayout).toBe('mapped-v3');
+  }, 10_000);
 
   it('drops obsolete YouTube panel payloads when syncing stores to the project file', async () => {
     const projectData = {

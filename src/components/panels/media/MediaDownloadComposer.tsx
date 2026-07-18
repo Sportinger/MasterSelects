@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
+import { openNativeHelperDialog } from '../../common/nativeHelperDialog';
 import { NativeHelperClient, type FormatRecommendation, type VideoInfo } from '../../../services/nativeHelper';
 import { isDownloadAvailable } from '../../../services/youtubeDownloader';
 import { parseDownloadUrls, useMediaDownloadStore } from '../../../stores/mediaDownloadStore';
@@ -326,9 +327,15 @@ export function MediaDownloadComposer() {
       <div className="fb-bubble-bar media-download-bar">
         <div className="fb-control-stack">
           <div className="fb-pill-group media-download-pill-group">
-            <span className={`fb-pill media-download-status-pill ${helperConnected ? 'ready' : 'offline'}`}>
+            <button
+              type="button"
+              className={`fb-pill media-download-status-pill ${helperConnected ? 'ready' : 'offline'}`}
+              onClick={openNativeHelperDialog}
+              title="Open Native Helper"
+              aria-haspopup="dialog"
+            >
               {helperConnected ? 'yt-dlp ready' : 'No helper'}
-            </span>
+            </button>
             {urls.length > 0 && (
               <span className="fb-pill media-download-count-pill">
                 {urls.length} URL{urls.length === 1 ? '' : 's'}

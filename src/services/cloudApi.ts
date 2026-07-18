@@ -20,6 +20,7 @@ import type {
   CloudSessionUser,
   CreditClaimRedeemResponse,
   CreditClaimStatusResponse,
+  WebsiteFreeCreditOfferResponse,
   HostedVideoCreateResponse,
   HostedVideoInfoResponse,
   HostedVideoStatusResponse,
@@ -61,6 +62,7 @@ export type {
   CreditClaimRedeemResponse,
   CreditClaimStatus,
   CreditClaimStatusResponse,
+  WebsiteFreeCreditOfferResponse,
   HostedVideoCreateResponse,
   HostedVideoInfoResponse,
   HostedVideoStatusResponse,
@@ -122,12 +124,15 @@ export const cloudApi = {
     },
   },
   credits: {
+    claimWebsiteOffer(): Promise<WebsiteFreeCreditOfferResponse> {
+      return requestJson<WebsiteFreeCreditOfferResponse>('/api/credits/free-offer', { method: 'POST' });
+    },
     claimStatus(code: string): Promise<CreditClaimStatusResponse> {
       const url = new URL('/api/credits/claim', window.location.origin);
       url.searchParams.set('code', code);
       return requestJson<CreditClaimStatusResponse>(url.toString(), { method: 'GET' });
     },
-    redeemClaim(body: { code: string; email: string }): Promise<CreditClaimRedeemResponse> {
+    redeemClaim(body: { code: string; email: string; redeemCode?: boolean }): Promise<CreditClaimRedeemResponse> {
       return requestJson<CreditClaimRedeemResponse>('/api/credits/claim', {
         body: JSON.stringify(body),
         method: 'POST',

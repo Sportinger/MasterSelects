@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   GIF_COLOR_PRESETS,
   GIF_DITHER_OPTIONS,
@@ -37,21 +38,52 @@ export function ExportVideoControls({
   useInOut,
   actions,
 }: ExportVideoControlsProps) {
+  const [orientationPreviewLocked, setOrientationPreviewLocked] = useState(false);
+  const isPortrait = video.actualHeight > video.actualWidth;
+  const toggleResolutionOrientation = () => {
+    if (video.useCustomResolution) {
+      actions.setCustomWidth(video.actualHeight);
+      actions.setCustomHeight(video.actualWidth);
+      return;
+    }
+    actions.handleQuickResolutionPreset(`${video.actualHeight}x${video.actualWidth}`);
+  };
+
   return (
     <>
       <div className="export-quick-grid">
         <div className="export-field-card export-subcard" data-export-target="video-resolution">
           <div className="export-field-head">
             <span>Resolution</span>
-            <strong>{video.actualWidth}x{video.actualHeight}</strong>
+            <div className="export-resolution-value">
+              <button
+                type="button"
+                className={`export-orientation-toggle${orientationPreviewLocked ? ' is-preview-locked' : ''}`}
+                onClick={() => {
+                  toggleResolutionOrientation();
+                  setOrientationPreviewLocked(true);
+                }}
+                onMouseLeave={() => setOrientationPreviewLocked(false)}
+                onBlur={() => setOrientationPreviewLocked(false)}
+                aria-label={`Switch to ${isPortrait ? '16:9 landscape' : '9:16 portrait'}`}
+                title={`Switch to ${isPortrait ? '16:9 landscape' : '9:16 portrait'}`}
+              >
+                <span className={`export-orientation-icon${isPortrait ? ' is-portrait' : ''}`} aria-hidden="true" />
+                <svg className="export-orientation-preview" viewBox="0 0 24 24" aria-hidden="true">
+                  <path className="export-orientation-preview-arc" d="M4 18A14 14 0 0 1 18 4" />
+                  <path className="export-orientation-preview-head" d="M13 4h5v5" />
+                </svg>
+              </button>
+              <strong>{video.actualWidth}x{video.actualHeight}</strong>
+            </div>
           </div>
           <div className="export-chip-row">
             {options.quickResolutionPresets.map(({ label, width: presetWidth, height: presetHeight }) => (
               <button
                 key={`${presetWidth}x${presetHeight}`}
                 type="button"
-                className={`export-chip${!video.useCustomResolution && video.width === presetWidth && video.height === presetHeight ? ' is-active' : ''}`}
-                onClick={() => actions.handleQuickResolutionPreset(`${presetWidth}x${presetHeight}`)}
+                className={`export-chip${!video.useCustomResolution && video.width === (isPortrait ? presetHeight : presetWidth) && video.height === (isPortrait ? presetWidth : presetHeight) ? ' is-active' : ''}`}
+                onClick={() => actions.handleQuickResolutionPreset(isPortrait ? `${presetHeight}x${presetWidth}` : `${presetWidth}x${presetHeight}`)}
               >
                 {label.split(' ')[0]}
               </button>

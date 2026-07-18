@@ -10,6 +10,7 @@ interface UsePreviewViewportOptions {
   effectiveResolution: PreviewSize;
   exportPreviewCanvasRef: RefObject<HTMLCanvasElement | null>;
   exportPreviewFrame: ImageBitmap | null;
+  fillContainer: boolean;
   isExporting: boolean;
   setCanvasSize: Dispatch<SetStateAction<PreviewSize>>;
   setContainerSize: Dispatch<SetStateAction<PreviewSize>>;
@@ -20,6 +21,7 @@ export function usePreviewViewport({
   effectiveResolution,
   exportPreviewCanvasRef,
   exportPreviewFrame,
+  fillContainer,
   isExporting,
   setCanvasSize,
   setContainerSize,
@@ -35,6 +37,11 @@ export function usePreviewViewport({
       if (containerWidth === 0 || containerHeight === 0) return;
 
       setContainerSize({ width: containerWidth, height: containerHeight });
+
+      if (fillContainer) {
+        setCanvasSize({ width: containerWidth, height: containerHeight });
+        return;
+      }
 
       const videoAspect = effectiveResolution.width / effectiveResolution.height;
       const containerAspect = containerWidth / containerHeight;
@@ -64,7 +71,7 @@ export function usePreviewViewport({
     }
 
     return () => resizeObserver.disconnect();
-  }, [containerRef, effectiveResolution.width, effectiveResolution.height, setCanvasSize, setContainerSize]);
+  }, [containerRef, effectiveResolution.width, effectiveResolution.height, fillContainer, setCanvasSize, setContainerSize]);
 
   useEffect(() => {
     const canvas = exportPreviewCanvasRef.current;
