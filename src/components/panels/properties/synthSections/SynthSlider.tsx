@@ -3,6 +3,16 @@
 // A tiny presentational control so every section reads the same and the range/
 // number pair (with clamping) is written once. Layout-agnostic: it renders one
 // `.audio-bus-control-row`, matching the rest of the properties panel.
+//
+// Motorized fader (plan §14): pass `paramId` to bind the control to the live-value
+// bus. During playback a ghost thumb + fill + value badge track the parameter's
+// live automated value, so the user sees WHAT is changing and to WHAT value. The
+// real thumb stays at the user's base value (we never write the animated value
+// back — the additive audio model is untouched). The overlay updates imperatively
+// off the bus, so an animating slider never triggers a React re-render.
+
+import { useEffect, useRef } from 'react';
+import { liveParamBus } from '../../../../services/midi/instrumentParams/liveParamBus';
 
 interface SynthSliderProps {
   label: string;
@@ -12,22 +22,64 @@ interface SynthSliderProps {
   step?: number;
   /** Optional unit shown after the label (e.g. "Hz", "s", "cents"). */
   unit?: string;
+  /** Bind to the live-value bus under this id to show the motorized ghost. */
+  paramId?: string;
   onChange: (value: number) => void;
 }
 
-export function SynthSlider({ label, value, min, max, step = 0.01, unit, onChange }: SynthSliderProps) {
+function formatLive(value: number, unit?: string, max?: number): string {
+  if (unit === 'Hz') return value >= 1000 ? `${(value / 1000).toFixed(1)}k` : String(Math.round(value));
+  if (max !== undefined && max <= 1) return value.toFixed(2);
+  return String(Math.round(value));
+}
+
+export function SynthSlider({ label, value, min, max, step = 0.01, unit, paramId, onChange }: SynthSliderProps) {
   const clamp = (v: number) => Math.max(min, Math.min(max, Number.isFinite(v) ? v : min));
+  const rowRef = useRef<HTMLLabelElement | null>(null);
+  const fillRef = useRef<HTMLDivElement | null>(null);
+  const thumbRef = useRef<HTMLDivElement | null>(null);
+  const badgeRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!paramId) return;
+    return liveParamBus.subscribe(paramId, (live) => {
+      const row = rowRef.current;
+      if (!row) return;
+      if (live === undefined || max === min) {
+        row.classList.remove('is-automating');
+        return;
+      }
+      const pct = Math.max(0, Math.min(1, (live - min) / (max - min))) * 100;
+      row.classList.add('is-automating');
+      if (fillRef.current) fillRef.current.style.width = `${pct}%`;
+      if (thumbRef.current) thumbRef.current.style.left = `${pct}%`;
+      if (badgeRef.current) {
+        badgeRef.current.style.left = `${pct}%`;
+        badgeRef.current.textContent = formatLive(live, unit, max);
+      }
+    });
+  }, [paramId, min, max, unit]);
+
   return (
-    <label className="audio-bus-control-row">
+    <label ref={rowRef} className={`audio-bus-control-row synth-slider${paramId ? ' synth-slider-live' : ''}`}>
       <span>{unit ? `${label} (${unit})` : label}</span>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(clamp(Number(e.currentTarget.value)))}
-      />
+      <div className="synth-slider-track">
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          onChange={(e) => onChange(clamp(Number(e.currentTarget.value)))}
+        />
+        {paramId && (
+          <>
+            <div ref={fillRef} className="synth-slider-ghost-fill" />
+            <div ref={thumbRef} className="synth-slider-ghost-thumb" />
+            <div ref={badgeRef} className="synth-slider-badge" />
+          </>
+        )}
+      </div>
       <input
         type="number"
         min={min}

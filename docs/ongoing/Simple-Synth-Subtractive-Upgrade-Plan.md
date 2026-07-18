@@ -476,3 +476,100 @@ Captured so they aren't lost; not yet built.
   renders every LFO per-voice.
 - **Tempo-synced LFO rate.** Schema ships free-run Hz; a tempo-sync division field
   is a later add (Wobble Bass wants 1/8-note sync).
+
+---
+
+## 14. Motorized-fader infrastructure (§13-A, promoted to active) — GENERAL
+
+Deferred follow-up (A) is being built now, but **as instrument-agnostic
+infrastructure**, not a Simple-Synth one-off. The goal: any instrument (Simple
+Synth today, Wavetable next, a compiled-DSP instrument later) declares its
+parameters once, and the UI can show the **live automated value** of any
+parameter so the user *sees on the panel what is changing and to what value*.
+
+### 14.1 Core decision — re-derive, don't read the DSP
+
+The audio bakes schedule-ahead onto AudioParams and must render identically
+offline; the live DSP value is not cleanly readable and won't be once the DSP
+moves to a FAUST/WASM worklet (§3a). So the displayed value is **re-derived**
+from data we already own — `base patch value + clip-automation lane sampled at
+the playhead` (`sampleLaneAt` in `midiAutomationWindow.ts`, already pure). This
+evaluator is the single source of truth: deterministic, offline-parity, and
+**DSP-swap-proof** (same durable tier as the schema + seam). It never writes the
+animated value back to the base patch — the additive audio model is untouched.
+
+### 14.2 Scope — Tier 1 only (locked)
+
+- **Tier 1 (this work):** clip-level automation (the four CC lanes) + base.
+  Instrument-agnostic, needs nothing from the DSP.
+- **Tier 2 (documented seam, NOT built):** per-voice modulation (filter env,
+  LFO, velocity) is per-note and only exists while a voice sounds; a faithful
+  read-out would need an optional `getMeter()` tap on `IMidiSynth`, which is
+  inherently per-DSP. Left as a seam for after the WASM direction settles.
+
+### 14.3 The four pieces
+
+1. **Parameter descriptors, per instrument `kind` (registry).** Each instrument
+   lists its animatable params: stable `id` (e.g. `'filter.cutoff'`), label,
+   min/max, unit, `getBase(inst)`, the feeding automation `lane`
+   (`keyof MidiClipAutomation` | none), and a `combine(base, laneNorm)` rule
+   (additive for mod/expression/pitchBend; the cutoff lane's mapping normalized
+   0..1 → Hz). A new instrument adds one descriptor list; everything downstream
+   just works. Registry: `getInstrumentParamModel(kind)`.
+2. **Pure evaluator** — `evaluateParamAt(descriptor, instrument, automation,
+   time)`: `combine(getBase, sampleLaneAt(automation[lane], time))`. Returns
+   `undefined` when the param has no active lane, so the UI knows not to animate.
+3. **Live-value bus driven imperatively by the playhead clock.** Pushing the
+   playhead into Zustand every frame would re-render the whole properties panel;
+   instead a single rAF subscription (the clock the piano-roll playhead already
+   follows) samples time, runs the evaluator for the *subscribed* params, and
+   pushes values into a lightweight non-React channel. Controls update their own
+   DOM. Zero React re-renders per frame — same ref-follow pattern as
+   `PianoRoll.syncRulerScroll`.
+4. **Generalized animated control** — extend `SynthSlider` into an
+   `AnimatedParamControl(paramId, …)` that subscribes to the bus and paints a
+   **ghost thumb + fill** at the live value in a distinct color (glow when
+   moving). The user's real thumb stays at the *base* value and stays editable.
+   Any instrument's UI reuses it. Fixes the earlier gap for free: editing a CC
+   lane now moves the matching slider's ghost, because both read one evaluator.
+
+### 14.4 Packets
+
+- **Packet A (durable, pure):** descriptor types + simple-synth descriptor list +
+  registry + `evaluateParamAt`, in `src/services/midi/instrumentParams/`. Light
+  unit test. No UI, no clock.
+- **Packet B:** live-value bus + playhead-clock driver hook (imperative).
+- **Packet C:** `AnimatedParamControl` (ghost thumb) + wire descriptors into the
+  synth sections. Check in on the visual/UX before finalizing.
+
+Simple-Synth Tier-1 param ↔ lane map: **Filter cutoff ↔ `cutoff` lane**
+(0..1→Hz), **Gain/amp ↔ `expression` lane** (additive scale), **LFO(pitch)
+depth ↔ `mod` lane** (additive vibrato). Pitch bend has no natural panel slider
+(small pitch read-out only, or skip a ghost). Wavetable registers `gain` (no
+lanes yet → no animation, but the plumbing is present).
+
+### 14.5 Implementation status — Tier 1 DONE (uncommitted)
+
+- **Packet A (durable, pure): DONE.** `src/services/midi/instrumentParams/`
+  (`instrumentParamTypes.ts`, `simpleSynthParams.ts`, `index.ts` = registry
+  `getInstrumentParamModel` + `evaluateParamAt`). CC-range mapping constants
+  (`CUTOFF_CC_RANGE_HZ`, `MOD_WHEEL_VIBRATO_CENTS`) moved into the shared pure
+  leaf `synthVoiceMath.ts` so the DSP bake and the UI evaluator use ONE source of
+  truth. Test `tests/unit/instrumentParams.test.ts`.
+- **Packet B (bus + clock): DONE.** `liveParamBus.ts` (framework-free pub/sub),
+  `activeMidiClip.ts` (`activeMidiClipAt`/`clipContentTimeAt` — MIDI clip under
+  the playhead on a track, global→content time), driver hook
+  `synthSections/useLiveInstrumentParams.ts` (rAF loop reading
+  `getPlayheadPosition`, publishes per-param live values while playing). Test
+  `tests/unit/liveParamBus.test.ts`.
+- **Packet C (UI): DONE.** `SynthSlider` extended with optional `paramId` → an
+  imperative ghost (fill + thumb + value badge, teal, `.is-automating` glow) that
+  subscribes to the bus and updates DOM without re-rendering. Wired: Filter Cutoff
+  (`filter.cutoff`), Oscillator Gain (`gain`), pitch-LFO Depth
+  (`lfo.<id>.depth`). Driver mounted in `MidiInstrumentTab`. CSS in
+  `PropertiesPanel.css`.
+
+All green: `tsc -b`, eslint on the write-set, focused vitest (21 tests). Not yet
+committed (no git ops requested). **Not yet verified live in the running app** —
+the ghost movement should be watched during playback of a clip with a cutoff/mod/
+expression lane. Tier 2 (`getMeter()` per-voice tap) remains a documented seam.

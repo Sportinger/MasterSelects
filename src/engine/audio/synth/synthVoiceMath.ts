@@ -31,6 +31,13 @@ export function semitonesToHzDelta(freqHz: number, semitones: number): number {
   return freqHz * (Math.pow(2, semitones / 12) - 1);
 }
 
+// CC-lane → value mapping contract (shared by the DSP bake AND the UI live-value
+// evaluator so the motorized-fader read-out matches what is actually rendered,
+// plan §14). These define the *meaning* of a normalized lane value; they are the
+// durable mapping, not disposable node code, so they live in this pure leaf.
+export const CUTOFF_CC_RANGE_HZ = 8000;    // full cutoff lane (1.0) adds up to +8 kHz
+export const MOD_WHEEL_VIBRATO_CENTS = 50; // full mod wheel (1.0) adds up to 50c vibrato
+
 // Keytracking reference: cutoff shift is measured relative to middle C, so notes
 // above it open the filter and notes below close it.
 export const KEYTRACK_REFERENCE_PITCH = 60;

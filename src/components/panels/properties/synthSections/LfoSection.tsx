@@ -55,6 +55,7 @@ export function LfoSection({ instrument, onChange }: SynthSectionProps) {
             <SynthSlider label="Depth" unit={targetOption?.depthUnit}
               value={lfo.depth} min={0} max={lfo.target === 'amp' ? 1 : lfo.target === 'pitch' ? 100 : 5000}
               step={lfo.target === 'amp' ? 0.01 : 1}
+              paramId={lfo.target === 'pitch' ? `lfo.${lfo.id}.depth` : undefined}
               onChange={(depth) => patchLfo(lfo.id, { depth })} />
             <label className="audio-bus-control-row audio-bus-control-row-compact">
               <span>Global (shared)</span>

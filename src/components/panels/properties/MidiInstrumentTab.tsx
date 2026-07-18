@@ -16,6 +16,7 @@ import {
   type MidiAdsr,
 } from '../../../types/midiClip';
 import { GM_PICKER_FAMILIES, GM_PROGRAM_NAMES, GM_PICKER_DRUM_KITS } from '../../../types/gmPrograms';
+import { useLiveInstrumentParams } from './synthSections/useLiveInstrumentParams';
 import { PresetSection } from './synthSections/PresetSection';
 import { OscillatorSection } from './synthSections/OscillatorSection';
 import { FilterSection } from './synthSections/FilterSection';
@@ -29,7 +30,12 @@ interface MidiInstrumentTabProps {
 
 export function MidiInstrumentTab({ track }: MidiInstrumentTabProps) {
   const setTrackMidiInstrument = useTimelineStore(state => state.setTrackMidiInstrument);
+  const isPlaying = useTimelineStore(state => state.isPlaying);
   const instrument: MidiInstrument = track.midiInstrument ?? createDefaultMidiInstrument();
+
+  // Drive the motorized-fader read-out: publishes each param's live automated
+  // value to the bus while playing; the animated SynthSliders subscribe (plan §14).
+  useLiveInstrumentParams(track.id, instrument, isPlaying);
 
   return (
     <div className="properties-tab-content audio-bus-properties-tab">

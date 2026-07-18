@@ -1717,6 +1717,67 @@
   grid-template-columns: minmax(68px, 90px) minmax(0, 1fr);
 }
 
+/* Motorized-fader ghost overlay (plan §14). The middle grid cell wraps the range
+   input so a live-value ghost (fill + thumb + badge) can be positioned over it.
+   All ghost parts are pointer-events:none so the real thumb stays draggable. */
+.synth-slider-track {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+.synth-slider-track > input[type="range"] {
+  width: 100%;
+  display: block;
+  position: relative;
+  z-index: 1;
+}
+.synth-slider-ghost-fill,
+.synth-slider-ghost-thumb,
+.synth-slider-badge {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.synth-slider.is-automating .synth-slider-ghost-fill,
+.synth-slider.is-automating .synth-slider-ghost-thumb,
+.synth-slider.is-automating .synth-slider-badge {
+  opacity: 1;
+}
+.synth-slider-ghost-fill {
+  left: 0;
+  top: 50%;
+  height: 4px;
+  width: 0;
+  transform: translateY(-50%);
+  background: linear-gradient(90deg, rgba(45, 212, 191, 0.15), rgba(45, 212, 191, 0.5));
+  border-radius: 2px;
+  z-index: 2;
+}
+.synth-slider-ghost-thumb {
+  top: 50%;
+  width: 2px;
+  height: 16px;
+  transform: translate(-50%, -50%);
+  background: #2dd4bf;
+  box-shadow: 0 0 6px rgba(45, 212, 191, 0.9);
+  border-radius: 1px;
+  z-index: 3;
+}
+.synth-slider-badge {
+  bottom: calc(100% + 3px);
+  transform: translateX(-50%);
+  font-size: 10px;
+  line-height: 1;
+  padding: 1px 4px;
+  color: #04201d;
+  background: #2dd4bf;
+  border-radius: 3px;
+  white-space: nowrap;
+  z-index: 4;
+}
+
 .audio-bus-control-row input[type="range"],
 .audio-bus-control-row select {
   min-width: 0;

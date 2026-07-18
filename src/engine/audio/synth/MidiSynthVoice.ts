@@ -21,15 +21,16 @@ import {
   clamp01,
   clampFilterHz,
   clampFilterQ,
+  CUTOFF_CC_RANGE_HZ,
   keytrackCutoffHz,
   midiPitchToFrequency,
+  MOD_WHEEL_VIBRATO_CENTS,
   semitonesToHzDelta,
 } from './synthVoiceMath';
 
-// Mapping choices for the performed CC lanes (the disposable DSP hardwires the four
-// lanes to their canonical destinations — see the note in scheduleNote's caller).
-const CUTOFF_CC_RANGE_HZ = 8000;      // full cutoff lane (1.0) adds up to +8 kHz
-const MOD_WHEEL_VIBRATO_CENTS = 50;   // full mod wheel (1.0) adds up to 50c vibrato
+// The disposable DSP hardwires the four performed CC lanes to their canonical
+// destinations (see scheduleNote's caller); the 0..1 → value mapping now lives in
+// synthVoiceMath so the UI live-value evaluator shares it exactly (plan §14).
 const CURVE_CONTROL_HZ = 120;         // automation → setValueCurve sampling rate
 const CURVE_MAX_SAMPLES = 512;        // bound the curve array for long notes
 
