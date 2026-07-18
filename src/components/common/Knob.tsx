@@ -90,24 +90,35 @@ export function Knob({
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (disabled || e.button !== 0) return;
+    // Keep the drag entirely on the knob: capture the pointer and stop the event
+    // from reaching the scrollable properties panel (no pointer lock — that made
+    // the browser scroll the panel to keep the locked element in view). Focus
+    // without scrolling so a below-the-fold knob doesn't jump the panel either.
     e.preventDefault();
+    e.stopPropagation();
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture?.(e.pointerId);
+    el.focus?.({ preventScroll: true });
     const startPos = valueToPosition(value, min, max, scale, gamma);
     let acc = 0;
-    (e.currentTarget as HTMLElement).requestPointerLock?.();
+    let lastY = e.clientY;
 
-    const move = (ev: MouseEvent) => {
+    const move = (ev: PointerEvent) => {
       const fine = ev.shiftKey ? 0.25 : ev.ctrlKey ? 0.05 : 1;
-      acc += -ev.movementY * fine; // drag up = increase
+      acc += (lastY - ev.clientY) * fine; // drag up = increase
+      lastY = ev.clientY;
       const nextPos = Math.max(0, Math.min(1, startPos + acc / DRAG_RANGE_PX));
       onChange(quantize(positionToValue(nextPos, min, max, scale, gamma)));
     };
-    const up = () => {
-      document.exitPointerLock?.();
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', up);
+    const up = (ev: PointerEvent) => {
+      el.releasePointerCapture?.(ev.pointerId);
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
     };
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up);
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
   }, [disabled, value, min, max, scale, gamma, onChange, quantize]);
 
   const reset = useCallback((e: React.MouseEvent) => {

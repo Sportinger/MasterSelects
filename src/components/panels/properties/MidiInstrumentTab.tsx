@@ -132,10 +132,14 @@ function SimpleSynthSections({
   return (
     <>
       <PresetSection instrument={instrument} onChange={onChange} />
-      <OscillatorSection instrument={instrument} onChange={onChange} />
-      <FilterSection instrument={instrument} onChange={onChange} />
-      <EnvelopeSection title="Amp Envelope" adsr={ampAdsr} onChange={(adsr) => onChange({ adsr })} />
-      <EnvelopeSection title="Filter Envelope" adsr={filterEnv} onChange={(env) => onChange({ filterEnv: env })} />
+      <div className="synth-section-row">
+        <OscillatorSection instrument={instrument} onChange={onChange} />
+        <EnvelopeSection title="Amp Envelope" adsr={ampAdsr} onChange={(adsr) => onChange({ adsr })} />
+      </div>
+      <div className="synth-section-row">
+        <FilterSection instrument={instrument} onChange={onChange} />
+        <EnvelopeSection title="Filter Envelope" adsr={filterEnv} onChange={(env) => onChange({ filterEnv: env })} />
+      </div>
       <LfoSection instrument={instrument} onChange={onChange} />
       <ModMatrixSection instrument={instrument} onChange={onChange} />
     </>

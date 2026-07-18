@@ -12,8 +12,9 @@ describe('synth panel sections (smoke)', () => {
   it('OscillatorSection renders and patches gain', () => {
     const onChange = vi.fn();
     const { container } = render(<OscillatorSection instrument={inst()} onChange={onChange} />);
-    const range = container.querySelector('input[type="range"]') as HTMLInputElement;
-    fireEvent.change(range, { target: { value: '0.5' } });
+    // Gain is now a knob (role="slider"); arrow keys nudge its value.
+    const knob = container.querySelector('[role="slider"]') as HTMLElement;
+    fireEvent.keyDown(knob, { key: 'ArrowUp' });
     expect(onChange).toHaveBeenCalled();
   });
 

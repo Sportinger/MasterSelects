@@ -11,6 +11,7 @@ note here when a plan still has unresolved gates or intentionally deferred work.
 | [Browser-Local-Background-Removal-Plan.md](./Browser-Local-Background-Removal-Plan.md) | Planning | Browser-local background removal is still open. |
 | [Native-Helper-Codec-Service.md](./Native-Helper-Codec-Service.md) | Draft plan | Native helper codec commands are not implemented server-side yet. |
 | [Transition-Nested-Composition-Architecture.md](./Transition-Nested-Composition-Architecture.md) | Runtime smoke pending | Transition rendering is now statically rebuilt as hidden nested compositions; Bridge/export smoke checks still need approval. |
+| [Timeline-Section-Split-Jitter-Bug.md](./Timeline-Section-Split-Jitter-Bug.md) | **TODO / open bug** | Timeline section jitters vertically when editing a selected track's panel in a short window; root-caused with live data, fix not started (pre-existing, not synth). |
 
 ## Recently Archived
 

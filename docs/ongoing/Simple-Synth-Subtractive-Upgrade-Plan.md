@@ -569,7 +569,34 @@ lanes yet → no animation, but the plumbing is present).
   (`lfo.<id>.depth`). Driver mounted in `MidiInstrumentTab`. CSS in
   `PropertiesPanel.css`.
 
-All green: `tsc -b`, eslint on the write-set, focused vitest (21 tests). Not yet
-committed (no git ops requested). **Not yet verified live in the running app** —
-the ghost movement should be watched during playback of a clip with a cutoff/mod/
-expression lane. Tier 2 (`getMeter()` per-voice tap) remains a documented seam.
+All green: `tsc -b`, eslint on the write-set, focused vitest (21 tests). Tier 1
+committed (`b9ca25dc`). Tier 2 (`getMeter()` per-voice tap) remains a documented
+seam.
+
+### 14.6 Control-UX follow-ups (DONE, committed)
+
+Built on top of Tier 1; all reuse the same descriptor/bus plumbing.
+
+- **Perceptual slider tapers** (`999d99b3`). `src/components/common/sliderScale.ts`
+  = pure `valueToPosition`/`positionToValue` for `'linear' | 'log' | 'power'`.
+  `SynthSlider` gained a `scale` prop: a non-linear scale runs the native range on
+  normalized position [0,1] and maps through the taper; the motorized ghost uses
+  the SAME map so fader and ghost stay in lockstep. Assignments: **log** = cutoff,
+  LFO rate (equal travel per octave); **power** (γ2, reaches 0) = gain, envelope
+  A/D/R, filter-target LFO depth; linear = the rest (cents already log; env amount
+  is bipolar). Test `tests/unit/sliderScale.test.ts`.
+- **General `Knob` component** (`1b43179a`). `src/components/common/Knob.tsx`
+  (+`Knob.css`) — a project-general rotary control (taper-aware, vertical
+  drag-to-turn with Shift/Ctrl fine, right-click/double-click reset, `role=slider`
+  a11y). **No MIDI dependency**: a generic `subscribeLive(cb) => unsub` prop drives
+  an imperative automation overlay (teal arc/dot, no re-render), so any live source
+  can animate it. `synthSections/SynthKnob.tsx` is the thin wrapper binding
+  `paramId → liveParamBus` (mirrors `SynthSlider`). **FilterSection** rebuilt as a
+  compact knob row (Cutoff live-automated / Res / Env Amt bipolar / Key Trk),
+  saving vertical space. `sliderScale.ts` moved to `common/` (slider + knob share
+  it). Reuse elsewhere: use `common/Knob` with your own `subscribeLive` (or none).
+- **Piano-roll "Velocity" toggle renamed "Controllers"** (`999d99b3`) — the
+  controller-area toggle now hosts velocity + the four CC lanes, so the old label
+  was a misnomer.
+
+Not yet verified live in the running app (knob drag + Cutoff arc during playback).

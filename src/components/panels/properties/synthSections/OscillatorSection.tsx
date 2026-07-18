@@ -1,7 +1,9 @@
 // Oscillator + global controls (#298): waveform, master gain, pitch-bend range.
+// Gain and bend range are knobs (compact, consistent with the Filter section);
+// Gain shows its live automated value during playback via the `gain` paramId.
 
 import { MIDI_WAVEFORM_OPTIONS } from '../../../../types/midiClip';
-import { SynthSlider } from './SynthSlider';
+import { SynthKnob } from './SynthKnob';
 import type { SynthSectionProps } from './synthSectionTypes';
 
 export function OscillatorSection({ instrument, onChange }: SynthSectionProps) {
@@ -19,15 +21,18 @@ export function OscillatorSection({ instrument, onChange }: SynthSectionProps) {
           ))}
         </select>
       </label>
-      <SynthSlider
-        label="Gain" value={instrument.gain} min={0} max={1} scale="power" paramId="gain"
-        onChange={(gain) => onChange({ gain })}
-      />
-      <SynthSlider
-        label="Pitch Bend Range" unit="semitones" step={1}
-        value={instrument.pitchBendRange ?? 2} min={0} max={24}
-        onChange={(pitchBendRange) => onChange({ pitchBendRange })}
-      />
+      <div className="synth-knob-row">
+        <SynthKnob
+          label="Gain" value={instrument.gain} min={0} max={1} scale="power"
+          step={0.01} defaultValue={0.8} paramId="gain"
+          onChange={(gain) => onChange({ gain })}
+        />
+        <SynthKnob
+          label="Bend Rng" unit="st" value={instrument.pitchBendRange ?? 2} min={0} max={24}
+          step={1} defaultValue={2}
+          onChange={(pitchBendRange) => onChange({ pitchBendRange })}
+        />
+      </div>
     </div>
   );
 }

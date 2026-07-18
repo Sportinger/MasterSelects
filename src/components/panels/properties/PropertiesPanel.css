@@ -1717,6 +1717,59 @@
   grid-template-columns: minmax(68px, 90px) minmax(0, 1fr);
 }
 
+/* Classic ADSR envelope graphic (EnvelopeGraph.tsx). Stretches to fill width;
+   non-scaling strokes keep line weight uniform under the non-uniform viewBox. */
+.envelope-graph {
+  width: 100%;
+  max-width: 200px;
+  height: 54px;
+  display: block;
+  margin: var(--sp-1) auto var(--sp-1-5);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+.envelope-graph line,
+.envelope-graph polyline,
+.envelope-graph path {
+  vector-effect: non-scaling-stroke;
+}
+.envelope-graph-base {
+  stroke: rgba(255, 255, 255, 0.14);
+  stroke-width: 1;
+}
+.envelope-graph-guide {
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+.envelope-graph-fill {
+  fill: rgba(45, 140, 235, 0.16);
+  stroke: none;
+}
+.envelope-graph-line {
+  fill: none;
+  stroke: #2d8ceb;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.envelope-graph-dot {
+  fill: #7fbcff;
+}
+
+/* Two synth sections side by side (Oscillator | Amp Envelope). Each keeps its
+   own card; they share the row width equally and can shrink to wrap their knobs. */
+.synth-section-row {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: flex-start;
+}
+.synth-section-row > .properties-section {
+  flex: 1;
+  min-width: 0;
+}
+
 /* Compact knob row for synth sections — knobs wrap and space out evenly. */
 .synth-knob-row {
   display: flex;
