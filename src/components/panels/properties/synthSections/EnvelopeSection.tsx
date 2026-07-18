@@ -24,7 +24,10 @@ export function EnvelopeSection({ title, adsr, onChange, timeMax = 4 }: Envelope
   return (
     <div className="properties-section">
       <h4>{title}</h4>
-      <EnvelopeGraph attack={adsr.attack} decay={adsr.decay} sustain={adsr.sustain} release={adsr.release} />
+      <EnvelopeGraph
+        attack={adsr.attack} decay={adsr.decay} sustain={adsr.sustain} release={adsr.release}
+        timeMax={timeMax} onChange={set}
+      />
       <div className="synth-knob-row">
         <Knob label="Attack" unit="s" value={adsr.attack} min={0} max={timeMax} scale="power"
           onChange={(attack) => set({ attack })} />

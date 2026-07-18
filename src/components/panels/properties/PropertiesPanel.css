@@ -1756,6 +1756,19 @@
 .envelope-graph-dot {
   fill: #7fbcff;
 }
+.envelope-graph-dot.editable {
+  fill: #cfe0ff;
+  r: 2;
+}
+/* Transparent, larger grab target over each editable breakpoint. */
+.envelope-graph-hit {
+  fill: transparent;
+  pointer-events: all;
+  cursor: grab;
+}
+.envelope-graph-hit:active {
+  cursor: grabbing;
+}
 
 /* Two synth sections side by side (Oscillator | Amp Envelope). Each keeps its
    own card; they share the row width equally and can shrink to wrap their knobs. */

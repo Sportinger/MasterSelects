@@ -75,6 +75,7 @@ export const classCHardTargets = [
   { path: 'src/components/panels/properties/TranscriptTab.tsx', maxCurrentHits: 3 },
   { path: 'src/components/panels/properties/TransformTab.tsx', maxCurrentHits: 2 },
   { path: 'src/components/panels/properties/VolumeTab.tsx', maxCurrentHits: 2 },
+  { path: 'src/components/panels/properties/synthSections/useLiveInstrumentParams.ts', maxCurrentHits: 1 },
   { path: 'src/components/panels/SAM2Panel.tsx', maxCurrentHits: 28 },
   { path: 'src/components/panels/sam2/MatAnyoneFileHelpers.ts', maxCurrentHits: 4 },
   { path: 'src/components/panels/TextTab.tsx', maxCurrentHits: 2 },
@@ -290,10 +291,8 @@ export const getStateAccessPolicyBaselines = {
   // only (669 -> 665 via the packet-188 Preview ceiling cut).
   // fileCount log (totals conserved per split redistribution):
   // 192 ->193(218) ->196(227) ->199(231) ->203(239) ->205(246) ->206(253/254)
-  // ->207(259) ->208(267) ->212(279) ->216(287) ->230(audio mixer) ->231(2.3.3) ->236(transition nested comps).
-  classCHardTargetFileCount: 236,
-  // 669 -> 665 (188) -> 664 (209) -> 659 (231) -> 658 (237) -> 657 (291)
-  // -> 664 (staging transition nested comps)
-  // -> 673 (#249 piano-roll 4 -> 13, merged into staging).
-  classCHardTargetMaxHits: 673,
+  // ->207(259) ->208(267) ->212(279) ->216(287) ->230(audio mixer) ->231(2.3.3) ->236(transition nested comps) ->237(#298 motorized-fader rAF hook).
+  classCHardTargetFileCount: 237,
+  // 669 ->665(188) ->664(209) ->659(231) ->658(237) ->657(291) ->664(nested comps) ->673(#249 piano-roll) ->674(#298 rAF hook).
+  classCHardTargetMaxHits: 674,
 } as const;

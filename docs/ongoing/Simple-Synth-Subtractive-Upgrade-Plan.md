@@ -598,5 +598,20 @@ Built on top of Tier 1; all reuse the same descriptor/bus plumbing.
 - **Piano-roll "Velocity" toggle renamed "Controllers"** (`999d99b3`) — the
   controller-area toggle now hosts velocity + the four CC lanes, so the old label
   was a misnomer.
+- **Whole synth panel is knob-based + 2-up layout** (`434a4d3d`, `99bbdcc5`).
+  Oscillator (Gain, Bend Rng), both ADSR envelopes, LFO (Rate/Depth), and Mod
+  Matrix (Amount) all use the knob; sections pair up (Instrument|Preset,
+  Oscillator|Filter, Amp|Filter envelope, LFO ⅔|Mod Matrix ⅓); LFOs lay out
+  two-up. Also fixed a real load-failure bug: the history serializer flagged ANY
+  key named `source` as a runtime handle, so a mod-matrix route's string `source`
+  aborted project load — now it only guards object-valued keys (`99bbdcc5`).
+- **Interactive ADSR envelope graph** (`EnvelopeGraph.tsx`). Each of A/D/R maps
+  its REAL value into its own fixed-width slot (independent — turning Decay never
+  moves the attack curve); release is anchored to the right edge and measured
+  backwards; sustain is the flexible plateau level. Breakpoints are draggable with
+  absolute cursor tracking and flow through the same `onChange` as the knobs, so
+  graph + knobs + audio stay in sync. Level (height) is linear (matches the
+  sustain knob); time uses a graph-only power taper (γ3) tuned for looks — the
+  graph is self-consistent for dragging regardless of the knob taper.
 
 Not yet verified live in the running app (knob drag + Cutoff arc during playback).
