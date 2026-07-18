@@ -2,6 +2,7 @@ import { createOpenAIChatCompletion } from '../openai';
 import type { Env } from '../env';
 
 export type HostedChatRole = 'assistant' | 'developer' | 'system' | 'tool' | 'user';
+export type HostedChatReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh';
 
 export interface HostedChatMessage {
   content: unknown;
@@ -24,6 +25,7 @@ export interface HostedChatRequest {
   messages: HostedChatMessage[];
   model: string;
   response_format?: Record<string, unknown>;
+  reasoning_effort?: HostedChatReasoningEffort;
   stream?: boolean;
   tool_choice?: unknown;
   tools?: unknown;
@@ -48,6 +50,12 @@ function normalizeNumericValue(value: unknown): number | undefined {
   }
 
   return value;
+}
+
+function normalizeReasoningEffort(value: unknown): HostedChatReasoningEffort | undefined {
+  return typeof value === 'string' && ['none', 'low', 'medium', 'high', 'xhigh'].includes(value)
+    ? value as HostedChatReasoningEffort
+    : undefined;
 }
 
 function normalizeToolCalls(value: unknown): HostedChatMessage['tool_calls'] | undefined {
@@ -139,6 +147,7 @@ export function normalizeHostedChatRequest(body: unknown): HostedChatRequest | n
     messages,
     model,
     response_format: isRecord(body.response_format) ? body.response_format : undefined,
+    reasoning_effort: normalizeReasoningEffort(body.reasoning_effort),
     stream: body.stream === true,
     tool_choice: body.tool_choice,
     tools: body.tools,
@@ -154,6 +163,7 @@ export async function runHostedChatCompletion(env: Env, request: HostedChatReque
     messages: request.messages,
     model: request.model,
     response_format: request.response_format,
+    reasoning_effort: request.reasoning_effort,
     stream: false,
     tool_choice: request.tool_choice,
     tools: request.tools,

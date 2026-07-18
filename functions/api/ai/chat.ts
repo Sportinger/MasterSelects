@@ -289,6 +289,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     messages: request.messages,
     model: request.model,
     response_format: request.response_format,
+    reasoning_effort: request.reasoning_effort,
     stream: false,
     tool_choice: request.tool_choice,
     tools: request.tools,

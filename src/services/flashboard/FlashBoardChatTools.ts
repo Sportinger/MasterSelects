@@ -8,6 +8,10 @@ import {
 } from '../aiTools';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { FLASHBOARD_CHAT_MAX_TOOL_ITERATIONS, FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS } from './FlashBoardChatConfig';
+import {
+  findFlashBoardChatImageData,
+  redactFlashBoardChatImageData,
+} from './FlashBoardChatImageData';
 import type {
   AnthropicToolDefinition,
   FlashBoardApprovalMode,
@@ -30,6 +34,20 @@ export const ANTHROPIC_TOOLS: AnthropicToolDefinition[] = AI_TOOLS.map((tool) =>
   description: tool.function.description,
   input_schema: tool.function.parameters,
 }));
+
+export function getFlashBoardToolResultImage(toolResult: FlashBoardExecutedToolCall): {
+  base64: string;
+  dataUrl: string;
+  mediaType: string;
+} | null {
+  return findFlashBoardChatImageData(toolResult.result.data);
+}
+
+export function prepareFlashBoardToolCallsForHistory(
+  toolCalls: FlashBoardExecutedToolCall[],
+): FlashBoardExecutedToolCall[] {
+  return redactFlashBoardChatImageData(toolCalls);
+}
 
 function parseToolArguments(rawArguments: string): Record<string, unknown> {
   try {
@@ -217,6 +235,7 @@ export async function runChatCompletionToolLoop(
   providerName: string,
   maxToolResultChars = FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS,
   onExecutedToolCalls?: (toolCalls: FlashBoardExecutedToolCall[]) => void,
+  includeToolResultImages = false,
 ): Promise<string> {
   const executedToolCalls: FlashBoardExecutedToolCall[] = [];
 
@@ -246,13 +265,25 @@ export async function runChatCompletionToolLoop(
 
     const toolResults = await executeFlashBoardToolCalls(result.toolCalls, maxToolResultChars);
     executedToolCalls.push(...toolResults);
-    onExecutedToolCalls?.(toolResults);
+    onExecutedToolCalls?.(prepareFlashBoardToolCallsForHistory(toolResults));
     for (const toolResult of toolResults) {
       messages.push({
         role: 'tool',
         content: toolResult.modelContent,
         tool_call_id: toolResult.toolCall.id,
       });
+    }
+    if (includeToolResultImages) {
+      for (const toolResult of toolResults) {
+        const image = getFlashBoardToolResultImage(toolResult);
+        if (image) {
+          messages.push({
+            role: 'user',
+            content: `Visual output from ${toolResult.toolCall.name}:`,
+            imageDataUrl: image.dataUrl,
+          });
+        }
+      }
     }
   }
 

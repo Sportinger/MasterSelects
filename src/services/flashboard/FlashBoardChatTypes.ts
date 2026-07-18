@@ -51,6 +51,7 @@ export interface FlashBoardExecutedToolCall {
 
 export interface FlashBoardChatCompletionMessage {
   content: string | null;
+  imageDataUrl?: string;
   role: 'system' | 'user' | 'assistant' | 'tool';
   tool_call_id?: string;
   tool_calls?: Array<{
@@ -99,13 +100,22 @@ export interface AnthropicToolUseBlock {
 }
 
 export interface AnthropicToolResultBlock {
-  content: string;
+  content: string | Array<AnthropicTextBlock | AnthropicImageBlock>;
   is_error?: boolean;
   tool_use_id: string;
   type: 'tool_result';
 }
 
-export type AnthropicContentBlock = AnthropicTextBlock | AnthropicToolUseBlock | AnthropicToolResultBlock;
+export interface AnthropicImageBlock {
+  source: {
+    data: string;
+    media_type: string;
+    type: 'base64';
+  };
+  type: 'image';
+}
+
+export type AnthropicContentBlock = AnthropicTextBlock | AnthropicToolUseBlock | AnthropicToolResultBlock | AnthropicImageBlock;
 
 export interface AnthropicMessage {
   content: string | AnthropicContentBlock[];

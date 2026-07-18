@@ -5,6 +5,7 @@ import {
   getFlashBoardChatCreditLabel,
   sendFlashBoardChatMessage,
 } from '../../src/services/flashboard/FlashBoardChatService';
+import { normalizeHostedChatRequest } from '../../functions/lib/providers/openai';
 
 describe('FlashBoardChatService', () => {
   afterEach(() => {
@@ -95,6 +96,7 @@ describe('FlashBoardChatService', () => {
     const response = await sendFlashBoardChatMessage({
       hostedAvailable: true,
       model: 'gpt-5.5',
+      openAiReasoningEffort: 'none',
       prompt: 'Suggest lighting',
       provider: 'openai',
       temperature: 0.7,
@@ -110,11 +112,51 @@ describe('FlashBoardChatService', () => {
       max_completion_tokens: 2048,
       idempotencyKey: expect.stringMatching(/^flashboard-chat:/),
       model: 'gpt-5.5',
+      reasoning_effort: 'none',
       messages: [
         expect.objectContaining({ role: 'system' }),
         { role: 'user', content: 'Suggest lighting' },
       ],
     });
+  });
+
+  it('validates hosted reasoning effort at the API boundary', () => {
+    expect(normalizeHostedChatRequest({
+      messages: [{ role: 'user', content: 'Inspect this' }],
+      model: 'gpt-5.5',
+      reasoning_effort: 'xhigh',
+    })?.reasoning_effort).toBe('xhigh');
+    expect(normalizeHostedChatRequest({
+      messages: [{ role: 'user', content: 'Inspect this' }],
+      model: 'gpt-5.5',
+      reasoning_effort: 'invalid',
+    })?.reasoning_effort).toBeUndefined();
+  });
+
+  it('reports a hosted token limit instead of pretending tool work completed', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      kind: 'ai.chat',
+      mode: 'hosted',
+      ok: true,
+      provider: 'openai',
+      requestId: 'req-length',
+      status: 'completed',
+      data: {
+        choices: [{
+          finish_reason: 'length',
+          message: { content: null },
+        }],
+      },
+    }), { status: 200 })));
+
+    await expect(sendFlashBoardChatMessage({
+      hostedAvailable: true,
+      model: 'gpt-5.5',
+      openAiReasoningEffort: 'none',
+      prompt: 'Make a funny cut',
+      provider: 'openai',
+      temperature: 0.7,
+    })).rejects.toThrow('full 2048-token round budget');
   });
 
   it('lets Lemonade cold-start past the old 60s timeout window', async () => {

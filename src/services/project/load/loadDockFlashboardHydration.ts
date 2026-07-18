@@ -14,6 +14,7 @@ import { useExportStore } from '../../../stores/exportStore';
 import { useMIDIStore } from '../../../stores/midiStore';
 import { hydrateHistoryStateFromProject } from '../../../stores/historyStore';
 import { flashBoardMediaBridge } from '../../flashboard/FlashBoardMediaBridge';
+import { redactFlashBoardChatImageData } from '../../flashboard/FlashBoardChatImageData';
 import type {
   FlashBoardGenerationRequest,
   FlashBoardChatMessage,
@@ -206,7 +207,9 @@ function normalizeFlashBoardChatMessage(
     editOptions: Array.isArray(message.editOptions) ? message.editOptions : undefined,
     isError: message.isError || wasPending || undefined,
     isPending: false,
-    toolCalls: Array.isArray(message.toolCalls) ? message.toolCalls : undefined,
+    toolCalls: Array.isArray(message.toolCalls)
+      ? redactFlashBoardChatImageData(message.toolCalls)
+      : undefined,
   };
 }
 

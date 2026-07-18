@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { stringifyAiPayloadForStorage } from '../../functions/lib/aiAudit';
 import { blocksAiRequest, buildModerationInput, type AiModerationResult } from '../../functions/lib/aiModeration';
 
 function moderation(status: AiModerationResult['status'], flagged = false): AiModerationResult {
@@ -19,6 +20,20 @@ describe('hosted AI moderation helpers', () => {
     })).toBe('make a clip');
 
     expect(buildModerationInput([{ text: 'first' }, { prompt: 'second' }])).toBe('first\nsecond');
+  });
+
+  it('keeps captured image bytes out of moderation text and stored logs', () => {
+    const input = {
+      content: [
+        { type: 'text', text: 'describe the frame' },
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } },
+      ],
+    };
+
+    expect(buildModerationInput(input)).toContain('describe the frame');
+    expect(buildModerationInput(input)).not.toContain('AAAA');
+    expect(stringifyAiPayloadForStorage(input)).toContain('[image data omitted]');
+    expect(stringifyAiPayloadForStorage(input)).not.toContain('AAAA');
   });
 
   it('blocks flagged and failed moderation results', () => {

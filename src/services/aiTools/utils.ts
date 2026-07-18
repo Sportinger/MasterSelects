@@ -71,80 +71,81 @@ export async function captureFrameGrid(
 
   const originalPosition = timelineStore.playheadPosition;
 
-  // Capture each frame
-  for (let i = 0; i < times.length; i++) {
-    const time = times[i];
-    const col = i % columns;
-    const row = Math.floor(i / columns);
+  try {
+    // Capture each frame
+    for (let i = 0; i < times.length; i++) {
+      const time = times[i];
+      const col = i % columns;
+      const row = Math.floor(i / columns);
 
-    // Move playhead and give nested video providers enough time to settle.
-    timelineStore.setPlayheadPosition(Math.max(0, time));
-    renderHostPort.requestRender();
-    await waitForAnimationFrame();
-    await waitForTimeout(settleMs);
-    renderHostPort.requestRender();
-    await waitForAnimationFrame();
+      // Move playhead and give nested video providers enough time to settle.
+      timelineStore.setPlayheadPosition(Math.max(0, time));
+      renderHostPort.requestRender();
+      await waitForAnimationFrame();
+      await waitForTimeout(settleMs);
+      renderHostPort.requestRender();
+      await waitForAnimationFrame();
 
-    const capture = await captureRenderHostFrame(mode);
-    if (!capture.success) {
-      timelineStore.setPlayheadPosition(originalPosition);
-      return {
-        success: false,
-        error: capture.error,
-        data: {
-          frameTime: time,
-          requestedMode: mode,
-        },
-      };
+      const capture = await captureRenderHostFrame(mode);
+      if (!capture.success) {
+        return {
+          success: false,
+          error: capture.error,
+          data: {
+            frameTime: time,
+            requestedMode: mode,
+          },
+        };
+      }
+      await drawDataUrlToCanvas(
+        gridCtx,
+        capture.dataUrl,
+        col * frameWidth,
+        row * frameHeight,
+        frameWidth,
+        frameHeight
+      );
+
+      // Draw time label
+      gridCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      gridCtx.fillRect(col * frameWidth, row * frameHeight + frameHeight - 20, frameWidth, 20);
+      gridCtx.fillStyle = '#ffffff';
+      gridCtx.font = '12px monospace';
+      gridCtx.fillText(
+        `${time.toFixed(2)}s`,
+        col * frameWidth + 5,
+        row * frameHeight + frameHeight - 6
+      );
+
+      // Draw separator line between "before" and "after" rows if this is a cut preview
+      if (i === columns - 1 && rows === 2) {
+        gridCtx.strokeStyle = '#ff4444';
+        gridCtx.lineWidth = 2;
+        gridCtx.beginPath();
+        gridCtx.moveTo(0, frameHeight);
+        gridCtx.lineTo(gridCanvas.width, frameHeight);
+        gridCtx.stroke();
+      }
     }
-    await drawDataUrlToCanvas(
-      gridCtx,
-      capture.dataUrl,
-      col * frameWidth,
-      row * frameHeight,
-      frameWidth,
-      frameHeight
-    );
 
-    // Draw time label
-    gridCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    gridCtx.fillRect(col * frameWidth, row * frameHeight + frameHeight - 20, frameWidth, 20);
-    gridCtx.fillStyle = '#ffffff';
-    gridCtx.font = '12px monospace';
-    gridCtx.fillText(
-      `${time.toFixed(2)}s`,
-      col * frameWidth + 5,
-      row * frameHeight + frameHeight - 6
-    );
+    // Convert to PNG
+    const dataUrl = gridCanvas.toDataURL('image/png');
 
-    // Draw separator line between "before" and "after" rows if this is a cut preview
-    if (i === columns - 1 && rows === 2) {
-      gridCtx.strokeStyle = '#ff4444';
-      gridCtx.lineWidth = 2;
-      gridCtx.beginPath();
-      gridCtx.moveTo(0, frameHeight);
-      gridCtx.lineTo(gridCanvas.width, frameHeight);
-      gridCtx.stroke();
-    }
+    return {
+      success: true,
+      data: {
+        width: gridCanvas.width,
+        height: gridCanvas.height,
+        frameCount: times.length,
+        gridSize: `${columns}x${rows}`,
+        requestedMode: mode,
+        dataUrl,
+      },
+    };
+  } finally {
+    timelineStore.setPlayheadPosition(originalPosition);
+    renderHostPort.requestRender();
   }
-
-  // Restore original playhead position
-  timelineStore.setPlayheadPosition(originalPosition);
-
-  // Convert to PNG
-  const dataUrl = gridCanvas.toDataURL('image/png');
-
-  return {
-    success: true,
-    data: {
-      width: gridCanvas.width,
-      height: gridCanvas.height,
-      frameCount: times.length,
-      gridSize: `${columns}x${rows}`,
-      requestedMode: mode,
-      dataUrl,
-    },
-  };
 }
 
 // Helper to format clip info for AI
@@ -160,6 +161,8 @@ export function formatClipInfo(clip: TimelineClip, track: TimelineTrack | undefi
     duration: clip.duration,
     inPoint: clip.inPoint,
     outPoint: clip.outPoint,
+    speed: clip.speed ?? 1,
+    reversed: clip.reversed ?? false,
     sourceType: clip.source?.type,
     signalAssetId: clip.signalAssetId,
     signalRefId: clip.signalRefId,

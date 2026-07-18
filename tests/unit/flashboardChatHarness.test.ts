@@ -86,6 +86,15 @@ describe('FlashBoard chat harness prompt', () => {
     expect(prompt).toMatch(/splitting alone leaves the same video/i);
   });
 
+  it('does not stop transcript remixes after merely splitting the clip', () => {
+    expect(prompt).toMatch(/Transcript remix \/ funny sentence/i);
+    expect(prompt).toMatch(/Transcript timestamps are SOURCE time/);
+    expect(prompt).toMatch(/getClipDetails \+ getClipTranscript/);
+    expect(prompt).toMatch(/splitClipAtTimes.*getTimelineState.*reorderClips/s);
+    expect(prompt).toMatch(/Splitting is preparation, never completion/i);
+    expect(prompt).toMatch(/dependent calls sequentially in the SAME turn/i);
+  });
+
   it('warns that one giant batch truncates and large N must be chunked', () => {
     expect(prompt).toMatch(/2048 tokens/);
     expect(prompt).toMatch(/empty "0 steps" batch/i);
@@ -115,6 +124,8 @@ describe('FlashBoard chat harness prompt', () => {
   it('instructs the agent to self-verify edits with the preview tools', () => {
     expect(prompt).toContain('getCutPreviewQuad');
     expect(prompt).toMatch(/captureFrame|getFramesAtTimes/);
+    expect(prompt).toMatch(/3-8 evenly spaced frames/);
+    expect(prompt).toContain('A transcript alone is not visual evidence.');
   });
 
   it('warns about the timeline-vs-source time and linked-clip gotchas', () => {

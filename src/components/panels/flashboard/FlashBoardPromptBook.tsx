@@ -10,6 +10,7 @@ import {
   type SavedAiSystemPrompt,
 } from '../../../services/aiPromptLibrary';
 import { flashBoardMediaBridge } from '../../../services/flashboard/FlashBoardMediaBridge';
+import { redactFlashBoardChatImageData } from '../../../services/flashboard/FlashBoardChatImageData';
 import { useMediaStore } from '../../../stores/mediaStore';
 import type { MediaFile } from '../../../stores/mediaStore/types';
 import type { FlashBoardChatMessage } from './FlashBoardChatOutput';
@@ -296,7 +297,8 @@ function formatPromptBookToolJson(raw: string): string {
 }
 
 function formatPromptBookToolResult(result: unknown): string {
-  return typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+  const redacted = redactFlashBoardChatImageData(result);
+  return typeof redacted === 'string' ? redacted : JSON.stringify(redacted, null, 2);
 }
 
 function formatPromptBookExecutedToolBody(toolCall: PromptBookExecutedToolCall): string {

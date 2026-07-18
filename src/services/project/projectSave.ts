@@ -24,6 +24,7 @@ import { buildProjectAudioStateIndex } from '../audio/projectAudioState';
 import { createCurrentAudioArtifactStore } from '../audio/timelineWaveformPyramidCache';
 import { clonePersistedClipAudioState } from '../audio/clipAudioStatePersistence';
 import { flashBoardMediaBridge } from '../flashboard/FlashBoardMediaBridge';
+import { redactFlashBoardChatImageData } from '../flashboard/FlashBoardChatImageData';
 import { cloneClipNodeGraph } from '../nodeGraph';
 import { normalizeTransitionInstanceParams } from '../../transitions';
 import { syncTransitionCompositionTimelineToParent } from '../../stores/mediaStore/slices/composition/transitionCompositionSync';
@@ -375,7 +376,7 @@ function serializeFlashBoardChatMessage(message: FlashBoardChatMessage): Project
     editOptions: message.editOptions,
     isError: message.isError,
     isPending: message.isPending,
-    toolCalls: message.toolCalls,
+    toolCalls: redactFlashBoardChatImageData(message.toolCalls),
   };
 }
 
