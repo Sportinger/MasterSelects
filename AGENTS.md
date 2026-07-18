@@ -102,6 +102,12 @@ Anything not using a `fast ...` command:
 
 - Full chain before normal commit, push, release, merge, or final readiness:
   `npm run build`, `npm run lint`, `npm run test`. Do not commit if any fail.
+- Run all three full-chain commands even when an earlier command fails. Treat
+  build, lint, and test as independent diagnostics: collect every exit code,
+  finish the complete chain, then report and fix all discovered failures
+  together. Never use fail-fast command chaining for the full gate. Vitest
+  already runs the complete selected suite without stopping at the first failed
+  test unless an explicitly scoped/bailing command says otherwise.
 - Do not rerun the chain if it already passed on the exact same HEAD after the
   latest changes; reuse the result and say so.
 - After pushing or merging to a protected branch (`staging` or `master`), wait
