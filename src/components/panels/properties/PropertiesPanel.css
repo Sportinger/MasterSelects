@@ -1717,6 +1717,16 @@
   grid-template-columns: minmax(68px, 90px) minmax(0, 1fr);
 }
 
+/* Compact knob row for synth sections — knobs wrap and space out evenly. */
+.synth-knob-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  justify-content: space-around;
+  align-items: flex-start;
+  padding: var(--sp-1) 0 var(--sp-1-5);
+}
+
 /* Motorized-fader ghost overlay (plan §14). The middle grid cell wraps the range
    input so a live-value ghost (fill + thumb + badge) can be positioned over it.
    All ghost parts are pointer-events:none so the real thumb stays draggable. */

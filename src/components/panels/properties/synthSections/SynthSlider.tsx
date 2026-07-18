@@ -13,7 +13,7 @@
 
 import { useEffect, useRef } from 'react';
 import { liveParamBus } from '../../../../services/midi/instrumentParams/liveParamBus';
-import { positionToValue, valueToPosition, type SliderScale } from './sliderScale';
+import { positionToValue, valueToPosition, type SliderScale } from '../../../common/sliderScale';
 
 interface SynthSliderProps {
   label: string;

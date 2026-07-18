@@ -2,9 +2,14 @@
 // key tracking. A toggle enables/disables the whole filter (absent `filter` =
 // bypassed, the bare-oscillator path). envAmount may be negative (env closes the
 // filter) per the schema, so its range is symmetric.
+//
+// Rendered as a compact KNOB row — knobs read better here and save vertical space
+// (the general common/Knob via SynthKnob, so the cutoff knob still shows its live
+// automated value during playback). Cutoff uses a log taper; env amount is bipolar
+// (centered at 0). Right-click a knob to reset to the patch default.
 
 import { DEFAULT_SIMPLE_SYNTH_FILTER, type SynthFilter } from '../../../../types/midiClip';
-import { SynthSlider } from './SynthSlider';
+import { SynthKnob } from './SynthKnob';
 import type { SynthSectionProps } from './synthSectionTypes';
 
 export function FilterSection({ instrument, onChange }: SynthSectionProps) {
@@ -26,16 +31,20 @@ export function FilterSection({ instrument, onChange }: SynthSectionProps) {
         />
       </label>
       {filter && (
-        <>
-          <SynthSlider label="Cutoff" unit="Hz" step={1} value={filter.cutoff} min={20} max={18000}
-            scale="log" paramId="filter.cutoff" onChange={(cutoff) => set({ cutoff })} />
-          <SynthSlider label="Resonance" unit="Q" value={filter.resonance} min={0.1} max={24}
+        <div className="synth-knob-row">
+          <SynthKnob label="Cutoff" unit="Hz" value={filter.cutoff} min={20} max={18000}
+            scale="log" step={1} defaultValue={DEFAULT_SIMPLE_SYNTH_FILTER.cutoff}
+            paramId="filter.cutoff" onChange={(cutoff) => set({ cutoff })} />
+          <SynthKnob label="Res" unit="Q" value={filter.resonance} min={0.1} max={24}
+            step={0.1} defaultValue={DEFAULT_SIMPLE_SYNTH_FILTER.resonance}
             onChange={(resonance) => set({ resonance })} />
-          <SynthSlider label="Env Amount" unit="Hz" step={10} value={filter.envAmount} min={-8000} max={8000}
+          <SynthKnob label="Env Amt" unit="Hz" value={filter.envAmount} min={-8000} max={8000}
+            step={10} defaultValue={DEFAULT_SIMPLE_SYNTH_FILTER.envAmount}
             onChange={(envAmount) => set({ envAmount })} />
-          <SynthSlider label="Key Track" value={filter.keytrack} min={0} max={1}
+          <SynthKnob label="Key Trk" value={filter.keytrack} min={0} max={1}
+            step={0.01} defaultValue={DEFAULT_SIMPLE_SYNTH_FILTER.keytrack}
             onChange={(keytrack) => set({ keytrack })} />
-        </>
+        </div>
       )}
     </div>
   );

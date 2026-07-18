@@ -1,0 +1,92 @@
+/* General rotary knob (src/components/common/Knob.tsx). Theme-neutral dark UI to
+   match the properties panel; the automation overlay uses the same teal as the
+   slider ghost so live-value read-out is consistent across control types. */
+
+.knob {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  user-select: none;
+}
+
+.knob-dial {
+  position: relative;
+  cursor: ns-resize;
+  outline: none;
+  touch-action: none;
+}
+.knob-dial:focus-visible {
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(45, 140, 235, 0.6);
+}
+.knob-disabled .knob-dial {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.knob-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.14);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.knob-value {
+  fill: none;
+  stroke: #2d8ceb;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.knob-indicator {
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+/* Automation overlay — hidden until the row gets .is-automating from a live value. */
+.knob-live-arc {
+  fill: none;
+  stroke: #2dd4bf;
+  stroke-width: 2;
+  stroke-linecap: round;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.knob-live-dot {
+  fill: #2dd4bf;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  filter: drop-shadow(0 0 3px rgba(45, 212, 191, 0.9));
+}
+.knob.is-automating .knob-live-arc,
+.knob.is-automating .knob-live-dot {
+  opacity: 1;
+}
+
+.knob-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+  text-align: center;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.knob-value-text {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.82);
+  line-height: 1;
+}
+.knob-live-value {
+  display: none;
+  font-size: 10px;
+  font-weight: 600;
+  color: #2dd4bf;
+  line-height: 1;
+}
+/* While automating, show the live teal value in place of the static one. */
+.knob.is-automating .knob-value-text {
+  display: none;
+}
+.knob.is-automating .knob-live-value {
+  display: block;
+}

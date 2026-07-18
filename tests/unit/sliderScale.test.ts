@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   positionToValue,
   valueToPosition,
-} from '../../src/components/panels/properties/synthSections/sliderScale';
+} from '../../src/components/common/sliderScale';
 
 describe('sliderScale', () => {
   it('log taper gives equal travel per octave (cutoff 20..18000)', () => {
