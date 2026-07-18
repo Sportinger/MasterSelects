@@ -79,7 +79,17 @@ describe('timeline clip canvas main-thread draw', () => {
       'motion-adjustment',
       'audio',
     ]);
-    expect(overlays.every((overlay) => overlay.showIcon)).toBe(true);
+    // Invariant: clip types that canvas-draw their own body preview (midi note
+    // bars / audio waveform) must NOT also show a type-icon overlay on top of
+    // the previsualization. All other types keep their pictogram.
+    const iconByType = new Map(overlays.map((overlay) => [overlay.iconType, overlay.showIcon]));
+    expect(iconByType.get('midi')).toBe(false);
+    expect(iconByType.get('audio')).toBe(false);
+    expect(
+      overlays
+        .filter((overlay) => overlay.iconType !== 'midi' && overlay.iconType !== 'audio')
+        .every((overlay) => overlay.showIcon),
+    ).toBe(true);
 
     const [thumbnailOverlay] = createTimelineClipCanvasChromeOverlays({
       chromeScrollX: 0,
