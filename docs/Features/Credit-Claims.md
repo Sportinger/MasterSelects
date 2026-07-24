@@ -2,7 +2,8 @@
 
 # Credit Claims
 
-Current state: Cloudflare-backed reward links plus one globally reserved website gift.
+Current state: Cloudflare-backed reward links. The globally reserved website-gift
+backend remains available, but its in-app promotional banner is disabled.
 
 ---
 
@@ -35,13 +36,20 @@ Useful options:
 
 ### Automatic website gift
 
+> **Disabled in the app:** the automatic `FREE FOR YOU` banner is not mounted,
+> so visitors are not prompted to check or claim this offer. The backend and
+> operator command below remain in place for a possible future reactivation.
+
 Arm the automatic offer for the next eligible visitor:
 
 ```bash
 npm run credits:create-claim -- --arm-website-offer
 ```
 
-This does not create or send a link. Once folder/project selection, splash, and any first-run tutorial are gone, each visitor waits ten seconds before asking D1 for the offer. A conditional D1 update selects exactly one browser; all other visitors receive no offer while that reservation is active. The winner sees the dismissible `FREE FOR YOU` window, a six-digit code, 3,000 credits, and a live one-hour countdown.
+This does not create or send a link. When the app integration is enabled, a
+conditional D1 update selects exactly one browser; all other visitors receive no
+offer while that reservation is active. The disabled banner previously exposed
+the winner's six-digit code, 3,000 credits, and live one-hour countdown.
 
 If the hour expires without redemption, the campaign stays armed and the next eligible visitor can win. Successful redemption disarms the campaign, so no new offer appears until the command above is run again. The manual claim-link command and its recipients are completely independent of this website slot.
 
@@ -60,10 +68,9 @@ Every successful free-offer claim sends that recipient an email with the claiman
 1. User opens `/credits/claim?code=...`.
 2. The page reads claim metadata from `GET /api/credits/claim`.
 3. A normal claim is redeemed on that page after magic-link sign-in.
-4. Independently, the normal app waits until first-run folder selection, splash, and tutorial screens are finished, then waits another ten seconds before requesting the automatic offer.
-5. Only the browser that wins the global D1 reservation receives the six-digit code and one-hour countdown.
-6. The window opens sign-in when needed or the prefilled Account redeem field when already authenticated.
-7. Successful Account redemption grants 3,000 credits and disarms the website campaign until an operator re-arms it.
+
+The automatic website-offer flow currently has no in-app entry point because
+its promotional banner is disabled.
 
 ---
 

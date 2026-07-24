@@ -176,6 +176,8 @@ function createRestoredClip(
       masks: clonePlain(clip.masks),
       transcriptStatus: clip.transcriptStatus,
       analysisStatus: clip.analysisStatus,
+      faceAnalysisStatus: clip.faceAnalysisStatus,
+      faceAnalysisMessage: clip.faceAnalysisMessage,
       sceneDescriptionStatus: clip.sceneDescriptionStatus,
       reversed: clip.reversed,
       speed: clip.speed,

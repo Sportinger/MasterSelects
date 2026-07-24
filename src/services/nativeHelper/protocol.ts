@@ -293,6 +293,60 @@ export interface MatAnyoneUninstallCommand {
   id: string;
 }
 
+// ── MuScriptor Commands ──
+
+export type MuscriptorModelVariant = 'small' | 'medium' | 'large';
+export type MuscriptorDevice = 'auto' | 'cpu' | 'cuda';
+export type MuscriptorRuntimeDevice = Exclude<MuscriptorDevice, 'auto'> | 'mps';
+
+export interface MuscriptorStatusCommand {
+  cmd: 'muscriptor_status';
+  id: string;
+}
+
+export interface MuscriptorSetupCommand {
+  cmd: 'muscriptor_setup';
+  id: string;
+}
+
+export interface MuscriptorDownloadModelCommand {
+  cmd: 'muscriptor_download_model';
+  id: string;
+  variant: MuscriptorModelVariant;
+  /** Used only by this download request. The editor never persists this token. */
+  hf_token?: string;
+}
+
+export interface MuscriptorStartCommand {
+  cmd: 'muscriptor_start';
+  id: string;
+  variant: MuscriptorModelVariant;
+  device?: MuscriptorDevice;
+}
+
+export interface MuscriptorStopCommand {
+  cmd: 'muscriptor_stop';
+  id: string;
+}
+
+export interface MuscriptorTranscribeCommand {
+  cmd: 'muscriptor_transcribe';
+  id: string;
+  audio_path: string;
+  instruments?: string[];
+}
+
+export interface MuscriptorCancelCommand {
+  cmd: 'muscriptor_cancel';
+  id: string;
+  job_id: string;
+}
+
+export interface MuscriptorUninstallCommand {
+  cmd: 'muscriptor_uninstall';
+  id: string;
+}
+
 export type Command =
   | AuthCommand
   | OpenCommand
@@ -327,7 +381,15 @@ export type Command =
   | MatAnyoneStopCommand
   | MatAnyoneMatteCommand
   | MatAnyoneCancelCommand
-  | MatAnyoneUninstallCommand;
+  | MatAnyoneUninstallCommand
+  | MuscriptorStatusCommand
+  | MuscriptorSetupCommand
+  | MuscriptorDownloadModelCommand
+  | MuscriptorStartCommand
+  | MuscriptorStopCommand
+  | MuscriptorTranscribeCommand
+  | MuscriptorCancelCommand
+  | MuscriptorUninstallCommand;
 
 // Encode settings
 export interface EncodeOutput {
@@ -473,7 +535,7 @@ export function isJpeg(flags: number): boolean {
 // ── MatAnyone2 Types ──
 
 export interface MatAnyoneStatusResponse {
-  setup_status: 'not_installed' | 'installed' | 'running' | 'error';
+  setup_status: 'not_installed' | 'partially_installed' | 'gpu_required' | 'installed' | 'running' | 'error';
   python_version: string | null;
   cuda_available: boolean;
   cuda_version: string | null;
@@ -485,6 +547,9 @@ export interface MatAnyoneStatusResponse {
   matanyone_installed: boolean;
   server_running: boolean;
   server_port: number | null;
+  installed_revision?: string | null;
+  expected_revision?: string | null;
+  server_error?: string | null;
 }
 
 export interface MatAnyoneSetupProgress {
@@ -515,6 +580,53 @@ export interface MatAnyoneMatteResult {
   foreground_path: string;
   alpha_path: string;
   job_id: string;
+}
+
+// ── MuScriptor Types ──
+
+export interface MuscriptorStatusResponse {
+  setup_status: 'not_installed' | 'partially_installed' | 'installed' | 'running' | 'error';
+  python_version: string | null;
+  venv_exists: boolean;
+  deps_installed: boolean;
+  models_downloaded: MuscriptorModelVariant[];
+  server_running: boolean;
+  server_port: number | null;
+  active_variant: MuscriptorModelVariant | null;
+  active_device: MuscriptorRuntimeDevice | null;
+  cuda_available: boolean;
+  cuda_version: string | null;
+  gpu_name: string | null;
+  vram_mb: number | null;
+  /** Helper-owned writable staging directory. Runtime files here are disposable. */
+  temp_directory: string | null;
+  available_instruments: string[];
+  error?: string | null;
+}
+
+export interface MuscriptorProgress {
+  type: 'progress';
+  step: string;
+  percent: number;
+  message?: string;
+  speed?: string;
+  eta?: string;
+  job_id?: string;
+  completed?: number;
+  total?: number;
+  note_count?: number;
+}
+
+export interface MuscriptorTranscribedNote {
+  pitch: number;
+  start_time: number;
+  end_time: number;
+  instrument: string;
+}
+
+export interface MuscriptorTranscriptionResult {
+  job_id: string;
+  notes: MuscriptorTranscribedNote[];
 }
 
 // Error codes

@@ -2,6 +2,7 @@ import type { MatAnyoneResultLike } from './MatAnyoneFileHelpers';
 
 type MatAnyoneRunSectionProps = {
   isMatReady: boolean;
+  isMatStarting: boolean;
   matGpu: string | null;
   matCuda: boolean;
   matProcessing: boolean;
@@ -21,6 +22,7 @@ type MatAnyoneRunSectionProps = {
 
 export function MatAnyoneRunSection({
   isMatReady,
+  isMatStarting,
   matGpu,
   matCuda,
   matProcessing,
@@ -51,14 +53,14 @@ export function MatAnyoneRunSection({
           <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
             Server not running{matGpu && <> &mdash; {matGpu}</>}
           </span>
-          <button className="sam2-btn primary" onClick={onStartServer}>
-            Start Server
+          <button className="sam2-btn primary" onClick={onStartServer} disabled={isMatStarting}>
+            {isMatStarting ? 'Starting Server...' : 'Start Server'}
           </button>
         </div>
       ) : (
         <>
           <p style={{ margin: '0 0 6px', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-            Extracts the masked subject with alpha for the selected clip segment.
+            Extracts the masked subject as a transparent WebM for the selected clip segment.
             {matCuda && matGpu && <> Using {matGpu}.</>}
           </p>
 

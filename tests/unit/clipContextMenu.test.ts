@@ -7,6 +7,7 @@ import {
   executeClipContextMenuClipboardCommand,
   executeClipContextMenuCopyPrompt,
   executeClipContextMenuLabelColor,
+  executeClipContextMenuMusicToMidi,
   executeClipContextMenuProxyGeneration,
   executeClipContextMenuShowInExplorer,
   executeClipContextMenuStemSeparation,
@@ -735,6 +736,7 @@ describe('clip context menu model', () => {
       generateWaveformForClip: vi.fn(),
       generateSpectrogramForClip: vi.fn(),
       startClipStemSeparation: vi.fn(async () => null),
+      openMusicToMidi: vi.fn(),
       toggleThumbnailsEnabled,
       toggleWaveformsEnabled: vi.fn(),
       setAudioDisplayMode: vi.fn(),
@@ -788,6 +790,10 @@ describe('clip context menu model', () => {
       kind: 'export-current-frame',
       canExecute: true,
     }, context)).resolves.toBe(true);
+    await expect(executeClipContextMenuCommand({
+      kind: 'music-to-midi',
+      canExecute: true,
+    }, context)).resolves.toBe(false);
 
     expect(clipboardActions.copyClipEffects).not.toHaveBeenCalled();
     expect(clipboardActions.pasteClipEffects).not.toHaveBeenCalled();
@@ -799,6 +805,7 @@ describe('clip context menu model', () => {
     expect(timelineActions.removeClip).not.toHaveBeenCalled();
     expect(toggleThumbnailsEnabled).toHaveBeenCalledTimes(1);
     expect(exportCurrentFrame).toHaveBeenCalledTimes(1);
+    expect(context.openMusicToMidi).not.toHaveBeenCalled();
   });
 
   it('executes stem separation through an injected starter only when allowed', () => {
@@ -825,5 +832,27 @@ describe('clip context menu model', () => {
       startClipStemSeparation,
     })).toBe(false);
     expect(startClipStemSeparation).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens Music to MIDI only for a current, modifiable source clip', () => {
+    const openMusicToMidi = vi.fn();
+    expect(executeClipContextMenuMusicToMidi({
+      clipId: 'clip-video',
+      canExecute: true,
+      openMusicToMidi,
+    })).toBe(true);
+    expect(openMusicToMidi).toHaveBeenCalledWith('clip-video');
+
+    expect(executeClipContextMenuMusicToMidi({
+      clipId: null,
+      canExecute: true,
+      openMusicToMidi,
+    })).toBe(false);
+    expect(executeClipContextMenuMusicToMidi({
+      clipId: 'clip-video',
+      canExecute: false,
+      openMusicToMidi,
+    })).toBe(false);
+    expect(openMusicToMidi).toHaveBeenCalledTimes(1);
   });
 });

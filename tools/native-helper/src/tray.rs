@@ -76,18 +76,10 @@ pub fn run_tray(state: Arc<TrayState>, port: u16) -> Result<()> {
         None,
     );
 
-    let status_item = MenuItem::new(
-        format!("Status: Starting... (port {})", port),
-        false,
-        None,
-    );
+    let status_item = MenuItem::new(format!("Status: Starting... (port {})", port), false, None);
 
-    let autostart_item = CheckMenuItem::new(
-        "Start with Windows",
-        true,
-        is_autostart_enabled(),
-        None,
-    );
+    let autostart_item =
+        CheckMenuItem::new("Start with Windows", true, is_autostart_enabled(), None);
 
     let open_downloads = MenuItem::new("Open Downloads Folder", true, None);
 
@@ -298,17 +290,15 @@ fn handle_update_click(state: &Arc<TrayState>) {
             let mut lock = st.update_status.lock().unwrap();
             *lock = UpdateStatus::Downloading;
         }
-        std::thread::spawn(move || {
-            match updater::download_update(&url) {
-                Ok(path) => {
-                    let mut lock = st.update_status.lock().unwrap();
-                    *lock = UpdateStatus::ReadyToInstall(path);
-                }
-                Err(e) => {
-                    eprintln!("Download failed: {}", e);
-                    let mut lock = st.update_status.lock().unwrap();
-                    *lock = UpdateStatus::Failed(e.to_string());
-                }
+        std::thread::spawn(move || match updater::download_update(&url) {
+            Ok(path) => {
+                let mut lock = st.update_status.lock().unwrap();
+                *lock = UpdateStatus::ReadyToInstall(path);
+            }
+            Err(e) => {
+                eprintln!("Download failed: {}", e);
+                let mut lock = st.update_status.lock().unwrap();
+                *lock = UpdateStatus::Failed(e.to_string());
             }
         });
     }
@@ -356,21 +346,27 @@ fn generate_icon_rgba() -> (Vec<u8>, u32, u32) {
     for y in 0..size {
         for x in 0..size {
             let idx = ((y * size + x) * 4) as usize;
-            rgba[idx] = 24; rgba[idx+1] = 24; rgba[idx+2] = 24; rgba[idx+3] = 255;
+            rgba[idx] = 24;
+            rgba[idx + 1] = 24;
+            rgba[idx + 2] = 24;
+            rgba[idx + 3] = 255;
         }
     }
 
     // Three horizontal bars (white, gold, green) with playhead
     let bars: [(u32, u32, [u8; 3]); 3] = [
-        (9, 13, [255, 255, 255]),   // white bar
-        (14, 18, [196, 164, 74]),   // gold bar
-        (19, 23, [74, 222, 128]),   // green bar
+        (9, 13, [255, 255, 255]), // white bar
+        (14, 18, [196, 164, 74]), // gold bar
+        (19, 23, [74, 222, 128]), // green bar
     ];
     for (y_start, y_end, color) in &bars {
         for y in *y_start..=*y_end {
             for x in 6..26 {
                 let idx = ((y * size + x) * 4) as usize;
-                rgba[idx] = color[0]; rgba[idx+1] = color[1]; rgba[idx+2] = color[2]; rgba[idx+3] = 255;
+                rgba[idx] = color[0];
+                rgba[idx + 1] = color[1];
+                rgba[idx + 2] = color[2];
+                rgba[idx + 3] = 255;
             }
         }
     }
@@ -378,7 +374,10 @@ fn generate_icon_rgba() -> (Vec<u8>, u32, u32) {
     for y in 8..24 {
         let x = 16u32;
         let idx = ((y * size + x) * 4) as usize;
-        rgba[idx] = 255; rgba[idx+1] = 255; rgba[idx+2] = 255; rgba[idx+3] = 255;
+        rgba[idx] = 255;
+        rgba[idx + 1] = 255;
+        rgba[idx + 2] = 255;
+        rgba[idx + 3] = 255;
     }
 
     (rgba, size, size)
@@ -386,9 +385,13 @@ fn generate_icon_rgba() -> (Vec<u8>, u32, u32) {
 
 /// Parse an ICO file and extract the entry closest to `target_size` as RGBA.
 fn parse_ico_best_size(data: &[u8], target_size: u32) -> Option<(Vec<u8>, u32, u32)> {
-    if data.len() < 6 { return None; }
+    if data.len() < 6 {
+        return None;
+    }
     let count = u16::from_le_bytes([data[4], data[5]]) as usize;
-    if data.len() < 6 + count * 16 { return None; }
+    if data.len() < 6 + count * 16 {
+        return None;
+    }
 
     // Find the best matching entry
     let mut best_idx = 0usize;
@@ -397,8 +400,16 @@ fn parse_ico_best_size(data: &[u8], target_size: u32) -> Option<(Vec<u8>, u32, u
 
     for i in 0..count {
         let offset = 6 + i * 16;
-        let w = if data[offset] == 0 { 256u32 } else { data[offset] as u32 };
-        let diff = if w >= target_size { w - target_size } else { target_size - w };
+        let w = if data[offset] == 0 {
+            256u32
+        } else {
+            data[offset] as u32
+        };
+        let diff = if w >= target_size {
+            w - target_size
+        } else {
+            target_size - w
+        };
         if diff < best_diff || (diff == best_diff && w > best_size) {
             best_diff = diff;
             best_size = w;
@@ -407,10 +418,22 @@ fn parse_ico_best_size(data: &[u8], target_size: u32) -> Option<(Vec<u8>, u32, u
     }
 
     let entry_off = 6 + best_idx * 16;
-    let img_size = u32::from_le_bytes([data[entry_off+8], data[entry_off+9], data[entry_off+10], data[entry_off+11]]) as usize;
-    let img_offset = u32::from_le_bytes([data[entry_off+12], data[entry_off+13], data[entry_off+14], data[entry_off+15]]) as usize;
+    let img_size = u32::from_le_bytes([
+        data[entry_off + 8],
+        data[entry_off + 9],
+        data[entry_off + 10],
+        data[entry_off + 11],
+    ]) as usize;
+    let img_offset = u32::from_le_bytes([
+        data[entry_off + 12],
+        data[entry_off + 13],
+        data[entry_off + 14],
+        data[entry_off + 15],
+    ]) as usize;
 
-    if img_offset + img_size > data.len() { return None; }
+    if img_offset + img_size > data.len() {
+        return None;
+    }
     let img_data = &data[img_offset..img_offset + img_size];
 
     // Check if PNG (starts with PNG magic)
@@ -501,7 +524,10 @@ unsafe impl Send for MutexLock {}
 /// Acquire a system-wide named mutex to prevent duplicate instances.
 /// Returns a `MutexLock` on success, `None` if another instance already holds it.
 pub fn acquire_single_instance_lock() -> Option<MutexLock> {
-    let wide: Vec<u16> = MUTEX_NAME.encode_utf16().chain(std::iter::once(0)).collect();
+    let wide: Vec<u16> = MUTEX_NAME
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
 
     unsafe {
         let handle = CreateMutexW(std::ptr::null(), 1, wide.as_ptr());
@@ -538,8 +564,7 @@ pub fn set_autostart(enabled: bool) -> Result<()> {
     use winreg::RegKey;
 
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    let (run_key, _) =
-        hkcu.create_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Run")?;
+    let (run_key, _) = hkcu.create_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Run")?;
 
     if enabled {
         let exe = std::env::current_exe()?;
@@ -596,7 +621,11 @@ fn has_seen_welcome() -> bool {
 
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     match hkcu.open_subkey("Software\\MasterSelects") {
-        Ok(key) => key.get_value::<u32, _>(FIRST_RUN_REGISTRY_VALUE).unwrap_or(0) == 1,
+        Ok(key) => {
+            key.get_value::<u32, _>(FIRST_RUN_REGISTRY_VALUE)
+                .unwrap_or(0)
+                == 1
+        }
         Err(_) => false,
     }
 }

@@ -43,6 +43,16 @@ The main runtime path is `LayerBuilderService` -> `AudioTrackSyncManager` -> `Au
 - Stem source switching is live during playback. The audio sync manager drops stale clip proxy/handoff elements when the active `mediaFileId` changes, so the audible source follows the selected button without stopping playback.
 - Project reload relinks completed stem choices from `MediaFile.stemInfo` or the legacy `Stems/<source>/<source> - <Stem>.wav` folder layout.
 
+## Music To MIDI
+
+- Timeline audio clips and video clips with audible audio expose **Music to MIDI...** beside stem separation in the clip context menu.
+- The local MuScriptor provider renders the processed audible clip range through `ClipAudioAnalysisOrchestrator`, so it respects the editor's selected audio source and signal-shaping state instead of transcribing an unrelated raw container track.
+- The Native Helper runs the pinned PyTorch model locally and streams note/progress events back to the browser. No source audio is uploaded to a cloud inference service.
+- Recognized instruments become General MIDI tracks; all resulting tracks and clips are inserted atomically as one undoable edit.
+- This is note transcription, not audio separation. MuScriptor does not create new WAV stems and currently assigns a stable default velocity because the model emits no performed velocity.
+
+See [MuScriptor Music-to-MIDI](./MuScriptor.md) for model setup, licensing, provider architecture, and limitations.
+
 ## Audio Effects
 
 Audio clip controls live in the Properties panel under `CLIP Effects`; clip edit-stack operations live under `CLIP Audio Edits`, and clip transcripts remain clip-only under `CLIP Transcript`. Linked video/audio companions share the same transcript state, so selecting either clip opens the same transcript view. Selecting an audio track/layer switches the same panel to `TRACK Controls`, `TRACK Effects`, and `TRACK Sends`; selecting the master bus switches it to `MASTER Controls` and `MASTER Effects`.

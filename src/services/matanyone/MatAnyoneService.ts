@@ -10,7 +10,11 @@
 
 import { Logger } from '../logger';
 import { NativeHelperClient } from '../nativeHelper/NativeHelperClient';
-import { useMatAnyoneStore } from '../../stores/matanyoneStore';
+import type { MatAnyoneStatusResponse } from '../nativeHelper/protocol';
+import {
+  useMatAnyoneStore,
+  type MatAnyoneSetupStatus,
+} from '../../stores/matanyoneStore';
 
 const log = Logger.create('MatAnyone');
 
@@ -21,6 +25,11 @@ export interface MatteOptions {
   sourceClipId: string;
   startFrame?: number;
   endFrame?: number;
+  sourceStartTime?: number;
+  sourceDuration?: number;
+  timelineStartTime?: number;
+  timelineDuration?: number;
+  sourceSpeed?: number;
 }
 
 export interface MatteResult {
@@ -32,6 +41,25 @@ type NativeHelperInfoFallback = {
   matanyone_available?: boolean;
   matanyone_status?: string;
 };
+
+function isGpuRequiredError(message: string): boolean {
+  return /(?:CUDA GPU|CUDA.+(?:required|available)|GPU required|CPU execution is disabled)/i.test(message);
+}
+
+export function resolveMatAnyoneSetupStatus(
+  data: Pick<
+    MatAnyoneStatusResponse,
+    'setup_status' | 'server_running' | 'matanyone_installed' | 'model_downloaded' | 'server_error' | 'cuda_available'
+  >,
+): MatAnyoneSetupStatus {
+  if (!data.cuda_available || data.setup_status === 'gpu_required') return 'gpu-required';
+  if (data.setup_status === 'error' || data.server_error) return 'error';
+  if (data.server_running || data.setup_status === 'running') return 'ready';
+  // A venv with generic dependencies is not a usable MatAnyone2 runtime.
+  // This also covers upgrades where the installed source revision is stale.
+  if (!data.matanyone_installed) return 'not-installed';
+  return data.model_downloaded ? 'installed' : 'model-needed';
+}
 
 export class MatAnyoneService {
   private async ensureNativeHelperConnected(): Promise<boolean> {
@@ -51,7 +79,7 @@ export class MatAnyoneService {
    */
   async checkStatus(): Promise<void> {
     const connected = await this.ensureNativeHelperConnected();
-    log.warn('checkStatus called, connected=' + connected);
+    log.debug('checkStatus called', { connected });
 
     if (!connected) {
       useMatAnyoneStore.getState().setSetupStatus('not-available');
@@ -59,7 +87,7 @@ export class MatAnyoneService {
     }
 
     try {
-      log.warn('checkStatus: sending mat_anyone_status...');
+      log.debug('Requesting MatAnyone2 status');
       const data = await NativeHelperClient.matanyoneStatus();
       this.applyDetailedStatus(data);
     } catch (e) {
@@ -81,20 +109,8 @@ export class MatAnyoneService {
     }
   }
 
-  private applyDetailedStatus(data: {
-    python_version?: string | null;
-    cuda_available?: boolean;
-    cuda_version?: string | null;
-    gpu_name?: string | null;
-    vram_mb?: number | null;
-    model_downloaded?: boolean;
-    venv_exists?: boolean;
-    deps_installed?: boolean;
-    matanyone_installed?: boolean;
-    server_running?: boolean;
-    setup_status?: string;
-  }): void {
-    log.warn(
+  private applyDetailedStatus(data: MatAnyoneStatusResponse): void {
+    log.debug(
       'checkStatus: got response, setup=' + (data.setup_status || 'unknown')
       + ', installed=' + String(data.matanyone_installed)
       + ', model=' + String(data.model_downloaded)
@@ -112,17 +128,12 @@ export class MatAnyoneService {
       modelDownloaded: data.model_downloaded ?? false,
     });
 
-    if (data.server_running || data.setup_status === 'running') {
-      useMatAnyoneStore.getState().setSetupStatus('ready');
-    } else if (data.matanyone_installed && data.model_downloaded) {
-      useMatAnyoneStore.getState().setSetupStatus('installed');
-    } else if (data.matanyone_installed && !data.model_downloaded) {
-      useMatAnyoneStore.getState().setSetupStatus('model-needed');
-    } else if (data.venv_exists && data.deps_installed) {
-      useMatAnyoneStore.getState().setSetupStatus('model-needed');
-    } else {
-      useMatAnyoneStore.getState().setSetupStatus('not-installed');
-    }
+    const setupStatus = resolveMatAnyoneSetupStatus(data);
+    useMatAnyoneStore.getState().setError(
+      data.server_error
+      ?? (data.setup_status === 'error' ? 'MatAnyone2 runtime reported an error' : null),
+    );
+    useMatAnyoneStore.getState().setSetupStatus(setupStatus);
 
     log.info('Status check complete', {
       status: useMatAnyoneStore.getState().setupStatus,
@@ -140,6 +151,12 @@ export class MatAnyoneService {
 
     if (fallbackStatus === 'running') {
       useMatAnyoneStore.getState().setSetupStatus('ready');
+      useMatAnyoneStore.getState().setError(null);
+      return;
+    }
+
+    if (fallbackStatus === 'gpu_required') {
+      useMatAnyoneStore.getState().setSetupStatus('gpu-required');
       useMatAnyoneStore.getState().setError(null);
       return;
     }
@@ -191,8 +208,11 @@ export class MatAnyoneService {
       );
 
       if (!result.success) {
-        useMatAnyoneStore.getState().setSetupStatus('error');
-        useMatAnyoneStore.getState().setError(result.error || 'Setup failed');
+        const message = result.error || 'Setup failed';
+        useMatAnyoneStore.getState().setSetupStatus(
+          isGpuRequiredError(message) ? 'gpu-required' : 'error',
+        );
+        useMatAnyoneStore.getState().setError(message);
         return;
       }
 
@@ -201,7 +221,9 @@ export class MatAnyoneService {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       log.error('Setup failed', e);
-      useMatAnyoneStore.getState().setSetupStatus('error');
+      useMatAnyoneStore.getState().setSetupStatus(
+        isGpuRequiredError(msg) ? 'gpu-required' : 'error',
+      );
       useMatAnyoneStore.getState().setError(msg);
     }
   }
@@ -264,8 +286,9 @@ export class MatAnyoneService {
       const result = await NativeHelperClient.matanyoneStart();
 
       if (!result.success) {
-        useMatAnyoneStore.getState().setError('Failed to start server');
-        store.setSetupStatus('installed');
+        const message = result.error ?? 'Failed to start server';
+        useMatAnyoneStore.getState().setError(message);
+        store.setSetupStatus(isGpuRequiredError(message) ? 'gpu-required' : 'installed');
         return;
       }
 
@@ -275,7 +298,7 @@ export class MatAnyoneService {
       const msg = e instanceof Error ? e.message : String(e);
       log.error('Failed to start server', e);
       useMatAnyoneStore.getState().setError(msg);
-      store.setSetupStatus('installed');
+      store.setSetupStatus(isGpuRequiredError(msg) ? 'gpu-required' : 'installed');
     }
   }
 
@@ -284,7 +307,10 @@ export class MatAnyoneService {
    */
   async stopServer(): Promise<void> {
     try {
-      await NativeHelperClient.matanyoneStop();
+      const result = await NativeHelperClient.matanyoneStop();
+      if (!result.success) {
+        throw new Error(result.error ?? 'Failed to stop MatAnyone2 server');
+      }
       useMatAnyoneStore.getState().setSetupStatus('installed');
       log.info('Server stopped');
     } catch (e) {
@@ -336,6 +362,11 @@ export class MatAnyoneService {
         foregroundPath: matteResult.foregroundPath,
         alphaPath: matteResult.alphaPath,
         sourceClipId: options.sourceClipId,
+        sourceStartTime: options.sourceStartTime,
+        sourceDuration: options.sourceDuration,
+        timelineStartTime: options.timelineStartTime,
+        timelineDuration: options.timelineDuration,
+        sourceSpeed: options.sourceSpeed,
       });
 
       useMatAnyoneStore.getState().setJobState({
@@ -398,7 +429,7 @@ export class MatAnyoneService {
       const result = await NativeHelperClient.matanyoneUninstall();
 
       if (!result.success) {
-        useMatAnyoneStore.getState().setError('Uninstall failed');
+        useMatAnyoneStore.getState().setError(result.error ?? 'Uninstall failed');
         return;
       }
 

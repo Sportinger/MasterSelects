@@ -5,6 +5,7 @@ import type { ToolResult } from '../../types';
 import { Logger } from '../../../logger';
 import { waitForCompositionReady, type MediaStore } from './runtime';
 import { isUserVisibleComposition } from '../../../../stores/mediaStore/compositionVisibility';
+import { useTimelineStore } from '../../../../stores/timeline';
 
 const log = Logger.create('AITool:Media');
 
@@ -14,6 +15,7 @@ export async function handleGetMediaItems(
 ): Promise<ToolResult> {
   const folderId = (args.folderId as string | undefined) || null;
   const { files, compositions, folders } = mediaStore;
+  const timelineClips = useTimelineStore.getState().clips;
 
   // Filter by folder
   const folderFiles = files.filter(f => f.parentId === folderId);
@@ -30,14 +32,30 @@ export async function handleGetMediaItems(
         type: 'folder',
         isExpanded: f.isExpanded,
       })),
-      files: folderFiles.map(f => ({
-        id: f.id,
-        name: f.name,
-        type: f.type,
-        duration: f.duration,
-        width: f.width,
-        height: f.height,
-      })),
+      files: folderFiles.map((f) => {
+        const analyzedClip = timelineClips.find(clip =>
+          (clip.source?.mediaFileId || clip.mediaFileId) === f.id
+          && clip.faceAnalysisStatus !== undefined);
+        return {
+          id: f.id,
+          name: f.name,
+          type: f.type,
+          duration: f.duration,
+          width: f.width,
+          height: f.height,
+          fps: f.fps,
+          codec: f.codec,
+          audioCodec: f.audioCodec,
+          container: f.container,
+          analysisStatus: f.analysisStatus ?? 'none',
+          analysisCoverage: f.analysisCoverage ?? 0,
+          faceAnalysisStatus: analyzedClip?.faceAnalysisStatus ?? 'none',
+          faceAnalysisError: analyzedClip?.faceAnalysisStatus === 'error'
+            ? analyzedClip.faceAnalysisMessage
+            : undefined,
+          uniquePeople: analyzedClip?.analysis?.faceAnalysis?.people.length ?? 0,
+        };
+      }),
       compositions: folderComps.map(c => ({
         id: c.id,
         name: c.name,

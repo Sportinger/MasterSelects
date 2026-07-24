@@ -6,13 +6,30 @@
 // instrument, not by the visual layer pipeline. Note CRUD actions are added in
 // the piano-roll phase; this slice currently owns clip creation.
 
-import type { TimelineClip } from '../../types';
-import type { MidiClipData, MidiNote, MidiClipAutomation, AutomationPoint } from '../../types/midiClip';
-import type { MidiClipActions, SliceCreator } from './types';
+import type { Keyframe, TimelineClip, TimelineTrack } from '../../types';
+import type {
+  AutomationPoint,
+  MidiClipAutomation,
+  MidiClipData,
+  MidiClipProvenance,
+  MidiNote,
+} from '../../types/midiClip';
+import type {
+  CommitMidiTranscriptionInput,
+  MidiClipActions,
+  MidiTranscriptionNoteInput,
+  MidiTranscriptionTrackInput,
+  SliceCreator,
+} from './types';
 import { DEFAULT_TRANSFORM } from './constants';
-import { generateMidiClipId, generateMidiNoteId } from './helpers/idGenerator';
+import { generateMidiClipId, generateMidiNoteId, generateTrackId } from './helpers/idGenerator';
 import { captureSnapshot } from '../historyStore';
 import { Logger } from '../../services/logger';
+import {
+  getTimelineClipAudioSourceFileKey,
+  resolveAudibleAudioClip,
+} from '../../services/audio/audioClipResolution';
+import { createProcessedClipAudioStateHash } from '../../services/audio/ProcessedWaveformPyramidService';
 
 const log = Logger.create('MidiClipSlice');
 
@@ -25,6 +42,134 @@ function clampPitch(pitch: number): number {
 
 function clampVelocity(velocity: number): number {
   return Math.max(0, Math.min(1, velocity));
+}
+
+function getInstrumentLabel(track: MidiTranscriptionTrackInput): string {
+  if (track.displayName?.trim()) return track.displayName.trim();
+  return track.instrumentId
+    .split('_')
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function normalizeTranscriptionNote(note: MidiTranscriptionNoteInput): Omit<MidiNote, 'id'> | null {
+  if (![note.pitch, note.startTime, note.endTime].every(Number.isFinite)) return null;
+  const start = Math.max(0, note.startTime);
+  const end = Math.max(0, note.endTime);
+  if (end <= start) return null;
+  return {
+    pitch: clampPitch(note.pitch),
+    start,
+    duration: Math.max(MIN_MIDI_NOTE_DURATION, end - start),
+    velocity: clampVelocity(Number.isFinite(note.velocity) ? note.velocity! : 0.8),
+  };
+}
+
+function cloneProvenance(provenance: MidiClipProvenance | undefined): MidiClipProvenance | undefined {
+  if (!provenance) return undefined;
+  try {
+    return JSON.parse(JSON.stringify(provenance)) as MidiClipProvenance;
+  } catch {
+    return undefined;
+  }
+}
+
+function buildTranscriptionCommit(
+  input: CommitMidiTranscriptionInput,
+  clips: readonly TimelineClip[],
+  tracks: readonly TimelineTrack[],
+  clipKeyframes: ReadonlyMap<string, readonly Keyframe[]>,
+): { tracks: TimelineTrack[]; clips: TimelineClip[]; trackIds: string[]; clipIds: string[] } | null {
+  const resolved = resolveAudibleAudioClip(clips, input.sourceClipId);
+  if (!resolved) return null;
+
+  const currentSourceFileKey = getTimelineClipAudioSourceFileKey(resolved.audioClip);
+  if (input.sourceFileKey === undefined || currentSourceFileKey !== input.sourceFileKey) return null;
+  if (input.processingStateHash !== undefined) {
+    const currentProcessingStateHash = createProcessedClipAudioStateHash(resolved.audioClip, {
+      keyframes: clipKeyframes.get(resolved.audioClip.id) ?? [],
+    });
+    if (currentProcessingStateHash !== input.processingStateHash) return null;
+  }
+
+  const sourceTrackIds = new Set([resolved.requestedClip.trackId, resolved.audioClip.trackId]);
+  if (tracks.some(track => sourceTrackIds.has(track.id) && track.locked)) return null;
+
+  const preparedTracks = input.tracks.flatMap((inputTrack) => {
+    const instrumentId = inputTrack.instrumentId.trim();
+    if (!instrumentId || !Number.isFinite(inputTrack.gmProgram)) return [];
+    const notes = inputTrack.notes.flatMap((inputNote) => {
+      const note = normalizeTranscriptionNote(inputNote);
+      return note ? [{ ...note, id: generateMidiNoteId() }] : [];
+    });
+    return notes.length > 0 ? [{ inputTrack, instrumentId, notes }] : [];
+  });
+  if (preparedTracks.length === 0) return null;
+
+  const maxNoteEnd = Math.max(...preparedTracks.flatMap(track => (
+    track.notes.map(note => note.start + note.duration)
+  )));
+  const clipDuration = Math.max(
+    MIN_MIDI_CLIP_DURATION,
+    resolved.audioClip.duration,
+    maxNoteEnd,
+  );
+  const baseProvenance = cloneProvenance(input.provenance);
+  const createdTracks: TimelineTrack[] = [];
+  const createdClips: TimelineClip[] = [];
+
+  for (const { inputTrack, instrumentId, notes } of preparedTracks) {
+    const trackId = generateTrackId('midi');
+    const clipId = generateMidiClipId();
+    const program = Math.max(0, Math.min(127, Math.round(inputTrack.gmProgram)));
+    const isDrum = inputTrack.isDrum === true;
+    const label = getInstrumentLabel(inputTrack);
+    createdTracks.push({
+      id: trackId,
+      name: `${label} MIDI`,
+      type: 'midi',
+      height: 40,
+      muted: false,
+      visible: true,
+      solo: false,
+      midiInstrument: { kind: 'gm', program, isDrum, gain: 0.8 },
+    });
+    createdClips.push({
+      id: clipId,
+      trackId,
+      name: label,
+      file: new File([], 'midi-transcription.dat', { type: 'application/octet-stream' }),
+      startTime: resolved.audioClip.startTime,
+      duration: clipDuration,
+      inPoint: 0,
+      outPoint: clipDuration,
+      source: { type: 'midi', naturalDuration: clipDuration },
+      transform: { ...DEFAULT_TRANSFORM },
+      effects: [],
+      midiData: {
+        notes: notes.toSorted((a, b) => a.start - b.start || a.pitch - b.pitch),
+        provenance: {
+          ...(baseProvenance ?? {}),
+          sourceClipId: resolved.audioClip.id,
+          sourceFingerprint: input.sourceFingerprint,
+          ...(input.processingStateHash ? { processingStateHash: input.processingStateHash } : {}),
+          sourceFileKey: currentSourceFileKey,
+          instrumentId,
+          gmProgram: program,
+          isDrum,
+        },
+      },
+      isLoading: false,
+    });
+  }
+
+  return {
+    tracks: createdTracks,
+    clips: createdClips,
+    trackIds: createdTracks.map(track => track.id),
+    clipIds: createdClips.map(clip => clip.id),
+  };
 }
 
 /** Replace a clip's midiData notes immutably, leaving other clips untouched. */
@@ -41,6 +186,40 @@ function mapClipNotes(
 }
 
 export const createMidiClipSlice: SliceCreator<MidiClipActions> = (set, get) => ({
+  commitMidiTranscription: (input) => {
+    const state = get();
+    const commit = buildTranscriptionCommit(input, state.clips, state.tracks, state.clipKeyframes);
+    if (!commit) {
+      log.debug('Ignored stale, locked, or empty MIDI transcription commit', {
+        sourceClipId: input.sourceClipId,
+        trackCount: input.tracks.length,
+      });
+      return null;
+    }
+
+    const nextClips = [...state.clips, ...commit.clips];
+    const nextExpandedTracks = new Set(state.expandedTracks);
+    commit.trackIds.forEach(trackId => nextExpandedTracks.add(trackId));
+    const nextDuration = state.durationLocked
+      ? state.duration
+      : Math.max(60, ...nextClips.map(clip => clip.startTime + clip.duration + 10));
+
+    set({
+      tracks: [...state.tracks, ...commit.tracks],
+      clips: nextClips,
+      expandedTracks: nextExpandedTracks,
+      duration: nextDuration,
+    });
+    state.invalidateCache();
+    captureSnapshot('Music to MIDI');
+    log.info('Committed music transcription to MIDI tracks', {
+      sourceClipId: input.sourceClipId,
+      trackCount: commit.trackIds.length,
+      noteCount: input.tracks.reduce((sum, track) => sum + track.notes.length, 0),
+    });
+    return { trackIds: commit.trackIds, clipIds: commit.clipIds };
+  },
+
   addMidiClip: (trackId, startTime, duration = 4) => {
     const { clips, tracks, updateDuration, invalidateCache } = get();
     const track = tracks.find(t => t.id === trackId);

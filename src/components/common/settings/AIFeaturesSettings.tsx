@@ -5,6 +5,9 @@ import {
   type GuidedActionReplayVisualizationMode,
 } from '../../../stores/settingsStore';
 import { useMatAnyoneStore, type MatAnyoneSetupStatus } from '../../../stores/matanyoneStore';
+import { getMatAnyoneService } from '../../../services/matanyone/MatAnyoneService';
+import { MatAnyoneSetupDialog } from '../MatAnyoneSetupDialog';
+import { MuscriptorFeatureSettings } from './MuscriptorFeatureSettings';
 import {
   checkLemonadeHealth,
   DEFAULT_LEMONADE_ENDPOINT,
@@ -12,10 +15,6 @@ import {
   LEMONADE_MODEL_PRESETS,
   type LemonadeModelInfo,
 } from '../../../services/lemonadeProvider';
-
-type DirectoryPickerWindow = Window & {
-  showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>;
-};
 
 type ReplayBudgetUnit = 'ms' | 's' | 'min' | 'h';
 
@@ -107,7 +106,6 @@ interface AIFeaturesSettingsProps {
 export function AIFeaturesSettings({ embedded }: AIFeaturesSettingsProps = {}) {
   const {
     matanyoneEnabled,
-    matanyonePythonPath,
     aiProvider,
     lemonadeEndpoint,
     lemonadeModel,
@@ -115,7 +113,6 @@ export function AIFeaturesSettings({ embedded }: AIFeaturesSettingsProps = {}) {
     guidedActionReplayBudgetMs,
     guidedActionReplayCompressionMode,
     setMatAnyoneEnabled,
-    setMatAnyonePythonPath,
     setAiProvider,
     setLemonadeEndpoint,
     setLemonadeModel,
@@ -133,7 +130,7 @@ export function AIFeaturesSettings({ embedded }: AIFeaturesSettingsProps = {}) {
     errorMessage,
   } = useMatAnyoneStore();
 
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [showMatAnyoneSetup, setShowMatAnyoneSetup] = useState(false);
   const [confirmUninstall, setConfirmUninstall] = useState(false);
   const [lemonadeStatus, setLemonadeStatus] = useState<'idle' | 'checking' | 'online' | 'offline'>('idle');
   const [lemonadeStatusMessage, setLemonadeStatusMessage] = useState('');
@@ -163,19 +160,6 @@ export function AIFeaturesSettings({ embedded }: AIFeaturesSettingsProps = {}) {
     return `${mb} MB`;
   }, []);
 
-  const handleBrowsePython = useCallback(async () => {
-    try {
-      // Use the native file picker if available (showDirectoryPicker API)
-      const pickerWindow = window as DirectoryPickerWindow;
-      if (pickerWindow.showDirectoryPicker) {
-        const dirHandle = await pickerWindow.showDirectoryPicker();
-        setMatAnyonePythonPath(dirHandle.name);
-      }
-    } catch {
-      // User cancelled or API not available
-    }
-  }, [setMatAnyonePythonPath]);
-
   const handleCheckLemonade = useCallback(async () => {
     setLemonadeStatus('checking');
     setLemonadeStatusMessage('');
@@ -203,6 +187,7 @@ export function AIFeaturesSettings({ embedded }: AIFeaturesSettingsProps = {}) {
 
   const matAnyoneContent = (
     <>
+      {showMatAnyoneSetup && <MatAnyoneSetupDialog onClose={() => setShowMatAnyoneSetup(false)} />}
       <div className="settings-group">
         <div className="settings-group-title">{embedded ? 'AI Features - Chat' : 'Chat Provider'}</div>
 
@@ -420,6 +405,7 @@ export function AIFeaturesSettings({ embedded }: AIFeaturesSettingsProps = {}) {
                   className="settings-button"
                   style={{ background: 'var(--accent)', color: 'white', borderColor: 'var(--accent)' }}
                   disabled={isBusy}
+                  onClick={() => setShowMatAnyoneSetup(true)}
                 >
                   Set Up MatAnyone2
                 </button>
@@ -429,6 +415,7 @@ export function AIFeaturesSettings({ embedded }: AIFeaturesSettingsProps = {}) {
                 <button
                   className="settings-button"
                   disabled={isBusy}
+                  onClick={() => void getMatAnyoneService().startServer()}
                 >
                   Start Server
                 </button>
@@ -437,6 +424,7 @@ export function AIFeaturesSettings({ embedded }: AIFeaturesSettingsProps = {}) {
               {isRunning && (
                 <button
                   className="settings-button"
+                  onClick={() => void getMatAnyoneService().stopServer()}
                 >
                   Stop Server
                 </button>
@@ -446,6 +434,7 @@ export function AIFeaturesSettings({ embedded }: AIFeaturesSettingsProps = {}) {
                 <button
                   className="settings-button"
                   disabled={isBusy}
+                  onClick={() => void getMatAnyoneService().downloadModel()}
                 >
                   Download Model
                 </button>
@@ -468,7 +457,10 @@ export function AIFeaturesSettings({ embedded }: AIFeaturesSettingsProps = {}) {
                       <button
                         className="settings-button"
                         style={{ color: '#ef4444', borderColor: '#ef4444' }}
-                        onClick={() => setConfirmUninstall(false)}
+                        onClick={() => {
+                          setConfirmUninstall(false);
+                          void getMatAnyoneService().uninstall();
+                        }}
                       >
                         Confirm Uninstall
                       </button>
@@ -493,45 +485,10 @@ export function AIFeaturesSettings({ embedded }: AIFeaturesSettingsProps = {}) {
             </div>
           </div>
 
-          {/* Advanced Section (collapsible) */}
-          <div className="settings-group">
-            <div
-              className="settings-group-title"
-              style={{ cursor: 'pointer', userSelect: 'none' }}
-              onClick={() => setAdvancedOpen(!advancedOpen)}
-            >
-              {advancedOpen ? '\u25BC' : '\u25B6'} Advanced
-            </div>
-
-            {advancedOpen && (
-              <>
-                <label className="settings-row">
-                  <span className="settings-label">Python Path</span>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    <input
-                      type="text"
-                      value={matanyonePythonPath}
-                      onChange={(e) => setMatAnyonePythonPath(e.target.value)}
-                      placeholder="Auto-detect"
-                      className="settings-input"
-                      style={{ width: 180 }}
-                    />
-                    <button
-                      className="settings-button"
-                      onClick={handleBrowsePython}
-                    >
-                      Browse
-                    </button>
-                  </div>
-                </label>
-                <p className="settings-hint">
-                  Leave empty to auto-detect Python. Set a custom path if Python is not on your system PATH.
-                </p>
-              </>
-            )}
-          </div>
         </>
       )}
+
+      <MuscriptorFeatureSettings />
     </>
   );
 

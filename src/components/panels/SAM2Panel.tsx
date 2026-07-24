@@ -14,16 +14,43 @@ import { MatAnyoneSetupDialog } from '../common/MatAnyoneSetupDialog';
 import {
   buildMatAnyoneProjectFileName,
   createMatAnyoneJobDir,
-  getMatAnyoneFrameRange,
+  getMatAnyoneFramePlan,
+  getMatAnyoneSourceDimensions,
   getOrCreateMattingMediaFolder,
   joinNativePath,
   readNativeFileAsFile,
   resolveMatAnyoneVideoPath,
 } from './sam2/MatAnyoneFileHelpers';
+import {
+  createSourceSpaceMaskPng,
+  readPaintMask,
+} from './sam2/MatAnyoneMaskPreparation';
 import { MaskCreationSection, type MaskMode } from './sam2/MaskCreationSection';
 import { MatAnyoneRunSection } from './sam2/MatAnyoneRunSection';
 import { MatAnyoneOverlays, MatAnyoneStatusBar } from './sam2/MatAnyoneStatusViews';
+import type { LayerSourceRect } from '../../types/layers';
+import type { ClipTransform } from '../../types/timelineCore';
 import './SAM2Panel.css';
+
+type MaskOrigin = {
+  clipId: string;
+  timelineTime: number;
+  transform: ClipTransform;
+  sourceRect?: LayerSourceRect;
+};
+
+function captureMaskOrigin(clipId: string): MaskOrigin | null {
+  const timeline = useTimelineStore.getState();
+  const clip = timeline.clips.find(candidate => candidate.id === clipId);
+  if (!clip) return null;
+  const timelineTime = timeline.playheadPosition;
+  return {
+    clipId,
+    timelineTime,
+    transform: structuredClone(timeline.getInterpolatedTransform(clipId, timelineTime - clip.startTime)),
+    sourceRect: clip.sourceRect ? structuredClone(clip.sourceRect) : undefined,
+  };
+}
 
 export function SAM2Panel() {
   const [showSetup, setShowSetup] = useState(false);
@@ -35,6 +62,7 @@ export function SAM2Panel() {
   const [hasPaintedMask, setHasPaintedMask] = useState(false);
   const [isImportingMatte, setIsImportingMatte] = useState(false);
   const [matImportError, setMatImportError] = useState<string | null>(null);
+  const [maskOrigin, setMaskOrigin] = useState<MaskOrigin | null>(null);
 
   // MatAnyone2 state
   const matStatus = useMatAnyoneStore(s => s.setupStatus);
@@ -46,6 +74,7 @@ export function SAM2Panel() {
   const matError = useMatAnyoneStore(s => s.errorMessage);
   const matGpu = useMatAnyoneStore(s => s.gpuName);
   const matCuda = useMatAnyoneStore(s => s.cudaAvailable);
+  const setMatError = useMatAnyoneStore(s => s.setError);
 
   // SAM2 state
   const sam2Status = useSAM2Store(s => s.modelStatus);
@@ -60,6 +89,7 @@ export function SAM2Panel() {
   const selectedClipIds = useTimelineStore(s => s.selectedClipIds);
   const clips = useTimelineStore(s => s.clips);
   const selectedClip = clips.find(c => selectedClipIds.has(c.id));
+  const selectedClipId = selectedClip?.id;
 
   // Check MatAnyone2 status on mount (skip if already resolved)
   useEffect(() => {
@@ -97,10 +127,29 @@ export function SAM2Panel() {
     setIsImportingMatte(false);
   }, [matResult?.foregroundPath, matResult?.alphaPath]);
 
+  useEffect(() => {
+    paintCanvasRef.current = null;
+    setHasPaintedMask(false);
+    setMaskOrigin(null);
+    setIsPainting(false);
+    document.getElementById('mask-paint-overlay')?.remove();
+    const sam2 = useSAM2Store.getState();
+    sam2.clearPoints();
+    sam2.setLiveMask(null);
+    sam2.clearFrameMasks();
+  }, [selectedClipId]);
+
+  useEffect(() => {
+    if (!liveMask || !selectedClipId) return;
+    setMaskOrigin(captureMaskOrigin(selectedClipId));
+  }, [liveMask, selectedClipId]);
+
   const isMatReady = matStatus === 'ready';
-  const isMatInstalled = matStatus === 'installed' || matStatus === 'ready' || matStatus === 'starting';
+  const isMatInstalled = matStatus === 'installed' || matStatus === 'model-needed'
+    || matStatus === 'ready' || matStatus === 'starting';
   const hasMask = maskMode === 'paint' ? hasPaintedMask : !!liveMask;
-  const showSetupOverlay = matStatus === 'not-installed' || matStatus === 'error';
+  const showSetupOverlay = matStatus === 'not-installed' || matStatus === 'model-needed'
+    || matStatus === 'gpu-required' || matStatus === 'error';
   const showHelperOverlay = matStatus === 'not-available';
 
   // --- Paint mask ---
@@ -197,6 +246,9 @@ export function SAM2Panel() {
         }
       }
       setHasPaintedMask(true);
+      if (selectedClip) {
+        setMaskOrigin(current => current ?? captureMaskOrigin(selectedClip.id));
+      }
     };
 
     overlay.addEventListener('mousedown', (e) => {
@@ -213,7 +265,7 @@ export function SAM2Panel() {
 
     overlay.addEventListener('mouseup', () => { drawing = false; });
     overlay.addEventListener('mouseleave', () => { drawing = false; });
-  }, [brushSize, isEraser]);
+  }, [brushSize, isEraser, selectedClip]);
 
   const handlePaintToggle = useCallback(() => {
     if (isPainting) {
@@ -248,6 +300,7 @@ export function SAM2Panel() {
       ctx?.clearRect(0, 0, overlay.clientWidth, overlay.clientHeight);
     }
     setHasPaintedMask(false);
+    setMaskOrigin(null);
   }, []);
 
   const refreshPaintOverlay = useCallback((delayMs: number) => {
@@ -284,6 +337,7 @@ export function SAM2Panel() {
   const handleSam2AutoDetect = useCallback(async () => {
     if (!selectedClip) return;
     try {
+      setMaskOrigin(captureMaskOrigin(selectedClip.id));
       const pixels = await renderHostPort.readPixels();
       if (!pixels) return;
       const { width, height } = renderHostPort.getOutputDimensions();
@@ -302,6 +356,7 @@ export function SAM2Panel() {
     useSAM2Store.getState().clearPoints();
     useSAM2Store.getState().setLiveMask(null);
     useSAM2Store.getState().clearFrameMasks();
+    setMaskOrigin(null);
   }, []);
 
   const handleMaskOpacityChange = useCallback((value: number) => {
@@ -313,14 +368,21 @@ export function SAM2Panel() {
     if (!selectedClip) return;
     const clipSource = selectedClip.source;
     if (!clipSource || clipSource.type !== 'video') {
-      useMatAnyoneStore.getState().setError('Selected clip is not a video');
+      setMatError('Selected clip is not a video');
+      return;
+    }
+
+    if (!maskOrigin || maskOrigin.clipId !== selectedClip.id) {
+      setMatError(
+        'The mask does not belong to this clip. Create a new mask on the frame where matting should begin.'
+      );
       return;
     }
 
     const videoPath = await resolveMatAnyoneVideoPath(selectedClip);
 
     if (!videoPath) {
-      useMatAnyoneStore.getState().setError(
+      setMatError(
         'No file path available. Could not locate the original video or stage a temporary helper copy. ' +
         'Try re-importing the file with the Native Helper running.'
       );
@@ -328,55 +390,58 @@ export function SAM2Panel() {
     }
 
     try {
-      let maskBlob: Blob | null = null;
-
-      if (maskMode === 'paint') {
-        // Use painted mask
-        const canvas = paintCanvasRef.current;
-        if (!canvas) return;
-        maskBlob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
-      } else {
-        // Use SAM2 mask
-        const maskData = useSAM2Store.getState().liveMask;
-        if (!maskData) return;
-
-        const maskCanvas = document.createElement('canvas');
-        maskCanvas.width = maskData.width;
-        maskCanvas.height = maskData.height;
-        const ctx = maskCanvas.getContext('2d');
-        if (!ctx) return;
-
-        const imageData = ctx.createImageData(maskData.width, maskData.height);
-        for (let i = 0; i < maskData.maskData.length; i++) {
-          const val = maskData.maskData[i] > 0 ? 255 : 0;
-          imageData.data[i * 4] = val;
-          imageData.data[i * 4 + 1] = val;
-          imageData.data[i * 4 + 2] = val;
-          imageData.data[i * 4 + 3] = 255;
-        }
-        ctx.putImageData(imageData, 0, 0);
-        maskBlob = await new Promise<Blob | null>(resolve => maskCanvas.toBlob(resolve, 'image/png'));
+      const timeline = useTimelineStore.getState();
+      if (timeline.clipKeyframes.get(selectedClip.id)?.some(keyframe => keyframe.property === 'speed')) {
+        throw new Error('Variable-speed clips must be baked before MatAnyone2 processing.');
+      }
+      const sourceDimensions = getMatAnyoneSourceDimensions(selectedClip);
+      if (!sourceDimensions) {
+        throw new Error('The source video dimensions are not available yet. Reload the clip and try again.');
       }
 
-      if (!maskBlob) return;
+      const framePlan = getMatAnyoneFramePlan(selectedClip, maskOrigin.timelineTime);
+      const previewMask = maskMode === 'paint'
+        ? (() => {
+            const canvas = paintCanvasRef.current;
+            if (!canvas) throw new Error('The painted mask is no longer available.');
+            return readPaintMask(canvas);
+          })()
+        : (() => {
+            const maskData = useSAM2Store.getState().liveMask;
+            if (!maskData) throw new Error('The SAM2 mask is no longer available.');
+            return {
+              width: maskData.width,
+              height: maskData.height,
+              values: maskData.maskData,
+            };
+          })();
+
+      const maskBlob = await createSourceSpaceMaskPng(previewMask, {
+        sourceWidth: sourceDimensions.width,
+        sourceHeight: sourceDimensions.height,
+        outputWidth: previewMask.width,
+        outputHeight: previewMask.height,
+        transform: maskOrigin.transform,
+        sourceRect: maskOrigin.sourceRect,
+      });
 
       const { NativeHelperClient } = await import('../../services/nativeHelper/NativeHelperClient');
       const jobDir = await createMatAnyoneJobDir(NativeHelperClient, selectedClip.id);
       if (!jobDir) {
-        useMatAnyoneStore.getState().setError('Could not create a MatAnyone2 output folder.');
+        setMatError('Could not create a MatAnyone2 output folder.');
         return;
       }
 
       const maskPath = joinNativePath(jobDir, 'mask.png');
       const maskWritten = await NativeHelperClient.writeFileBinary(maskPath, maskBlob);
       if (!maskWritten) {
-        useMatAnyoneStore.getState().setError('Could not write MatAnyone2 mask image for the native helper.');
+        setMatError('Could not write MatAnyone2 mask image for the native helper.');
         return;
       }
 
       const maskFile = await NativeHelperClient.exists(maskPath);
       if (!maskFile.exists || maskFile.kind !== 'file') {
-        useMatAnyoneStore.getState().setError('MatAnyone2 mask image was not written to disk.');
+        setMatError('MatAnyone2 mask image was not written to disk.');
         return;
       }
 
@@ -384,16 +449,16 @@ export function SAM2Panel() {
         videoPath,
         maskPath,
         outputDir: jobDir,
-        ...getMatAnyoneFrameRange(selectedClip),
+        ...framePlan,
         sourceClipId: selectedClip.id,
       });
     } catch (e) {
       console.error('MatAnyone2 matting failed:', e);
-      useMatAnyoneStore.getState().setError(
+      setMatError(
         `MatAnyone2 matting failed: ${e instanceof Error ? e.message : String(e)}`
       );
     }
-  }, [selectedClip, maskMode]);
+  }, [selectedClip, maskMode, maskOrigin, setMatError]);
 
   const handleImportMattingResult = useCallback(async () => {
     if (!matResult || isImportingMatte) return;
@@ -415,22 +480,6 @@ export function SAM2Panel() {
       );
       useMediaStore.getState().moveToFolder([foregroundMedia.id], folderId);
 
-      let alphaMediaId: string | null = null;
-      try {
-        const alphaFile = await readNativeFileAsFile(NativeHelperClient, matResult.alphaPath);
-        const alphaMedia = requireMediaFileImportResult(
-          await useMediaStore.getState().importFile(alphaFile, folderId, {
-            forceCopyToProject: true,
-            projectFileName: buildMatAnyoneProjectFileName(matResult, matResult.alphaPath),
-          }),
-          'MatAnyone alpha import',
-        );
-        useMediaStore.getState().moveToFolder([alphaMedia.id], folderId);
-        alphaMediaId = alphaMedia.id;
-      } catch (alphaError) {
-        console.warn('MatAnyone2 alpha sidecar import failed:', alphaError);
-      }
-
       if (!foregroundMedia.file) {
         throw new Error(`Imported media is not ready: ${foregroundMedia.name}`);
       }
@@ -443,11 +492,14 @@ export function SAM2Panel() {
 
       const targetTrackId = timelineBefore.addTrack('video');
       const beforeClipIds = new Set(useTimelineStore.getState().clips.map(clip => clip.id));
+      const timelineStartTime = matResult.timelineStartTime ?? sourceClip.startTime;
+      const sourceDuration = matResult.sourceDuration ?? sourceClip.duration;
+      const timelineDuration = matResult.timelineDuration ?? sourceClip.duration;
       await useTimelineStore.getState().addClip(
         targetTrackId,
         foregroundMedia.file,
-        sourceClip.startTime,
-        sourceClip.duration,
+        timelineStartTime,
+        sourceDuration,
         foregroundMedia.id,
       );
 
@@ -464,8 +516,8 @@ export function SAM2Panel() {
 
         const latestClip = useTimelineStore.getState().clips.find(clip => clip.id === addedVideoClip.id);
         const matteDuration = Math.max(0.01, Math.min(
-          sourceClip.duration,
-          latestClip?.source?.naturalDuration ?? latestClip?.duration ?? sourceClip.duration,
+          sourceDuration,
+          latestClip?.source?.naturalDuration ?? latestClip?.duration ?? sourceDuration,
         ));
         timeline.trimClip(addedVideoClip.id, 0, matteDuration);
 
@@ -475,13 +527,16 @@ export function SAM2Panel() {
 
         useTimelineStore.getState().updateClip(addedVideoClip.id, {
           name: `Matte - ${sourceClip.name}`,
+          duration: timelineDuration,
+          speed: matResult.sourceSpeed ?? sourceClip.speed,
+          sourceRect: sourceClip.sourceRect ? structuredClone(sourceClip.sourceRect) : undefined,
         });
         useTimelineStore.getState().selectClip(addedVideoClip.id);
       }
 
       console.info('Imported MatAnyone2 result', {
         foregroundMediaId: foregroundMedia.id,
-        alphaMediaId,
+        alphaSidecarPath: matResult.alphaPath,
         folderId,
       });
     } catch (e) {
@@ -561,6 +616,7 @@ export function SAM2Panel() {
 
               <MatAnyoneRunSection
                 isMatReady={isMatReady}
+                isMatStarting={matStatus === 'starting'}
                 matGpu={matGpu}
                 matCuda={matCuda}
                 matProcessing={matProcessing}

@@ -4,8 +4,59 @@ import { useTimelineStore } from '../../../stores/timeline';
 import type { ToolResult } from '../types';
 import { selectClipAndOpenTab } from '../aiFeedback';
 import { isAIExecutionActive } from '../executionState';
+import type { TimelineClip } from '../../../types/timeline';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
+
+function sourceTimeToTimeline(
+  clip: TimelineClip,
+  sourceTime: number,
+  timelineStore: TimelineStore,
+): number {
+  if (typeof timelineStore.getSourceTimeForClip === 'function') {
+    const reversed = clip.reversed === true || (clip.speed ?? 1) < 0;
+    const sourceAt = (localTime: number) => {
+      const offset = timelineStore.getSourceTimeForClip(clip.id, localTime);
+      return reversed ? clip.outPoint - Math.abs(offset) : clip.inPoint + offset;
+    };
+    let bestLocal = 0;
+    let bestDistance = Infinity;
+    const steps = 96;
+    for (let index = 0; index <= steps; index += 1) {
+      const local = clip.duration * (index / steps);
+      const distance = Math.abs(sourceAt(local) - sourceTime);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestLocal = local;
+      }
+    }
+    let radius = clip.duration / steps;
+    for (let pass = 0; pass < 12; pass += 1) {
+      const left = Math.max(0, bestLocal - radius);
+      const right = Math.min(clip.duration, bestLocal + radius);
+      const leftDistance = Math.abs(sourceAt(left) - sourceTime);
+      const rightDistance = Math.abs(sourceAt(right) - sourceTime);
+      if (leftDistance < bestDistance) {
+        bestLocal = left;
+        bestDistance = leftDistance;
+      }
+      if (rightDistance < bestDistance) {
+        bestLocal = right;
+        bestDistance = rightDistance;
+      }
+      radius /= 2;
+    }
+    return clip.startTime + bestLocal;
+  }
+
+  const speed = clip.speed ?? 1;
+  const absoluteSpeed = Math.max(0.0001, Math.abs(speed));
+  const reversed = clip.reversed === true || speed < 0;
+  const local = reversed
+    ? (clip.outPoint - sourceTime) / absoluteSpeed
+    : (sourceTime - clip.inPoint) / absoluteSpeed;
+  return clip.startTime + Math.max(0, local);
+}
 
 export async function handleGetClipAnalysis(
   args: Record<string, unknown>,
@@ -21,24 +72,32 @@ export async function handleGetClipAnalysis(
   selectClipAndOpenTab(clipId, 'analysis');
 
   if (clip.analysisStatus !== 'ready' || !clip.analysis) {
+    const error = clip.faceAnalysisStatus === 'error'
+      ? clip.faceAnalysisMessage || 'YuNet + SFace analysis failed.'
+      : undefined;
     return {
-      success: true,
+      success: !error,
+      error,
       data: {
         hasAnalysis: false,
         status: clip.analysisStatus,
-        message: clip.analysisStatus === 'analyzing'
+        faceAnalysisStatus: clip.faceAnalysisStatus ?? 'none',
+        faceAnalysisProgress: clip.faceAnalysisProgress ?? 0,
+        message: error ?? (clip.analysisStatus === 'analyzing'
           ? 'Analysis in progress'
-          : 'No analysis data. Run analysis on this clip first.',
+          : 'No analysis data. Run analysis on this clip first.'),
       },
     };
   }
 
   // Summarize analysis data
   const frames = clip.analysis.frames;
-  const avgMotion = frames.reduce((sum, f) => sum + f.motion, 0) / frames.length;
-  const avgBrightness = frames.reduce((sum, f) => sum + f.brightness, 0) / frames.length;
-  const avgFocus = frames.reduce((sum, f) => sum + (f.focus || 0), 0) / frames.length;
+  const divisor = Math.max(1, frames.length);
+  const avgMotion = frames.reduce((sum, f) => sum + f.motion, 0) / divisor;
+  const avgBrightness = frames.reduce((sum, f) => sum + f.brightness, 0) / divisor;
+  const avgFocus = frames.reduce((sum, f) => sum + (f.focus || 0), 0) / divisor;
   const totalFaces = frames.reduce((sum, f) => sum + (f.faceCount || 0), 0);
+  const faceAnalysis = clip.analysis.faceAnalysis;
 
   return {
     success: true,
@@ -50,11 +109,12 @@ export async function handleGetClipAnalysis(
         averageMotion: avgMotion,
         averageBrightness: avgBrightness,
         averageFocus: avgFocus,
-        maxMotion: Math.max(...frames.map(f => f.motion)),
-        minMotion: Math.min(...frames.map(f => f.motion)),
-        maxFocus: Math.max(...frames.map(f => f.focus || 0)),
-        minFocus: Math.min(...frames.map(f => f.focus || 0)),
-        totalFacesDetected: totalFaces,
+        maxMotion: frames.length ? Math.max(...frames.map(f => f.motion)) : 0,
+        minMotion: frames.length ? Math.min(...frames.map(f => f.motion)) : 0,
+        maxFocus: frames.length ? Math.max(...frames.map(f => f.focus || 0)) : 0,
+        minFocus: frames.length ? Math.min(...frames.map(f => f.focus || 0)) : 0,
+        faceObservations: totalFaces,
+        uniquePeople: faceAnalysis?.people.length ?? 0,
       },
       // Include detailed frame data for specific queries
       frames: frames.map(f => ({
@@ -64,6 +124,119 @@ export async function handleGetClipAnalysis(
         focus: f.focus || 0,
         faces: f.faceCount || 0,
       })),
+      faceAnalysis: faceAnalysis
+        ? {
+            model: `${faceAnalysis.detector} + ${faceAnalysis.recognizer}`,
+            modelVersion: faceAnalysis.modelVersion,
+            backend: faceAnalysis.backend,
+            uniquePeople: faceAnalysis.people.length,
+            observationCount: faceAnalysis.observationCount,
+          }
+        : null,
+    },
+  };
+}
+
+export async function handleGetClipFaceAnalysis(
+  args: Record<string, unknown>,
+  timelineStore: TimelineStore,
+): Promise<ToolResult> {
+  const clipId = args.clipId as string;
+  const clip = timelineStore.clips.find(candidate => candidate.id === clipId);
+  if (!clip) return { success: false, error: `Clip not found: ${clipId}` };
+
+  selectClipAndOpenTab(clipId, 'analysis');
+  const status = clip.faceAnalysisStatus ?? 'none';
+  if (status === 'error') {
+    return {
+      success: false,
+      error: clip.faceAnalysisMessage || 'YuNet + SFace analysis failed.',
+      data: { clipId, status, progress: clip.faceAnalysisProgress ?? 0 },
+    };
+  }
+  const result = clip.analysis?.faceAnalysis;
+  if (status !== 'ready' || !result) {
+    return {
+      success: true,
+      data: {
+        clipId,
+        status,
+        progress: clip.faceAnalysisProgress ?? 0,
+        message: clip.faceAnalysisMessage
+          || (status === 'analyzing'
+            ? 'YuNet + SFace analysis is still running.'
+            : 'No YuNet + SFace analysis exists. Call startClipFaceAnalysis first.'),
+      },
+    };
+  }
+
+  const requestedStart = typeof args.sourceStart === 'number' ? args.sourceStart : clip.inPoint;
+  const requestedEnd = typeof args.sourceEnd === 'number' ? args.sourceEnd : clip.outPoint;
+  const clampSourceTime = (value: number) => Math.min(clip.outPoint, Math.max(clip.inPoint, value));
+  const sourceStart = clampSourceTime(Math.min(requestedStart, requestedEnd));
+  const sourceEnd = clampSourceTime(Math.max(requestedStart, requestedEnd));
+  const requestedPersonId = typeof args.personId === 'string' ? args.personId : null;
+  const includeObservations = args.includeObservations === true;
+  const limit = Math.min(30, Math.max(1, typeof args.limit === 'number' ? Math.floor(args.limit) : 20));
+  const people = result.people
+    .filter(person => !requestedPersonId || person.id === requestedPersonId)
+    .map(person => ({
+      ...person,
+      appearances: person.appearances
+        .filter(range => range.end >= sourceStart && range.start <= sourceEnd)
+        .map((range) => {
+          const clippedStart = Math.max(sourceStart, range.start);
+          const clippedEnd = Math.min(sourceEnd, range.end);
+          const timelineA = sourceTimeToTimeline(clip, clippedStart, timelineStore);
+          const timelineB = sourceTimeToTimeline(clip, clippedEnd, timelineStore);
+          return {
+            sourceStart: clippedStart,
+            sourceEnd: clippedEnd,
+            timelineStart: Math.min(timelineA, timelineB),
+            timelineEnd: Math.max(timelineA, timelineB),
+          };
+        }),
+    }))
+    .filter(person => person.appearances.length > 0);
+  const personLabels = new Map(result.people.map(person => [person.id, person.label]));
+  const observations = includeObservations
+    ? (clip.analysis?.frames ?? [])
+        .filter(frame => frame.timestamp >= sourceStart && frame.timestamp <= sourceEnd)
+        .flatMap(frame => (frame.faces ?? [])
+          .filter(face => !requestedPersonId || face.personId === requestedPersonId)
+          .map(face => ({
+            sourceTime: frame.timestamp,
+            timelineTime: sourceTimeToTimeline(clip, frame.timestamp, timelineStore),
+            personId: face.personId,
+            label: personLabels.get(face.personId) ?? face.label,
+            confidence: face.confidence,
+            box: face.box,
+            landmarks: face.landmarks,
+          })))
+        .slice(0, limit)
+    : undefined;
+
+  return {
+    success: true,
+    data: {
+      clipId,
+      status,
+      sourceRange: { start: sourceStart, end: sourceEnd },
+      model: {
+        detector: result.detector,
+        recognizer: result.recognizer,
+        version: result.modelVersion,
+        backend: result.backend,
+      },
+      summary: {
+        uniquePeople: people.length,
+        totalUniquePeopleInClip: result.people.length,
+        observationCount: result.observationCount,
+      },
+      people,
+      observations,
+      observationsLimitedTo: includeObservations ? limit : undefined,
+      privacy: 'Anonymous local person IDs only; raw biometric vectors are never exposed.',
     },
   };
 }
@@ -353,6 +526,14 @@ export async function handleStartClipAnalysis(
   if (!clip) {
     return { success: false, error: `Clip not found: ${clipId}` };
   }
+  if (!clip.file) {
+    return { success: false, error: `Source file is unavailable for clip: ${clipId}` };
+  }
+  const isVideo = clip.file.type.startsWith('video/')
+    || /\.(mp4|webm|mov|avi|mkv|m4v|mxf)$/i.test(clip.file.name);
+  if (!isVideo) {
+    return { success: false, error: 'Clip analysis requires a video clip.' };
+  }
 
   if (clip.analysisStatus === 'analyzing') {
     return { success: false, error: 'Analysis already in progress for this clip' };
@@ -362,15 +543,59 @@ export async function handleStartClipAnalysis(
   selectClipAndOpenTab(clipId, 'analysis');
 
   // Import and start analysis (runs in background)
-  const { analyzeClip } = await import('../../clipAnalyzer');
-  analyzeClip(clipId); // Don't await - runs in background
+  const { analyzeClip, isAnalysisRunning, getCurrentAnalyzingClipId } = await import('../../clipAnalyzer');
+  if (isAnalysisRunning()) {
+    return {
+      success: false,
+      error: `Another clip analysis is already running (${getCurrentAnalyzingClipId() ?? 'unknown clip'}).`,
+    };
+  }
+  void analyzeClip(clipId).catch(() => {
+    // The analyzer persists its exact runtime error for getClipAnalysis.
+  });
 
   return {
     success: true,
     data: {
       clipId,
       clipName: clip.name,
-      message: 'Analysis started. Check clip details later for results.',
+      message: 'Analysis started, including browser-local YuNet + SFace. Poll getClipAnalysis for progress, results, or errors.',
+    },
+  };
+}
+
+export async function handleStartClipFaceAnalysis(
+  args: Record<string, unknown>,
+  timelineStore: TimelineStore,
+): Promise<ToolResult> {
+  const clipId = args.clipId as string;
+  const clip = timelineStore.clips.find(candidate => candidate.id === clipId);
+  if (!clip) return { success: false, error: `Clip not found: ${clipId}` };
+  if (!clip.file) return { success: false, error: `Source file is unavailable for clip: ${clipId}` };
+  const isVideo = clip.file.type.startsWith('video/')
+    || /\.(mp4|webm|mov|avi|mkv|m4v|mxf)$/i.test(clip.file.name);
+  if (!isVideo) return { success: false, error: 'YuNet + SFace analysis requires a video clip.' };
+
+  const { analyzeClip, isAnalysisRunning, getCurrentAnalyzingClipId } = await import('../../clipAnalyzer');
+  if (isAnalysisRunning()) {
+    return {
+      success: false,
+      error: `Another clip analysis is already running (${getCurrentAnalyzingClipId() ?? 'unknown clip'}).`,
+    };
+  }
+
+  selectClipAndOpenTab(clipId, 'analysis');
+  void analyzeClip(clipId).catch(() => {
+    // analyzeClip persists runtime errors on the clip for getClipFaceAnalysis.
+  });
+
+  return {
+    success: true,
+    data: {
+      clipId,
+      clipName: clip.name,
+      status: 'analyzing',
+      message: 'YuNet + SFace analysis started in the browser. Poll getClipFaceAnalysis for progress, results, or an exact module error.',
     },
   };
 }

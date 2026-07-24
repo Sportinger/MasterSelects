@@ -125,6 +125,8 @@ function createSerializableClip(
     transcriptStatus: clip.transcriptStatus !== 'none' ? clip.transcriptStatus : undefined,
     analysis: clip.analysis,
     analysisStatus: clip.analysisStatus !== 'none' ? clip.analysisStatus : undefined,
+    faceAnalysisStatus: clip.faceAnalysisStatus !== 'none' ? clip.faceAnalysisStatus : undefined,
+    faceAnalysisMessage: clip.faceAnalysisMessage,
     reversed: clip.reversed || undefined,
     speed: clip.speed != null && clip.speed !== 1 ? clip.speed : undefined,
     preservesPitch: clip.preservesPitch === false ? false : undefined,

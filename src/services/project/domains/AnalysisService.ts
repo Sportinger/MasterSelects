@@ -181,4 +181,24 @@ export class AnalysisService {
   ): Promise<boolean> {
     return this.fileStorage.deleteFile(projectHandle, 'ANALYSIS', `${mediaId}.json`);
   }
+
+  async deleteAnalysisRange(
+    projectHandle: FileSystemDirectoryHandle,
+    mediaId: string,
+    inPoint: number,
+    outPoint: number,
+  ): Promise<boolean> {
+    const record = await this.getAnalysisRecord(projectHandle, mediaId);
+    if (!record) return true;
+    delete record.analyses[this.getAnalysisRangeKey(inPoint, outPoint)];
+    if (Object.keys(record.analyses).length === 0) {
+      return this.deleteAnalysis(projectHandle, mediaId);
+    }
+    return this.fileStorage.writeFile(
+      projectHandle,
+      'ANALYSIS',
+      `${mediaId}.json`,
+      JSON.stringify(record, null, 2),
+    );
+  }
 }

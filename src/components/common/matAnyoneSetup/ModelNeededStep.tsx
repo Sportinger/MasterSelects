@@ -20,6 +20,9 @@ export function ModelNeededStep({ onClose, onDownloadModel }: ModelNeededStepPro
             Environment is set up. Download the model weights to complete installation.
           </p>
           <p style={styles.modelInfo}>~141 MB from HuggingFace</p>
+          <p style={{ ...styles.description, textAlign: 'center', fontSize: 11 }}>
+            Downloading and using the weights is subject to the NTU S-Lab License 1.0, including its non-commercial-use terms.
+          </p>
         </div>
       </div>
 

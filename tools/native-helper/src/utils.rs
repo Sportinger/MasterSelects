@@ -177,7 +177,8 @@ pub fn is_path_allowed_with_extra(path: &std::path::Path, extra_prefixes: &[Path
     };
 
     allowed.iter().any(|prefix| {
-        let prefix_canonical = canonicalize_existing_ancestor(prefix).unwrap_or_else(|| prefix.clone());
+        let prefix_canonical =
+            canonicalize_existing_ancestor(prefix).unwrap_or_else(|| prefix.clone());
         path_is_within_allowed_prefix(&effective_path, &prefix_canonical)
     })
 }
@@ -199,7 +200,10 @@ mod tests {
         // For unit test purposes, verify the prefix matching logic
         let prefixes = get_allowed_prefixes();
         let is_under_prefix = prefixes.iter().any(|p| test_path.starts_with(p));
-        assert!(is_under_prefix, "Project root path should be under an allowed prefix");
+        assert!(
+            is_under_prefix,
+            "Project root path should be under an allowed prefix"
+        );
     }
 
     #[test]
@@ -209,7 +213,10 @@ mod tests {
         // Downloads dir is under temp, which is always allowed
         let prefixes = get_allowed_prefixes();
         let is_under_prefix = prefixes.iter().any(|p| test_path.starts_with(p));
-        assert!(is_under_prefix, "Download dir path should be under an allowed prefix");
+        assert!(
+            is_under_prefix,
+            "Download dir path should be under an allowed prefix"
+        );
     }
 
     #[test]
@@ -219,7 +226,10 @@ mod tests {
         if let Some(home) = dirs::home_dir() {
             let prefixes = get_allowed_prefixes();
             let home_in_prefixes = prefixes.iter().any(|p| p == &home);
-            assert!(!home_in_prefixes, "Home directory should not be in allowed prefixes");
+            assert!(
+                !home_in_prefixes,
+                "Home directory should not be in allowed prefixes"
+            );
         }
     }
 
@@ -228,22 +238,38 @@ mod tests {
         #[cfg(windows)]
         {
             let system_path = Path::new("C:\\Windows\\System32\\cmd.exe");
-            assert!(!is_path_allowed(system_path), "System paths should be rejected");
+            assert!(
+                !is_path_allowed(system_path),
+                "System paths should be rejected"
+            );
         }
 
         #[cfg(unix)]
         {
             let system_path = Path::new("/etc/passwd");
-            assert!(!is_path_allowed(system_path), "System paths should be rejected");
+            assert!(
+                !is_path_allowed(system_path),
+                "System paths should be rejected"
+            );
         }
     }
 
     #[test]
     fn test_rejected_path_traversal() {
         let download_dir = get_download_dir();
-        let traversal_path = download_dir.join("..").join("..").join("etc").join("passwd");
-        assert!(has_traversal_segments(&traversal_path), "Path with .. should be detected as traversal");
-        assert!(!is_path_allowed(&traversal_path), "Paths with traversal should be rejected");
+        let traversal_path = download_dir
+            .join("..")
+            .join("..")
+            .join("etc")
+            .join("passwd");
+        assert!(
+            has_traversal_segments(&traversal_path),
+            "Path with .. should be detected as traversal"
+        );
+        assert!(
+            !is_path_allowed(&traversal_path),
+            "Paths with traversal should be rejected"
+        );
     }
 
     #[test]
@@ -255,16 +281,23 @@ mod tests {
         let forward_slash_path = PathBuf::from(format!("{}/test-video.mp4", download_str));
 
         // The path should contain forward slashes
-        assert!(forward_slash_path.to_string_lossy().contains('/') || cfg!(not(windows)),
-            "Test path should use forward slashes on Windows");
+        assert!(
+            forward_slash_path.to_string_lossy().contains('/') || cfg!(not(windows)),
+            "Test path should use forward slashes on Windows"
+        );
 
-        assert!(is_path_allowed(&forward_slash_path), "Forward-slash paths should match allowed prefixes");
+        assert!(
+            is_path_allowed(&forward_slash_path),
+            "Forward-slash paths should match allowed prefixes"
+        );
     }
 
     #[test]
     fn test_rejected_sibling_prefix_path() {
         let allowed_temp = std::env::temp_dir();
-        let parent = allowed_temp.parent().expect("temp dir should have a parent");
+        let parent = allowed_temp
+            .parent()
+            .expect("temp dir should have a parent");
         let base_name = allowed_temp
             .file_name()
             .and_then(|name| name.to_str())

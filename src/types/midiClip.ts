@@ -19,9 +19,25 @@ export interface MidiNote {
   velocity: number;  // 0–1
 }
 
+export type MidiClipProvenanceValue =
+  | string
+  | number
+  | boolean
+  | null
+  | MidiClipProvenanceValue[]
+  | { [key: string]: MidiClipProvenanceValue };
+
+/**
+ * Optional durable metadata describing how a generated MIDI clip was created.
+ * This intentionally permits JSON values only: runtime handles, Files, and
+ * service instances must never leak into project data.
+ */
+export type MidiClipProvenance = Record<string, MidiClipProvenanceValue>;
+
 /** Note data carried by a MIDI clip (`TimelineClip.midiData`). */
 export interface MidiClipData {
   notes: MidiNote[];
+  provenance?: MidiClipProvenance;
 }
 
 /**

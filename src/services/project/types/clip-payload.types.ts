@@ -191,6 +191,46 @@ export interface ProjectSceneSegment {
   end: number;
 }
 
+export interface ProjectFaceAnalysisPoint {
+  x: number;
+  y: number;
+}
+
+export interface ProjectFaceAnalysisBox extends ProjectFaceAnalysisPoint {
+  width: number;
+  height: number;
+}
+
+export interface ProjectFaceFrameDetection {
+  id: string;
+  personId: string;
+  label: string;
+  confidence: number;
+  box: ProjectFaceAnalysisBox;
+  landmarks: ProjectFaceAnalysisPoint[];
+}
+
+export interface ProjectFacePersonSummary {
+  id: string;
+  label: string;
+  firstSeen: number;
+  lastSeen: number;
+  sampleCount: number;
+  averageConfidence: number;
+  maxConfidence: number;
+  appearances: Array<{ start: number; end: number }>;
+}
+
+export interface ProjectFaceAnalysisResult {
+  schemaVersion: 1;
+  modelVersion: string;
+  detector: 'YuNet';
+  recognizer: 'SFace';
+  backend: 'webgpu' | 'wasm' | 'cached';
+  observationCount: number;
+  people: ProjectFacePersonSummary[];
+}
+
 export interface ProjectFrameAnalysisData {
   timestamp: number;
   motion: number;
@@ -199,12 +239,15 @@ export interface ProjectFrameAnalysisData {
   focus: number;
   brightness: number;
   faceCount: number;
+  faces?: ProjectFaceFrameDetection[];
+  faceModelVersion?: string;
   isSceneCut?: boolean;
 }
 
 export interface ProjectClipAnalysis {
   frames: ProjectFrameAnalysisData[];
   sampleInterval: number;
+  faceAnalysis?: ProjectFaceAnalysisResult;
 }
 
 export type ProjectVideoBakeRegionScope = 'composition' | 'clip';

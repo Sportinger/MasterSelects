@@ -15,7 +15,12 @@ import type {
   TextClipProperties,
   TimelineClip,
 } from '../../../types';
-import type { MidiNote, MidiClipAutomation, AutomationPoint } from '../../../types/midiClip';
+import type {
+  AutomationPoint,
+  MidiClipAutomation,
+  MidiClipProvenance,
+  MidiNote,
+} from '../../../types/midiClip';
 import type {
   MotionColor,
   MotionLayerDefinition,
@@ -71,6 +76,45 @@ export interface MidiClipActions {
     points: AutomationPoint[] | undefined,
     options?: { captureHistory?: boolean },
   ) => void;
+  /**
+   * Atomically materialize a provider-neutral music transcription as one GM
+   * track/clip per detected instrument. Returns null when the source became
+   * stale/locked or no valid notes remain; those cases do not mutate history.
+   */
+  commitMidiTranscription: (
+    input: CommitMidiTranscriptionInput,
+  ) => CommitMidiTranscriptionResult | null;
+}
+
+export interface MidiTranscriptionNoteInput {
+  pitch: number;
+  startTime: number;
+  endTime: number;
+  velocity?: number;
+}
+
+export interface MidiTranscriptionTrackInput {
+  instrumentId: string;
+  displayName?: string;
+  gmProgram: number;
+  isDrum?: boolean;
+  notes: readonly MidiTranscriptionNoteInput[];
+}
+
+export interface CommitMidiTranscriptionInput {
+  sourceClipId: string;
+  sourceFingerprint: string;
+  /** Processed clip/keyframe identity captured before inference for stale-result validation. */
+  processingStateHash?: string;
+  /** Current File identity captured before inference; used only for stale-result validation. */
+  sourceFileKey?: string | null;
+  tracks: readonly MidiTranscriptionTrackInput[];
+  provenance?: MidiClipProvenance;
+}
+
+export interface CommitMidiTranscriptionResult {
+  trackIds: string[];
+  clipIds: string[];
 }
 
 export interface MathSceneClipActions {

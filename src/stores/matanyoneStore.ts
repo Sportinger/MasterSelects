@@ -7,6 +7,7 @@ export type MatAnyoneSetupStatus =
   | 'not-checked'
   | 'not-available'      // Native helper not connected
   | 'not-installed'      // Not set up yet
+  | 'gpu-required'       // NVIDIA CUDA access is unavailable; CPU is unsupported
   | 'installing'         // Setup in progress
   | 'model-needed'       // Deps installed but no model
   | 'downloading-model'  // Model download in progress
@@ -43,6 +44,11 @@ interface MatAnyoneState {
     foregroundPath: string;
     alphaPath: string;
     sourceClipId: string;
+    sourceStartTime?: number;
+    sourceDuration?: number;
+    timelineStartTime?: number;
+    timelineDuration?: number;
+    sourceSpeed?: number;
   } | null;
 }
 
@@ -127,7 +133,7 @@ function createMatAnyoneStore() {
 
 type MatAnyoneStoreApi = ReturnType<typeof createMatAnyoneStore>;
 
-const existingStore = import.meta.hot?.data.matAnyoneStore as MatAnyoneStoreApi | undefined;
+const existingStore = import.meta.hot?.data?.matAnyoneStore as MatAnyoneStoreApi | undefined;
 
 export const useMatAnyoneStore = existingStore ?? createMatAnyoneStore();
 

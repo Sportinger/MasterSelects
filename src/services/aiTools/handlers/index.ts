@@ -44,10 +44,12 @@ import {
 
 import {
   handleGetClipAnalysis,
+  handleGetClipFaceAnalysis,
   handleGetClipTranscript,
   handleFindSilentSections,
   handleFindLowQualitySections,
   handleStartClipAnalysis,
+  handleStartClipFaceAnalysis,
   handleStartClipTranscription,
 } from './analysis';
 
@@ -216,10 +218,12 @@ const timelineHandlers: Record<string, (args: Record<string, unknown>, store: Re
   setTrackVisibility: handleSetTrackVisibility,
   setTrackMuted: handleSetTrackMuted,
   getClipAnalysis: handleGetClipAnalysis,
+  getClipFaceAnalysis: handleGetClipFaceAnalysis,
   getClipTranscript: handleGetClipTranscript,
   findSilentSections: handleFindSilentSections,
   findLowQualitySections: handleFindLowQualitySections,
   startClipAnalysis: handleStartClipAnalysis,
+  startClipFaceAnalysis: handleStartClipFaceAnalysis,
   startClipTranscription: handleStartClipTranscription,
   captureFrame: handleCaptureFrame,
   getCutPreviewQuad: handleGetCutPreviewQuad,
@@ -608,10 +612,12 @@ export {
   handleSetTrackMuted,
   // Analysis
   handleGetClipAnalysis,
+  handleGetClipFaceAnalysis,
   handleGetClipTranscript,
   handleFindSilentSections,
   handleFindLowQualitySections,
   handleStartClipAnalysis,
+  handleStartClipFaceAnalysis,
   handleStartClipTranscription,
   // Preview
   handleCaptureFrame,

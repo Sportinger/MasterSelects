@@ -259,6 +259,8 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       // Analysis data
       analysis: c.analysis || undefined,
       analysisStatus: c.analysisStatus || undefined,
+      faceAnalysisStatus: c.faceAnalysisStatus || undefined,
+      faceAnalysisMessage: c.faceAnalysisMessage || undefined,
       // AI scene description data
       sceneDescriptions: c.sceneDescriptions || undefined,
       sceneDescriptionStatus: c.sceneDescriptionStatus || undefined,

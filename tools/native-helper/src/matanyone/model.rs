@@ -17,6 +17,7 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::time::Instant;
 
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tracing::{debug, error, info, warn};
 
@@ -26,9 +27,14 @@ use tracing::{debug, error, info, warn};
 
 const HF_REPO: &str = "PeiqingYang/MatAnyone2";
 const HF_BASE_URL: &str = "https://huggingface.co";
+/// Immutable Hugging Face repository revision verified on 2026-07-19.
+const HF_REVISION: &str = "40c894a6f68d1f55c86ab0de838d89dc61587930";
 
 const MODEL_FILENAME: &str = "model.safetensors";
 const CONFIG_FILENAME: &str = "config.json";
+const MODEL_SHA256: &str = "70d3bf1d85d0aaf2020f9ef3577239f4f83b77c2ba47fca1eebaaf872f9ad40f";
+const CONFIG_SHA256: &str = "48dfbea235039093873586f352f0d05fbfdcbfeda094f2d8b257bc6408e68063";
+const ARTIFACT_MANIFEST: &str = "artifact-manifest.json";
 
 const USER_AGENT: &str = "MasterSelects-Helper";
 
@@ -73,6 +79,25 @@ pub struct DownloadProgress {
     pub eta_seconds: Option<f64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct ArtifactManifest {
+    repository: String,
+    revision: String,
+    model_sha256: String,
+    config_sha256: String,
+}
+
+impl ArtifactManifest {
+    fn expected() -> Self {
+        Self {
+            repository: HF_REPO.to_string(),
+            revision: HF_REVISION.to_string(),
+            model_sha256: MODEL_SHA256.to_string(),
+            config_sha256: CONFIG_SHA256.to_string(),
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Directory helpers
 // ---------------------------------------------------------------------------
@@ -107,8 +132,9 @@ pub fn get_model_info() -> ModelInfo {
     let model_path = dir.join(MODEL_FILENAME);
     let config_path = dir.join(CONFIG_FILENAME);
 
-    let model_ok = file_is_valid(&model_path);
-    let config_ok = file_is_valid(&config_path);
+    let manifest_ok = artifact_manifest_is_valid(&dir.join(ARTIFACT_MANIFEST));
+    let model_ok = manifest_ok && file_is_valid(&model_path, MODEL_SHA256);
+    let config_ok = manifest_ok && file_is_valid(&config_path, CONFIG_SHA256);
 
     let size_bytes = if model_ok {
         fs::metadata(&model_path).ok().map(|m| m.len())
@@ -153,10 +179,10 @@ pub async fn download_model(
 
     // Download config.json first (small, quick)
     let config_path = dir.join(CONFIG_FILENAME);
-    if !file_is_valid(&config_path) {
+    if !file_is_valid(&config_path, CONFIG_SHA256) {
         let config_url = resolve_url(CONFIG_FILENAME);
         info!("Downloading {CONFIG_FILENAME} from {config_url}");
-        download_file(&config_url, &config_path, None).map_err(|e| {
+        download_file(&config_url, &config_path, CONFIG_SHA256, None).map_err(|e| {
             error!("Failed to download {CONFIG_FILENAME}: {e}");
             format!("Failed to download {CONFIG_FILENAME}: {e}")
         })?;
@@ -165,15 +191,23 @@ pub async fn download_model(
 
     // Download model.safetensors (large, with progress)
     let model_path = dir.join(MODEL_FILENAME);
-    if !file_is_valid(&model_path) {
+    if !file_is_valid(&model_path, MODEL_SHA256) {
         let model_url = resolve_url(MODEL_FILENAME);
         info!("Downloading {MODEL_FILENAME} from {model_url}");
-        download_file(&model_url, &model_path, Some(&progress_callback)).map_err(|e| {
+        download_file(
+            &model_url,
+            &model_path,
+            MODEL_SHA256,
+            Some(&progress_callback),
+        )
+        .map_err(|e| {
             error!("Failed to download {MODEL_FILENAME}: {e}");
             format!("Failed to download {MODEL_FILENAME}: {e}")
         })?;
         info!("{MODEL_FILENAME} downloaded successfully");
     }
+
+    write_artifact_manifest(&dir.join(ARTIFACT_MANIFEST))?;
 
     Ok(get_model_info())
 }
@@ -194,6 +228,7 @@ pub async fn delete_model() -> Result<(), String> {
         &format!("{CONFIG_FILENAME}.tmp"),
         &format!("{MODEL_FILENAME}.sha256"),
         &format!("{CONFIG_FILENAME}.sha256"),
+        ARTIFACT_MANIFEST,
     ];
 
     for name in &files {
@@ -206,7 +241,7 @@ pub async fn delete_model() -> Result<(), String> {
 
     // Try to remove the directory tree if empty
     let _ = fs::remove_dir(dir.join("..").join("models")); // models/
-    let _ = fs::remove_dir(dir.join(".."));                 // matanyone2/
+    let _ = fs::remove_dir(dir.join("..")); // matanyone2/
 
     info!("MatAnyone2 model files deleted");
     Ok(())
@@ -216,14 +251,13 @@ pub async fn delete_model() -> Result<(), String> {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/// Build the HuggingFace `resolve/main/` URL for a file.
+/// Build an immutable Hugging Face resolve URL for a file.
 fn resolve_url(filename: &str) -> String {
-    format!("{HF_BASE_URL}/{HF_REPO}/resolve/main/{filename}")
+    format!("{HF_BASE_URL}/{HF_REPO}/resolve/{HF_REVISION}/{filename}")
 }
 
-/// Check if a file exists, has non-zero size, and (if a sidecar is present)
-/// passes SHA-256 verification.
-fn file_is_valid(path: &PathBuf) -> bool {
+/// Check if a file exists, has non-zero size, and matches the pinned digest.
+fn file_is_valid(path: &PathBuf, expected_sha256: &str) -> bool {
     let meta = match fs::metadata(path) {
         Ok(m) => m,
         Err(_) => return false,
@@ -233,28 +267,46 @@ fn file_is_valid(path: &PathBuf) -> bool {
     }
 
     let sidecar = sidecar_path(path);
-    if sidecar.exists() {
-        match (read_sidecar_hash(&sidecar), compute_sha256(path)) {
-            (Some(expected), Ok(actual)) => {
-                if expected != actual {
-                    warn!(
-                        "SHA-256 mismatch for {}: expected {expected}, got {actual}",
-                        path.display()
-                    );
-                    return false;
-                }
-            }
-            (Some(_), Err(e)) => {
-                warn!("Cannot verify {}: {e}", path.display());
-                return false;
-            }
-            // No sidecar hash → skip verification (file was downloaded before
-            // we added integrity checks; still considered valid).
-            (None, _) => {}
+    let recorded = match read_sidecar_hash(&sidecar) {
+        Some(hash) if hash == expected_sha256 => hash,
+        Some(hash) => {
+            warn!(
+                "Pinned SHA-256 mismatch in {}: expected {expected_sha256}, got {hash}",
+                sidecar.display()
+            );
+            return false;
+        }
+        None => return false,
+    };
+
+    match compute_sha256(path) {
+        Ok(actual) if actual == recorded => true,
+        Ok(actual) => {
+            warn!(
+                "SHA-256 mismatch for {}: expected {recorded}, got {actual}",
+                path.display()
+            );
+            false
+        }
+        Err(error) => {
+            warn!("Cannot verify {}: {error}", path.display());
+            false
         }
     }
+}
 
-    true
+fn artifact_manifest_is_valid(path: &PathBuf) -> bool {
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|content| serde_json::from_str::<ArtifactManifest>(&content).ok())
+        .is_some_and(|manifest| manifest == ArtifactManifest::expected())
+}
+
+fn write_artifact_manifest(path: &PathBuf) -> Result<(), String> {
+    let content = serde_json::to_string_pretty(&ArtifactManifest::expected())
+        .map_err(|error| format!("Failed to serialize artifact manifest: {error}"))?;
+    fs::write(path, format!("{content}\n"))
+        .map_err(|error| format!("Failed to write {}: {error}", path.display()))
 }
 
 /// Return the `.sha256` sidecar path for a given file.
@@ -303,6 +355,7 @@ fn compute_sha256(path: &PathBuf) -> Result<String, String> {
 fn download_file(
     url: &str,
     dest: &PathBuf,
+    expected_sha256: &str,
     progress_callback: Option<&dyn Fn(DownloadProgress)>,
 ) -> Result<(), String> {
     let tmp_path = {
@@ -312,9 +365,7 @@ fn download_file(
     };
 
     // Determine how many bytes we already have (for resume).
-    let existing_len: u64 = fs::metadata(&tmp_path)
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let existing_len: u64 = fs::metadata(&tmp_path).map(|m| m.len()).unwrap_or(0);
 
     // --- Issue HTTP request ---
     let response = issue_download_request(url, existing_len)?;
@@ -353,8 +404,7 @@ fn download_file(
             .open(&tmp_path)
             .map_err(|e| format!("Cannot open tmp file for append: {e}"))?
     } else {
-        fs::File::create(&tmp_path)
-            .map_err(|e| format!("Cannot create tmp file: {e}"))?
+        fs::File::create(&tmp_path).map_err(|e| format!("Cannot create tmp file: {e}"))?
     };
 
     // --- Stream body ---
@@ -424,10 +474,8 @@ fn download_file(
     }
 
     // Flush and sync to disk before renaming
-    file.flush()
-        .map_err(|e| format!("Flush failed: {e}"))?;
-    file.sync_all()
-        .map_err(|e| format!("Sync failed: {e}"))?;
+    file.flush().map_err(|e| format!("Flush failed: {e}"))?;
+    file.sync_all().map_err(|e| format!("Sync failed: {e}"))?;
     drop(file);
 
     let elapsed = start_time.elapsed();
@@ -449,15 +497,33 @@ fn download_file(
         fs::remove_file(dest)
             .map_err(|e| format!("Cannot remove existing file {}: {e}", dest.display()))?;
     }
-    fs::rename(&tmp_path, dest)
-        .map_err(|e| format!("Rename {} -> {} failed: {e}", tmp_path.display(), dest.display()))?;
+    fs::rename(&tmp_path, dest).map_err(|e| {
+        format!(
+            "Rename {} -> {} failed: {e}",
+            tmp_path.display(),
+            dest.display()
+        )
+    })?;
 
     // Compute and store SHA-256 sidecar
     info!("Computing SHA-256 for {} ...", dest.display());
     let hash = compute_sha256(dest)?;
+    if hash != expected_sha256 {
+        let _ = fs::remove_file(dest);
+        return Err(format!(
+            "Pinned SHA-256 mismatch for {}: expected {expected_sha256}, got {hash}",
+            dest.display()
+        ));
+    }
     let sidecar = sidecar_path(dest);
-    fs::write(&sidecar, format!("{hash}  {}\n", dest.file_name().unwrap_or_default().to_string_lossy()))
-        .map_err(|e| format!("Failed to write sidecar {}: {e}", sidecar.display()))?;
+    fs::write(
+        &sidecar,
+        format!(
+            "{hash}  {}\n",
+            dest.file_name().unwrap_or_default().to_string_lossy()
+        ),
+    )
+    .map_err(|e| format!("Failed to write sidecar {}: {e}", sidecar.display()))?;
     info!("SHA-256: {hash}");
 
     Ok(())
@@ -508,12 +574,20 @@ mod tests {
     fn test_resolve_url() {
         assert_eq!(
             resolve_url("model.safetensors"),
-            "https://huggingface.co/PeiqingYang/MatAnyone2/resolve/main/model.safetensors"
+            "https://huggingface.co/PeiqingYang/MatAnyone2/resolve/40c894a6f68d1f55c86ab0de838d89dc61587930/model.safetensors"
         );
         assert_eq!(
             resolve_url("config.json"),
-            "https://huggingface.co/PeiqingYang/MatAnyone2/resolve/main/config.json"
+            "https://huggingface.co/PeiqingYang/MatAnyone2/resolve/40c894a6f68d1f55c86ab0de838d89dc61587930/config.json"
         );
+    }
+
+    #[test]
+    fn expected_manifest_pins_revision_and_digests() {
+        let manifest = ArtifactManifest::expected();
+        assert_eq!(manifest.revision, HF_REVISION);
+        assert_eq!(manifest.model_sha256, MODEL_SHA256);
+        assert_eq!(manifest.config_sha256, CONFIG_SHA256);
     }
 
     #[test]

@@ -2,7 +2,7 @@
 
 [← Back to Index](./README.md)
 
-GPT-powered editing with 86 exported model tools across 16 exported definition groups, OpenAI/Cloud or local Lemonade chat providers, multi-provider AI video/image/audio generation, transcription, multicam EDL generation, browser-local SAM 2 segmentation, and native-helper MatAnyone2 matting.
+GPT-powered editing with 86 exported model tools across 16 exported definition groups, OpenAI/Cloud or local Lemonade chat providers, multi-provider AI video/image/audio generation, transcription, multicam EDL generation, browser-local SAM 2 segmentation, native-helper MatAnyone2 matting, and local MuScriptor music-to-MIDI.
 
 ---
 
@@ -181,12 +181,10 @@ The practical rule for the current branch is:
 
 ## AI Segmentation and MatAnyone2
 
-> **Status:** Work in progress
-
 The panel combines two different mask sources:
 - **SAM 2** runs locally in the browser for interactive segmentation and frame propagation
 - **Paint** is a browser-only fallback that does not require a model download
-- **MatAnyone2** is a separate native-helper-backed video matting step that consumes either mask source and produces the alpha matte output
+- **MatAnyone2** is a separate native-helper-backed video matting step that consumes either mask source and produces a transparent foreground video plus an alpha sidecar
 
 SAM 2 inference runs locally in the browser using ONNX Runtime with WebGPU acceleration. No API keys or cloud services are involved.
 
@@ -256,14 +254,22 @@ After creating a mask on the current frame, SAM 2 can propagate it forward:
 ### MatAnyone2 Stage
 MatAnyone2 is the second step in the workflow:
 - Requires the Native Helper to be connected
+- Runs only on an accessible NVIDIA CUDA GPU; setup and server start fail closed instead of falling back to CPU
 - Uses either the painted mask or the SAM 2 live mask
-- Renders only the selected source clip segment when the timeline clip is trimmed
+- Converts composition-space paint/SAM2 masks back into raw source space, including source crop, aspect, scale, position, and 2D/3D rotation
+- Starts on the exact source frame where the mask was created and renders only the remaining selected source range
+- Preserves constant clip speed and aligns the imported result to the corresponding timeline time; reverse and variable-speed clips request a bake instead of producing a silently misaligned matte
 - Writes the job mask and native-helper output into a project-local `MatAnyone2/` folder
-- Imports completed foreground and alpha outputs into Media Pool `AI Gen / Matting`
+- Encodes a real alpha plane in VP9/WebM; the separate alpha WebM remains a diagnostic/interop sidecar
+- Imports the transparent foreground into Media Pool `AI Gen / Matting`
 - Copies imported outputs into project `Raw/MatAnyone2/...` so generated mattes survive reloads and project moves
-- Places the foreground result on a new video track aligned to the source clip when using `Import to Timeline`
+- Places the transparent foreground on a new video track aligned to the mask frame when using `Import to Timeline`
 - Exposes progress, job state, and hard cancellation; cancel stops the MatAnyone2 sidecar process tree and returns the stage to installed/not-running
 - Shows a helper-unavailable state when the Native Helper is not connected
+
+The helper installs a tested MatAnyone2 upstream revision rather than an unpinned branch head. Setup repairs stale installs, honors an explicitly configured Python interpreter, drains sidecar output continuously, and waits for real health instead of trusting cached process state.
+
+MatAnyone2 is distributed under the NTU S-Lab License 1.0. The setup UI surfaces its non-commercial-use terms; commercial use requires separate permission from the authors.
 
 ### Workflow
 ```
@@ -276,6 +282,16 @@ MatAnyone2 is the second step in the workflow:
 7. Import or inspect the generated matte result
 8. Clear All to reset and start over
 ```
+
+---
+
+## Local Music-to-MIDI
+
+Timeline audio and video clips with audible audio expose **Music to MIDI...** next to **Stem Separation...**. The action renders the processed audible clip range, stages a temporary WAV through the Native Helper, transcribes it with a persistent local MuScriptor model, maps instrument groups to General MIDI, and commits all generated tracks/clips as one undo step.
+
+MuScriptor is not a stem separator: it emits editable note timing, pitch, and instrument classes. The runtime and model cache are isolated from MatAnyone2. Published model weights are gated under CC BY-NC 4.0, so setup presents the license requirement and uses a transient user-supplied HuggingFace token only for the selected model download.
+
+See [MuScriptor Music-to-MIDI](./MuScriptor.md) for the complete runtime, mapping, license, and troubleshooting details.
 
 ---
 
@@ -511,10 +527,11 @@ Hosted cloud access for chat/video does not use a user-entered API key in the de
 
 ### No API Key Required
 - SAM 2 AI Segmentation runs entirely in the browser
+- MatAnyone2 video matting and MuScriptor music-to-MIDI run locally through isolated Native Helper sidecars
 - Local Whisper transcription runs in-browser
 
 ### Storage
-API keys are stored encrypted in IndexedDB via Web Crypto API. SAM 2 model files are stored in OPFS. MatAnyone2 runtime state and its model/files live in the Native Helper and the local file system.
+API keys are stored encrypted in IndexedDB via Web Crypto API. SAM 2 model files are stored in OPFS. MatAnyone2 and MuScriptor runtime state and model files live in isolated Native Helper provider directories. MuScriptor's gated HuggingFace token is deliberately transient and is not added to the stored API-key set.
 
 ### Security Considerations
 - Encryption at rest protects against casual inspection, not same-origin scripts or browser extensions

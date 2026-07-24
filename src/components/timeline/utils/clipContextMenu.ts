@@ -506,6 +506,16 @@ export function executeClipContextMenuStemSeparation(input: {
   return true;
 }
 
+export function executeClipContextMenuMusicToMidi(input: {
+  clipId: string | null | undefined;
+  canExecute: boolean;
+  openMusicToMidi: (clipId: string) => void;
+}): boolean {
+  if (!input.clipId || !input.canExecute) return false;
+  input.openMusicToMidi(input.clipId);
+  return true;
+}
+
 export async function executeClipContextMenuCommand(
   command: ClipContextMenuCommandDescriptor,
   context: ClipContextMenuCommandExecutionContext,
@@ -628,6 +638,13 @@ export async function executeClipContextMenuCommand(
         canExecute: command.canExecute,
         force: command.force,
         startClipStemSeparation: context.startClipStemSeparation,
+      });
+    case 'music-to-midi':
+      if (!context.clip) return false;
+      return executeClipContextMenuMusicToMidi({
+        clipId: context.clipId,
+        canExecute: command.canExecute,
+        openMusicToMidi: context.openMusicToMidi,
       });
     case 'transcription':
       return executeClipContextMenuTranscription({

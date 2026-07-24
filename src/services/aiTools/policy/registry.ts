@@ -93,6 +93,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['getClipsInTimeRange', readOnly()],
   ['getMediaItems', readOnly()],
   ['getClipAnalysis', readOnly()],
+  ['getClipFaceAnalysis', readOnly()],
   ['getClipTranscript', readOnly()],
   ['findSilentSections', readOnly()],
   ['findLowQualitySections', readOnly()],
@@ -473,6 +474,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['addMarker', mutatingLow()],
   ['removeMarker', mutatingLow()],
   ['startClipAnalysis', mutatingLow()],
+  ['startClipFaceAnalysis', mutatingLow()],
   ['startClipTranscription', mutatingLow()],
   ['searchYouTube', mutatingLow()],
   // searchVideos is the definition name for the same handler as searchYouTube

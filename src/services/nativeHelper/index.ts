@@ -21,6 +21,15 @@ export type {
   VideoInfo,
   FormatInfo,
   FormatRecommendation,
+  MuscriptorDevice,
+  MuscriptorRuntimeDevice,
+  MuscriptorModelVariant,
+  MuscriptorProgress,
+  MuscriptorStatusResponse,
+  MuscriptorTranscribedNote,
+  MuscriptorTranscriptionResult,
 } from './protocol';
+
+export type { MuscriptorProgressCallback, MuscriptorNativeCommands } from './nativeHelperMuscriptorCommands';
 
 export { ERROR_CODES } from './protocol';

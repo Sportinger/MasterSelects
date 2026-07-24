@@ -2,15 +2,16 @@
 
 # Native Helper
 
-The Native Helper is a local companion application that provides Firefox project persistence, external AI control, and yt-dlp-based downloads.
+The Native Helper is a local companion application that provides Firefox project persistence, external AI control, yt-dlp-based downloads, and isolated local-AI runtimes.
 
 ## Overview
 
-The Native Helper is a lightweight Rust binary that runs locally and communicates with the MasterSelects web app over WebSocket and HTTP. It currently provides three main capabilities:
+The Native Helper is a lightweight Rust binary that runs locally and communicates with the MasterSelects web app over WebSocket and HTTP. Its main capabilities are:
 
 1. **Downloads**: YouTube, TikTok, Instagram, Twitter/X, and other platforms via yt-dlp
 2. **File System Access**: Read/write files, create directories, folder picker -- primarily used for Firefox project persistence (since Firefox lacks the File System Access API)
 3. **AI Bridge**: Forward AI tool calls from local agents to the running MasterSelects editor session
+4. **Local AI Providers**: Provision and supervise isolated MatAnyone2 and MuScriptor Python sidecars
 
 The browser client can discover the auth token automatically from `GET /startup-token` on the local HTTP server, then authenticate over WebSocket/HTTP as needed.
 
@@ -27,6 +28,8 @@ The browser client can discover the auth token automatically from `GET /startup-
 - **Manual path fallback** -- If the helper cannot show a native folder picker on the current platform, the web app prompts for the project folder path instead
 - **Firefox persistence** -- Enables full project save/load on Firefox via file system commands
 - **External AI control** -- Local `POST /api/ai-tools` bridge for Claude Code, curl, and other local agents
+- **MatAnyone2 video matting** -- Pinned local runtime, model cache, persistent inference sidecar, transparent VP9/WebM output, progress, and cancellation
+- **MuScriptor music-to-MIDI** -- Pinned isolated runtime, gated model variants, persistent transcription sidecar, instrument constraints, progress, and cancellation
 - **System tray** -- On Windows, runs as a system tray app with auto-start and self-update support
 - **Temp download dir** -- yt-dlp writes to the helper's local download folder (`temp/masterselects-downloads`) before files are copied into a project
 - **Default project root** -- projects are created under `Documents/MasterSelects` when available, otherwise `Home/MasterSelects`, unless `MASTERSELECTS_PROJECT_ROOT` is set to an absolute path
@@ -45,6 +48,7 @@ Native Helper (Rust)
     | bundled or system yt-dlp (subprocess)
     | File system (direct)
     | AI tool forwarding
+    | MatAnyone2 / MuScriptor sidecar control
     |
     v
 Local file system
@@ -136,7 +140,8 @@ The helper communicates via WebSocket (port 9876) with JSON commands:
 | `exists` | Check if a path exists |
 | `rename` | Rename or move a file/directory |
 | `pick_folder` | Open native OS folder picker dialog |
-| `mat_anyone_*` | MatAnyone2 setup, model download, inference, cancel, uninstall |
+| `mat_anyone_*` | GPU-only MatAnyone2 setup, model download, inference, cancel, uninstall (NVIDIA CUDA required; no CPU fallback) |
+| `muscriptor_*` | MuScriptor status, setup, gated model download, start/stop, transcribe, cancel, uninstall |
 
 ### HTTP Server
 
@@ -164,8 +169,10 @@ curl -X POST http://127.0.0.1:9877/api/ai-tools \
 - **Localhost only** -- Binds to 127.0.0.1
 - **Origin validation** -- Only accepts connections from allowed origins
 - **Auth token** -- Token-based authentication for HTTP and WebSocket bridge operations
-- **No external network access** -- Only local file system and yt-dlp subprocess
+- **Scoped external access** -- Network access is used only for requested downloads such as yt-dlp, pinned provider source, and model weights; inference stays local
 - **Allowed origins** -- Defaults include localhost and the main MasterSelects production/Pages domains; preview subdomains can be added with `--allowed-origins`
+- **Sidecar path policy** -- Local-AI inputs and outputs are checked against project/granted roots or the exact provider temp root before subprocess access
+- **Transient model credentials** -- Gated HuggingFace tokens are passed only to the model-download subprocess and are excluded from command logging
 
 ## Technical Details
 
@@ -177,8 +184,13 @@ tools/native-helper/
   Cargo.toml
   src/
     main.rs          # Entry point, CLI args, platform setup
-    server.rs        # WebSocket + HTTP server
-    session.rs       # Auth token management, command dispatch, file system ops
+    server.rs        # Server orchestration and shared state
+    http_server.rs   # Authenticated HTTP health and local-file routes
+    websocket_server.rs # Authenticated WebSocket command dispatch
+    session.rs       # Session state and command coordination
+    session/
+      file_commands.rs      # File grants, reads, and staging
+      matanyone_commands.rs # MatAnyone2 command routing
     utils.rs         # Shared utilities
     download/
       mod.rs
@@ -186,6 +198,13 @@ tools/native-helper/
     protocol/
       mod.rs
       commands.rs     # Command/Response types, error codes
+    matanyone/        # MatAnyone2 model, process, and inference
+      env.rs          # Environment orchestration
+      env/            # Platform, source, and bootstrap stages
+    muscriptor/       # MuScriptor environment, process, control, inference
+  python/
+    matanyone2_server.py
+    muscriptor_server.py
 ```
 
 Windows-specific modules:
@@ -204,7 +223,7 @@ src/services/nativeHelper/
   index.ts               # Re-exports
 ```
 
-> The `NativeDecoder.ts` and decode/encode related types in `protocol.ts` define a video decode/encode protocol that is **not implemented** in the current Rust server. These are retained for potential future use.
+> The `NativeDecoder.ts` and decode/encode related types in `protocol.ts` define a video decode/encode protocol that is **not implemented** in the current Rust server. These are retained for potential future use. MatAnyone2 and MuScriptor use their own job protocols and local sidecars instead.
 
 ### Dependencies (Cargo.toml)
 
@@ -252,7 +271,7 @@ cargo build --release
 
 ## Tests
 
-No dedicated unit tests -- this is a Rust binary tested separately.
+The helper has Rust unit tests for protocol normalization, path-policy behavior, provider state, token redaction, archive selection, process helpers, and inference parsing. Browser protocol adapters and provider stores/mappers have focused Vitest coverage in `tests/unit/`.
 
 ---
 
@@ -260,3 +279,4 @@ No dedicated unit tests -- this is a Rust binary tested separately.
 
 - [Media Downloads](./Download-Panel.md) -- Media panel download UI powered by the Native Helper
 - [Project Persistence](./Project-Persistence.md) -- Firefox project persistence via Native Helper file system ops
+- [MuScriptor Music-to-MIDI](./MuScriptor.md) -- Local audio-to-MIDI provider and timeline workflow

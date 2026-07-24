@@ -165,6 +165,8 @@ export interface ProjectClip {
   // Analysis data
   analysis?: ProjectClipAnalysis;
   analysisStatus?: string;
+  faceAnalysisStatus?: string;
+  faceAnalysisMessage?: string;
 
   // AI scene description data
   sceneDescriptions?: ProjectSceneSegment[];

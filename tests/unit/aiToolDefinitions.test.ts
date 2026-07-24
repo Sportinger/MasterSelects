@@ -207,10 +207,12 @@ describe('expected tools exist', () => {
 
   it('includes analysis tools', () => {
     expect(toolNames).toContain('getClipAnalysis');
+    expect(toolNames).toContain('getClipFaceAnalysis');
     expect(toolNames).toContain('getClipTranscript');
     expect(toolNames).toContain('findSilentSections');
     expect(toolNames).toContain('findLowQualitySections');
     expect(toolNames).toContain('startClipAnalysis');
+    expect(toolNames).toContain('startClipFaceAnalysis');
     expect(toolNames).toContain('startClipTranscription');
   });
 

@@ -13,6 +13,7 @@ export function getMatAnyoneSetupView(status: MatAnyoneSetupStatus): MatAnyoneSe
     case 'not-checked':
     case 'not-installed':
     case 'not-available':
+    case 'gpu-required':
       return 'welcome';
     case 'installing':
       return 'installing';

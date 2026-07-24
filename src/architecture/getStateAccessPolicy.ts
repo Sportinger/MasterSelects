@@ -16,6 +16,7 @@ export const allowedAdapterPaths = [
   'src/hooks/useMIDIRuntime.ts',
   'src/services/sam2/**',
   'src/services/matanyone/**',
+  'src/services/muscriptor/**',
   'src/services/flashboard/**',
   'src/services/mediaRuntime/**',
   'src/services/timeline/timelineRuntimeCoordinator.ts',
@@ -285,7 +286,7 @@ export const classCHardTargets = [
 ] as const satisfies readonly GetStateClassCHardTarget[];
 
 export const getStateAccessPolicyBaselines = {
-  allowedAdapterPathCount: 25,
+  allowedAdapterPathCount: 26,
   // Running redistribution log: 178 (packet 172), 182 (183), 187 (186),
   // 189 (189+190: ExportPanel/MediaPanel hits moved into runner/board-hook
   // entries). Totals conserved per redistribution; max-hits ratchets DOWN

@@ -26,6 +26,7 @@ import * as videoCommands from './nativeHelperVideoCommands';
 import * as downloadCommands from './nativeHelperDownloadCommands';
 import * as fileCommands from './nativeHelperFileCommands';
 import { createMatAnyoneCommands } from './nativeHelperMatAnyoneCommands';
+import { createMuscriptorCommands } from './nativeHelperMuscriptorCommands';
 import { handleNativeHelperMessage } from './nativeHelperMessageHandler';
 import { getErrorMessage, okField } from './nativeHelperResponseUtils';
 
@@ -80,6 +81,7 @@ class NativeHelperClientImpl {
     dispatchFrame: (frame) => this.dispatchFrame(frame),
   };
   private readonly matAnyoneCommands = createMatAnyoneCommands(this.commandHost);
+  readonly muscriptor = createMuscriptorCommands(this.commandHost);
 
   constructor() {
     this.config = {
@@ -519,12 +521,12 @@ class NativeHelperClientImpl {
   }
 
 
-  async matanyoneStart(): Promise<{ success: boolean; port?: number }> {
+  async matanyoneStart(): Promise<{ success: boolean; port?: number; error?: string }> {
     return this.matAnyoneCommands.start();
   }
 
 
-  async matanyoneStop(): Promise<{ success: boolean }> {
+  async matanyoneStop(): Promise<{ success: boolean; error?: string }> {
     return this.matAnyoneCommands.stop();
   }
 
@@ -545,7 +547,7 @@ class NativeHelperClientImpl {
   }
 
 
-  async matanyoneUninstall(): Promise<{ success: boolean }> {
+  async matanyoneUninstall(): Promise<{ success: boolean; error?: string }> {
     return this.matAnyoneCommands.uninstall();
   }
 
