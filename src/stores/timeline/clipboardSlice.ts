@@ -136,6 +136,14 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
                 : undefined,
             }
           : undefined,
+        // Source-time visual metadata is immutable cache data. Derived clips
+        // share this reference and use their own in/out points as the view.
+        analysis: clip.analysis,
+        analysisStatus: clip.analysisStatus,
+        analysisProgress: clip.analysisProgress,
+        faceAnalysisStatus: clip.faceAnalysisStatus,
+        faceAnalysisProgress: clip.faceAnalysisProgress,
+        faceAnalysisMessage: clip.faceAnalysisMessage,
         isComposition: clip.isComposition,
         compositionId: clip.compositionId,
         is3D: clip.is3D,

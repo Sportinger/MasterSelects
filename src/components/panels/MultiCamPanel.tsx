@@ -322,7 +322,7 @@ function SettingsModal({
         </div>
         <div className="modal-body">
           <div className="settings-section">
-            <label>Claude API Key</label>
+            <label>Kie.ai API Key</label>
             {apiKeySet ? (
               <div className="api-key-status">
                 <span className="api-key-set">API key configured</span>
@@ -334,7 +334,7 @@ function SettingsModal({
               <div className="api-key-input">
                 <input
                   type="password"
-                  placeholder="sk-ant-..."
+                  placeholder="Kie.ai API key"
                   value={newApiKey}
                   onChange={(e) => setNewApiKey(e.target.value)}
                 />
@@ -609,7 +609,7 @@ export function MultiCamPanel() {
         </div>
         {!apiKeySet && (
           <div className="warning-message">
-            Configure your Claude API key in settings to generate edits.
+            Configure your Kie.ai API key in settings to generate edits.
           </div>
         )}
         {edlStatus === 'error' && edlError && (

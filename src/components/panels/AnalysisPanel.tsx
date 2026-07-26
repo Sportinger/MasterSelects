@@ -104,9 +104,14 @@ export function AnalysisPanel() {
 
   // Handle cancel analysis
   const handleCancel = useCallback(async () => {
-    const { cancelAnalysis } = await import('../../services/clipAnalyzer');
+    if (!selectedClipId) return;
+    const { cancelAnalysis, isAnalysisRunning, recoverStaleAnalysis } = await import('../../services/clipAnalyzer');
+    if (!isAnalysisRunning()) {
+      recoverStaleAnalysis(selectedClipId);
+      return;
+    }
     cancelAnalysis();
-  }, []);
+  }, [selectedClipId]);
 
   // Handle clear analysis
   const handleClear = useCallback(async () => {

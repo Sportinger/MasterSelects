@@ -9,6 +9,31 @@ import { resolveClipGeometry } from './timelineClipCanvasClipGeometry';
 
 export type TimelineClipCanvasMediaStatusMap = ReadonlyMap<string, TimelineClipCanvasMediaStatus>;
 
+interface TimelineClipCanvasMediaStatusSource {
+  id: string;
+  proxyStatus?: string;
+  proxyProgress?: number;
+  audioProxyStatus?: string;
+  audioProxyProgress?: number;
+  hasProxyAudio?: boolean;
+  sceneCutAnalysis?: {
+    cuts: readonly { timestamp: number }[];
+  };
+}
+
+export function createTimelineClipCanvasMediaStatusMap(
+  mediaFiles: readonly TimelineClipCanvasMediaStatusSource[],
+): TimelineClipCanvasMediaStatusMap {
+  return new Map(mediaFiles.map((file) => [file.id, {
+    proxyStatus: file.proxyStatus,
+    proxyProgress: file.proxyProgress,
+    audioProxyStatus: file.audioProxyStatus,
+    audioProxyProgress: file.audioProxyProgress,
+    hasProxyAudio: file.hasProxyAudio,
+    sceneCutTimestamps: file.sceneCutAnalysis?.cuts.map((cut) => cut.timestamp),
+  }]));
+}
+
 export interface TimelineClipCanvasChromeBadge {
   label: string;
   fill: string;

@@ -143,7 +143,7 @@ function getPromptBookDayKey(createdAt: number): string {
 }
 
 function formatSystemPromptProvider(provider: AIProvider | undefined): string {
-  return provider === 'lemonade' ? 'Lemonade' : 'OpenAI';
+  return provider === 'lemonade' ? 'Lemonade' : 'Kie.ai';
 }
 
 function formatPromptBookKind(kind: PromptBookPage['kind']): string {
@@ -985,7 +985,7 @@ export function FlashBoardPromptBook({
                       <div className="fb-prompt-book-system-presets">
                         <div className="fb-prompt-book-run">
                           <strong>Presets</strong>
-                          <span>{activePage.provider === 'lemonade' ? 'Lemonade Local' : 'OpenAI / Cloud'}</span>
+                          <span>{activePage.provider === 'lemonade' ? 'Lemonade Local' : 'Kie.ai / Cloud'}</span>
                         </div>
                         <label className="fb-prompt-book-preset-field">
                           <span>Name</span>

@@ -194,18 +194,6 @@ export function ApiKeysSettings({ localKeys, onKeyChange }: ApiKeysSettingsProps
         })}
 
         {renderApiKeyRow({
-          label: 'Kie.ai API Key',
-          provider: 'kieai',
-          value: getKey('kieai'),
-          placeholder: 'Enter Kie.ai key...',
-          linkUrl: 'https://kie.ai',
-          linkText: 'Get API Key',
-          show: showKeys.kieai,
-          onToggle: () => toggleShowKey('kieai'),
-          onChange: (v) => onKeyChange('kieai', v),
-        })}
-
-        {renderApiKeyRow({
           label: 'EvoLink API Key',
           provider: 'evolink',
           value: getKey('evolink'),
@@ -218,18 +206,18 @@ export function ApiKeysSettings({ localKeys, onKeyChange }: ApiKeysSettingsProps
         })}
       </div>
       <div className="settings-group">
-        <div className="settings-group-title">AI Chat</div>
+        <div className="settings-group-title">AI Chat & Kie.ai Media</div>
 
         {renderApiKeyRow({
-          label: 'Anthropic API Key',
-          provider: 'anthropic',
-          value: getKey('anthropic'),
-          placeholder: 'sk-ant-...',
-          linkUrl: 'https://console.anthropic.com/settings/keys',
+          label: 'Kie.ai API Key',
+          provider: 'kieai',
+          value: getKey('kieai'),
+          placeholder: 'Enter Kie.ai key...',
+          linkUrl: 'https://kie.ai',
           linkText: 'Get API Key',
-          show: showKeys.anthropic,
-          onToggle: () => toggleShowKey('anthropic'),
-          onChange: (v) => onKeyChange('anthropic', v),
+          show: showKeys.kieai,
+          onToggle: () => toggleShowKey('kieai'),
+          onChange: (v) => onKeyChange('kieai', v),
         })}
       </div>
       <div className="settings-group">

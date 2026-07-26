@@ -46,10 +46,10 @@ export interface AppDurableObjectNamespace {
 }
 
 export interface Env {
-  ANTHROPIC_API_KEY?: string;
   AUTH_EMAIL_FROM?: string;
   CREDIT_CLAIM_NOTIFY_EMAIL?: string;
   DB: AppD1Database;
+  DEEPGRAM_API_KEY?: string;
   ENVIRONMENT?: string;
   ELEVENLABS_API_KEY?: string;
   GOOGLE_CLIENT_ID?: string;

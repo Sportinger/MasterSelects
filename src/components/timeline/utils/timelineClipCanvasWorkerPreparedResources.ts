@@ -142,8 +142,17 @@ export function clonePassiveDecorationsResource(
     kind: 'passive-decorations',
     badges: passiveDecorations.badges,
     progressBars: passiveDecorations.progressBars,
+    sceneCutMarkers: passiveDecorations.sceneCutMarkers
+      ? new Float32Array(passiveDecorations.sceneCutMarkers)
+      : undefined,
     transcriptMarkers: passiveDecorations.transcriptMarkers
       ? new Float32Array(passiveDecorations.transcriptMarkers)
+      : undefined,
+    faceRanges: passiveDecorations.faceRanges
+      ? new Float32Array(passiveDecorations.faceRanges)
+      : undefined,
+    faceMarkers: passiveDecorations.faceMarkers
+      ? new Float32Array(passiveDecorations.faceMarkers)
       : undefined,
     analysisOverlay: passiveDecorations.analysisOverlay
       ? {

@@ -81,8 +81,8 @@ export function CustomNodeParameters({ clip, node }: { clip: TimelineClip; node:
       }
     : accountSession?.authenticated && hostedAIEnabled
       ? { kind: 'hosted', label: 'Cloud' }
-      : apiKeys.openai
-        ? { apiKey: apiKeys.openai, kind: 'openai', label: 'OpenAI key' }
+      : apiKeys.kieai
+        ? { apiKey: apiKeys.kieai, kind: 'kie', label: 'Kie.ai key' }
         : { kind: 'none', label: 'No AI' };
   const canSendPrompt = access.kind !== 'none' && definition.ai.prompt.trim().length > 0 && !isGenerating;
   const conversationCount = definition.ai.conversation?.length ?? 0;

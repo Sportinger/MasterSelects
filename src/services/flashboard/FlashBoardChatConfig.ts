@@ -2,67 +2,112 @@ import { DEFAULT_LEMONADE_MODEL } from '../lemonadeProvider';
 import type { FlashBoardChatModelOption, FlashBoardChatProvider, FlashBoardChatProviderOption, FlashBoardOpenAiReasoningEffort } from './FlashBoardChatTypes';
 
 export const FLASHBOARD_CHAT_PROVIDERS: FlashBoardChatProviderOption[] = [
-  { id: 'openai', label: 'OpenAI' },
-  { id: 'anthropic', label: 'Anthropic' },
+  { id: 'kie', label: 'Kie.ai' },
   { id: 'lemonade', label: 'Lemon' },
 ];
 
-const OPENAI_REASONING_EFFORTS_FULL: FlashBoardOpenAiReasoningEffort[] = ['none', 'low', 'medium', 'high', 'xhigh'];
-const OPENAI_REASONING_EFFORTS_FAST: FlashBoardOpenAiReasoningEffort[] = ['none', 'low', 'medium', 'high'];
+const KIE_GPT_REASONING_EFFORTS: FlashBoardOpenAiReasoningEffort[] = ['low', 'medium', 'high', 'xhigh'];
 
 export const FLASHBOARD_CHAT_MODEL_OPTIONS: Record<FlashBoardChatProvider, FlashBoardChatModelOption[]> = {
-  openai: [
+  kie: [
     {
-      id: 'gpt-5.5',
+      id: 'gpt-5-6-luna',
+      kieProtocol: 'openai-responses',
+      label: '5.6 Luna',
+      provider: 'kie',
+      supportsTemperature: false,
+      supportsTools: true,
+      supportsReasoningEffort: true,
+      reasoningEfforts: KIE_GPT_REASONING_EFFORTS,
+    },
+    {
+      id: 'gpt-5-6-terra',
+      kieProtocol: 'openai-responses',
+      label: '5.6 Terra',
+      provider: 'kie',
+      supportsTemperature: false,
+      supportsTools: true,
+      supportsReasoningEffort: true,
+      reasoningEfforts: KIE_GPT_REASONING_EFFORTS,
+    },
+    {
+      id: 'gpt-5-6-sol',
+      kieProtocol: 'openai-responses',
+      label: '5.6 Sol',
+      provider: 'kie',
+      supportsTemperature: false,
+      supportsTools: true,
+      supportsReasoningEffort: true,
+      reasoningEfforts: KIE_GPT_REASONING_EFFORTS,
+    },
+    {
+      id: 'gpt-5-5',
+      kieProtocol: 'openai-responses',
       label: '5.5',
-      provider: 'openai',
+      provider: 'kie',
       supportsTemperature: false,
+      supportsTools: true,
       supportsReasoningEffort: true,
-      reasoningEfforts: OPENAI_REASONING_EFFORTS_FULL,
+      reasoningEfforts: KIE_GPT_REASONING_EFFORTS,
     },
     {
-      id: 'gpt-5.4',
+      id: 'gpt-5-4',
+      kieProtocol: 'openai-responses',
       label: '5.4',
-      provider: 'openai',
+      provider: 'kie',
       supportsTemperature: false,
+      supportsTools: true,
       supportsReasoningEffort: true,
-      reasoningEfforts: OPENAI_REASONING_EFFORTS_FULL,
+      reasoningEfforts: KIE_GPT_REASONING_EFFORTS,
     },
     {
-      id: 'gpt-5.4-mini',
-      label: '5.4 Fast',
-      provider: 'openai',
-      supportsTemperature: false,
-      supportsReasoningEffort: true,
-      reasoningEfforts: OPENAI_REASONING_EFFORTS_FAST,
+      id: 'claude-opus-4-8',
+      kieProtocol: 'claude-messages',
+      label: 'Opus 4.8',
+      provider: 'kie',
+      supportsTemperature: true,
+      supportsTools: true,
     },
     {
-      id: 'gpt-5.4-nano',
-      label: '5.4 Instant',
-      provider: 'openai',
-      supportsTemperature: false,
-      supportsReasoningEffort: true,
-      reasoningEfforts: OPENAI_REASONING_EFFORTS_FAST,
+      id: 'claude-sonnet-5',
+      kieProtocol: 'claude-messages',
+      label: 'Sonnet 5',
+      provider: 'kie',
+      supportsTemperature: true,
+      supportsTools: true,
     },
-  ],
-  anthropic: [
-    { id: 'claude-opus-4-1-20250805', label: 'Opus 4.1', provider: 'anthropic', supportsTemperature: true },
-    { id: 'claude-sonnet-4-20250514', label: 'Sonnet 4', provider: 'anthropic', supportsTemperature: true },
-    { id: 'claude-3-5-haiku-20241022', label: 'Haiku 3.5', provider: 'anthropic', supportsTemperature: true },
+    {
+      id: 'claude-fable-5',
+      kieProtocol: 'claude-messages',
+      label: 'Fable 5 (chat only)',
+      provider: 'kie',
+      supportsTemperature: true,
+      supportsTools: false,
+    },
   ],
   lemonade: [
-    { id: DEFAULT_LEMONADE_MODEL, label: 'Lemonade', provider: 'lemonade', supportsTemperature: true },
+    {
+      id: DEFAULT_LEMONADE_MODEL,
+      label: 'Lemonade',
+      provider: 'lemonade',
+      supportsTemperature: true,
+      supportsTools: true,
+    },
   ],
 };
 
-export const DEFAULT_FLASHBOARD_CHAT_PROVIDER: FlashBoardChatProvider = 'openai';
-export const DEFAULT_FLASHBOARD_CHAT_MODEL = 'gpt-5.4-nano';
-export const DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT: FlashBoardOpenAiReasoningEffort = 'none';
+export const DEFAULT_FLASHBOARD_CHAT_PROVIDER: FlashBoardChatProvider = 'kie';
+export const DEFAULT_FLASHBOARD_CHAT_MODEL = 'gpt-5-6-luna';
+export const DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT: FlashBoardOpenAiReasoningEffort = 'low';
 const FLASHBOARD_CHAT_MODEL_CREDIT_COSTS: Record<string, number> = {
-  'gpt-5.5': 5,
-  'gpt-5.4': 5,
-  'gpt-5.4-mini': 1,
-  'gpt-5.4-nano': 1,
+  'gpt-5-6-luna': 3,
+  'gpt-5-6-terra': 5,
+  'gpt-5-6-sol': 8,
+  'gpt-5-5': 5,
+  'gpt-5-4': 5,
+  'claude-opus-4-8': 8,
+  'claude-sonnet-5': 5,
+  'claude-fable-5': 10,
 };
 export const FLASHBOARD_OPENAI_REASONING_EFFORT_OPTIONS: Array<{
   id: FlashBoardOpenAiReasoningEffort;
@@ -75,6 +120,7 @@ export const FLASHBOARD_OPENAI_REASONING_EFFORT_OPTIONS: Array<{
   { id: 'xhigh', label: 'XHigh' },
 ];
 export const DEFAULT_FLASHBOARD_CHAT_TEMPERATURE = 0.7;
+export const FLASHBOARD_CHAT_MAX_PROVIDER_TOOLS = 128;
 export const FLASHBOARD_CHAT_MAX_TOOL_ITERATIONS = 12;
 export const FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS = 8000;
 export const FLASHBOARD_LEMONADE_MAX_TOOL_RESULT_CHARS = 2000;
@@ -100,11 +146,11 @@ export function clampTemperature(value: number): number {
 
 export function isTemperatureSupported(provider: FlashBoardChatProvider, model: string): boolean {
   const option = FLASHBOARD_CHAT_MODEL_OPTIONS[provider].find((candidate) => candidate.id === model);
-  return option?.supportsTemperature ?? provider !== 'openai';
+  return option?.supportsTemperature ?? provider !== 'kie';
 }
 
 export function isOpenAiReasoningEffortSupported(model: string): boolean {
-  const option = FLASHBOARD_CHAT_MODEL_OPTIONS.openai.find((candidate) => candidate.id === model);
+  const option = FLASHBOARD_CHAT_MODEL_OPTIONS.kie.find((candidate) => candidate.id === model);
   if (option) {
     return option.supportsReasoningEffort === true && (option.reasoningEfforts?.length ?? 0) > 0;
   }
@@ -116,9 +162,9 @@ export function getOpenAiReasoningEffortOptions(model: string): Array<{
   id: FlashBoardOpenAiReasoningEffort;
   label: string;
 }> {
-  const option = FLASHBOARD_CHAT_MODEL_OPTIONS.openai.find((candidate) => candidate.id === model);
+  const option = FLASHBOARD_CHAT_MODEL_OPTIONS.kie.find((candidate) => candidate.id === model);
   const supportedEfforts = option?.reasoningEfforts ?? (
-    isOpenAiReasoningEffortSupported(model) ? OPENAI_REASONING_EFFORTS_FULL : []
+    isOpenAiReasoningEffortSupported(model) ? KIE_GPT_REASONING_EFFORTS : []
   );
 
   return FLASHBOARD_OPENAI_REASONING_EFFORT_OPTIONS.filter((effort) => supportedEfforts.includes(effort.id));

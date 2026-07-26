@@ -19,7 +19,10 @@ export type TimelinePaintResourceKind =
   | 'waveform-columns'
   | 'spectrogram-raster'
   | 'midi-bars'
+  | 'scene-cut-markers'
   | 'transcript-markers'
+  | 'face-ranges'
+  | 'face-markers'
   | 'analysis-overlay'
   | 'composition-segments'
   | 'fade-curve-points'
@@ -143,7 +146,10 @@ export const timelinePaintResourceKinds = [
   'waveform-columns',
   'spectrogram-raster',
   'midi-bars',
+  'scene-cut-markers',
   'transcript-markers',
+  'face-ranges',
+  'face-markers',
   'analysis-overlay',
   'composition-segments',
   'fade-curve-points',

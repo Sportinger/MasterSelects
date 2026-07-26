@@ -49,17 +49,46 @@ export function ClipRegenerateContextMenuItems({
         <div className="context-submenu">
           {isVideoMedia && (
             <div
-              className={`context-menu-item ${!mediaFile || (!isGenerating && !mediaFile.file) ? 'disabled' : ''}`}
+              className={`context-menu-item ${!mediaFile || (!isGenerating && !mediaFile.file) || mediaFile.sceneCutStatus === 'analyzing' ? 'disabled' : ''}`}
               onClick={() => runCommand({
                 kind: 'proxy-generation',
                 action: isGenerating ? 'stop' : 'start',
                 options: { force: hasProxy },
-                canExecute: Boolean(mediaFile && (isGenerating || mediaFile.file)),
+                canExecute: Boolean(
+                  mediaFile &&
+                  (isGenerating || mediaFile.file) &&
+                  mediaFile.sceneCutStatus !== 'analyzing'
+                ),
               })}
             >
               {isGenerating
                 ? `Stop Proxy Generation (${mediaFile?.proxyProgress || 0}%)`
                 : `Proxy${hasProxy ? ' (ready)' : ''}`}
+            </div>
+          )}
+          {isVideoMedia && (
+            <div
+              className={`context-menu-item ${!mediaFile?.file || isGenerating ? 'disabled' : ''}`}
+              onClick={() => runCommand(mediaFile?.sceneCutStatus === 'analyzing'
+                ? {
+                    kind: 'proxy-generation',
+                    action: 'stop',
+                    canExecute: Boolean(mediaFile?.file && !isGenerating),
+                  }
+                : {
+                    kind: 'scene-cut-analysis',
+                    force: true,
+                    canExecute: Boolean(mediaFile?.file && !isGenerating),
+                  })}
+            >
+              {mediaFile?.sceneCutStatus === 'analyzing' ? 'Stop Scene Cuts' : 'Scene Cuts'}
+              {mediaFile?.sceneCutStatus === 'analyzing'
+                ? ` (${Math.round(mediaFile.sceneCutProgress || 0)}%)`
+                : mediaFile?.sceneCutStatus === 'ready'
+                  ? ` (${mediaFile.sceneCutAnalysis?.cuts.length ?? 0} found)`
+                  : mediaFile?.sceneCutStatus === 'error'
+                    ? ' (error)'
+                    : ''}
             </div>
           )}
           {isVideoMedia && (

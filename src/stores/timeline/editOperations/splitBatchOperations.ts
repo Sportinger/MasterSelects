@@ -37,7 +37,6 @@ export function deepCloneClipProps(clip: TimelineClip): Partial<TimelineClip> {
     effects: clip.effects.map(e => structuredClone(e)),
     ...(clip.masks ? { masks: clip.masks.map(m => structuredClone(m)) } : {}),
     ...(clip.textProperties ? { textProperties: structuredClone(clip.textProperties) } : {}),
-    ...(clip.analysis ? { analysis: structuredClone(clip.analysis) } : {}),
   };
 }
 

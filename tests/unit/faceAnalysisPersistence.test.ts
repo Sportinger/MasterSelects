@@ -51,6 +51,24 @@ describe('face analysis persistence', () => {
     expect(hasCompatibleFaceAnalysis(analysis('old-model'))).toBe(false);
   });
 
+  it('keeps compatible face ranges when other ranges contain metrics only', () => {
+    const metricsOnly = {
+      ...frame(),
+      timestamp: 2,
+      faceCount: 0,
+      faces: undefined,
+      faceModelVersion: undefined,
+    };
+    const partialFaces: ClipAnalysis = {
+      ...analysis(),
+      frames: [frame(), metricsOnly],
+    };
+
+    expect(hasCompatibleFaceAnalysis(partialFaces)).toBe(true);
+    expect(sanitizePersistedFaceAnalysis(partialFaces)?.frames).toHaveLength(2);
+    expect(normalizePersistedFaceStatus('ready', partialFaces)).toBe('ready');
+  });
+
   it('strips biometric-derived fields while preserving generic metrics', () => {
     const [sanitized] = stripFaceDataFromFrames([frame('old-model')]);
     expect(sanitized.motion).toBe(0.2);

@@ -10,6 +10,7 @@ import type {
   TimelineTrack,
 } from '../../../types';
 import { cloudAiService } from '../../cloudAiService';
+import { requestKieChatByo } from '../../kieAi/chatTransport';
 import {
   createLemonadeChatCompletionStream,
   DEFAULT_LEMONADE_ENDPOINT,
@@ -25,7 +26,7 @@ import {
 } from '../../nodeGraph';
 import type { ToolResult } from '../types';
 
-const AI_NODE_OPENAI_MODEL = 'gpt-5.1';
+const AI_NODE_KIE_MODEL = 'gpt-5-6-luna';
 const AI_NODE_MAX_TOKENS = 100_000;
 const AI_NODE_TIMEOUT_MS = 90_000;
 const AI_NODE_STREAM_IDLE_TIMEOUT_MS = 20_000;
@@ -37,7 +38,7 @@ const AI_NODE_SUMMARY_MAX_CHARS = 2_400;
 
 type AINodeGenerationAccess =
   | { kind: 'hosted'; label: 'Cloud' }
-  | { apiKey: string; kind: 'openai'; label: 'OpenAI key' }
+  | { apiKey: string; kind: 'kie'; label: 'Kie.ai key' }
   | { endpoint: string; kind: 'lemonade'; label: 'Local'; model: string }
   | { kind: 'none'; label: 'No AI' };
 
@@ -50,6 +51,10 @@ function truncateForAI(value: string, maxLength: number): string {
 
 function parseAITextPayload(data: unknown): string {
   const payload = data as {
+    output?: Array<{
+      content?: Array<{ text?: unknown; type?: string }>;
+      type?: string;
+    }>;
     choices?: Array<{
       finish_reason?: string | null;
       message?: {
@@ -61,7 +66,13 @@ function parseAITextPayload(data: unknown): string {
   if (choice?.finish_reason === 'length') {
     throw new Error(`AI response hit the ${AI_NODE_MAX_TOKENS} token output cap before finishing. Ask for a smaller node or simplify the generated code.`);
   }
-  return (choice?.message?.content ?? '').trim();
+  const responsesText = payload.output
+    ?.flatMap((item) => item.content ?? [])
+    .filter((part) => part.type === 'output_text' && typeof part.text === 'string')
+    .map((part) => part.text as string)
+    .join('\n')
+    .trim();
+  return responsesText || (choice?.message?.content ?? '').trim();
 }
 
 function createAssistantChatContent(response: string, generatedCode: string | null): string {
@@ -139,8 +150,8 @@ function resolveAINodeAccess(): AINodeGenerationAccess {
     return { kind: 'hosted', label: 'Cloud' };
   }
 
-  if (settings.apiKeys.openai) {
-    return { apiKey: settings.apiKeys.openai, kind: 'openai', label: 'OpenAI key' };
+  if (settings.apiKeys.kieai) {
+    return { apiKey: settings.apiKeys.kieai, kind: 'kie', label: 'Kie.ai key' };
   }
 
   return { kind: 'none', label: 'No AI' };
@@ -231,33 +242,32 @@ async function generateAINodeResponse(
     return (result.content ?? '').trim();
   }
 
+  const systemPrompt = messages
+    .filter((message) => message.role === 'system')
+    .map((message) => message.content)
+    .join('\n\n');
   const requestBody: Record<string, unknown> = {
-    model: AI_NODE_OPENAI_MODEL,
-    messages,
-    max_completion_tokens: AI_NODE_MAX_TOKENS,
+    model: AI_NODE_KIE_MODEL,
+    instructions: systemPrompt,
+    input: messages.filter((message) => message.role !== 'system'),
+    max_output_tokens: AI_NODE_MAX_TOKENS,
   };
 
   if (access.kind === 'hosted') {
-    const response = await cloudAiService.createChatCompletion(requestBody);
+    const response = await cloudAiService.createChatCompletion({
+      ...requestBody,
+      protocol: 'openai-responses',
+    });
     return parseAITextPayload(response);
   }
 
-  if (access.kind === 'openai') {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${access.apiKey}`,
-      },
-      body: JSON.stringify(requestBody),
+  if (access.kind === 'kie') {
+    const response = await requestKieChatByo({
+      apiKey: access.apiKey,
+      body: requestBody,
+      endpoint: '/codex/v1/responses',
     });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error?.message || `AI request failed: ${response.status}`);
-    }
-
-    return parseAITextPayload(await response.json());
+    return parseAITextPayload(response);
   }
 
   throw new Error('No AI provider is configured.');

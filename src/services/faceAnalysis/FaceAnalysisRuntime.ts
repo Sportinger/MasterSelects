@@ -1,6 +1,10 @@
 import { Logger } from '../logger';
 import type { FaceAnalysisBackend } from '../../types/clipMetadata';
-import { FACE_ANALYSIS_MODEL_VERSION, FACE_MODEL_CATALOG, type FaceModelCatalogEntry } from './modelCatalog';
+import {
+  FACE_MODEL_CACHE_VERSION,
+  FACE_MODEL_CATALOG,
+  type FaceModelCatalogEntry,
+} from './modelCatalog';
 import type {
   FaceModelLoadProgress,
   FaceRuntimeDetection,
@@ -9,9 +13,12 @@ import type {
 } from './types';
 
 const log = Logger.create('FaceAnalysisRuntime');
-const CACHE_NAME = `masterselects-face-models-${FACE_ANALYSIS_MODEL_VERSION}`;
+const CACHE_NAME = `masterselects-face-models-${FACE_MODEL_CACHE_VERSION}`;
 const FRAME_TIMEOUT_MS = 60_000;
-const MODEL_INIT_TIMEOUT_MS = 180_000;
+// Model downloads have their own progress path. Once both cached buffers have
+// reached the worker, taking longer than a minute is a failed runtime start,
+// not a slow first-run download.
+const MODEL_INIT_TIMEOUT_MS = 60_000;
 
 interface PendingFrame {
   resolve: (detections: FaceRuntimeDetection[]) => void;
@@ -288,7 +295,6 @@ export class FaceAnalysisRuntime {
         type: 'initialize',
         yunetBuffer: buffers[0]!,
         sfaceBuffer: buffers[1]!,
-        preferWebGpu: true,
       } satisfies FaceWorkerRequest, { transfer: buffers });
     });
     options.onProgress?.({ progress: 1, message: `YuNet + SFace ready (${backend}).` });

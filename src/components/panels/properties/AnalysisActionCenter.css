@@ -1,0 +1,92 @@
+.analysis-action-center {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.analysis-action-heading,
+.analysis-action-row,
+.analysis-action-buttons {
+  display: flex;
+  align-items: center;
+}
+
+.analysis-action-heading {
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.analysis-action-heading h4 {
+  margin: 0;
+}
+
+.analysis-action-global-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.analysis-action-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.analysis-action-row {
+  align-items: stretch;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 7px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-tertiary) 72%, transparent);
+}
+
+.analysis-action-copy {
+  display: grid;
+  min-width: 0;
+}
+
+.analysis-action-title {
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: var(--font-semibold);
+}
+
+.analysis-action-detail,
+.analysis-action-status {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analysis-action-status.state-ready {
+  color: var(--success-light);
+}
+
+.analysis-action-status.state-analyzing,
+.analysis-action-status.state-describing {
+  color: var(--accent);
+}
+
+.analysis-action-status.state-error {
+  color: var(--danger-light);
+}
+
+.analysis-action-buttons {
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: auto;
+}
+
+.analysis-action-buttons .btn {
+  flex: 1 1 0;
+  min-width: 0;
+}

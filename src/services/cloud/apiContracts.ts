@@ -192,11 +192,21 @@ export interface CloudAiChatMessage {
 export interface CloudAiChatRequest {
   max_completion_tokens?: number;
   idempotencyKey?: string;
+  include?: unknown;
+  input?: unknown[];
+  instructions?: string;
+  max_output_tokens?: number;
   max_tokens?: number;
-  messages: CloudAiChatMessage[];
+  messages?: CloudAiChatMessage[];
   model?: string;
+  protocol?: 'claude-messages' | 'openai-responses';
+  reasoning?: Record<string, unknown>;
   response_format?: Record<string, unknown>;
+  store?: boolean;
+  system?: unknown;
   stream?: boolean;
+  text?: Record<string, unknown>;
+  thinkingFlag?: boolean;
   tool_choice?: unknown;
   tools?: unknown;
   temperature?: number;
@@ -267,6 +277,8 @@ export interface CloudAiAudioTranscriptionRequest {
     fileName?: string;
     language?: string;
     mimeType?: string;
+    provider?: 'deepgram' | 'openai';
+    variant?: 'word-timestamps' | 'diarized-speakers';
   };
 }
 
@@ -279,7 +291,14 @@ export interface CloudAiAudioMusicCreateResponse {
 export interface CloudAiAudioTranscriptionResponse {
   durationSeconds: number;
   model: string;
-  words: Array<{ word: string; start: number; end: number }>;
+  words: Array<{
+    confidence?: number;
+    end: number;
+    speaker?: number | string;
+    speakerConfidence?: number;
+    start: number;
+    word: string;
+  }>;
 }
 
 export interface CloudAiAudioModelsResponse {

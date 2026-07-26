@@ -43,6 +43,7 @@ export interface ClipContextMenuThumbnailCacheLike {
 
 export interface ClipContextMenuProxyStoreLike {
   generateProxy: (mediaFileId: string, options?: { force?: boolean }) => void;
+  analyzeSceneCuts: (mediaFileId: string, options?: { force?: boolean }) => void;
   cancelProxyGeneration: (mediaFileId: string) => void;
   generateAudioProxy: (mediaFileId: string, options?: { force?: boolean }) => void | Promise<unknown>;
 }
@@ -118,6 +119,11 @@ export type ClipContextMenuCommandDescriptor =
       kind: 'proxy-generation';
       action: 'start' | 'stop';
       options?: { force?: boolean };
+      canExecute: boolean;
+    }
+  | {
+      kind: 'scene-cut-analysis';
+      force?: boolean;
       canExecute: boolean;
     }
   | {

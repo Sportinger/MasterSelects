@@ -81,6 +81,7 @@ tools/native-helper/ffmpeg/
 
 # AI Bridge session token (generated per dev session)
 .ai-bridge-token
+.ai-bridge-tool-history.jsonl
 
 # Native helper release/package artifacts
 tools/native-helper/MasterSelects-NativeHelper-v*-windows-x64.msi
@@ -90,6 +91,10 @@ tools/native-helper/icon.ico
 # Project folders (user media)
 Wonder/
 _fremd/
+
+# Private planning docs (proprietary kernel/orchestration design — never publish
+# to the public MIT repo; lives in docs/private/, future home: private repo)
+docs/private/
 
 # Python virtual environments
 **/venv/

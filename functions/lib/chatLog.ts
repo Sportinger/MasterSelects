@@ -74,16 +74,36 @@ function extractOpenAIFields(response: unknown): {
 
   const r = response as OpenAIResponse;
   const choice = r.choices?.[0];
-  const usage = r.usage;
-
-  const toolCalls = choice?.message?.tool_calls ?? null;
-  const finishReason = choice?.finish_reason ?? null;
-  const tokensIn = usage?.prompt_tokens ?? null;
-  const tokensOut = usage?.completion_tokens ?? null;
-  const tokensTotal = usage?.total_tokens ?? null;
+  const usage = isRecord(r.usage) ? r.usage as Record<string, unknown> : {};
+  const output = Array.isArray(response.output) ? response.output : [];
+  const content = Array.isArray(response.content) ? response.content : [];
+  const responseToolCalls = output.filter((item) => (
+    isRecord(item) && item.type === 'function_call'
+  ));
+  const claudeToolCalls = content.filter((item) => (
+    isRecord(item) && item.type === 'tool_use'
+  ));
+  const chatToolCalls = choice?.message?.tool_calls ?? [];
+  const toolCalls = responseToolCalls.length > 0
+    ? responseToolCalls
+    : claudeToolCalls.length > 0
+      ? claudeToolCalls
+      : chatToolCalls;
+  const finishReason = choice?.finish_reason
+    ?? (typeof response.stop_reason === 'string' ? response.stop_reason : null)
+    ?? (typeof response.status === 'string' ? response.status : null);
+  const tokensIn = typeof usage.prompt_tokens === 'number'
+    ? usage.prompt_tokens
+    : typeof usage.input_tokens === 'number' ? usage.input_tokens : null;
+  const tokensOut = typeof usage.completion_tokens === 'number'
+    ? usage.completion_tokens
+    : typeof usage.output_tokens === 'number' ? usage.output_tokens : null;
+  const tokensTotal = typeof usage.total_tokens === 'number'
+    ? usage.total_tokens
+    : tokensIn !== null && tokensOut !== null ? tokensIn + tokensOut : null;
 
   return {
-    toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : null,
+    toolCalls: toolCalls.length > 0 ? toolCalls : null,
     finishReason,
     tokensIn,
     tokensOut,
@@ -157,14 +177,27 @@ export interface ChatLogSummary {
 
 function extractLastUserMessage(messagesJson: string): string | null {
   try {
-    const messages = JSON.parse(messagesJson) as Array<{ role: string; content: unknown }>;
+    const parsed = JSON.parse(messagesJson) as unknown;
+    const first = Array.isArray(parsed) && parsed.length === 1 && isRecord(parsed[0])
+      ? parsed[0]
+      : null;
+    const providerInput = first?.input;
+    const providerMessages = first?.messages;
+    const messages = Array.isArray(providerInput)
+      ? providerInput
+      : Array.isArray(providerMessages)
+        ? providerMessages
+        : Array.isArray(parsed) ? parsed : [];
     for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'user') {
-        const content = messages[i].content;
+      const message = isRecord(messages[i]) ? messages[i] : null;
+      if (message?.role === 'user') {
+        const content = message.content;
         if (typeof content === 'string') return content;
         if (Array.isArray(content)) {
           const textPart = content.find(
-            (p: unknown) => isRecord(p) && p.type === 'text' && typeof p.text === 'string',
+            (p: unknown) => isRecord(p)
+              && (p.type === 'text' || p.type === 'input_text')
+              && typeof p.text === 'string',
           );
           if (textPart && isRecord(textPart)) return textPart.text as string;
         }
@@ -179,8 +212,22 @@ function extractLastUserMessage(messagesJson: string): string | null {
 
 function extractAssistantMessage(responseJson: string): string | null {
   try {
-    const response = JSON.parse(responseJson) as OpenAIResponse;
-    return response.choices?.[0]?.message?.content ?? null;
+    const response = JSON.parse(responseJson) as OpenAIResponse & Record<string, unknown>;
+    const chatText = response.choices?.[0]?.message?.content;
+    if (typeof chatText === 'string' && chatText.trim()) {
+      return chatText;
+    }
+    const blocks = Array.isArray(response.output)
+      ? response.output.flatMap((item) => isRecord(item) && Array.isArray(item.content) ? item.content : [])
+      : Array.isArray(response.content) ? response.content : [];
+    const text = blocks
+      .filter((block) => isRecord(block) && (
+        block.type === 'output_text' || block.type === 'text'
+      ) && typeof block.text === 'string')
+      .map((block) => (block as Record<string, unknown>).text as string)
+      .join('\n')
+      .trim();
+    return text || null;
   } catch {
     // ignore
   }
@@ -190,9 +237,12 @@ function extractAssistantMessage(responseJson: string): string | null {
 function extractToolNames(toolCallsJson: string | null): string[] {
   if (!toolCallsJson) return [];
   try {
-    const toolCalls = JSON.parse(toolCallsJson) as Array<{ function?: { name?: string } }>;
+    const toolCalls = JSON.parse(toolCallsJson) as Array<{
+      function?: { name?: string };
+      name?: string;
+    }>;
     return toolCalls
-      .map((tc) => tc.function?.name)
+      .map((tc) => tc.function?.name ?? tc.name)
       .filter((name): name is string => typeof name === 'string');
   } catch {
     return [];

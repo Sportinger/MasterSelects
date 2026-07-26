@@ -263,9 +263,24 @@ function createWorkerClipPaintPacket(input: {
   }
   if (input.passiveDecorations) {
     const refs = [
+      input.passiveDecorations.sceneCutMarkers
+        ? addResource('scene-cut-markers', 'transfer', {
+          byteEstimate: input.passiveDecorations.sceneCutMarkers.byteLength,
+        })
+        : null,
       input.passiveDecorations.transcriptMarkers
         ? addResource('transcript-markers', 'transfer', {
           byteEstimate: input.passiveDecorations.transcriptMarkers.byteLength,
+        })
+        : null,
+      input.passiveDecorations.faceRanges
+        ? addResource('face-ranges', 'transfer', {
+          byteEstimate: input.passiveDecorations.faceRanges.byteLength,
+        })
+        : null,
+      input.passiveDecorations.faceMarkers
+        ? addResource('face-markers', 'transfer', {
+          byteEstimate: input.passiveDecorations.faceMarkers.byteLength,
         })
         : null,
       input.passiveDecorations.analysisOverlay
@@ -478,6 +493,15 @@ export function buildTimelineClipCanvasWorkerDrawMessage(
       : undefined;
     if (passiveDecorations?.transcriptMarkers) {
       transferables.push(passiveDecorations.transcriptMarkers.buffer);
+    }
+    if (passiveDecorations?.sceneCutMarkers) {
+      transferables.push(passiveDecorations.sceneCutMarkers.buffer);
+    }
+    if (passiveDecorations?.faceRanges) {
+      transferables.push(passiveDecorations.faceRanges.buffer);
+    }
+    if (passiveDecorations?.faceMarkers) {
+      transferables.push(passiveDecorations.faceMarkers.buffer);
     }
     if (passiveDecorations?.analysisOverlay) {
       transferables.push(passiveDecorations.analysisOverlay.points.buffer);

@@ -9,6 +9,7 @@ import {
   executeClipContextMenuLabelColor,
   executeClipContextMenuMusicToMidi,
   executeClipContextMenuProxyGeneration,
+  executeClipContextMenuSceneCutAnalysis,
   executeClipContextMenuShowInExplorer,
   executeClipContextMenuStemSeparation,
   executeClipContextMenuTimelineCommand,
@@ -368,6 +369,14 @@ describe('clip context menu model', () => {
     expect(generateProxy).toHaveBeenCalledWith('media-video', { force: true });
     expect(cancelProxyGeneration).not.toHaveBeenCalled();
 
+    const analyzeSceneCuts = vi.fn();
+    expect(executeClipContextMenuSceneCutAnalysis({
+      mediaFile,
+      proxyStore: { analyzeSceneCuts },
+      force: true,
+    })).toBe(true);
+    expect(analyzeSceneCuts).toHaveBeenCalledWith('media-video', { force: true });
+
     expect(executeClipContextMenuProxyGeneration({
       mediaFile,
       proxyStore,
@@ -726,6 +735,7 @@ describe('clip context menu model', () => {
       },
       proxyStore: {
         generateProxy: vi.fn(),
+        analyzeSceneCuts: vi.fn(),
         cancelProxyGeneration: vi.fn(),
         generateAudioProxy: vi.fn(),
       },

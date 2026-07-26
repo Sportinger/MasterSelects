@@ -206,8 +206,8 @@ function serializeHostedReferenceMedia(
 }
 
 export const cloudAiService = {
-  async createChatCompletion(body: Record<string, unknown>): Promise<unknown> {
-    const response = await cloudApi.ai.chat.create(body as unknown as CloudAiChatRequest);
+  async createChatCompletion(body: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> {
+    const response = await cloudApi.ai.chat.create(body as unknown as CloudAiChatRequest, signal);
     syncHostedCreditBalance(response);
     return response.data ?? response;
   },

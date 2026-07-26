@@ -206,6 +206,10 @@ export async function requestJson<T>(path: string, init: ApiRequestInit = {}): P
       throw getApiTimeoutError(path, timeoutMs);
     }
 
+    if (requestInit.signal?.aborted) {
+      throw error;
+    }
+
     if (isLocalViteOrigin() && isHostedCloudApiRoute(path)) {
       throw getLocalHostedApiError(path);
     }

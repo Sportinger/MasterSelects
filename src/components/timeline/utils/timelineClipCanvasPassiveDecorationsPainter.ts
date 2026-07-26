@@ -4,6 +4,11 @@ import {
   drawTimelineClipCanvasPassiveProgressBars,
 } from './timelineClipCanvasPassiveBadgePainter';
 import { drawTimelineClipCanvasPassiveAnalysisOverlay } from './timelineClipCanvasPassiveAnalysisPainter';
+import {
+  collectTimelineFaceIdentityRanges,
+  getTimelineFaceIdentityColor,
+  getTimelineFaceIdentityRangeRatios,
+} from './timelineFaceRangeOverlay';
 import type { TimelineClipCanvasTrimGeometry } from './timelineClipCanvasTrimResource';
 import type {
   TimelineClipCanvasWorkerPassiveBadge,
@@ -47,6 +52,36 @@ function drawTimelineClipCanvasTranscriptMarkers(
   ctx.restore();
 }
 
+function drawTimelineClipCanvasFaceRanges(
+  ctx: CanvasRenderingContext2D,
+  clip: TimelinePaintSourceClip,
+  geometry: TimelineClipCanvasTrimGeometry,
+  x: number,
+  top: number,
+  w: number,
+  h: number,
+): void {
+  if (w < 12) return;
+  const ratios = getTimelineFaceIdentityRangeRatios(
+    collectTimelineFaceIdentityRanges(clip),
+    geometry.inPoint,
+    geometry.outPoint,
+    clip.reversed,
+  );
+  if (ratios.length === 0) return;
+
+  const bandHeight = Math.max(2, Math.min(4, h * 0.12));
+  for (const range of ratios) {
+    const [red, green, blue] = getTimelineFaceIdentityColor(range.personId).rgb;
+    const left = x + range.start * w;
+    const width = Math.max(1, (range.end - range.start) * w);
+    ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, 0.16)`;
+    ctx.fillRect(left, top, width, h);
+    ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, 0.78)`;
+    ctx.fillRect(left, top + h - bandHeight, width, bandHeight);
+  }
+}
+
 export function drawTimelineClipCanvasPassiveDecorations(
   ctx: CanvasRenderingContext2D,
   clip: TimelinePaintSourceClip,
@@ -58,11 +93,15 @@ export function drawTimelineClipCanvasPassiveDecorations(
   w: number,
   h: number,
   drawBadges = true,
+  showFaceRanges = false,
 ): void {
   ctx.save();
   ctx.beginPath();
   ctx.roundRect(x, top, w, h, Math.min(4, h / 4));
   ctx.clip();
+  if (showFaceRanges) {
+    drawTimelineClipCanvasFaceRanges(ctx, clip, geometry, x, top, w, h);
+  }
   drawTimelineClipCanvasPassiveAnalysisOverlay(ctx, clip, geometry, x, top, w, h);
   drawTimelineClipCanvasTranscriptMarkers(ctx, clip, geometry, x, top, w, h);
   drawTimelineClipCanvasPassiveProgressBars(ctx, progressBars, x, top, w);

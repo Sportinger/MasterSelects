@@ -337,7 +337,7 @@ export const useSettingsStore = create<SettingsState>()(
       gpuPowerPreference: 'high-performance', // Prefer dGPU by default
       matanyoneEnabled: false, // MatAnyone2 disabled by default
       matanyonePythonPath: '', // Auto-detect Python path
-      aiApprovalMode: 'confirm-destructive' as const, // Require confirmation for destructive AI actions
+      aiApprovalMode: 'auto' as const, // Let compact chat run editor actions by default
       aiProvider: 'openai' as AIProvider,
       lemonadeEndpoint: DEFAULT_LEMONADE_ENDPOINT,
       lemonadeContextSize: DEFAULT_LEMONADE_CONTEXT_SIZE,
@@ -665,7 +665,7 @@ export const useSettingsStore = create<SettingsState>()(
       // Helpers
       getActiveApiKey: () => {
         const { transcriptionProvider, apiKeys } = get();
-        if (transcriptionProvider === 'local') return null;
+        if (transcriptionProvider === 'local' || transcriptionProvider === 'hybrid') return null;
         return apiKeys[transcriptionProvider] || null;
       },
 

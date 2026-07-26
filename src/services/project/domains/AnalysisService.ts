@@ -4,14 +4,16 @@
 import { FileStorageService } from '../core/FileStorageService';
 
 /**
- * Analysis cache file structure (stored in Analysis/{mediaId}.json)
+ * Project analysis artifact (stored in Analysis/{mediaId}.json)
  */
 interface StoredAnalysisFile {
+  schemaVersion?: 2;
   mediaFileId: string;
   analyses: {
     [rangeKey: string]: {
       frames: unknown[];
       sampleInterval: number;
+      faceAnalysis?: unknown;
       createdAt: number;
     };
   };
@@ -66,21 +68,25 @@ export class AnalysisService {
     inPoint: number,
     outPoint: number,
     frames: unknown[],
-    sampleInterval: number
+    sampleInterval: number,
+    faceAnalysis?: unknown,
   ): Promise<boolean> {
     const rangeKey = this.getAnalysisRangeKey(inPoint, outPoint);
 
     // Get existing record or create new
     const existing = await this.getAnalysisRecord(projectHandle, mediaId);
     const record: StoredAnalysisFile = existing || {
+      schemaVersion: 2,
       mediaFileId: mediaId,
       analyses: {},
     };
+    record.schemaVersion = 2;
 
     // Add/update this range
     record.analyses[rangeKey] = {
       frames,
       sampleInterval,
+      faceAnalysis,
       createdAt: Date.now(),
     };
 
@@ -96,7 +102,7 @@ export class AnalysisService {
     mediaId: string,
     inPoint: number,
     outPoint: number
-  ): Promise<{ frames: unknown[]; sampleInterval: number } | null> {
+  ): Promise<{ frames: unknown[]; sampleInterval: number; faceAnalysis?: unknown } | null> {
     const record = await this.getAnalysisRecord(projectHandle, mediaId);
     if (!record) return null;
 
@@ -104,7 +110,11 @@ export class AnalysisService {
     const analysis = record.analyses[rangeKey];
 
     if (!analysis) return null;
-    return { frames: analysis.frames, sampleInterval: analysis.sampleInterval };
+    return {
+      frames: analysis.frames,
+      sampleInterval: analysis.sampleInterval,
+      faceAnalysis: analysis.faceAnalysis,
+    };
   }
 
   /**

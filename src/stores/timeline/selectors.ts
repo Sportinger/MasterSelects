@@ -121,6 +121,7 @@ export const selectUISettings = (state: TimelineStore) => ({
   audioFocusMode: state.audioFocusMode,
   trackFocusMode: state.trackFocusMode,
   showAudioRegionEditMarkers: state.showAudioRegionEditMarkers,
+  showFaceRanges: state.showFaceRanges,
 });
 
 // Preview/export state (changes during preview/export operations)

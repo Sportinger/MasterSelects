@@ -1,10 +1,14 @@
 // Analysis & Transcript Tool Handlers
 
 import { useTimelineStore } from '../../../stores/timeline';
+import { useMediaStore } from '../../../stores/mediaStore';
 import type { ToolResult } from '../types';
 import { selectClipAndOpenTab } from '../aiFeedback';
 import { isAIExecutionActive } from '../executionState';
 import type { TimelineClip } from '../../../types/timeline';
+import { collectFaceReviewCandidates } from '../../faceAnalysis/faceReviewCandidates';
+import { buildKeepOnlyFaceCutPlan } from './faceAnalysisCutPlan';
+import { resolveFacePersonReference } from './facePersonReference';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
@@ -90,8 +94,21 @@ export async function handleGetClipAnalysis(
     };
   }
 
-  // Summarize analysis data
-  const frames = clip.analysis.frames;
+  const allFrames = clip.analysis.frames;
+  const requestedStart = typeof args.sourceStart === 'number' ? args.sourceStart : clip.inPoint;
+  const requestedEnd = typeof args.sourceEnd === 'number' ? args.sourceEnd : clip.outPoint;
+  const clampSourceTime = (value: number) => Math.min(clip.outPoint, Math.max(clip.inPoint, value));
+  const sourceA = clampSourceTime(requestedStart);
+  const sourceB = clampSourceTime(requestedEnd);
+  const sourceStart = Math.min(sourceA, sourceB);
+  const sourceEnd = Math.max(sourceA, sourceB);
+  const frames = allFrames.filter(frame => (
+    frame.timestamp >= sourceStart && frame.timestamp <= sourceEnd
+  ));
+  const offset = Math.max(0, typeof args.offset === 'number' ? Math.floor(args.offset) : 0);
+  const limit = Math.min(200, Math.max(1, typeof args.limit === 'number' ? Math.floor(args.limit) : 100));
+  const includeFrames = args.includeFrames === true;
+  const framePage = includeFrames ? frames.slice(offset, offset + limit) : [];
   const divisor = Math.max(1, frames.length);
   const avgMotion = frames.reduce((sum, f) => sum + f.motion, 0) / divisor;
   const avgBrightness = frames.reduce((sum, f) => sum + f.brightness, 0) / divisor;
@@ -103,7 +120,9 @@ export async function handleGetClipAnalysis(
     success: true,
     data: {
       hasAnalysis: true,
-      frameCount: frames.length,
+      frameCount: allFrames.length,
+      matchingFrameCount: frames.length,
+      sourceRange: { start: sourceStart, end: sourceEnd },
       sampleInterval: clip.analysis.sampleInterval,
       summary: {
         averageMotion: avgMotion,
@@ -116,14 +135,25 @@ export async function handleGetClipAnalysis(
         faceObservations: totalFaces,
         uniquePeople: faceAnalysis?.people.length ?? 0,
       },
-      // Include detailed frame data for specific queries
-      frames: frames.map(f => ({
-        time: f.timestamp,
-        motion: f.motion,
-        brightness: f.brightness,
-        focus: f.focus || 0,
-        faces: f.faceCount || 0,
-      })),
+      frames: includeFrames
+        ? framePage.map(f => ({
+            time: f.timestamp,
+            motion: f.motion,
+            brightness: f.brightness,
+            focus: f.focus || 0,
+            faces: f.faceCount || 0,
+          }))
+        : undefined,
+      pagination: {
+        detailIncluded: includeFrames,
+        offset,
+        limit,
+        returned: framePage.length,
+        hasMore: includeFrames && offset + framePage.length < frames.length,
+        nextOffset: includeFrames && offset + framePage.length < frames.length
+          ? offset + framePage.length
+          : null,
+      },
       faceAnalysis: faceAnalysis
         ? {
             model: `${faceAnalysis.detector} + ${faceAnalysis.recognizer}`,
@@ -175,9 +205,21 @@ export async function handleGetClipFaceAnalysis(
   const clampSourceTime = (value: number) => Math.min(clip.outPoint, Math.max(clip.inPoint, value));
   const sourceStart = clampSourceTime(Math.min(requestedStart, requestedEnd));
   const sourceEnd = clampSourceTime(Math.max(requestedStart, requestedEnd));
-  const requestedPersonId = typeof args.personId === 'string' ? args.personId : null;
+  const timelineRangeA = sourceTimeToTimeline(clip, sourceStart, timelineStore);
+  const timelineRangeB = sourceTimeToTimeline(clip, sourceEnd, timelineStore);
+  const timelineRange = {
+    start: Math.min(timelineRangeA, timelineRangeB),
+    end: Math.max(timelineRangeA, timelineRangeB),
+  };
+  const requestedPersonReference = typeof args.personId === 'string' ? args.personId : null;
+  const personResolution = resolveFacePersonReference(requestedPersonReference, result.people);
+  const requestedPersonId = personResolution.resolvedPersonId ?? requestedPersonReference;
   const includeObservations = args.includeObservations === true;
   const limit = Math.min(30, Math.max(1, typeof args.limit === 'number' ? Math.floor(args.limit) : 20));
+  const reviewLimit = Math.min(
+    50,
+    Math.max(1, typeof args.reviewLimit === 'number' ? Math.floor(args.reviewLimit) : 30),
+  );
   const people = result.people
     .filter(person => !requestedPersonId || person.id === requestedPersonId)
     .map(person => ({
@@ -199,6 +241,22 @@ export async function handleGetClipFaceAnalysis(
     }))
     .filter(person => person.appearances.length > 0);
   const personLabels = new Map(result.people.map(person => [person.id, person.label]));
+  const allReviewCandidates = collectFaceReviewCandidates(clip.analysis?.frames ?? []);
+  const reviewCandidatesInRange = allReviewCandidates.filter(
+    candidate => candidate.lastSeen >= sourceStart && candidate.firstSeen <= sourceEnd,
+  );
+  const reviewCandidates = reviewCandidatesInRange.slice(0, reviewLimit).map(candidate => ({
+    candidateId: candidate.id,
+    sourceStart: candidate.firstSeen,
+    sourceEnd: candidate.lastSeen,
+    timelineStart: sourceTimeToTimeline(clip, candidate.firstSeen, timelineStore),
+    timelineEnd: sourceTimeToTimeline(clip, candidate.lastSeen, timelineStore),
+    representativeSourceTime: candidate.sample.timestamp,
+    representativeTimelineTime: sourceTimeToTimeline(clip, candidate.sample.timestamp, timelineStore),
+    observationCount: candidate.observationCount,
+    confidence: candidate.sample.confidence,
+    box: candidate.sample.box,
+  }));
   const observations = includeObservations
     ? (clip.analysis?.frames ?? [])
         .filter(frame => frame.timestamp >= sourceStart && frame.timestamp <= sourceEnd)
@@ -209,11 +267,17 @@ export async function handleGetClipFaceAnalysis(
             timelineTime: sourceTimeToTimeline(clip, frame.timestamp, timelineStore),
             personId: face.personId,
             label: personLabels.get(face.personId) ?? face.label,
+            identityEligible: face.identityEligible !== false,
+            needsReview: face.identityEligible === false,
+            manuallyAssigned: Boolean(face.manualSourcePersonId),
             confidence: face.confidence,
             box: face.box,
             landmarks: face.landmarks,
           })))
         .slice(0, limit)
+    : undefined;
+  const keepOnlyCutPlan = requestedPersonId && people[0]
+    ? buildKeepOnlyFaceCutPlan(clipId, requestedPersonId, timelineRange, people[0].appearances)
     : undefined;
 
   return {
@@ -222,6 +286,8 @@ export async function handleGetClipFaceAnalysis(
       clipId,
       status,
       sourceRange: { start: sourceStart, end: sourceEnd },
+      timelineRange,
+      personResolution: requestedPersonReference ? personResolution : undefined,
       model: {
         detector: result.detector,
         recognizer: result.recognizer,
@@ -232,10 +298,29 @@ export async function handleGetClipFaceAnalysis(
         uniquePeople: people.length,
         totalUniquePeopleInClip: result.people.length,
         observationCount: result.observationCount,
+        needsReviewCandidates: reviewCandidatesInRange.length,
+        totalNeedsReviewCandidatesInClip: allReviewCandidates.length,
       },
       people,
+      needsReview: {
+        candidates: reviewCandidates,
+        candidatesInRange: reviewCandidatesInRange.length,
+        totalCandidatesInClip: allReviewCandidates.length,
+        limitedTo: reviewLimit,
+        note: 'These are small or brief yellow detections consolidated into short visual tracks; no automatic identity is claimed.',
+      },
       observations,
       observationsLimitedTo: includeObservations ? limit : undefined,
+      keepOnlyCutPlan,
+      correctionTools: {
+        mergePeople: 'mergeClipFacePeople',
+        moveAppearance: 'moveClipFaceAppearance',
+        assignNeedsReview: 'assignClipFaceReviewCandidate',
+      },
+      editingGuidance: {
+        appearanceRanges: 'Each appearance already contains timelineStart/timelineEnd mapped and clamped to this clip.',
+        keepOnlyPerson: 'When personId was supplied, pass keepOnlyCutPlan.recommendedToolCall args to cutRangesFromClip unchanged. Do not split first or delete linked audio separately.',
+      },
       privacy: 'Anonymous local person IDs only; raw biometric vectors are never exposed.',
     },
   };
@@ -264,18 +349,71 @@ export async function handleGetClipTranscript(
     };
   }
 
+  const requestedStart = typeof args.sourceStart === 'number' ? args.sourceStart : clip.inPoint;
+  const requestedEnd = typeof args.sourceEnd === 'number' ? args.sourceEnd : clip.outPoint;
+  const clampSourceTime = (value: number) => Math.min(clip.outPoint, Math.max(clip.inPoint, value));
+  const sourceA = clampSourceTime(requestedStart);
+  const sourceB = clampSourceTime(requestedEnd);
+  const sourceStart = Math.min(sourceA, sourceB);
+  const sourceEnd = Math.max(sourceA, sourceB);
+  const matchingSegments = clip.transcript.filter(word => (
+    word.end >= sourceStart && word.start <= sourceEnd
+  ));
+  const offset = Math.max(0, typeof args.offset === 'number' ? Math.floor(args.offset) : 0);
+  const limit = Math.min(200, Math.max(1, typeof args.limit === 'number' ? Math.floor(args.limit) : 120));
+  const page = matchingSegments.slice(offset, offset + limit);
+  const hasMore = offset + page.length < matchingSegments.length;
+  const text = page.map(word => word.text).join(' ');
+  const mediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
+  const mediaFile = mediaFileId
+    ? useMediaStore.getState().files.find(file => file.id === mediaFileId)
+    : undefined;
+  const fusionArtifact = mediaFile?.transcriptArtifact;
+  const fusionProgress = mediaFile?.transcriptFusionProgress;
+
   return {
     success: true,
     data: {
       hasTranscript: true,
       segmentCount: clip.transcript.length,
-      segments: clip.transcript.map(word => ({
-        start: word.start,
-        end: word.end,
-        text: word.text,
-      })),
-      // Full text for easy reading
-      fullText: clip.transcript.map(w => w.text).join(' '),
+      matchingSegmentCount: matchingSegments.length,
+      sourceRange: { start: sourceStart, end: sourceEnd },
+      offset,
+      limit,
+      returned: page.length,
+      hasMore,
+      nextOffset: hasMore ? offset + page.length : null,
+      nextSourceStart: hasMore ? page.at(-1)?.end ?? sourceStart : null,
+      segments: args.includeSegments === false
+        ? undefined
+        : page.map(word => ({
+            start: word.start,
+            end: word.end,
+            text: word.text,
+            speaker: word.speaker,
+            speakerConfidence: word.speakerConfidence,
+            speakerSourceProvider: word.speakerSourceProvider,
+            sourceProvider: word.sourceProvider,
+            agreement: word.agreement,
+            needsReview: word.needsReview === true,
+            alternatives: word.alternatives,
+          })),
+      text,
+      fullText: text,
+      fusion: fusionArtifact || fusionProgress
+        ? {
+            stage: fusionProgress?.stage ?? 'complete',
+            providers: fusionProgress?.providers,
+            openConflicts: fusionArtifact?.conflicts.filter(
+              conflict => conflict.status === 'needs-review',
+            ).length ?? fusionProgress?.conflictCount ?? 0,
+            resolvedConflicts: fusionArtifact?.conflicts.filter(
+              conflict => conflict.status !== 'needs-review',
+            ).length ?? fusionProgress?.resolvedCount ?? 0,
+            agentStatus: fusionArtifact?.agent.status ?? 'not-requested',
+            recentPatches: fusionArtifact?.patches.slice(-8),
+          }
+        : null,
     },
   };
 }

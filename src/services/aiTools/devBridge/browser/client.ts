@@ -1,4 +1,5 @@
 import { AI_TOOLS, executeAITool, getQuickTimelineSummary } from '../../index';
+import { describeAgentControlSession, handleAgentControlRequest } from './agentControl';
 import { collectDebugState } from './debugState';
 import { installRealClipDragRecorder } from './debugActions/realClipDragRecorder';
 import { runDebugAction } from './debugActions';
@@ -11,7 +12,42 @@ import {
 } from './presence';
 
 export function registerDevBridgeBrowserClient(hot: BrowserHot): void {
-  const sendPresence = registerBridgePresence(hot, installRealClipDragRecorder);
+  const sendPresence = registerBridgePresence(
+    hot,
+    installRealClipDragRecorder,
+    describeAgentControlSession,
+  );
+
+  hot.on('agent-control:request', async (data: {
+    requestId: string;
+    operation: string;
+    args?: Record<string, unknown>;
+    targetTabId?: string | null;
+  }) => {
+    if (data.targetTabId && data.targetTabId !== tabId) {
+      return;
+    }
+
+    try {
+      const delayMs = getTabPriorityDelayMs(data.targetTabId === tabId);
+      if (delayMs < 0) {
+        return;
+      }
+      if (delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+      sendPresence();
+      hot.send('agent-control:result', {
+        requestId: data.requestId,
+        result: await handleAgentControlRequest(data.operation, data.args ?? {}),
+      });
+    } catch (error: unknown) {
+      hot.send('agent-control:result', {
+        requestId: data.requestId,
+        result: { success: false, error: error instanceof Error ? error.message : String(error) },
+      });
+    }
+  });
 
   hot.on('ai-tools:execute', async (data: {
     requestId: string;

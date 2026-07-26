@@ -1,12 +1,19 @@
-import type { AnalysisStatus, ClipAnalysis, FrameAnalysisData } from '../../types/clipMetadata';
+import type {
+  AnalysisStatus,
+  ClipAnalysis,
+  FaceAnalysisResult,
+  FrameAnalysisData,
+} from '../../types/clipMetadata';
 import { summarizeCachedFaces } from './faceIdentityTracker';
 import { FACE_ANALYSIS_MODEL_VERSION } from './modelCatalog';
 
 export function hasCompatibleFaceAnalysis(analysis?: ClipAnalysis): boolean {
-  return Boolean(
-    analysis?.faceAnalysis?.modelVersion === FACE_ANALYSIS_MODEL_VERSION
-    && analysis.frames.every(frame => frame.faceModelVersion === FACE_ANALYSIS_MODEL_VERSION),
-  );
+  if (analysis?.faceAnalysis?.modelVersion !== FACE_ANALYSIS_MODEL_VERSION) return false;
+  const faceFrames = analysis.frames.filter(frame => (
+    frame.faceModelVersion !== undefined || frame.faces !== undefined
+  ));
+  return faceFrames.length > 0
+    && faceFrames.every(frame => frame.faceModelVersion === FACE_ANALYSIS_MODEL_VERSION);
 }
 
 export function stripFaceDataFromFrames(
@@ -24,10 +31,20 @@ export function sanitizePersistedFaceAnalysis(
   analysis?: ClipAnalysis,
 ): ClipAnalysis | undefined {
   if (!analysis || hasCompatibleFaceAnalysis(analysis)) return analysis;
+  const frames = analysis.frames.map((frame) => (
+    frame.faceModelVersion === undefined && frame.faces === undefined
+      ? frame
+      : frame.faceModelVersion === FACE_ANALYSIS_MODEL_VERSION
+        ? frame
+        : stripFaceDataFromFrames([frame])[0]
+  ));
+  const hasFaces = frames.some(
+    frame => frame.faceModelVersion === FACE_ANALYSIS_MODEL_VERSION,
+  );
   return {
     ...analysis,
-    frames: stripFaceDataFromFrames(analysis.frames),
-    faceAnalysis: undefined,
+    frames,
+    faceAnalysis: hasFaces ? summarizeCachedFaces(frames) : undefined,
   };
 }
 
@@ -40,20 +57,30 @@ export function normalizePersistedFaceStatus(
 }
 
 export function restoreCachedClipAnalysis(
-  cached: { frames: unknown[]; sampleInterval: number },
-  isExactRange: boolean,
+  cached: { frames: unknown[]; sampleInterval: number; faceAnalysis?: unknown },
 ): { analysis: ClipAnalysis; hasFaces: boolean } {
   const cachedFrames = cached.frames as FrameAnalysisData[];
-  const hasFaces = isExactRange
-    && cachedFrames.length > 0
-    && cachedFrames.every(frame => frame.faceModelVersion === FACE_ANALYSIS_MODEL_VERSION);
-  const frames = hasFaces ? cachedFrames : stripFaceDataFromFrames(cachedFrames);
+  const frames = cachedFrames.map((frame) => (
+    frame.faceModelVersion === undefined && frame.faces === undefined
+      ? frame
+      : frame.faceModelVersion === FACE_ANALYSIS_MODEL_VERSION
+        ? frame
+        : stripFaceDataFromFrames([frame])[0]
+  ));
+  const hasFaces = frames.some(
+    frame => frame.faceModelVersion === FACE_ANALYSIS_MODEL_VERSION,
+  );
+  const persistedFaceAnalysis = cached.faceAnalysis as FaceAnalysisResult | undefined;
   return {
     hasFaces,
     analysis: {
       frames,
       sampleInterval: cached.sampleInterval,
-      faceAnalysis: hasFaces ? summarizeCachedFaces(frames) : undefined,
+      faceAnalysis: hasFaces
+        ? persistedFaceAnalysis?.modelVersion === FACE_ANALYSIS_MODEL_VERSION
+          ? persistedFaceAnalysis
+          : summarizeCachedFaces(frames)
+        : undefined,
     },
   };
 }

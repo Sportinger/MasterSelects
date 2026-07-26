@@ -6,9 +6,8 @@ import {
   getProjectionParams,
   withClipProjectionTransform,
 } from './maskOverlay/maskOverlayProjectionPlans';
+import { getTimelineFaceIdentityColor } from '../timeline/utils/timelineFaceRangeOverlay';
 import './FaceAnalysisOverlay.css';
-
-const FACE_COLORS = ['#ffd54f', '#4dd0e1', '#ff8a80', '#b39ddb', '#81c784', '#ffab40'];
 
 interface FaceAnalysisOverlayProps {
   canvasWidth: number;
@@ -32,12 +31,16 @@ function closestFaceFrame(
   return closestDistance <= Math.max(0.3, (sampleInterval / 1000) * 1.1) ? closest : null;
 }
 
-function colorForPerson(personId: string): string {
-  let hash = 0;
-  for (let index = 0; index < personId.length; index += 1) {
-    hash = (hash * 31 + personId.charCodeAt(index)) >>> 0;
-  }
-  return FACE_COLORS[hash % FACE_COLORS.length]!;
+function formatTimestamp(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const remainder = Math.floor(seconds % 60);
+  return `${minutes.toString().padStart(2, '0')}:${remainder.toString().padStart(2, '0')}`;
+}
+
+function faceColor(face: FaceFrameDetection): string {
+  return face.identityEligible === false
+    ? '#f6bd60'
+    : getTimelineFaceIdentityColor(face.personId).css;
 }
 
 function FaceAnalysisOverlayComponent({
@@ -83,6 +86,15 @@ function FaceAnalysisOverlayComponent({
   const personLabels = new Map(
     clip?.analysis?.faceAnalysis?.people.map(person => [person.id, person.label]) ?? [],
   );
+  const highlightedFace = frame?.faces?.toSorted(
+    (left, right) => right.box.width * right.box.height - left.box.width * left.box.height,
+  )[0];
+  const highlightedLabel = highlightedFace
+    ? personLabels.get(highlightedFace.personId) ?? highlightedFace.label
+    : null;
+  const highlightedColor = highlightedFace
+    ? faceColor(highlightedFace)
+    : null;
   const sourceRect = projectionLayer?.sourceRect ?? { x: 0, y: 0, width: 1, height: 1 };
 
   if (
@@ -112,8 +124,27 @@ function FaceAnalysisOverlayComponent({
       viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
       aria-label="YuNet and SFace detections"
     >
+      {highlightedFace && highlightedLabel && highlightedColor && (
+        <g transform="translate(14 14)">
+          <rect
+            width={Math.min(canvasWidth - 28, Math.max(220, highlightedLabel.length * 12 + 118))}
+            height={52}
+            rx={7}
+            fill="rgba(8, 10, 14, 0.86)"
+            stroke={highlightedColor}
+            strokeWidth={2}
+          />
+          <circle cx={19} cy={20} r={6} fill={highlightedColor} />
+          <text x={33} y={24} fill="white" fontSize={16} fontFamily="system-ui, sans-serif" fontWeight={700}>
+            {highlightedLabel}
+          </text>
+          <text x={14} y={43} fill="rgba(255,255,255,.76)" fontSize={12} fontFamily="system-ui, sans-serif">
+            Face track · {Math.round(highlightedFace.confidence * 100)}% confidence · {formatTimestamp(sourceTime)}
+          </text>
+        </g>
+      )}
       {frame.faces.map((face: FaceFrameDetection) => {
-        const color = colorForPerson(face.personId);
+        const color = faceColor(face);
         const label = personLabels.get(face.personId) ?? face.label;
         const left = Math.max(face.box.x, sourceRect.x);
         const top = Math.max(face.box.y, sourceRect.y);

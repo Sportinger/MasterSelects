@@ -5,11 +5,10 @@ import { insertChatLog } from '../../lib/chatLog';
 import { getCreditLedgerEntryBySource, spendCredits } from '../../lib/credits';
 import { getCurrentUser, json, methodNotAllowed, parseJson } from '../../lib/db';
 import {
-  buildHostedChatCapabilities,
-  normalizeHostedChatRequest,
-  runHostedChatCompletion,
-  type HostedChatRequest,
-} from '../../lib/providers/openai';
+  getKieChatCapabilities,
+  normalizeHostedKieChatRequest,
+  runHostedKieChatCompletion,
+} from '../../lib/providers/kieChat';
 import {
   createGatewayError,
   createHostedGatewayEnvelope,
@@ -19,13 +18,6 @@ import {
 import { getModelCreditCost } from '../../lib/modelPricing';
 import { completeUsageEvent, createUsageEvent } from '../../lib/usage';
 import type { AppContext, AppRouteHandler } from '../../lib/env';
-
-interface HostedChatRouteBody {
-  idempotencyKey?: string;
-  messages?: unknown;
-  model?: string;
-  stream?: boolean;
-}
 
 interface HostedAiContext {
   billing: Awaited<ReturnType<typeof getUserBillingSnapshot>> | null;
@@ -42,7 +34,7 @@ function buildRouteEnvelope<TData>(
     ...input,
     kind: 'ai.chat',
     mode: 'hosted',
-    provider: input.provider ?? 'openai',
+    provider: input.provider ?? 'kie.ai',
     requestId: input.requestId,
   });
 }
@@ -74,15 +66,20 @@ async function loadHostedContext(context: AppContext): Promise<HostedAiContext> 
 
 function buildCapabilityResponse(context: AppContext, hostedContext: HostedAiContext): HostedGatewayEnvelope<Record<string, unknown>> {
   const requestId = context.data.requestId ?? null;
-  const capabilities = buildHostedChatCapabilities();
+  const models = getKieChatCapabilities();
+  const capabilities = {
+    models,
+    provider: 'kie.ai',
+    streamSupported: false,
+  };
   const authenticated = Boolean(hostedContext.user);
 
   return buildRouteEnvelope({
     byoRequired: !authenticated || !hostedContext.billing?.hostedAIEnabled,
-    capability: capabilities as unknown as Record<string, unknown>,
+    capability: capabilities,
     creditBalance: hostedContext.billing?.balance ?? 0,
     data: {
-      capabilities,
+      capabilities: models,
       feature: 'hosted_ai_chat',
       modes: ['hosted', 'byo'],
       streamSupported: false,
@@ -104,7 +101,7 @@ function buildSsePayload(requestId: string | null, message: string): Response {
       {
         data: {
           kind: 'ai.chat',
-          provider: 'openai',
+          provider: 'kie.ai',
           requestId,
           status: 'ready',
         },
@@ -146,8 +143,8 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   }
 
   const requestId = context.data.requestId ?? crypto.randomUUID();
-  const rawBody = (await parseJson<HostedChatRouteBody>(context.request)) ?? null;
-  const request = normalizeHostedChatRequest(rawBody);
+  const rawBody = (await parseJson<Record<string, unknown>>(context.request)) ?? null;
+  const request = normalizeHostedKieChatRequest(rawBody);
   const idempotencyKey =
     typeof rawBody?.idempotencyKey === 'string' && rawBody.idempotencyKey.trim().length > 0
       ? rawBody.idempotencyKey.trim()
@@ -158,7 +155,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       buildRouteEnvelope({
         error: createGatewayError(
           'invalid_request',
-          'Expected a JSON body with a messages array.',
+          'Expected a supported Kie.ai chat model and protocol request body.',
           { requestId },
         ),
         ok: false,
@@ -247,15 +244,15 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     );
   }
 
-  const moderation = await moderateAiInput(context.env, request.messages);
+  const moderation = await moderateAiInput(context.env, request.auditInput);
   if (blocksAiRequest(moderation)) {
     await insertAiAuditEvent(context, {
       feature: 'hosted_ai_chat',
       idempotencyKey,
       model: request.model,
       moderation,
-      prompt: request.messages,
-      provider: 'openai',
+      prompt: request.auditInput,
+      provider: 'kie.ai',
       requestId,
       status: 'blocked',
       userId: hostedContext.user.id,
@@ -283,40 +280,26 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     );
   }
 
-  const providerBody: HostedChatRequest = {
-    max_completion_tokens: request.max_completion_tokens,
-    max_tokens: request.max_tokens,
-    messages: request.messages,
-    model: request.model,
-    response_format: request.response_format,
-    reasoning_effort: request.reasoning_effort,
-    stream: false,
-    tool_choice: request.tool_choice,
-    tools: request.tools,
-    temperature: request.temperature,
-    top_p: request.top_p,
-  };
-
   await createUsageEvent(context.env.DB, {
     creditCost: creditCost,
     feature: 'hosted_ai_chat',
     idempotencyKey,
     metadata: {
-      messageCount: request.messages.length,
+      messageCount: request.messageCount,
       model: request.model,
       requestId,
       stream: false,
     },
     model: request.model,
-    provider: 'openai',
-    requestUnits: `${request.messages.length}`,
+    provider: 'kie.ai',
+    requestUnits: `${request.messageCount}`,
     userId: hostedContext.user.id,
   });
 
   const startTime = Date.now();
 
   try {
-    const payload = await runHostedChatCompletion(context.env, providerBody);
+    const payload = await runHostedKieChatCompletion(context.env, request);
     const durationMs = Date.now() - startTime;
     const charge = await spendCredits(
       context.env.DB,
@@ -340,8 +323,8 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
           idempotencyKey,
           model: request.model,
           moderation,
-          prompt: request.messages,
-          provider: 'openai',
+          prompt: request.auditInput,
+          provider: 'kie.ai',
           requestId,
           status: 'failed',
           userId: hostedContext.user.id,
@@ -390,7 +373,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
         requestId,
         idempotencyKey,
         model: request.model,
-        messages: request.messages,
+        messages: [request.auditInput],
         response: payload,
         creditCost: charge.charged ? creditCost : 0,
         durationMs,
@@ -406,8 +389,8 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
         idempotencyKey,
         model: request.model,
         moderation,
-        prompt: request.messages,
-        provider: 'openai',
+        prompt: request.auditInput,
+        provider: 'kie.ai',
         requestId,
         status: 'completed',
         userId: hostedContext.user.id,
@@ -440,7 +423,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
         requestId,
         idempotencyKey,
         model: request.model,
-        messages: request.messages,
+        messages: [request.auditInput],
         response: null,
         creditCost: 0,
         durationMs,
@@ -457,8 +440,8 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
         idempotencyKey,
         model: request.model,
         moderation,
-        prompt: request.messages,
-        provider: 'openai',
+        prompt: request.auditInput,
+        provider: 'kie.ai',
         requestId,
         status: 'failed',
         userId: hostedContext.user.id,

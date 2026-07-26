@@ -10,8 +10,14 @@ import {
   tokenFilePath,
   validateBridgeRequest,
 } from './auth.ts'
+import {
+  installAgentControlEndpoints,
+  type AgentControlSession,
+} from './agentControlEndpoints.ts'
+import { installAgentChatEndpoints } from './agentChatEndpoints.ts'
 import { installLocalFileEndpoints } from './localFileEndpoints.ts'
 import { installBlobStoreEndpoint, installBrowserLogEndpoint } from './supportEndpoints.ts'
+import { BridgeTraceStore } from './traceStore.ts'
 
 export { allowedFileRoots, bridgeToken } from './auth.ts'
 
@@ -29,15 +35,18 @@ type DevBridgeClient = {
   visibilityState: string
   hasFocus: boolean
   lastSeenAt: number
+  session: Record<string, unknown> | null
   unresponsiveUntil?: number
 }
 
 export function createDevBridgePlugin(options: DevBridgePluginOptions = {}): Plugin {
   const enableAiToolsBridge = options.enableAiToolsBridge ?? true
   const pendingRequests = new Map<string, PendingRequest>()
+  const pendingAgentControlRequests = new Map<string, PendingRequest>()
   const pendingDebugRequests = new Map<string, PendingRequest>()
   const pendingDebugActionRequests = new Map<string, PendingRequest>()
   const clients = new Map<string, DevBridgeClient>()
+  const traceStore = new BridgeTraceStore()
   let requestCounter = 0
 
   const pruneClients = () => {
@@ -156,6 +165,15 @@ export function createDevBridgePlugin(options: DevBridgePluginOptions = {}): Plu
         }
       })
 
+      server.hot.on('agent-control:result', (data: { requestId: string; result: unknown }) => {
+        const pending = pendingAgentControlRequests.get(data.requestId)
+        if (pending) {
+          clearTimeout(pending.timer)
+          pendingAgentControlRequests.delete(data.requestId)
+          pending.resolve(data.result)
+        }
+      })
+
       server.hot.on('debug-state:result', (data: { requestId: string; result: unknown }) => {
         const pending = pendingDebugRequests.get(data.requestId)
         if (pending) {
@@ -174,7 +192,12 @@ export function createDevBridgePlugin(options: DevBridgePluginOptions = {}): Plu
         }
       })
 
-      server.hot.on('ai-tools:presence', (data: { tabId: string; visibilityState?: string; hasFocus?: boolean }) => {
+      server.hot.on('ai-tools:presence', (data: {
+        tabId: string
+        visibilityState?: string
+        hasFocus?: boolean
+        session?: Record<string, unknown>
+      }) => {
         if (!data?.tabId) return
         const previous = clients.get(data.tabId)
         clients.set(data.tabId, {
@@ -182,8 +205,72 @@ export function createDevBridgePlugin(options: DevBridgePluginOptions = {}): Plu
           visibilityState: data.visibilityState ?? 'hidden',
           hasFocus: Boolean(data.hasFocus),
           lastSeenAt: Date.now(),
+          session: data.session ?? previous?.session ?? null,
           unresponsiveUntil: previous?.unresponsiveUntil,
         })
+      })
+
+      const listAgentSessions = (): AgentControlSession[] => {
+        pruneClients()
+        return [...clients.values()].map((client) => ({
+          hasFocus: client.hasFocus,
+          lastSeenAt: client.lastSeenAt,
+          session: client.session,
+          sessionId: client.tabId,
+          unresponsiveUntil: client.unresponsiveUntil,
+          visibilityState: client.visibilityState,
+        }))
+      }
+      const dispatchAgentRequest = ({
+        operation,
+        args = {},
+        sessionId,
+        timeoutMs,
+      }: {
+        operation: string
+        args?: Record<string, unknown>
+        sessionId?: string | null
+        timeoutMs?: number
+      }): Promise<{ result: unknown; sessionId: string }> => {
+        pruneClients()
+        if (sessionId && !clients.has(sessionId)) {
+          return Promise.reject(new Error(`Unknown or stale bridge session: ${sessionId}`))
+        }
+        const targetTabId = sessionId ?? pickTargetTabId()
+        if (!targetTabId) {
+          return Promise.reject(new Error('No browser tab connected to the dev bridge'))
+        }
+
+        const requestId = `agent-${++requestCounter}-${crypto.randomUUID().slice(0, 8)}`
+        const requestTimeoutMs = sanitizeBridgeTimeoutMs(timeoutMs, 30000)
+        return new Promise((resolve, reject) => {
+          const timer = setTimeout(() => {
+            pendingAgentControlRequests.delete(requestId)
+            markClientUnresponsive(targetTabId)
+            reject(new Error(`Timeout: bridge session ${targetTabId} did not respond within ${Math.round(requestTimeoutMs / 1000)}s`))
+          }, requestTimeoutMs)
+
+          pendingAgentControlRequests.set(requestId, {
+            resolve: (result) => resolve({ result, sessionId: targetTabId }),
+            timer,
+          })
+          server.hot.send('agent-control:request', {
+            args,
+            operation,
+            requestId,
+            targetTabId,
+          })
+        })
+      }
+
+      installAgentChatEndpoints(server, {
+        dispatch: dispatchAgentRequest,
+        listSessions: listAgentSessions,
+      })
+      installAgentControlEndpoints(server, {
+        dispatch: dispatchAgentRequest,
+        listSessions: listAgentSessions,
+        traceStore,
       })
 
       server.middlewares.use('/api/ai-tools', (req, res) => {
@@ -249,17 +336,50 @@ export function createDevBridgePlugin(options: DevBridgePluginOptions = {}): Plu
             }
 
             const requestId = `r${++requestCounter}-${crypto.randomUUID().slice(0, 8)}`
-            const explicitTargetTabId = typeof requestedTargetTabId === 'string' && clients.has(requestedTargetTabId)
+            if (typeof requestedTargetTabId === 'string' && !clients.has(requestedTargetTabId)) {
+              res.statusCode = 404
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({
+                success: false,
+                error: `Unknown or stale bridge session: ${requestedTargetTabId}`,
+              }))
+              return
+            }
+            const explicitTargetTabId = typeof requestedTargetTabId === 'string'
               ? requestedTargetTabId
               : null
             const targetTabId = explicitTargetTabId ?? pickTargetTabId()
+            if (!targetTabId) {
+              res.statusCode = 503
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({ success: false, error: 'No browser tab connected to the dev bridge' }))
+              return
+            }
             const requestTimeoutMs = sanitizeBridgeTimeoutMs(timeoutMs, 30000)
+            const trace = traceStore.begin({
+              args,
+              options,
+              requestId,
+              sessionId: targetTabId,
+              source: 'http',
+              surface: 'devBridge',
+              tool,
+            })
 
             const resultPromise = new Promise((resolve) => {
               const timer = setTimeout(() => {
                 pendingRequests.delete(requestId)
                 markClientUnresponsive(targetTabId)
-                resolve({ success: false, error: `Timeout: no browser tab responded within ${Math.round(requestTimeoutMs / 1000)}s` })
+                const result = {
+                  success: false,
+                  error: `Timeout: no browser tab responded within ${Math.round(requestTimeoutMs / 1000)}s`,
+                }
+                traceStore.complete(trace.callId, {
+                  error: result.error,
+                  result,
+                  status: 'timeout',
+                })
+                resolve(result)
               }, requestTimeoutMs)
 
               pendingRequests.set(requestId, { resolve, timer })
@@ -267,6 +387,15 @@ export function createDevBridgePlugin(options: DevBridgePluginOptions = {}): Plu
             })
 
             resultPromise.then((result) => {
+              if (traceStore.get(trace.callId)?.status === 'running') {
+                const error = result
+                  && typeof result === 'object'
+                  && 'error' in result
+                  && typeof (result as { error?: unknown }).error === 'string'
+                  ? (result as { error: string }).error
+                  : undefined
+                traceStore.complete(trace.callId, { error, result })
+              }
               res.setHeader('Content-Type', 'application/json')
               res.end(JSON.stringify(result))
             })

@@ -6,7 +6,66 @@ export interface TranscriptApiWord {
   start?: number;
   end?: number;
   confidence?: number;
+  punctuated_word?: string;
   speaker?: number | string;
+  speakerConfidence?: number;
+  speaker_confidence?: number;
+}
+
+export interface TranscriptApiSegment {
+  end?: number;
+  speaker?: number | string;
+  start?: number;
+  text?: string;
+}
+
+function transcriptTokenWeight(value: string): number {
+  const normalizedLength = Array.from(value.replace(/[^\p{L}\p{N}]/gu, '')).length;
+  return Math.max(1, normalizedLength);
+}
+
+/**
+ * OpenAI's diarization model returns timestamped speaker segments rather than
+ * word timestamps. Expand each speaker segment into monotonic approximate word
+ * spans so its diarization boundaries can be projected onto Deepgram's exact
+ * timing backbone. OpenAI's token text and these approximate timings are never
+ * used in the displayed transcript.
+ */
+export function expandDiarizedSegmentsToWords(
+  segments: TranscriptApiSegment[],
+): TranscriptApiWord[] {
+  return segments.flatMap((segment) => {
+    const tokens = segment.text?.trim().split(/\s+/).filter(Boolean) ?? [];
+    if (tokens.length === 0) return [];
+
+    const start = typeof segment.start === 'number' ? segment.start : 0;
+    const requestedEnd = typeof segment.end === 'number' ? segment.end : start + tokens.length * 0.2;
+    const end = Math.max(start + tokens.length * 0.04, requestedEnd);
+    const duration = end - start;
+    const weights = tokens.map(transcriptTokenWeight);
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+    let cursor = start;
+
+    return tokens.map((token, index): TranscriptApiWord => {
+      const tokenEnd = index === tokens.length - 1
+        ? end
+        : cursor + duration * (weights[index] / totalWeight);
+      const word = {
+        end: tokenEnd,
+        speaker: segment.speaker,
+        start: cursor,
+        word: token,
+      };
+      cursor = tokenEnd;
+      return word;
+    });
+  });
+}
+
+function formatTranscriptSpeaker(value: number | string | undefined): string {
+  if (typeof value === 'number') return `Speaker ${value + 1}`;
+  if (!value) return 'Speaker 1';
+  return /^speaker(?:\s|$)/i.test(value) ? value : `Speaker ${value}`;
 }
 
 /**
@@ -85,17 +144,17 @@ export function mergeTranscriptWords(
 }
 
 export function mapOpenAIWords(
-  rawWords: Array<{ word: string; start: number; end: number }>,
+  rawWords: TranscriptApiWord[],
   inPointOffset: number,
   startIndex: number = 0,
 ): TranscriptWord[] {
   return rawWords.map((word, index) => ({
     id: `word-${startIndex + index}`,
-    text: word.word,
+    text: word.word ?? word.text ?? '',
     start: (word.start || 0) + inPointOffset,
-    end: (word.end || word.start + 0.1) + inPointOffset,
-    confidence: 1,
-    speaker: 'Speaker 1',
+    end: (word.end || (word.start ?? 0) + 0.1) + inPointOffset,
+    confidence: typeof word.confidence === 'number' ? word.confidence : 1,
+    speaker: formatTranscriptSpeaker(word.speaker),
   }));
 }
 
@@ -120,6 +179,7 @@ export function mapAssemblyAIWords(
 export function mapDeepgramWords(
   rawWords: TranscriptApiWord[],
   inPointOffset: number,
+  startIndex: number = 0,
 ): TranscriptWord[] {
   return rawWords.map((word, index) => {
     const start = typeof word.start === 'number' ? word.start : 0;
@@ -129,12 +189,13 @@ export function mapDeepgramWords(
       : word.speaker ?? 'Speaker 1';
 
     return {
-      id: `word-${index}`,
-      text: word.word ?? word.text ?? '',
+      id: `word-${startIndex + index}`,
+      text: word.punctuated_word ?? word.word ?? word.text ?? '',
       start: start + inPointOffset,
       end: end + inPointOffset,
-      confidence: word.confidence || 1,
+      confidence: typeof word.confidence === 'number' ? word.confidence : 1,
       speaker,
+      speakerConfidence: word.speakerConfidence ?? word.speaker_confidence,
     };
   });
 }

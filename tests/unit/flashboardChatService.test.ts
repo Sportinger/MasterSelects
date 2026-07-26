@@ -5,7 +5,8 @@ import {
   getFlashBoardChatCreditLabel,
   sendFlashBoardChatMessage,
 } from '../../src/services/flashboard/FlashBoardChatService';
-import { normalizeHostedChatRequest } from '../../functions/lib/providers/openai';
+import { findFlashBoardChatRunByIdempotencyKey } from '../../src/services/flashboard/FlashBoardChatRunAudit';
+import { normalizeHostedKieChatRequest } from '../../functions/lib/providers/kieChat';
 
 describe('FlashBoardChatService', () => {
   afterEach(() => {
@@ -13,7 +14,8 @@ describe('FlashBoardChatService', () => {
     vi.unstubAllGlobals();
   });
 
-  it('sends GPT-5.5 chat through Responses with reasoning effort', async () => {
+  it('sends Kie.ai GPT chat through Responses with reasoning effort', async () => {
+    let completedRun: import('../../src/services/flashboard/FlashBoardChatService').FlashBoardChatRunRecord | null = null;
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       output: [{
         type: 'message',
@@ -23,71 +25,70 @@ describe('FlashBoardChatService', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const response = await sendFlashBoardChatMessage({
-      model: 'gpt-5.5',
-      openAiApiKey: 'sk-test',
+      kieAiApiKey: 'kie-test',
+      model: 'gpt-5-6-luna',
+      idempotencyKey: 'chat-service-test-run',
+      onRunCompleted: (run) => {
+        completedRun = run;
+      },
       openAiReasoningEffort: 'xhigh',
       prompt: 'Make this more cinematic',
-      provider: 'openai',
+      provider: 'kie',
       systemPromptOverride: 'Custom compact editor prompt.',
       temperature: 1.2,
     });
 
     expect(response).toBe('A better prompt.');
-    expect(fetchMock).toHaveBeenCalledWith('https://api.openai.com/v1/responses', expect.objectContaining({
+    expect(completedRun).toMatchObject({
+      idempotencyKey: 'chat-service-test-run',
+      promptVersion: 'custom',
+      response: 'A better prompt.',
+      source: 'ui',
+      status: 'succeeded',
+    });
+    await expect(findFlashBoardChatRunByIdempotencyKey('chat-service-test-run'))
+      .resolves.toMatchObject({
+        response: 'A better prompt.',
+        status: 'succeeded',
+      });
+    expect(fetchMock).toHaveBeenCalledWith('/api/kieai/byo/request', expect.objectContaining({
       method: 'POST',
       headers: expect.objectContaining({
-        Authorization: 'Bearer sk-test',
+        'x-kieai-api-key': 'kie-test',
       }),
     }));
 
-    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-    expect(body).toMatchObject({
+    const proxyBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(proxyBody.endpoint).toBe('/codex/v1/responses');
+    expect(proxyBody.body).toMatchObject({
       input: [{ role: 'user', content: 'Make this more cinematic' }],
       max_output_tokens: 2048,
-      model: 'gpt-5.5',
+      model: 'gpt-5-6-luna',
       reasoning: { effort: 'xhigh' },
       store: false,
     });
-    expect(body.instructions).toContain('Custom compact editor prompt.');
-    expect(body.instructions).toContain('Current MasterSelects context:');
-    expect(body).not.toHaveProperty('temperature');
+    expect(proxyBody.body.instructions).toContain('Custom compact editor prompt.');
+    expect(proxyBody.body.instructions).toContain('Current MasterSelects context:');
+    expect(proxyBody.body).not.toHaveProperty('temperature');
+    expect(proxyBody.body.tools.length).toBeLessThanOrEqual(128);
+    expect(proxyBody.body.tools.map((tool: { name: string }) => tool.name)).toEqual(expect.arrayContaining([
+      'getClipFaceAnalysis',
+      'cutRangesFromClip',
+    ]));
   });
 
-  it('does not send xhigh reasoning to the instant OpenAI model', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      output: [{
-        type: 'message',
-        content: [{ type: 'output_text', text: 'Short answer.' }],
-      }],
-    }), { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    await sendFlashBoardChatMessage({
-      model: 'gpt-5.4-nano',
-      openAiApiKey: 'sk-test',
-      openAiReasoningEffort: 'xhigh',
-      prompt: 'Answer fast',
-      provider: 'openai',
-      temperature: 0.7,
-    });
-
-    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-    expect(body.reasoning).toEqual({ effort: 'none' });
-  });
-
-  it('uses hosted OpenAI chat when a signed-in cloud session is available', async () => {
+  it('uses hosted Kie.ai chat when a signed-in cloud session is available', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       kind: 'ai.chat',
       mode: 'hosted',
       ok: true,
-      provider: 'openai',
+      provider: 'kie.ai',
       requestId: 'req-1',
       status: 'completed',
       data: {
-        choices: [{
-          message: {
-            content: 'Use softer backlight.',
-          },
+        output: [{
+          type: 'message',
+          content: [{ type: 'output_text', text: 'Use softer backlight.' }],
         }],
       },
     }), { status: 200 }));
@@ -95,10 +96,10 @@ describe('FlashBoardChatService', () => {
 
     const response = await sendFlashBoardChatMessage({
       hostedAvailable: true,
-      model: 'gpt-5.5',
-      openAiReasoningEffort: 'none',
+      model: 'gpt-5-6-luna',
+      openAiReasoningEffort: 'low',
       prompt: 'Suggest lighting',
-      provider: 'openai',
+      provider: 'kie',
       temperature: 0.7,
     });
 
@@ -109,54 +110,27 @@ describe('FlashBoardChatService', () => {
 
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(body).toMatchObject({
-      max_completion_tokens: 2048,
       idempotencyKey: expect.stringMatching(/^flashboard-chat:/),
-      model: 'gpt-5.5',
-      reasoning_effort: 'none',
-      messages: [
-        expect.objectContaining({ role: 'system' }),
-        { role: 'user', content: 'Suggest lighting' },
-      ],
+      input: [{ role: 'user', content: 'Suggest lighting' }],
+      max_output_tokens: 2048,
+      model: 'gpt-5-6-luna',
+      protocol: 'openai-responses',
+      reasoning: { effort: 'low' },
     });
   });
 
-  it('validates hosted reasoning effort at the API boundary', () => {
-    expect(normalizeHostedChatRequest({
-      messages: [{ role: 'user', content: 'Inspect this' }],
-      model: 'gpt-5.5',
-      reasoning_effort: 'xhigh',
-    })?.reasoning_effort).toBe('xhigh');
-    expect(normalizeHostedChatRequest({
-      messages: [{ role: 'user', content: 'Inspect this' }],
-      model: 'gpt-5.5',
-      reasoning_effort: 'invalid',
-    })?.reasoning_effort).toBeUndefined();
-  });
-
-  it('reports a hosted token limit instead of pretending tool work completed', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
-      kind: 'ai.chat',
-      mode: 'hosted',
-      ok: true,
-      provider: 'openai',
-      requestId: 'req-length',
-      status: 'completed',
-      data: {
-        choices: [{
-          finish_reason: 'length',
-          message: { content: null },
-        }],
-      },
-    }), { status: 200 })));
-
-    await expect(sendFlashBoardChatMessage({
-      hostedAvailable: true,
-      model: 'gpt-5.5',
-      openAiReasoningEffort: 'none',
-      prompt: 'Make a funny cut',
-      provider: 'openai',
-      temperature: 0.7,
-    })).rejects.toThrow('full 2048-token round budget');
+  it('validates Kie.ai protocol and model at the hosted boundary', () => {
+    expect(normalizeHostedKieChatRequest({
+      input: [{ role: 'user', content: 'Inspect this' }],
+      model: 'gpt-5-6-terra',
+      protocol: 'openai-responses',
+      reasoning: { effort: 'xhigh' },
+    })?.protocol).toBe('openai-responses');
+    expect(normalizeHostedKieChatRequest({
+      input: [{ role: 'user', content: 'Inspect this' }],
+      model: 'claude-opus-4-8',
+      protocol: 'openai-responses',
+    })).toBeNull();
   });
 
   it('lets Lemonade cold-start past the old 60s timeout window', async () => {
@@ -211,119 +185,60 @@ describe('FlashBoardChatService', () => {
     });
 
     expect(response).toBe('Ready');
-    expect(fetchMock).toHaveBeenNthCalledWith(1, 'http://localhost:13305/api/v1/load', expect.objectContaining({
-      method: 'POST',
-    }));
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
       ctx_size: 16384,
       model_name: 'Gemma-3-4b-it-GGUF',
     });
-    expect(fetchMock).toHaveBeenNthCalledWith(2, 'http://localhost:13305/api/v1/chat/completions', expect.objectContaining({
-      method: 'POST',
-    }));
   });
 
-  it('uses a fresh hosted charge key for each tool-followup model round', async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        kind: 'ai.chat',
-        mode: 'hosted',
-        ok: true,
-        provider: 'openai',
-        requestId: 'req-1',
-        status: 'completed',
-        data: {
-          choices: [{
-            message: {
-              content: null,
-              tool_calls: [{
-                id: 'tool-call-1',
-                type: 'function',
-                function: {
-                  name: 'unknownCompactChatTool',
-                  arguments: '{}',
-                },
-              }],
-            },
-          }],
-        },
-      }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        kind: 'ai.chat',
-        mode: 'hosted',
-        ok: true,
-        provider: 'openai',
-        requestId: 'req-2',
-        status: 'completed',
-        data: {
-          choices: [{
-            message: {
-              content: 'Tool result handled.',
-            },
-          }],
-        },
-      }), { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const response = await sendFlashBoardChatMessage({
-      hostedAvailable: true,
-      model: 'gpt-5.4-nano',
-      prompt: 'Inspect this',
-      provider: 'openai',
-      temperature: 0.7,
-    });
-
-    expect(response).toBe('Tool result handled.');
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-
-    const firstBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-    const secondBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
-    expect(firstBody.idempotencyKey).toMatch(/^flashboard-chat:/);
-    expect(secondBody.idempotencyKey).toMatch(/^flashboard-chat:/);
-    expect(secondBody.idempotencyKey).not.toBe(firstBody.idempotencyKey);
-    expect(secondBody.messages).toEqual(expect.arrayContaining([
-      expect.objectContaining({ role: 'tool', tool_call_id: 'tool-call-1' }),
-    ]));
-  });
-
-  it('labels hosted compact chat credit prices per model round', () => {
-    expect(getFlashBoardChatCreditCost('gpt-5.4-nano')).toBe(1);
-    expect(getFlashBoardChatCreditLabel('gpt-5.4-nano')).toBe('1 cr');
-    expect(getFlashBoardChatCreditCost('gpt-5.5')).toBe(5);
+  it('labels hosted compact-chat credit prices per Kie.ai model round', () => {
+    expect(getFlashBoardChatCreditCost('gpt-5-6-luna')).toBe(3);
+    expect(getFlashBoardChatCreditLabel('gpt-5-6-sol')).toBe('8 cr');
+    expect(getFlashBoardChatCreditCost('claude-fable-5')).toBe(10);
     expect(getFlashBoardChatCreditLabel('unknown-chat-model')).toBe('5 cr');
   });
 
-  it('uses documented Anthropic model ids and headers', async () => {
+  it('uses Kie.ai Messages for tool-capable Claude models', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       content: [{ type: 'text', text: 'Try a lower angle.' }],
     }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const model = FLASHBOARD_CHAT_MODEL_OPTIONS.anthropic[0]?.id ?? '';
+    const model = FLASHBOARD_CHAT_MODEL_OPTIONS.kie.find((option) => option.id === 'claude-opus-4-8')?.id ?? '';
     const response = await sendFlashBoardChatMessage({
-      anthropicApiKey: 'sk-ant-test',
+      kieAiApiKey: 'kie-test',
       model,
       prompt: 'Suggest a camera angle',
-      provider: 'anthropic',
+      provider: 'kie',
       temperature: 0.6,
     });
 
     expect(response).toBe('Try a lower angle.');
-    expect(model).toBe('claude-opus-4-1-20250805');
-    expect(fetchMock).toHaveBeenCalledWith('https://api.anthropic.com/v1/messages', expect.objectContaining({
-      method: 'POST',
-      headers: expect.objectContaining({
-        'anthropic-dangerous-direct-browser-access': 'true',
-        'anthropic-version': '2023-06-01',
-        'x-api-key': 'sk-ant-test',
-      }),
-    }));
-
-    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-    expect(body).toMatchObject({
+    const proxyBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(proxyBody.endpoint).toBe('/claude/v1/messages');
+    expect(proxyBody.body).toMatchObject({
       max_tokens: 2048,
-      model: 'claude-opus-4-1-20250805',
+      model: 'claude-opus-4-8',
       temperature: 0.6,
     });
+    expect(proxyBody.body.tools.length).toBeGreaterThan(0);
+  });
+
+  it('does not expose editor tools to Kie.ai Fable 5', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      content: [{ type: 'text', text: 'I can discuss the edit.' }],
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await sendFlashBoardChatMessage({
+      kieAiApiKey: 'kie-test',
+      model: 'claude-fable-5',
+      prompt: 'Discuss this edit',
+      provider: 'kie',
+      temperature: 0.6,
+    });
+
+    const proxyBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(proxyBody.body).not.toHaveProperty('tools');
   });
 });

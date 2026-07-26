@@ -84,6 +84,8 @@ function TimelineControlsComponent({
   const masterDropdownRef = useRef<HTMLDivElement>(null);
   const masterAudioState = useTimelineStore(state => state.masterAudioState);
   const runAudioExportPreflight = useTimelineStore(state => state.runAudioExportPreflight);
+  const showFaceRanges = useTimelineStore(state => state.showFaceRanges);
+  const toggleFaceRanges = useTimelineStore(state => state.toggleFaceRanges);
   const timelineTracks = useTimelineStore(state => state.tracks);
   const propertiesSelection = useTimelineStore(state => state.propertiesSelection);
   const armedAudioTracks = useMemo(
@@ -479,6 +481,13 @@ function TimelineControlsComponent({
               >
                 <span className={`view-check ${waveformsEnabled ? 'checked' : ''}`}>✓</span>
                 <span>Waveforms</span>
+              </div>
+              <div
+                className="view-dropdown-item"
+                onClick={toggleFaceRanges}
+              >
+                <span className={`view-check ${showFaceRanges ? 'checked' : ''}`}>âœ“</span>
+                <span>Face Ranges</span>
               </div>
               <div className="view-dropdown-divider" />
               <div

@@ -138,8 +138,8 @@ const topazImageEntry: CatalogEntry = {
 };
 
 describe('FlashBoardPromptRefiner', () => {
-  it('uses GPT-5.5 as the prompt refiner model', () => {
-    expect(FLASHBOARD_PROMPT_REFINER_MODEL).toBe('gpt-5.5');
+  it('uses Kie.ai GPT 5.6 Luna as the prompt refiner model', () => {
+    expect(FLASHBOARD_PROMPT_REFINER_MODEL).toBe('gpt-5-6-luna');
   });
 
   it('builds image-model guidance for Nano Banana reference prompts', () => {

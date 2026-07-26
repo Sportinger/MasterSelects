@@ -182,6 +182,7 @@ export interface ProjectTranscriptWord {
   end: number;
   confidence?: number;
   speaker?: string;
+  speakerConfidence?: number;
 }
 
 export interface ProjectSceneSegment {
@@ -205,6 +206,8 @@ export interface ProjectFaceFrameDetection {
   id: string;
   personId: string;
   label: string;
+  identityEligible?: boolean;
+  manualSourcePersonId?: string;
   confidence: number;
   box: ProjectFaceAnalysisBox;
   landmarks: ProjectFaceAnalysisPoint[];

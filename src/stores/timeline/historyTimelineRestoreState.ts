@@ -13,6 +13,7 @@ import type {
   HistoryTimelineRuntimeRef,
   HistoryTimelineTrackEditState,
 } from './historyTimelineEditState';
+import { getClipAnalysisSourceId } from '../../services/clipAnalysis/sourceAnalysisSharing';
 
 export interface HistoryTimelineRestoreCurrentState {
   clips?: readonly TimelineClip[];
@@ -135,6 +136,7 @@ function createDataOnlyClipSource(
 function createRestoredClip(
   clip: HistoryTimelineClipEditState,
   currentClip: TimelineClip | undefined,
+  currentAnalysisSource: TimelineClip | undefined,
   options: CreateHistoryTimelineRestoreStateOptions,
 ): { clip: TimelineClip; reusedRuntime: boolean } {
   const reusedRuntime = Boolean(
@@ -175,8 +177,13 @@ function createRestoredClip(
       nodeGraph: clonePlain(clip.nodeGraph),
       masks: clonePlain(clip.masks),
       transcriptStatus: clip.transcriptStatus,
+      analysis: clip.analysisStatus && clip.analysisStatus !== 'none'
+        ? currentAnalysisSource?.analysis
+        : undefined,
       analysisStatus: clip.analysisStatus,
+      analysisProgress: currentAnalysisSource?.analysisProgress,
       faceAnalysisStatus: clip.faceAnalysisStatus,
+      faceAnalysisProgress: currentAnalysisSource?.faceAnalysisProgress,
       faceAnalysisMessage: clip.faceAnalysisMessage,
       sceneDescriptionStatus: clip.sceneDescriptionStatus,
       reversed: clip.reversed,
@@ -277,13 +284,29 @@ export function createHistoryTimelineRestoreState(
   const currentClipsById = new Map(
     (currentTimeline.clips ?? []).map((clip) => [clip.id, clip])
   );
+  const currentAnalysisBySourceId = new Map<string, TimelineClip>();
+  for (const clip of currentTimeline.clips ?? []) {
+    const sourceId = getClipAnalysisSourceId(clip);
+    if (sourceId && clip.analysis && !currentAnalysisBySourceId.has(sourceId)) {
+      currentAnalysisBySourceId.set(sourceId, clip);
+    }
+  }
   const currentLayersById = new Map(
     (currentTimeline.layers ?? []).filter(Boolean).map((layer) => [layer.id, layer])
   );
   const reusedRuntimeClipIds: string[] = [];
   const deferredRuntimeClipIds: string[] = [];
   const restoredClipEntries = historyState.timeline.clips.map((clip) => {
-    const restored = createRestoredClip(clip, currentClipsById.get(clip.id), options);
+    const currentClip = currentClipsById.get(clip.id);
+    const sourceId = clip.sourceType === 'video'
+      ? clip.mediaFileId ?? clip.runtimeRef.mediaFileId
+      : undefined;
+    const restored = createRestoredClip(
+      clip,
+      currentClip,
+      currentClip?.analysis ? currentClip : sourceId ? currentAnalysisBySourceId.get(sourceId) : undefined,
+      options,
+    );
     if (restored.reusedRuntime) {
       reusedRuntimeClipIds.push(clip.id);
     } else if (!(clip.liveInputId ?? clip.runtimeRef.liveInputId)) {

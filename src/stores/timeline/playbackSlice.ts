@@ -553,6 +553,14 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
     set({ showTranscriptMarkers: enabled });
   },
 
+  toggleFaceRanges: () => {
+    set({ showFaceRanges: !get().showFaceRanges });
+  },
+
+  setShowFaceRanges: (enabled: boolean) => {
+    set({ showFaceRanges: enabled });
+  },
+
   // Tool mode actions
   setToolMode: (mode) => {
     get().setActiveTimelineTool(mode === 'cut' ? 'blade' : 'select');

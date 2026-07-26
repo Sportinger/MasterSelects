@@ -7,10 +7,15 @@ import {
   type ProxyFrameWriter,
   type ProxyStorageService,
 } from '../domains/ProxyStorageService';
-import type { TranscriptService } from '../domains/TranscriptService';
+import type { StoredTranscript, TranscriptService } from '../domains/TranscriptService';
 import {
+  deleteAnalysisRangeNative,
+  getAllAnalysisMergedNative,
+  getAnalysisNative,
+  getAnalysisRangesNative,
   getProxyAudioNative,
   hasProxyAudioNative,
+  saveAnalysisNative,
   saveProxyAudioNative,
 } from './nativeBackend';
 
@@ -254,10 +259,16 @@ export async function saveAnalysis(
   outPoint: number,
   frames: unknown[],
   sampleInterval: number,
+  faceAnalysis?: unknown,
 ): Promise<boolean> {
+  if (context.activeBackend === 'native') {
+    return saveAnalysisNative(
+      context.getNativeProjectPath(), mediaId, inPoint, outPoint, frames, sampleInterval, faceAnalysis,
+    );
+  }
   const handle = context.getProjectHandle();
   if (!handle) return false;
-  return context.analysisService.saveAnalysis(handle, mediaId, inPoint, outPoint, frames, sampleInterval);
+  return context.analysisService.saveAnalysis(handle, mediaId, inPoint, outPoint, frames, sampleInterval, faceAnalysis);
 }
 
 export async function getAnalysis(
@@ -265,7 +276,10 @@ export async function getAnalysis(
   mediaId: string,
   inPoint: number,
   outPoint: number,
-): Promise<{ frames: unknown[]; sampleInterval: number } | null> {
+): Promise<{ frames: unknown[]; sampleInterval: number; faceAnalysis?: unknown } | null> {
+  if (context.activeBackend === 'native') {
+    return getAnalysisNative(context.getNativeProjectPath(), mediaId, inPoint, outPoint);
+  }
   const handle = context.getProjectHandle();
   if (!handle) return null;
   return context.analysisService.getAnalysis(handle, mediaId, inPoint, outPoint);
@@ -283,6 +297,9 @@ export async function hasAnalysis(
 }
 
 export async function getAnalysisRanges(context: ArtifactStorageContext, mediaId: string): Promise<string[]> {
+  if (context.activeBackend === 'native') {
+    return getAnalysisRangesNative(context.getNativeProjectPath(), mediaId);
+  }
   const handle = context.getProjectHandle();
   if (!handle) return [];
   return context.analysisService.getAnalysisRanges(handle, mediaId);
@@ -292,6 +309,9 @@ export async function getAllAnalysisMerged(
   context: ArtifactStorageContext,
   mediaId: string,
 ): Promise<{ frames: unknown[]; sampleInterval: number } | null> {
+  if (context.activeBackend === 'native') {
+    return getAllAnalysisMergedNative(context.getNativeProjectPath(), mediaId);
+  }
   const handle = context.getProjectHandle();
   if (!handle) return null;
   return context.analysisService.getAllAnalysisMerged(handle, mediaId);
@@ -313,6 +333,9 @@ export async function deleteAnalysisRange(
   inPoint: number,
   outPoint: number,
 ): Promise<boolean> {
+  if (context.activeBackend === 'native') {
+    return deleteAnalysisRangeNative(context.getNativeProjectPath(), mediaId, inPoint, outPoint);
+  }
   const handle = context.getProjectHandle();
   if (!handle) return false;
   return context.analysisService.deleteAnalysisRange(handle, mediaId, inPoint, outPoint);
@@ -332,7 +355,7 @@ export async function saveTranscript(
 export async function getTranscript(
   context: ArtifactStorageContext,
   mediaId: string,
-): Promise<{ words: unknown[]; transcribedRanges?: [number, number][] } | null> {
+): Promise<StoredTranscript | null> {
   const handle = context.getProjectHandle();
   if (!handle) return null;
   return context.transcriptService.getTranscript(handle, mediaId);

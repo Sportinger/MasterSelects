@@ -130,12 +130,14 @@ export async function restoreLegacyStartupMediaState(
 
         let transcriptStatus: TranscriptStatus = 'none';
         let transcript: TranscriptWord[] | undefined;
+        let transcriptArtifact: import('../../types').TranscriptFusionArtifact | undefined;
         if (projectFileService.isProjectOpen()) {
           try {
             const saved = await projectFileService.getTranscript(mediaFile.id);
-            if (saved && Array.isArray(saved) && saved.length > 0) {
+            if (saved?.words?.length) {
               transcriptStatus = 'ready';
-              transcript = saved as TranscriptWord[];
+              transcript = saved.words as TranscriptWord[];
+              transcriptArtifact = saved.artifact as import('../../types').TranscriptFusionArtifact | undefined;
             }
           } catch { /* no transcript file */ }
         }
@@ -154,6 +156,7 @@ export async function restoreLegacyStartupMediaState(
           proxyFormat,
           transcriptStatus,
           transcript,
+          transcriptArtifact,
           duration: stored.duration ?? mediaFile.duration,
           width: stored.width ?? mediaFile.width,
           height: stored.height ?? mediaFile.height,

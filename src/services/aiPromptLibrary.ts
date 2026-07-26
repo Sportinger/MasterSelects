@@ -27,7 +27,7 @@ export interface LoadedAiSystemPrompt extends SavedAiSystemPrompt {
 }
 
 export function getDefaultProjectPromptName(provider: AIProvider): string {
-  return provider === 'lemonade' ? 'Lemonade system prompt' : 'OpenAI system prompt';
+  return provider === 'lemonade' ? 'Lemonade system prompt' : 'Kie.ai system prompt';
 }
 
 export function isProjectPromptStorageAvailable(): boolean {

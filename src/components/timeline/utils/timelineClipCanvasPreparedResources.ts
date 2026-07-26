@@ -58,7 +58,15 @@ export interface TimelineClipCanvasPreparedResourceClipInput {
   transcript?: readonly { start: number; end: number }[];
   transcriptStatus?: string;
   transcriptProgress?: number;
-  analysis?: { frames?: readonly { timestamp: number; focus?: number; globalMotion?: number; motion?: number; faceCount?: number }[] };
+  analysis?: {
+    frames?: readonly { timestamp: number; focus?: number; globalMotion?: number; motion?: number; faceCount?: number }[];
+    faceAnalysis?: {
+      people?: readonly {
+        id: string;
+        appearances?: readonly { start: number; end: number }[];
+      }[];
+    };
+  };
   analysisStatus?: string;
   analysisProgress?: number;
   source?: {
@@ -86,6 +94,7 @@ interface CreateTimelineClipCanvasWorkerPreparedResourcesInput {
   minThumbnailWidth: number;
   thumbnailSlotPx: number;
   maxThumbnailSlots: number;
+  showFaceRanges: boolean;
   resolveGeometry: (clip: TimelineClipCanvasPreparedResourceClipInput) => TimelineClipCanvasTrimGeometry;
   getMediaStatus: (clip: TimelineClipCanvasPreparedResourceClipInput) => TimelineClipCanvasMediaStatus | undefined;
 }
@@ -163,6 +172,7 @@ export function createTimelineClipCanvasWorkerPreparedResourcesByClipId(
       clip: resourceClip,
       mediaStatus: input.getMediaStatus(resourceClip),
       clipWidth: Math.max(1, Math.round(clipWidth)),
+      showFaceRanges: input.showFaceRanges,
     });
     const absoluteX = input.timeToPixel(resourceClip.startTime);
     const visibleAbsLeft = Math.max(absoluteX, input.canvasOffsetX, input.scrollX - input.renderOverscanPx);

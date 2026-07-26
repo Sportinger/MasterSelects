@@ -6,8 +6,6 @@ function normalizeApiKeyValue(value: unknown): string {
 }
 
 export function useFlashBoardComposerAccessState() {
-  const openAiApiKey = normalizeApiKeyValue(useSettingsStore((s) => s.apiKeys.openai));
-  const anthropicApiKey = normalizeApiKeyValue(useSettingsStore((s) => s.apiKeys.anthropic));
   const piApiKey = normalizeApiKeyValue(useSettingsStore((s) => s.apiKeys.piapi));
   const kieAiApiKey = normalizeApiKeyValue(useSettingsStore((s) => s.apiKeys.kieai));
   const evolinkApiKey = normalizeApiKeyValue(useSettingsStore((s) => s.apiKeys.evolink));
@@ -28,8 +26,7 @@ export function useFlashBoardComposerAccessState() {
   const setAiSystemPromptSendContext = useSettingsStore((s) => s.setAiSystemPromptSendContext);
   const setLemonadeContextSize = useSettingsStore((s) => s.setLemonadeContextSize);
   const setLemonadeModel = useSettingsStore((s) => s.setLemonadeModel);
-  const useOpenAiKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.openai && openAiApiKey.trim());
-  const useAnthropicKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.anthropic && anthropicApiKey.trim());
+  const hasUnlockedKieAiKey = Boolean(apiKeysUnlocked && kieAiApiKey.trim());
   const usePiApiKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.piapi && piApiKey.trim());
   const useKieAiKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.kieai && kieAiApiKey.trim());
   const useEvolinkKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.evolink && evolinkApiKey.trim());
@@ -42,7 +39,7 @@ export function useFlashBoardComposerAccessState() {
   const hasHostedSession = accountSession?.authenticated === true;
   const hasHostedAudioAccess = Boolean(accountSession?.authenticated && hostedAIEnabled);
   const canUseHostedPromptRefiner = Boolean(accountSession?.authenticated && hostedAIEnabled);
-  const canUseByoPromptRefiner = !useHostedProductionProviders && useOpenAiKeyByDefault;
+  const canUseByoPromptRefiner = !useHostedProductionProviders && hasUnlockedKieAiKey;
 
   return {
     accountSession,
@@ -50,22 +47,19 @@ export function useFlashBoardComposerAccessState() {
     aiProvider,
     aiSystemPromptSendContext,
     aiSystemPromptOverrides,
-    anthropicApiKey,
     canUseByoPromptRefiner,
     canUseHostedPromptRefiner,
     elevenLabsApiKey,
-    hasAnthropicKey: useAnthropicKeyByDefault,
     hasElevenLabsKey: useElevenLabsKeyByDefault,
     hasEvolinkKey: useEvolinkKeyByDefault,
     hasHostedAudioAccess,
     hasHostedSession,
-    hasKieAiKey: useKieAiKeyByDefault,
-    hasOpenAiKey: useOpenAiKeyByDefault,
+    hasKieAiKey: hasUnlockedKieAiKey,
     hostedAIEnabled,
+    kieAiApiKey,
     lemonadeContextSize,
     lemonadeEndpoint,
     lemonadeModel,
-    openAiApiKey,
     openAuthDialog,
     openPricingDialog,
     openSettings,
@@ -79,7 +73,6 @@ export function useFlashBoardComposerAccessState() {
     useEvolinkKeyByDefault,
     useHostedProductionProviders,
     useKieAiKeyByDefault,
-    useOpenAiKeyByDefault,
     usePiApiKeyByDefault,
   };
 }

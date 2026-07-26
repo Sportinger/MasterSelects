@@ -18,7 +18,7 @@ interface BuildFlashBoardChatOptionsStateInput {
   isChatting: boolean;
   lemonadeModels: LemonadeModelInfo[];
   useHostedProductionProviders: boolean;
-  useOpenAiKeyByDefault: boolean;
+  useKieAiKeyByDefault: boolean;
 }
 
 export interface FlashBoardChatOptionsState {
@@ -49,6 +49,7 @@ export function buildFlashBoardChatModelOptions({
     label: model.name || model.id,
     provider: 'lemonade' as const,
     supportsTemperature: true,
+    supportsTools: true,
   }));
   const fallbackModels = FLASHBOARD_CHAT_MODEL_OPTIONS.lemonade;
   const mergedModels = discoveredModels.length > 0 ? discoveredModels : fallbackModels;
@@ -61,6 +62,7 @@ export function buildFlashBoardChatModelOptions({
         label: chatModel === DEFAULT_LEMONADE_MODEL ? 'Lemonade' : chatModel,
         provider: 'lemonade',
         supportsTemperature: true,
+        supportsTools: true,
       },
     ];
   }
@@ -74,19 +76,19 @@ export function buildFlashBoardChatOptionsState({
   isChatting,
   lemonadeModels,
   useHostedProductionProviders,
-  useOpenAiKeyByDefault,
+  useKieAiKeyByDefault,
 }: BuildFlashBoardChatOptionsStateInput): FlashBoardChatOptionsState {
   const chatModelOptions = buildFlashBoardChatModelOptions({ chatModel, chatProvider, lemonadeModels });
   const activeChatModel = chatModelOptions.find((model) => model.id === chatModel) ?? chatModelOptions[0];
   const activeChatModelId = activeChatModel?.id ?? chatModel;
-  const chatTemperatureSupported = activeChatModel?.supportsTemperature ?? chatProvider !== 'openai';
-  const chatReasoningSupported = chatProvider === 'openai' && isOpenAiReasoningEffortSupported(activeChatModelId);
+  const chatTemperatureSupported = activeChatModel?.supportsTemperature ?? chatProvider !== 'kie';
+  const chatReasoningSupported = chatProvider === 'kie' && isOpenAiReasoningEffortSupported(activeChatModelId);
   const chatReasoningEffortOptions = chatReasoningSupported ? getOpenAiReasoningEffortOptions(activeChatModelId) : [];
   const chatProviderOptions = useHostedProductionProviders
-    ? FLASHBOARD_CHAT_PROVIDERS.filter((provider) => provider.id === 'openai')
+    ? FLASHBOARD_CHAT_PROVIDERS.filter((provider) => provider.id === 'kie')
     : FLASHBOARD_CHAT_PROVIDERS;
   const chatProviderLabel = chatProviderOptions.find((provider) => provider.id === chatProvider)?.label ?? 'Chat';
-  const chatCreditLabel = chatProvider === 'openai' && (useHostedProductionProviders || !useOpenAiKeyByDefault)
+  const chatCreditLabel = chatProvider === 'kie' && (useHostedProductionProviders || !useKieAiKeyByDefault)
     ? getFlashBoardChatCreditLabel(activeChatModelId)
     : null;
 

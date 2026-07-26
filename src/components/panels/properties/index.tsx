@@ -16,6 +16,7 @@ import {
 } from './AudioBusPropertiesTabs';
 import { MidiInstrumentTab } from './MidiInstrumentTab';
 import { DEFAULT_MASTER_AUDIO_STATE } from './audioBusDefaults';
+import { PropertiesTabStrip } from './PropertiesTabStrip';
 import { liveInputRuntime } from '../../../services/mediaRuntime/liveInputRuntime';
 import './PropertiesPanel.css';
 import './EffectsTab.css';
@@ -68,10 +69,6 @@ function getSelectionKey(
   if (selection?.kind === 'track') return `track:${selection.trackId}`;
   if (selection?.kind === 'master') return 'master';
   return fallbackClipId ? `clip:${fallbackClipId}` : null;
-}
-
-function scopedTabLabel(scope: 'CLIP' | 'TRACK' | 'MASTER', label: string): string {
-  return `${scope} ${label}`;
 }
 
 export function PropertiesPanel() {
@@ -310,11 +307,11 @@ export function PropertiesPanel() {
   if (isSlotMode && selectedSlotComposition && selectedSlotIndex !== undefined) {
     return (
       <div className="properties-panel">
-        <div className="properties-tabs">
+        <PropertiesTabStrip>
           <button className="tab-btn active" onClick={() => setActiveTab('slot-clip')}>
             Slot Clip
           </button>
-        </div>
+        </PropertiesTabStrip>
 
         <div className="properties-content">
           <Suspense fallback={<TabLoading />}>
@@ -331,11 +328,11 @@ export function PropertiesPanel() {
   if (selectedTransitionSelection) {
     return (
       <div className="properties-panel">
-        <div className="properties-tabs">
+        <PropertiesTabStrip>
           <button className="tab-btn active" onClick={() => setActiveTab('transition')}>
             TRANSITION Parameters
           </button>
-        </div>
+        </PropertiesTabStrip>
 
         <div className="properties-content">
           <Suspense fallback={<TabLoading />}>
@@ -365,13 +362,13 @@ export function PropertiesPanel() {
 
     return (
       <div className="properties-panel">
-        <div className="properties-tabs">
+        <PropertiesTabStrip>
           {hasBusControls && (
             <button
               className={`tab-btn ${activeTab === 'track-controls' ? 'active' : ''}`}
               onClick={() => setActiveTab('track-controls')}
             >
-              {scopedTabLabel('TRACK', 'Controls')}
+              Controls
             </button>
           )}
           {isMidiTrack && (
@@ -379,7 +376,7 @@ export function PropertiesPanel() {
               className={`tab-btn ${activeTab === 'track-instrument' ? 'active' : ''}`}
               onClick={() => setActiveTab('track-instrument')}
             >
-              {scopedTabLabel('TRACK', 'Instrument')}
+              Instrument
             </button>
           )}
           {hasBusControls && (
@@ -388,17 +385,17 @@ export function PropertiesPanel() {
                 className={`tab-btn ${activeTab === 'track-effects' ? 'active' : ''}`}
                 onClick={() => setActiveTab('track-effects')}
               >
-                {scopedTabLabel('TRACK', 'Effects')} {trackEffectCount > 0 && <span className="badge">{trackEffectCount}</span>}
+                Effects {trackEffectCount > 0 && <span className="badge">{trackEffectCount}</span>}
               </button>
               <button
                 className={`tab-btn ${activeTab === 'track-sends' ? 'active' : ''}`}
                 onClick={() => setActiveTab('track-sends')}
               >
-                {scopedTabLabel('TRACK', 'Sends')} {trackSendCount > 0 && <span className="badge">{trackSendCount}</span>}
+                Sends {trackSendCount > 0 && <span className="badge">{trackSendCount}</span>}
               </button>
             </>
           )}
-        </div>
+        </PropertiesTabStrip>
 
         <div className="properties-content">
           {hasBusControls ? (
@@ -421,20 +418,20 @@ export function PropertiesPanel() {
 
     return (
       <div className="properties-panel">
-        <div className="properties-tabs">
+        <PropertiesTabStrip>
           <button
             className={`tab-btn ${activeTab === 'master-controls' ? 'active' : ''}`}
             onClick={() => setActiveTab('master-controls')}
           >
-            {scopedTabLabel('MASTER', 'Controls')}
+            Controls
           </button>
           <button
             className={`tab-btn ${activeTab === 'master-effects' ? 'active' : ''}`}
             onClick={() => setActiveTab('master-effects')}
           >
-            {scopedTabLabel('MASTER', 'Effects')} {masterEffectCount > 0 && <span className="badge">{masterEffectCount}</span>}
+            Effects {masterEffectCount > 0 && <span className="badge">{masterEffectCount}</span>}
           </button>
-        </div>
+        </PropertiesTabStrip>
 
         <div className="properties-content">
           {activeTab === 'master-controls' && <MasterAudioControlsTab masterAudio={masterAudio} />}
@@ -448,11 +445,11 @@ export function PropertiesPanel() {
     if (reconnectRequiredCount > 0) {
       return (
         <div className="properties-panel">
-          <div className="properties-tabs">
+          <PropertiesTabStrip>
             <button className="tab-btn active" type="button">
-              {scopedTabLabel('CLIP', 'Live')} <span className="badge">{reconnectRequiredCount}</span>
+              Live <span className="badge">{reconnectRequiredCount}</span>
             </button>
-          </div>
+          </PropertiesTabStrip>
           <div className="properties-content">
             <Suspense fallback={<TabLoading />}><LiveInputTab /></Suspense>
           </div>
@@ -511,135 +508,135 @@ export function PropertiesPanel() {
         </div>
       )}
 
-      <div className="properties-tabs">
+      <PropertiesTabStrip>
         {isAudioClip ? (
           <>
             <button className={`tab-btn ${activeTab === 'effects' ? 'active' : ''}`} onClick={() => setActiveTab('effects')}>
-              {scopedTabLabel('CLIP', 'Effects')} {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
+              Effects {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
             </button>
             <button className={`tab-btn ${activeTab === 'audio-edits' ? 'active' : ''}`} onClick={() => setActiveTab('audio-edits')}>
-              {scopedTabLabel('CLIP', 'Audio Edits')} {audioEditCount > 0 && <span className="badge">{audioEditCount}</span>}
+              Audio Edits {audioEditCount > 0 && <span className="badge">{audioEditCount}</span>}
             </button>
             <button className={`tab-btn ${activeTab === 'transcript' ? 'active' : ''}`} onClick={() => setActiveTab('transcript')}>
-              {scopedTabLabel('CLIP', 'Transcript')} {transcriptWords.length > 0 && <span className="badge">{transcriptWords.length}</span>}
+              Transcript {transcriptWords.length > 0 && <span className="badge">{transcriptWords.length}</span>}
             </button>
           </>
         ) : isCameraClip ? (
           <>
-            <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} {...getGuidedPropertiesTabAttributes('transform')} onClick={() => setActiveTab('transform')}>{scopedTabLabel('CLIP', 'Transform')}</button>
+            <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} {...getGuidedPropertiesTabAttributes('transform')} onClick={() => setActiveTab('transform')}>Transform</button>
           </>
         ) : isMathSceneClip ? (
           <>
-            <button className={`tab-btn ${activeTab === 'math' ? 'active' : ''}`} onClick={() => setActiveTab('math')}>{scopedTabLabel('CLIP', 'Math')}</button>
-            <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} {...getGuidedPropertiesTabAttributes('transform')} onClick={() => setActiveTab('transform')}>{scopedTabLabel('CLIP', 'Transform')}</button>
-            <button className={`tab-btn ${activeTab === 'color' ? 'active' : ''}`} onClick={() => setActiveTab('color')}>{scopedTabLabel('CLIP', 'Color')}</button>
+            <button className={`tab-btn ${activeTab === 'math' ? 'active' : ''}`} onClick={() => setActiveTab('math')}>Math</button>
+            <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} {...getGuidedPropertiesTabAttributes('transform')} onClick={() => setActiveTab('transform')}>Transform</button>
+            <button className={`tab-btn ${activeTab === 'color' ? 'active' : ''}`} onClick={() => setActiveTab('color')}>Color</button>
             <button className={`tab-btn ${activeTab === 'effects' ? 'active' : ''}`} onClick={() => setActiveTab('effects')}>
-              {scopedTabLabel('CLIP', 'Effects')} {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
+              Effects {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
             </button>
             <button className={`tab-btn ${activeTab === 'masks' ? 'active' : ''}`} {...getGuidedPropertiesTabAttributes('masks')} onClick={() => setActiveTab('masks')}>
-              {scopedTabLabel('CLIP', 'Masks')} {selectedClip.masks && selectedClip.masks.length > 0 && <span className="badge">{selectedClip.masks.length}</span>}
+              Masks {selectedClip.masks && selectedClip.masks.length > 0 && <span className="badge">{selectedClip.masks.length}</span>}
             </button>
           </>
         ) : isMotionShapeClip ? (
           <>
-            <button className={`tab-btn ${activeTab === 'motion' ? 'active' : ''}`} onClick={() => setActiveTab('motion')}>{scopedTabLabel('CLIP', 'Motion')}</button>
-            <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} onClick={() => setActiveTab('transform')}>{scopedTabLabel('CLIP', 'Transform')}</button>
-            <button className={`tab-btn ${activeTab === 'color' ? 'active' : ''}`} onClick={() => setActiveTab('color')}>{scopedTabLabel('CLIP', 'Color')}</button>
+            <button className={`tab-btn ${activeTab === 'motion' ? 'active' : ''}`} onClick={() => setActiveTab('motion')}>Motion</button>
+            <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} onClick={() => setActiveTab('transform')}>Transform</button>
+            <button className={`tab-btn ${activeTab === 'color' ? 'active' : ''}`} onClick={() => setActiveTab('color')}>Color</button>
             <button className={`tab-btn ${activeTab === 'effects' ? 'active' : ''}`} onClick={() => setActiveTab('effects')}>
-              {scopedTabLabel('CLIP', 'Effects')} {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
+              Effects {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
             </button>
             <button className={`tab-btn ${activeTab === 'masks' ? 'active' : ''}`} {...getGuidedPropertiesTabAttributes('masks')} onClick={() => setActiveTab('masks')}>
-              {scopedTabLabel('CLIP', 'Masks')} {selectedClip.masks && selectedClip.masks.length > 0 && <span className="badge">{selectedClip.masks.length}</span>}
+              Masks {selectedClip.masks && selectedClip.masks.length > 0 && <span className="badge">{selectedClip.masks.length}</span>}
             </button>
           </>
         ) : isTextClip ? (
           <>
-            <button className={`tab-btn ${activeTab === 'text' ? 'active' : ''}`} onClick={() => setActiveTab('text')}>{scopedTabLabel('CLIP', 'Text')}</button>
-            <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} onClick={() => setActiveTab('transform')}>{scopedTabLabel('CLIP', 'Transform')}</button>
-            <button className={`tab-btn ${activeTab === 'color' ? 'active' : ''}`} onClick={() => setActiveTab('color')}>{scopedTabLabel('CLIP', 'Color')}</button>
+            <button className={`tab-btn ${activeTab === 'text' ? 'active' : ''}`} onClick={() => setActiveTab('text')}>Text</button>
+            <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} onClick={() => setActiveTab('transform')}>Transform</button>
+            <button className={`tab-btn ${activeTab === 'color' ? 'active' : ''}`} onClick={() => setActiveTab('color')}>Color</button>
             <button className={`tab-btn ${activeTab === 'effects' ? 'active' : ''}`} onClick={() => setActiveTab('effects')}>
-              {scopedTabLabel('CLIP', 'Effects')} {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
+              Effects {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
             </button>
             <button className={`tab-btn ${activeTab === 'masks' ? 'active' : ''}`} onClick={() => setActiveTab('masks')}>
-              {scopedTabLabel('CLIP', 'Masks')} {selectedClip.masks && selectedClip.masks.length > 0 && <span className="badge">{selectedClip.masks.length}</span>}
+              Masks {selectedClip.masks && selectedClip.masks.length > 0 && <span className="badge">{selectedClip.masks.length}</span>}
             </button>
           </>
         ) : is3DTextClip ? (
           <>
-            <button className={`tab-btn ${activeTab === '3d-text' ? 'active' : ''}`} onClick={() => setActiveTab('3d-text')}>{scopedTabLabel('CLIP', '3D Text')}</button>
-            <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} onClick={() => setActiveTab('transform')}>{scopedTabLabel('CLIP', 'Transform')}</button>
-            <button className={`tab-btn ${activeTab === 'color' ? 'active' : ''}`} onClick={() => setActiveTab('color')}>{scopedTabLabel('CLIP', 'Color')}</button>
+            <button className={`tab-btn ${activeTab === '3d-text' ? 'active' : ''}`} onClick={() => setActiveTab('3d-text')}>3D Text</button>
+            <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} onClick={() => setActiveTab('transform')}>Transform</button>
+            <button className={`tab-btn ${activeTab === 'color' ? 'active' : ''}`} onClick={() => setActiveTab('color')}>Color</button>
             <button className={`tab-btn ${activeTab === 'effects' ? 'active' : ''}`} onClick={() => setActiveTab('effects')}>
-              {scopedTabLabel('CLIP', 'Effects')} {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
+              Effects {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
             </button>
             <button className={`tab-btn ${activeTab === 'masks' ? 'active' : ''}`} onClick={() => setActiveTab('masks')}>
-              {scopedTabLabel('CLIP', 'Masks')} {selectedClip.masks && selectedClip.masks.length > 0 && <span className="badge">{selectedClip.masks.length}</span>}
+              Masks {selectedClip.masks && selectedClip.masks.length > 0 && <span className="badge">{selectedClip.masks.length}</span>}
             </button>
           </>
         ) : (
           <>
             {isLiveInputClip && (
               <button className={`tab-btn ${activeTab === 'live' ? 'active' : ''}`} onClick={() => setActiveTab('live')}>
-                {scopedTabLabel('CLIP', 'Live')}
+                Live
               </button>
             )}
             {isVectorAnimationClip && (
               <button className={`tab-btn ${activeTab === 'lottie' ? 'active' : ''}`} onClick={() => setActiveTab('lottie')}>
-                {scopedTabLabel('CLIP', vectorAnimationTabLabel)}
+                {vectorAnimationTabLabel}
               </button>
             )}
-            <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} {...getGuidedPropertiesTabAttributes('transform')} onClick={() => setActiveTab('transform')}>{scopedTabLabel('CLIP', 'Transform')}</button>
+            <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} {...getGuidedPropertiesTabAttributes('transform')} onClick={() => setActiveTab('transform')}>Transform</button>
             {isModelClip && (
-              <button className={`tab-btn ${activeTab === 'model-3d' ? 'active' : ''}`} onClick={() => setActiveTab('model-3d')}>{scopedTabLabel('CLIP', '3D')}</button>
+              <button className={`tab-btn ${activeTab === 'model-3d' ? 'active' : ''}`} onClick={() => setActiveTab('model-3d')}>3D</button>
             )}
             {!isSplatEffectorClip && (
-              <button className={`tab-btn ${activeTab === 'color' ? 'active' : ''}`} onClick={() => setActiveTab('color')}>{scopedTabLabel('CLIP', 'Color')}</button>
+              <button className={`tab-btn ${activeTab === 'color' ? 'active' : ''}`} onClick={() => setActiveTab('color')}>Color</button>
             )}
             {isGaussianAvatar && (
               <button className={`tab-btn ${activeTab === 'blendshapes' ? 'active' : ''}`} onClick={() => setActiveTab('blendshapes')}>
-                {scopedTabLabel('CLIP', 'Blendshapes')}
+                Blendshapes
               </button>
             )}
             {isGaussianSplat && (
               <button className={`tab-btn ${activeTab === 'gaussian-splat' ? 'active' : ''}`} onClick={() => setActiveTab('gaussian-splat')}>
-                {scopedTabLabel('CLIP', 'Gaussian')}
+                Gaussian
               </button>
             )}
             {isLightClip && (
               <button className={`tab-btn ${activeTab === 'light' ? 'active' : ''}`} onClick={() => setActiveTab('light')}>
-                {scopedTabLabel('CLIP', 'Light')}
+                Light
               </button>
             )}
             {isSplatEffectorClip && (
               <button className={`tab-btn ${activeTab === 'splat-effector' ? 'active' : ''}`} onClick={() => setActiveTab('splat-effector')}>
-                {scopedTabLabel('CLIP', 'Effector')}
+                Effector
               </button>
             )}
             {!isLightClip && (
               <>
                 <button className={`tab-btn ${activeTab === 'effects' ? 'active' : ''}`} onClick={() => setActiveTab('effects')}>
-                  {scopedTabLabel('CLIP', 'Effects')} {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
+                  Effects {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
                 </button>
                 <button className={`tab-btn ${activeTab === 'masks' ? 'active' : ''}`} {...getGuidedPropertiesTabAttributes('masks')} onClick={() => setActiveTab('masks')}>
-                  {scopedTabLabel('CLIP', 'Masks')} {selectedClip.masks && selectedClip.masks.length > 0 && <span className="badge">{selectedClip.masks.length}</span>}
+                  Masks {selectedClip.masks && selectedClip.masks.length > 0 && <span className="badge">{selectedClip.masks.length}</span>}
                 </button>
               </>
             )}
             {!isSolidClip && !isVectorAnimationClip && !isLightClip && (
               <>
                 <button className={`tab-btn ${activeTab === 'transcript' ? 'active' : ''}`} onClick={() => setActiveTab('transcript')}>
-                  {scopedTabLabel('CLIP', 'Transcript')} {transcriptWords.length > 0 && <span className="badge">{transcriptWords.length}</span>}
+                  Transcript {transcriptWords.length > 0 && <span className="badge">{transcriptWords.length}</span>}
                 </button>
                 <button className={`tab-btn ${activeTab === 'analysis' ? 'active' : ''}`} onClick={() => setActiveTab('analysis')}>
-                  {scopedTabLabel('CLIP', 'Analysis')} {selectedClip.analysisStatus === 'ready' && <span className="badge">✓</span>}
+                  Analysis {selectedClip.analysisStatus === 'ready' && <span className="badge">✓</span>}
                 </button>
               </>
             )}
           </>
         )}
-      </div>
+      </PropertiesTabStrip>
 
-      <div className="properties-content">
+      <div className={`properties-content ${activeTab === 'transcript' ? 'properties-content--transcript' : ''}`}>
         <Suspense fallback={<TabLoading />}>
           {activeTab === 'live' && isLiveInputClip && <LiveInputTab clipId={selectedClip.id} />}
           {activeTab === 'text' && isTextClip && selectedClip.textProperties && (
@@ -681,8 +678,10 @@ export function PropertiesPanel() {
               transcriptStatus={transcriptStatus}
               transcriptProgress={transcriptProgress}
               clipStartTime={selectedClip.startTime}
+              clipDuration={selectedClip.duration}
               inPoint={selectedClip.inPoint}
               outPoint={selectedClip.outPoint}
+              reversed={selectedClip.reversed}
             />
           )}
           {activeTab === 'analysis' && !isAudioClip && !isLightClip && (

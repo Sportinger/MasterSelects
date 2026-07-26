@@ -57,14 +57,14 @@ export function FlashBoardComposer({
   const setHoveredComposerReference = useFlashBoardStore((s) => s.setHoveredComposerReference);
   const mediaFiles = useMediaStore((s) => s.files);
   const {
-    accountSession, aiApprovalMode, aiProvider, anthropicApiKey, canUseByoPromptRefiner,
-    aiSystemPromptOverrides, aiSystemPromptSendContext, canUseHostedPromptRefiner, elevenLabsApiKey, hasAnthropicKey,
+    accountSession, aiApprovalMode, aiProvider, canUseByoPromptRefiner,
+    aiSystemPromptOverrides, aiSystemPromptSendContext, canUseHostedPromptRefiner, elevenLabsApiKey,
     hasElevenLabsKey, hasEvolinkKey, hasHostedAudioAccess, hasHostedSession,
-    hasKieAiKey, hasOpenAiKey, hostedAIEnabled, lemonadeContextSize, lemonadeEndpoint, lemonadeModel,
-    openAiApiKey, openAuthDialog, openPricingDialog, openSettings, setAiApprovalMode,
+    hasKieAiKey, hostedAIEnabled, kieAiApiKey, lemonadeContextSize, lemonadeEndpoint, lemonadeModel,
+    openAuthDialog, openPricingDialog, openSettings, setAiApprovalMode,
     setAiProvider, setAiSystemPromptOverride, setAiSystemPromptSendContext, setLemonadeContextSize, setLemonadeModel,
     useElevenLabsKeyByDefault, useEvolinkKeyByDefault, useHostedProductionProviders,
-    useKieAiKeyByDefault, useOpenAiKeyByDefault, usePiApiKeyByDefault,
+    useKieAiKeyByDefault, usePiApiKeyByDefault,
   } = useFlashBoardComposerAccessState();
 
   const modelCatalogState = useMemo(() => buildFlashBoardModelCatalogState({
@@ -145,24 +145,22 @@ export function FlashBoardComposer({
     aiProvider,
     aiSystemPromptSendContext,
     aiSystemPromptOverrides,
-    anthropicApiKey,
     closePopover,
-    hasAnthropicKey,
     hasHostedSession,
-    hasOpenAiKey,
+    hasKieAiKey,
     hostedAIEnabled,
     initialMode,
+    kieAiApiKey,
     lemonadeContextSize,
     lemonadeEndpoint,
     lemonadeModel,
-    openAiApiKey,
     openAuthDialog,
     openPricingDialog,
     openSettings,
     setAiProvider,
     setLemonadeModel,
     useHostedProductionProviders,
-    useOpenAiKeyByDefault,
+    useKieAiKeyByDefault,
   });
   const activeChatSystemPromptOverride = aiSystemPromptOverrides[chatSystemPromptProvider]?.trim()
     ? aiSystemPromptOverrides[chatSystemPromptProvider]!
@@ -509,7 +507,7 @@ export function FlashBoardComposer({
     isSunoMode,
     mode,
     multiShots,
-    openAiApiKey,
+    kieAiApiKey,
     openAuthDialog,
     openPricingDialog,
     openSettings,

@@ -243,6 +243,7 @@ export const useTimelineStore = create<TimelineStore>()(
       audioRegionClipboard: null,
       showAudioRegionEditMarkers: true,
       showTranscriptMarkers: true,
+      showFaceRanges: true,
       clipStemSeparationJobs: {},
 
       // Keyframe animation state

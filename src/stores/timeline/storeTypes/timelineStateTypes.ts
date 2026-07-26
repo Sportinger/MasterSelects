@@ -89,6 +89,7 @@ export interface TimelineState {
   audioRegionClipboard: TimelineAudioRegionClipboard | null;
   showAudioRegionEditMarkers: boolean;
   showTranscriptMarkers: boolean;
+  showFaceRanges: boolean;
   clipStemSeparationJobs: Record<string, ClipStemSeparationJobState>;
   clipKeyframes: Map<string, Keyframe[]>;
   keyframeRecordingEnabled: Set<string>;

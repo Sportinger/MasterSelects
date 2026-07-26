@@ -369,6 +369,55 @@ Bridge automation gotchas:
 - For long diagnostics, print compact summaries. Full `getStats`/trace payloads
   are huge and easy to truncate, which can hide the real result.
 
+#### End-to-end chat-agent testing
+
+When changing the FlashBoard system prompt, playbooks, tool schemas, history
+construction, approval policy, or provider loop, test the complete in-app agent
+through the bridge. Calling an editor tool directly proves only that tool; it
+does not validate model planning, tool selection, result handling, follow-up
+rounds, or the final answer.
+
+Use this workflow:
+
+1. Start Vite, open the app in a browser, and wait at least 5 seconds after
+   every reload before reading bridge state.
+2. Discover the connected sessions with `bridge_list_sessions`, identify the
+   intended project/timeline, and select it explicitly with
+   `bridge_select_session`. Never let a multi-tab test choose a tab implicitly.
+3. Inspect the exact rendered prompt first with
+   `bridge_get_chat_system_prompt` (or `GET /api/agent-chat/prompt`), including
+   its prompt version, live context, and selected playbooks.
+4. Run `bridge_send_chat_message` with `dryRun: true` before making a provider
+   request. Provider calls can consume paid credits, so do not set
+   `confirm: true` without explicit user approval. A prompt comparison makes
+   two provider rounds.
+5. For diagnosis, default to `toolExecutionMode: "read-only"` and
+   `persistToChat: false`. Enable normal/mutating execution or visible chat
+   persistence only when that behavior is itself under test.
+6. For an A/B test, use `bridge_compare_chat_prompts` with the same prompt,
+   session, provider/model, and context settings for `legacy-v1` and `v2`.
+   Default to `includeHistory: false` for a controlled comparison.
+7. Read each completed run by ID with `bridge_get_chat_run`. Review the exact
+   resolved system prompt, provider/model, final response, ordered tool calls,
+   arguments, results, denied/failed/truncated output, status, and timing.
+   Cross-check `bridge_get_history` or `/api/agent-control/history` when the
+   browser-side tool audit is relevant.
+8. Classify the failure before editing code: prompt/playbook, missing
+   conversation or tool-result continuity, tool schema/result
+   size/pagination, policy/approval, or provider-loop/dispatcher
+   orchestration. Do not patch the system prompt to mask a non-prompt defect.
+9. Keep large transcript and analysis reads bounded. Follow
+   `hasMore`/`nextOffset` and use source ranges, `offset`, `limit`, and
+   `includeFrames` only as needed.
+10. Capture the failing request as a regression case before changing the
+    default prompt. Keep `legacy-v1` available until the controlled v2
+    comparison demonstrates the improvement.
+
+The durable chat-run audit is authoritative for this debugging workflow: it
+survives clearing the visible chat store and records the resolved prompt plus
+the full model/tool loop. Never copy bridge tokens, API keys, or unredacted
+secret fields into logs, fixtures, or reports.
+
 | Tool | Purpose |
 |---|---|
 | `getStats` / `getStatsHistory` | engine snapshot(s): FPS, timing, decoder, drops, audio, GPU |

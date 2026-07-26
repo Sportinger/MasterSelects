@@ -22,6 +22,7 @@ import { handleExecuteBatch } from './handlers/batch';
 import { setAIExecutionActive, setStaggerBudget } from './executionState';
 import { checkToolAccess } from './policy';
 import type { CallerContext } from './policy';
+import { beginAIToolAudit, completeAIToolAudit } from './audit';
 import {
   compileGuidedToolCall,
   compileGuidedToolCalls,
@@ -87,20 +88,33 @@ export async function executeAITool(
   callerContext: CallerContext = 'internal',
   options: AIToolExecutionOptions = {},
 ): Promise<ToolResult> {
+  const audit = beginAIToolAudit({
+    args,
+    callerContext,
+    options,
+    providerToolCallId: options.auditProviderToolCallId,
+    tool: toolName,
+  });
   // Policy gate: check if caller is allowed to execute this tool
   const access = checkToolAccess(toolName, callerContext);
   if (!access.allowed) {
     log.warn(`Policy denied: ${toolName} from ${callerContext} — ${access.reason}`);
-    return { success: false, error: access.reason };
+    const result = { success: false, error: access.reason };
+    completeAIToolAudit(audit.callId, result, access.reason, 'denied');
+    return result;
   }
 
   const useGuidedExecution = shouldUseGuidedAIToolExecution(callerContext, options);
   setAIExecutionActive(true, useGuidedExecution ? getGuidedLegacyFeedback(options) : getLegacyFeedback(options));
   try {
-    if (useGuidedExecution) {
-      return await executeGuidedAITool(toolName, args, callerContext, options);
-    }
-    return await _executeAIToolInternal(toolName, args, callerContext, options);
+    const result = useGuidedExecution
+      ? await executeGuidedAITool(toolName, args, callerContext, options)
+      : await _executeAIToolInternal(toolName, args, callerContext, options);
+    completeAIToolAudit(audit.callId, result);
+    return result;
+  } catch (error) {
+    completeAIToolAudit(audit.callId, undefined, error);
+    throw error;
   } finally {
     setAIExecutionActive(false);
   }
@@ -120,12 +134,23 @@ export async function executeAIToolCalls(
   }
 
   const allowedCalls: AIToolCallExecution[] = [];
+  const auditCallIds = new Map<AIToolCallExecution, string>();
   const policyResults = new Map<string, ToolResult>();
   for (const toolCall of toolCalls) {
+    const audit = beginAIToolAudit({
+      args: toolCall.args,
+      callerContext,
+      options,
+      providerToolCallId: toolCall.id,
+      tool: toolCall.tool,
+    });
+    auditCallIds.set(toolCall, audit.callId);
     const access = checkToolAccess(toolCall.tool, callerContext);
     if (!access.allowed) {
       log.warn(`Policy denied: ${toolCall.tool} from ${callerContext} â€” ${access.reason}`);
-      policyResults.set(getToolCallResultKey(toolCall), { success: false, error: access.reason });
+      const result = { success: false, error: access.reason };
+      policyResults.set(getToolCallResultKey(toolCall), result);
+      completeAIToolAudit(audit.callId, result, access.reason, 'denied');
     } else {
       allowedCalls.push(toolCall);
     }
@@ -146,13 +171,27 @@ export async function executeAIToolCalls(
   try {
     const guidedResults = await executeGuidedAIToolCallGroup(allowedCalls, callerContext, options);
     const guidedResultByKey = new Map(guidedResults.map((result) => [getToolCallResultKey(result), result.result]));
-    return toolCalls.map((toolCall) => ({
+    const results = toolCalls.map((toolCall) => ({
       id: toolCall.id,
       tool: toolCall.tool,
       result: policyResults.get(getToolCallResultKey(toolCall))
         ?? guidedResultByKey.get(getToolCallResultKey(toolCall))
         ?? createMissingGroupedToolResult(toolCall.tool),
     }));
+    for (const toolCall of allowedCalls) {
+      const callId = auditCallIds.get(toolCall);
+      const result = results.find(
+        (entry) => getToolCallResultKey(entry) === getToolCallResultKey(toolCall),
+      )?.result;
+      if (callId && result) completeAIToolAudit(callId, result);
+    }
+    return results;
+  } catch (error) {
+    for (const toolCall of allowedCalls) {
+      const callId = auditCallIds.get(toolCall);
+      if (callId) completeAIToolAudit(callId, undefined, error);
+    }
+    throw error;
   } finally {
     setAIExecutionActive(false);
   }
@@ -361,6 +400,7 @@ async function executeAIToolCallsDirect(
     }
     const result = await executeAITool(toolCall.tool, toolCall.args, callerContext, {
       ...options,
+      auditProviderToolCallId: toolCall.id,
       guidedReplayRemainingCalls: toolCalls.length - index,
     });
     results.push({

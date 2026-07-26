@@ -52,6 +52,11 @@ import {
   handleStartClipFaceAnalysis,
   handleStartClipTranscription,
 } from './analysis';
+import {
+  handleAssignClipFaceReviewCandidate,
+  handleMergeClipFacePeople,
+  handleMoveClipFaceAppearance,
+} from './faceAnalysisCorrections';
 
 import {
   handleCaptureFrame,
@@ -219,6 +224,9 @@ const timelineHandlers: Record<string, (args: Record<string, unknown>, store: Re
   setTrackMuted: handleSetTrackMuted,
   getClipAnalysis: handleGetClipAnalysis,
   getClipFaceAnalysis: handleGetClipFaceAnalysis,
+  mergeClipFacePeople: handleMergeClipFacePeople,
+  moveClipFaceAppearance: handleMoveClipFaceAppearance,
+  assignClipFaceReviewCandidate: handleAssignClipFaceReviewCandidate,
   getClipTranscript: handleGetClipTranscript,
   findSilentSections: handleFindSilentSections,
   findLowQualitySections: handleFindLowQualitySections,
@@ -613,6 +621,9 @@ export {
   // Analysis
   handleGetClipAnalysis,
   handleGetClipFaceAnalysis,
+  handleMergeClipFacePeople,
+  handleMoveClipFaceAppearance,
+  handleAssignClipFaceReviewCandidate,
   handleGetClipTranscript,
   handleFindSilentSections,
   handleFindLowQualitySections,

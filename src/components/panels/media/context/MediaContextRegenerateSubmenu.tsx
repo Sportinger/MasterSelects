@@ -14,7 +14,11 @@ export interface MediaContextRegenerateSubmenuProps {
   hasSourceWaveform: boolean;
   hasSourceSpectrogram: boolean;
   onCancelProxyGeneration: (mediaFileId: string) => void;
-  onGenerateProxy: (mediaFileId: string, options: { force: boolean }) => void;
+  onGenerateProxy: (
+    mediaFileId: string,
+    options: { force?: boolean },
+  ) => void;
+  onAnalyzeSceneCuts: (mediaFileId: string, options: { force?: boolean }) => void;
   onRegenerateThumbnails: (mediaFile: MediaFile) => void;
   onRegenerateAudioProxy: (mediaFile: MediaFile, force: boolean) => void;
   onRegenerateWaveform: (mediaFile: MediaFile) => void;
@@ -36,6 +40,7 @@ export function MediaContextRegenerateSubmenu({
   hasSourceSpectrogram,
   onCancelProxyGeneration,
   onGenerateProxy,
+  onAnalyzeSceneCuts,
   onRegenerateThumbnails,
   onRegenerateAudioProxy,
   onRegenerateWaveform,
@@ -51,9 +56,9 @@ export function MediaContextRegenerateSubmenu({
         <div className="context-submenu">
           {isVideoFile && (
             <div
-              className={`context-menu-item ${!mediaFile.file && !isGenerating ? 'disabled' : ''}`}
+              className={`context-menu-item ${(!mediaFile.file && !isGenerating) || mediaFile.sceneCutStatus === 'analyzing' ? 'disabled' : ''}`}
               onClick={() => {
-                if (!mediaFile.file && !isGenerating) return;
+                if ((!mediaFile.file && !isGenerating) || mediaFile.sceneCutStatus === 'analyzing') return;
                 if (isGenerating) {
                   onCancelProxyGeneration(mediaFile.id);
                 } else {
@@ -65,6 +70,29 @@ export function MediaContextRegenerateSubmenu({
               {isGenerating
                 ? `Stop Proxy Generation (${mediaFile.proxyProgress || 0}%)`
                 : `Proxy${hasProxy ? ' (ready)' : ''}`}
+            </div>
+          )}
+          {isVideoFile && (
+            <div
+              className={`context-menu-item ${!mediaFile.file || isGenerating ? 'disabled' : ''}`}
+              onClick={() => {
+                if (!mediaFile.file || isGenerating) return;
+                if (mediaFile.sceneCutStatus === 'analyzing') {
+                  onCancelProxyGeneration(mediaFile.id);
+                } else {
+                  onAnalyzeSceneCuts(mediaFile.id, { force: true });
+                }
+                onClose();
+              }}
+            >
+              {mediaFile.sceneCutStatus === 'analyzing' ? 'Stop Scene Cuts' : 'Scene Cuts'}
+              {mediaFile.sceneCutStatus === 'analyzing'
+                ? ` (${Math.round(mediaFile.sceneCutProgress || 0)}%)`
+                : mediaFile.sceneCutStatus === 'ready'
+                  ? ` (${mediaFile.sceneCutAnalysis?.cuts.length ?? 0} found)`
+                  : mediaFile.sceneCutStatus === 'error'
+                    ? ' (error)'
+                    : ''}
             </div>
           )}
           {(isVideoFile || isImageFile) && (

@@ -1,7 +1,12 @@
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import type { MediaFile } from '../../stores/mediaStore/types';
-import type { TranscriptStatus, TranscriptWord } from '../../types/clipMetadata';
+import type {
+  TranscriptFusionArtifact,
+  TranscriptFusionProgress,
+  TranscriptStatus,
+  TranscriptWord,
+} from '../../types/clipMetadata';
 import { projectFileService } from '../project/ProjectFileService';
 import { Logger } from '../logger';
 import { calcCoverage, mergeRanges, mergeTranscriptWords } from './resultMapping';
@@ -14,6 +19,12 @@ export type ClipTranscriptUpdate = {
   words?: TranscriptWord[];
   message?: string;
 };
+
+export interface TranscriptFusionPreviewUpdate {
+  artifact?: TranscriptFusionArtifact | null;
+  progress: TranscriptFusionProgress;
+  words?: TranscriptWord[];
+}
 
 /**
  * Update clip transcript data in the timeline store.
@@ -44,6 +55,31 @@ export function updateClipTranscript(clipId: string, data: ClipTranscriptUpdate)
 }
 
 /**
+ * Publish transient hybrid-fusion state without writing a project artifact.
+ * The final result is persisted only by propagateTranscriptToMediaFile().
+ */
+export function updateTranscriptFusionPreview(
+  mediaFileId: string,
+  update: TranscriptFusionPreviewUpdate,
+): void {
+  const hasArtifact = Object.prototype.hasOwnProperty.call(update, 'artifact');
+  const hasWords = Object.prototype.hasOwnProperty.call(update, 'words');
+  useMediaStore.setState(state => ({
+    files: state.files.map(file => file.id === mediaFileId
+      ? {
+          ...file,
+          transcriptStatus: 'transcribing' as TranscriptStatus,
+          transcript: hasWords ? update.words : file.transcript,
+          transcriptArtifact: hasArtifact
+            ? update.artifact ?? undefined
+            : file.transcriptArtifact,
+          transcriptFusionProgress: update.progress,
+        }
+      : file),
+  }));
+}
+
+/**
  * Propagate transcript to MediaFile for badge display and carry-over to new clips.
  * Merges with existing transcript if the MediaFile already has words from a different region.
  * Also tracks transcribed ranges for continue mode and project transcript artifacts.
@@ -52,6 +88,7 @@ export function propagateTranscriptToMediaFile(
   mediaFileId: string,
   words: TranscriptWord[],
   newRanges?: [number, number][],
+  artifact?: TranscriptFusionArtifact,
 ): void {
   try {
     const mediaState = useMediaStore.getState();
@@ -71,6 +108,9 @@ export function propagateTranscriptToMediaFile(
 
     const existingRanges: [number, number][] = file.transcribedRanges || [];
     const mergedRanges = mergeRanges([...existingRanges, ...(newRanges || [])]);
+    const persistedArtifact = artifact
+      ? { ...artifact, words: mergedWords }
+      : undefined;
 
     useMediaStore.setState({
       files: mediaState.files.map((f: MediaFile) =>
@@ -79,6 +119,23 @@ export function propagateTranscriptToMediaFile(
               ...f,
               transcriptStatus: 'ready' as TranscriptStatus,
               transcript: mergedWords,
+              transcriptArtifact: persistedArtifact,
+              transcriptFusionProgress: persistedArtifact
+                ? {
+                    stage: 'complete',
+                    range: [
+                      mergedRanges[0]?.[0] ?? 0,
+                      mergedRanges.at(-1)?.[1] ?? mergedWords.at(-1)?.end ?? 0,
+                    ],
+                    providers: file.transcriptFusionProgress?.providers
+                      ?? { deepgram: 'complete', openai: 'complete' },
+                    conflictCount: persistedArtifact.conflicts.length,
+                    resolvedCount: persistedArtifact.conflicts.filter(
+                      conflict => conflict.status !== 'needs-review',
+                    ).length,
+                    updatedAt: Date.now(),
+                  }
+                : undefined,
               transcriptCoverage,
               transcribedRanges: mergedRanges,
             }
@@ -86,7 +143,10 @@ export function propagateTranscriptToMediaFile(
       ),
     });
 
-    projectFileService.saveTranscript(mediaFileId, mergedWords, mergedRanges).then(saved => {
+    projectFileService.saveTranscript(mediaFileId, {
+      words: mergedWords,
+      artifact: persistedArtifact,
+    }, mergedRanges).then(saved => {
       if (saved) log.debug('Transcript saved to project folder', { mediaFileId });
     }).catch(() => { /* no project open */ });
 

@@ -15,6 +15,7 @@ import {
   startLoadStateVectorRuntimeRestore,
 } from '../../../services/timeline/timelineMediaSourceRuntimeRestore';
 import { isVectorAnimationSourceType } from '../../../types/vectorAnimation';
+import { applySharedClipAnalysisState } from '../../../services/clipAnalysis/sourceAnalysisSharing';
 import type { useMediaStore } from '../../mediaStore';
 import {
   createDataOnlyRestoredGaussianSplatSource,
@@ -159,19 +160,14 @@ function loadCachedProjectAnalysis(params: {
     log.debug('Loaded analysis from project folder', { clip: serializedClip.name });
     const { analysis, hasFaces } = facePersistence.restoreCachedClipAnalysis(
       restoredAnalysis,
-      Boolean(cachedAnalysis),
     );
     set(state => ({
-      clips: state.clips.map(c =>
-        c.id === clip.id
-          ? {
-              ...c,
-              analysis,
-              analysisStatus: 'ready' as const,
-              faceAnalysisStatus: hasFaces ? 'ready' as const : 'none' as const,
-            }
-          : c
-      ),
+      clips: applySharedClipAnalysisState(state.clips, clip.id, candidate => ({
+        ...candidate,
+        analysis,
+        analysisStatus: 'ready' as const,
+        faceAnalysisStatus: hasFaces ? 'ready' as const : 'none' as const,
+      })),
     }));
   }).catch(err => {
     log.warn('Failed to load analysis from project folder', err);

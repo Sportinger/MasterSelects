@@ -10,6 +10,8 @@
     "dev:api": "npm run cf:migrate:local && npm run dev:cf",
     "dev:full": "node scripts/dev-full.mjs",
     "dev:changelog": "vite --mode changelog",
+    "mcp": "node scripts/masterselects-mcp.mjs",
+    "mcp:smoke": "node scripts/masterselects-mcp-smoke.mjs",
     "build": "tsc -b && vite build",
     "build:deploy": "vite build",
     "cf:migrate:local": "wrangler d1 migrations apply DB --local",
@@ -63,6 +65,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

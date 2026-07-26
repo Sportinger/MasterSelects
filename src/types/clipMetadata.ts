@@ -6,6 +6,114 @@ export interface TranscriptWord {
   end: number;          // End time in seconds (relative to clip source)
   confidence?: number;  // 0-1 confidence score
   speaker?: string;     // Speaker label if diarization available
+  speakerConfidence?: number; // 0-1 confidence in the diarized speaker label
+  speakerSourceProvider?: TranscriptProviderId;
+  sourceProvider?: TranscriptWordSource;
+  agreement?: TranscriptWordAgreement;
+  needsReview?: boolean;
+  originalSpeaker?: string;
+  alternatives?: TranscriptWordAlternative[];
+}
+
+export type TranscriptProviderId = 'deepgram' | 'openai';
+export type TranscriptWordSource = TranscriptProviderId | 'consensus';
+export type TranscriptWordAgreement = 'consensus' | 'primary-only' | 'secondary-only' | 'conflict';
+
+export interface TranscriptWordAlternative {
+  id: string;
+  provider: TranscriptProviderId;
+  text?: string;
+  speaker?: string;
+  confidence?: number;
+}
+
+export interface TranscriptProviderRun {
+  id: string;
+  provider: TranscriptProviderId;
+  model: string;
+  language: string;
+  range: [number, number];
+  createdAt: number;
+  words: TranscriptWord[];
+}
+
+export type TranscriptConflictKind = 'text' | 'speaker' | 'insertion' | 'deletion';
+export type TranscriptConflictStatus =
+  | 'resolved-deterministic'
+  | 'resolved-agent'
+  | 'needs-review';
+
+export interface TranscriptConflictCandidate {
+  id: string;
+  provider?: TranscriptProviderId;
+  text?: string;
+  speaker?: string;
+  confidence?: number;
+}
+
+export interface TranscriptConflict {
+  id: string;
+  kind: TranscriptConflictKind;
+  start: number;
+  end: number;
+  finalWordIds: string[];
+  deepgramWordIds: string[];
+  openaiWordIds: string[];
+  candidates: TranscriptConflictCandidate[];
+  status: TranscriptConflictStatus;
+  selectedCandidateId?: string;
+  confidence?: number;
+  reason?: string;
+}
+
+export interface TranscriptPatch {
+  id: string;
+  conflictId: string;
+  source: 'deterministic' | 'agent' | 'manual';
+  operation: 'choose-text' | 'reassign-speaker' | 'insert-word' | 'delete-word';
+  wordIds: string[];
+  before: string;
+  after: string;
+  confidence: number;
+  reason: string;
+  createdAt?: number;
+}
+
+export interface TranscriptFusionAgentAudit {
+  status: 'not-requested' | 'unavailable' | 'completed' | 'failed';
+  model?: string;
+  reviewedConflictIds?: string[];
+  appliedConflictIds?: string[];
+  error?: string;
+}
+
+export interface TranscriptFusionArtifact {
+  schemaVersion: 1;
+  primaryProvider: 'deepgram';
+  createdAt: number;
+  rawRuns: TranscriptProviderRun[];
+  words: TranscriptWord[];
+  conflicts: TranscriptConflict[];
+  patches: TranscriptPatch[];
+  agent: TranscriptFusionAgentAudit;
+}
+
+export type TranscriptFusionStage =
+  | 'transcribing'
+  | 'aligning'
+  | 'finalizing'
+  | 'complete'
+  | 'error';
+
+export type TranscriptFusionProviderStatus = 'waiting' | 'running' | 'complete' | 'error';
+
+export interface TranscriptFusionProgress {
+  stage: TranscriptFusionStage;
+  range: [number, number];
+  providers: Record<TranscriptProviderId, TranscriptFusionProviderStatus>;
+  conflictCount: number;
+  resolvedCount: number;
+  updatedAt: number;
 }
 
 // Scene description types for AI video analysis
@@ -41,6 +149,10 @@ export interface FaceFrameDetection {
   id: string;
   personId: string;
   label: string;
+  /** False when YuNet found a face too small for dependable SFace grouping. */
+  identityEligible?: boolean;
+  /** Original identity when a user manually moves this observation. */
+  manualSourcePersonId?: string;
   confidence: number;
   box: FaceAnalysisBox;
   landmarks: FaceAnalysisPoint[];

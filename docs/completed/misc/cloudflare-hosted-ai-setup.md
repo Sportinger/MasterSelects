@@ -48,7 +48,7 @@ That summary feeds the visible plan, credit balance, entitlements, hosted AI ava
 Hosted AI uses three server routes:
 
 - `/api/ai/chat` is OpenAI-backed and credit-gated
-- `/api/ai/audio` is ElevenLabs-backed for hosted FlashBoard text-to-speech and Kie.ai/Suno-backed for hosted music generation, also credit-gated
+- `/api/ai/audio` is OpenAI- or Deepgram-backed for hosted transcription, ElevenLabs-backed for hosted FlashBoard text-to-speech, and Kie.ai/Suno-backed for hosted music generation; all hosted paths are credit-gated
 - `/api/ai/video` is Kie.ai-backed for Kling 3.0 and Nano Banana 2, also credit-gated
 
 Hosted chat requests are also logged best-effort into D1:
@@ -75,20 +75,21 @@ Hosted Suno music creates a Kie.ai Suno task through `/api/ai/audio`, charges Ma
 
 ## Secrets
 
-Set these as Cloudflare Pages or Workers secrets:
+Set these as production secrets on the `masterselects` Cloudflare Pages project:
 
 ```powershell
-wrangler secret put SESSION_SECRET
-wrangler secret put GOOGLE_CLIENT_SECRET
-wrangler secret put RESEND_API_KEY
-wrangler secret put STRIPE_SECRET_KEY
-wrangler secret put STRIPE_WEBHOOK_SECRET
-wrangler secret put OPENAI_API_KEY
-wrangler secret put KIEAI_API_KEY
-wrangler secret put ELEVENLABS_API_KEY
+npx wrangler pages secret put SESSION_SECRET --project-name masterselects
+npx wrangler pages secret put GOOGLE_CLIENT_SECRET --project-name masterselects
+npx wrangler pages secret put RESEND_API_KEY --project-name masterselects
+npx wrangler pages secret put STRIPE_SECRET_KEY --project-name masterselects
+npx wrangler pages secret put STRIPE_WEBHOOK_SECRET --project-name masterselects
+npx wrangler pages secret put OPENAI_API_KEY --project-name masterselects
+npx wrangler pages secret put DEEPGRAM_API_KEY --project-name masterselects
+npx wrangler pages secret put KIEAI_API_KEY --project-name masterselects
+npx wrangler pages secret put ELEVENLABS_API_KEY --project-name masterselects
 ```
 
-`OPENAI_API_KEY` is used by hosted chat and prompt refinement. `KIEAI_API_KEY` is used by hosted video, hosted image generation, and hosted Suno music. `ELEVENLABS_API_KEY` is used by hosted FlashBoard text-to-speech.
+`OPENAI_API_KEY` is used by hosted moderation and OpenAI transcription. `DEEPGRAM_API_KEY` is used by hosted Deepgram transcription. `KIEAI_API_KEY` is used by hosted chat, prompt refinement, video, image generation, and Suno music. `ELEVENLABS_API_KEY` is used by hosted FlashBoard text-to-speech.
 
 ## Non-Secret Vars
 

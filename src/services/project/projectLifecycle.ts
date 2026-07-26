@@ -76,6 +76,7 @@ function isPersistedMediaFileEqual(a: MediaFile, b: MediaFile): boolean {
     && a.proxyStatus === b.proxyStatus
     && a.proxyFrameCount === b.proxyFrameCount
     && a.proxyFps === b.proxyFps
+    && a.sceneCutAnalysis === b.sceneCutAnalysis
     && a.hasProxyAudio === b.hasProxyAudio
     && a.audioProxyStatus === b.audioProxyStatus
     && a.audioProxyStorageKey === b.audioProxyStorageKey

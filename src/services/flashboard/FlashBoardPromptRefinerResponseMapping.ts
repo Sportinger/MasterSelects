@@ -9,7 +9,7 @@ export function getOpenAIErrorMessage(
   status: number,
   statusText: string,
 ): string {
-  return payload?.error?.message || statusText || `OpenAI request failed with status ${status}`;
+  return payload?.error?.message || statusText || `Kie.ai Responses request failed with status ${status}`;
 }
 
 export function getResponseOutputText(payload: OpenAIResponsePayload): string {
@@ -151,7 +151,7 @@ export function parseOpenAIStreamFrame(frame: string): OpenAIStreamEvent | null 
 
 export async function* readOpenAIStreamEvents(response: Response): AsyncGenerator<OpenAIStreamEvent> {
   if (!response.body) {
-    throw new Error('OpenAI streaming is not available in this browser.');
+    throw new Error('Kie.ai Responses streaming is not available in this browser.');
   }
 
   const reader = response.body.getReader();
@@ -190,7 +190,7 @@ export function extractRefinedPromptFromOpenAIResponse(payload: OpenAIResponsePa
   const outputText = getResponseOutputText(payload);
 
   if (!outputText) {
-    throw new Error('OpenAI returned an empty prompt refinement.');
+    throw new Error('Kie.ai returned an empty prompt refinement.');
   }
 
   const parsed = parseJsonObject(outputText);
@@ -199,7 +199,7 @@ export function extractRefinedPromptFromOpenAIResponse(payload: OpenAIResponsePa
     : null;
 
   if (typeof prompt !== 'string' || !prompt.trim()) {
-    throw new Error('OpenAI returned an invalid prompt refinement.');
+    throw new Error('Kie.ai returned an invalid prompt refinement.');
   }
 
   return prompt.trim();

@@ -11,10 +11,13 @@ import {
 
 const KIEAI_PROXY_BASE_URL = 'https://api.kie.ai';
 const KIEAI_PROXY_UPLOAD_URL = 'https://kieai.redpandaai.co/api/file-stream-upload';
+const KIEAI_PROXY_MAX_JSON_BYTES = 32 * 1024 * 1024;
 const KIEAI_PROXY_ALLOWED_ENDPOINTS = new Set([
   '/api/v1/chat/credit',
   '/api/v1/jobs/createTask',
   '/api/v1/jobs/recordInfo',
+  '/claude/v1/messages',
+  '/codex/v1/responses',
 ]);
 const EVOLINK_PROXY_BASE_URL = 'https://api.evolink.ai';
 const EVOLINK_PROXY_UPLOAD_URL = 'https://files-api.evolink.ai/api/v1/files/upload/stream';
@@ -148,7 +151,7 @@ function kieAiByoProxy(): Plugin {
 
         let body: { body?: unknown; endpoint?: unknown; method?: unknown };
         try {
-          body = JSON.parse(await readRequestBody(req)) as typeof body;
+          body = JSON.parse(await readRequestBody(req, KIEAI_PROXY_MAX_JSON_BYTES)) as typeof body;
         } catch (error) {
           writeJsonResponse(res, 400, {
             error: 'invalid_json',

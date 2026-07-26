@@ -69,6 +69,8 @@ export interface PlaybackActions {
   setShowAudioRegionEditMarkers: (enabled: boolean) => void;
   toggleTranscriptMarkers: () => void;
   setShowTranscriptMarkers: (enabled: boolean) => void;
+  toggleFaceRanges: () => void;
+  setShowFaceRanges: (enabled: boolean) => void;
 }
 
 export interface TimelineToolActions {

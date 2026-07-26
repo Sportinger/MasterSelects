@@ -11,21 +11,36 @@ import {
 } from './proxyGeneration/constants';
 import { createCanvasPool, type CanvasSlot } from './proxyGeneration/canvasPool';
 import { createProxyVideoDecoder } from './proxyGeneration/decoder';
-import { processProxySamples } from './proxyGeneration/decodePipeline';
+import {
+  processProxySamples,
+  type ProxySampleProcessingResult,
+} from './proxyGeneration/decodePipeline';
 import { ProxyFrameEncodeWorkerClient } from './proxyGeneration/frameEncodeWorkerClient';
 import { createMetrics, logProxyPerformance, type ProxyGenerationMetrics } from './proxyGeneration/metrics';
 import { loadProxyVideoWithMP4Box } from './proxyGeneration/mp4Demuxer';
-import { getMaxFrameIndex } from './proxyGeneration/sampleTiming';
+import {
+  getDurationSecondsFromSamples,
+  getMaxFrameIndex,
+} from './proxyGeneration/sampleTiming';
 import {
   canUseDedicatedFrameWorkers,
   getDedicatedFrameWorkerCount,
 } from './proxyGeneration/workerCapabilities';
+import { ProxySceneCutAnalyzer } from './sceneCutDetection/proxySceneCutAnalyzer';
+import { getSceneCutCompletenessError } from './sceneCutDetection/sceneCutDetector';
+import type { SceneCutAnalysis } from '../types/sceneCutAnalysis';
 
 const log = Logger.create('ProxyGenerator');
 
 interface EncodeQueueItem {
   frameIndex: number;
   frame: VideoFrame;
+}
+
+export interface ProxyGenerationOptions {
+  analyzeSceneCuts?: boolean;
+  sceneCutsOnly?: boolean;
+  onSceneCutProgress?: (progress: number) => void;
 }
 
 class ProxyGeneratorWebCodecs {
@@ -51,12 +66,19 @@ class ProxyGeneratorWebCodecs {
   private encodeStopRequested = false;
   private metrics: ProxyGenerationMetrics = createMetrics();
   private lastReportedProgress = -1;
+  private sceneCutAnalyzer: ProxySceneCutAnalyzer | null = null;
+  private sceneCutError: Error | null = null;
+  private sceneCutProgress = -1;
+  private decodeResult: ProxySampleProcessingResult | null = null;
+  private sourceFingerprint = { size: 0, lastModified: 0 };
+  private sceneCutsOnly = false;
 
   private canvasPool: CanvasSlot[] = [];
 
   private onProgress: ((progress: number) => void) | null = null;
   private checkCancelled: (() => boolean) | null = null;
   private saveFrame: ((frame: { frameIndex: number; blob: Blob }) => Promise<void>) | null = null;
+  private onSceneCutProgress: ((progress: number) => void) | null = null;
   private isCancelled = false;
 
   async generate(
@@ -66,8 +88,15 @@ class ProxyGeneratorWebCodecs {
     checkCancelled: () => boolean,
     saveFrame: (frame: { frameIndex: number; blob: Blob }) => Promise<void>,
     existingFrameIndices?: Set<number>,
-  ): Promise<{ frameCount: number; fps: number; frameIndices: Set<number> } | null> {
-    this.resetGenerationState(onProgress, checkCancelled, saveFrame);
+    options: ProxyGenerationOptions = {},
+  ): Promise<{
+    frameCount: number;
+    fps: number;
+    frameIndices: Set<number>;
+    sceneCutAnalysis?: SceneCutAnalysis;
+    sceneCutError?: string;
+  } | null> {
+    this.resetGenerationState(file, onProgress, checkCancelled, saveFrame, options);
     let resumeFrameIndices = existingFrameIndices;
 
     if (resumeFrameIndices && resumeFrameIndices.size > 0) {
@@ -117,6 +146,9 @@ class ProxyGeneratorWebCodecs {
       } catch (firstError) {
         log.warn('First decode attempt failed, trying without description...');
         this.closeDecodedFrames();
+        this.resetSceneCutAnalyzer(options.analyzeSceneCuts === true);
+        this.decodeResult = null;
+        this.metrics.decodedOutputFrames = 0;
         const existingCount = resumeFrameIndices?.size ?? 0;
         this.processedFrames = existingCount;
         this.savedFrameIndices = resumeFrameIndices ? new Set(resumeFrameIndices) : new Set();
@@ -142,7 +174,17 @@ class ProxyGeneratorWebCodecs {
         }
       }
 
-      if (this.isCancelled || this.processedFrames === 0) {
+      if (
+        this.isCancelled ||
+        (
+          !this.sceneCutsOnly &&
+          this.processedFrames === 0
+        ) ||
+        (
+          this.sceneCutsOnly &&
+          this.metrics.decodedOutputFrames === 0
+        )
+      ) {
         this.cleanup();
         if (this.isCancelled) {
           log.info('Generation cancelled');
@@ -152,13 +194,22 @@ class ProxyGeneratorWebCodecs {
         return null;
       }
 
-      log.info(`Proxy complete: ${this.savedFrameIndices.size} frames saved as JPEG`);
+      if (!this.sceneCutsOnly) {
+        log.info(`Proxy complete: ${this.savedFrameIndices.size} frames saved as JPEG`);
+      }
+      const sceneCutAnalysis = await this.completeSceneCutAnalysis();
+      const sceneCutError = this.sceneCutError?.message;
+      if (sceneCutAnalysis) {
+        this.onSceneCutProgress?.(100);
+      }
       this.cleanup();
 
       return {
         frameCount: this.savedFrameIndices.size,
         fps: this.proxyFps,
         frameIndices: new Set(this.savedFrameIndices),
+        sceneCutAnalysis,
+        sceneCutError,
       };
     } catch (error) {
       log.error('Generation failed', error);
@@ -182,14 +233,22 @@ class ProxyGeneratorWebCodecs {
   }
 
   private resetGenerationState(
+    file: File,
     onProgress: (progress: number) => void,
     checkCancelled: () => boolean,
     saveFrame: (frame: { frameIndex: number; blob: Blob }) => Promise<void>,
+    options: ProxyGenerationOptions,
   ): void {
     this.onProgress = onProgress;
     this.checkCancelled = checkCancelled;
     this.saveFrame = saveFrame;
+    this.onSceneCutProgress = options.onSceneCutProgress ?? null;
     this.isCancelled = false;
+    this.sceneCutsOnly = options.sceneCutsOnly === true;
+    this.sourceFingerprint = {
+      size: file.size,
+      lastModified: file.lastModified,
+    };
     this.samples = [];
     this.decodedFrames.clear();
     this.processingFrameIndices.clear();
@@ -200,8 +259,11 @@ class ProxyGeneratorWebCodecs {
     this.encodeStopRequested = false;
     this.metrics = createMetrics();
     this.lastReportedProgress = -1;
+    this.sceneCutProgress = -1;
+    this.decodeResult = null;
     this.canvasPool = [];
     this.proxyFps = PROXY_FPS;
+    this.resetSceneCutAnalyzer(options.analyzeSceneCuts === true);
   }
 
   private initDecoder() {
@@ -211,6 +273,19 @@ class ProxyGeneratorWebCodecs {
 
   private handleDecodedFrame(frame: VideoFrame) {
     this.metrics.decodedOutputFrames++;
+    if (this.sceneCutAnalyzer && !this.sceneCutError) {
+      try {
+        this.sceneCutAnalyzer.analyze(frame);
+      } catch (error) {
+        this.sceneCutError = error instanceof Error ? error : new Error(String(error));
+        log.warn('Scene-cut analysis failed; proxy generation will continue', this.sceneCutError);
+      }
+    }
+    this.reportSceneCutProgress();
+    if (this.sceneCutsOnly) {
+      frame.close();
+      return;
+    }
     const timestamp = frame.timestamp / 1_000_000;
     const frameIndex = Math.round(timestamp * this.proxyFps);
 
@@ -253,6 +328,7 @@ class ProxyGeneratorWebCodecs {
   }
 
   private startEncodeWorkers(): void {
+    if (this.sceneCutsOnly) return;
     if (canUseDedicatedFrameWorkers()) {
       const workerCount = getDedicatedFrameWorkerCount();
       this.frameEncodeWorkers = Array.from(
@@ -449,7 +525,7 @@ class ProxyGeneratorWebCodecs {
 
   private async processSamples(): Promise<void> {
     if (!this.decoder) return;
-    await processProxySamples({
+    this.decodeResult = await processProxySamples({
       decoder: this.decoder,
       samples: this.samples,
       metrics: this.metrics,
@@ -464,6 +540,8 @@ class ProxyGeneratorWebCodecs {
       startEncodeWorkers: () => this.startEncodeWorkers(),
       queueDecodedFrames: () => this.queueDecodedFrames(),
       waitForEncodeBackpressure: () => this.waitForEncodeBackpressure(),
+      waitForSceneCutBackpressure: () => this.waitForSceneCutBackpressure(),
+      isSceneCutAnalysisActive: () => Boolean(this.sceneCutAnalyzer && !this.sceneCutError),
       getDecodedFrameCount: () => this.decodedFrames.size,
       closeDecodedFrames: () => this.closeDecodedFrames(),
       isEncodeStopRequested: () => this.encodeStopRequested,
@@ -485,6 +563,70 @@ class ProxyGeneratorWebCodecs {
     this.decodedFrames.clear();
   }
 
+  private resetSceneCutAnalyzer(enabled: boolean): void {
+    this.sceneCutAnalyzer?.dispose();
+    this.sceneCutAnalyzer = null;
+    this.sceneCutError = null;
+    this.sceneCutProgress = -1;
+    if (!enabled) return;
+    try {
+      this.sceneCutAnalyzer = new ProxySceneCutAnalyzer();
+      log.debug(`Scene-cut analysis backend: ${this.sceneCutAnalyzer.backend}`);
+    } catch (error) {
+      this.sceneCutAnalyzer = null;
+      this.sceneCutError = error instanceof Error ? error : new Error(String(error));
+      log.warn('Could not initialize scene-cut analysis; proxy generation will continue', this.sceneCutError);
+    }
+  }
+
+  private async waitForSceneCutBackpressure(): Promise<void> {
+    if (!this.sceneCutAnalyzer || this.sceneCutError) return;
+    try {
+      await this.sceneCutAnalyzer.waitForBackpressure();
+    } catch (error) {
+      this.sceneCutError = error instanceof Error ? error : new Error(String(error));
+      this.sceneCutAnalyzer.dispose();
+      this.sceneCutAnalyzer = null;
+      log.warn('Scene-cut worker failed; proxy generation will continue', this.sceneCutError);
+    }
+  }
+
+  private reportSceneCutProgress(): void {
+    if (!this.sceneCutAnalyzer || this.samples.length === 0) return;
+    const progress = Math.min(
+      99,
+      Math.floor((this.metrics.decodedOutputFrames / this.samples.length) * 100),
+    );
+    if (progress === this.sceneCutProgress) return;
+    this.sceneCutProgress = progress;
+    this.onSceneCutProgress?.(progress);
+  }
+
+  private async completeSceneCutAnalysis(): Promise<SceneCutAnalysis | undefined> {
+    if (!this.sceneCutAnalyzer || this.sceneCutError) return undefined;
+    if (!this.decodeResult) return undefined;
+    try {
+      const analysis = await this.sceneCutAnalyzer.complete(
+        getDurationSecondsFromSamples(this.samples),
+        this.decodeResult.expectedFrameCount,
+        this.sourceFingerprint,
+      );
+      const completenessError = getSceneCutCompletenessError(
+        analysis,
+        this.decodeResult,
+      );
+      if (completenessError) {
+        this.sceneCutError = new Error(completenessError);
+        return undefined;
+      }
+      return analysis;
+    } catch (error) {
+      this.sceneCutError = error instanceof Error ? error : new Error(String(error));
+      log.warn('Could not finalize scene-cut analysis', this.sceneCutError);
+      return undefined;
+    }
+  }
+
   private cleanup() {
     try { this.decoder?.close(); } catch { /* ignore */ }
     this.encodeStopRequested = true;
@@ -496,6 +638,8 @@ class ProxyGeneratorWebCodecs {
     this.processingFrameIndices.clear();
     this.canvasPool = [];
     this.decoder = null;
+    this.sceneCutAnalyzer?.dispose();
+    this.sceneCutAnalyzer = null;
   }
 }
 

@@ -104,7 +104,9 @@ export function FlashBoardChatControls({
         <button
           className={`fb-pill ${activePopover === 'chatModel' ? 'active' : ''}`}
           onClick={() => onOpenPopover('chatModel')}
-          title={`Model: ${activeChatModel?.label ?? activeChatModelId}`}
+          title={activeChatModel?.supportsTools === false
+            ? `Model: ${activeChatModel.label}. Chat only; this model cannot operate editor tools.`
+            : `Model: ${activeChatModel?.label ?? activeChatModelId}`}
         >
           <span className="fb-pill-label">{activeChatModel?.label ?? activeChatModelId}</span>
         </button>
@@ -207,7 +209,9 @@ export function FlashBoardChatControls({
                     onClosePopover('chatModel');
                   }}
                   disabled={isChatting}
-                  title={model.id}
+                  title={model.supportsTools
+                    ? `${model.id} · editor tools enabled`
+                    : `${model.id} · chat only; editor tools unavailable`}
                 >
                   <span className="fb-popover-pill-label">{model.label}</span>
                 </button>

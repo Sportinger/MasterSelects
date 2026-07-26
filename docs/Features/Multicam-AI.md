@@ -56,15 +56,16 @@ Wichtige Details:
 
 ### EDL-Erzeugung
 
-`claudeService.ts` sendet direkt aus dem Browser an:
+`claudeService.ts` erzeugt EDLs mit Claude Sonnet 5 ueber die gemeinsame
+Kie.ai-Transportebene:
 
-- `https://api.anthropic.com/v1/messages`
+- Kie.ai endpoint: `/claude/v1/messages`
+- localhost BYO requests use the same-origin Kie.ai proxy
 
 Aktuell verwendet es:
 
-- model: `claude-sonnet-4-20250514`
+- model: `claude-sonnet-5`
 - `max_tokens: 4096`
-- header `anthropic-dangerous-direct-browser-access: true`
 
 Der Prompt enthaelt:
 
@@ -96,7 +97,7 @@ Die Antwort wird als JSON-Array von Edit-Entscheidungen geparst.
 - Analyse starten
 - Transcript generieren oder importieren
 - Edit Style waehlen
-- Claude API key setzen
+- Kie.ai API key setzen
 - EDL generieren und manuell bearbeiten
 - EDL auf die Timeline anwenden
 
@@ -106,7 +107,7 @@ Die Antwort wird als JSON-Array von Edit-Entscheidungen geparst.
 
 Multicam nutzt den gemeinsamen `apiKeyManager` fuer lokale, verschluesselte Speicherung in IndexedDB.
 
-- Legacy key id: `claude-api-key`
+- Typed key id: `kieai`
 - Der Store speichert nur `apiKeySet`, nicht den Klartext-Key
 - Beim Start wird asynchron geprueft, ob ein Key bereits vorhanden ist
 
@@ -188,7 +189,7 @@ The presets are baked into the prompt and steer the EDL generation strategy, but
 - Face detection returns empty arrays.
 - Transcript speaker labels are not diarized.
 - Analysis is CPU-based, not GPU-based.
-- The AI generation call is direct browser access to Anthropic, so it depends on the user's local API key.
+- The EDL generation call uses Kie.ai from the browser, so it depends on the user's local Kie.ai API key.
 - Premiere XML and DaVinci Resolve export are not implemented.
 
 ---

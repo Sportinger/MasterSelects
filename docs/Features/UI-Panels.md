@@ -353,7 +353,7 @@ See [Slot Grid](./Slot-Grid.md) for the current live/deck behavior, slot-clip tr
 
 ## Properties Panel
 
-The unified Properties panel adapts its tabs to the selected clip type, selected audio track/layer, selected master bus, and slot-grid mode. Tab labels are scoped with `CLIP`, `TRACK`, or `MASTER`; transcript tabs are shown only for clip targets. Linked video/audio companions share the same `CLIP Transcript` state, so selecting either side opens the same transcript view.
+The unified Properties panel adapts its tabs to the selected clip type, selected audio track/layer, selected master bus, and slot-grid mode. The dock tab already identifies the current clip, track, or master target, so the inner tab labels stay compact and do not repeat that scope. Transcript tabs are shown only for clip targets. Linked video/audio companions share the same Transcript state, so selecting either side opens the same transcript view.
 
 Selecting a timeline transition switches the panel to `TRANSITION Parameters`.
 That tab shows the transition type, first-pass centered placement with timeline
@@ -369,26 +369,48 @@ same source-handle edges.
 
 | Tab | Contents |
 |-----|----------|
-| **CLIP Transform** | Position, scale, rotation, opacity, blend mode, and speed |
-| **CLIP Effects** | GPU effects list with parameters |
-| **CLIP Masks** | Mask shapes with mode and feather controls |
-| **CLIP Transcript** | Speech-to-text transcript with playback sync |
-| **CLIP Analysis** | Focus, motion, face, and AI scene metadata |
+| **Transform** | Position, scale, rotation, opacity, blend mode, and speed |
+| **Effects** | GPU effects list with parameters |
+| **Masks** | Mask shapes with mode and feather controls |
+| **Transcript** | Speech-to-text transcript with playback sync |
+| **Analysis** | Focus, motion, face, and AI scene metadata |
+
+The Transcript tab uses the full remaining panel height and keeps the original
+conversation order. Words are grouped into timestamped speaker turns, with one
+stable color per detected speaker. Clicking a turn timestamp or individual word
+seeks the playhead to that source position, including clips with speed changes
+or reverse playback. During playback, the currently spoken word and speaker
+turn are highlighted and the transcript viewport follows them automatically.
+Scrubbing the timeline updates the same highlight and scroll position
+immediately, without animated lag.
+
+Best Quality uses a fixed provider split: Deepgram supplies every displayed word
+and timestamp, while OpenAI supplies the speaker turns. The completed summary
+states these two roles directly; it has no agreement percentage, conflict count,
+review queue, or agent state.
+
+The Transcript tab uses one compact workspace header for language, quality
+mode, actions, progress, coverage, and search. An active run
+replaces the completed-result summary instead of stacking contradictory states.
+Best Quality shows Deepgram, OpenAI, and Speakers as three compact stages beneath
+one overall progress rail. Cancel aborts local, direct-provider, hosted
+Cloudflare requests and restores the previously completed
+transcript when re-transcription is stopped.
 
 ### Audio Clip Tabs
 
 | Tab | Contents |
 |-----|----------|
-| **CLIP Effects** | Audio effects and linked audio controls |
-| **CLIP Audio Edits** | Non-destructive edit-stack operations |
-| **CLIP Transcript** | Speech-to-text transcript, shared with the linked video clip when present |
+| **Effects** | Audio effects and linked audio controls |
+| **Audio Edits** | Non-destructive edit-stack operations |
+| **Transcript** | Speech-to-text transcript, shared with the linked video clip when present |
 
 ### Audio Track And Master Tabs
 
 | Target | Tabs |
 |--------|------|
-| **Audio track/layer** | TRACK Controls, TRACK Effects, TRACK Sends |
-| **Master bus** | MASTER Controls, MASTER Effects |
+| **Audio track/layer** | Controls, Effects, Sends |
+| **Master bus** | Controls, Effects |
 
 ### Text and 3D Text Tabs
 
@@ -430,6 +452,15 @@ same source-handle edges.
 ### Tab Behavior
 
 - Tabs switch automatically based on clip type
+- Properties tabs hide their horizontal scrollbar. Compact previous/next
+  controls appear only when more tabs exist in that direction and reveal one
+  additional tab per click. Manual navigation stays where the user leaves it;
+  when the active tab is outside the viewport, its direction control is
+  highlighted instead of pulling the strip back automatically. Hovering a
+  direction control advances one additional tab every 500 ms until the pointer
+  leaves it or the strip reaches that end. A manual click advances immediately,
+  pauses that hover timer for two seconds, and then resumes the 500 ms cadence.
+  Tab movement and direction-control entry/exit are animated smoothly.
 - Clicking an audio track/layer in the Timeline or a strip in the Audio Mixer selects the same `TRACK` Properties target, highlights both surfaces, and smoothly reveals off-screen timeline audio layers
 - Clicking the master bus selects the `MASTER` Properties target
 - Badge counts appear for effects, masks, transcripts, and analysis readiness
