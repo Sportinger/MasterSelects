@@ -133,4 +133,5 @@ export interface TimelineState {
   aiActionOverlays: AIActionOverlay[];
   aiMovingClips: Map<string, AIMovingClip>;
   timelineSessionId: number;
+  timelineRevision: number;
 }

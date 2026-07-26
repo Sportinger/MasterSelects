@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 
 import type { TimelineStore, TimelineUtils, TimelineClip, Keyframe } from './types';
+import { withTimelineRevision } from './revisionMiddleware';
 import { DEFAULT_TRACKS, DEFAULT_TRACK_HEADER_WIDTH, MIN_TRACK_HEADER_WIDTH, MAX_TRACK_HEADER_WIDTH } from './constants';
 import { createDefaultTempoMap, createDefaultRulerLanes, getDefaultActiveRulerLaneId } from '../../timeline/tempo/rulerDefaults';
 
@@ -72,7 +73,7 @@ export { setClipStemSeparationRunner } from './stemSeparationSlice';
 export * from './selectors';
 
 export const useTimelineStore = create<TimelineStore>()(
-  subscribeWithSelector((set, get) => {
+  subscribeWithSelector(withTimelineRevision((set, get) => {
     // Create all slices
     const trackActions = createTrackSlice(set, get);
     const clipActions = createClipSlice(set, get);
@@ -320,6 +321,9 @@ export const useTimelineStore = create<TimelineStore>()(
 
       // Async session guard for composition switches / reloads
       timelineSessionId: 0,
+
+      // Monotonic durable timeline edit revision for stale-plan detection
+      timelineRevision: 0,
     };
 
     // Layer actions (render layers for engine, moved from mixerStore)
@@ -416,5 +420,5 @@ export const useTimelineStore = create<TimelineStore>()(
       ...initialState,
       ...actions,
     };
-  })
+  }))
 );
