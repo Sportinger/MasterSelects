@@ -30,6 +30,9 @@ export const selectTempoMap = (state: TimelineStore) => state.tempoMap;
 
 export const selectSnappingEnabled = (state: TimelineStore) => state.snappingEnabled;
 export const selectTimelineGridSubdivision = (state: TimelineStore) => state.timelineGridSubdivision;
+export const selectMetronomeEnabled = (state: TimelineStore) => state.metronomeEnabled;
+export const selectMetronomeVolume = (state: TimelineStore) => state.metronomeVolume;
+export const selectMetronomeMode = (state: TimelineStore) => state.metronomeMode;
 export const selectInPoint = (state: TimelineStore) => state.inPoint;
 export const selectOutPoint = (state: TimelineStore) => state.outPoint;
 export const selectLoopPlayback = (state: TimelineStore) => state.loopPlayback;

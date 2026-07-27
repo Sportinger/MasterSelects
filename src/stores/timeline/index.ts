@@ -46,6 +46,9 @@ import { Logger } from '../../services/logger';
 import { lockTimelineEditActions } from './exportEditLock';
 import {
   readStoredAudioLayerAdvancedMode,
+  readStoredMetronomeEnabled,
+  readStoredMetronomeMode,
+  readStoredMetronomeVolume,
   readStoredTimelineGridSubdivision,
   readStoredTimelineSnappingEnabled,
   readStoredTimelineSplitRatio,
@@ -188,6 +191,9 @@ export const useTimelineStore = create<TimelineStore>()(
       timelineSplitRatio: readStoredTimelineSplitRatio(null),
       snappingEnabled: readStoredTimelineSnappingEnabled(true),
       timelineGridSubdivision: readStoredTimelineGridSubdivision('beat'),
+      metronomeEnabled: readStoredMetronomeEnabled(false),
+      metronomeVolume: readStoredMetronomeVolume(0.6),
+      metronomeMode: readStoredMetronomeMode('beats'),
       isPlaying: false,
       isDraggingPlayhead: false,
       playbackWarmup: null,

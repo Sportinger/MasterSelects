@@ -30,6 +30,11 @@ export interface PlaybackActions {
   stop: () => void;
   setZoom: (zoom: number) => void;
   toggleSnapping: () => void;
+  toggleMetronome: () => void;
+  setMetronomeVolume: (volume: number) => void;
+  setMetronomeMode: (
+    mode: import('../../../services/audio/metronomeScheduler').MetronomeMode,
+  ) => void;
   setTimelineGridSubdivision: (
     subdivision: import('../../../timeline/tempo/barsGrid').TimelineGridSubdivision,
   ) => void;
