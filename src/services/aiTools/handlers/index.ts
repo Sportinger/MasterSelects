@@ -17,6 +17,7 @@ import {
   handleSetPlayhead,
   handleSetInOutPoints,
 } from './timeline';
+import { handleVerifyTimelineInvariants } from './verifyTimelineInvariants';
 
 import {
   handleGetClipDetails,
@@ -481,6 +482,7 @@ export function getRegisteredToolHandlerNames(): string[] {
     // executeBatch is dispatched by the outer app tool executor.
     'executeBatch',
     'getTimelineAnalysis',
+    'verifyTimelineInvariants',
     ...Object.keys(timelineHandlers),
     ...Object.keys(mediaHandlers),
     ...Object.keys(selfContainedHandlers),
@@ -505,6 +507,10 @@ export async function executeToolInternal(
 
   if (toolName === 'getTimelineAnalysis') {
     return handleGetTimelineAnalysis(args, timelineStore, mediaStore);
+  }
+
+  if (toolName === 'verifyTimelineInvariants') {
+    return handleVerifyTimelineInvariants(args, timelineStore);
   }
 
   // Check timeline handlers first

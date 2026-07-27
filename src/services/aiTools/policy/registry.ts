@@ -89,6 +89,10 @@ function devBridgeFixture(): ToolPolicyEntry {
 const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   // ── READ-ONLY (low risk) ──────────────────────────────────────────────
   ['getTimelineState', readOnly()],
+  ['verifyTimelineInvariants', {
+    ...readOnly(),
+    allowedCallers: ['chat', 'devBridge'],
+  }],
   ['getClipDetails', readOnly()],
   ['getClipsInTimeRange', readOnly()],
   ['getMediaItems', readOnly()],
