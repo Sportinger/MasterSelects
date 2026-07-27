@@ -1,6 +1,11 @@
 import { useTimelineStore } from '../../../stores/timeline';
 import { getRuntimeTransition } from '../../../transitions';
+import type { TimelineClip, TimelineTransition } from '../../../types';
 import type { ToolResult } from '../types';
+import {
+  captureMutationEntitySnapshot,
+  describeMutationEntities,
+} from './mutationEntityResults';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
@@ -20,6 +25,10 @@ export async function handleAddTransition(
   if (!clipA) return { success: false, error: `Clip not found: ${clipAId}` };
   if (!clipB) return { success: false, error: `Clip not found: ${clipBId}` };
 
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'transition',
+    collectTransitions(useTimelineStore.getState().clips),
+  );
   const { applyTransition } = useTimelineStore.getState();
   const result = applyTransition(clipAId, clipBId, type, duration, {
     source: 'ai-tool',
@@ -35,7 +44,17 @@ export async function handleAddTransition(
 
   return {
     success: true,
-    data: { clipAId, clipBId, type, duration, changedClipIds: result.changedClipIds },
+    data: {
+      clipAId,
+      clipBId,
+      type,
+      duration,
+      changedClipIds: result.changedClipIds,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        collectTransitions(useTimelineStore.getState().clips),
+      ),
+    },
   };
 }
 
@@ -52,6 +71,10 @@ export async function handleRemoveTransition(
   const clip = timelineStore.clips.find(c => c.id === clipId);
   if (!clip) return { success: false, error: `Clip not found: ${clipId}` };
 
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'transition',
+    collectTransitions(useTimelineStore.getState().clips),
+  );
   const { removeTransition } = useTimelineStore.getState();
   const result = removeTransition(clipId, edge, {
     source: 'ai-tool',
@@ -67,6 +90,24 @@ export async function handleRemoveTransition(
 
   return {
     success: true,
-    data: { clipId, edge, removed: true, changedClipIds: result.changedClipIds },
+    data: {
+      clipId,
+      edge,
+      removed: true,
+      changedClipIds: result.changedClipIds,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        collectTransitions(useTimelineStore.getState().clips),
+      ),
+    },
   };
+}
+
+function collectTransitions(clips: readonly TimelineClip[]): TimelineTransition[] {
+  const transitionsById = new Map<string, TimelineTransition>();
+  for (const clip of clips) {
+    if (clip.transitionIn) transitionsById.set(clip.transitionIn.id, clip.transitionIn);
+    if (clip.transitionOut) transitionsById.set(clip.transitionOut.id, clip.transitionOut);
+  }
+  return [...transitionsById.values()];
 }
