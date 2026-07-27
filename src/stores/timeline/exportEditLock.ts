@@ -84,6 +84,7 @@ const EXPORT_LOCKED_ACTION_NAMES = new Set<string>([
   'updateTextBoundsVertices',
   'addSolidClip',
   'updateSolidColor',
+  'commitMidiTranscription',
   'addMathSceneClip',
   'updateMathScene',
   'addMathObject',
@@ -238,6 +239,7 @@ const STRING_FALLBACK_ACTION_NAMES = new Set<string>([
   'addVertex',
 ]);
 const NULL_FALLBACK_ACTION_NAMES = new Set<string>([
+  'commitMidiTranscription',
   'addSolidClip',
   'addMathSceneClip',
   'addMotionShapeClip',

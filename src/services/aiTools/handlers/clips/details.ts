@@ -102,6 +102,21 @@ export async function handleGetClipDetails(
       masks: clip.masks || [],
       transcript: clip.transcript,
       analysisStatus: clip.analysisStatus,
+      faceAnalysis: {
+        status: clip.faceAnalysisStatus ?? 'none',
+        progress: clip.faceAnalysisProgress ?? 0,
+        message: clip.faceAnalysisMessage ?? null,
+        model: clip.analysis?.faceAnalysis
+          ? {
+              detector: clip.analysis.faceAnalysis.detector,
+              recognizer: clip.analysis.faceAnalysis.recognizer,
+              version: clip.analysis.faceAnalysis.modelVersion,
+              backend: clip.analysis.faceAnalysis.backend,
+            }
+          : null,
+        uniquePeople: clip.analysis?.faceAnalysis?.people.length ?? 0,
+        observationCount: clip.analysis?.faceAnalysis?.observationCount ?? 0,
+      },
     },
   };
 }

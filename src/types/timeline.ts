@@ -156,6 +156,9 @@ export interface TimelineClip {
   analysis?: ClipAnalysis;
   analysisStatus?: AnalysisStatus;
   analysisProgress?: number;  // 0-100 progress
+  faceAnalysisStatus?: import('./clipMetadata').FaceAnalysisStatus;
+  faceAnalysisProgress?: number; // 0-100 progress
+  faceAnalysisMessage?: string; // Current stage or exact module error
   // AI scene description support
   sceneDescriptions?: SceneSegment[];
   sceneDescriptionStatus?: SceneDescriptionStatus;
@@ -261,6 +264,8 @@ export interface SerializableClip {
   // Analysis data
   analysis?: ClipAnalysis;
   analysisStatus?: AnalysisStatus;
+  faceAnalysisStatus?: import('./clipMetadata').FaceAnalysisStatus;
+  faceAnalysisMessage?: string;
   // AI scene description data
   sceneDescriptions?: SceneSegment[];
   sceneDescriptionStatus?: SceneDescriptionStatus;

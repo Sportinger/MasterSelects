@@ -22,6 +22,7 @@ export function WelcomeStep({
   onClose,
   onInstall,
 }: WelcomeStepProps) {
+  const installDisabled = setupStatus === 'not-available' || !cudaAvailable;
   return (
     <>
       <div style={styles.body}>
@@ -76,9 +77,16 @@ export function WelcomeStep({
         {!cudaAvailable && (
           <div style={styles.warningBox}>
             <span style={styles.warningIconWrap}><WarningIcon /></span>
-            <span>No NVIDIA GPU detected. CPU mode will be very slow but installation is still possible.</span>
+            <span>MatAnyone2 is GPU-only in MasterSelects. Installation and processing require an accessible NVIDIA CUDA GPU; CPU fallback is disabled.</span>
           </div>
         )}
+
+        <div style={styles.warningBox}>
+          <span style={styles.warningIconWrap}><WarningIcon /></span>
+          <span>
+            MatAnyone2 is distributed under the NTU S-Lab License 1.0. Non-commercial use must follow its terms; commercial use requires separate permission from the authors.
+          </span>
+        </div>
 
         {setupStatus === 'not-available' && (
           <div style={styles.warningBox}>
@@ -100,15 +108,15 @@ export function WelcomeStep({
         <button
           style={{
             ...styles.btnPrimary,
-            opacity: setupStatus === 'not-available' ? 0.5 : 1,
-            cursor: setupStatus === 'not-available' ? 'not-allowed' : 'pointer',
+            opacity: installDisabled ? 0.5 : 1,
+            cursor: installDisabled ? 'not-allowed' : 'pointer',
             padding: '10px 28px',
             fontSize: 14,
           }}
-          disabled={setupStatus === 'not-available'}
+          disabled={installDisabled}
           onClick={onInstall}
           onMouseEnter={(e) => {
-            if (setupStatus !== 'not-available') {
+            if (!installDisabled) {
               e.currentTarget.style.background = 'rgba(99, 102, 241, 1)';
             }
           }}
@@ -116,7 +124,7 @@ export function WelcomeStep({
             e.currentTarget.style.background = 'rgba(99, 102, 241, 0.9)';
           }}
         >
-          Install
+          {cudaAvailable ? 'Install' : 'GPU Required'}
         </button>
       </div>
     </>

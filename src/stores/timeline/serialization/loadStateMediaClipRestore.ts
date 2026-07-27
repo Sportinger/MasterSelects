@@ -1,5 +1,5 @@
 import type { SerializableClip, TimelineClip, TimelineStore } from '../types';
-import type { ClipAnalysis, FrameAnalysisData } from '../../../types';
+import * as facePersistence from '../../../services/faceAnalysis/faceAnalysisPersistence';
 import { clonePersistedClipAudioState } from '../../../services/audio/clipAudioStatePersistence';
 import { Logger } from '../../../services/logger';
 import { cloneClipNodeGraph } from '../../../services/nodeGraph';
@@ -29,7 +29,6 @@ import {
 import { startRestoredVectorRuntimeRestore } from '../vectorRuntimeRestore';
 
 const log = Logger.create('Timeline');
-
 type MediaStoreState = ReturnType<typeof useMediaStore.getState>;
 type MediaFile = MediaStoreState['files'][number];
 type TimelineSet = (partial: Partial<TimelineStore> | ((state: TimelineStore) => Partial<TimelineStore>)) => void;
@@ -79,6 +78,11 @@ function createRestoredMediaClip(params: {
   serializedClip: SerializableClip;
 }): TimelineClip {
   const { file, initialSource, mediaFile, needsReload, serializedClip } = params;
+  const analysis = facePersistence.sanitizePersistedFaceAnalysis(serializedClip.analysis);
+  const faceAnalysisStatus = facePersistence.normalizePersistedFaceStatus(
+    serializedClip.faceAnalysisStatus,
+    analysis,
+  );
   return {
     id: serializedClip.id,
     trackId: serializedClip.trackId,
@@ -115,8 +119,12 @@ function createRestoredMediaClip(params: {
     masks: serializedClip.masks,
     transcript: serializedClip.transcript,
     transcriptStatus: serializedClip.transcriptStatus || 'none',
-    analysis: serializedClip.analysis,
+    analysis,
     analysisStatus: serializedClip.analysisStatus || 'none',
+    faceAnalysisStatus,
+    faceAnalysisMessage: faceAnalysisStatus === 'error'
+      ? serializedClip.faceAnalysisMessage
+      : undefined,
     reversed: serializedClip.reversed,
     speed: serializedClip.speed,
     preservesPitch: serializedClip.preservesPitch,
@@ -132,7 +140,11 @@ function loadCachedProjectAnalysis(params: {
   set: TimelineSet;
 }): void {
   const { clip, serializedClip, set } = params;
-  if (serializedClip.analysis || !serializedClip.mediaFileId || !projectFileService.isProjectOpen()) {
+  if (
+    facePersistence.hasCompatibleFaceAnalysis(serializedClip.analysis)
+    || !serializedClip.mediaFileId
+    || !projectFileService.isProjectOpen()
+  ) {
     return;
   }
 
@@ -145,14 +157,19 @@ function loadCachedProjectAnalysis(params: {
     const restoredAnalysis = cachedAnalysis ?? await projectFileService.getAllAnalysisMerged(mediaFileId);
     if (!restoredAnalysis) return;
     log.debug('Loaded analysis from project folder', { clip: serializedClip.name });
-    const analysis: ClipAnalysis = {
-      frames: restoredAnalysis.frames as FrameAnalysisData[],
-      sampleInterval: restoredAnalysis.sampleInterval,
-    };
+    const { analysis, hasFaces } = facePersistence.restoreCachedClipAnalysis(
+      restoredAnalysis,
+      Boolean(cachedAnalysis),
+    );
     set(state => ({
       clips: state.clips.map(c =>
         c.id === clip.id
-          ? { ...c, analysis, analysisStatus: 'ready' as const }
+          ? {
+              ...c,
+              analysis,
+              analysisStatus: 'ready' as const,
+              faceAnalysisStatus: hasFaces ? 'ready' as const : 'none' as const,
+            }
           : c
       ),
     }));

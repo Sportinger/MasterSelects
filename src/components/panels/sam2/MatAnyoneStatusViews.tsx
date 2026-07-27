@@ -46,11 +46,15 @@ export function MatAnyoneOverlays({
           <div className="sam2-overlay-content">
             <span className="sam2-icon" style={{ fontSize: 32 }}>&#x2726;</span>
             <p style={{ fontWeight: 600, fontSize: 14, margin: '8px 0 4px' }}>
-              {matStatus === 'error' ? 'MatAnyone2 Setup Error' : 'AI Video Matting'}
+              {matStatus === 'error'
+                ? 'MatAnyone2 Setup Error'
+                : matStatus === 'gpu-required' ? 'NVIDIA CUDA GPU Required' : 'AI Video Matting'}
             </p>
             <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 12px', lineHeight: 1.5 }}>
               {matStatus === 'error'
                 ? (matError || 'The MatAnyone2 setup needs attention.')
+                : matStatus === 'gpu-required'
+                  ? 'CPU fallback is disabled. Check the NVIDIA driver and Native Helper permissions.'
                 : 'Extract people from video with precise alpha mattes.'}
             </p>
             <button className="sam2-download-btn" onClick={onOpenSetup}>
@@ -98,6 +102,7 @@ export function MatAnyoneStatusBar({
       {matStatus === 'not-checked' && 'Checking...'}
       {matStatus === 'not-available' && 'Native Helper required'}
       {matStatus === 'not-installed' && 'Not installed'}
+      {matStatus === 'gpu-required' && 'NVIDIA CUDA GPU required'}
       {matStatus === 'installing' && 'Installing...'}
       {matStatus === 'model-needed' && 'Model download needed'}
       {matStatus === 'downloading-model' && 'Downloading model...'}

@@ -15,6 +15,7 @@ export const allowedAdapterPaths = [
   'src/hooks/useMIDIRuntime.ts',
   'src/services/sam2/**',
   'src/services/matanyone/**',
+  'src/services/muscriptor/**',
   'src/services/flashboard/**',
   'src/services/mediaRuntime/**',
   'src/services/timeline/timelineRuntimeCoordinator.ts',
@@ -275,7 +276,7 @@ export const classCHardTargets = [
 // the totals conserved. The per-packet redistribution history lives in git and
 // in docs/completed/refactor/Complete-refactor.md — do not re-accumulate it here.
 export const getStateAccessPolicyBaselines = {
-  allowedAdapterPathCount: 25,
+  allowedAdapterPathCount: 26,
   classCHardTargetFileCount: 238, // +1 (#299): metronomeScheduler
   classCHardTargetMaxHits: 678, // +4 (#299): metronomeScheduler, like its MIDI sibling
 } as const;

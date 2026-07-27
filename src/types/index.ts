@@ -55,6 +55,8 @@ export type {
   ClipAnalysis,
   ClipSegment,
   ClipVideoState,
+  FaceAnalysisBackend, FaceAnalysisBox, FaceAnalysisPoint, FaceAnalysisResult,
+  FaceAnalysisStatus, FaceAppearanceRange, FaceFrameDetection, FacePersonSummary,
   FrameAnalysisData,
   SceneDescriptionStatus,
   SceneSegment,

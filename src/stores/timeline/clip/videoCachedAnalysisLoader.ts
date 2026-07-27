@@ -1,5 +1,7 @@
-import type { TimelineClip } from '../../../types';
+import type { TimelineClip } from '../../../types/timeline';
+import type { FrameAnalysisData } from '../../../types/clipMetadata';
 import { Logger } from '../../../services/logger';
+import { stripFaceDataFromFrames } from '../../../services/faceAnalysis/faceAnalysisPersistence';
 
 const log = Logger.create('VideoCachedAnalysisLoader');
 
@@ -16,12 +18,20 @@ export function loadCachedProjectAnalysisForVideo(
     try {
       const merged = await projectFileService.getAllAnalysisMerged(mediaFileId);
       if (merged && merged.frames.length > 0) {
+        const frames = stripFaceDataFromFrames(
+          merged.frames as FrameAnalysisData[],
+        );
         setClips(clips => clips.map(c => {
           if (c.id !== clipId || c.analysisStatus === 'ready') return c;
           return {
             ...c,
-            analysis: { frames: merged.frames as import('../../../types').FrameAnalysisData[], sampleInterval: merged.sampleInterval },
+            analysis: {
+              frames,
+              sampleInterval: merged.sampleInterval,
+            },
             analysisStatus: 'ready' as const,
+            faceAnalysisStatus: 'none' as const,
+            faceAnalysisMessage: undefined,
           };
         }));
         log.debug('Loaded cached analysis for new clip', { file: fileName, frames: merged.frames.length });

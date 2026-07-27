@@ -30,6 +30,15 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
 
   // Reactive data - subscribe to specific value only
   const playheadPosition = useTimelineStore(state => state.playheadPosition);
+  const faceState = useTimelineStore((state) => {
+    const clip = state.clips.find(candidate => candidate.id === clipId);
+    return {
+      status: clip?.faceAnalysisStatus ?? 'none',
+      progress: clip?.faceAnalysisProgress ?? 0,
+      message: clip?.faceAnalysisMessage,
+      uniquePeople: clip?.analysis?.faceAnalysis?.people.length ?? 0,
+    };
+  });
 
   // Calculate current values at playhead
   const currentValues = useMemo((): FrameAnalysisData | null => {
@@ -99,7 +108,7 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
 
   const handleClear = useCallback(async () => {
     const { clearClipAnalysis } = await import('../../../services/clipAnalyzer');
-    clearClipAnalysis(clipId);
+    await clearClipAnalysis(clipId);
   }, [clipId]);
 
   // AI scene description handlers
@@ -162,6 +171,11 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
             <span className="coverage-bar-text">{Math.round(clipCoverage * 100)}% analyzed</span>
           </div>
         )}
+        {faceState.status === 'error' && faceState.message && (
+          <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--danger-light)' }}>
+            YuNet + SFace: {faceState.message}
+          </div>
+        )}
       </div>
 
       {/* Progress */}
@@ -171,6 +185,9 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
             <div className="analysis-progress-fill" style={{ width: `${analysisProgress}%` }} />
           </div>
           <span className="analysis-progress-text">{analysisProgress}%</span>
+          <span className="analysis-progress-text">
+            {faceState.message || `YuNet + SFace ${faceState.progress}%`}
+          </span>
         </div>
       )}
 
@@ -209,6 +226,7 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
             <div className="stat-row"><span>Avg Motion:</span><span>{stats.avgMotion}%</span></div>
             <div className="stat-row"><span>Peak Motion:</span><span>{stats.maxMotion}%</span></div>
             <div className="stat-row"><span>Total Faces:</span><span>{stats.totalFaces}</span></div>
+            <div className="stat-row"><span>Anonymous people:</span><span>{faceState.uniquePeople}</span></div>
           </div>
         </div>
       )}

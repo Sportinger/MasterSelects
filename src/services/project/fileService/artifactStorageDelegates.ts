@@ -307,6 +307,17 @@ export async function deleteAnalysis(context: ArtifactStorageContext, mediaId: s
   return context.analysisService.deleteAnalysis(handle, mediaId);
 }
 
+export async function deleteAnalysisRange(
+  context: ArtifactStorageContext,
+  mediaId: string,
+  inPoint: number,
+  outPoint: number,
+): Promise<boolean> {
+  const handle = context.getProjectHandle();
+  if (!handle) return false;
+  return context.analysisService.deleteAnalysisRange(handle, mediaId, inPoint, outPoint);
+}
+
 export async function saveTranscript(
   context: ArtifactStorageContext,
   mediaId: string,
