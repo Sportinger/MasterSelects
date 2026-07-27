@@ -9,7 +9,7 @@ const log = Logger.create('AITool');
 import { flags } from '../../engine/featureFlags';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { startBatch, endBatch } from '../../stores/historyStore';
+import { startBatch, endBatch, useHistoryStore } from '../../stores/historyStore';
 import type {
   AIToolCallExecution,
   AIToolCallExecutionResult,
@@ -23,6 +23,11 @@ import { setAIExecutionActive, setStaggerBudget } from './executionState';
 import { checkToolAccess } from './policy';
 import type { CallerContext } from './policy';
 import { beginAIToolAudit, completeAIToolAudit } from './audit';
+import {
+  abortAgentTransaction,
+  beginAgentTransaction,
+  commitAgentTransaction,
+} from './agentTransaction';
 import {
   compileGuidedToolCall,
   compileGuidedToolCalls,
@@ -167,9 +172,13 @@ export async function executeAIToolCalls(
     }));
   }
 
-  setAIExecutionActive(true, getGuidedLegacyFeedback(options));
+  const transaction = beginTransactionForToolCalls(allowedCalls);
   try {
-    const guidedResults = await executeGuidedAIToolCallGroup(allowedCalls, callerContext, options);
+    setAIExecutionActive(true, getGuidedLegacyFeedback(options));
+    const guidedResults = await executeGuidedAIToolCallGroup(allowedCalls, callerContext, {
+      ...options,
+      suppressHistory: transaction ? true : options.suppressHistory,
+    });
     const guidedResultByKey = new Map(guidedResults.map((result) => [getToolCallResultKey(result), result.result]));
     const results = toolCalls.map((toolCall) => ({
       id: toolCall.id,
@@ -185,8 +194,14 @@ export async function executeAIToolCalls(
       )?.result;
       if (callId && result) completeAIToolAudit(callId, result);
     }
+    if (transaction) {
+      commitAgentTransaction(transaction);
+    }
     return results;
   } catch (error) {
+    if (transaction) {
+      abortAgentTransaction(transaction);
+    }
     for (const toolCall of allowedCalls) {
       const callId = auditCallIds.get(toolCall);
       if (callId) completeAIToolAudit(callId, undefined, error);
@@ -209,17 +224,19 @@ async function _executeAIToolInternal(
 
   // Special-case: executeBatch wraps all sub-actions in a single undo group
   if (toolName === 'executeBatch') {
-    if (!options.suppressHistory) {
+    const ownsBatch = !options.suppressHistory
+      && useHistoryStore.getState().batchId === null;
+    if (ownsBatch) {
       startBatch('AI: batch');
     }
     try {
       const result = await handleExecuteBatch(args, callerContext, options);
-      if (!options.suppressHistory) {
+      if (ownsBatch) {
         endBatch();
       }
       return result;
     } catch (error) {
-      if (!options.suppressHistory) {
+      if (ownsBatch) {
         endBatch();
       }
       log.error('Error executing batch', error);
@@ -287,6 +304,9 @@ async function executeGuidedAITool(
   options: AIToolExecutionOptions,
 ): Promise<ToolResult> {
   const inlineBatchExecution = toolName === 'executeBatch';
+  const ownsInlineBatch = inlineBatchExecution
+    && !options.suppressHistory
+    && useHistoryStore.getState().batchId === null;
   const compiled = compileGuidedToolCall({
     tool: toolName,
     args,
@@ -299,7 +319,9 @@ async function executeGuidedAITool(
     executeTool: (tool, toolArgs, nestedCallerContext, nestedOptions) => (
       _executeAIToolInternal(tool, toolArgs, nestedCallerContext, {
         ...nestedOptions,
-        suppressHistory: inlineBatchExecution || nestedOptions?.suppressHistory,
+        suppressHistory: inlineBatchExecution
+          || options.suppressHistory
+          || nestedOptions?.suppressHistory,
       })
     ),
   });
@@ -310,7 +332,7 @@ async function executeGuidedAITool(
   }));
 
   try {
-    if (inlineBatchExecution) {
+    if (ownsInlineBatch) {
       startBatch('AI: batch');
     }
     const result = await runtime.startSession({
@@ -332,7 +354,7 @@ async function executeGuidedAITool(
       ? batchToolResultFromGuidedSession(args, result)
       : toolResultFromGuidedSession(toolName, result);
   } finally {
-    if (inlineBatchExecution) {
+    if (ownsInlineBatch) {
       endBatch();
     }
     unregisterHandlers();
@@ -353,7 +375,10 @@ async function executeGuidedAIToolCallGroup(
     defaultCallerContext: callerContext,
     defaultLegacyFeedback: getGuidedLegacyFeedback(options),
     executeTool: (tool, toolArgs, nestedCallerContext, nestedOptions) => (
-      _executeAIToolInternal(tool, toolArgs, nestedCallerContext, nestedOptions)
+      _executeAIToolInternal(tool, toolArgs, nestedCallerContext, {
+        ...nestedOptions,
+        suppressHistory: options.suppressHistory || nestedOptions?.suppressHistory,
+      })
     ),
   });
   const runtime = getGuidedActionRuntime();
@@ -393,23 +418,47 @@ async function executeAIToolCallsDirect(
   options: AIToolExecutionOptions,
 ): Promise<AIToolCallExecutionResult[]> {
   const results: AIToolCallExecutionResult[] = [];
-  for (let index = 0; index < toolCalls.length; index++) {
-    const toolCall = toolCalls[index];
-    if (!toolCall) {
-      continue;
+  const transaction = beginTransactionForToolCalls(toolCalls);
+  try {
+    for (let index = 0; index < toolCalls.length; index++) {
+      const toolCall = toolCalls[index];
+      if (!toolCall) {
+        continue;
+      }
+      const result = await executeAITool(toolCall.tool, toolCall.args, callerContext, {
+        ...options,
+        auditProviderToolCallId: toolCall.id,
+        guidedReplayRemainingCalls: toolCalls.length - index,
+        suppressHistory: transaction ? true : options.suppressHistory,
+      });
+      results.push({
+        id: toolCall.id,
+        tool: toolCall.tool,
+        result,
+      });
     }
-    const result = await executeAITool(toolCall.tool, toolCall.args, callerContext, {
-      ...options,
-      auditProviderToolCallId: toolCall.id,
-      guidedReplayRemainingCalls: toolCalls.length - index,
-    });
-    results.push({
-      id: toolCall.id,
-      tool: toolCall.tool,
-      result,
-    });
+    if (transaction) {
+      commitAgentTransaction(transaction);
+    }
+    return results;
+  } catch (error) {
+    if (transaction) {
+      abortAgentTransaction(transaction);
+    }
+    throw error;
   }
-  return results;
+}
+
+function beginTransactionForToolCalls(toolCalls: AIToolCallExecution[]) {
+  if (!toolCalls.some((toolCall) => MODIFYING_TOOLS.has(toolCall.tool))) {
+    return null;
+  }
+
+  const firstTool = toolCalls[0]?.tool ?? 'unknown';
+  const additionalToolCount = toolCalls.length - 1;
+  return beginAgentTransaction(
+    `AI task: ${firstTool}${additionalToolCount > 0 ? ` +${additionalToolCount}` : ''}`,
+  );
 }
 
 function shouldUseGuidedAIToolExecution(

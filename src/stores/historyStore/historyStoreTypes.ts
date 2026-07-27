@@ -99,6 +99,7 @@ export interface HistoryState {
   restoreBranch: (branchId: string, snapshotIndex?: number) => HistoryRestoreResult | null;
   startBatch: (label: string) => void;
   endBatch: () => void;
+  cancelBatch: () => void;
   setIsApplying: (value: boolean) => void;
   clearHistory: () => void;
   serializeForProject: () => ProjectHistoryState;

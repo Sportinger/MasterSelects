@@ -457,6 +457,23 @@ export const useHistoryStore = create<HistoryState>()(
       }
     },
 
+    cancelBatch: () => {
+      const { batchId, currentSnapshot } = get();
+      if (batchId === null) return;
+
+      try {
+        if (currentSnapshot) {
+          applySnapshot(currentSnapshot);
+        }
+      } finally {
+        set({
+          batchId: null,
+          batchLabel: null,
+        });
+        suppressCaptures();
+      }
+    },
+
     setIsApplying: (value: boolean) => set({ isApplying: value }),
 
     clearHistory: () => set({
@@ -509,6 +526,7 @@ export const undo = historyFacade.undo;
 export const redo = historyFacade.redo;
 export const startBatch = historyFacade.startBatch;
 export const endBatch = historyFacade.endBatch;
+export const cancelHistoryBatch = historyFacade.cancelHistoryBatch;
 export const recordHistoryEvent = historyFacade.recordHistoryEvent;
 export const restoreHistoryEntry = historyFacade.restoreHistoryEntry;
 export const restoreHistoryBranch = historyFacade.restoreHistoryBranch;

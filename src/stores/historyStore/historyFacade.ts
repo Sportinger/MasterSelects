@@ -17,6 +17,7 @@ export function createHistoryFacade(useHistoryStore: HistoryStoreAccessor) {
     redo: () => useHistoryStore.getState().redo(),
     startBatch: (label: string) => useHistoryStore.getState().startBatch(label),
     endBatch: () => useHistoryStore.getState().endBatch(),
+    cancelHistoryBatch: () => useHistoryStore.getState().cancelBatch(),
     recordHistoryEvent: (type: HistoryEventType, label: string) => {
       useHistoryStore.getState().recordEvent(type, label);
     },
