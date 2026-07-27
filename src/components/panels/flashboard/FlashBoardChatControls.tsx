@@ -26,8 +26,6 @@ interface FlashBoardChatControlsProps {
   chatProvider: FlashBoardChatProvider;
   chatProviderLabel: string;
   chatProviderOptions: FlashBoardChatProviderOption[];
-  editOptionsMode: boolean;
-  editOptionsModeEnabled: boolean;
   chatReasoningEffortOptions: ChatReasoningOption[];
   chatReasoningSupported: boolean;
   chatTemperature: number;
@@ -46,7 +44,6 @@ interface FlashBoardChatControlsProps {
   onChatTemperatureChange: (temperature: number) => void;
   onClearChatHistory: () => void;
   onClosePopover: (popover: NonNullable<ChatControlsPopover>) => void;
-  onEditOptionsModeToggle: () => void;
   onLemonadeContextSizeChange: (contextSize: number) => void;
   onOpenPromptBook: () => void;
   onOpenPopover: (popover: NonNullable<ChatControlsPopover>) => void;
@@ -63,8 +60,6 @@ export function FlashBoardChatControls({
   chatProvider,
   chatProviderLabel,
   chatProviderOptions,
-  editOptionsMode,
-  editOptionsModeEnabled,
   chatReasoningEffortOptions,
   chatReasoningSupported,
   chatTemperature,
@@ -83,7 +78,6 @@ export function FlashBoardChatControls({
   onChatTemperatureChange,
   onClearChatHistory,
   onClosePopover,
-  onEditOptionsModeToggle,
   onLemonadeContextSizeChange,
   onOpenPromptBook,
   onOpenPopover,
@@ -136,19 +130,6 @@ export function FlashBoardChatControls({
         >
           <span className="fb-pill-label">{chatTemperatureSupported ? `Temp ${chatTemperature.toFixed(1)}` : 'Fixed temp'}</span>
         </button>
-        {editOptionsModeEnabled && (
-          <button
-            className={`fb-pill fb-chat-options-pill ${editOptionsMode ? 'active' : ''}`}
-            type="button"
-            onClick={onEditOptionsModeToggle}
-            disabled={isChatting}
-            title={editOptionsMode
-              ? 'Plan 3 mode on - next prompt proposes three edit choices before applying.'
-              : 'Plan 3 mode off - click to propose three edit choices before applying.'}
-          >
-            <span className="fb-pill-label">Plan 3</span>
-          </button>
-        )}
         <button
           className="fb-pill fb-prompt-book-pill"
           type="button"
