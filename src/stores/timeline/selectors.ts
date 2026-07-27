@@ -29,6 +29,10 @@ export const selectTempoMap = (state: TimelineStore) => state.tempoMap;
 // ===========================================
 
 export const selectSnappingEnabled = (state: TimelineStore) => state.snappingEnabled;
+export const selectTimelineGridSubdivision = (state: TimelineStore) => state.timelineGridSubdivision;
+export const selectMetronomeEnabled = (state: TimelineStore) => state.metronomeEnabled;
+export const selectMetronomeVolume = (state: TimelineStore) => state.metronomeVolume;
+export const selectMetronomeMode = (state: TimelineStore) => state.metronomeMode;
 export const selectInPoint = (state: TimelineStore) => state.inPoint;
 export const selectOutPoint = (state: TimelineStore) => state.outPoint;
 export const selectLoopPlayback = (state: TimelineStore) => state.loopPlayback;
@@ -299,6 +303,14 @@ export const selectRulerLaneActions = (state: TimelineStore) => ({
   removeRulerLane: state.removeRulerLane,
   setActiveRulerLane: state.setActiveRulerLane,
   reorderRulerLanes: state.reorderRulerLanes,
+});
+
+// Tempo-map editing actions (issue #299)
+export const selectTempoActions = (state: TimelineStore) => ({
+  setProjectTempo: state.setProjectTempo,
+  addTempoChange: state.addTempoChange,
+  updateTempoChange: state.updateTempoChange,
+  removeTempoChange: state.removeTempoChange,
 });
 
 // Clipboard actions

@@ -35,6 +35,7 @@ import { createKeyframeSlice } from './keyframeSlice';
 import { createMaskSlice } from './maskSlice';
 import { createMarkerSlice } from './markerSlice';
 import { createRulerSlice } from './rulerSlice';
+import { createTempoSlice } from './tempoSlice';
 import { createTransitionSlice } from './transitionSlice';
 import { createNodeGraphSlice } from './nodeGraphSlice';
 import { createClipboardSlice } from './clipboardSlice';
@@ -45,6 +46,10 @@ import { Logger } from '../../services/logger';
 import { lockTimelineEditActions } from './exportEditLock';
 import {
   readStoredAudioLayerAdvancedMode,
+  readStoredMetronomeEnabled,
+  readStoredMetronomeMode,
+  readStoredMetronomeVolume,
+  readStoredTimelineGridSubdivision,
   readStoredTimelineSnappingEnabled,
   readStoredTimelineSplitRatio,
   readStoredTimelineTrackFocusMode,
@@ -102,6 +107,7 @@ export const useTimelineStore = create<TimelineStore>()(
     const maskActions = createMaskSlice(set, get);
     const markerActions = createMarkerSlice(set, get);
     const rulerActions = createRulerSlice(set, get);
+    const tempoActions = createTempoSlice(set, get);
     const transitionActions = createTransitionSlice(set, get);
     const nodeGraphActions = createNodeGraphSlice(set, get);
     const clipboardActions = createClipboardSlice(set, get);
@@ -184,6 +190,10 @@ export const useTimelineStore = create<TimelineStore>()(
       ),
       timelineSplitRatio: readStoredTimelineSplitRatio(null),
       snappingEnabled: readStoredTimelineSnappingEnabled(true),
+      timelineGridSubdivision: readStoredTimelineGridSubdivision('beat'),
+      metronomeEnabled: readStoredMetronomeEnabled(false),
+      metronomeVolume: readStoredMetronomeVolume(0.6),
+      metronomeMode: readStoredMetronomeMode('beats'),
       isPlaying: false,
       isDraggingPlayhead: false,
       playbackWarmup: null,
@@ -404,6 +414,7 @@ export const useTimelineStore = create<TimelineStore>()(
       ...maskActions,
       ...markerActions,
       ...rulerActions,
+      ...tempoActions,
       ...transitionActions,
       ...nodeGraphActions,
       ...clipboardActions,

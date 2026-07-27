@@ -6,12 +6,15 @@
 // before this feature) is filled with sane defaults on load — no version bump.
 
 import type { RulerLane, RulerLaneFormat, TempoMap } from '../../types/timeline';
+import { createDefaultTempoEvent, normalizeTempoMap, type TempoMapInput } from './tempoEdits';
 
-// Constant 4/4 @ 60 BPM today; the TempoMap is list-of-events-ready for future
-// tempo / time-signature changes (Packet 2).
-export const DEFAULT_TEMPO_BPM = 60;
-export const DEFAULT_TIME_SIGNATURE_NUMERATOR = 4;
-export const DEFAULT_TIME_SIGNATURE_DENOMINATOR = 4;
+// Tempo defaults now live with the editing invariants (issue #299) and are
+// re-exported here so existing importers keep their import path.
+export {
+  DEFAULT_TEMPO_BPM,
+  DEFAULT_TIME_SIGNATURE_NUMERATOR,
+  DEFAULT_TIME_SIGNATURE_DENOMINATOR,
+} from './tempoEdits';
 
 // Lanes are unique per format, so a deterministic per-format id is safe and keeps
 // ids stable across remove/re-add. The slice and the defaults share this scheme.
@@ -29,17 +32,16 @@ export interface RulerLaneState {
   activeRulerLaneId: string | null;
 }
 
+// What `normalizeRulerLaneState` accepts: the durable project tier has optional
+// tempo-event ids (#299), so the input is deliberately wider than the output.
+export interface RulerLaneStateInput {
+  tempoMap?: TempoMapInput | null;
+  rulerLanes?: RulerLane[];
+  activeRulerLaneId?: string | null;
+}
+
 export function createDefaultTempoMap(): TempoMap {
-  return {
-    events: [
-      {
-        time: 0,
-        bpm: DEFAULT_TEMPO_BPM,
-        numerator: DEFAULT_TIME_SIGNATURE_NUMERATOR,
-        denominator: DEFAULT_TIME_SIGNATURE_DENOMINATOR,
-      },
-    ],
-  };
+  return { events: [createDefaultTempoEvent()] };
 }
 
 export function createDefaultRulerLanes(): RulerLane[] {
@@ -75,10 +77,11 @@ function dedupeLanesByFormat(lanes: RulerLane[]): RulerLane[] {
 // Fill any missing/invalid fields with defaults. Used at every load/restore seam
 // so old projects round-trip cleanly and the active lane always references a real
 // lane.
-export function normalizeRulerLaneState(partial?: Partial<RulerLaneState>): RulerLaneState {
-  const tempoMap = partial?.tempoMap && partial.tempoMap.events?.length
-    ? partial.tempoMap
-    : createDefaultTempoMap();
+export function normalizeRulerLaneState(partial?: RulerLaneStateInput): RulerLaneState {
+  // Not a pass-through: the map goes through the full invariant repair (sort,
+  // dedupe, pin event 0, clamp, backfill ids). This is the single seam where a
+  // pre-#299 project without event ids becomes editable.
+  const tempoMap = normalizeTempoMap(partial?.tempoMap);
 
   const rulerLanes = partial?.rulerLanes && partial.rulerLanes.length
     ? dedupeLanesByFormat(partial.rulerLanes)
