@@ -1,4 +1,3 @@
-import { useTimelineStore } from '../../stores/timeline';
 import {
   executeAIToolCalls,
   type AIToolCallExecution,
@@ -10,7 +9,6 @@ import {
   commitAgentTransaction,
   type AgentTransaction,
 } from '../aiTools/agentTransaction';
-import { handleGetTimelineState } from '../aiTools/handlers/timeline';
 import { KernelServiceClient } from './index';
 import type {
   KernelCompileCompiledResponse,
@@ -176,10 +174,17 @@ function parseCompleteResponse(value: unknown): KernelRunCompleteResponse | unde
   };
 }
 
+// Snapshots go through the semantic tool gateway like every other kernel
+// interaction (plan §8.3) — the gateway never reads stores directly.
 async function buildTimelineSnapshot(): Promise<unknown> {
-  const result = await handleGetTimelineState({}, useTimelineStore.getState());
-  if (!result.success || result.data === undefined) {
-    throw new Error(result.error ?? 'getTimelineState did not return a snapshot.');
+  const [execution] = await executeAIToolCalls(
+    [{ id: 'kernel-snapshot', tool: 'getTimelineState', args: {} }],
+    'chat',
+    { guidedReplay: false, suppressHistory: true },
+  );
+  const result = execution?.result;
+  if (!result?.success || result.data === undefined) {
+    throw new Error(result?.error ?? 'getTimelineState did not return a snapshot.');
   }
   return result.data;
 }

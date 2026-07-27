@@ -1,7 +1,6 @@
-import type { TimelineClip, TimelineTrack } from '../../../../types';
+import type { TempoMap, TimelineClip, TimelineTrack } from '../../../../types/timeline';
 import type { TimelineToolId, TimelineToolPreview } from '../../../../stores/timeline/types';
 import type { TimelineEditOperation } from '../../../../stores/timeline/editOperations/types';
-import type { TempoMap } from '../../../../types';
 import {
   collectBarsGridSnapTimes,
   type TimelineGridSubdivision,
