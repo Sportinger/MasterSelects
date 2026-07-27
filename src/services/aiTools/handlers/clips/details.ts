@@ -1,5 +1,6 @@
 import type { ToolResult } from '../../types.ts';
 import { formatClipInfo } from '../../utils';
+import { resolveClipTranscriptWords } from '../../../transcription/clipTranscriptResolver';
 import { getGaussianSplatGpuRenderer } from '../../../../engine/gaussian/core/GaussianSplatGpuRenderer';
 import { resolveSharedSplatSceneKey } from '../../../../engine/scene/runtime/SharedSplatRuntimeUtils';
 import { ensureRenderForDiagnostics } from '../renderOnce';
@@ -100,7 +101,7 @@ export async function handleGetClipDetails(
       gaussianTargetSummary,
       effects: clip.effects || [],
       masks: clip.masks || [],
-      transcript: clip.transcript,
+      transcript: resolveClipTranscriptWords(clip),
       analysisStatus: clip.analysisStatus,
       faceAnalysis: {
         status: clip.faceAnalysisStatus ?? 'none',

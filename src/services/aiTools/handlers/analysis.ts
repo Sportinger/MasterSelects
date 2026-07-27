@@ -7,6 +7,7 @@ import { selectClipAndOpenTab } from '../aiFeedback';
 import { isAIExecutionActive } from '../executionState';
 import type { TimelineClip } from '../../../types/timeline';
 import { collectFaceReviewCandidates } from '../../faceAnalysis/faceReviewCandidates';
+import { resolveClipTranscriptWords } from '../../transcription/clipTranscriptResolver';
 import { buildKeepOnlyFaceCutPlan } from './faceAnalysisCutPlan';
 import { resolveFacePersonReference } from './facePersonReference';
 
@@ -339,7 +340,8 @@ export async function handleGetClipTranscript(
   // Visual feedback: select clip and open transcript tab
   selectClipAndOpenTab(clipId, 'transcript');
 
-  if (!clip.transcript?.length) {
+  const transcriptWords = resolveClipTranscriptWords(clip);
+  if (!transcriptWords?.length) {
     return {
       success: true,
       data: {
@@ -356,7 +358,7 @@ export async function handleGetClipTranscript(
   const sourceB = clampSourceTime(requestedEnd);
   const sourceStart = Math.min(sourceA, sourceB);
   const sourceEnd = Math.max(sourceA, sourceB);
-  const matchingSegments = clip.transcript.filter(word => (
+  const matchingSegments = transcriptWords.filter(word => (
     word.end >= sourceStart && word.start <= sourceEnd
   ));
   const offset = Math.max(0, typeof args.offset === 'number' ? Math.floor(args.offset) : 0);
@@ -375,7 +377,7 @@ export async function handleGetClipTranscript(
     success: true,
     data: {
       hasTranscript: true,
-      segmentCount: clip.transcript.length,
+      segmentCount: transcriptWords.length,
       matchingSegmentCount: matchingSegments.length,
       sourceRange: { start: sourceStart, end: sourceEnd },
       offset,
@@ -430,7 +432,8 @@ export async function handleFindSilentSections(
     return { success: false, error: `Clip not found: ${clipId}` };
   }
 
-  if (!clip.transcript?.length) {
+  const silenceWords = resolveClipTranscriptWords(clip);
+  if (!silenceWords?.length) {
     return {
       success: false,
       error: 'No transcript available to analyze for silence.',
@@ -442,7 +445,7 @@ export async function handleFindSilentSections(
   const sourceEnd = clip.outPoint;
 
   // Filter segments to those within the visible range
-  const allSegments = clip.transcript;
+  const allSegments = silenceWords;
   const segments = allSegments.filter(seg => seg.end > sourceStart && seg.start < sourceEnd);
 
   const silentSections: Array<{ sourceStart: number; sourceEnd: number; duration: number }> = [];

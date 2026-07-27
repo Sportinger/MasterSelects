@@ -5,6 +5,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { NativeHelperClient } from '../nativeHelper';
 import { renderHostPort } from '../render/renderHostPort';
 import type { TimelineClip, TimelineTrack } from '../../stores/timeline/types';
+import { clipHasTranscript } from '../transcription/clipTranscriptResolver';
 import type { ToolResult } from './types';
 import {
   captureRenderHostFrame,
@@ -176,7 +177,7 @@ export function formatClipInfo(clip: TimelineClip, track: TimelineTrack | undefi
     faceAnalysisError: clip.faceAnalysisStatus === 'error' ? clip.faceAnalysisMessage : undefined,
     uniquePeople: clip.analysis?.faceAnalysis?.people.length ?? 0,
     faceObservationCount: clip.analysis?.faceAnalysis?.observationCount ?? 0,
-    hasTranscript: clip.transcriptStatus === 'ready' || !!clip.transcript?.length,
+    hasTranscript: clipHasTranscript(clip),
     // Transform info
     transform: clip.transform,
     // Effects count
@@ -213,7 +214,7 @@ export function formatTrackInfo(track: TimelineTrack, clips: TimelineClip[]) {
       transitionIn: c.transitionIn ? { ...c.transitionIn } : undefined,
       transitionOut: c.transitionOut ? { ...c.transitionOut } : undefined,
       hasAnalysis: c.analysisStatus === 'ready',
-      hasTranscript: c.transcriptStatus === 'ready' || !!c.transcript?.length,
+      hasTranscript: clipHasTranscript(c),
     })),
   };
 }
