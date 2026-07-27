@@ -394,8 +394,14 @@ export const useHistoryStore = create<HistoryState>()(
     startBatch: (label: string) => {
       if (isHistoryDisabledForDebug()) return;
 
+      if (get().batchId !== null) return; // Already batching
+
+      // Materialize a recent debounced user edit before the batch snapshot is
+      // seeded, so the user edit remains its own undo step.
+      flushPendingCapture();
+
       const { batchId, currentSnapshot } = get();
-      if (batchId !== null) return; // Already batching
+      if (batchId !== null) return; // The flush callback may have opened a batch.
 
       // Capture initial state before batch
       if (!currentSnapshot) {
@@ -470,7 +476,11 @@ export const useHistoryStore = create<HistoryState>()(
           batchId: null,
           batchLabel: null,
         });
+        // Restoring the pre-batch snapshot can synchronously schedule another
+        // debounced capture. Suppress first, then flush: useGlobalHistory's
+        // callback clears that timer and drops it while suppression is active.
         suppressCaptures();
+        flushPendingCapture();
       }
     },
 

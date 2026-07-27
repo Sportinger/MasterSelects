@@ -1,7 +1,6 @@
 // Timeline Tool Handlers
 
 import { useTimelineStore } from '../../../stores/timeline';
-import { getTimelineRevision } from '../../../stores/timeline/revisionMiddleware';
 import { computeTimelineOccupancy } from '../../timeline/timelineOccupancy';
 import type { ToolResult } from '../types';
 import { formatTrackInfo } from '../utils';
@@ -74,7 +73,7 @@ export async function handleGetTimelineState(
       videoTracks,
       audioTracks,
       occupancy: {
-        stateRevision: getTimelineRevision(),
+        stateRevision: timelineStore.timelineRevision,
         occupied: occupancy.occupied,
         clipDurationSumSeconds: occupancy.clipDurationSumSeconds,
         gapCount: occupancy.gaps.length,

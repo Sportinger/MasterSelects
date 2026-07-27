@@ -8,6 +8,7 @@ import {
 } from '../../src/stores/historyStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { getTimelineRevision } from '../../src/stores/timeline/revisionMiddleware';
+import { executeAIToolCalls } from '../../src/services/aiTools';
 import {
   abortAgentTransaction,
   beginAgentTransaction,
@@ -130,6 +131,8 @@ describe('agent mutation transactions', () => {
     const committedPassthrough = beginAgentTransaction('AI task: passthrough commit');
 
     expect(committedPassthrough.alreadyBatching).toBe(true);
+    expect(committedPassthrough.abortNoop).toBe(true);
+    expect(committedPassthrough.historyBatchId).toBe(outerBatchId);
     appendClip('first');
     commitAgentTransaction(committedPassthrough);
     expect(useHistoryStore.getState().batchId).toBe(outerBatchId);
@@ -152,5 +155,62 @@ describe('agent mutation transactions', () => {
 
     expect(committed.stateRevisionAfter).toBe(getTimelineRevision());
     expect(committed.stateRevisionAfter).toBeGreaterThan(transaction.stateRevisionBefore);
+  });
+
+  it('leaves a replacement history batch untouched when commit ownership is lost', () => {
+    const transaction = beginAgentTransaction('AI task: lost ownership');
+    const replacementBatchId = (transaction.historyBatchId ?? 0) + 1;
+    appendClip('first');
+    const undoLengthBeforeCommit = useHistoryStore.getState().undoStack.length;
+
+    useHistoryStore.setState({
+      batchId: replacementBatchId,
+      batchLabel: 'replacement owner',
+    });
+    commitAgentTransaction(transaction);
+
+    expect(isAgentTransactionOpen()).toBe(false);
+    expect(useHistoryStore.getState().batchId).toBe(replacementBatchId);
+    expect(useHistoryStore.getState().batchLabel).toBe('replacement owner');
+    expect(useHistoryStore.getState().undoStack).toHaveLength(undoLengthBeforeCommit);
+    expect(useTimelineStore.getState().clips.map((clip) => clip.id)).toEqual(['base', 'first']);
+  });
+
+  it('rolls back a grouped partial failure without creating an undo entry', async () => {
+    const undoLengthBefore = useHistoryStore.getState().undoStack.length;
+
+    const results = await executeAIToolCalls([
+      { id: 'create', tool: 'createTrack', args: { type: 'video' } },
+      { id: 'missing', tool: 'deleteClip', args: { clipId: 'missing', withLinked: false } },
+    ], 'internal', { guidedReplay: false });
+
+    expect(results.map((entry) => entry.result.success)).toEqual([true, false]);
+    expect(results[0]?.result.data).toMatchObject({
+      partialFailure: {
+        occurred: true,
+        rolledBack: true,
+        rollbackDeferred: false,
+        transactionOwnershipLost: false,
+        failedModifyingTools: [{ id: 'missing', tool: 'deleteClip' }],
+      },
+    });
+    expect(useTimelineStore.getState().tracks).toEqual([]);
+    expect(useHistoryStore.getState().undoStack).toHaveLength(undoLengthBefore);
+    expect(useHistoryStore.getState().batchId).toBeNull();
+  });
+
+  it('does not open a transaction or create undo history when history is suppressed', async () => {
+    const undoLengthBefore = useHistoryStore.getState().undoStack.length;
+
+    const results = await executeAIToolCalls([
+      { tool: 'createTrack', args: { type: 'video' } },
+      { tool: 'createTrack', args: { type: 'audio' } },
+    ], 'internal', { guidedReplay: false, suppressHistory: true });
+
+    expect(results.every((entry) => entry.result.success)).toBe(true);
+    expect(isAgentTransactionOpen()).toBe(false);
+    expect(useHistoryStore.getState().batchId).toBeNull();
+    expect(useHistoryStore.getState().undoStack).toHaveLength(undoLengthBefore);
+    expect(useTimelineStore.getState().tracks).toHaveLength(2);
   });
 });

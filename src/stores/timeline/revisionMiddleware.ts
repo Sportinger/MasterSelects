@@ -8,6 +8,13 @@ const WATCHED_TIMELINE_KEYS = [
   'clipKeyframes',
   'markers',
   'masterAudioState',
+  'duration',
+  'durationLocked',
+  'inPoint',
+  'outPoint',
+  'tempoMap',
+  'rulerLanes',
+  'videoBakeRegions',
 ] as const satisfies readonly (keyof TimelineStore)[];
 
 type TimelineStatePatch = TimelineStore | Partial<TimelineStore>;
@@ -15,16 +22,23 @@ type TimelineStateUpdate =
   | TimelineStatePatch
   | ((state: TimelineStore) => TimelineStatePatch);
 
+// Re-evaluating this module under HMR can reset the store's revision epoch.
+// That is acceptable for now: monotonicity is session-scoped, and the agent
+// kernel re-snapshots each run.
 let readTimelineState: StoreApi<TimelineStore>['getState'] | null = null;
+
+function hasOwnKey(patch: TimelineStatePatch, key: keyof TimelineStore): boolean {
+  return Object.prototype.hasOwnProperty.call(patch, key);
+}
 
 function applyRevision(
   currentState: TimelineStore,
   patch: TimelineStatePatch,
   replace: boolean,
 ): TimelineStatePatch {
-  const nextState = (replace ? patch : { ...currentState, ...patch }) as TimelineStore;
   const watchedStateChanged = WATCHED_TIMELINE_KEYS.some(
-    (key) => !Object.is(currentState[key], nextState[key]),
+    (key) => (replace || hasOwnKey(patch, key))
+      && !Object.is(currentState[key], patch[key]),
   );
 
   return {
@@ -51,6 +65,19 @@ export const withTimelineRevision = (
     replace = false,
   ): void => {
     const currentState = get();
+    if (typeof update !== 'function') {
+      const hasWatchedKey = WATCHED_TIMELINE_KEYS.some((key) => hasOwnKey(update, key));
+      const suppliesRevision = hasOwnKey(update, 'timelineRevision');
+      if (!hasWatchedKey && !suppliesRevision) {
+        if (replace) {
+          set(update as TimelineStore, true);
+        } else {
+          set(update);
+        }
+        return;
+      }
+    }
+
     const patch = typeof update === 'function' ? update(currentState) : update;
     const revisedPatch = applyRevision(currentState, patch, replace);
 

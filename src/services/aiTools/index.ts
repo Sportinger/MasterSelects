@@ -25,8 +25,10 @@ import type { CallerContext } from './policy';
 import { beginAIToolAudit, completeAIToolAudit } from './audit';
 import {
   abortAgentTransaction,
+  attachGroupedPartialFailure,
   beginAgentTransaction,
   commitAgentTransaction,
+  createGroupedPartialFailureInfo,
 } from './agentTransaction';
 import {
   compileGuidedToolCall,
@@ -172,7 +174,7 @@ export async function executeAIToolCalls(
     }));
   }
 
-  const transaction = beginTransactionForToolCalls(allowedCalls);
+  const transaction = beginTransactionForToolCalls(allowedCalls, options);
   try {
     setAIExecutionActive(true, getGuidedLegacyFeedback(options));
     const guidedResults = await executeGuidedAIToolCallGroup(allowedCalls, callerContext, {
@@ -180,22 +182,32 @@ export async function executeAIToolCalls(
       suppressHistory: transaction ? true : options.suppressHistory,
     });
     const guidedResultByKey = new Map(guidedResults.map((result) => [getToolCallResultKey(result), result.result]));
-    const results = toolCalls.map((toolCall) => ({
+    let results: AIToolCallExecutionResult[] = toolCalls.map((toolCall) => ({
       id: toolCall.id,
       tool: toolCall.tool,
       result: policyResults.get(getToolCallResultKey(toolCall))
         ?? guidedResultByKey.get(getToolCallResultKey(toolCall))
         ?? createMissingGroupedToolResult(toolCall.tool),
     }));
+    const partialFailure = createGroupedPartialFailureInfo(
+      results,
+      transaction,
+      options.suppressHistory === true,
+    );
+    if (partialFailure) {
+      if (transaction) {
+        abortAgentTransaction(transaction);
+      }
+      results = attachGroupedPartialFailure(results, partialFailure);
+    } else if (transaction) {
+      commitAgentTransaction(transaction);
+    }
     for (const toolCall of allowedCalls) {
       const callId = auditCallIds.get(toolCall);
       const result = results.find(
         (entry) => getToolCallResultKey(entry) === getToolCallResultKey(toolCall),
       )?.result;
       if (callId && result) completeAIToolAudit(callId, result);
-    }
-    if (transaction) {
-      commitAgentTransaction(transaction);
     }
     return results;
   } catch (error) {
@@ -418,7 +430,7 @@ async function executeAIToolCallsDirect(
   options: AIToolExecutionOptions,
 ): Promise<AIToolCallExecutionResult[]> {
   const results: AIToolCallExecutionResult[] = [];
-  const transaction = beginTransactionForToolCalls(toolCalls);
+  const transaction = beginTransactionForToolCalls(toolCalls, options);
   try {
     for (let index = 0; index < toolCalls.length; index++) {
       const toolCall = toolCalls[index];
@@ -437,6 +449,17 @@ async function executeAIToolCallsDirect(
         result,
       });
     }
+    const partialFailure = createGroupedPartialFailureInfo(
+      results,
+      transaction,
+      options.suppressHistory === true,
+    );
+    if (partialFailure) {
+      if (transaction) {
+        abortAgentTransaction(transaction);
+      }
+      return attachGroupedPartialFailure(results, partialFailure);
+    }
     if (transaction) {
       commitAgentTransaction(transaction);
     }
@@ -449,8 +472,12 @@ async function executeAIToolCallsDirect(
   }
 }
 
-function beginTransactionForToolCalls(toolCalls: AIToolCallExecution[]) {
-  if (!toolCalls.some((toolCall) => MODIFYING_TOOLS.has(toolCall.tool))) {
+function beginTransactionForToolCalls(
+  toolCalls: AIToolCallExecution[],
+  options: AIToolExecutionOptions,
+) {
+  if (options.suppressHistory
+    || !toolCalls.some((toolCall) => MODIFYING_TOOLS.has(toolCall.tool))) {
     return null;
   }
 

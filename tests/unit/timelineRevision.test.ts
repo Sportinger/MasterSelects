@@ -40,4 +40,21 @@ describe('timeline revision middleware', () => {
     useTimelineStore.setState({ timelineRevision: 0 });
     expect(getTimelineRevision()).toBe(revAfterClip + 2);
   });
+
+  it('increments for duration changes but not playhead-only object patches', () => {
+    const initialState = useTimelineStore.getState();
+    const initialRevision = getTimelineRevision();
+
+    useTimelineStore.setState({ duration: initialState.duration + 1 });
+    expect(getTimelineRevision()).toBe(initialRevision + 1);
+
+    const revisionAfterDuration = getTimelineRevision();
+    const watchedClips = useTimelineStore.getState().clips;
+    const watchedTracks = useTimelineStore.getState().tracks;
+    useTimelineStore.setState({ playheadPosition: 1 });
+
+    expect(getTimelineRevision()).toBe(revisionAfterDuration);
+    expect(useTimelineStore.getState().clips).toBe(watchedClips);
+    expect(useTimelineStore.getState().tracks).toBe(watchedTracks);
+  });
 });
