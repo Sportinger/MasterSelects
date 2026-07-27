@@ -35,6 +35,7 @@ function pickValue<T extends string>(value: unknown, allowed: readonly T[], fall
 function resolveCurrentExportRange(): { startTime: number; endTime: number } {
   const timeline = useTimelineStore.getState();
   const exportSettings = useExportStore.getState().settings;
+  // agent-kernel WP2: canonical source is computeTimelineOccupancy
   const duration = Number.isFinite(timeline.duration) ? Math.max(0, timeline.duration) : 0;
 
   if (!exportSettings.useInOut) {

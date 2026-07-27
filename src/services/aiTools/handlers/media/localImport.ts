@@ -8,6 +8,7 @@ import type { CallerContext } from '../../policy';
 import { Logger } from '../../../logger';
 import { activateDockPanel, flashPreviewCanvas } from '../../aiFeedback';
 import { validateFilePath, getAllowedRoots } from '../../../security/fileAccessBroker';
+import { computeTimelineOccupancy } from '../../../timeline/timelineOccupancy';
 import {
   placeSignalAssetOnTimeline,
 } from '../../../../runtime/renderers/signalTimelineRendererAdapter';
@@ -26,6 +27,15 @@ type LocalFileImportStage =
   | 'createFile'
   | 'mediaStore.importFile'
   | 'timelinePlacement';
+
+export function resolveLocalImportAppendPoint(targetTrackId: string): number {
+  const { clips, tracks } = useTimelineStore.getState();
+  const existingClips = clips.filter(clip => clip.trackId === targetTrackId);
+  // agent-kernel WP2: canonical occupancy semantics
+  return existingClips.length > 0
+    ? computeTimelineOccupancy(existingClips, tracks).occupied?.endSeconds ?? 0
+    : 0;
+}
 
 export async function handleImportLocalFiles(
   args: Record<string, unknown>,
@@ -149,10 +159,7 @@ export async function handleImportLocalFiles(
       currentTime = requestedStartTime;
     } else {
       // Append after last clip on this track
-      const existingClips = useTimelineStore.getState().clips.filter(c => c.trackId === targetTrackId);
-      currentTime = existingClips.length > 0
-        ? Math.max(...existingClips.map(c => c.startTime + c.duration))
-        : 0;
+      currentTime = resolveLocalImportAppendPoint(targetTrackId);
     }
 
     const placedClips: Array<{ name: string; trackId: string; startTime: number; clipId?: string; type?: string }> = [];

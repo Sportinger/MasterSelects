@@ -7,6 +7,7 @@ import { useYouTubeStore } from '../../../stores/youtubeStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
+import { computeTimelineOccupancy } from '../../timeline/timelineOccupancy';
 import type { ToolResult } from '../types';
 
 const log = Logger.create('AITool:YouTube');
@@ -36,6 +37,14 @@ interface YouTubeDetailsItem {
 
 interface YouTubeDetailsResponse {
   items?: YouTubeDetailsItem[];
+}
+
+export function resolveYouTubeAppendPoint(): number {
+  const { clips, tracks } = useTimelineStore.getState();
+  // agent-kernel WP2: canonical occupancy semantics
+  return clips.length > 0
+    ? computeTimelineOccupancy(clips, tracks).occupied?.endSeconds ?? 0
+    : 0;
 }
 
 interface YouTubeErrorResponse {
@@ -265,9 +274,7 @@ export async function handleDownloadAndImportVideo(args: Record<string, unknown>
   // 1. Explicit startTime from args takes priority
   // 2. If no clips exist, place at 0 (not at default duration of 60)
   // 3. Otherwise append after last clip
-  const startTime = explicitStartTime ?? (timelineStore.clips.length > 0
-    ? Math.max(...timelineStore.clips.map(c => c.startTime + c.duration))
-    : 0);
+  const startTime = explicitStartTime ?? resolveYouTubeAppendPoint();
   const clipId = timelineStore.addPendingDownloadClip(
     videoTrack.id,
     startTime,
