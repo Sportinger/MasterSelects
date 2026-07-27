@@ -71,6 +71,11 @@ export interface StateSnapshot {
   export: ExportStoreData;
 }
 
+export interface HistoryBatchStartResult {
+  opened: boolean;
+  batchId: number | null;
+}
+
 export interface HistoryState {
   undoStack: StateSnapshot[];
   redoStack: StateSnapshot[];
@@ -97,7 +102,7 @@ export interface HistoryState {
   recordEvent: (type: HistoryEventType, label: string) => void;
   restoreEntry: (entry: HistoryListEntry) => HistoryRestoreResult | null;
   restoreBranch: (branchId: string, snapshotIndex?: number) => HistoryRestoreResult | null;
-  startBatch: (label: string) => void;
+  startBatch: (label: string) => HistoryBatchStartResult;
   endBatch: () => void;
   cancelBatch: () => void;
   setIsApplying: (value: boolean) => void;

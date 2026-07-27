@@ -25,6 +25,15 @@ export type AIToolAuditStatus =
   | 'denied'
   | 'cancelled';
 
+export interface AIToolAuditError {
+  category: string;
+  message: string;
+}
+
+export type AIToolAuditResult = Omit<ToolResult, 'error'> & {
+  error?: ToolResult['error'] | AIToolAuditError;
+};
+
 export interface AIToolAuditEntry {
   appVersion: string;
   args: Record<string, unknown>;
@@ -101,7 +110,7 @@ export function beginAIToolAudit(input: BeginAIToolAuditInput): AIToolAuditEntry
 
 export function completeAIToolAudit(
   callId: string,
-  result: ToolResult | undefined,
+  result: AIToolAuditResult | undefined,
   error?: unknown,
   explicitStatus?: Exclude<AIToolAuditStatus, 'running'>,
 ): AIToolAuditEntry | null {
@@ -113,7 +122,9 @@ export function completeAIToolAudit(
     ? error.message
     : typeof error === 'string'
       ? error
-      : result?.error;
+      : typeof result?.error === 'string'
+        ? result.error
+        : result?.error?.message;
   const entry: AIToolAuditEntry = {
     ...current,
     durationMs: Math.max(0, finishedAt - current.startedAt),
@@ -221,10 +232,13 @@ function rememberAuditEntry(entry: AIToolAuditEntry): void {
 }
 
 function inferAuditStatus(
-  result: ToolResult | undefined,
+  result: AIToolAuditResult | undefined,
   error: string | undefined,
 ): Exclude<AIToolAuditStatus, 'running'> {
-  if (result?.error && /cancelled|canceled|aborted/i.test(result.error)) return 'cancelled';
+  const resultError = typeof result?.error === 'string'
+    ? result.error
+    : result?.error?.message;
+  if (resultError && /cancelled|canceled|aborted/i.test(resultError)) return 'cancelled';
   if (error || result?.success === false) return 'failed';
   return 'succeeded';
 }

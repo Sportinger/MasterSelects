@@ -175,6 +175,7 @@ describe('agent mutation transactions', () => {
     expect(transaction.alreadyBatching).toBe(true);
     expect(transaction.abortNoop).toBe(true);
     expect(transaction.historyBatchId).toBe(flushBatchId);
+    expect(openedBatch).toBe(true);
 
     appendClip('first');
     abortAgentTransaction(transaction);
@@ -238,15 +239,31 @@ describe('agent mutation transactions', () => {
         failedModifyingTools: [{ id: missingCallId, tool: 'deleteClip' }],
       },
     });
+    const createdTrackData = results[0]?.result.data as { trackId: string; trackType: string };
     const auditEntries = await listAIToolAuditEntries({ limit: 100, tool: 'createTrack' });
     const createAudit = auditEntries.find((entry) => entry.providerToolCallId === createCallId);
     expect(createAudit).toMatchObject({
+      status: 'failed',
       result: {
-        success: true,
-        data: {
-          rolledBack: true,
-          rollbackReason: expect.stringContaining('deleteClip'),
+        success: false,
+        error: {
+          category: 'partialTransaction',
+          message: expect.stringContaining('rolled back:'),
         },
+        data: {
+          originalResult: {
+            success: true,
+            data: {
+              trackId: createdTrackData.trackId,
+              trackType: 'video',
+            },
+          },
+        },
+      },
+    });
+    expect(createAudit?.result).toMatchObject({
+      error: {
+        message: expect.stringContaining('deleteClip'),
       },
     });
     expect(useTimelineStore.getState().tracks).toEqual([]);

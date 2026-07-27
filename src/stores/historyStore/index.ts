@@ -394,26 +394,31 @@ export const useHistoryStore = create<HistoryState>()(
     ),
 
     startBatch: (label: string) => {
-      if (isHistoryDisabledForDebug()) return;
-
-      if (get().batchId !== null) return; // Already batching
+      const existingBatchId = get().batchId;
+      if (isHistoryDisabledForDebug() || existingBatchId !== null) {
+        return { opened: false, batchId: existingBatchId };
+      }
 
       // Materialize a recent debounced user edit before the batch snapshot is
       // seeded, so the user edit remains its own undo step.
       flushPendingCapture();
 
       const { batchId, currentSnapshot } = get();
-      if (batchId !== null) return; // The flush callback may have opened a batch.
+      if (batchId !== null) {
+        return { opened: false, batchId }; // The flush callback opened a foreign batch.
+      }
 
       // Capture initial state before batch
       if (!currentSnapshot) {
         set({ currentSnapshot: createSnapshot('initial') });
       }
 
+      const openedBatchId = nextBatchId++;
       set({
-        batchId: nextBatchId++,
+        batchId: openedBatchId,
         batchLabel: label,
       });
+      return { opened: true, batchId: openedBatchId };
     },
 
     endBatch: () => {

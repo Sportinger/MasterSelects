@@ -207,11 +207,15 @@ export async function executeAIToolCalls(
       commitAgentTransaction(transaction);
     }
     const rollbackReason = partialFailure?.rolledBack ? createGroupedRollbackReason(partialFailure) : undefined;
-    for (const toolCall of allowedCalls) {
+    for (const [index, toolCall] of allowedCalls.entries()) {
       const callId = auditCallIds.get(toolCall);
-      const result = results.find(
-        (entry) => getToolCallResultKey(entry) === getToolCallResultKey(toolCall),
+      const resultKey = getToolCallResultKey(toolCall);
+      const finalResult = results.find(
+        (entry) => getToolCallResultKey(entry) === resultKey,
       )?.result;
+      const result = rollbackReason !== undefined && MODIFYING_TOOLS.has(toolCall.tool)
+        ? guidedResults[index]?.result ?? finalResult
+        : finalResult;
       if (callId && result) completeAgentToolAudit({ callId, tool: toolCall.tool, result }, rollbackReason);
     }
     return results;
@@ -473,7 +477,9 @@ async function executeAIToolCallsDirect(
       commitAgentTransaction(transaction);
     }
     for (const [index, completion] of auditCompletions.entries()) {
-      const result = finalResults[index]?.result ?? completion.result;
+      const result = rollbackReason !== undefined && MODIFYING_TOOLS.has(completion.tool)
+        ? completion.result
+        : finalResults[index]?.result ?? completion.result;
       completeAgentToolAudit({ ...completion, result }, rollbackReason);
     }
     return finalResults;

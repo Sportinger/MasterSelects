@@ -1,7 +1,6 @@
 import {
   cancelHistoryBatch,
   endBatch,
-  flushPendingHistoryCapture,
   startBatch,
   useHistoryStore,
 } from '../../stores/historyStore';
@@ -9,6 +8,7 @@ import { getTimelineRevision } from '../../stores/timeline/revisionMiddleware';
 import { Logger } from '../logger';
 import {
   completeAIToolAudit,
+  type AIToolAuditResult,
   type AIToolAuditStatus,
 } from './audit';
 import {
@@ -57,18 +57,8 @@ const openTransactionIds = new Set<string>();
 
 export function beginAgentTransaction(label: string): AgentTransaction {
   const transactionId = `agent-tx-${++transactionCounter}`;
-  let historyBatchId = useHistoryStore.getState().batchId;
-  let alreadyBatching = historyBatchId !== null;
-
-  if (!alreadyBatching) {
-    flushPendingHistoryCapture();
-    historyBatchId = useHistoryStore.getState().batchId;
-    alreadyBatching = historyBatchId !== null;
-  }
-  if (!alreadyBatching) {
-    startBatch(label);
-    historyBatchId = useHistoryStore.getState().batchId;
-  }
+  const batchStart = startBatch(label);
+  const alreadyBatching = !batchStart.opened;
 
   openTransactionIds.add(transactionId);
   return {
@@ -76,7 +66,7 @@ export function beginAgentTransaction(label: string): AgentTransaction {
     label,
     stateRevisionBefore: getTimelineRevision(),
     alreadyBatching,
-    historyBatchId,
+    historyBatchId: batchStart.batchId,
     abortNoop: alreadyBatching,
   };
 }
@@ -231,42 +221,33 @@ export function completeAgentToolAudit(
   completion: AgentToolAuditCompletion,
   rollbackReason?: string,
 ): void {
-  const rolledBackMutation = rollbackReason !== undefined
+  let auditResult: AIToolAuditResult | undefined = completion.result;
+  if (rollbackReason !== undefined
     && completion.explicitStatus !== 'denied'
-    && MODIFYING_TOOLS.has(completion.tool);
-  const baseResult = completion.result ?? (rolledBackMutation
-    ? { success: false, error: rollbackReason }
-    : undefined);
-  const result = rolledBackMutation && baseResult
-    ? attachRollbackAuditMetadata(baseResult, rollbackReason)
-    : baseResult;
+    && MODIFYING_TOOLS.has(completion.tool)) {
+    auditResult = createRolledBackAuditResult(completion.result, rollbackReason);
+  }
   completeAIToolAudit(
     completion.callId,
-    result,
+    auditResult,
     completion.error,
     completion.explicitStatus,
   );
 }
 
-function attachRollbackAuditMetadata(
-  result: ToolResult,
+function createRolledBackAuditResult(
+  originalResult: ToolResult | undefined,
   rollbackReason: string,
-): ToolResult {
-  const existingData = result.data;
-  const data = existingData !== null
-    && typeof existingData === 'object'
-    && !Array.isArray(existingData)
-    ? existingData as Record<string, unknown>
-    : existingData === undefined
-      ? {}
-      : { originalData: existingData };
+): AIToolAuditResult {
   return {
-    ...result,
-    data: {
-      ...data,
-      rolledBack: true,
-      rollbackReason,
+    success: false,
+    error: {
+      category: 'partialTransaction',
+      message: `rolled back: ${rollbackReason}`,
     },
+    ...(originalResult === undefined ? {} : {
+      data: { originalResult },
+    }),
   };
 }
 
