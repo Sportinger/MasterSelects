@@ -129,12 +129,14 @@ export async function buildTranscriptMoments(
 
         wordCount += segmentWords;
         moments.push({
+          schemaVersion: 1,
           handle: `$m${moments.length + 1}`,
-          source: clip.mediaId,
-          sourceRange: [start, end],
+          source: { mediaId: clip.mediaId },
+          sourceRange: { startSeconds: start, endSeconds: end },
           evidence: { transcript: text },
           confidence: 1,
           indexVersion: TRANSCRIPT_MOMENT_INDEX_VERSION,
+          analysisSources: ['transcript'],
         });
       }
 

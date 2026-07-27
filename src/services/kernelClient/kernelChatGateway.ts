@@ -9,6 +9,7 @@ import {
   commitAgentTransaction,
   type AgentTransaction,
 } from '../aiTools/agentTransaction';
+import { Logger } from '../logger';
 import { KernelServiceClient } from './index';
 import {
   formatAssumptionNote,
@@ -30,6 +31,8 @@ const KERNEL_ENABLED_KEY = 'ms.kernel.enabled';
 const KERNEL_TOKEN_KEY = 'ms.kernel.token';
 const KERNEL_URL_KEY = 'ms.kernel.url';
 const FINGERPRINT_SHORT_LENGTH = 8;
+
+const log = Logger.create('KernelGateway');
 
 export type KernelChatGatewayResult =
   | { handled: false }
@@ -469,6 +472,10 @@ export async function tryKernelFirst(
   try {
     const snapshot = await getSnapshot();
     const moments = await buildTranscriptMoments(snapshot, executeToolCalls);
+    log.info('kernel compile request', {
+      momentCount: moments.length,
+      requestLength: request.length,
+    });
     const compileResult = await client.compile({
       request,
       snapshot,
@@ -478,22 +485,40 @@ export async function tryKernelFirst(
         : { moments, indexVersion: TRANSCRIPT_MOMENT_INDEX_VERSION }),
     });
     if (!compileResult.ok) {
+      log.warn('kernel compile transport failed; falling back', {
+        status: compileResult.status,
+        error: compileResult.error,
+      });
       return { handled: false };
     }
 
     const parsed = parseCompileResponse(compileResult.data);
     if (!parsed) {
+      log.warn('kernel compile response unparseable; falling back', {
+        data: compileResult.data,
+      });
       return { handled: false };
     }
     compiled = parsed;
-  } catch {
+  } catch (error) {
+    log.warn('kernel gateway threw before execution; falling back', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return { handled: false };
   }
 
   if (compiled.status !== 'compiled') {
     if (compiled.status === 'aborted') {
+      log.info('kernel declined the task; falling back to community chat', {
+        reason: compiled.reason,
+        failures: compiled.failures,
+      });
       return { handled: false };
     }
+    log.warn('kernel compile failed', {
+      runId: compiled.runId,
+      failures: compiled.failures,
+    });
     return {
       handled: true,
       message: failedMessage(compiled.failures),

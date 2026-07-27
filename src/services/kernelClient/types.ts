@@ -18,14 +18,16 @@ export interface KernelResolvedCall {
 }
 
 export interface KernelTranscriptMoment {
+  schemaVersion: 1;
   handle: string;
-  source: string;
-  sourceRange: [number, number];
+  source: { mediaId: string; fileName?: string };
+  sourceRange: { startSeconds: number; endSeconds: number };
   evidence: {
     transcript?: string;
   };
   confidence: number;
   indexVersion: string;
+  analysisSources: ['transcript'];
 }
 
 export interface KernelCompileRequest {

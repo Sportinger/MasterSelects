@@ -44,6 +44,8 @@ export type {
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8787';
 const DEFAULT_TIMEOUT_MS = 30_000;
+// Story compiles include a provider blueprint round plus the director run.
+const COMPILE_TIMEOUT_MS = 180_000;
 const AVAILABILITY_TIMEOUT_MS = 2_000;
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -128,7 +130,7 @@ export class KernelServiceClient {
     return this.request('/kernel/compile', true, {
       method: 'POST',
       body: JSON.stringify(input),
-    }, options);
+    }, { timeoutMs: COMPILE_TIMEOUT_MS, ...options });
   }
 
   completeRun(
