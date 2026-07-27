@@ -50,6 +50,19 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
 
   const kernelResult = await tryKernelFirst(request.playbookPrompt ?? prompt);
   if (kernelResult.handled) {
+    // Kernel-handled turns still record a durable chat run so bridge and
+    // in-app audits see the same history as legacy turns.
+    const kernelRun = beginFlashBoardChatRun(
+      { ...request, prompt },
+      kernelResult.runId === undefined
+        ? 'agent-kernel: kernel-first cutover run'
+        : `agent-kernel: kernel-first cutover run ${kernelResult.runId}`,
+    );
+    const completed = completeFlashBoardChatRun(kernelRun.runId, {
+      executedToolCalls: [],
+      response: kernelResult.message,
+    });
+    if (completed) request.onRunCompleted?.(completed);
     return kernelResult.message;
   }
 
