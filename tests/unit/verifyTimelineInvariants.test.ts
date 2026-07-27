@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { getToolRegistrySnapshot } from '../../src/services/aiTools/registrySnapshot';
 import { executeToolInternal } from '../../src/services/aiTools/handlers';
-import { getToolPolicy, isToolAllowed } from '../../src/services/aiTools/policy/registry';
+import { checkToolAccess, getToolPolicy } from '../../src/services/aiTools/policy/registry';
 import type { ToolResult } from '../../src/services/aiTools/types';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
@@ -166,8 +166,8 @@ describe('verifyTimelineInvariants AI tool', () => {
       localFileAccess: false,
       allowedCallers: ['chat', 'devBridge'],
     });
-    expect(isToolAllowed('verifyTimelineInvariants', 'chat')).toEqual({ allowed: true });
-    expect(isToolAllowed('verifyTimelineInvariants', 'devBridge')).toEqual({ allowed: true });
-    expect(isToolAllowed('verifyTimelineInvariants', 'internal').allowed).toBe(false);
+    expect(checkToolAccess('verifyTimelineInvariants', 'chat')).toEqual({ allowed: true });
+    expect(checkToolAccess('verifyTimelineInvariants', 'devBridge')).toEqual({ allowed: true });
+    expect(checkToolAccess('verifyTimelineInvariants', 'internal').allowed).toBe(false);
   });
 });
