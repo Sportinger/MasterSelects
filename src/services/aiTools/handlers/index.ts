@@ -475,6 +475,19 @@ async function handleSwitchDockLayout(args: Record<string, unknown>): Promise<To
   };
 }
 
+/** Return every name accepted by the dispatcher for registry parity checks. */
+export function getRegisteredToolHandlerNames(): string[] {
+  return [...new Set([
+    // executeBatch is dispatched by the outer app tool executor.
+    'executeBatch',
+    'getTimelineAnalysis',
+    ...Object.keys(timelineHandlers),
+    ...Object.keys(mediaHandlers),
+    ...Object.keys(selfContainedHandlers),
+    ...Object.keys(youtubeHandlers),
+  ])];
+}
+
 /**
  * Execute a tool by name
  * Dispatches to the appropriate handler based on tool name
