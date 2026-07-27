@@ -75,8 +75,22 @@ export async function handleSetTrackVisibility(
     return { success: false, error: `Track not found: ${trackId}` };
   }
 
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'track',
+    useTimelineStore.getState().tracks,
+  );
   timelineStore.setTrackVisible(trackId, visible);
-  return { success: true, data: { trackId, visible } };
+  return {
+    success: true,
+    data: {
+      trackId,
+      visible,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().tracks,
+      ),
+    },
+  };
 }
 
 export async function handleSetTrackMuted(
@@ -91,6 +105,20 @@ export async function handleSetTrackMuted(
     return { success: false, error: `Track not found: ${trackId}` };
   }
 
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'track',
+    useTimelineStore.getState().tracks,
+  );
   timelineStore.setTrackMuted(trackId, muted);
-  return { success: true, data: { trackId, muted } };
+  return {
+    success: true,
+    data: {
+      trackId,
+      muted,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().tracks,
+      ),
+    },
+  };
 }

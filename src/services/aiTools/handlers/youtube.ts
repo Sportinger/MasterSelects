@@ -9,8 +9,65 @@ import { useMediaStore } from '../../../stores/mediaStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { computeTimelineOccupancy } from '../../timeline/timelineOccupancy';
 import type { ToolResult } from '../types';
+import {
+  captureMutationEntitySnapshot,
+  describeMutationEntities,
+  type MutationEntitySnapshot,
+} from './mutationEntityResults';
+import type { TimelineClip, TimelineTrack } from '../../../types';
 
 const log = Logger.create('AITool:YouTube');
+
+const DOWNLOAD_MUTATION_WARNINGS = [
+  'The shared mutation entity model has no mediaItem/folder kinds yet; downloaded mediaItem refs use clip and folder refs use track.',
+  'Waveform and thumbnail generation may continue asynchronously after the download/import result is returned.',
+];
+
+function createDownloadMutationEnvelope(
+  trackSnapshot: MutationEntitySnapshot<TimelineTrack>,
+  clipSnapshot: MutationEntitySnapshot<TimelineClip>,
+  mediaFileIdsBefore: ReadonlySet<string>,
+  mediaFolderIdsBefore: ReadonlySet<string>,
+) {
+  const trackEnvelope = describeMutationEntities(trackSnapshot, useTimelineStore.getState().tracks);
+  const clipEnvelope = describeMutationEntities(clipSnapshot, useTimelineStore.getState().clips);
+  const mediaStateAfter = useMediaStore.getState();
+  const stateRevisionBefore = Math.min(
+    trackEnvelope.stateRevisionBefore,
+    clipEnvelope.stateRevisionBefore,
+  );
+  const stateRevisionAfter = Math.max(
+    trackEnvelope.stateRevisionAfter,
+    clipEnvelope.stateRevisionAfter,
+  );
+  const revisionAdvanced = stateRevisionAfter > stateRevisionBefore;
+
+  return {
+    stateRevisionBefore: revisionAdvanced ? stateRevisionBefore : null,
+    stateRevisionAfter: revisionAdvanced ? stateRevisionAfter : null,
+    entities: {
+      created: [
+        ...mediaStateAfter.files
+          .filter((file) => !mediaFileIdsBefore.has(file.id))
+          .map((file) => ({ kind: 'mediaItem' as const, id: file.id })),
+        ...mediaStateAfter.folders
+          .filter((folder) => !mediaFolderIdsBefore.has(folder.id))
+          .map((folder) => ({ kind: 'folder' as const, id: folder.id })),
+        ...trackEnvelope.entities.created,
+        ...clipEnvelope.entities.created,
+      ],
+      updated: [
+        ...trackEnvelope.entities.updated,
+        ...clipEnvelope.entities.updated,
+      ],
+      deleted: [
+        ...trackEnvelope.entities.deleted,
+        ...clipEnvelope.entities.deleted,
+      ],
+    },
+    warnings: DOWNLOAD_MUTATION_WARNINGS,
+  };
+}
 
 interface YouTubeSearchItem {
   id: { videoId: string };
@@ -242,6 +299,18 @@ export async function handleDownloadAndImportVideo(args: Record<string, unknown>
     return { success: false, error: 'Native Helper not connected. Please start the helper application and enable Native Helper in settings.' };
   }
 
+  const trackSnapshot = captureMutationEntitySnapshot(
+    'track',
+    useTimelineStore.getState().tracks,
+  );
+  const clipSnapshot = captureMutationEntitySnapshot(
+    'clip',
+    useTimelineStore.getState().clips,
+  );
+  const mediaStateBefore = useMediaStore.getState();
+  const mediaFileIdsBefore = new Set(mediaStateBefore.files.map((file) => file.id));
+  const mediaFolderIdsBefore = new Set(mediaStateBefore.folders.map((folder) => folder.id));
+
   // Switch to target composition if specified
   if (compositionId) {
     const mediaStore = useMediaStore.getState();
@@ -322,6 +391,12 @@ export async function handleDownloadAndImportVideo(args: Record<string, unknown>
         fileName: file.name,
         fileSize: file.size,
         message: `Video "${title}" downloaded and imported to timeline.`,
+        ...createDownloadMutationEnvelope(
+          trackSnapshot,
+          clipSnapshot,
+          mediaFileIdsBefore,
+          mediaFolderIdsBefore,
+        ),
       },
     };
   } catch (error) {
@@ -331,6 +406,12 @@ export async function handleDownloadAndImportVideo(args: Record<string, unknown>
     return {
       success: false,
       error: `Download failed: ${(error as Error).message}`,
+      data: createDownloadMutationEnvelope(
+        trackSnapshot,
+        clipSnapshot,
+        mediaFileIdsBefore,
+        mediaFolderIdsBefore,
+      ),
     };
   }
 }

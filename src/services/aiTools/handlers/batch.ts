@@ -19,6 +19,24 @@ export interface BatchActionResult {
   success: boolean;
   data?: unknown;
   error?: string;
+  stateRevisionBefore: number | null;
+  stateRevisionAfter: number | null;
+}
+
+interface BatchEntityRef {
+  kind: string;
+  id: string;
+}
+
+interface BatchMutationMetadata {
+  stateRevisionBefore: number | null;
+  stateRevisionAfter: number | null;
+  entities: {
+    created: BatchEntityRef[];
+    updated: BatchEntityRef[];
+    deleted: BatchEntityRef[];
+  };
+  warnings: string[];
 }
 
 export interface NormalizedBatchAction {
@@ -121,11 +139,14 @@ export async function executeBatchCore(
     try {
       await options.hooks?.beforeAction?.(normalizedAction);
       const result = await executeTool(action.tool, toolArgs, callerContext);
+      const mutationMetadata = readMutationMetadata(result.data);
       const actionResult: BatchActionResult = {
         tool: action.tool,
         success: result.success,
         data: result.data,
         error: result.error,
+        stateRevisionBefore: mutationMetadata.stateRevisionBefore,
+        stateRevisionAfter: mutationMetadata.stateRevisionAfter,
       };
 
       results.push(actionResult);
@@ -140,6 +161,8 @@ export async function executeBatchCore(
         tool: action.tool,
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
+        stateRevisionBefore: null,
+        stateRevisionAfter: null,
       });
     }
 
@@ -160,6 +183,7 @@ export async function executeBatchCore(
       succeeded: results.filter((result) => result.success).length,
       failed: results.filter((result) => !result.success).length,
       results,
+      ...aggregateBatchMutationMetadata(results),
     },
   };
 }
@@ -192,6 +216,8 @@ function createCancelledBatchResult(
     tool: action.tool,
     success: false,
     error: 'Batch execution cancelled',
+    stateRevisionBefore: null,
+    stateRevisionAfter: null,
   }));
   const results = [...completedResults, ...skippedResults];
   const succeeded = results.filter((result) => result.success).length;
@@ -205,8 +231,63 @@ function createCancelledBatchResult(
       failed: actions.length - succeeded,
       cancelled: true,
       results,
+      ...aggregateBatchMutationMetadata(results),
     },
   };
+}
+
+function readMutationMetadata(data: unknown): BatchMutationMetadata {
+  const record = isRecord(data) ? data : {};
+  const entities = isRecord(record.entities) ? record.entities : {};
+  return {
+    stateRevisionBefore: typeof record.stateRevisionBefore === 'number'
+      ? record.stateRevisionBefore
+      : null,
+    stateRevisionAfter: typeof record.stateRevisionAfter === 'number'
+      ? record.stateRevisionAfter
+      : null,
+    entities: {
+      created: readEntityRefs(entities.created),
+      updated: readEntityRefs(entities.updated),
+      deleted: readEntityRefs(entities.deleted),
+    },
+    warnings: Array.isArray(record.warnings)
+      ? record.warnings.filter((warning): warning is string => typeof warning === 'string')
+      : [],
+  };
+}
+
+function aggregateBatchMutationMetadata(results: readonly BatchActionResult[]): BatchMutationMetadata {
+  const metadata = results.map((result) => readMutationMetadata(result.data));
+  const firstRevision = metadata.find((item) => item.stateRevisionBefore !== null);
+  const lastRevision = metadata.findLast((item) => item.stateRevisionAfter !== null);
+  return {
+    stateRevisionBefore: firstRevision?.stateRevisionBefore ?? null,
+    stateRevisionAfter: lastRevision?.stateRevisionAfter ?? null,
+    entities: {
+      created: unionEntityRefs(metadata.flatMap((item) => item.entities.created)),
+      updated: unionEntityRefs(metadata.flatMap((item) => item.entities.updated)),
+      deleted: unionEntityRefs(metadata.flatMap((item) => item.entities.deleted)),
+    },
+    warnings: [...new Set(metadata.flatMap((item) => item.warnings))],
+  };
+}
+
+function readEntityRefs(value: unknown): BatchEntityRef[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entity): entity is BatchEntityRef => (
+    isRecord(entity)
+    && typeof entity.kind === 'string'
+    && typeof entity.id === 'string'
+  ));
+}
+
+function unionEntityRefs(entities: readonly BatchEntityRef[]): BatchEntityRef[] {
+  return [...new Map(entities.map((entity) => [`${entity.kind}:${entity.id}`, entity])).values()];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function delayWithSignal(ms: number, signal?: AbortSignal): Promise<boolean> {

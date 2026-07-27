@@ -2,6 +2,10 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { collectFaceReviewCandidates } from '../../faceAnalysis/faceReviewCandidates';
 import { selectClipAndOpenTab } from '../aiFeedback';
 import type { ToolResult } from '../types';
+import {
+  captureMutationEntitySnapshot,
+  describeMutationEntities,
+} from './mutationEntityResults';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
@@ -25,6 +29,10 @@ export async function handleMergeClipFacePeople(
     return { success: false, error: `Target person not found: ${targetPersonId}` };
   }
 
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'clip',
+    useTimelineStore.getState().clips,
+  );
   selectClipAndOpenTab(clipId, 'analysis');
   const { mergeFacePeople } = await import('../../faceAnalysis/faceIdentityCorrections');
   await mergeFacePeople(clipId, sourcePersonId, targetPersonId);
@@ -39,6 +47,10 @@ export async function handleMergeClipFacePeople(
       targetSightings: target?.sampleCount ?? 0,
       remainingPeople: updated?.analysis?.faceAnalysis?.people.length ?? 0,
       persisted: true,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().clips,
+      ),
     },
   };
 }
@@ -68,6 +80,10 @@ export async function handleMoveClipFaceAppearance(
     return { success: false, error: `No ${sourcePersonId} appearance contains source time ${sourceTime}.` };
   }
 
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'clip',
+    useTimelineStore.getState().clips,
+  );
   selectClipAndOpenTab(clipId, 'analysis');
   const { moveFaceAppearance } = await import('../../faceAnalysis/faceIdentityCorrections');
   await moveFaceAppearance(clipId, sourcePersonId, targetPersonId, sourceTime);
@@ -79,6 +95,10 @@ export async function handleMoveClipFaceAppearance(
       targetPersonId,
       movedSourceRange: { start: appearance.start, end: appearance.end },
       persisted: true,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().clips,
+      ),
     },
   };
 }
@@ -100,6 +120,10 @@ export async function handleAssignClipFaceReviewCandidate(
     .find(review => review.id === candidateId);
   if (!candidate) return { success: false, error: `Needs Review candidate not found: ${candidateId}` };
 
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'clip',
+    useTimelineStore.getState().clips,
+  );
   selectClipAndOpenTab(clipId, 'analysis');
   const { assignReviewFaces } = await import('../../faceAnalysis/faceIdentityCorrections');
   await assignReviewFaces(clipId, candidate.id, candidate.faceIds, targetPersonId);
@@ -115,6 +139,10 @@ export async function handleAssignClipFaceReviewCandidate(
       sourceRange: { start: candidate.firstSeen, end: candidate.lastSeen },
       remainingNeedsReview: remainingCandidates,
       persisted: true,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().clips,
+      ),
     },
   };
 }

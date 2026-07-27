@@ -6,8 +6,65 @@ import { Logger } from '../../../logger';
 import { waitForCompositionReady, type MediaStore } from './runtime';
 import { isUserVisibleComposition } from '../../../../stores/mediaStore/compositionVisibility';
 import { useTimelineStore } from '../../../../stores/timeline';
+import {
+  captureMutationEntitySnapshot,
+  describeMutationEntities,
+  type MutationEntityKind,
+} from '../mutationEntityResults';
 
 const log = Logger.create('AITool:Media');
+
+interface MutationEntityRef {
+  kind: MutationEntityKind;
+  id: string;
+}
+
+interface MutationEntities {
+  created: MutationEntityRef[];
+  updated: MutationEntityRef[];
+  deleted: MutationEntityRef[];
+}
+
+function mediaEntityRef(type: 'mediaItem' | 'composition' | 'folder', id: string): MutationEntityRef {
+  return { kind: type, id };
+}
+
+function createMediaMutationEnvelope(
+  entities: MutationEntities,
+  ...timelineEnvelopes: Array<ReturnType<typeof describeMutationEntities>>
+) {
+  const stateRevisionBefore = timelineEnvelopes.length > 0
+    ? Math.min(...timelineEnvelopes.map((envelope) => envelope.stateRevisionBefore))
+    : null;
+  const stateRevisionAfter = timelineEnvelopes.length > 0
+    ? Math.max(...timelineEnvelopes.map((envelope) => envelope.stateRevisionAfter))
+    : null;
+  const revisionAdvanced = stateRevisionBefore !== null
+    && stateRevisionAfter !== null
+    && stateRevisionAfter > stateRevisionBefore;
+  return {
+    stateRevisionBefore: revisionAdvanced ? stateRevisionBefore : null,
+    stateRevisionAfter: revisionAdvanced ? stateRevisionAfter : null,
+    entities: {
+      created: [
+        ...entities.created,
+        ...timelineEnvelopes.flatMap((envelope) => envelope.entities.created),
+      ],
+      updated: [
+        ...entities.updated,
+        ...timelineEnvelopes.flatMap((envelope) => envelope.entities.updated),
+      ],
+      deleted: [
+        ...entities.deleted,
+        ...timelineEnvelopes.flatMap((envelope) => envelope.entities.deleted),
+      ],
+    },
+  };
+}
+
+function emptyMutationEntities(): MutationEntities {
+  return { created: [], updated: [], deleted: [] };
+}
 
 export async function handleGetMediaItems(
   args: Record<string, unknown>,
@@ -80,6 +137,8 @@ export async function handleCreateMediaFolder(
   const parentFolderId = (args.parentFolderId as string | undefined) || null;
 
   const folder = mediaStore.createFolder(name, parentFolderId);
+  const entities = emptyMutationEntities();
+  entities.created.push(mediaEntityRef('folder', folder.id));
 
   return {
     success: true,
@@ -87,6 +146,7 @@ export async function handleCreateMediaFolder(
       folderId: folder.id,
       folderName: folder.name,
       parentId: parentFolderId,
+      ...createMediaMutationEnvelope(entities),
     },
   };
 }
@@ -105,13 +165,19 @@ export async function handleRenameMediaItem(
 
   if (file) {
     mediaStore.renameFile(itemId, newName);
-    return { success: true, data: { itemId, newName, type: 'file' } };
+    const entities = emptyMutationEntities();
+    entities.updated.push(mediaEntityRef('mediaItem', itemId));
+    return { success: true, data: { itemId, newName, type: 'file', ...createMediaMutationEnvelope(entities) } };
   } else if (comp) {
     mediaStore.updateComposition(itemId, { name: newName });
-    return { success: true, data: { itemId, newName, type: 'composition' } };
+    const entities = emptyMutationEntities();
+    entities.updated.push(mediaEntityRef('composition', itemId));
+    return { success: true, data: { itemId, newName, type: 'composition', ...createMediaMutationEnvelope(entities) } };
   } else if (folder) {
     mediaStore.renameFolder(itemId, newName);
-    return { success: true, data: { itemId, newName, type: 'folder' } };
+    const entities = emptyMutationEntities();
+    entities.updated.push(mediaEntityRef('folder', itemId));
+    return { success: true, data: { itemId, newName, type: 'folder', ...createMediaMutationEnvelope(entities) } };
   }
 
   return { success: false, error: `Item not found: ${itemId}` };
@@ -128,7 +194,13 @@ export async function handleDeleteMediaItem(
   const folder = mediaStore.folders.find(f => f.id === itemId);
 
   if (file) {
+    const timelineSnapshot = captureMutationEntitySnapshot(
+      'clip',
+      useTimelineStore.getState().clips,
+    );
     const result = await mediaStore.deleteMediaFilesEverywhere([itemId]);
+    const entities = emptyMutationEntities();
+    entities.deleted.push(mediaEntityRef('mediaItem', itemId));
     return {
       success: true,
       data: {
@@ -137,14 +209,39 @@ export async function handleDeleteMediaItem(
         type: 'file',
         removedClipCount: result.removedClipCount,
         artifactFailures: result.artifactFailures,
+        ...createMediaMutationEnvelope(
+          entities,
+          describeMutationEntities(timelineSnapshot, useTimelineStore.getState().clips),
+        ),
       },
     };
   } else if (comp) {
     mediaStore.removeComposition(itemId);
-    return { success: true, data: { itemId, deletedName: comp.name, type: 'composition' } };
+    const entities = emptyMutationEntities();
+    entities.deleted.push(mediaEntityRef('composition', itemId));
+    return {
+      success: true,
+      data: {
+        itemId,
+        deletedName: comp.name,
+        type: 'composition',
+        ...createMediaMutationEnvelope(entities),
+      },
+    };
   } else if (folder) {
     mediaStore.removeFolder(itemId);
-    return { success: true, data: { itemId, deletedName: folder.name, type: 'folder', note: 'All contents also deleted' } };
+    const entities = emptyMutationEntities();
+    entities.deleted.push(mediaEntityRef('folder', itemId));
+    return {
+      success: true,
+      data: {
+        itemId,
+        deletedName: folder.name,
+        type: 'folder',
+        note: 'All contents also deleted',
+        ...createMediaMutationEnvelope(entities),
+      },
+    };
   }
 
   return { success: false, error: `Item not found: ${itemId}` };
@@ -171,6 +268,12 @@ export async function handleMoveMediaItems(
     mediaStore.folders.some((folder) => folder.id === id) ||
     visibleCompositionIds.has(id)
   );
+  const entities = emptyMutationEntities();
+  entities.updated.push(...movableIds.map((id) => {
+    if (mediaStore.files.some((file) => file.id === id)) return mediaEntityRef('mediaItem', id);
+    if (visibleCompositionIds.has(id)) return mediaEntityRef('composition', id);
+    return mediaEntityRef('folder', id);
+  }));
   mediaStore.moveToFolder(movableIds, targetFolderId);
 
   return {
@@ -179,6 +282,7 @@ export async function handleMoveMediaItems(
       movedIds: movableIds,
       targetFolderId: targetFolderId || 'root',
       itemCount: movableIds.length,
+      ...createMediaMutationEnvelope(entities),
     },
   };
 }
@@ -194,6 +298,14 @@ export async function handleCreateComposition(
   const frameRate = (args.frameRate as number) || 30;
   const duration = (args.duration as number) || 60;
   const openAfterCreate = args.openAfterCreate !== false; // default true
+  const trackSnapshot = captureMutationEntitySnapshot(
+    'track',
+    useTimelineStore.getState().tracks,
+  );
+  const clipSnapshot = captureMutationEntitySnapshot(
+    'clip',
+    useTimelineStore.getState().clips,
+  );
 
   const comp = mediaStore.createComposition(name, {
     width,
@@ -201,6 +313,8 @@ export async function handleCreateComposition(
     frameRate,
     duration,
   });
+  const entities = emptyMutationEntities();
+  entities.created.push(mediaEntityRef('composition', comp.id));
 
   // Auto-open so subsequent operations target this composition
   if (openAfterCreate) {
@@ -221,6 +335,11 @@ export async function handleCreateComposition(
       frameRate: comp.frameRate,
       duration: comp.duration,
       opened: openAfterCreate,
+      ...createMediaMutationEnvelope(
+        entities,
+        describeMutationEntities(trackSnapshot, useTimelineStore.getState().tracks),
+        describeMutationEntities(clipSnapshot, useTimelineStore.getState().clips),
+      ),
     },
   };
 }
