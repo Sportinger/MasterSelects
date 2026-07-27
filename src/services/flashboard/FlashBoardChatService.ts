@@ -1,3 +1,4 @@
+import { tryKernelFirst } from '../kernelClient/kernelChatGateway';
 import { buildFlashBoardChatSystemPrompt } from './FlashBoardChatPrompt';
 import { sendKieChat, sendLemonadeChat } from './FlashBoardChatProviderTransport';
 import {
@@ -45,6 +46,11 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
   const prompt = request.prompt.trim();
   if (!prompt) {
     throw new Error('Write a prompt before starting chat.');
+  }
+
+  const kernelResult = await tryKernelFirst(request.playbookPrompt ?? prompt);
+  if (kernelResult.handled) {
+    return kernelResult.message;
   }
 
   const systemPrompt = buildFlashBoardChatSystemPrompt(request.systemPromptOverride, {
