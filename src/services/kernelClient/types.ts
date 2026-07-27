@@ -11,6 +11,55 @@ export interface KernelRunResponse {
   [key: string]: unknown;
 }
 
+export interface KernelResolvedCall {
+  stepId: string;
+  tool: string;
+  args: Record<string, unknown>;
+}
+
+export interface KernelCompileRequest {
+  request: string;
+  snapshot: unknown;
+  seed?: string;
+}
+
+export interface KernelCompileCompiledResponse {
+  runId: string;
+  status: 'compiled';
+  taskContract: unknown;
+  plan: unknown;
+  resolvedCalls: KernelResolvedCall[];
+  expectedFingerprint: unknown;
+  summary: unknown;
+}
+
+export interface KernelCompileStoppedResponse {
+  runId: string;
+  status: 'aborted' | 'failed';
+  failures: unknown;
+}
+
+export type KernelCompileResponse =
+  | KernelCompileCompiledResponse
+  | KernelCompileStoppedResponse;
+
+export interface KernelRunCompleteRequest {
+  finalSnapshot: unknown;
+}
+
+export interface KernelFingerprintAssert {
+  committed?: string;
+  matches: boolean;
+  simulated?: string;
+  [key: string]: unknown;
+}
+
+export interface KernelRunCompleteResponse {
+  status: 'succeeded' | 'failed';
+  fingerprintAssert: KernelFingerprintAssert;
+  verificationReport: unknown;
+}
+
 export interface KernelValidateRequest {
   request: unknown;
   seed?: number;

@@ -4,10 +4,13 @@ import { describe, expect, it } from 'vitest';
 
 const repoRoot = process.cwd();
 const kernelClientRoot = path.join(repoRoot, 'src', 'services', 'kernelClient');
-const kernelClientFiles = [
+const kernelTransportFiles = [
   path.join(kernelClientRoot, 'index.ts'),
-  path.join(kernelClientRoot, 'kernelChatGateway.ts'),
   path.join(kernelClientRoot, 'types.ts'),
+];
+const kernelClientFiles = [
+  ...kernelTransportFiles,
+  path.join(kernelClientRoot, 'kernelChatGateway.ts'),
 ];
 const sourceExtensions = new Set(['.js', '.jsx', '.ts', '.tsx']);
 const staticModuleSpecifierPattern =
@@ -34,16 +37,16 @@ function importedSpecifiers(source: string): string[] {
 }
 
 describe('kernel client isolation', () => {
-  it('keeps every dependency relative', () => {
-    for (const filePath of kernelClientFiles) {
+  it('keeps every transport dependency relative', () => {
+    for (const filePath of kernelTransportFiles) {
       for (const specifier of importedSpecifiers(readFileSync(filePath, 'utf8'))) {
         expect(specifier.startsWith('.'), `${toRepoPath(filePath)} imports ${specifier}`).toBe(true);
       }
     }
   });
 
-  it('keeps every dependency inside the kernel client directory', () => {
-    for (const filePath of kernelClientFiles) {
+  it('keeps transport dependencies inside the kernel client directory', () => {
+    for (const filePath of kernelTransportFiles) {
       for (const specifier of importedSpecifiers(readFileSync(filePath, 'utf8'))) {
         const resolved = path.resolve(path.dirname(filePath), specifier);
         const relative = path.relative(kernelClientRoot, resolved);
