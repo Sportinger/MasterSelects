@@ -1,7 +1,10 @@
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { TimelineClip } from '../../../types';
+import { isWithinValidationTolerance } from '../../validationCore';
 import type { GuidedTargetRef, ValidationCheck } from '../types';
+
+export * from '../../validationCore';
 
 type TimelineSnapshot = ReturnType<typeof useTimelineStore.getState>;
 type MediaSnapshot = ReturnType<typeof useMediaStore.getState>;
@@ -154,7 +157,7 @@ function validatePlayheadAtTime(
   const timeline = getTimeline(readers);
   const tolerance = check.toleranceSeconds ?? DEFAULT_TIME_TOLERANCE_SECONDS;
 
-  return isWithinTolerance(timeline.playheadPosition, check.time, tolerance)
+  return isWithinValidationTolerance(timeline.playheadPosition, check.time, tolerance)
     ? pass({ kind: check.kind, time: check.time, actual: timeline.playheadPosition })
     : fail(check, `Playhead is not at ${check.time}s`, {
         actual: timeline.playheadPosition,
@@ -178,7 +181,7 @@ function validateClipTransformMatches(
   const expected = normalizeExpectedTransformValue(check, media);
   const tolerance = check.tolerance ?? DEFAULT_VALUE_TOLERANCE;
 
-  return isWithinTolerance(actual, expected, tolerance)
+  return isWithinValidationTolerance(actual, expected, tolerance)
     ? pass({ kind: check.kind, clipId: check.clipId, property: check.property, actual, expected })
     : fail(check, `Transform ${check.property} on ${check.clipId} does not match`, {
         actual,
@@ -268,7 +271,7 @@ function validateKeyframeExists(
   const keyframe = keyframes.find((entry) => (
     (!check.keyframeId || entry.id === check.keyframeId)
     && (!check.property || String(entry.property) === check.property)
-    && (typeof check.time !== 'number' || isWithinTolerance(entry.time, check.time, tolerance))
+    && (typeof check.time !== 'number' || isWithinValidationTolerance(entry.time, check.time, tolerance))
   ));
 
   return keyframe
@@ -425,10 +428,6 @@ function fail(
       ...data,
     },
   };
-}
-
-function isWithinTolerance(actual: number, expected: number, tolerance: number): boolean {
-  return Math.abs(actual - expected) <= tolerance;
 }
 
 function delay(
