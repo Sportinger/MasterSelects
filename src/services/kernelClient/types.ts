@@ -1,4 +1,4 @@
-export interface KernelHealthResponse {
+﻿export interface KernelHealthResponse {
   [key: string]: unknown;
 }
 
@@ -51,7 +51,7 @@ export interface KernelCompileCompiledResponse {
   mode?: 'mechanical' | 'story';
   taskContract: unknown;
   plan?: unknown;
-  blueprintSummary?: unknown;
+  storySummary?: unknown;
   resolvedCalls: KernelResolvedCall[];
   setup?: KernelCompileSetup;
   /** Source-ordered simulated segment ids for runtime id mapping. */

@@ -1,4 +1,4 @@
-function isRecord(value: unknown): value is Record<string, unknown> {
+﻿function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
@@ -34,7 +34,7 @@ export function formatStoryVerificationDetails(
   finalSnapshot: unknown,
   report: unknown,
   compileSummary: unknown,
-  blueprintSummary: unknown,
+  storySummary: unknown,
 ): string {
   const snapshotRecord = isRecord(finalSnapshot) ? finalSnapshot : undefined;
   const occupancy = snapshotRecord && isRecord(snapshotRecord.occupancy)
@@ -54,7 +54,7 @@ export function formatStoryVerificationDetails(
     reportSummary?.counts,
     reportRecord?.counts,
     isRecord(compileSummary) ? compileSummary.counts : undefined,
-    isRecord(blueprintSummary) ? blueprintSummary.counts : undefined,
+    isRecord(storySummary) ? storySummary.counts : undefined,
   ]);
   const sources = [
     snapshotRecord,
@@ -64,7 +64,7 @@ export function formatStoryVerificationDetails(
     reportSummary,
     reportRecord,
     isRecord(compileSummary) ? compileSummary : undefined,
-    isRecord(blueprintSummary) ? blueprintSummary : undefined,
+    isRecord(storySummary) ? storySummary : undefined,
   ];
   const clipCount = readFiniteNumber(sources, [
     'totalClips',
@@ -80,7 +80,7 @@ export function formatStoryVerificationDetails(
     reportSummary,
     reportRecord,
     isRecord(compileSummary) ? compileSummary : undefined,
-    isRecord(blueprintSummary) ? blueprintSummary : undefined,
+    isRecord(storySummary) ? storySummary : undefined,
     snapshotRecord,
   ], [
     'occupiedEndSeconds',
@@ -118,8 +118,8 @@ function inlineReport(value: unknown): string | undefined {
   return undefined;
 }
 
-export function formatAssumptionNote(blueprintSummary: unknown): string | undefined {
-  if (!isRecord(blueprintSummary)) return undefined;
-  const report = inlineReport(blueprintSummary.assumptionReport);
+export function formatAssumptionNote(storySummary: unknown): string | undefined {
+  if (!isRecord(storySummary)) return undefined;
+  const report = inlineReport(storySummary.assumptionReport);
   return report ? `Annahmen: ${report}` : undefined;
 }

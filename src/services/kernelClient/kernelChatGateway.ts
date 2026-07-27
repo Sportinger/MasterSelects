@@ -1,4 +1,4 @@
-import {
+﻿import {
   executeAIToolCalls,
   type AIToolCallExecution,
   type AIToolCallExecutionResult,
@@ -193,7 +193,7 @@ function parseCompileResponse(value: unknown): KernelCompileResponse | undefined
     ...(mode === undefined ? {} : { mode }),
     taskContract: value.taskContract,
     plan: value.plan,
-    blueprintSummary: value.blueprintSummary,
+    storySummary: value.storySummary,
     resolvedCalls: resolvedCalls as KernelResolvedCall[],
     ...(setup === undefined ? {} : { setup }),
     ...(segments === undefined ? {} : { segments }),
@@ -224,7 +224,7 @@ function parseCompleteResponse(value: unknown): KernelRunCompleteResponse | unde
 }
 
 // Snapshots go through the semantic tool gateway like every other kernel
-// interaction (plan §8.3) — the gateway never reads stores directly.
+// interaction (plan Â§8.3) â€” the gateway never reads stores directly.
 async function buildTimelineSnapshot(executor: ExecuteToolCalls): Promise<unknown> {
   const [execution] = await executor(
     [{ id: 'kernel-snapshot', tool: 'getTimelineState', args: {} }],
@@ -576,7 +576,7 @@ export async function tryKernelFirst(
 
     // Runtime id binding: reorder calls reference simulated segment ids.
     // After the split executes, map them positionally onto the real ids
-    // from the split result's segments payload (plan §7.1).
+    // from the split result's segments payload (plan Â§7.1).
     const simulatedIds = compiledPlan.segments?.simulatedVideoClipIds;
     let simulatedToReal: Map<string, string> | undefined;
     const mapId = (id: string): string => simulatedToReal?.get(id) ?? id;
@@ -679,9 +679,9 @@ export async function tryKernelFirst(
       finalSnapshot,
       completion.verificationReport,
       compiledPlan.summary,
-      compiledPlan.blueprintSummary,
+      compiledPlan.storySummary,
     );
-    const assumptionNote = formatAssumptionNote(compiledPlan.blueprintSummary);
+    const assumptionNote = formatAssumptionNote(compiledPlan.storySummary);
     return {
       handled: true,
       message: `Kernel-verifiziert (${fingerprintShort}): ${details}`
