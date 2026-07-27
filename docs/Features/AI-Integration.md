@@ -73,8 +73,6 @@ In Lemonade editor mode, each new user request is sent as a fresh tool-capable t
 
 FlashBoard Chat includes a `PromptBook` button for provider-specific system prompt overrides, generation prompts, generated media, chat history, and tool-call history. Prompts can be saved into the current project folder under `Prompts/*.prompt.json`, reloaded from the saved prompt list, reset to the built-in prompt, imported from a text/Markdown file, and exported as a `.txt` file. The active override and its `Send current MasterSelects context` setting are still mirrored in app settings so the chat can use them immediately. The old docked AI Chat panel is retired; the floating FlashBoard Chat is the primary AI editing surface.
 
-The `Options` chat pill enables the Phase A multi-option prototype. In this mode the next request asks the provider for 2-3 text-only edit approaches and explicitly avoids tool execution. Parsed options appear with `Use` buttons; choosing one sends a normal edit request that applies the selected approach through the existing tool dispatcher. This bounds the prototype to one planning round plus one apply round, guarded by `flags.flashBoardChatEditOptions`.
-
 ### Available Models
 
 Kie.ai:

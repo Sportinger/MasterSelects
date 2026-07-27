@@ -1,7 +1,11 @@
 import type {
+  KernelCompileRequest,
+  KernelCompileResponse,
   KernelHealthResponse,
   KernelManifestsResponse,
   KernelRequestOptions,
+  KernelRunCompleteRequest,
+  KernelRunCompleteResponse,
   KernelRunRequest,
   KernelRunResponse,
   KernelRunStatusResponse,
@@ -13,9 +17,17 @@ import type {
 } from './types';
 
 export type {
+  KernelCompileCompiledResponse,
+  KernelCompileRequest,
+  KernelCompileResponse,
+  KernelCompileStoppedResponse,
+  KernelFingerprintAssert,
   KernelHealthResponse,
   KernelManifestsResponse,
   KernelRequestOptions,
+  KernelResolvedCall,
+  KernelRunCompleteRequest,
+  KernelRunCompleteResponse,
   KernelRunRequest,
   KernelRunResponse,
   KernelRunStatusResponse,
@@ -101,6 +113,27 @@ export class KernelServiceClient {
     options?: KernelRequestOptions,
   ): Promise<KernelServiceResult<KernelRunResponse>> {
     return this.request('/kernel/run', true, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }, options);
+  }
+
+  compile(
+    input: KernelCompileRequest,
+    options?: KernelRequestOptions,
+  ): Promise<KernelServiceResult<KernelCompileResponse>> {
+    return this.request('/kernel/compile', true, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }, options);
+  }
+
+  completeRun(
+    id: string,
+    input: KernelRunCompleteRequest,
+    options?: KernelRequestOptions,
+  ): Promise<KernelServiceResult<KernelRunCompleteResponse>> {
+    return this.request(`/kernel/runs/${encodeURIComponent(id)}/complete`, true, {
       method: 'POST',
       body: JSON.stringify(input),
     }, options);

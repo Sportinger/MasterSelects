@@ -133,14 +133,14 @@ export function FlashBoardComposer({
   const copiedPromptBookResetRef = useRef<number | null>(null);
   const {
     activeChatModel, activeChatModelId, chatButtonLabel, chatChargeTitle, chatError,
-    chatMessages, chatModelOptions, chatOptionsMode, chatOptionsModeEnabled, chatPanelOpen, chatPrompt, chatProvider,
+    chatMessages, chatModelOptions, chatPanelOpen, chatPrompt, chatProvider,
     chatProviderLabel, chatProviderOptions, chatReasoningEffortOptions,
     chatReasoningSupported, chatTemperature, chatTemperatureSupported, clearChatError,
     copiedChatMessageId, handleChatButtonClick, handleChatInputKeyDown,
-    handleChatMessageDoubleClick, handleChatProviderSelect, handleChatPromptChange, handleEditOptionSelect,
+    handleChatMessageDoubleClick, handleChatProviderSelect, handleChatPromptChange,
     handleClearChatHistory, handleClearChatPrompt, isChatting, lemonadeStatus,
     openAiReasoningEffort, chatSystemPromptProvider, chatSystemPromptSendContext, setChatModel, setChatTemperature,
-    setChatOptionsMode, setOpenAiReasoningEffort, showChatCloudActions,
+    setOpenAiReasoningEffort, showChatCloudActions,
   } = useFlashBoardChatController({
     aiProvider,
     aiSystemPromptSendContext,
@@ -644,7 +644,6 @@ export function FlashBoardComposer({
         chatOutput={{
           chatError, chatHistoryRef, copiedChatMessageId, messages: chatMessages,
           showChatCloudActions, onAuthClick: openAuthDialog,
-          onEditOptionSelect: handleEditOptionSelect,
           onMessageDoubleClick: handleChatMessageDoubleClick, onPricingClick: openPricingDialog,
         }}
         referenceStrip={{
@@ -784,7 +783,7 @@ export function FlashBoardComposer({
         chatControls={{
           activeChatModel, activeChatModelId, activePopover: popover,
           chatError, chatModelOptions, chatPrompt, chatProvider, chatProviderLabel,
-          chatProviderOptions, editOptionsMode: chatOptionsMode, editOptionsModeEnabled: chatOptionsModeEnabled,
+          chatProviderOptions,
           chatReasoningEffortOptions, chatReasoningSupported,
           chatTemperature, chatTemperatureSupported, hasChatMessages: chatMessages.length > 0,
           isChatting, lemonadeContextSize, lemonadeStatus, openAiReasoningEffort, popoverHostClassName,
@@ -792,7 +791,6 @@ export function FlashBoardComposer({
           onChatErrorClear: clearChatError, onChatModelChange: setChatModel,
           onChatProviderSelect: handleChatProviderSelect, onChatTemperatureChange: setChatTemperature,
           onClearChatHistory: handleClearChatHistory, onClosePopover: closePopover,
-          onEditOptionsModeToggle: () => setChatOptionsMode(!chatOptionsMode),
           onLemonadeContextSizeChange: setLemonadeContextSize,
           onOpenPopover: togglePopover, onOpenPromptBook: () => openPromptBook('chat'),
           onReasoningEffortChange: setOpenAiReasoningEffort,

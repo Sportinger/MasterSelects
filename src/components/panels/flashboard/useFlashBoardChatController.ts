@@ -15,7 +15,6 @@ import {
   type FlashBoardChatProvider,
   type FlashBoardOpenAiReasoningEffort,
 } from '../../../services/flashboard/FlashBoardChatService';
-import { flags } from '../../../engine/featureFlags';
 import { useFlashBoardStore } from '../../../stores/flashboardStore';
 import { appendFlashBoardPromptHistoryEntry } from '../../../stores/flashboardStore/activeGenerationRecords';
 import type { AIProvider } from '../../../stores/settingsStore';
@@ -32,12 +31,6 @@ import {
   buildFlashBoardChatReasoningFallback,
 } from './FlashBoardChatOptionsPlanner';
 import type { FlashBoardChatMessage } from './FlashBoardChatOutput';
-import {
-  buildFlashBoardChatApplyOptionPrompt,
-  buildFlashBoardChatEditOptionsPrompt,
-  parseFlashBoardChatEditOptions,
-  type FlashBoardChatEditOption,
-} from './FlashBoardChatEditOptions';
 import {
   buildFlashBoardChatCompletionMessages,
   buildFlashBoardChatErrorMessages,
@@ -117,10 +110,8 @@ export function useFlashBoardChatController({
   const [copiedChatMessageId, setCopiedChatMessageId] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
   const [isChatting, setIsChatting] = useState(false);
-  const [chatOptionsMode, setChatOptionsMode] = useState(false);
   const [lemonadeStatus, setLemonadeStatus] = useState<'idle' | 'checking' | 'online' | 'offline'>('idle');
   const [lemonadeModels, setLemonadeModels] = useState<LemonadeModelInfo[]>([]);
-  const chatOptionsModeEnabled = flags.flashBoardChatEditOptions;
   const chatSystemPromptProvider: AIProvider = chatProvider === 'lemonade' ? 'lemonade' : 'openai';
   const chatSystemPromptSendContext = aiSystemPromptSendContext[chatSystemPromptProvider] !== false;
   const chatSystemPromptOverride = aiSystemPromptOverrides[chatSystemPromptProvider]?.trim()
@@ -231,18 +222,10 @@ export function useFlashBoardChatController({
     }
   }, [chatProvider, chatProviderOptions, handleChatProviderSelect]);
 
-  const submitChatPrompt = useCallback(async (
-    promptOverride?: string,
-    options: { optionsMode?: boolean; visiblePrompt?: string } = {},
-  ) => {
+  const submitChatPrompt = useCallback(async () => {
     closePopover();
 
-    const effectiveChatPrompt = (promptOverride ?? chatPrompt).trim();
-    const useEditOptions = chatOptionsModeEnabled && (options.optionsMode ?? chatOptionsMode);
-    const requestPrompt = effectiveChatPrompt && useEditOptions
-      ? buildFlashBoardChatEditOptionsPrompt(effectiveChatPrompt)
-      : effectiveChatPrompt;
-    const visibleUserPrompt = options.visiblePrompt ?? effectiveChatPrompt;
+    const effectiveChatPrompt = chatPrompt.trim();
     const chatSendPlan = buildFlashBoardChatSendPlan({
       activeChatModelId,
       canUseByoChat,
@@ -251,7 +234,7 @@ export function useFlashBoardChatController({
       chatPanelOpen,
       chatProvider,
       chatTemperature,
-      effectiveChatPrompt: requestPrompt,
+      effectiveChatPrompt,
       hasHostedSession,
       hostedAIEnabled,
       isChatting,
@@ -290,19 +273,17 @@ export function useFlashBoardChatController({
     const optimisticMessages = buildFlashBoardChatOptimisticMessages({
       assistantMessageId,
       userMessageId,
-      userPrompt: visibleUserPrompt,
+      userPrompt: effectiveChatPrompt,
     });
 
     setIsChatting(true);
     setChatError(null);
-    if (promptOverride === undefined) {
-      setChatPrompt('');
-    }
+    setChatPrompt('');
     setChatMessages((current) => [
       ...current,
       ...optimisticMessages,
     ]);
-    appendFlashBoardPromptHistoryEntry({ kind: 'chat', prompt: visibleUserPrompt });
+    appendFlashBoardPromptHistoryEntry({ kind: 'chat', prompt: effectiveChatPrompt });
 
     try {
       const executedToolCalls: FlashBoardExecutedToolCall[] = [];
@@ -314,12 +295,11 @@ export function useFlashBoardChatController({
         systemPromptIncludeContext: chatSystemPromptSendContext,
         systemPromptOverride: chatSystemPromptOverride,
       });
-      const editOptions = useEditOptions ? parseFlashBoardChatEditOptions(response) : undefined;
       setChatMessages((current) => buildFlashBoardChatCompletionMessages(
         current,
         assistantMessageId,
         response,
-        editOptions,
+        undefined,
         executedToolCalls,
       ));
     } catch (error) {
@@ -337,8 +317,6 @@ export function useFlashBoardChatController({
     activeChatModelId,
     chatSystemPromptOverride,
     chatSystemPromptSendContext,
-    chatOptionsMode,
-    chatOptionsModeEnabled,
     chatMessages,
     chatPanelOpen,
     chatPrompt,
@@ -364,16 +342,6 @@ export function useFlashBoardChatController({
 
   const handleChatButtonClick = useCallback(async () => {
     await submitChatPrompt();
-  }, [submitChatPrompt]);
-
-  const handleEditOptionSelect = useCallback((option: FlashBoardChatEditOption) => {
-    void submitChatPrompt(
-      buildFlashBoardChatApplyOptionPrompt(option),
-      {
-        optionsMode: false,
-        visiblePrompt: `Use option ${option.index}: ${option.title}`,
-      },
-    );
   }, [submitChatPrompt]);
 
   const handleClearChatHistory = useCallback(() => {
@@ -453,8 +421,6 @@ export function useFlashBoardChatController({
     ...chatOptionsState,
     chatError,
     chatMessages,
-    chatOptionsMode,
-    chatOptionsModeEnabled,
     chatPanelOpen,
     chatPrompt,
     chatProvider,
@@ -464,7 +430,6 @@ export function useFlashBoardChatController({
     handleChatButtonClick,
     handleChatInputKeyDown,
     handleChatMessageDoubleClick,
-    handleEditOptionSelect,
     handleChatProviderSelect,
     handleChatPromptChange,
     handleClearChatHistory,
@@ -474,7 +439,6 @@ export function useFlashBoardChatController({
     openAiReasoningEffort,
     chatSystemPromptProvider,
     chatSystemPromptSendContext,
-    setChatOptionsMode,
     setChatModel: handleChatModelSelect,
     setChatTemperature,
     setOpenAiReasoningEffort,

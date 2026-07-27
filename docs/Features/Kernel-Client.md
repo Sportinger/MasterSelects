@@ -1,28 +1,17 @@
 # Kernel Client
 
-[← Back to Index](./README.md)
+[Back to Index](./README.md)
 
-The kernel client is the browser-side transport boundary for the optional
-MasterSelects kernel service. It supports the WP11 strangler routing described
-by the **Agent Kernel Plan**: FlashBoard offers a request to the service first
-when kernel mode is configured, while retaining the existing community chat
-path as the fallback.
+The kernel client is the browser-side boundary for the external MasterSelects
+kernel service and the WP11 kernel-first strangler route. FlashBoard offers an
+eligible request to the kernel before constructing the community-provider
+prompt. The service compiles and verifies the plan; the browser remains the
+only process that executes semantic editor tools and owns timeline history.
 
-The client contains no kernel implementation. It serializes requests, performs
-HTTP calls to a separately running service, interprets the small run-status
-envelope, and returns either a handled response or control to FlashBoard.
+The app does not contain the kernel implementation, private prompts, expert
+packs, or evaluation criteria.
 
 ---
-
-## Modes
-
-| Mode | Browser behavior |
-|---|---|
-| Community mode | Kernel routing is disabled. FlashBoard uses its configured chat provider and app-side prompt/tool flow. |
-| Kernel mode | The browser sends the request to the configured external service first. A successful or explicitly failed run is handled there; eligible availability and routing failures fall back to the community path. |
-
-Kernel mode is opt-in. Its browser configuration does not bundle extra kernel
-behavior into the app.
 
 ## Local Configuration
 
@@ -30,68 +19,95 @@ The gateway reads exactly three `localStorage` entries:
 
 | Key | Semantics |
 |---|---|
-| `ms.kernel.enabled` | Routing is enabled only when the value is exactly `true`; any other value selects community mode. |
-| `ms.kernel.url` | External service base URL. Empty or missing values default to `http://127.0.0.1:8787`. |
-| `ms.kernel.token` | Bearer token for authenticated operations. Missing or blank tokens skip kernel routing. |
+| `ms.kernel.url` | Required external service base URL. Blank or missing values bypass kernel routing. |
+| `ms.kernel.token` | Required bearer token. Blank or missing values bypass kernel routing. |
+| `ms.kernel.enabled` | Presence-based cutover switch. URL + token enable kernel-first by default; only the exact string `false` disables it. |
 
-The token is read only to construct the service request. Same-origin scripts or
+This default-on behavior applies only when both URL and token are present. The
+older explicit `true` flag is still accepted but is no longer required.
+
+The token is read only to authenticate kernel requests. Same-origin scripts or
 browser-profile access can expose `localStorage`, so use a scoped token and
 protect the local profile.
 
-## Routing And Fallback
+## Compile, Execute, Complete
 
-FlashBoard invokes `tryKernelFirst()` before it constructs the community
-provider system prompt.
+`tryKernelFirst()` implements one production transaction:
+
+1. It calls the same `handleGetTimelineState` handler used by the semantic
+   `getTimelineState` tool and sends that compact snapshot with the request to
+   `POST /kernel/compile`.
+2. A compiled response must contain a run ID and validated concrete
+   `resolvedCalls` (`stepId`, `tool`, and object `args`). The browser executes
+   those calls in order through `executeAIToolCalls(..., 'chat')`.
+3. The gateway opens one `beginAgentTransaction` for the task and invokes the
+   semantic executor with nested history suppressed. A successful group is
+   committed as one undo point. Any failed or missing tool result aborts the
+   transaction, rolls the whole group back through `abortAgentTransaction`,
+   warns in the console, and returns control to community chat.
+4. After a successful commit, it rebuilds the snapshot with the same timeline
+   handler and sends `{ finalSnapshot }` to
+   `POST /kernel/runs/:runId/complete`.
+5. A successful `fingerprintAssert.matches` result is shown in chat with the
+   short fingerprint plus verified video/audio clip counts and occupied span from
+   the verification report or compile summary.
+
+The service endpoints are authenticated with `Authorization: Bearer <token>`.
+The browser never asks the service to mutate editor state directly.
+
+## Routing And Fallback
 
 | Condition | Gateway result | FlashBoard behavior |
 |---|---|---|
-| Flag off or storage unavailable/unreadable | Not handled | Continue through the community provider. |
-| Token missing or blank | Not handled | Continue through the community provider. |
-| HTTP error, timeout, network exception, or unrecognized success status | Not handled | Continue through the community provider. |
-| Status `aborted` | Not handled | Continue through the community provider. |
-| Status `failed` | Handled with the failure message and optional run ID | Show the failure; do not resend through a community provider. |
-| Status `succeeded` | Handled with a verification fingerprint and optional run ID | Show success; do not invoke a community provider. |
+| Storage unavailable, URL/token missing, or `ms.kernel.enabled` exactly `false` | Not handled | Continue through the community provider. |
+| Compile HTTP/network error or malformed response | Not handled | Continue through the community provider. |
+| Compile status `aborted` | Not handled | Fall back silently; this is the mechanical-coverage escape hatch. |
+| Compile status `failed` | Handled failure | Surface the kernel failure without running tools. |
+| Any local tool failure or executor exception | Roll back, then not handled | Warn in the console and continue through the community provider. |
+| Completion transport/error response after a committed mutation | Handled failure | Surface the verification failure; do not run a second provider against mutated state. |
+| Fingerprint mismatch | Handled failure | Surface the mismatch honestly; do not fall back because state was already mutated. |
+| Completion succeeded and fingerprint matches | Handled verified result | Show video/audio counts, occupied span, and short fingerprint in chat. |
 
-Availability and routing failures fail open so community mode remains usable.
-An explicit `failed` run is authoritative and is surfaced rather than silently
-rerunning the request through another provider.
+Compile-time availability failures fail open. Once all local calls have
+succeeded and the single transaction has committed, completion failures fail
+closed so the same prompt cannot mutate the already-changed timeline twice.
 
 ## Isolation Guarantee
 
-`src/services/kernelClient/` is a transport-and-types-only boundary. Its three
-source files may import only relative modules resolving inside that directory.
-They must not import stores, engines, app feature implementations, or external
-packages. Kernel logic, private prompts, evaluation criteria, and expert packs
-are not client assets.
+`src/services/kernelClient/index.ts` and `types.ts` are the transport/type
+boundary. They may import only relative modules resolving inside
+`src/services/kernelClient/` and must not import stores, engines, app feature
+implementations, or external packages.
 
-`tests/unit/kernelClientIsolation.test.ts` enforces the boundary by:
+`kernelChatGateway.ts` is deliberately the app-side integration layer: it may
+import the timeline store, the `getTimelineState` handler, the semantic tool
+executor, and the agent transaction API. It still contains no kernel logic,
+prompt, rubric, or pack assets.
 
-- resolving every static and dynamic module specifier in the client sources;
-- rejecting implementation, prompt, pack, and evaluation leakage vocabulary;
-- requiring the FlashBoard pre-hook to remain the only gateway import site
-  under `src/`; and
-- freezing all three `localStorage` key names so renames fail loudly.
+`tests/unit/kernelClientIsolation.test.ts` keeps the guard honest by applying
+the strict import rules only to `index.ts` and `types.ts`, scanning every
+kernel-client source for forbidden private vocabulary, requiring the
+FlashBoard pre-hook to remain the only gateway import site, and freezing the
+three storage key names.
 
 ## Troubleshooting
 
-Check `GET /health` on the configured base URL. The default is
-`http://127.0.0.1:8787/health`; this availability probe does not require the
-bearer token used by kernel operations.
+If FlashBoard unexpectedly uses community chat, check:
 
-If FlashBoard unexpectedly uses the community path, check:
+1. `ms.kernel.url` and `ms.kernel.token` are both present and nonblank.
+2. `ms.kernel.enabled` is not the exact string `false`.
+3. The configured service is reachable and accepts the bearer token.
+4. `/kernel/compile` did not return `aborted`, an HTTP failure, or an invalid
+   response.
+5. The browser console has no rolled-back semantic tool failure warning.
 
-1. `ms.kernel.enabled` is the string `true`.
-2. `ms.kernel.token` is present and not blank.
-3. `ms.kernel.url` reaches the running service without a proxy or firewall
-   issue.
-4. The health endpoint responds before the request timeout.
-5. The run did not return `aborted`, an HTTP failure, or an unknown status.
-
-An explicit `failed` status is not a fallback cause. FlashBoard displays that
-result so the failure and optional run ID remain visible.
+If the timeline changed but verification failed, inspect the run ID and the
+completion response. The gateway intentionally does not fall back after the
+transaction commits.
 
 ---
 
 *Source: `src/services/kernelClient/`,
 `src/services/flashboard/FlashBoardChatService.ts`,
+`tests/unit/kernelChatGatewayCutover.test.ts`,
 `tests/unit/kernelClientIsolation.test.ts`*
