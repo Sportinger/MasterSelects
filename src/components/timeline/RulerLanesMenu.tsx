@@ -5,7 +5,7 @@
 // an ordered checklist: checking adds a lane, unchecking removes it. Reuses the
 // existing view-dropdown styling for consistency with the View menu.
 
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type { RulerLaneFormat } from '../../types';
 import { useTimelineStore } from '../../stores/timeline';
 import { selectRulerLanes, selectTimelineGridSubdivision } from '../../stores/timeline/selectors';
@@ -31,6 +31,9 @@ export function RulerLanesMenu() {
   const removeRulerLane = useTimelineStore((state) => state.removeRulerLane);
 
   const [open, setOpen] = useState(false);
+  // Collapsed by default: the grid resolution is a detail of the bars lane, not
+  // a peer of the lane list.
+  const [gridOpen, setGridOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -69,35 +72,49 @@ export function RulerLanesMenu() {
         <div className="view-dropdown-menu">
           {LANE_OPTIONS.map((option) => {
             const enabled = lanes.some((lane) => lane.format === option.format);
+            // Only the bars lane owns a sub-setting: the grid resolution the
+            // body grid draws and snaps to (§3.5).
+            const ownsGrid = option.format === 'bars';
             return (
-              <div
-                key={option.format}
-                className={`view-dropdown-item ${enabled ? 'active' : ''}`}
-                onClick={() => toggleFormat(option.format)}
-              >
-                <span className={`view-check ${enabled ? 'checked' : ''}`}>✓</span>
-                <span>{option.label}</span>
-              </div>
+              <Fragment key={option.format}>
+                <div
+                  className={`view-dropdown-item ${enabled ? 'active' : ''}`}
+                  onClick={() => toggleFormat(option.format)}
+                >
+                  <span className={`view-check ${enabled ? 'checked' : ''}`}>✓</span>
+                  <span className="ruler-lane-label">{option.label}</span>
+                  {ownsGrid && (
+                    // The row itself stays a pure toggle; expanding is a
+                    // separate affordance so one click never means two things.
+                    <button
+                      type="button"
+                      className="ruler-lane-expander"
+                      title={gridOpen ? 'Hide grid resolution' : 'Grid resolution'}
+                      aria-label="Grid resolution"
+                      aria-expanded={gridOpen}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setGridOpen((previous) => !previous);
+                      }}
+                    >
+                      {gridOpen ? '−' : '+'}
+                    </button>
+                  )}
+                </div>
+                {ownsGrid && gridOpen && TIMELINE_GRID_SUBDIVISIONS.map((subdivision) => (
+                  <div
+                    key={subdivision}
+                    // Indented: these belong to Bars + Beats, not to the lane list.
+                    className={`view-dropdown-item ruler-lane-subitem ${gridSubdivision === subdivision ? 'active' : ''}`}
+                    onClick={() => setTimelineGridSubdivision(subdivision)}
+                  >
+                    <span className={`view-check ${gridSubdivision === subdivision ? 'checked' : ''}`}>✓</span>
+                    <span className="ruler-lane-label">{TIMELINE_GRID_SUBDIVISION_LABELS[subdivision]}</span>
+                  </div>
+                ))}
+              </Fragment>
             );
           })}
-          {/* The grid resolution only means anything while a bars ruler is on
-              (§3.5: an enabled bars ruler is what switches the body grid), so it
-              lives here rather than as a second toolbar dropdown. */}
-          {lanes.some((lane) => lane.format === 'bars') && (
-            <>
-              <div className="view-dropdown-divider" />
-              {TIMELINE_GRID_SUBDIVISIONS.map((subdivision) => (
-                <div
-                  key={subdivision}
-                  className={`view-dropdown-item ${gridSubdivision === subdivision ? 'active' : ''}`}
-                  onClick={() => setTimelineGridSubdivision(subdivision)}
-                >
-                  <span className={`view-check ${gridSubdivision === subdivision ? 'checked' : ''}`}>✓</span>
-                  <span>{`Grid: ${TIMELINE_GRID_SUBDIVISION_LABELS[subdivision]}`}</span>
-                </div>
-              ))}
-            </>
-          )}
         </div>
       )}
     </div>

@@ -12,7 +12,8 @@
 // only decides what to commit and how to label it.
 
 import { captureSnapshot } from '../historyStore';
-import type { SliceCreator, TempoActions } from './types';
+import type { SliceCreator, TempoActions, TimelineClip } from './types';
+import { remapTimelineClipsForTempo } from '../../timeline/tempo/tempoRemap';
 import {
   insertTempoEvent,
   normalizeTempoMap,
@@ -24,9 +25,17 @@ import {
 export const createTempoSlice: SliceCreator<TempoActions> = (set, get) => {
   const commit = (result: TempoMapEditResult, label: string): void => {
     if (!result.changed) return;
-    set({ tempoMap: result.map });
-    // Packet 2 makes a tempo edit move MIDI clips, so the cache the layer
-    // builder keys off must be dropped with the same edit, not after it.
+
+    // MIDI content is musical and moves with the tempo; media stays linear
+    // (plan §3.1). Both land in ONE `set` and under ONE snapshot, so a single
+    // undo reverts the tempo and the notes together.
+    const { clips, tempoMap, tracks } = get();
+    const remappedClips = remapTimelineClipsForTempo(clips, tracks, tempoMap, result.map);
+
+    set({
+      tempoMap: result.map,
+      ...(remappedClips === clips ? {} : { clips: remappedClips as TimelineClip[] }),
+    });
     get().invalidateCache();
     captureSnapshot(label);
   };

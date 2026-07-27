@@ -93,3 +93,40 @@ describe('TempoMap — meter change', () => {
     expect(barBeatToSeconds(map, 3)).toBeCloseTo(7);
   });
 });
+
+// Issue #299, Packet 2: the projection must stay total and invertible BELOW the
+// first segment. A MIDI clip extended leftwards has a negative inPoint, so its
+// content origin sits before bar 1 and the remap queries bar <= 0.
+describe('TempoMap — below the first segment', () => {
+  const single: TempoMap = {
+    events: [{ id: 'ev-6', time: 0, bpm: 60, numerator: 4, denominator: 4 }],
+  };
+
+  const multi: TempoMap = {
+    events: [
+      { id: 'ev-7', time: 0, bpm: 60, numerator: 4, denominator: 4 },
+      { id: 'ev-8', time: 8, bpm: 120, numerator: 4, denominator: 4 },
+    ],
+  };
+
+  it('extrapolates bar 0 backwards through the first segment', () => {
+    // One 4 s bar before the origin.
+    expect(barBeatToSeconds(single, 0)).toBeCloseTo(-4);
+    expect(barBeatToSeconds(single, 0, 3)).toBeCloseTo(-2);
+    expect(barBeatToSeconds(single, -1)).toBeCloseTo(-8);
+  });
+
+  it('uses the FIRST segment, not the last, when several exist', () => {
+    // The regression: every range test failed and the walk fell through to the
+    // last segment, which is 120 BPM here and would answer -2 instead of -4.
+    expect(barBeatToSeconds(multi, 0)).toBeCloseTo(-4);
+    expect(barBeatToSeconds(multi, 0)).toBe(barBeatToSeconds(single, 0));
+  });
+
+  it('round-trips negative times through secondsToBarBeat', () => {
+    for (const time of [-0.25, -1, -4, -9.5]) {
+      const position = secondsToBarBeat(multi, time);
+      expect(barBeatToSeconds(multi, position.bar, position.beat)).toBeCloseTo(time, 9);
+    }
+  });
+});

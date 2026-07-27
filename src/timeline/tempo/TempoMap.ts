@@ -120,6 +120,19 @@ export function secondsToBarBeat(map: TempoMap, time: number): BarBeat {
 export function barBeatToSeconds(map: TempoMap, bar: number, beat = 1): number {
   const segments = buildSegments(map);
 
+  // Below the first segment (bar <= 0, i.e. musical time before the project
+  // origin) no range test below can match, and the loop would fall through to
+  // the LAST segment and return nonsense. This is reachable in normal use: a
+  // MIDI clip extended leftwards has a negative inPoint, so its content origin
+  // sits before 0 (see midiClipTiming.ts). Extrapolate through segment 0's
+  // tempo instead — the projection stays continuous and invertible.
+  const firstSegment = segments[0];
+  const firstTargetPhase = (bar - 1) + (beat - 1) / firstSegment.numerator;
+  if (firstTargetPhase < firstSegment.startPhase - EPSILON) {
+    return firstSegment.startTime
+      + (firstTargetPhase - firstSegment.startPhase) * firstSegment.barSeconds;
+  }
+
   for (let i = 0; i < segments.length; i++) {
     const segment = segments[i];
     const nextStartPhase = segments[i + 1]?.startPhase ?? Infinity;
@@ -135,6 +148,12 @@ export function barBeatToSeconds(map: TempoMap, bar: number, beat = 1): number {
 
   // Unreachable (the last segment always matches); kept for total-function safety.
   return 0;
+}
+
+// Object-taking companion, so a `secondsToBarBeat` result can be fed straight
+// back without unpacking it at every call site (issue #299, Packet 2).
+export function barBeatToSecondsAt(map: TempoMap, position: BarBeat): number {
+  return barBeatToSeconds(map, position.bar, position.beat);
 }
 
 // Emit every beat line within [startTime, endTime] (inclusive), in order. Drives

@@ -59,4 +59,43 @@
 .view-check.checked {
   color: var(--accent-color, #4a9eff);
 }
+
+/* Ruler lanes menu: a lane row can own sub-settings (Bars + Beats owns the grid
+   resolution). The row stays a pure enable/disable toggle and the expander is a
+   separate control, so a single click never means two different things. */
+/* Label takes the slack so the expander sits flush right, without pulling the
+   label away from its checkmark (which `justify-content: space-between` would). */
+.ruler-lanes-menu .ruler-lane-label {
+  margin-right: auto;
+}
+
+.ruler-lane-expander {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  margin-left: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-secondary, var(--text-primary));
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.ruler-lane-expander:hover {
+  background: var(--bg-secondary);
+  color: var(--accent-color, #4a9eff);
+  border-color: var(--accent-color, #4a9eff);
+}
+
+/* Owned by the lane above it — indented past the checkmark column. */
+.ruler-lanes-menu .view-dropdown-item.ruler-lane-subitem {
+  padding-left: 30px;
+  font-size: 11px;
+}
 }

@@ -2,7 +2,7 @@
 
 # BPM / Tempo Management + Metronome (Plan)
 
-**Status:** In progress — Packets 1 and 4 landed (uncommitted); 2, 3, 5, 6, 7 open.
+**Status:** In progress — Packets 1, 2 and 4 landed; 3, 5, 6, 7 open.
 Issue: #299. Branch: `299-add-bpm-management`.
 
 Turns the read-only `TempoMap` shipped by issue #257 into an **editable tempo
@@ -254,10 +254,21 @@ restores the previous map and one redo re-applies it (verifies the
 capture-after-mutate order); save → load → composition-switch → back
 round-trips the events with ids.
 
-### Packet 2 — Content follows tempo (MIDI remap)
+### Packet 2 — Content follows tempo (MIDI remap) — **DONE**
 
 **Goal:** a tempo edit moves MIDI content and leaves media alone, in one undo
 entry.
+
+**Landed 2026-07-27.** Full gate green: build, lint, test (634 files / 5671
+tests). New `src/timeline/tempo/tempoRemap.ts`; `barBeatToSeconds` fixed below
+the first segment and `barBeatToSecondsAt` added; `tempoSlice.commit` now
+remaps clips and the map in one `set` under one snapshot.
+
+Both fixes were mutation-checked: disabling the below-first-segment branch fails
+3 tests, and dropping the automation remap fails 1 — neither is silently
+passing. Note identity, `noteAbsoluteStart` exactness, negative `inPoint`,
+CC automation, cross-boundary note ends and a full 120 -> 60 -> 120 timeline
+round trip are all covered.
 
 - New pure `src/timeline/tempo/tempoRemap.ts`:
   - `remapAcrossMaps(oldMap, newMap, t)` = `barBeatToSecondsAt(newMap,
