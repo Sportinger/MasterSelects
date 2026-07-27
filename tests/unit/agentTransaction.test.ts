@@ -1,14 +1,16 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   cancelHistoryBatch,
   captureSnapshot,
   initHistoryStoreRefs,
+  setHistoryCallbacks,
   useHistoryStore,
 } from '../../src/stores/historyStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { getTimelineRevision } from '../../src/stores/timeline/revisionMiddleware';
 import { executeAIToolCalls } from '../../src/services/aiTools';
+import { listAIToolAuditEntries } from '../../src/services/aiTools/audit';
 import {
   abortAgentTransaction,
   beginAgentTransaction,
@@ -74,6 +76,10 @@ function appendClip(id: string): void {
 
 describe('agent mutation transactions', () => {
   beforeEach(() => {
+    setHistoryCallbacks({
+      flushPendingCapture: () => undefined,
+      suppressCaptures: () => undefined,
+    });
     initializeHistoryRefs();
     useHistoryStore.setState({ batchId: null, batchLabel: null });
     useHistoryStore.getState().clearHistory();
@@ -96,6 +102,11 @@ describe('agent mutation transactions', () => {
     }
     useHistoryStore.getState().clearHistory();
     useTimelineStore.setState(initialTimelineState);
+    setHistoryCallbacks({
+      flushPendingCapture: () => undefined,
+      suppressCaptures: () => undefined,
+    });
+    vi.restoreAllMocks();
   });
 
   it('commits two store mutations as one undo entry', () => {
@@ -145,6 +156,34 @@ describe('agent mutation transactions', () => {
     expect(useTimelineStore.getState().clips.map((clip) => clip.id)).toEqual(['base']);
   });
 
+  it('treats a batch opened by the pre-start flush as outer-owned', () => {
+    const flushBatchId = 987_654_321;
+    let openedBatch = false;
+    setHistoryCallbacks({
+      flushPendingCapture: () => {
+        if (openedBatch) return;
+        openedBatch = true;
+        useHistoryStore.setState({
+          batchId: flushBatchId,
+          batchLabel: 'flush owner',
+        });
+      },
+      suppressCaptures: () => undefined,
+    });
+
+    const transaction = beginAgentTransaction('AI task: flush ownership');
+    expect(transaction.alreadyBatching).toBe(true);
+    expect(transaction.abortNoop).toBe(true);
+    expect(transaction.historyBatchId).toBe(flushBatchId);
+
+    appendClip('first');
+    abortAgentTransaction(transaction);
+
+    expect(useHistoryStore.getState().batchId).toBe(flushBatchId);
+    expect(useHistoryStore.getState().batchLabel).toBe('flush owner');
+    expect(useTimelineStore.getState().clips.map((clip) => clip.id)).toEqual(['base', 'first']);
+  });
+
   it('reports monotonic timeline revisions across commit', () => {
     const revisionBefore = getTimelineRevision();
     const transaction = beginAgentTransaction('AI task: revision');
@@ -157,16 +196,18 @@ describe('agent mutation transactions', () => {
     expect(committed.stateRevisionAfter).toBeGreaterThan(transaction.stateRevisionBefore);
   });
 
-  it('leaves a replacement history batch untouched when commit ownership is lost', () => {
+  it('leaves a same-millisecond replacement batch untouched when commit ownership is lost', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000);
     const transaction = beginAgentTransaction('AI task: lost ownership');
-    const replacementBatchId = (transaction.historyBatchId ?? 0) + 1;
+    const originalBatchId = transaction.historyBatchId;
     appendClip('first');
+    useHistoryStore.getState().endBatch();
+    useHistoryStore.getState().startBatch('replacement owner');
+    const replacementBatchId = useHistoryStore.getState().batchId;
     const undoLengthBeforeCommit = useHistoryStore.getState().undoStack.length;
 
-    useHistoryStore.setState({
-      batchId: replacementBatchId,
-      batchLabel: 'replacement owner',
-    });
+    expect(originalBatchId).not.toBeNull();
+    expect(replacementBatchId).not.toBe(originalBatchId);
     commitAgentTransaction(transaction);
 
     expect(isAgentTransactionOpen()).toBe(false);
@@ -178,10 +219,13 @@ describe('agent mutation transactions', () => {
 
   it('rolls back a grouped partial failure without creating an undo entry', async () => {
     const undoLengthBefore = useHistoryStore.getState().undoStack.length;
+    const auditIdPrefix = `rollback-audit-${Date.now()}-${Math.random()}`;
+    const createCallId = `${auditIdPrefix}-create`;
+    const missingCallId = `${auditIdPrefix}-missing`;
 
     const results = await executeAIToolCalls([
-      { id: 'create', tool: 'createTrack', args: { type: 'video' } },
-      { id: 'missing', tool: 'deleteClip', args: { clipId: 'missing', withLinked: false } },
+      { id: createCallId, tool: 'createTrack', args: { type: 'video' } },
+      { id: missingCallId, tool: 'deleteClip', args: { clipId: 'missing', withLinked: false } },
     ], 'internal', { guidedReplay: false });
 
     expect(results.map((entry) => entry.result.success)).toEqual([true, false]);
@@ -191,7 +235,18 @@ describe('agent mutation transactions', () => {
         rolledBack: true,
         rollbackDeferred: false,
         transactionOwnershipLost: false,
-        failedModifyingTools: [{ id: 'missing', tool: 'deleteClip' }],
+        failedModifyingTools: [{ id: missingCallId, tool: 'deleteClip' }],
+      },
+    });
+    const auditEntries = await listAIToolAuditEntries({ limit: 100, tool: 'createTrack' });
+    const createAudit = auditEntries.find((entry) => entry.providerToolCallId === createCallId);
+    expect(createAudit).toMatchObject({
+      result: {
+        success: true,
+        data: {
+          rolledBack: true,
+          rollbackReason: expect.stringContaining('deleteClip'),
+        },
       },
     });
     expect(useTimelineStore.getState().tracks).toEqual([]);

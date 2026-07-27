@@ -59,6 +59,7 @@ const MAX_HISTORY_BRANCHES = 24;
 const MAX_PERSISTED_HISTORY_SNAPSHOTS = 32;
 const PERSIST_HISTORY_SNAPSHOTS = false;
 const HISTORY_CAPTURE_WARN_MS = 24;
+let nextBatchId = 1;
 
 // Callback to flush pending debounced captures before undo/redo (set by useGlobalHistory)
 // Flush = execute the pending capture immediately so its state isn't lost
@@ -142,6 +143,7 @@ function isTimelineHistoryLocked(): boolean {
 function flushPendingCapture(): void {
   flushPendingCaptureCallback?.();
 }
+export const flushPendingHistoryCapture = flushPendingCapture;
 
 function suppressCaptures(): void {
   suppressCapturesCallback?.();
@@ -409,7 +411,7 @@ export const useHistoryStore = create<HistoryState>()(
       }
 
       set({
-        batchId: Date.now(),
+        batchId: nextBatchId++,
         batchLabel: label,
       });
     },

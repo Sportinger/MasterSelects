@@ -24,11 +24,9 @@ import { checkToolAccess } from './policy';
 import type { CallerContext } from './policy';
 import { beginAIToolAudit, completeAIToolAudit } from './audit';
 import {
-  abortAgentTransaction,
-  attachGroupedPartialFailure,
-  beginAgentTransaction,
-  commitAgentTransaction,
-  createGroupedPartialFailureInfo,
+  abortAgentTransaction, attachGroupedPartialFailure, beginAgentTransaction,
+  commitAgentTransaction, completeAgentToolAudit, completeOrDeferAgentToolAudit,
+  createAgentTransactionRollbackReason, createGroupedPartialFailureInfo, createGroupedRollbackReason, type AgentToolAuditCompletion,
 } from './agentTransaction';
 import {
   compileGuidedToolCall,
@@ -89,11 +87,17 @@ export { isAIExecutionActive } from './executionState';
  * Main entry point for AI chat integration.
  * @param callerContext identifies who is calling (chat, devBridge, etc.)
  */
-export async function executeAITool(
-  toolName: string,
-  args: Record<string, unknown>,
-  callerContext: CallerContext = 'internal',
-  options: AIToolExecutionOptions = {},
+export function executeAITool(
+  toolName: string, args: Record<string, unknown>,
+  callerContext: CallerContext = 'internal', options: AIToolExecutionOptions = {},
+): Promise<ToolResult> {
+  return executeAIToolWithDeferredAudit(toolName, args, callerContext, options);
+}
+
+async function executeAIToolWithDeferredAudit(
+  toolName: string, args: Record<string, unknown>,
+  callerContext: CallerContext, options: AIToolExecutionOptions,
+  deferAuditCompletion?: (completion: AgentToolAuditCompletion) => void,
 ): Promise<ToolResult> {
   const audit = beginAIToolAudit({
     args,
@@ -107,7 +111,7 @@ export async function executeAITool(
   if (!access.allowed) {
     log.warn(`Policy denied: ${toolName} from ${callerContext} — ${access.reason}`);
     const result = { success: false, error: access.reason };
-    completeAIToolAudit(audit.callId, result, access.reason, 'denied');
+    completeOrDeferAgentToolAudit({ callId: audit.callId, tool: toolName, result, error: access.reason, explicitStatus: 'denied' }, deferAuditCompletion);
     return result;
   }
 
@@ -117,10 +121,10 @@ export async function executeAITool(
     const result = useGuidedExecution
       ? await executeGuidedAITool(toolName, args, callerContext, options)
       : await _executeAIToolInternal(toolName, args, callerContext, options);
-    completeAIToolAudit(audit.callId, result);
+    completeOrDeferAgentToolAudit({ callId: audit.callId, tool: toolName, result }, deferAuditCompletion);
     return result;
   } catch (error) {
-    completeAIToolAudit(audit.callId, undefined, error);
+    completeOrDeferAgentToolAudit({ callId: audit.callId, tool: toolName, error }, deferAuditCompletion);
     throw error;
   } finally {
     setAIExecutionActive(false);
@@ -202,21 +206,23 @@ export async function executeAIToolCalls(
     } else if (transaction) {
       commitAgentTransaction(transaction);
     }
+    const rollbackReason = partialFailure?.rolledBack ? createGroupedRollbackReason(partialFailure) : undefined;
     for (const toolCall of allowedCalls) {
       const callId = auditCallIds.get(toolCall);
       const result = results.find(
         (entry) => getToolCallResultKey(entry) === getToolCallResultKey(toolCall),
       )?.result;
-      if (callId && result) completeAIToolAudit(callId, result);
+      if (callId && result) completeAgentToolAudit({ callId, tool: toolCall.tool, result }, rollbackReason);
     }
     return results;
   } catch (error) {
+    const rollbackReason = transaction ? createAgentTransactionRollbackReason(transaction, error) : undefined;
     if (transaction) {
       abortAgentTransaction(transaction);
     }
     for (const toolCall of allowedCalls) {
       const callId = auditCallIds.get(toolCall);
-      if (callId) completeAIToolAudit(callId, undefined, error);
+      if (callId) completeAgentToolAudit({ callId, tool: toolCall.tool, error }, rollbackReason);
     }
     throw error;
   } finally {
@@ -429,6 +435,7 @@ async function executeAIToolCallsDirect(
   callerContext: CallerContext,
   options: AIToolExecutionOptions,
 ): Promise<AIToolCallExecutionResult[]> {
+  const auditCompletions: AgentToolAuditCompletion[] = [];
   const results: AIToolCallExecutionResult[] = [];
   const transaction = beginTransactionForToolCalls(toolCalls, options);
   try {
@@ -437,12 +444,12 @@ async function executeAIToolCallsDirect(
       if (!toolCall) {
         continue;
       }
-      const result = await executeAITool(toolCall.tool, toolCall.args, callerContext, {
+      const result = await executeAIToolWithDeferredAudit(toolCall.tool, toolCall.args, callerContext, {
         ...options,
         auditProviderToolCallId: toolCall.id,
         guidedReplayRemainingCalls: toolCalls.length - index,
         suppressHistory: transaction ? true : options.suppressHistory,
-      });
+      }, (completion) => auditCompletions.push(completion));
       results.push({
         id: toolCall.id,
         tool: toolCall.tool,
@@ -454,19 +461,29 @@ async function executeAIToolCallsDirect(
       transaction,
       options.suppressHistory === true,
     );
+    let finalResults = results;
+    let rollbackReason: string | undefined;
     if (partialFailure) {
       if (transaction) {
         abortAgentTransaction(transaction);
       }
-      return attachGroupedPartialFailure(results, partialFailure);
-    }
-    if (transaction) {
+      finalResults = attachGroupedPartialFailure(results, partialFailure);
+      rollbackReason = partialFailure.rolledBack ? createGroupedRollbackReason(partialFailure) : undefined;
+    } else if (transaction) {
       commitAgentTransaction(transaction);
     }
-    return results;
+    for (const [index, completion] of auditCompletions.entries()) {
+      const result = finalResults[index]?.result ?? completion.result;
+      completeAgentToolAudit({ ...completion, result }, rollbackReason);
+    }
+    return finalResults;
   } catch (error) {
+    const rollbackReason = transaction ? createAgentTransactionRollbackReason(transaction, error) : undefined;
     if (transaction) {
       abortAgentTransaction(transaction);
+    }
+    for (const completion of auditCompletions) {
+      completeAgentToolAudit(completion, rollbackReason);
     }
     throw error;
   }
