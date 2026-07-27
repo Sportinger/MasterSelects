@@ -1,4 +1,5 @@
 import { useTimelineStore } from '../../../../stores/timeline';
+import { getTimelineRevision } from '../../../../stores/timeline/revisionMiddleware';
 import type { ToolResult } from '../../types.ts';
 import { isAIExecutionActive } from '../../executionState';
 import type { TimelineStore } from './runtime';
@@ -122,6 +123,10 @@ export async function handleCutRangesFromClip(
 
   const trackId = initialClip.trackId;
   const results: Array<{ range: { start: number; end: number }; status: string }> = [];
+  const mutationSnapshot = captureClipMutationSnapshot([
+    initialClip.id,
+    initialClip.linkedClipId,
+  ]);
 
   // Sort ranges from END to START (so we don't shift positions)
   const sortedRanges = [...ranges].sort((a, b) => b.timelineStart - a.timelineStart);
@@ -240,6 +245,36 @@ export async function handleCutRangesFromClip(
       rangesProcessed: ranges.length,
       rangesRemoved: removedCount,
       results,
+      ...describeClipMutation(mutationSnapshot),
+    },
+  };
+}
+
+function captureClipMutationSnapshot(targetClipIds: Array<string | undefined>) {
+  const clips = useTimelineStore.getState().clips;
+  return {
+    clipsById: new Map(clips.map((clip) => [clip.id, clip])),
+    targetClipIds: new Set(targetClipIds.filter((id): id is string => id !== undefined)),
+    stateRevisionBefore: getTimelineRevision(),
+  };
+}
+
+function describeClipMutation(snapshot: ReturnType<typeof captureClipMutationSnapshot>) {
+  const clipsAfter = useTimelineStore.getState().clips;
+  const clipsAfterById = new Map(clipsAfter.map((clip) => [clip.id, clip]));
+  const entity = (id: string) => ({ kind: 'clip' as const, id });
+
+  return {
+    stateRevisionBefore: snapshot.stateRevisionBefore,
+    stateRevisionAfter: getTimelineRevision(),
+    entities: {
+      created: clipsAfter.filter((clip) => !snapshot.clipsById.has(clip.id)).map((clip) => entity(clip.id)),
+      updated: [...snapshot.targetClipIds]
+        .filter((id) => clipsAfterById.has(id) && clipsAfterById.get(id) !== snapshot.clipsById.get(id))
+        .map(entity),
+      deleted: [...snapshot.clipsById.keys()]
+        .filter((id) => !clipsAfterById.has(id))
+        .map(entity),
     },
   };
 }
