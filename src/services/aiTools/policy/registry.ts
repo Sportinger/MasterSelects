@@ -506,6 +506,11 @@ export function getToolPolicy(toolName: string): ToolPolicyEntry | undefined {
   return TOOL_POLICY_MAP.get(normalizeToolName(toolName));
 }
 
+/** Return the names registered in the policy map for parity checks. */
+export function getRegisteredToolPolicyNames(): string[] {
+  return [...TOOL_POLICY_MAP.keys()];
+}
+
 /**
  * Check whether a caller is allowed to execute a given tool.
  * Unknown tools fail closed (not allowed).
