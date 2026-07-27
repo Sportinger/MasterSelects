@@ -237,6 +237,15 @@ export async function handleSplitClipAtTimes(
     splitClipBatch(clip, validTimes, withLinked);
   }
 
+  const clipsAfter = useTimelineStore.getState().clips;
+  const videoSegments = clipsAfter
+    .filter((candidate) => (
+      candidate.trackId === clip.trackId
+      && candidate.startTime >= clipStart - 0.001
+      && candidate.startTime + candidate.duration <= clipEnd + 0.001
+    ))
+    .toSorted((a, b) => a.startTime - b.startTime);
+
   return {
     success: true,
     data: {
@@ -244,9 +253,17 @@ export async function handleSplitClipAtTimes(
       splitTimes: validTimes,
       resultingParts: validTimes.length + 1,
       withLinked,
+      // Runtime segment binding payload (agent-kernel plan section 6.2):
+      // segment ids in timeline order so downstream steps never copy ID lists.
+      segments: {
+        videoClipIds: videoSegments.map((segment) => segment.id),
+        audioClipIds: videoSegments
+          .map((segment) => segment.linkedClipId)
+          .filter((id): id is string => typeof id === 'string'),
+      },
       ...describeMutationEntities(
         mutationSnapshot,
-        useTimelineStore.getState().clips,
+        clipsAfter,
         {
           updatedEntityIds: targetClipIds,
           excludedDeletedEntityIds: targetClipIds,

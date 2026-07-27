@@ -205,6 +205,7 @@ export function formatTrackInfo(track: TimelineTrack, clips: TimelineClip[]) {
       inPoint: c.inPoint,
       outPoint: c.outPoint,
       linkedClipId: c.linkedClipId,
+      mediaId: c.mediaFileId ?? c.source?.mediaFileId,
       sourceType: c.source?.type,
       signalAssetId: c.signalAssetId,
       signalRefId: c.signalRefId,
