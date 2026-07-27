@@ -29,6 +29,8 @@ export interface KernelCompileCompiledResponse {
   taskContract: unknown;
   plan: unknown;
   resolvedCalls: KernelResolvedCall[];
+  /** Source-ordered simulated segment ids for runtime id mapping. */
+  segments?: { simulatedVideoClipIds: string[] };
   expectedFingerprint: unknown;
   summary: unknown;
 }

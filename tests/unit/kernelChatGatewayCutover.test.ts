@@ -92,12 +92,14 @@ function createTransactionMocks() {
   };
 }
 
-function successfulToolResults(): AIToolCallExecutionResult[] {
-  return resolvedCalls.map((call) => ({
-    id: call.stepId,
+function perCallSuccess() {
+  return vi.fn(async (
+    calls: AIToolCallExecution[],
+  ): Promise<AIToolCallExecutionResult[]> => calls.map((call) => ({
+    ...(call.id === undefined ? {} : { id: call.id }),
     tool: call.tool,
     result: { success: true },
-  }));
+  })));
 }
 
 const configuredStorage = (enabled?: string) => createStorage({
@@ -118,9 +120,7 @@ describe('kernel chat gateway WP11 cutover', () => {
     const getSnapshot = vi.fn()
       .mockResolvedValueOnce(initialSnapshot)
       .mockResolvedValueOnce(finalSnapshot);
-    const executeToolCalls = vi.fn(async (
-      _calls: AIToolCallExecution[],
-    ): Promise<AIToolCallExecutionResult[]> => successfulToolResults());
+    const executeToolCalls = perCallSuccess();
     const transaction = createTransactionMocks();
 
     const result = await tryKernelFirst('Schneide den Clip', {
@@ -139,8 +139,14 @@ describe('kernel chat gateway WP11 cutover', () => {
     expect(transaction.begin).toHaveBeenCalledTimes(1);
     expect(transaction.commit).toHaveBeenCalledWith(transaction.agentTransaction);
     expect(transaction.abort).not.toHaveBeenCalled();
-    expect(executeToolCalls).toHaveBeenCalledWith([
+    expect(executeToolCalls).toHaveBeenCalledTimes(2);
+    expect(executeToolCalls).toHaveBeenNthCalledWith(1, [
       { id: 'step-1', tool: 'splitClip', args: { clipId: 'clip-1', splitTime: 4 } },
+    ], 'chat', {
+      guidedReplay: false,
+      suppressHistory: true,
+    });
+    expect(executeToolCalls).toHaveBeenNthCalledWith(2, [
       { id: 'step-2', tool: 'moveClip', args: { clipId: 'clip-2', newStartTime: 8 } },
     ], 'chat', {
       guidedReplay: false,
@@ -185,10 +191,13 @@ describe('kernel chat gateway WP11 cutover', () => {
 
   it('rolls back and falls back when any semantic tool fails', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(compiledResponse()));
-    const executeToolCalls = vi.fn().mockResolvedValue([
-      { id: 'step-1', tool: 'splitClip', result: { success: true } },
-      { id: 'step-2', tool: 'moveClip', result: { success: false, error: 'clip missing' } },
-    ]);
+    const executeToolCalls = vi.fn()
+      .mockResolvedValueOnce([
+        { id: 'step-1', tool: 'splitClip', result: { success: true } },
+      ])
+      .mockResolvedValueOnce([
+        { id: 'step-2', tool: 'moveClip', result: { success: false, error: 'clip missing' } },
+      ]);
     const transaction = createTransactionMocks();
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
@@ -216,7 +225,7 @@ describe('kernel chat gateway WP11 cutover', () => {
     const transaction = createTransactionMocks();
 
     const result = await tryKernelFirst('Schneide den Clip', {
-      executeToolCalls: vi.fn().mockResolvedValue(successfulToolResults()),
+      executeToolCalls: perCallSuccess(),
       fetchImpl: fetchImpl as unknown as typeof fetch,
       getSnapshot: vi.fn()
         .mockResolvedValueOnce(initialSnapshot)

@@ -135,12 +135,21 @@ function parseCompileResponse(value: unknown): KernelCompileResponse | undefined
     return undefined;
   }
 
+  const segments = isRecord(value.segments)
+    && Array.isArray(value.segments.simulatedVideoClipIds)
+    && value.segments.simulatedVideoClipIds.every(
+      (id): id is string => typeof id === 'string',
+    )
+    ? { simulatedVideoClipIds: [...value.segments.simulatedVideoClipIds] }
+    : undefined;
+
   return {
     runId,
     status,
     taskContract: value.taskContract,
     plan: value.plan,
     resolvedCalls: resolvedCalls as KernelResolvedCall[],
+    ...(segments === undefined ? {} : { segments }),
     expectedFingerprint: value.expectedFingerprint,
     summary: value.summary,
   };
@@ -441,30 +450,85 @@ export async function tryKernelFirst(
   const executeToolCalls = deps.executeToolCalls ?? executeAIToolCalls;
   let agentTransaction: AgentTransaction | undefined;
 
+  const failureResult = (detail: unknown): KernelChatGatewayResult => {
+    // A deferred rollback means our mutations are still applied; falling
+    // back to the legacy loop would double-edit the timeline. Report the
+    // failure honestly instead.
+    if (agentTransaction?.abortNoop) {
+      return {
+        handled: true,
+        message: failedMessage(detail),
+        runId: compiledPlan.runId,
+      };
+    }
+    console.warn('Kernel tool execution failed; rolled back and falling back to community chat.', detail);
+    return { handled: false };
+  };
+
   try {
     agentTransaction = transaction.begin(`Kernel task: ${compiledPlan.runId}`);
-    const calls: AIToolCallExecution[] = compiledPlan.resolvedCalls.map((call) => ({
-      id: call.stepId,
-      tool: call.tool,
-      args: call.args,
-    }));
-    const results = await executeToolCalls(calls, 'chat', {
-      guidedReplay: false,
-      suppressHistory: true,
-    });
-    const failure = toolExecutionFailure(compiledPlan.resolvedCalls, results);
-    if (failure) {
-      transaction.abort(agentTransaction);
-      console.warn('Kernel tool execution failed; rolled back and falling back to community chat.', failure);
-      return { handled: false };
+
+    // Runtime id binding: reorder calls reference simulated segment ids.
+    // After the split executes, map them positionally onto the real ids
+    // from the split result's segments payload (plan §7.1).
+    const simulatedIds = compiledPlan.segments?.simulatedVideoClipIds;
+    let simulatedToReal: Map<string, string> | undefined;
+    const mapId = (id: string): string => simulatedToReal?.get(id) ?? id;
+    const mapArgs = (args: Record<string, unknown>): Record<string, unknown> => {
+      if (!simulatedToReal) {
+        return args;
+      }
+      const mapped: Record<string, unknown> = { ...args };
+      for (const [key, value] of Object.entries(mapped)) {
+        if (typeof value === 'string') {
+          mapped[key] = mapId(value);
+        } else if (Array.isArray(value) && value.every((entry) => typeof entry === 'string')) {
+          mapped[key] = value.map(mapId);
+        }
+      }
+      return mapped;
+    };
+
+    for (const call of compiledPlan.resolvedCalls) {
+      const execution: AIToolCallExecution = {
+        id: call.stepId,
+        tool: call.tool,
+        args: mapArgs(call.args),
+      };
+      const results = await executeToolCalls([execution], 'chat', {
+        guidedReplay: false,
+        suppressHistory: true,
+      });
+      const failure = toolExecutionFailure([call], results);
+      if (failure) {
+        transaction.abort(agentTransaction);
+        return failureResult(failure);
+      }
+
+      const data = results[0]?.result.data;
+      if (simulatedIds
+        && !simulatedToReal
+        && isRecord(data)
+        && isRecord(data.segments)
+        && Array.isArray(data.segments.videoClipIds)) {
+        const realIds = data.segments.videoClipIds
+          .filter((id): id is string => typeof id === 'string');
+        if (realIds.length === simulatedIds.length) {
+          simulatedToReal = new Map(
+            simulatedIds.map((simulatedId, index) => [
+              simulatedId,
+              realIds[index] as string,
+            ]),
+          );
+        }
+      }
     }
     transaction.commit(agentTransaction);
   } catch (error) {
     if (agentTransaction) {
       transaction.abort(agentTransaction);
     }
-    console.warn('Kernel tool execution failed; rolled back and falling back to community chat.', error);
-    return { handled: false };
+    return failureResult(error);
   }
 
   let completion: KernelRunCompleteResponse;
