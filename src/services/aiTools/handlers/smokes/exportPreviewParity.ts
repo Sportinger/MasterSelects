@@ -1,5 +1,6 @@
 import { useTimelineStore } from '../../../../stores/timeline';
 import { timelineRuntimeCoordinator } from '../../../timeline/timelineRuntimeCoordinator';
+import { computeTimelineOccupancy } from '../../../timeline/timelineOccupancy';
 import {
   compareFrameFingerprints,
   fingerprintDataUrl,
@@ -31,6 +32,18 @@ import {
 } from './smokeRuntime';
 import { createSyntheticTimeline } from './smokeFixtures';
 import { assertCanvasSmokeSnapshot, collectSmokeSnapshot } from './smokeSnapshots';
+
+type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
+
+export function resolveExportPreviewParityTimelineDuration(
+  timelineStore: Pick<TimelineStore, 'clips' | 'tracks'>,
+): number {
+  // occupiedEnd: the agent smoke excludes UI-only trailing timeline padding.
+  return computeTimelineOccupancy(
+    timelineStore.clips,
+    timelineStore.tracks,
+  ).occupied?.endSeconds ?? 0;
+}
 
 export async function handleRunTimelineCanvasExportPreviewParitySmoke(
   args: Record<string, unknown>,
@@ -183,7 +196,7 @@ export async function handleRunTimelineCanvasExportPreviewParitySmoke(
       });
     before = collectSmokeSnapshot('before');
     const timelineStore = useTimelineStore.getState();
-    const timelineDuration = Math.max(0, timelineStore.duration);
+    const timelineDuration = resolveExportPreviewParityTimelineDuration(timelineStore);
     const maxStartTime = Math.max(0, timelineDuration - 0.1);
     const sampleTimeCandidates = resolveExportPreviewParitySampleTimes(args, maxStartTime);
     sampleTime = sampleTimeCandidates[0] ?? 0;

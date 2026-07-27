@@ -6,9 +6,11 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { exportDiagnostics } from '../../export/exportDiagnostics';
 import { Logger } from '../../logger';
 import { renderHostPort } from '../../render/renderHostPort';
+import { computeTimelineOccupancy } from '../../timeline/timelineOccupancy';
 import type { ToolResult } from '../types';
 
 const log = Logger.create('AIExport');
+type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
 function finiteNumber(value: unknown, fallback: number, min?: number, max?: number): number {
   const numericValue = typeof value === 'string' && value.trim() !== ''
@@ -32,14 +34,18 @@ function pickValue<T extends string>(value: unknown, allowed: readonly T[], fall
   return typeof value === 'string' && allowed.includes(value as T) ? value as T : fallback;
 }
 
-function resolveCurrentExportRange(): { startTime: number; endTime: number } {
-  const timeline = useTimelineStore.getState();
-  const exportSettings = useExportStore.getState().settings;
-  // agent-kernel WP2: canonical source is computeTimelineOccupancy
-  const duration = Number.isFinite(timeline.duration) ? Math.max(0, timeline.duration) : 0;
+export function resolveAgentExportRange(
+  timeline: Pick<TimelineStore, 'clips' | 'tracks' | 'inPoint' | 'outPoint'>,
+  useInOut: boolean,
+): { startTime: number; endTime: number } {
+  // occupiedEnd: agent exports exclude UI-only trailing timeline padding.
+  const occupiedEnd = computeTimelineOccupancy(
+    timeline.clips,
+    timeline.tracks,
+  ).occupied?.endSeconds ?? 0;
 
-  if (!exportSettings.useInOut) {
-    return { startTime: 0, endTime: duration };
+  if (!useInOut) {
+    return { startTime: 0, endTime: occupiedEnd };
   }
 
   const requestedStart = typeof timeline.inPoint === 'number' && Number.isFinite(timeline.inPoint)
@@ -47,11 +53,17 @@ function resolveCurrentExportRange(): { startTime: number; endTime: number } {
     : 0;
   const requestedEnd = typeof timeline.outPoint === 'number' && Number.isFinite(timeline.outPoint)
     ? timeline.outPoint
-    : duration;
+    : occupiedEnd;
 
-  const startTime = Math.max(0, Math.min(requestedStart, duration));
-  const endTime = Math.max(startTime, Math.min(requestedEnd, duration));
+  const startTime = Math.max(0, Math.min(requestedStart, occupiedEnd));
+  const endTime = Math.max(startTime, Math.min(requestedEnd, occupiedEnd));
   return { startTime, endTime };
+}
+
+function resolveCurrentExportRange(): { startTime: number; endTime: number } {
+  const timeline = useTimelineStore.getState();
+  const exportSettings = useExportStore.getState().settings;
+  return resolveAgentExportRange(timeline, exportSettings.useInOut);
 }
 
 function compactProgress(progress: ExportProgress): Record<string, unknown> {
@@ -88,13 +100,14 @@ export async function handleDebugExport(args: Record<string, unknown>): Promise<
 
   const startTime = finiteNumber(args.startTime, range.startTime, 0);
   const durationSeconds = finiteNumber(args.durationSeconds, 0, 0);
-  const timelineDuration = Number.isFinite(timeline.duration) && timeline.duration > 0
-    ? timeline.duration
-    : Number.POSITIVE_INFINITY;
+  const occupiedEnd = computeTimelineOccupancy(
+    timeline.clips,
+    timeline.tracks,
+  ).occupied?.endSeconds ?? 0;
   let endTime = durationSeconds > 0
     ? startTime + durationSeconds
     : finiteNumber(args.endTime, range.endTime, startTime);
-  endTime = Math.min(endTime, timelineDuration);
+  endTime = Math.min(endTime, occupiedEnd);
 
   if (endTime <= startTime) {
     return { success: false, error: `Invalid export range ${startTime}s-${endTime}s` };
