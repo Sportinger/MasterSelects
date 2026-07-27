@@ -21,6 +21,7 @@ describe('rulerDefaults', () => {
         bpm: DEFAULT_TEMPO_BPM,
         numerator: 4,
         denominator: 4,
+        curve: 'jump',
       },
     ]);
   });
@@ -141,7 +142,7 @@ describe('tempo events across save / load / composition switch', () => {
     const reloaded = normalizeRulerLaneState({ tempoMap: durable }).tempoMap;
 
     expect(reloaded.events).toEqual([
-      { id: 'kept', time: 0, bpm: 96, numerator: 5, denominator: 8 },
+      { id: 'kept', time: 0, bpm: 96, numerator: 5, denominator: 8, curve: 'jump' },
     ]);
   });
 });

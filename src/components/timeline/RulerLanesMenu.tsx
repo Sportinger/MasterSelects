@@ -20,6 +20,7 @@ const LANE_OPTIONS: { format: RulerLaneFormat; label: string }[] = [
   { format: 'timecode', label: 'Timecode' },
   { format: 'frames', label: 'Frames' },
   { format: 'bars', label: 'Bars + Beats' },
+  { format: 'tempo', label: 'Tempo' },
 ];
 
 export function RulerLanesMenu() {

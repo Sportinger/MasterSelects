@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createBarsGridPlan } from '../../src/components/timeline/utils/timelineGrid';
+import { createBarsGridPlan, nearestBarTime } from '../../src/timeline/tempo/barsGrid';
 import { normalizeTempoMap } from '../../src/timeline/tempo/tempoEdits';
 import type { TempoMap } from '../../src/types/timeline';
 
@@ -116,5 +116,40 @@ describe('createBarsGridPlan', () => {
   it('returns nothing for an inverted window', () => {
     const plan = createBarsGridPlan({ tempoMap: AT_120, zoom: 100, startTime: 8, endTime: 4 });
     expect(plan).toEqual({ barTimes: [], beatTimes: [], subdivisionTimes: [] });
+  });
+});
+
+// Issue #299, Packet 3: the tempo editor snaps flags to bars, independent of
+// zoom — a musical position, not whatever the grid happens to draw.
+describe('nearestBarTime', () => {
+  it('snaps to the closest bar at 120 BPM 4/4 (2 s bars)', () => {
+    expect(nearestBarTime(AT_120, 0)).toBeCloseTo(0, 9);
+    expect(nearestBarTime(AT_120, 0.9)).toBeCloseTo(0, 9);
+    expect(nearestBarTime(AT_120, 1.1)).toBeCloseTo(2, 9);
+    expect(nearestBarTime(AT_120, 7.4)).toBeCloseTo(8, 9);
+  });
+
+  it('follows the tempo map across a change', () => {
+    const map = normalizeTempoMap({
+      events: [
+        { id: 'a', time: 0, bpm: 60, numerator: 4, denominator: 4 },
+        { id: 'b', time: 8, bpm: 120, numerator: 4, denominator: 4 },
+      ],
+    });
+    // Before the change bars are 4 s; after it they are 2 s.
+    expect(nearestBarTime(map, 3.5)).toBeCloseTo(4, 9);
+    expect(nearestBarTime(map, 9.2)).toBeCloseTo(10, 9);
+  });
+
+  it('respects the meter — a 3/4 bar at 60 BPM is 3 s', () => {
+    const threeFour = normalizeTempoMap({
+      events: [{ id: 'a', time: 0, bpm: 60, numerator: 3, denominator: 4 }],
+    });
+    expect(nearestBarTime(threeFour, 2.6)).toBeCloseTo(3, 9);
+    expect(nearestBarTime(threeFour, 5.4)).toBeCloseTo(6, 9);
+  });
+
+  it('never returns a negative time', () => {
+    expect(nearestBarTime(AT_120, -5)).toBeGreaterThanOrEqual(0);
   });
 });

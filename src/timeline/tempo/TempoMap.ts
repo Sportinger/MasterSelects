@@ -38,11 +38,14 @@ export interface BarBeatLine {
 }
 
 interface TempoSegment {
-  startTime: number;   // seconds the segment takes effect
-  numerator: number;   // beats per bar
-  beatSeconds: number; // seconds per metric beat
-  barSeconds: number;  // seconds per bar
-  startPhase: number;  // cumulative bar phase at startTime
+  startTime: number;    // seconds the segment takes effect
+  endTime: number;      // seconds the NEXT event takes effect (Infinity if last)
+  numerator: number;    // beats per bar
+  denominator: number;  // the beat's note value (4 = quarter)
+  startBps: number;     // metric beats per second at startTime
+  endBps: number;       // ... at endTime; equals startBps unless the next event ramps
+  startPhase: number;   // cumulative bar phase at startTime
+  startQuarters: number; // cumulative QUARTER NOTES at startTime
 }
 
 const FALLBACK_EVENT: TempoEvent = {
@@ -53,10 +56,51 @@ const FALLBACK_EVENT: TempoEvent = {
   denominator: 4,
 };
 
-function beatSecondsFor(event: TempoEvent): number {
-  // Quarter note = 60/bpm seconds; the counted beat is a 1/denominator note.
-  const quarterNoteSeconds = SECONDS_PER_MINUTE / event.bpm;
-  return quarterNoteSeconds * (4 / event.denominator);
+// Metric beats per second. BPM counts quarter notes; the counted beat is a
+// 1/denominator note, so a 6/8 bar at 120 BPM ticks eighth notes.
+function beatsPerSecond(bpm: number, denominator: number): number {
+  return (bpm / SECONDS_PER_MINUTE) * (denominator / 4);
+}
+
+// Beats elapsed `tau` seconds into a segment.
+//
+// A jump segment is linear: beats = bps * tau. A RAMP segment interpolates the
+// tempo linearly in time, so beats is the INTEGRAL of that line — quadratic in
+// tau, not a division by a constant. Outside [0, T] the tempo is held constant
+// (before the project origin, or past the last segment), which keeps the
+// projection total.
+function beatsElapsed(segment: TempoSegment, tau: number): number {
+  const duration = segment.endTime - segment.startTime;
+  const delta = segment.endBps - segment.startBps;
+  if (!Number.isFinite(duration) || Math.abs(delta) < EPSILON || tau <= 0) {
+    return segment.startBps * tau;
+  }
+  const within = Math.min(tau, duration);
+  const beats = segment.startBps * within + (delta * within * within) / (2 * duration);
+  return tau > duration ? beats + segment.endBps * (tau - duration) : beats;
+}
+
+// Inverse of beatsElapsed: how far into the segment beat `beats` falls. The ramp
+// case solves the quadratic in closed form, so this stays exact rather than
+// iterating.
+function tauForBeats(segment: TempoSegment, beats: number): number {
+  const duration = segment.endTime - segment.startTime;
+  const delta = segment.endBps - segment.startBps;
+  if (!Number.isFinite(duration) || Math.abs(delta) < EPSILON || beats <= 0) {
+    return beats / segment.startBps;
+  }
+
+  const totalBeats = beatsElapsed(segment, duration);
+  if (beats > totalBeats) {
+    // Past the ramp: the tempo is whatever it reached.
+    return duration + (beats - totalBeats) / segment.endBps;
+  }
+
+  // (delta / 2T) * tau^2 + startBps * tau - beats = 0
+  const a = delta / (2 * duration);
+  const discriminant = segment.startBps * segment.startBps + 4 * a * beats;
+  if (discriminant <= 0) return beats / segment.startBps;
+  return (-segment.startBps + Math.sqrt(discriminant)) / (2 * a);
 }
 
 // Fold the events into segments carrying their cumulative bar phase so every
@@ -69,18 +113,35 @@ function buildSegments(map: TempoMap): TempoSegment[] {
   const segments: TempoSegment[] = [];
   let previous: TempoSegment | null = null;
 
-  for (const event of events) {
-    const beatSeconds = beatSecondsFor(event);
-    const barSeconds = beatSeconds * event.numerator;
-    const startPhase = previous
-      ? previous.startPhase + (event.time - previous.startTime) / previous.barSeconds
+  for (let index = 0; index < events.length; index += 1) {
+    const event = events[index];
+    const next = events[index + 1];
+    const startBps = beatsPerSecond(event.bpm, event.denominator);
+    // A ramp belongs to the event it leads INTO: marking event N+1 as a ramp
+    // makes THIS segment glide from its own tempo up to N+1's. The next tempo is
+    // expressed in this segment's beat unit, because the beat only changes at
+    // the boundary.
+    const endBps = next?.curve === 'ramp'
+      ? beatsPerSecond(next.bpm, event.denominator)
+      : startBps;
+
+    const previousBeats = previous
+      ? beatsElapsed(previous, previous.endTime - previous.startTime)
       : 0;
+    const startPhase = previous ? previous.startPhase + previousBeats / previous.numerator : 0;
+    const startQuarters = previous
+      ? previous.startQuarters + previousBeats * (4 / previous.denominator)
+      : 0;
+
     const segment: TempoSegment = {
       startTime: event.time,
+      endTime: next ? next.time : Number.POSITIVE_INFINITY,
       numerator: event.numerator,
-      beatSeconds,
-      barSeconds,
+      denominator: event.denominator,
+      startBps,
+      endBps,
       startPhase,
+      startQuarters,
     };
     segments.push(segment);
     previous = segment;
@@ -111,7 +172,8 @@ function phaseToBarBeat(phase: number, numerator: number): BarBeat {
 export function secondsToBarBeat(map: TempoMap, time: number): BarBeat {
   const segments = buildSegments(map);
   const segment = segmentAtTime(segments, time);
-  const phase = segment.startPhase + (time - segment.startTime) / segment.barSeconds;
+  const phase = segment.startPhase
+    + beatsElapsed(segment, time - segment.startTime) / segment.numerator;
   return phaseToBarBeat(phase, segment.numerator);
 }
 
@@ -129,8 +191,8 @@ export function barBeatToSeconds(map: TempoMap, bar: number, beat = 1): number {
   const firstSegment = segments[0];
   const firstTargetPhase = (bar - 1) + (beat - 1) / firstSegment.numerator;
   if (firstTargetPhase < firstSegment.startPhase - EPSILON) {
-    return firstSegment.startTime
-      + (firstTargetPhase - firstSegment.startPhase) * firstSegment.barSeconds;
+    const beats = (firstTargetPhase - firstSegment.startPhase) * firstSegment.numerator;
+    return firstSegment.startTime + beats / firstSegment.startBps;
   }
 
   for (let i = 0; i < segments.length; i++) {
@@ -142,7 +204,8 @@ export function barBeatToSeconds(map: TempoMap, bar: number, beat = 1): number {
       isLast
       || (targetPhase >= segment.startPhase - EPSILON && targetPhase < nextStartPhase - EPSILON)
     ) {
-      return segment.startTime + (targetPhase - segment.startPhase) * segment.barSeconds;
+      const beats = (targetPhase - segment.startPhase) * segment.numerator;
+      return segment.startTime + tauForBeats(segment, beats);
     }
   }
 
@@ -154,6 +217,52 @@ export function barBeatToSeconds(map: TempoMap, bar: number, beat = 1): number {
 // back without unpacking it at every call site (issue #299, Packet 2).
 export function barBeatToSecondsAt(map: TempoMap, position: BarBeat): number {
   return barBeatToSeconds(map, position.bar, position.beat);
+}
+
+// ─── Quarter-note position ───────────────────────────────────────────────────
+//
+// The musical coordinate CONTENT is anchored to (issue #299). Deliberately NOT
+// bar/beat: BPM defines how long a quarter note lasts, while the time signature
+// only groups beats into bars. Anchoring content to bar/beat would make a pure
+// meter change (4/4 -> 3/4 at the same BPM) drag every note sideways, even
+// though no note's duration changed. Quarters are invariant under re-grouping
+// and scale correctly with tempo, including through ramps.
+
+// A segment's beat is a 1/denominator note = 4/denominator quarter notes.
+function beatsToQuarters(segment: TempoSegment, beats: number): number {
+  return beats * (4 / segment.denominator);
+}
+
+export function secondsToQuarters(map: TempoMap, time: number): number {
+  const segments = buildSegments(map);
+  const segment = segmentAtTime(segments, time);
+  return segment.startQuarters
+    + beatsToQuarters(segment, beatsElapsed(segment, time - segment.startTime));
+}
+
+export function quartersToSeconds(map: TempoMap, quarters: number): number {
+  const segments = buildSegments(map);
+
+  // Before the project origin the first segment's tempo is held constant, the
+  // same extrapolation barBeatToSeconds uses (reachable via negative MIDI
+  // content time).
+  const first = segments[0];
+  if (quarters < first.startQuarters - EPSILON) {
+    const beats = (quarters - first.startQuarters) * (first.denominator / 4);
+    return first.startTime + beats / first.startBps;
+  }
+
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+    const nextStartQuarters = segments[i + 1]?.startQuarters ?? Infinity;
+    const isLast = i === segments.length - 1;
+    if (isLast || quarters < nextStartQuarters - EPSILON) {
+      const beats = (quarters - segment.startQuarters) * (segment.denominator / 4);
+      return segment.startTime + tauForBeats(segment, beats);
+    }
+  }
+
+  return 0;
 }
 
 // Emit every beat line within [startTime, endTime] (inclusive), in order. Drives
@@ -171,15 +280,17 @@ export function iterateBarBeatLines(
 
   for (let i = 0; i < segments.length; i++) {
     const segment = segments[i];
-    const segmentEnd = segments[i + 1]?.startTime ?? Infinity;
+    const segmentEnd = segment.endTime;
     const from = Math.max(startTime, segment.startTime);
     const to = Math.min(endTime, segmentEnd);
     if (from > to + EPSILON) continue;
 
-    // First beat index k (>= 0) whose line time is at or after `from`.
-    let k = Math.max(0, Math.ceil((from - segment.startTime) / segment.beatSeconds - EPSILON));
+    // First beat index k (>= 0) whose line time is at or after `from`. With a
+    // ramp the spacing is not constant, so k comes from the integral and each
+    // line time from its inverse.
+    let k = Math.max(0, Math.ceil(beatsElapsed(segment, from - segment.startTime) - EPSILON));
     for (; ; k++) {
-      const time = segment.startTime + k * segment.beatSeconds;
+      const time = segment.startTime + tauForBeats(segment, k);
       if (time > to + EPSILON) break;
       // The line on a segment's start belongs to that next segment, not this one.
       if (segmentEnd !== Infinity && time >= segmentEnd - EPSILON) break;

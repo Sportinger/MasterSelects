@@ -107,6 +107,9 @@ export interface ProjectTempoEvent {
   bpm: number;
   numerator: number;
   denominator: number;
+  // 'ramp' = the tempo glides into this event from the previous one (#299).
+  // Absent reads as 'jump', so pre-ramp projects are unchanged.
+  curve?: 'jump' | 'ramp';
 }
 
 export interface ProjectTempoMap {

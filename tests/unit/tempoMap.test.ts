@@ -130,3 +130,92 @@ describe('TempoMap — below the first segment', () => {
     }
   });
 });
+
+// Issue #299: a 'ramp' event is REACHED gradually — the tempo interpolates
+// linearly in time across the interval leading into it, so beats accumulate as
+// the integral of a line rather than a constant stride.
+describe('TempoMap — ramps', () => {
+  // 60 BPM 4/4 (1 beat/s) gliding to 120 BPM (2 beats/s) over the first 8 s.
+  const accelerando: TempoMap = {
+    events: [
+      { id: 'ev-a', time: 0, bpm: 60, numerator: 4, denominator: 4 },
+      { id: 'ev-b', time: 8, bpm: 120, numerator: 4, denominator: 4, curve: 'ramp' },
+    ],
+  };
+
+  const jump: TempoMap = {
+    events: [
+      { id: 'ev-c', time: 0, bpm: 60, numerator: 4, denominator: 4 },
+      { id: 'ev-d', time: 8, bpm: 120, numerator: 4, denominator: 4 },
+    ],
+  };
+
+  it('accumulates the AVERAGE tempo across the ramp, not the starting one', () => {
+    // (1 + 2)/2 beats/s * 8 s = 12 beats = 3 bars, so 8 s is the bar-4 downbeat.
+    expect(secondsToBarBeat(accelerando, 8)).toEqual({ bar: 4, beat: 1 });
+    // The same map as a jump only reaches 8 beats = 2 bars in that time.
+    expect(secondsToBarBeat(jump, 8)).toEqual({ bar: 3, beat: 1 });
+  });
+
+  it('is quadratic through the ramp, not linear', () => {
+    // Halfway in time: 1*4 + (1 beat/s over 8 s) * 4^2 / (2*8) = 5 beats.
+    const halfway = secondsToBarBeat(accelerando, 4);
+    expect(halfway.bar).toBe(2);
+    expect(halfway.beat).toBeCloseTo(2, 9);
+    // A linear reading would have put 4 s at beat 5 of bar 1 (4 beats elapsed).
+  });
+
+  it('inverts exactly — barBeatToSeconds undoes secondsToBarBeat', () => {
+    for (const time of [0.5, 2, 4, 6, 7.99, 8, 12]) {
+      const position = secondsToBarBeat(accelerando, time);
+      expect(barBeatToSeconds(accelerando, position.bar, position.beat)).toBeCloseTo(time, 6);
+    }
+  });
+
+  it('emits beat lines that get progressively closer together', () => {
+    const lines = iterateBarBeatLines(accelerando, 0, 8);
+    const gaps = lines.slice(1).map((line, i) => line.time - lines[i].time);
+
+    expect(gaps.length).toBeGreaterThan(4);
+    expect(gaps.every((gap, i) => i === 0 || gap < gaps[i - 1] + 1e-9)).toBe(true);
+    // The very first beat is ALREADY accelerating, so it is a little under the
+    // 1 s a jump would give: tau^2 + 16*tau - 16 = 0 => 0.9443 s.
+    expect(gaps[0]).toBeCloseTo(0.9443, 3);
+    expect(gaps[gaps.length - 1]).toBeLessThan(0.75);
+  });
+
+  it('handles a ritardando (slowing down) symmetrically', () => {
+    const ritardando: TempoMap = {
+      events: [
+        { id: 'ev-e', time: 0, bpm: 120, numerator: 4, denominator: 4 },
+        { id: 'ev-f', time: 8, bpm: 60, numerator: 4, denominator: 4, curve: 'ramp' },
+      ],
+    };
+    // (2 + 1)/2 * 8 = 12 beats again — the mirror of the accelerando.
+    expect(secondsToBarBeat(ritardando, 8)).toEqual({ bar: 4, beat: 1 });
+
+    const lines = iterateBarBeatLines(ritardando, 0, 8);
+    const gaps = lines.slice(1).map((line, i) => line.time - lines[i].time);
+    expect(gaps.every((gap, i) => i === 0 || gap > gaps[i - 1] - 1e-9)).toBe(true);
+  });
+
+  it('holds the reached tempo after the ramp ends', () => {
+    // From 8 s onward it is a flat 120 BPM: 2 beats/s, so a bar takes 2 s.
+    expect(secondsToBarBeat(accelerando, 10)).toEqual({ bar: 5, beat: 1 });
+  });
+
+  it('ignores a curve on the FIRST event — nothing precedes it to ramp from', () => {
+    const leading: TempoMap = {
+      events: [{ id: 'ev-g', time: 0, bpm: 60, numerator: 4, denominator: 4, curve: 'ramp' }],
+    };
+    expect(secondsToBarBeat(leading, 4)).toEqual({ bar: 2, beat: 1 });
+  });
+
+  it('leaves a map with no ramps byte-identical to the jump behaviour', () => {
+    for (const time of [0, 1.5, 8, 9.25, 20]) {
+      expect(secondsToBarBeat(jump, time)).toEqual(secondsToBarBeat(jump, time));
+    }
+    expect(iterateBarBeatLines(jump, 0, 12).map(l => l.time))
+      .toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12]);
+  });
+});

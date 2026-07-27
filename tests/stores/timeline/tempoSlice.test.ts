@@ -35,7 +35,17 @@ describe('tempoSlice', () => {
     store.getState().addTempoChange(8, 90);
     store.getState().setProjectTempo(100);
     expect(events()[0]).toMatchObject({ time: 0, bpm: 100 });
-    expect(events()[1]).toMatchObject({ time: 8, bpm: 90 });
+    expect(events()[1]).toMatchObject({ bpm: 90 });
+  });
+
+  it('setProjectTempo: later events keep their BAR, so their seconds move', () => {
+    // Default 60 BPM 4/4 => 4 s bars, so 8 s is the bar-3 downbeat.
+    store.getState().addTempoChange(8, 90);
+    store.getState().setProjectTempo(100);
+
+    // At 100 BPM a 4/4 bar is 2.4 s, so bar 3 now sits at 4.8 s. A tempo mark is
+    // musical: it stays on its bar and its seconds follow.
+    expect(events()[1].time).toBeCloseTo(4.8, 9);
   });
 
   // ─── addTempoChange ─────────────────────────────────────────────────

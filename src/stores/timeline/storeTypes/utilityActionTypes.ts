@@ -185,7 +185,14 @@ export interface TempoActions {
   ) => string | null;
   updateTempoChange: (
     eventId: string,
-    patch: { time?: number; bpm?: number; numerator?: number; denominator?: number },
+    patch: {
+      time?: number;
+      bpm?: number;
+      numerator?: number;
+      denominator?: number;
+      // 'ramp' reaches this tempo by interpolating from the previous one (#299).
+      curve?: import('../../../types/timeline').TempoCurve;
+    },
   ) => void;
   // No-op for the project tempo, which is not deletable.
   removeTempoChange: (eventId: string) => void;

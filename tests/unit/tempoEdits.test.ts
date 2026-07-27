@@ -14,6 +14,7 @@ import {
   tempoMapsEqual,
   updateTempoEvent,
 } from '../../src/timeline/tempo/tempoEdits';
+import { secondsToBarBeat } from '../../src/timeline/tempo/TempoMap';
 import type { TempoMap } from '../../src/types/timeline';
 
 function map(...events: Array<Partial<TempoMap['events'][number]>>): TempoMap {
@@ -235,5 +236,111 @@ describe('tempoEdits — helpers', () => {
   it('tempoMapsEqual compares by value, not identity', () => {
     expect(tempoMapsEqual(base, normalizeTempoMap(base))).toBe(true);
     expect(tempoMapsEqual(base, updateTempoEvent(base, 'b', { bpm: 121 }).map)).toBe(false);
+  });
+});
+
+// Issue #299: 'ramp' means the tempo is REACHED by interpolation from the
+// previous event rather than by an instant step.
+describe('tempoEdits — curve', () => {
+  it('defaults every event to jump', () => {
+    const base = map({ id: 'a', time: 0, bpm: 60, numerator: 4, denominator: 4 });
+    expect(base.events[0].curve).toBe('jump');
+    expect(insertTempoEvent(base, { time: 8, bpm: 120 }).event?.curve).toBe('jump');
+  });
+
+  it('round-trips a ramp through normalization', () => {
+    const result = map(
+      { id: 'a', time: 0, bpm: 60, numerator: 4, denominator: 4 },
+      { id: 'b', time: 8, bpm: 120, numerator: 4, denominator: 4, curve: 'ramp' },
+    );
+    expect(result.events[1].curve).toBe('ramp');
+  });
+
+  it('forces the project tempo to jump — nothing precedes it to ramp from', () => {
+    const result = map({ id: 'a', time: 0, bpm: 60, numerator: 4, denominator: 4, curve: 'ramp' });
+    expect(result.events[0].curve).toBe('jump');
+  });
+
+  it('toggles the curve through updateTempoEvent', () => {
+    const base = map(
+      { id: 'a', time: 0, bpm: 60, numerator: 4, denominator: 4 },
+      { id: 'b', time: 8, bpm: 120, numerator: 4, denominator: 4 },
+    );
+    const ramped = updateTempoEvent(base, 'b', { curve: 'ramp' });
+    expect(ramped.changed).toBe(true);
+    expect(ramped.map.events[1].curve).toBe('ramp');
+
+    const back = updateTempoEvent(ramped.map, 'b', { curve: 'jump' });
+    expect(back.map.events[1].curve).toBe('jump');
+  });
+
+  it('treats a curve change as a real change for history', () => {
+    const base = map(
+      { id: 'a', time: 0, bpm: 60, numerator: 4, denominator: 4 },
+      { id: 'b', time: 8, bpm: 120, numerator: 4, denominator: 4 },
+    );
+    expect(updateTempoEvent(base, 'b', { curve: 'jump' }).changed).toBe(false);
+    expect(updateTempoEvent(base, 'b', { curve: 'ramp' }).changed).toBe(true);
+  });
+});
+
+// Issue #299: a tempo mark is a MUSICAL object — "90 BPM at bar 11". Editing an
+// earlier tempo, or making this one a ramp, changes how long the interval before
+// it takes, so its SECONDS must move to keep its BAR. Storing seconds without
+// re-anchoring is what let a ramp flag drift to bar 11.5.
+describe('tempoEdits — events stay on their bar', () => {
+  // 60 BPM 4/4 => 4 s bars, so bar 11 is at 40 s.
+  const base = map(
+    { id: 'a', time: 0, bpm: 60, numerator: 4, denominator: 4 },
+    { id: 'b', time: 40, bpm: 90, numerator: 4, denominator: 4 },
+  );
+  const barOf = (m: TempoMap, id: string) =>
+    secondsToBarBeat(m, m.events.find(e => e.id === id)!.time);
+
+  it('turning an event into a ramp keeps it on its bar', () => {
+    expect(barOf(base, 'b')).toEqual({ bar: 11, beat: 1 });
+
+    const ramped = updateTempoEvent(base, 'b', { curve: 'ramp' }).map;
+    // 40 quarters covered at the average of 60 and 90 BPM = 75 => 32 s.
+    expect(ramped.events[1].time).toBeCloseTo(32, 9);
+    expect(barOf(ramped, 'b')).toEqual({ bar: 11, beat: 1 });
+  });
+
+  it('and turning it back restores the original seconds', () => {
+    const ramped = updateTempoEvent(base, 'b', { curve: 'ramp' }).map;
+    const back = updateTempoEvent(ramped, 'b', { curve: 'jump' }).map;
+    expect(back.events[1].time).toBeCloseTo(40, 9);
+  });
+
+  it('changing an EARLIER tempo keeps later events on their bars', () => {
+    const faster = updateTempoEvent(base, 'a', { bpm: 120 }).map;
+    // Bars are now 2 s, so bar 11 sits at 20 s.
+    expect(faster.events[1].time).toBeCloseTo(20, 9);
+    expect(barOf(faster, 'b')).toEqual({ bar: 11, beat: 1 });
+  });
+
+  it('a meter change moves no event at all', () => {
+    const threeFour = updateTempoEvent(base, 'a', { numerator: 3 }).map;
+    expect(threeFour.events[1].time).toBeCloseTo(40, 9);
+  });
+
+  it('deleting an event keeps the ones after it on their bars', () => {
+    const three = insertTempoEvent(base, { time: 60, bpm: 60 }).map;
+    const lastBar = barOf(three, three.events[2].id);
+
+    const without = removeTempoEvent(three, 'b').map;
+    expect(barOf(without, without.events[1].id)).toEqual(lastBar);
+  });
+
+  it('a DRAG still lands exactly where it was dropped', () => {
+    // The dropped position is what the user pointed at, so it wins over the
+    // musical address — otherwise the flag would slide out from under the cursor.
+    const moved = updateTempoEvent(base, 'b', { time: 24 }).map;
+    expect(moved.events[1].time).toBeCloseTo(24, 9);
+  });
+
+  it('an inserted event lands exactly where it was placed', () => {
+    const inserted = insertTempoEvent(base, { time: 16, bpm: 140 });
+    expect(inserted.event?.time).toBeCloseTo(16, 9);
   });
 });

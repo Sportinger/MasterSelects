@@ -168,6 +168,37 @@ export function createBarsGridPlan(input: BarsGridPlanInput): BarsGridPlan {
   return { barTimes, beatTimes, subdivisionTimes };
 }
 
+/**
+ * The bar line closest to `time`. Unlike the grid plan this ignores zoom: the
+ * tempo editor snaps flags to musical positions, not to what happens to be drawn
+ * at the current zoom.
+ */
+export function nearestBarTime(tempoMap: TempoMap, time: number): number {
+  // A bar can be no longer than the slowest beat times the widest meter.
+  const widestNumerator = tempoMap.events.reduce(
+    (widest, event) => Math.max(widest, event.numerator),
+    1,
+  );
+  const window = longestBeatSeconds(tempoMap) * widestNumerator;
+  const lines = iterateBarBeatLines(
+    tempoMap,
+    Math.max(0, time - window),
+    Math.max(0, time) + window,
+  );
+
+  let best: number | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const line of lines) {
+    if (!line.isBarStart) continue;
+    const distance = Math.abs(line.time - time);
+    if (distance < bestDistance) {
+      best = line.time;
+      bestDistance = distance;
+    }
+  }
+  return best ?? Math.max(0, time);
+}
+
 export interface BarsGridSnapTimesInput {
   tempoMap: TempoMap;
   zoom: number;

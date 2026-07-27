@@ -244,3 +244,44 @@ describe('remapTimelineClipsForTempo', () => {
     expect(back[1]).toBe(clips[1]);
   });
 });
+
+// Issue #299: content is anchored to the QUARTER-NOTE position, not to bar/beat.
+// A time signature only groups beats into bars — re-grouping must not move a
+// single note, or the bars ruler ends up out of sync with the content under it.
+describe('remapAcrossMaps — meter is grouping, not timing', () => {
+  const at = (bpm: number, numerator: number, denominator: number): TempoMap =>
+    normalizeTempoMap({ events: [{ id: 'a', time: 0, bpm, numerator, denominator }] });
+
+  it('a 4/4 -> 3/4 change at the same BPM moves nothing', () => {
+    const fourFour = at(60, 4, 4);
+    const threeFour = at(60, 3, 4);
+    for (const time of [0, 1, 2, 4, 6, 8, 13.75]) {
+      expect(remapAcrossMaps(fourFour, threeFour, time)).toBeCloseTo(time, 9);
+    }
+  });
+
+  it('holds for exotic meters too', () => {
+    for (const [numerator, denominator] of [[7, 8], [5, 4], [12, 8], [1, 1]]) {
+      const changed = at(60, numerator, denominator);
+      expect(remapAcrossMaps(at(60, 4, 4), changed, 6)).toBeCloseTo(6, 9);
+    }
+  });
+
+  it('a 6/8 change keeps quarter positions even though the BEAT unit changes', () => {
+    // 4/4 counts quarters, 6/8 counts eighths — twice as many beats per second,
+    // but a quarter still lasts the same 1 s at 60 BPM.
+    expect(remapAcrossMaps(at(60, 4, 4), at(60, 6, 8), 5)).toBeCloseTo(5, 9);
+  });
+
+  it('a simultaneous tempo AND meter change moves only by the tempo ratio', () => {
+    // 60 -> 120 halves every time; switching 4/4 -> 3/4 adds nothing on top.
+    expect(remapAcrossMaps(at(60, 4, 4), at(120, 3, 4), 8)).toBeCloseTo(4, 9);
+  });
+
+  it('leaves MIDI clips untouched when only the meter changes', () => {
+    const clips = [midiClip({ startTime: 2, duration: 4, inPoint: 0, outPoint: 4 })];
+    const result = remapTimelineClipsForTempo(clips, TRACKS, at(60, 4, 4), at(60, 3, 4));
+    // Same objects: nothing moved, so nothing re-rendered.
+    expect(result[0]).toBe(clips[0]);
+  });
+});

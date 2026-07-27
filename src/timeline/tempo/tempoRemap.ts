@@ -13,7 +13,7 @@
 
 import type { TimelineClip, TimelineTrack } from '../../types/timeline';
 import type { AutomationLane, MidiClipAutomation, MidiNote } from '../../types/midiClip';
-import { barBeatToSecondsAt, secondsToBarBeat } from './TempoMap';
+import { quartersToSeconds, secondsToQuarters } from './TempoMap';
 import { tempoMapsEqual } from './tempoEdits';
 import type { TempoMap } from '../../types/timeline';
 
@@ -25,9 +25,17 @@ const REMAP_EPSILON = 1e-9;
 // wildly; matches MIN_MIDI_NOTE_DURATION in midiClipSlice.
 const MIN_REMAPPED_DURATION = 0.01;
 
-/** Project `time` from `oldMap`'s musical grid onto `newMap`'s. */
+/**
+ * Project `time` from `oldMap`'s musical grid onto `newMap`'s.
+ *
+ * The invariant is the QUARTER-NOTE position, not bar/beat. Bar/beat would make
+ * a pure meter change (4/4 -> 3/4 at the same BPM) shift every note, because
+ * re-grouping bars changes a note's (bar, beat) address without changing when it
+ * is played. Quarters only move when the TEMPO moves, which is exactly the rule
+ * "MIDI follows tempo".
+ */
 export function remapAcrossMaps(oldMap: TempoMap, newMap: TempoMap, time: number): number {
-  return barBeatToSecondsAt(newMap, secondsToBarBeat(oldMap, time));
+  return quartersToSeconds(newMap, secondsToQuarters(oldMap, time));
 }
 
 /**

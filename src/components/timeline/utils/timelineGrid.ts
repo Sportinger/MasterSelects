@@ -215,7 +215,7 @@ export interface RulerTick {
 }
 
 export interface LinearLaneTicksInput {
-  format: Exclude<RulerLaneFormat, 'bars'>;
+  format: Exclude<RulerLaneFormat, 'bars' | 'tempo'>;
   zoom: number;
   frameRate?: number | null;
   startTime: number;
