@@ -45,7 +45,7 @@ function installThumbnailGenerationDom(generatedThumbnail: Blob) {
     if (tagName === 'canvas') return canvas;
     return originalCreateElement(tagName, options);
   }) as typeof document.createElement);
-  return { createElement };
+  return { createElement, video };
 }
 
 describe('face crop thumbnail cache', () => {
@@ -112,5 +112,22 @@ describe('face crop thumbnail cache', () => {
     );
     expect(createElement).not.toHaveBeenCalledWith('video');
     expect(projectFileServiceMocks.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('reuses one decoded source session across distinct crops from the same file', async () => {
+    const generatedThumbnail = new Blob(['generated-face'], { type: 'image/jpeg' });
+    const { createElement, video } = installThumbnailGenerationDom(generatedThumbnail);
+    const file = new File(['video-c'], 'video-c.mp4', { lastModified: 300 });
+
+    await getFaceCropThumbnail({ file, timestamp: 2, box });
+    await getFaceCropThumbnail({
+      file,
+      timestamp: 2,
+      box: { ...box, x: 0.4 },
+    });
+
+    expect(createElement.mock.calls.filter(([tagName]) => tagName === 'video')).toHaveLength(1);
+    expect(video.load).toHaveBeenCalledTimes(1);
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
   });
 });

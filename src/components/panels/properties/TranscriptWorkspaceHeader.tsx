@@ -1,7 +1,7 @@
 import type {
   TranscriptFusionProviderStatus,
   TranscriptFusionStage,
-} from '../../../types';
+} from '../../../types/clipMetadata';
 import type { TranscriptionProvider } from '../../../stores/settingsStore';
 import './TranscriptWorkspaceHeader.css';
 

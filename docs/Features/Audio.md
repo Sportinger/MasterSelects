@@ -55,7 +55,24 @@ See [MuScriptor Music-to-MIDI](./MuScriptor.md) for model setup, licensing, prov
 
 ## Audio Effects
 
-Audio clip controls live in the Properties panel under `CLIP Effects`; clip edit-stack operations live under `CLIP Audio Edits`, and clip transcripts remain clip-only under `CLIP Transcript`. Linked video/audio companions share the same transcript state, so selecting either clip opens the same transcript view. Selecting an audio track/layer switches the same panel to `TRACK Controls`, `TRACK Effects`, and `TRACK Sends`; selecting the master bus switches it to `MASTER Controls` and `MASTER Effects`.
+Audio clip controls live in the Properties panel under `CLIP Effects`; clip
+edit-stack operations live under `CLIP Audio Edits`. `CLIP Transcript` remains
+the full transcript-control surface, while `CLIP Analysis` presents the same
+linked transcript as word-synchronized scene blobs in the shared analysis
+workspace. Visual channels are marked unavailable rather than synthesized.
+Linked video/audio companions resolve one transcript source, so selecting
+either side reads the same words. The Analysis workspace remains useful with
+audio only: its scene list, text search, active-word sync, speaker state, and
+click-to-seek use source time without requiring video frames. Provider,
+language, continuation, clear, and advanced review/search controls remain in
+`CLIP Transcript` until complete control-surface parity is reached. Selecting
+Scope/Profile in `CLIP Analysis` is a read-only estimate for audio as well;
+the existing transcript runner keeps its current clip-range behavior until the
+range-aware job graph is connected.
+Selecting
+an audio track/layer switches the
+same panel to `TRACK Controls`, `TRACK Effects`, and `TRACK Sends`; selecting
+the master bus switches the same panel to `MASTER Controls` and `MASTER Effects`.
 For audio clips, `CLIP Effects` renders the `VolumeTab`.
 
 - Volume is stored as the `audio-volume` effect and displayed in dB.
@@ -154,6 +171,8 @@ Audio extraction for playback and export uses browser `decodeAudioData`, not MP4
 ## Multicam And Analysis
 
 - `audioAnalyzer` provides RMS level curves and downsampled fingerprints.
+- Agent Timeline audio classes now have an offline, cheap-first foundation. It derives `speech`, `music`, `noise`, `ambience`, `applause`, or explicit `unknown` spans exclusively from persisted loudness/peak, frequency, onset, and transcript summaries; it neither decodes media nor loads/downloads a model. Same-class adjacent samples merge into explicit half-open time spans, with bounded heuristic confidence and provenance for both feature artifacts and classifier version.
+- A future injected audio model is evaluated only against labelled local reference cases. It cannot be promoted merely because it exists: it must improve both accuracy and macro-F1 over the heuristic and provide observed cold and warm real-media runtime, peak-memory, artifact-size, download/no-download, and zero redundant warm-decode evidence for every required platform and scenario. This packet intentionally records no performance claim or model measurement.
 - `audioSync` uses normalized cross-correlation plus FFT-backed waveform/envelope correlation to compute offsets.
 - The Timeline clip context menu exposes Sync via Audio for selected clips with at least two audible sources; the command realigns the selected audio/video pairs and stores the result as a manual linked group.
 - `MulticamDialog` and `multicamStore` still use the legacy media-id offset path for the experimental multicam flow.

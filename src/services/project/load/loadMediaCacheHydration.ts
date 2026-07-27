@@ -209,7 +209,7 @@ export async function restoreDeferredMediaCacheState(
           updates.transcript = words;
           updates.transcriptArtifact = Array.isArray(saved)
             ? undefined
-            : saved.artifact as import('../../../types').TranscriptFusionArtifact | undefined;
+            : saved.artifact as import('../../../types/clipMetadata').TranscriptFusionArtifact | undefined;
           const transcribedRanges = Array.isArray(saved) ? undefined : saved.transcribedRanges;
           updates.transcribedRanges = transcribedRanges;
           updates.transcriptCoverage = pm.duration && pm.duration > 0

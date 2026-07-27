@@ -954,6 +954,18 @@ Wichtige Betriebsregeln:
 
 ## 11. Umsetzungsphasen
 
+### Runtime-Persistenz (implementierter Phase-1A-Unterbau)
+
+Fertige lokale Analyse-, Transcript-, Schnitt-, Description- und kompatible
+Source-Audio-Zustände werden nun im Hintergrund entprellt in Event-Shards,
+Intervallindex, Manifest und zuletzt einen Pointer geschrieben. Die Runtime
+speichert ausschließlich die materialisierten Event-DTOs; `File`/`Blob`, DOM-,
+Decoder-, Modell- und Embedding-Handles bleiben außerhalb der Persistenz.
+Lesen bevorzugt einen validierten Pointer mit identischer Source-Identity und
+fällt bei fehlenden, veralteten oder beschädigten Artefakten schreibfrei auf
+den bisherigen Live-Adapter zurück. Manuelle/nicht-legacy Artefakte verbleiben
+im Manifest, wenn der automatische Snapshot aktualisiert wird.
+
 ### Phase 0A — Benchmark und Referenzkorpus
 
 - heutige Cut-, Focus/Motion-, Face- und Audiozeiten erfassen,

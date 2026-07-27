@@ -92,6 +92,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['getClipDetails', readOnly()],
   ['getClipsInTimeRange', readOnly()],
   ['getMediaItems', readOnly()],
+  ['getTimelineAnalysis', readOnly()],
   ['getClipAnalysis', readOnly()],
   ['getClipFaceAnalysis', readOnly()],
   ['getClipTranscript', readOnly()],

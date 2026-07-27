@@ -1,4 +1,4 @@
-import type { FacePersonSummary, FrameAnalysisData } from '../../../types';
+import type { FacePersonSummary, FrameAnalysisData } from '../../../types/clipMetadata';
 import type { FaceCropSample } from './FaceCropThumbnail';
 
 export function collectFacePersonSamples(

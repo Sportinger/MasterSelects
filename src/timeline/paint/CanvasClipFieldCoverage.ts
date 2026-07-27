@@ -39,8 +39,6 @@ export const canvasClipFieldCoverage = [
   { field: 'transcriptStatus', disposition: 'projection', replacement: 'TimelineProjectionClip.badges.transcript.status', runtimeBoundary: 'plain-data' },
   { field: 'transcriptProgress', disposition: 'projection', replacement: 'TimelineProjectionClip.badges.transcript.progress', runtimeBoundary: 'plain-data' },
   { field: 'analysis', disposition: 'resource-table', replacement: 'TimelinePaintResourceRef(kind=analysis-overlay)', runtimeBoundary: 'resource-ref' },
-  { field: 'analysis.faceAnalysis', disposition: 'resource-table', replacement: 'TimelinePaintResourceRef(kind=face-ranges)', runtimeBoundary: 'resource-ref' },
-  { field: 'analysis.frames.faces', disposition: 'resource-table', replacement: 'TimelinePaintResourceRef(kind=face-markers)', runtimeBoundary: 'resource-ref' },
   { field: 'analysisStatus', disposition: 'projection', replacement: 'TimelineProjectionClip.badges.analysis.status', runtimeBoundary: 'plain-data' },
   { field: 'analysisProgress', disposition: 'projection', replacement: 'TimelineProjectionClip.badges.analysis.progress', runtimeBoundary: 'plain-data' },
   { field: 'mediaFileId', disposition: 'projection', replacement: 'TimelineProjectionClip.mediaFileId', runtimeBoundary: 'plain-data' },

@@ -12,7 +12,7 @@ import type {
   TranscriptFusionArtifact,
   TranscriptStatus,
   TranscriptWord,
-} from '../../../types';
+} from '../../../types/clipMetadata';
 import { yieldToBrowser } from './loadProgress';
 import { calcRangeCoverage, projectMediaCanHaveAudio } from './loadMediaCacheHydration';
 import { hydrateProjectMediaRuntimeSources } from './loadMediaRuntimeSources';

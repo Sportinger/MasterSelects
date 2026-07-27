@@ -189,6 +189,12 @@ export interface FrameAnalysisData {
   motion: number;         // 0-1 overall motion score (legacy, kept for compatibility)
   globalMotion: number;   // 0-1 camera/scene motion (whole frame changes uniformly)
   localMotion: number;    // 0-1 object motion (localized changes within frame)
+  motionMeanMagnitude?: number; // GPU optical-flow magnitude in analysis pixels
+  motionMeanX?: number;   // Mean optical-flow X; see motionVectorConvention
+  motionMeanY?: number;   // Mean optical-flow Y; see motionVectorConvention
+  motionDirectionCoherence?: number; // 0-1 directional agreement
+  motionCoverageRatio?: number; // 0-1 moving-pixel coverage
+  motionVectorConvention?: 'camera-motion' | 'image-flow';
   focus: number;          // 0-1 focus/sharpness score
   brightness: number;     // 0-1 brightness/luminance score
   faceCount: number;      // Number of faces detected

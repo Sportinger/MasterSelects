@@ -130,14 +130,14 @@ export async function restoreLegacyStartupMediaState(
 
         let transcriptStatus: TranscriptStatus = 'none';
         let transcript: TranscriptWord[] | undefined;
-        let transcriptArtifact: import('../../types').TranscriptFusionArtifact | undefined;
+        let transcriptArtifact: import('../../types/clipMetadata').TranscriptFusionArtifact | undefined;
         if (projectFileService.isProjectOpen()) {
           try {
             const saved = await projectFileService.getTranscript(mediaFile.id);
             if (saved?.words?.length) {
               transcriptStatus = 'ready';
               transcript = saved.words as TranscriptWord[];
-              transcriptArtifact = saved.artifact as import('../../types').TranscriptFusionArtifact | undefined;
+              transcriptArtifact = saved.artifact as import('../../types/clipMetadata').TranscriptFusionArtifact | undefined;
             }
           } catch { /* no transcript file */ }
         }

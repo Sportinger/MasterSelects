@@ -28,6 +28,7 @@ import type {
 
 const FLASHBOARD_CHAT_PRIORITY_TOOL_NAMES = new Set([
   'getTimelineState',
+  'getTimelineAnalysis',
   'getClipDetails',
   'getClipFaceAnalysis',
   'startClipFaceAnalysis',
@@ -104,7 +105,7 @@ function shouldRequireConfirmation(
   return !policy.readOnly;
 }
 
-function sanitizeToolResultValue(value: unknown, depth = 0): unknown {
+function sanitizeToolResultValue(value: unknown, depth = 0, maximumDepth = 4): unknown {
   if (typeof value === 'string') {
     if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(value)) {
       return '[image data omitted from compact chat context]';
@@ -121,12 +122,14 @@ function sanitizeToolResultValue(value: unknown, depth = 0): unknown {
     return value;
   }
 
-  if (depth >= 4) {
+  if (depth >= maximumDepth) {
     return '[truncated nested value]';
   }
 
   if (Array.isArray(value)) {
-    const items = value.slice(0, 30).map((item) => sanitizeToolResultValue(item, depth + 1));
+    const items = value.slice(0, 30).map((item) => (
+      sanitizeToolResultValue(item, depth + 1, maximumDepth)
+    ));
     if (value.length > 30) {
       items.push(`[${value.length - 30} more items truncated]`);
     }
@@ -137,7 +140,7 @@ function sanitizeToolResultValue(value: unknown, depth = 0): unknown {
     const entries = Object.entries(value as Record<string, unknown>);
     const sanitized: Record<string, unknown> = {};
     for (const [key, nestedValue] of entries.slice(0, 50)) {
-      sanitized[key] = sanitizeToolResultValue(nestedValue, depth + 1);
+      sanitized[key] = sanitizeToolResultValue(nestedValue, depth + 1, maximumDepth);
     }
     if (entries.length > 50) {
       sanitized.__truncatedKeys = entries.length - 50;
@@ -148,10 +151,18 @@ function sanitizeToolResultValue(value: unknown, depth = 0): unknown {
   return String(value);
 }
 
-function formatToolResultForModel(result: ToolResult, maxLength: number): string {
+function formatToolResultForModel(
+  result: ToolResult,
+  maxLength: number,
+  toolName?: string,
+): string {
   const sanitized = JSON.stringify({
     success: result.success,
-    data: sanitizeToolResultValue(result.data),
+    data: sanitizeToolResultValue(
+      result.data,
+      0,
+      toolName === 'getTimelineAnalysis' ? 8 : 4,
+    ),
     error: result.error,
   });
 
@@ -195,7 +206,20 @@ export async function executeFlashBoardToolCalls(
   }> = [];
 
   for (const toolCall of toolCalls) {
-    const args = parseToolArguments(toolCall.arguments);
+    const parsedArgs = parseToolArguments(toolCall.arguments);
+    const args = toolCall.name === 'getTimelineAnalysis'
+      ? {
+          ...parsedArgs,
+          limit: Math.min(
+            maxToolResultChars <= 2500 ? 5 : 25,
+            Math.max(1, Number(parsedArgs.limit) || 25),
+          ),
+          maxBytes: Math.min(
+            Math.max(1024, maxToolResultChars - 512),
+            Math.max(1, Number(parsedArgs.maxBytes) || 6 * 1024),
+          ),
+        }
+      : parsedArgs;
     const policy = getToolPolicy(toolCall.name);
 
     if (options.toolExecutionMode === 'read-only' && policy?.readOnly !== true) {
@@ -262,7 +286,11 @@ export async function executeFlashBoardToolCalls(
     return {
       toolCall,
       result: resolvedResult,
-      modelContent: formatToolResultForModel(resolvedResult, maxToolResultChars),
+      modelContent: formatToolResultForModel(
+        resolvedResult,
+        maxToolResultChars,
+        toolCall.name,
+      ),
     };
   });
 }

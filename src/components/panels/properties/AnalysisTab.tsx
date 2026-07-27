@@ -4,10 +4,44 @@ import { useShallow } from 'zustand/react/shallow';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { countSceneCutsInSourceRange } from '../../../services/sceneCutDetection/sceneCutRange';
-import type { ClipAnalysis, FacePersonSummary, FrameAnalysisData, SceneSegment, SceneDescriptionStatus } from '../../../types';
-import { AnalysisActionCenter } from './AnalysisActionCenter';
-import { FacePeopleSummary } from './FacePeopleSummary';
-import { FaceReviewSummary } from './FaceReviewSummary';
+import { estimateAgentTimelineAnalysis } from '../../../services/agentTimeline/profiles/analysisEstimate';
+import { getAgentTimelineProfileSettings } from '../../../services/agentTimeline/profiles/analysisProfiles';
+import type {
+  AgentTimelineAnalysisEstimate,
+  AgentTimelineAnalysisScopeKind,
+} from '../../../types/agentTimeline/analysisEstimate';
+import type { AgentTimelineJobGraphSnapshot } from '../../../types/agentTimeline/jobGraph';
+import type { AgentTimelineProfile, AgentTimelineRange } from '../../../types/agentTimeline/manifest';
+import type {
+  ClipAnalysis,
+  FacePersonSummary,
+  FrameAnalysisData,
+  SceneDescriptionStatus,
+  SceneSegment,
+  TranscriptStatus,
+  TranscriptWord,
+} from '../../../types/clipMetadata';
+import {
+  AnalysisActionCenter,
+} from './AnalysisActionCenter';
+import { FaceCropThumbnail } from './FaceCropThumbnail';
+import { collectFaceReviewCandidates } from '../../../services/faceAnalysis/faceReviewCandidates';
+import { collectFacePersonSamples, representativeFacePersonSample } from './facePersonSamples';
+import {
+  cancelCurrentClipAnalysis,
+  runCurrentClipAnalysis,
+} from '../../../services/agentTimeline/jobs/currentClipAnalysisExecution';
+import { AnalysisWorkspace } from './analysisWorkspace/AnalysisWorkspace';
+import { buildAnalysisWorkspaceViewModel } from './analysisWorkspace/analysisWorkspaceAdapter';
+import {
+  buildAnalysisWorkspaceTimelineMapping, sourceTimeForAnalysisWorkspacePlayhead, timelineTimeForAnalysisWorkspaceSource,
+} from './analysisWorkspace/analysisWorkspaceOccurrenceMapping';
+import {
+  createAnalysisActionConfiguration,
+  resolveLocalVisualExecution,
+} from './analysisScopeProfileExecution';
+import { TranscriptWorkspaceHeader } from './TranscriptWorkspaceHeader';
+import { useTranscriptWorkspaceController } from './useTranscriptWorkspaceController';
 
 interface AnalysisTabProps {
   clipId: string;
@@ -21,24 +55,60 @@ interface AnalysisTabProps {
   sceneDescriptionStatus?: SceneDescriptionStatus;
   sceneDescriptionProgress?: number;
   sceneDescriptionMessage?: string;
+  transcriptStatus?: TranscriptStatus;
+  transcriptProgress?: number;
+  transcript?: readonly TranscriptWord[];
 }
 
 const EMPTY_FACE_PEOPLE: readonly FacePersonSummary[] = [];
-
-function formatTimestamp(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+const EMPTY_CLIP_KEYFRAMES = [] as const;
+function graphJobText(
+  graph: AgentTimelineJobGraphSnapshot | undefined,
+  jobId: string,
+): string | undefined {
+  const status = graph?.jobs.find((job) => job.id === jobId)?.status;
+  if (status === 'queued') return 'Queued';
+  if (status === 'cached') return 'Cached';
+  if (status === 'blocked') return 'Blocked by dependency';
+  if (status === 'partial') return 'Partially complete';
+  return undefined;
 }
 
-export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress, clipStartTime, inPoint, outPoint, sceneDescriptions, sceneDescriptionStatus, sceneDescriptionProgress, sceneDescriptionMessage }: AnalysisTabProps) {
+function range(start: number, end: number): AgentTimelineRange | undefined {
+  return Number.isFinite(start) && Number.isFinite(end) && end > start
+    ? { start, end }
+    : undefined;
+}
+
+function estimateProfile(profile: AgentTimelineProfile) {
+  const baseline = getAgentTimelineProfileSettings(profile === 'custom' ? 'balanced' : profile);
+  return profile === 'custom' ? { ...baseline, profile } : baseline;
+}
+
+export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress, clipStartTime, inPoint, outPoint, sceneDescriptions, sceneDescriptionStatus, sceneDescriptionProgress, sceneDescriptionMessage, transcriptStatus = 'none', transcriptProgress = 0, transcript = [] }: AnalysisTabProps) {
   const [analyzeAllRunning, setAnalyzeAllRunning] = useState(false);
+  const [analysisGraph, setAnalysisGraph] = useState<AgentTimelineJobGraphSnapshot>();
+  const [analysisScope, setAnalysisScope] = useState<Extract<AgentTimelineAnalysisScopeKind, 'source' | 'used-ranges' | 'selection' | 'in-out'>>('used-ranges');
+  const [analysisProfile, setAnalysisProfile] = useState<AgentTimelineProfile>('balanced');
   const descStatus = sceneDescriptionStatus ?? 'none';
   const descProgress = sceneDescriptionProgress ?? 0;
   const segments = useMemo(() => sceneDescriptions ?? [], [sceneDescriptions]);
+  const transcriptController = useTranscriptWorkspaceController({
+    clipId,
+    inPoint,
+    outPoint,
+    transcript,
+    transcriptProgress,
+    transcriptStatus,
+  });
 
   // Reactive data - subscribe to specific value only
   const playheadPosition = useTimelineStore(state => state.playheadPosition);
+  const isPlaying = useTimelineStore(state => state.isPlaying);
+  const isDraggingPlayhead = useTimelineStore(state => state.isDraggingPlayhead);
+  const setPlayheadPosition = useTimelineStore(state => state.setPlayheadPosition);
+  const selectedClip = useTimelineStore(state => state.clips.find(candidate => candidate.id === clipId));
+  const clipKeyframes = useTimelineStore(state => state.clipKeyframes.get(clipId));
   const faceStatus = useTimelineStore(
     state => state.clips.find(candidate => candidate.id === clipId)?.faceAnalysisStatus ?? 'none',
   );
@@ -58,24 +128,63 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
   const isVideoSource = useTimelineStore(
     state => state.clips.find(candidate => candidate.id === clipId)?.source?.type === 'video',
   );
+  const isAudioSource = useTimelineStore(
+    state => state.clips.find(candidate => candidate.id === clipId)?.source?.type === 'audio',
+  );
+  const timelineInPoint = useTimelineStore(state => state.inPoint);
+  const timelineOutPoint = useTimelineStore(state => state.outPoint);
+  const isSelected = useTimelineStore(state => state.selectedClipIds.has(clipId));
   const {
     sceneCutAnalysis,
     sceneCutStatus,
     sceneCutProgress,
+    sourceDuration,
+    transcribedRanges,
+    analyzeSceneCuts,
+    cancelProxyGeneration,
   } = useMediaStore(useShallow((state) => {
     const mediaFile = state.files.find(candidate => candidate.id === sourceMediaFileId);
     return {
       sceneCutAnalysis: mediaFile?.sceneCutAnalysis,
       sceneCutStatus: mediaFile?.sceneCutStatus ?? 'none',
       sceneCutProgress: mediaFile?.sceneCutProgress ?? 0,
+      sourceDuration: mediaFile?.duration,
+      transcribedRanges: mediaFile?.transcribedRanges,
+      analyzeSceneCuts: state.analyzeSceneCuts,
+      cancelProxyGeneration: state.cancelProxyGeneration,
     };
   }));
   const facePeople = analysis?.faceAnalysis?.people ?? EMPTY_FACE_PEOPLE;
-  const displayedProgress = analysisStatus === 'analyzing'
-    ? analysisProgress
-    : faceStatus === 'analyzing'
-      ? faceProgress
-      : Math.max(analysisProgress, faceProgress);
+  const scenePersonSamples = useMemo(() => new Map(facePeople.map((person) => [
+    person.id,
+    collectFacePersonSamples(analysis?.frames ?? [], person),
+  ])), [analysis?.frames, facePeople]);
+  const faceReviewCandidates = useMemo(
+    () => collectFaceReviewCandidates(analysis?.frames ?? []),
+    [analysis?.frames],
+  );
+  const workspaceTimelineMapping = useMemo(() => buildAnalysisWorkspaceTimelineMapping({
+    clip: selectedClip, sourceId: sourceMediaFileId, keyframes: clipKeyframes ?? EMPTY_CLIP_KEYFRAMES,
+  }), [clipKeyframes, selectedClip, sourceMediaFileId]);
+  const sourceTimeAtPlayhead = sourceTimeForAnalysisWorkspacePlayhead(workspaceTimelineMapping, playheadPosition);
+  const workspaceSourceTime = sourceTimeAtPlayhead ?? Number.NaN;
+  const workspaceModel = useMemo(() => buildAnalysisWorkspaceViewModel({
+    range: { inPoint, outPoint },
+    analysis,
+    cuts: sceneCutAnalysis?.cuts,
+    sceneSegments: segments,
+    transcript,
+    channels: {
+      cuts: { status: sceneCutStatus, measuredRanges: sceneCutStatus === 'ready' && sceneCutAnalysis ? [{ start: 0, end: sceneCutAnalysis.duration }] : undefined },
+      metrics: { status: analysisStatus },
+      faces: { status: faceStatus },
+      transcript: { status: transcriptStatus, measuredRanges: transcribedRanges?.map(([start, end]) => ({ start, end })) },
+      descriptions: { status: descStatus, measuredRanges: descStatus === 'ready' ? [{ start: inPoint, end: outPoint }] : undefined },
+      ...(isAudioSource ? {
+        audio: { status: transcriptStatus, measuredRanges: transcribedRanges?.map(([start, end]) => ({ start, end })) },
+      } : {}),
+    },
+  }), [analysis, analysisStatus, descStatus, faceStatus, inPoint, isAudioSource, outPoint, sceneCutAnalysis, sceneCutStatus, segments, transcript, transcriptStatus, transcribedRanges]);
   const cutCount = useMemo(
     () => countSceneCutsInSourceRange(sceneCutAnalysis?.cuts, inPoint, outPoint),
     [inPoint, outPoint, sceneCutAnalysis],
@@ -85,24 +194,86 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
     : sceneCutAnalysis
       ? String(cutCount)
       : '—';
+  const usedRange = useMemo(() => range(inPoint, outPoint), [inPoint, outPoint]);
+  const fullSourceRange = useMemo(() => range(
+    0,
+    sourceDuration ?? 0,
+  ), [sourceDuration]);
+  const inOutRange = useMemo(() => {
+    if (timelineInPoint === null || timelineOutPoint === null || !usedRange) return undefined;
+    const timelineStart = Math.min(timelineInPoint, timelineOutPoint);
+    const timelineEnd = Math.max(timelineInPoint, timelineOutPoint);
+    const sourceStart = inPoint + Math.max(0, timelineStart - clipStartTime);
+    const sourceEnd = inPoint + Math.max(0, timelineEnd - clipStartTime);
+    return range(
+      Math.max(usedRange.start, sourceStart),
+      Math.min(usedRange.end, sourceEnd),
+    );
+  }, [clipStartTime, inPoint, timelineInPoint, timelineOutPoint, usedRange]);
+  const scopeRanges = useMemo(() => ({
+    source: fullSourceRange ? [fullSourceRange] : undefined,
+    'used-ranges': usedRange ? [usedRange] : undefined,
+    selection: isSelected && usedRange ? [usedRange] : undefined,
+    'in-out': inOutRange ? [inOutRange] : undefined,
+  }), [fullSourceRange, inOutRange, isSelected, usedRange]);
+  const { localVisual, blockedReason: localVisualBlockedReason } = useMemo(() => (
+    resolveLocalVisualExecution(analysisScope, analysisProfile, scopeRanges)
+  ), [analysisProfile, analysisScope, scopeRanges]);
+  const analysisEstimate = useMemo<AgentTimelineAnalysisEstimate | undefined>(() => {
+    const sourceRanges = scopeRanges[analysisScope];
+    if (!sourceRanges) return undefined;
+    const sourceFrameRate = sceneCutAnalysis && sceneCutAnalysis.duration > 0
+      ? sceneCutAnalysis.sourceFrameCount / sceneCutAnalysis.duration
+      : undefined;
+    const cachedCoverage = [
+      ...(sceneCutStatus === 'ready' && sceneCutAnalysis && fullSourceRange
+        ? [{ channel: 'cuts' as const, ranges: [fullSourceRange] }]
+        : []),
+      ...(analysisStatus === 'ready' && usedRange
+        ? [{ channel: 'quality' as const, ranges: [usedRange] }]
+        : []),
+      ...(faceStatus === 'ready' && usedRange
+        ? [{ channel: 'people' as const, ranges: [usedRange] }]
+        : []),
+      ...(transcriptStatus === 'ready' && usedRange
+        ? [{ channel: 'speech' as const, ranges: [usedRange] }]
+        : []),
+    ];
+    return estimateAgentTimelineAnalysis({
+      scope: { kind: analysisScope, sourceRanges },
+      profile: estimateProfile(analysisProfile),
+      channels: isAudioSource
+        ? ['speech', 'audio']
+        : ['cuts', 'quality', 'people', 'speech'],
+      cachedCoverage,
+      sourceFrameRate,
+      shotCount: sceneCutAnalysis ? sceneCutAnalysis.cuts.length + 1 : undefined,
+    });
+  }, [analysisProfile, analysisScope, analysisStatus, faceStatus, fullSourceRange, isAudioSource, sceneCutAnalysis, sceneCutStatus, scopeRanges, transcriptStatus, usedRange]);
+  const analysisConfiguration = useMemo(() => createAnalysisActionConfiguration({
+    scope: analysisScope,
+    profile: analysisProfile,
+    scopeRanges,
+    estimate: analysisEstimate,
+    isSelected,
+    hasInOutRange: Boolean(inOutRange),
+    blockedReason: localVisualBlockedReason,
+    onScopeChange: setAnalysisScope,
+    onProfileChange: setAnalysisProfile,
+  }), [analysisEstimate, analysisProfile, analysisScope, inOutRange, isSelected, localVisualBlockedReason, scopeRanges]);
   const handleAnalyzeSceneCuts = useCallback(() => {
     if (!sourceMediaFileId) return;
-    void useMediaStore.getState().analyzeSceneCuts(sourceMediaFileId, {
+    void analyzeSceneCuts(sourceMediaFileId, {
       force: sceneCutStatus === 'ready'
         || sceneCutStatus === 'error'
         || Boolean(sceneCutAnalysis),
     });
-  }, [sceneCutAnalysis, sceneCutStatus, sourceMediaFileId]);
+  }, [analyzeSceneCuts, sceneCutAnalysis, sceneCutStatus, sourceMediaFileId]);
   const handleCancelSceneCuts = useCallback(() => {
+    if (cancelCurrentClipAnalysis(clipId, localVisual)) return;
     if (!sourceMediaFileId) return;
-    useMediaStore.getState().cancelProxyGeneration(sourceMediaFileId);
-  }, [sourceMediaFileId]);
-  const showSceneCutAction = Boolean(
-    sourceMediaFileId
-    && sceneCutStatus !== 'analyzing'
-    && (sceneCutStatus === 'error' || !sceneCutAnalysis),
-  );
-
+    cancelProxyGeneration(sourceMediaFileId);
+  }, [cancelProxyGeneration, clipId, localVisual, sourceMediaFileId]);
   // A page reload ends the in-memory analysis job but can leave its durable
   // clip state marked as "analyzing". Recover it when the tab remounts so the
   // user is never left with a non-functional Cancel button.
@@ -124,11 +295,8 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
   const currentValues = useMemo((): FrameAnalysisData | null => {
     if (!analysis?.frames.length) return null;
 
-    const clipEnd = clipStartTime + (outPoint - inPoint);
-    if (playheadPosition < clipStartTime || playheadPosition > clipEnd) return null;
-
-    const timeInClip = playheadPosition - clipStartTime;
-    const sourceTime = inPoint + timeInClip;
+    if (sourceTimeAtPlayhead === undefined) return null;
+    const sourceTime = sourceTimeAtPlayhead;
 
     let closestFrame = analysis.frames[0];
     let closestDistance = Math.abs(closestFrame.timestamp - sourceTime);
@@ -141,7 +309,7 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
       }
     }
     return closestFrame;
-  }, [analysis, clipStartTime, inPoint, outPoint, playheadPosition]);
+  }, [analysis, sourceTimeAtPlayhead]);
 
   // Stats summary
   const stats = useMemo(() => {
@@ -172,39 +340,64 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
   const isPartial = analysisStatus === 'ready' && clipCoverage < 0.98;
 
   const handleAnalyzeMetrics = useCallback(async () => {
+    if (!localVisual) return;
+    const profile = getAgentTimelineProfileSettings(localVisual.profile);
     const { analyzeClip } = await import('../../../services/clipAnalyzer');
     await analyzeClip(clipId, {
       target: 'metrics',
       force: analysisStatus === 'ready' || analysisStatus === 'error',
+      sourceRange: localVisual.sourceRange,
+      sampleIntervalMs: 1000 / profile.metricSamplesPerSecond,
     });
-  }, [analysisStatus, clipId]);
+  }, [analysisStatus, clipId, localVisual]);
 
   const handleAnalyzeFaces = useCallback(async () => {
+    if (!localVisual?.includeFaces) return;
+    const profile = getAgentTimelineProfileSettings(localVisual.profile);
     const { analyzeClip } = await import('../../../services/clipAnalyzer');
     await analyzeClip(clipId, {
       target: 'faces',
       force: faceStatus === 'ready' || faceStatus === 'error',
+      sourceRange: localVisual.sourceRange,
+      faceSampleIntervalMs: 1000 / profile.faceSamplesPerSecond,
     });
-  }, [clipId, faceStatus]);
+  }, [clipId, faceStatus, localVisual]);
 
   const handleContinue = useCallback(async () => {
+    if (!localVisual) return;
+    const profile = getAgentTimelineProfileSettings(localVisual.profile);
     const { analyzeClip } = await import('../../../services/clipAnalyzer');
-    await analyzeClip(clipId, { continueMode: true, target: 'metrics' });
-  }, [clipId]);
+    await analyzeClip(clipId, {
+      continueMode: true,
+      target: 'metrics',
+      sourceRange: localVisual.sourceRange,
+      sampleIntervalMs: 1000 / profile.metricSamplesPerSecond,
+    });
+  }, [clipId, localVisual]);
 
   const handleCancel = useCallback(async () => {
+    if (cancelCurrentClipAnalysis(clipId, localVisual)) return;
     const { cancelAnalysis, isAnalysisRunning, recoverStaleAnalysis } = await import('../../../services/clipAnalyzer');
     if (!isAnalysisRunning()) {
       recoverStaleAnalysis(clipId);
       return;
     }
     cancelAnalysis();
-  }, [clipId]);
+  }, [clipId, localVisual]);
 
   const handleClear = useCallback(async () => {
     const { clearClipAnalysis } = await import('../../../services/clipAnalyzer');
     await clearClipAnalysis(clipId);
   }, [clipId]);
+
+  const handleClearAll = useCallback(async () => {
+    if (isAudioSource) {
+      const { clearClipTranscript } = await import('../../../services/clipTranscriber');
+      clearClipTranscript(clipId);
+      return;
+    }
+    await handleClear();
+  }, [clipId, handleClear, isAudioSource]);
 
   // AI scene description handlers
   const handleDescribe = useCallback(async () => {
@@ -213,60 +406,33 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
   }, [clipId]);
 
   const handleCancelDescribe = useCallback(async () => {
+    if (cancelCurrentClipAnalysis(clipId, localVisual)) return;
     const { cancelDescription } = await import('../../../services/sceneDescriber');
     cancelDescription();
-  }, []);
+  }, [clipId, localVisual]);
 
-  const handleClearDescriptions = useCallback(async () => {
-    const { clearSceneDescriptions } = await import('../../../services/sceneDescriber');
-    clearSceneDescriptions(clipId);
-  }, [clipId]);
+  const handleCancelTranscriptAction = useCallback(() => {
+    if (!cancelCurrentClipAnalysis(clipId, localVisual)) transcriptController.onCancel();
+  }, [clipId, localVisual, transcriptController]);
 
   const handleAnalyzeAll = useCallback(async () => {
-    if (!sourceMediaFileId || analyzeAllRunning) return;
+    if (analyzeAllRunning || !localVisual) return;
+    setAnalysisGraph(undefined);
     setAnalyzeAllRunning(true);
     try {
-      const { analyzeClip } = await import('../../../services/clipAnalyzer');
-      const jobs: Array<() => Promise<void>> = [
-        () => analyzeClip(clipId, {
-          target: 'all',
-          force: analysisStatus === 'ready'
-            || analysisStatus === 'error'
-            || faceStatus === 'ready'
-            || faceStatus === 'error',
-        }),
-        () => useMediaStore.getState().analyzeSceneCuts(sourceMediaFileId, {
-          force: sceneCutStatus === 'ready'
-            || sceneCutStatus === 'error'
-            || Boolean(sceneCutAnalysis),
-        }),
-        async () => {
-          const { describeClip } = await import('../../../services/sceneDescriber');
-          await describeClip(clipId);
-        },
-      ];
-
-      // Avoid multiplying decoder and GPU load. Each service owns its visible
-      // error state, so one failure must not block the remaining channels.
-      for (const run of jobs) {
-        try {
-          await run();
-        } catch {
-          // Continue with the next independent analysis channel.
-        }
-      }
+      await runCurrentClipAnalysis({ clipId, localVisual, onUpdate: setAnalysisGraph });
     } finally {
       setAnalyzeAllRunning(false);
     }
   }, [
-    analysisStatus,
     analyzeAllRunning,
     clipId,
-    faceStatus,
-    sceneCutAnalysis,
-    sceneCutStatus,
-    sourceMediaFileId,
+    localVisual,
   ]);
+  const visualGraphText = graphJobText(analysisGraph, 'visual');
+  const cutsGraphText = graphJobText(analysisGraph, 'cuts');
+  const transcriptGraphText = graphJobText(analysisGraph, 'transcript');
+  const descriptionsGraphText = graphJobText(analysisGraph, 'descriptions');
 
   const analysisActions = useMemo(() => [
     {
@@ -276,6 +442,8 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
       state: analysisStatus,
       statusText: analysisStatus === 'analyzing'
         ? `${analysisProgress}%`
+        : analyzeAllRunning && visualGraphText
+          ? visualGraphText
         : analysisStatus === 'ready'
           ? `${Math.round(clipCoverage * 100)}% analyzed`
           : analysisStatus === 'error'
@@ -283,7 +451,9 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
             : 'Not analyzed',
       onRun: handleAnalyzeMetrics,
       onCancel: handleCancel,
-      disabled: faceStatus === 'analyzing' && analysisStatus !== 'analyzing',
+      disabled: Boolean(localVisualBlockedReason)
+        || analyzeAllRunning
+        || (faceStatus === 'analyzing' && analysisStatus !== 'analyzing'),
       secondaryAction: isPartial
         ? { label: 'Continue', onClick: handleContinue }
         : undefined,
@@ -295,6 +465,10 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
       state: faceStatus,
       statusText: faceStatus === 'analyzing'
         ? (faceMessage || `${faceProgress}%`)
+        : !localVisual?.includeFaces
+          ? 'Unavailable for source scope'
+        : analyzeAllRunning && visualGraphText
+          ? visualGraphText
         : faceStatus === 'ready'
           ? `${facePeople.length} grouped people`
           : faceStatus === 'error'
@@ -302,7 +476,10 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
             : 'Not analyzed',
       onRun: handleAnalyzeFaces,
       onCancel: handleCancel,
-      disabled: analysisStatus === 'analyzing' && faceStatus !== 'analyzing',
+      disabled: Boolean(localVisualBlockedReason)
+        || !localVisual?.includeFaces
+        || analyzeAllRunning
+        || (analysisStatus === 'analyzing' && faceStatus !== 'analyzing'),
     },
     {
       id: 'cuts',
@@ -311,6 +488,8 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
       state: sceneCutStatus,
       statusText: sceneCutStatus === 'analyzing'
         ? `${Math.round(sceneCutProgress)}%`
+        : analyzeAllRunning && cutsGraphText
+          ? cutsGraphText
         : sceneCutStatus === 'ready' && sceneCutAnalysis
           ? `${sceneCutAnalysis.cuts.length} cuts`
           : sceneCutStatus === 'error'
@@ -318,7 +497,25 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
             : 'Not analyzed',
       onRun: handleAnalyzeSceneCuts,
       onCancel: handleCancelSceneCuts,
-      disabled: !sourceMediaFileId,
+      disabled: analyzeAllRunning || !sourceMediaFileId,
+    },
+    {
+      id: 'transcript',
+      title: 'Transcript',
+      detail: 'Timed words and diarized speakers',
+      state: transcriptStatus,
+      statusText: transcriptStatus === 'transcribing'
+        ? `${Math.round(transcriptProgress)}%`
+        : analyzeAllRunning && transcriptGraphText
+          ? transcriptGraphText
+        : transcriptStatus === 'ready'
+          ? `${transcript.length} words`
+          : transcriptStatus === 'error'
+            ? 'Transcription failed'
+            : 'Not transcribed',
+      onRun: transcriptController.onTranscribe,
+      onCancel: handleCancelTranscriptAction,
+      disabled: analyzeAllRunning,
     },
     {
       id: 'descriptions',
@@ -327,6 +524,8 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
       state: descStatus,
       statusText: descStatus === 'describing'
         ? (sceneDescriptionMessage || `${Math.round(descProgress)}%`)
+        : analyzeAllRunning && descriptionsGraphText
+          ? descriptionsGraphText
         : descStatus === 'ready'
           ? `${segments.length} described scenes`
           : descStatus === 'error'
@@ -334,13 +533,17 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
             : 'Not analyzed',
       onRun: handleDescribe,
       onCancel: handleCancelDescribe,
+      disabled: analyzeAllRunning,
     },
   ], [
     analysisProgress,
     analysisStatus,
+    analyzeAllRunning,
     clipCoverage,
+    cutsGraphText,
     descProgress,
     descStatus,
+    descriptionsGraphText,
     faceMessage,
     facePeople.length,
     faceProgress,
@@ -350,38 +553,34 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
     handleAnalyzeSceneCuts,
     handleCancel,
     handleCancelDescribe,
+    handleCancelTranscriptAction,
     handleCancelSceneCuts,
     handleContinue,
     handleDescribe,
+    transcriptController.onTranscribe,
     isPartial,
+    localVisual,
+    localVisualBlockedReason,
     sceneCutAnalysis,
     sceneCutProgress,
     sceneCutStatus,
     sceneDescriptionMessage,
     segments.length,
     sourceMediaFileId,
+    transcriptProgress,
+    transcriptStatus,
+    transcript.length,
+    transcriptGraphText,
+    visualGraphText,
   ]);
-
-  // Find active scene segment at playhead
-  const activeSegment = useMemo(() => {
-    if (segments.length === 0) return null;
-    const clipEnd = clipStartTime + (outPoint - inPoint);
-    if (playheadPosition < clipStartTime || playheadPosition > clipEnd) return null;
-    const sourceTime = inPoint + (playheadPosition - clipStartTime);
-    return segments.find(s => sourceTime >= s.start && sourceTime < s.end) ?? null;
-  }, [segments, clipStartTime, inPoint, outPoint, playheadPosition]);
-
-  const handleSeekToSegment = useCallback((sourceTime: number) => {
-    const timelinePosition = clipStartTime + (sourceTime - inPoint);
-    useTimelineStore.getState().setPlayheadPosition(Math.max(0, timelinePosition));
-  }, [clipStartTime, inPoint]);
+  const visibleAnalysisActions = isVideoSource
+    ? analysisActions
+    : analysisActions.filter((action) => action.id === 'transcript');
 
   const handleSeekToSourceTime = useCallback((sourceTime: number) => {
-    const clampedSourceTime = Math.max(inPoint, Math.min(outPoint, sourceTime));
-    useTimelineStore.getState().setPlayheadPosition(
-      Math.max(0, clipStartTime + (clampedSourceTime - inPoint)),
-    );
-  }, [clipStartTime, inPoint, outPoint]);
+    const timelineTime = timelineTimeForAnalysisWorkspaceSource(workspaceTimelineMapping, sourceTime);
+    if (timelineTime !== undefined) setPlayheadPosition(Math.max(0, timelineTime));
+  }, [setPlayheadPosition, workspaceTimelineMapping]);
 
   const handleMergePeople = useCallback((sourcePersonId: string, targetPersonId: string) => {
     void import('../../../services/faceAnalysis/faceIdentityCorrections').then(({ mergeFacePeople }) => (
@@ -403,14 +602,17 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
 
   return (
     <div className="properties-tab-content analysis-tab" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {isVideoSource && (
+      {(isVideoSource || isAudioSource) && (
         <AnalysisActionCenter
-          actions={analysisActions}
+          actions={visibleAnalysisActions}
+          configuration={analysisConfiguration}
           analyzeAllDisabled={analyzeAllRunning
+            || Boolean(localVisualBlockedReason)
             || analysisStatus === 'analyzing'
             || faceStatus === 'analyzing'
             || sceneCutStatus === 'analyzing'
-            || descStatus === 'describing'}
+            || descStatus === 'describing'
+            || transcriptStatus === 'transcribing'}
           analyzeAllRunning={analyzeAllRunning}
           clearDisabled={analyzeAllRunning
             || analysisStatus === 'analyzing'
@@ -418,208 +620,106 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
           onAnalyzeAll={() => {
             void handleAnalyzeAll();
           }}
-          onClearAll={handleClear}
+          onClearAll={handleClearAll}
         />
       )}
 
-      {/* Progress */}
-      {(analysisStatus === 'analyzing' || faceStatus === 'analyzing') && (
-        <div className="properties-section">
-          <div className="analysis-progress-bar">
-            <div className="analysis-progress-fill" style={{ width: `${displayedProgress}%` }} />
-          </div>
-          <span className="analysis-progress-text">{displayedProgress}%</span>
-          <span className="analysis-progress-text">
-            {faceStatus === 'analyzing'
-              ? (faceMessage || `YuNet + SFace ${faceProgress}%`)
-              : `Focus & Motion ${analysisProgress}%`}
-          </span>
-        </div>
-      )}
-
-      {/* Current values at playhead */}
-      {currentValues && (
-        <div className="properties-section">
-          <h4>Current Frame</h4>
-          <div className="analysis-realtime-grid">
-            <div className="analysis-metric">
-              <span className="metric-label">Focus</span>
-              <div className="metric-bar"><div className="metric-fill focus" style={{ width: `${Math.round(currentValues.focus * 100)}%` }} /></div>
-              <span className="metric-value">{Math.round(currentValues.focus * 100)}%</span>
-            </div>
-            <div className="analysis-metric">
-              <span className="metric-label">Motion</span>
-              <div className="metric-bar"><div className="metric-fill motion" style={{ width: `${Math.round(currentValues.motion * 100)}%` }} /></div>
-              <span className="metric-value">{Math.round(currentValues.motion * 100)}%</span>
-            </div>
-            {currentValues.faceCount > 0 && (
-              <div className="analysis-metric">
-                <span className="metric-label">Faces</span>
-                <span className="metric-value">{currentValues.faceCount}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Stats summary */}
-      {(stats || (isVideoSource && sourceMediaFileId)) && (
-        <div className="properties-section">
-          <h4>{stats ? `Summary (${stats.frameCount} frames)` : 'Summary'}</h4>
-          <div className="analysis-stats-grid">
-            {stats && (
-              <>
-                <div className="stat-row"><span>Avg Focus:</span><span>{stats.avgFocus}%</span></div>
-                <div className="stat-row"><span>Peak Focus:</span><span>{stats.maxFocus}%</span></div>
-                <div className="stat-row"><span>Avg Motion:</span><span>{stats.avgMotion}%</span></div>
-                <div className="stat-row"><span>Peak Motion:</span><span>{stats.maxMotion}%</span></div>
-              </>
-            )}
-            {isVideoSource && (
-              <div className="stat-row">
-                <span>Cuts:</span>
-                <span title={sceneCutAnalysis ? `${sceneCutAnalysis.cuts.length} in source` : undefined}>
-                  {showSceneCutAction ? (
-                    <button
-                      type="button"
-                      className="btn btn-sm"
-                      onClick={handleAnalyzeSceneCuts}
-                    >
-                      {sceneCutStatus === 'error' ? 'Retry' : 'Analyze'}
-                    </button>
-                  ) : cutCounterText}
-                </span>
-              </div>
-            )}
-            {stats && (
-              <>
-                <div className="stat-row"><span>Total Faces:</span><span>{stats.totalFaces}</span></div>
-                <div className="stat-row"><span>Grouped people:</span><span>{facePeople.length}</span></div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      <FacePeopleSummary
-        people={facePeople}
-        frames={analysis?.frames ?? []}
-        sourceFile={analysisStatus === 'ready' && faceStatus === 'ready' ? sourceFile : undefined}
-        onSelectSourceTime={handleSeekToSourceTime}
+      {workspaceTimelineMapping.status === 'mapping-unavailable' && <p role="status">mapping-unavailable: {workspaceTimelineMapping.reason}</p>}
+      <AnalysisWorkspace
+        model={workspaceModel}
+        sourceTime={workspaceSourceTime}
+        isFollowingPlayback={isPlaying || isDraggingPlayhead}
+        transcriptSearchQuery={transcriptController.searchQuery}
+        onTranscriptSearchChange={transcriptController.onSearchChange}
+        transcriptControls={(
+          <TranscriptWorkspaceHeader
+            activeProvider={transcriptController.activeProvider}
+            clipCoverage={transcriptController.clipCoverage}
+            hasTranscript={transcript.length > 0}
+            isPartial={transcriptController.isPartial}
+            isSignedIn={transcriptController.isSignedIn}
+            language={transcriptController.language}
+            onCancel={transcriptController.onCancel}
+            onContinue={transcriptController.onContinue}
+            onDelete={transcriptController.onClear}
+            onLanguageChange={transcriptController.onLanguageChange}
+            onProviderChange={transcriptController.onProviderChange}
+            onSearchChange={transcriptController.onSearchChange}
+            onTranscribe={transcriptController.onTranscribe}
+            run={transcriptController.run}
+            searchQuery={transcriptController.searchQuery}
+            summary={transcriptController.summary}
+            transcriptProgress={transcriptProgress}
+            transcriptStatus={transcriptStatus}
+          />
+        )}
+        currentFrame={currentValues ? {
+          sourceTime: workspaceSourceTime,
+          focus: currentValues.focus,
+          motion: currentValues.motion,
+          faceCount: currentValues.faceCount,
+        } : undefined}
+        summary={{
+          ...(stats ? {
+            frameCount: stats.frameCount,
+            averageFocus: stats.avgFocus,
+            peakFocus: stats.maxFocus,
+            averageMotion: stats.avgMotion,
+            peakMotion: stats.maxMotion,
+            totalFaces: stats.totalFaces,
+          } : {}),
+          groupedPeople: facePeople.length,
+          ...(isVideoSource ? {
+            cutCount,
+            totalSourceCuts: sceneCutAnalysis?.cuts.length,
+            cutStatusText: cutCounterText,
+          } : {}),
+          transcriptWords: transcript.length,
+          describedScenes: segments.length,
+        }}
+        reviewCandidates={faceReviewCandidates}
+        facePeople={facePeople}
+        faceFrames={analysis?.frames ?? []}
+        faceSourceFile={analysisStatus === 'ready' && faceStatus === 'ready' ? sourceFile : undefined}
+        onSeekSourceTime={handleSeekToSourceTime}
         onMergePeople={handleMergePeople}
         onMoveAppearance={handleMoveAppearance}
         onAssignReviewFaces={handleAssignReviewFaces}
+        onReanalyzeDescription={() => {
+          void handleDescribe();
+        }}
+        renderPersonThumbnail={(person, _scene, requestedTime) => {
+          const personSamples = scenePersonSamples.get(person.id) ?? [];
+          // List avatars deliberately reuse one representative crop per
+          // identity. Scene-specific crops are only needed for an explicit
+          // appearance click, otherwise a long list would enqueue a new video
+          // seek for the same speaker in every scene.
+          const sample = requestedTime === undefined
+            ? representativeFacePersonSample(personSamples)
+            : personSamples.reduce<(typeof personSamples)[number] | undefined>((closest, candidate) => (
+              !closest || Math.abs(candidate.timestamp - requestedTime) < Math.abs(closest.timestamp - requestedTime)
+                ? candidate
+                : closest
+            ), undefined);
+          return (
+            <FaceCropThumbnail
+              file={analysisStatus === 'ready' && faceStatus === 'ready' ? sourceFile : undefined}
+              sample={sample}
+              size={42}
+              alt={`${person.label} face`}
+            />
+          );
+        }}
+        renderReviewThumbnail={(candidate) => (
+          <FaceCropThumbnail
+            file={analysisStatus === 'ready' && faceStatus === 'ready' ? sourceFile : undefined}
+            sample={candidate.sample}
+            size={42}
+            alt={`Face needing review at ${candidate.sample.timestamp.toFixed(1)} seconds`}
+          />
+        )}
       />
 
-      <FaceReviewSummary
-        frames={analysis?.frames ?? []}
-        sourceFile={analysisStatus === 'ready' && faceStatus === 'ready' ? sourceFile : undefined}
-        onSelectSourceTime={handleSeekToSourceTime}
-      />
-
-      {/* Empty state */}
-      {analysisStatus !== 'ready' && analysisStatus !== 'analyzing' && !analysis?.frames.length && (
-        <div className="analysis-empty-state">
-          Choose an analysis above to inspect this clip.
-        </div>
-      )}
-
-      {/* AI Scene Description Section */}
-      <div className="properties-section" style={{ borderTop: '1px solid var(--border-color)', marginTop: '8px', paddingTop: '8px', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <h4>AI Scene Description</h4>
-        <div className="analysis-tab-actions">
-          {descStatus !== 'ready' && descStatus !== 'describing' && (
-            <button className="btn btn-sm" onClick={handleDescribe}>AI Describe</button>
-          )}
-          {descStatus === 'describing' && (
-            <button className="btn btn-sm btn-danger" onClick={handleCancelDescribe}>Cancel</button>
-          )}
-          {descStatus === 'ready' && (
-            <>
-              <button className="btn btn-sm" onClick={handleDescribe}>Re-describe</button>
-              <button className="btn btn-sm btn-danger" onClick={handleClearDescriptions}>Clear</button>
-            </>
-          )}
-        </div>
-
-        {/* Progress */}
-        {descStatus === 'describing' && (
-          <div style={{ marginTop: '6px' }}>
-            <div className="analysis-progress-bar">
-              <div className="analysis-progress-fill" style={{ width: `${descProgress}%` }} />
-            </div>
-            <span className="analysis-progress-text">
-              {sceneDescriptionMessage || `${descProgress}%`}
-            </span>
-          </div>
-        )}
-
-        {/* Error */}
-        {descStatus === 'error' && sceneDescriptionMessage && (
-          <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--danger-light)' }}>
-            {sceneDescriptionMessage}
-          </div>
-        )}
-
-        {/* Scene segment list */}
-        {segments.length > 0 && (
-          <div className="scene-segment-list" style={{
-            marginTop: '6px',
-            flex: 1,
-            overflowY: 'auto',
-            borderRadius: '4px',
-            border: '1px solid var(--border-color)',
-            minHeight: 0,
-          }}>
-            {segments.map(seg => {
-              const isActive = seg.id === activeSegment?.id;
-              return (
-                <div
-                  key={seg.id}
-                  className={`scene-segment-item${isActive ? ' active' : ''}`}
-                  onClick={() => handleSeekToSegment(seg.start)}
-                  style={{
-                    display: 'flex',
-                    gap: '8px',
-                    padding: '6px 8px',
-                    cursor: 'pointer',
-                    borderLeft: isActive ? '3px solid var(--accent)' : '3px solid transparent',
-                    background: isActive ? 'var(--accent-subtle)' : 'transparent',
-                    borderBottom: '1px solid var(--border-color)',
-                    transition: 'background 0.15s',
-                  }}
-                  onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.03)'; }}
-                  onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-                >
-                  <span style={{
-                    color: isActive ? 'var(--accent)' : 'var(--text-muted)',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '10px',
-                    whiteSpace: 'nowrap',
-                    paddingTop: '1px',
-                    flexShrink: 0,
-                  }}>
-                    {formatTimestamp(seg.start)}
-                  </span>
-                  <span style={{
-                    color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    fontSize: '11px',
-                    lineHeight: '1.4',
-                  }}>
-                    {seg.text}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {descStatus === 'none' && segments.length === 0 && (
-          <div className="analysis-empty-state" style={{ marginTop: '4px', fontSize: '11px' }}>
-            Uses local Ollama AI to describe video content with timestamps.
-          </div>
-        )}
-      </div>
     </div>
   );
 }

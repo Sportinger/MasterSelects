@@ -411,4 +411,10 @@ describe('FlashBoardPromptRefiner', () => {
       ],
     })).toBe('A detailed product render prompt.');
   });
+
+  it('rejects malformed external response payloads at the mapping boundary', () => {
+    expect(() => extractRefinedPromptFromOpenAIResponse({
+      output: [{ type: 'message', content: 'not-an-array' }],
+    })).toThrow('empty prompt refinement');
+  });
 });

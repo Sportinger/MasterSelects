@@ -422,3 +422,7 @@ export const useTimelineStore = create<TimelineStore>()(
     };
   }))
 );
+
+(globalThis as typeof globalThis & {
+  __timelineStoreModule?: { useTimelineStore: typeof useTimelineStore };
+}).__timelineStoreModule = { useTimelineStore };

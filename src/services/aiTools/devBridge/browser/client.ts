@@ -5,6 +5,10 @@ import { installRealClipDragRecorder } from './debugActions/realClipDragRecorder
 import { runDebugAction } from './debugActions';
 import { inspectGuidedBridgeTool, resolveBridgeToolExecution } from './guidedOptions';
 import {
+  isAgentTimelineLocalBenchmarkTool,
+  runAgentTimelineLocalBenchmark,
+} from '../../../agentTimeline/benchmark/localBenchmarkRunner/browserLocalBenchmarkRunner';
+import {
   getTabPriorityDelayMs,
   registerBridgePresence,
   tabId,
@@ -77,6 +81,8 @@ export function registerDevBridgeBrowserClient(hot: BrowserHot): void {
         result = { success: true, data: getQuickTimelineSummary() };
       } else if (data.tool === '_inspectGuided') {
         result = inspectGuidedBridgeTool(data.args);
+      } else if (isAgentTimelineLocalBenchmarkTool(data.tool)) {
+        result = { success: true, data: await runAgentTimelineLocalBenchmark(data.args) };
       } else {
         const execution = resolveBridgeToolExecution(data.args, data.options);
         result = await executeAITool(data.tool, execution.args, 'devBridge', execution.options);

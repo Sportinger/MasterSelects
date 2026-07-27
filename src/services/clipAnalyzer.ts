@@ -10,8 +10,15 @@ import {
   destroyOpticalFlowAnalyzer,
   type MotionResult,
 } from '../engine/analysis/OpticalFlowAnalyzer';
-import { analyzeMotion, analyzeSharpness } from './clipAnalysis/frameMetrics';
+import { analyzeFrameVisualMetrics, analyzeMotion } from './clipAnalysis/frameMetrics';
 import { extractVideoFrame } from './clipAnalysis/frameExtractor';
+import {
+  cachedFaceCadenceIsCompatible,
+  createAnalysisSampleSchedule,
+  positiveSampleInterval,
+  resolveSourceAnalysisRange,
+  type SourceAnalysisRange,
+} from './clipAnalysis/analysisSampling';
 import {
   createStaleAnalysisRecoveryUpdate,
   propagateAnalysisToMediaFile,
@@ -58,7 +65,14 @@ export interface ClipAnalysisOptions {
   continueMode?: boolean;
   force?: boolean;
   target?: ClipAnalysisTarget;
+  /** Source-time interval. Defaults to the current clip's trimmed range. */
+  sourceRange?: SourceAnalysisRange;
+  /** Focus/motion cadence. Defaults to the established Balanced 2 fps path. */
+  sampleIntervalMs?: number;
+  /** Optional independent YuNet/SFace cadence for a mixed visual pass. */
+  faceSampleIntervalMs?: number;
 }
+
 
 /**
  * Initialize GPU optical flow analyzer
@@ -231,8 +245,13 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
 
   // Check for cached analysis first (from project folder, not browser cache)
   const mediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
-  const inPoint = clip.inPoint ?? 0;
-  const outPoint = clip.outPoint ?? clip.duration;
+  const [inPoint, outPoint] = resolveSourceAnalysisRange(
+    options.sourceRange,
+    clip.inPoint ?? 0,
+    clip.outPoint ?? clip.duration,
+  );
+  const metricSampleIntervalMs = positiveSampleInterval(options.sampleIntervalMs, SAMPLE_INTERVAL_MS);
+  const faceSampleIntervalMs = positiveSampleInterval(options.faceSampleIntervalMs, metricSampleIntervalMs);
   // Face embeddings are intentionally not persisted. A full pass keeps anonymous
   // person IDs coherent instead of creating colliding identities across cache gaps.
   const continueMode = false;
@@ -267,9 +286,16 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
     try {
       const cachedAnalysis = await projectFileService.getAnalysis(mediaFileId, inPoint, outPoint);
       const restored = cachedAnalysis ? restoreCachedClipAnalysis(cachedAnalysis) : null;
+      const metricsCacheIsCompatible = !analyzeMetrics
+        || restored?.analysis.sampleInterval === undefined
+        || restored.analysis.sampleInterval <= metricSampleIntervalMs;
+      const facesCacheIsCompatible = !analyzeFaces
+        || Boolean(restored?.hasFaces
+          && cachedFaceCadenceIsCompatible(restored.analysis.frames, faceSampleIntervalMs));
       const cacheSatisfiesTarget = Boolean(
         restored?.analysis.frames.length
-        && (target === 'metrics' || restored.hasFaces),
+        && metricsCacheIsCompatible
+        && facesCacheIsCompatible,
       );
       if (restored && cacheSatisfiesTarget) {
         log.info('Found cached analysis in project folder, loading...');
@@ -409,11 +435,19 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
     // Determine ranges to analyze
     const ranges: [number, number][] = analysisGaps
       ? analysisGaps.map(([s, e]) => [s, Math.min(e, video.duration)])
-      : [[inPoint, Math.min(outPoint, video.duration)]];
+      : [[Math.max(0, inPoint), Math.min(outPoint, video.duration)]];
+    if (ranges.some(([start, end]) => end <= start)) {
+      throw new RangeError('Analysis source range does not overlap the video source.');
+    }
 
     // Calculate total samples across all ranges for progress reporting
     const totalSamples = ranges.reduce((sum, [s, e]) => {
-      return sum + Math.ceil(((e - s) * 1000) / SAMPLE_INTERVAL_MS);
+      return sum + createAnalysisSampleSchedule(
+        s,
+        e,
+        analyzeMetrics ? metricSampleIntervalMs : undefined,
+        analyzeFaces ? faceSampleIntervalMs : undefined,
+      ).length;
     }, 0);
 
     let processedSamples = 0;
@@ -424,11 +458,19 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
       (clip.analysis?.frames ?? []).map(frame => [Math.round(frame.timestamp * 1000), frame]),
     );
 
-    log.info(`Analyzing ${target}: ${totalSamples} frames across ${ranges.length} range(s)${continueMode ? ' (continue mode)' : ''}`);
+    log.info(`Analyzing ${target}: ${totalSamples} samples across ${ranges.length} range(s)`, {
+      metricSampleIntervalMs: analyzeMetrics ? metricSampleIntervalMs : undefined,
+      faceSampleIntervalMs: analyzeFaces ? faceSampleIntervalMs : undefined,
+      continueMode,
+    });
 
     for (const [rangeStart, rangeEnd] of ranges) {
-      const rangeDuration = rangeEnd - rangeStart;
-      const rangeSamples = Math.ceil((rangeDuration * 1000) / SAMPLE_INTERVAL_MS);
+      const rangeSamples = createAnalysisSampleSchedule(
+        rangeStart,
+        rangeEnd,
+        analyzeMetrics ? metricSampleIntervalMs : undefined,
+        analyzeFaces ? faceSampleIntervalMs : undefined,
+      );
 
       // Reset flow analyzer between ranges (different video regions)
       if (gpuAvailable) {
@@ -438,7 +480,7 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
 
       const rangeFrames: FrameAnalysisData[] = [];
 
-      for (let i = 0; i < rangeSamples; i++) {
+      for (const scheduledSample of rangeSamples) {
         if (shouldCancel) {
           log.info('Analysis cancelled');
           updateClipAnalysis(clipId, {
@@ -452,14 +494,14 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
           return;
         }
 
-        const relativeTime = (i * SAMPLE_INTERVAL_MS) / 1000;
-        const absoluteTime = rangeStart + relativeTime;
+        const absoluteTime = scheduledSample.time;
 
         const frame = await extractVideoFrame(video, absoluteTime, canvas, ctx);
         const existingFrame = existingFramesByTimestamp.get(Math.round(absoluteTime * 1000));
-        const calculateMetrics = analyzeMetrics || !existingFrame;
+        const calculateMetrics = scheduledSample.metrics && (analyzeMetrics || !existingFrame);
         let motionResult: MotionResult | null = null;
         let focus = existingFrame?.focus ?? 0;
+        let brightness = existingFrame?.brightness ?? 0.5;
         if (calculateMetrics) {
           const analysisStart = performance.now();
           if (gpuAvailable) {
@@ -469,7 +511,9 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
           } else {
             motionResult = analyzeMotion(frame, previousFrame);
           }
-          focus = analyzeSharpness(frame);
+          const visualMetrics = analyzeFrameVisualMetrics(frame);
+          focus = visualMetrics.sharpness;
+          brightness = visualMetrics.brightness;
           if (processedSamples === 0) {
             const analysisTime = performance.now() - analysisStart;
             log.debug(`First frame analysis took ${analysisTime.toFixed(1)}ms (${gpuAvailable ? 'GPU' : 'CPU'})`);
@@ -478,7 +522,7 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
         }
 
         let faces = existingFrame?.faces;
-        if (analyzeFaces && faceRuntime && identityTracker && faceCanvas && faceContext) {
+        if (scheduledSample.faces && analyzeFaces && faceRuntime && identityTracker && faceCanvas && faceContext) {
           faceContext.drawImage(video, 0, 0, faceCanvas.width, faceCanvas.height);
           const faceFrame = faceContext.getImageData(0, 0, faceCanvas.width, faceCanvas.height);
           const runtimeDetections = await faceRuntime.analyzeFrame(faceFrame, abortController.signal);
@@ -491,10 +535,34 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
           globalMotion: motionResult?.global ?? existingFrame?.globalMotion ?? 0,
           localMotion: motionResult?.local ?? existingFrame?.localMotion ?? 0,
           focus,
-          brightness: existingFrame?.brightness ?? 0.5,
+          brightness,
           faceCount: faces?.length ?? existingFrame?.faceCount ?? 0,
           isSceneCut: motionResult?.isSceneCut ?? existingFrame?.isSceneCut,
         };
+        const directionalMotion = {
+          meanMagnitude: motionResult?.meanMagnitude ?? existingFrame?.motionMeanMagnitude,
+          meanX: motionResult?.meanX ?? existingFrame?.motionMeanX,
+          meanY: motionResult?.meanY ?? existingFrame?.motionMeanY,
+          directionCoherence: motionResult?.directionCoherence
+            ?? existingFrame?.motionDirectionCoherence,
+          coverageRatio: motionResult?.coverageRatio ?? existingFrame?.motionCoverageRatio,
+          vectorConvention: motionResult?.vectorConvention
+            ?? existingFrame?.motionVectorConvention,
+        };
+        if (directionalMotion.meanMagnitude !== undefined) {
+          analyzedFrame.motionMeanMagnitude = directionalMotion.meanMagnitude;
+        }
+        if (directionalMotion.meanX !== undefined) analyzedFrame.motionMeanX = directionalMotion.meanX;
+        if (directionalMotion.meanY !== undefined) analyzedFrame.motionMeanY = directionalMotion.meanY;
+        if (directionalMotion.directionCoherence !== undefined) {
+          analyzedFrame.motionDirectionCoherence = directionalMotion.directionCoherence;
+        }
+        if (directionalMotion.coverageRatio !== undefined) {
+          analyzedFrame.motionCoverageRatio = directionalMotion.coverageRatio;
+        }
+        if (directionalMotion.vectorConvention) {
+          analyzedFrame.motionVectorConvention = directionalMotion.vectorConvention;
+        }
         if (faces) analyzedFrame.faces = faces;
         if (analyzeFaces) {
           analyzedFrame.faceModelVersion = FACE_ANALYSIS_MODEL_VERSION;
@@ -517,13 +585,15 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
               ...completedRanges,
               [rangeStart, Math.min(
                 rangeEnd,
-                absoluteTime + SAMPLE_INTERVAL_MS / 1000,
+                absoluteTime + metricSampleIntervalMs / 1000,
               )],
             ],
           );
           const partialAnalysis: ClipAnalysis = {
             frames: allSoFar,
-            sampleInterval: SAMPLE_INTERVAL_MS,
+            sampleInterval: analyzeMetrics
+              ? metricSampleIntervalMs
+              : latestAnalysis?.sampleInterval ?? clip.analysis?.sampleInterval ?? SAMPLE_INTERVAL_MS,
             faceAnalysis: summarizeMergedFaces(allSoFar),
           };
           updateClipAnalysis(clipId, {
@@ -560,7 +630,7 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
             rangeStart,
             rangeEnd,
             persistedRangeFrames,
-            SAMPLE_INTERVAL_MS,
+            analyzeMetrics ? metricSampleIntervalMs : clip.analysis?.sampleInterval ?? SAMPLE_INTERVAL_MS,
             summarizeMergedFaces(persistedRangeFrames),
           );
           log.debug('Saved analysis range', { range: `${rangeStart.toFixed(1)}-${rangeEnd.toFixed(1)}` });
@@ -594,7 +664,9 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
 
     const analysis: ClipAnalysis = {
       frames: finalFrames,
-      sampleInterval: SAMPLE_INTERVAL_MS,
+      sampleInterval: analyzeMetrics
+        ? metricSampleIntervalMs
+        : latestAnalysis?.sampleInterval ?? clip.analysis?.sampleInterval ?? SAMPLE_INTERVAL_MS,
       faceAnalysis: summarizeMergedFaces(finalFrames),
     };
 

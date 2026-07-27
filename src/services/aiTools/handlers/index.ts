@@ -63,7 +63,6 @@ import {
   handleGetCutPreviewQuad,
   handleGetFramesAtTimes,
 } from './preview';
-import { handleRunPixelParticleDisintegrateQa } from './pixelParticleDisintegrateQa';
 
 import {
   handleGetMediaItems,
@@ -104,7 +103,6 @@ import {
   handlePlay,
   handlePause,
   handleSimulateFrameKeypresses,
-  handleMonitorManualPause,
   handleSimulateScrub,
   handleSimulatePlayback,
   handleSimulatePlaybackPulses,
@@ -132,7 +130,6 @@ import {
   handleAddVertex,
   handleRemoveVertex,
   handleUpdateVertex,
-  handleAddMaskPathKeyframe,
 } from './masks';
 
 import {
@@ -199,83 +196,8 @@ import {
   handleGetNodeWorkspaceDebugState,
   handleSendAINodePrompt,
 } from './nodeWorkspace';
-
-// Handler registry - maps tool names to handler functions
-const timelineHandlers: Record<string, (args: Record<string, unknown>, store: ReturnType<typeof useTimelineStore.getState>, callerContext?: CallerContext) => Promise<ToolResult>> = {
-  getTimelineState: handleGetTimelineState,
-  setPlayhead: handleSetPlayhead,
-  setInOutPoints: handleSetInOutPoints,
-  getClipDetails: handleGetClipDetails,
-  getClipsInTimeRange: handleGetClipsInTimeRange,
-  splitClip: handleSplitClip,
-  deleteClip: handleDeleteClip,
-  deleteClips: handleDeleteClips,
-  cutRangesFromClip: handleCutRangesFromClip,
-  moveClip: handleMoveClip,
-  trimClip: handleTrimClip,
-  splitClipEvenly: handleSplitClipEvenly,
-  splitClipAtTimes: handleSplitClipAtTimes,
-  reorderClips: handleReorderClips,
-  selectClips: handleSelectClips,
-  clearSelection: handleClearSelection,
-  createTrack: handleCreateTrack,
-  deleteTrack: handleDeleteTrack,
-  setTrackVisibility: handleSetTrackVisibility,
-  setTrackMuted: handleSetTrackMuted,
-  getClipAnalysis: handleGetClipAnalysis,
-  getClipFaceAnalysis: handleGetClipFaceAnalysis,
-  mergeClipFacePeople: handleMergeClipFacePeople,
-  moveClipFaceAppearance: handleMoveClipFaceAppearance,
-  assignClipFaceReviewCandidate: handleAssignClipFaceReviewCandidate,
-  getClipTranscript: handleGetClipTranscript,
-  findSilentSections: handleFindSilentSections,
-  findLowQualitySections: handleFindLowQualitySections,
-  startClipAnalysis: handleStartClipAnalysis,
-  startClipFaceAnalysis: handleStartClipFaceAnalysis,
-  startClipTranscription: handleStartClipTranscription,
-  captureFrame: handleCaptureFrame,
-  getCutPreviewQuad: handleGetCutPreviewQuad,
-  getFramesAtTimes: handleGetFramesAtTimes,
-  runPixelParticleDisintegrateQa: async (args: Record<string, unknown>) =>
-    handleRunPixelParticleDisintegrateQa(args),
-  // Transform
-  setTransform: handleSetTransform,
-  // Effects
-  addEffect: handleAddEffect,
-  removeEffect: handleRemoveEffect,
-  updateEffect: handleUpdateEffect,
-  // Keyframes
-  getKeyframes: handleGetKeyframes,
-  addKeyframe: handleAddKeyframe,
-  // Playback & Control
-  play: handlePlay,
-  pause: handlePause,
-  monitorManualPause: handleMonitorManualPause,
-  simulateFrameKeypresses: handleSimulateFrameKeypresses,
-  simulateScrub: handleSimulateScrub,
-  simulatePlayback: handleSimulatePlayback,
-  simulatePlaybackPulses: handleSimulatePlaybackPulses,
-  simulatePlaybackPath: handleSimulatePlaybackPath,
-  setClipSpeed: handleSetClipSpeed,
-  // Markers
-  addMarker: handleAddMarker,
-  getMarkers: handleGetMarkers,
-  removeMarker: handleRemoveMarker,
-  // Transitions
-  addTransition: handleAddTransition,
-  removeTransition: handleRemoveTransition,
-  // Masks
-  getMasks: handleGetMasks,
-  addRectangleMask: handleAddRectangleMask,
-  addEllipseMask: handleAddEllipseMask,
-  addMask: handleAddMask,
-  removeMask: handleRemoveMask,
-  updateMask: handleUpdateMask,
-  addVertex: handleAddVertex,
-  removeVertex: handleRemoveVertex,
-  updateVertex: handleUpdateVertex,
-  addMaskPathKeyframe: handleAddMaskPathKeyframe,
-};
+import { handleGetTimelineAnalysis } from './agentTimeline';
+import { timelineHandlers } from './timelineHandlerRegistry';
 
 const mediaHandlers: Record<string, (args: Record<string, unknown>, store: ReturnType<typeof useMediaStore.getState>, callerContext?: CallerContext) => Promise<ToolResult>> = {
   getMediaItems: handleGetMediaItems,
@@ -568,6 +490,10 @@ export async function executeToolInternal(
   // so dispatch matches the registered handler name.
   toolName = normalizeToolName(toolName);
 
+  if (toolName === 'getTimelineAnalysis') {
+    return handleGetTimelineAnalysis(args, timelineStore, mediaStore);
+  }
+
   // Check timeline handlers first
   if (toolName in timelineHandlers) {
     return timelineHandlers[toolName](args, timelineStore, callerContext);
@@ -619,6 +545,7 @@ export {
   handleSetTrackVisibility,
   handleSetTrackMuted,
   // Analysis
+  handleGetTimelineAnalysis,
   handleGetClipAnalysis,
   handleGetClipFaceAnalysis,
   handleMergeClipFacePeople,

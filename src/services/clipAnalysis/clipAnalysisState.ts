@@ -1,5 +1,4 @@
-import { useMediaStore, triggerTimelineSave } from '../../stores/mediaStore';
-import { useTimelineStore } from '../../stores/timeline';
+import { triggerTimelineSave } from '../../stores/mediaStore';
 import { Logger } from '../logger';
 import { projectFileService } from '../projectFileService';
 import { hasCompatibleFaceAnalysis } from '../faceAnalysis/faceAnalysisPersistence';
@@ -9,6 +8,12 @@ import type {
 } from '../../types/clipMetadata';
 import type { TimelineClip } from '../../types/timeline';
 import { applySharedClipAnalysisState } from './sourceAnalysisSharing';
+import {
+  findTimelineAnalysisMediaFile,
+  readTimelineAnalysisClips,
+  updateTimelineAnalysisClips,
+  updateTimelineAnalysisMediaFiles,
+} from '../timeline/timelineRuntimeCoordinator';
 
 const log = Logger.create('ClipAnalysisState');
 
@@ -62,9 +67,9 @@ export function updateClipAnalysis(
   clipId: string,
   data: ClipAnalysisStateUpdate,
 ): TimelineClip | undefined {
-  const store = useTimelineStore.getState();
-  const originalClip = store.clips.find(clip => clip.id === clipId);
-  const clips = applySharedClipAnalysisState(store.clips, clipId, (clip) => {
+  const clips = readTimelineAnalysisClips();
+  const originalClip = clips.find(clip => clip.id === clipId);
+  const updatedClips = applySharedClipAnalysisState(clips, clipId, (clip) => {
     const next = {
       ...clip,
       analysisStatus: data.status ?? clip.analysisStatus,
@@ -79,7 +84,7 @@ export function updateClipAnalysis(
     return next;
   });
 
-  useTimelineStore.setState({ clips });
+  updateTimelineAnalysisClips(() => updatedClips);
   return originalClip;
 }
 
@@ -101,8 +106,7 @@ function calculateCoverage(ranges: [number, number][], totalDuration: number): n
 
 export async function propagateAnalysisToMediaFile(mediaFileId: string): Promise<void> {
   try {
-    const mediaState = useMediaStore.getState();
-    const file = mediaState.files.find(candidate => candidate.id === mediaFileId);
+    const file = findTimelineAnalysisMediaFile(mediaFileId);
     if (!file?.duration || file.duration <= 0) return;
 
     const ranges: [number, number][] = [];
@@ -118,7 +122,7 @@ export async function propagateAnalysisToMediaFile(mediaFileId: string): Promise
       }
     }
 
-    const analyzedClip = useTimelineStore.getState().clips.find((clip) => {
+    const analyzedClip = readTimelineAnalysisClips().find((clip) => {
       const clipMediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
       return clipMediaFileId === mediaFileId && Boolean(clip.analysis?.frames.length);
     });
@@ -132,13 +136,13 @@ export async function propagateAnalysisToMediaFile(mediaFileId: string): Promise
     }
 
     const analysisCoverage = calculateCoverage(ranges, file.duration);
-    useMediaStore.setState(state => ({
-      files: state.files.map(candidate =>
+    updateTimelineAnalysisMediaFiles(files =>
+      files.map(candidate =>
         candidate.id === mediaFileId
           ? { ...candidate, analysisStatus: 'ready' as const, analysisCoverage }
           : candidate
-      ),
-    }));
+      )
+    );
     log.debug('Propagated analysis status to MediaFile', {
       mediaFileId,
       analysisCoverage: analysisCoverage.toFixed(2),
@@ -167,13 +171,13 @@ export async function clearClipAnalysis(clipId: string): Promise<void> {
     }
   }
   if (mediaFileId) {
-    useMediaStore.setState(state => ({
-      files: state.files.map(file => (
+    updateTimelineAnalysisMediaFiles(files =>
+      files.map(file => (
         file.id === mediaFileId
           ? { ...file, analysisStatus: 'none' as const, analysisCoverage: 0 }
           : file
-      )),
-    }));
+      ))
+    );
   }
   triggerTimelineSave();
 }

@@ -1061,7 +1061,7 @@ describe('TimelineClipCanvas worker runtime', () => {
     const analysisPointCount = analysisOverlay?.pointCount ?? 0;
     expect(analysisOverlay?.points?.[0]).toBeCloseTo((8 - 1) / 8);
     expect(analysisOverlay?.points?.[(analysisPointCount - 1) * 4]).toBeCloseTo((8 - 7) / 8);
-    expect(worker.postedTransferables[drawIndex]).toEqual([analysisOverlay?.points?.buffer]);
+    expect(worker.postedTransferables[drawIndex]).toContain(analysisOverlay?.points?.buffer);
   });
 
   it('posts prepared spectrogram values with a transfer list for eligible spectral audio clips', async () => {

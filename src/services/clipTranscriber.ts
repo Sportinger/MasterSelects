@@ -2,7 +2,6 @@
 // Handles transcription of individual clips using Whisper (local) or cloud APIs
 
 import { Logger } from './logger';
-import { useTimelineStore } from '../stores/timeline';
 import { triggerTimelineSave, useMediaStore } from '../stores/mediaStore';
 import type { APIKeys } from '../stores/settingsStore';
 import type {
@@ -39,6 +38,11 @@ import {
   publishTranscriptionRunUpdate,
   restoreActiveTranscriptionRun,
 } from './transcription/transcriptionRunController';
+import {
+  findTimelineAnalysisClip,
+  findTimelineAnalysisMediaFile,
+  readTimelineAnalysisClips,
+} from './timeline/timelineRuntimeCoordinator';
 
 const log = Logger.create('ClipTranscriber');
 
@@ -188,8 +192,8 @@ export async function transcribeClip(
     return;
   }
 
-  const store = useTimelineStore.getState();
-  const clip = store.clips.find(c => c.id === clipId);
+  const clips = readTimelineAnalysisClips();
+  const clip = clips.find(c => c.id === clipId);
 
   if (!clip || !clip.file) {
     log.warn('Clip not found or has no file', { clipId });
@@ -241,14 +245,14 @@ export async function transcribeClip(
 
   const continueMode = options?.continueMode ?? false;
   const linkedClip = clip.linkedClipId
-    ? store.clips.find(c => c.id === clip.linkedClipId)
-    : store.clips.find(c => c.linkedClipId === clip.id);
+    ? clips.find(c => c.id === clip.linkedClipId)
+    : clips.find(c => c.linkedClipId === clip.id);
   const existingTranscript = clip.transcript?.length
     ? clip.transcript
     : linkedClip?.transcript;
   const mediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
   const mediaFile = mediaFileId
-    ? useMediaStore.getState().files.find(file => file.id === mediaFileId)
+    ? findTimelineAnalysisMediaFile(mediaFileId)
     : undefined;
   const existingFusionArtifact = mediaFile?.transcriptArtifact;
   const inPoint = clip.inPoint || 0;
@@ -590,8 +594,7 @@ export async function transcribeClip(
     }
     log.error('Transcription failed', error);
     if (useHybridTranscription && mediaFileId) {
-      const activeProgress = useMediaStore.getState().files
-        .find(file => file.id === mediaFileId)?.transcriptFusionProgress;
+      const activeProgress = findTimelineAnalysisMediaFile(mediaFileId)?.transcriptFusionProgress;
       updateTranscriptFusionPreview(mediaFileId, {
         progress: {
           stage: 'error',
@@ -620,7 +623,7 @@ export async function transcribeClip(
  * Clear transcript from a clip.
  */
 export function clearClipTranscript(clipId: string): void {
-  const clip = useTimelineStore.getState().clips.find(candidate => candidate.id === clipId);
+  const clip = findTimelineAnalysisClip(clipId);
   const mediaFileId = clip?.source?.mediaFileId || clip?.mediaFileId;
   updateClipTranscript(clipId, {
     status: 'none',

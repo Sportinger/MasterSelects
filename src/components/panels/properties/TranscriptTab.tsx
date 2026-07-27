@@ -8,7 +8,7 @@ import type {
   TranscriptFusionArtifact,
   TranscriptFusionProviderStatus,
   TranscriptWord,
-} from '../../../types';
+} from '../../../types/clipMetadata';
 import {
   buildTranscriptSpeakerSegments,
   findActiveTranscriptWordIndex,

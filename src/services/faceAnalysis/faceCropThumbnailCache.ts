@@ -2,6 +2,7 @@ import type { FaceAnalysisBox } from '../../types/clipMetadata';
 import { projectFileService } from '../project/ProjectFileService';
 
 const MAX_CACHE_ENTRIES = 80;
+const MAX_SOURCE_SESSIONS = 3;
 const THUMBNAIL_SIZE = 112;
 const FACE_PADDING = 0.34;
 const CACHE_VERSION = 1;
@@ -16,6 +17,12 @@ interface FaceCropThumbnailRuntime {
   cache: Map<string, Blob>;
   pending: Map<string, Promise<Blob | null>>;
   generationQueue: Promise<void>;
+  sourceSessions: Map<string, FaceCropSourceSession>;
+}
+
+interface FaceCropSourceSession {
+  video: HTMLVideoElement;
+  sourceUrl: string;
 }
 
 interface LegacyFaceCropThumbnailRuntime {
@@ -23,13 +30,21 @@ interface LegacyFaceCropThumbnailRuntime {
   pending?: Map<string, Promise<Blob | null>>;
   generationQueue?: Promise<void>;
   queue?: Promise<void>;
+  sourceSessions?: Map<string, FaceCropSourceSession>;
+}
+
+function sourceKey(file: File): string {
+  return [
+    file.name,
+    file.type,
+    file.size,
+    file.lastModified,
+  ].join(':');
 }
 
 function thumbnailKey({ file, timestamp, box }: FaceCropThumbnailRequest): string {
   return [
-    file.name,
-    file.size,
-    file.lastModified,
+    sourceKey(file),
     timestamp.toFixed(3),
     box.x.toFixed(3),
     box.y.toFixed(3),
@@ -94,14 +109,8 @@ function canvasBlob(canvas: HTMLCanvasElement): Promise<Blob> {
 }
 
 async function createFaceCropThumbnail({ file, timestamp, box }: FaceCropThumbnailRequest): Promise<Blob> {
-  const video = document.createElement('video');
-  const sourceUrl = URL.createObjectURL(file);
-  video.muted = true;
-  video.playsInline = true;
-  video.preload = 'auto';
-  video.src = sourceUrl;
-  video.load();
-
+  const session = getSourceSession(file);
+  const { video } = session;
   try {
     if (video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
       await waitForVideo(video, 'canplaythrough');
@@ -120,11 +129,9 @@ async function createFaceCropThumbnail({ file, timestamp, box }: FaceCropThumbna
     const crop = cropBounds(box, sourceWidth, sourceHeight);
     context.drawImage(video, crop.x, crop.y, crop.size, crop.size, 0, 0, THUMBNAIL_SIZE, THUMBNAIL_SIZE);
     return await canvasBlob(canvas);
-  } finally {
-    video.pause();
-    video.removeAttribute('src');
-    video.load();
-    URL.revokeObjectURL(sourceUrl);
+  } catch (error) {
+    discardSourceSession(file, session);
+    throw error;
   }
 }
 
@@ -132,6 +139,7 @@ let runtime: FaceCropThumbnailRuntime = {
   cache: new Map(),
   pending: new Map(),
   generationQueue: Promise.resolve(),
+  sourceSessions: new Map(),
 };
 
 if (import.meta.hot) {
@@ -142,11 +150,57 @@ if (import.meta.hot) {
       cache: restored.cache ?? new Map(),
       pending: restored.pending ?? new Map(),
       generationQueue: restored.generationQueue ?? restored.queue ?? Promise.resolve(),
+      sourceSessions: restored.sourceSessions ?? new Map(),
     };
   }
   import.meta.hot.dispose((data) => {
     data.faceCropThumbnailRuntime = runtime;
   });
+}
+
+function closeSourceSession(session: FaceCropSourceSession): void {
+  session.video.pause();
+  session.video.removeAttribute('src');
+  session.video.load();
+  URL.revokeObjectURL(session.sourceUrl);
+}
+
+function discardSourceSession(file: File, session: FaceCropSourceSession): void {
+  const key = sourceKey(file);
+  if (runtime.sourceSessions.get(key) !== session) return;
+  runtime.sourceSessions.delete(key);
+  closeSourceSession(session);
+}
+
+function getSourceSession(file: File): FaceCropSourceSession {
+  const key = sourceKey(file);
+  const existing = runtime.sourceSessions.get(key);
+  if (existing) {
+    // Refresh insertion order so the small session cache behaves as an LRU.
+    runtime.sourceSessions.delete(key);
+    runtime.sourceSessions.set(key, existing);
+    return existing;
+  }
+
+  const video = document.createElement('video');
+  const sourceUrl = URL.createObjectURL(file);
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = 'auto';
+  video.src = sourceUrl;
+  video.load();
+  const session = { video, sourceUrl };
+  runtime.sourceSessions.set(key, session);
+
+  while (runtime.sourceSessions.size > MAX_SOURCE_SESSIONS) {
+    const oldest = runtime.sourceSessions.entries().next().value as
+      | [string, FaceCropSourceSession]
+      | undefined;
+    if (!oldest) break;
+    runtime.sourceSessions.delete(oldest[0]);
+    closeSourceSession(oldest[1]);
+  }
+  return session;
 }
 
 function rememberThumbnail(key: string, thumbnail: Blob): void {

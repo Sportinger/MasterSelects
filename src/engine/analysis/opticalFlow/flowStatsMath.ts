@@ -8,6 +8,13 @@ export interface MotionResult {
   global: number;      // Camera/scene motion 0-1
   local: number;       // Object motion 0-1
   isSceneCut: boolean; // True if likely a scene cut
+  /** Optional directional measurements. CPU fallbacks intentionally omit them. */
+  meanMagnitude?: number;
+  meanX?: number;
+  meanY?: number;
+  directionCoherence?: number;
+  coverageRatio?: number;
+  vectorConvention?: 'camera-motion' | 'image-flow';
 }
 
 // Flow statistics from GPU
@@ -130,6 +137,12 @@ export function classifyMotion(stats: FlowStats): MotionResult {
     global: Math.min(1, globalMotion),
     local: Math.min(1, localMotion),
     isSceneCut,
+    meanMagnitude: stats.meanMagnitude,
+    meanX: stats.meanVx,
+    meanY: stats.meanVy,
+    directionCoherence: stats.directionCoherence,
+    coverageRatio: stats.coverageRatio,
+    vectorConvention: 'image-flow',
   };
 }
 

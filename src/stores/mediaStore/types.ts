@@ -1,17 +1,19 @@
 // MediaStore types - extracted from mediaStore.ts
 
 import type {
-  AnalysisStatus,
   CompositionTimelineData,
   GaussianSplatSequenceData,
   MediaFileAudioAnalysisRefs,
   MediaFileStemInfo,
   ModelSequenceData,
+} from '../../types';
+import type {
+  AnalysisStatus,
   TranscriptFusionArtifact,
   TranscriptFusionProgress,
   TranscriptStatus,
   TranscriptWord,
-} from '../../types';
+} from '../../types/clipMetadata';
 import type { TransitionCompositionLink } from '../../types/timelineCore';
 import type { SplatEffectorSettings } from '../../types/splatEffector';
 import type { LightClipSettings } from '../../types/light';

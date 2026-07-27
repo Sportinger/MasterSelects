@@ -30,6 +30,7 @@
     "docs:screenshots": "node scripts/capture-feature-doc-screenshots.mjs",
     "stress-test:bridge-fast": "node scripts/run-stress-test-bridge-fast.mjs",
     "timeline:canvas:verify": "node scripts/run-timeline-canvas-verification.mjs",
+    "agent-timeline:benchmark": "node scripts/agent-timeline/run-benchmark.mjs",
     "worker-first:platform:collect": "node scripts/run-worker-first-platform-evidence.mjs collect",
     "worker-first:platform:verify": "node scripts/run-worker-first-platform-evidence.mjs verify",
     "worker-first:platform:status": "node scripts/run-worker-first-platform-evidence.mjs status",

@@ -1,0 +1,182 @@
+.FacePeopleSummary,
+.FaceReviewSummary {
+  display: grid;
+  gap: var(--sp-2);
+  border-top: 1px solid var(--border-color);
+  padding-top: var(--sp-2);
+}
+
+.FacePeopleSummary__header,
+.FaceReviewSummary__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.FacePeopleSummary__header h4,
+.FaceReviewSummary__header h4 {
+  margin: 0;
+}
+
+.FacePeopleSummary__header span,
+.FaceReviewSummary__header span {
+  color: var(--text-muted);
+  font-size: var(--font-2xs);
+  text-align: right;
+}
+
+.FacePeopleSummary__grid,
+.FaceReviewSummary__grid,
+.FacePeopleSummary__appearances {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1-5);
+}
+
+.FacePeopleSummary__person {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+}
+
+.FacePeopleSummary__person--expanded,
+.FacePeopleSummary__person--drop {
+  border-color: var(--face-color, var(--accent));
+}
+
+.FacePeopleSummary__person--drop {
+  background: var(--accent-dim);
+}
+
+.FacePeopleSummary__personButton,
+.FacePeopleSummary__appearance,
+.FaceReviewSummary__face {
+  appearance: none;
+  display: grid;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  padding: 0;
+  text-align: left;
+  cursor: grab;
+}
+
+.FacePeopleSummary__personButton {
+  width: 86px;
+}
+
+.FacePeopleSummary__personButton:focus-visible,
+.FacePeopleSummary__appearance:focus-visible,
+.FaceReviewSummary__face:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.FacePeopleSummary__personMeta {
+  display: grid;
+  gap: 2px;
+  border-top: 1px solid var(--border-color);
+  padding: 4px 5px;
+}
+
+.FacePeopleSummary__personName {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--font-xs);
+  font-weight: var(--font-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.FacePeopleSummary__personDot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-full);
+  background: var(--face-color, var(--accent));
+}
+
+.FacePeopleSummary__personStats {
+  color: var(--text-muted);
+  font-size: var(--font-2xs);
+  line-height: 1.25;
+}
+
+.FacePeopleSummary__appearancesPanel {
+  display: grid;
+  gap: var(--sp-1-5);
+  border-top: 1px solid var(--border-color);
+  padding-top: var(--sp-2);
+}
+
+.FacePeopleSummary__appearancesLabel {
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+}
+
+.FacePeopleSummary__appearance {
+  position: relative;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+}
+
+.FacePeopleSummary__appearance:hover,
+.FaceReviewSummary__face:hover {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.FacePeopleSummary__moved {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--accent);
+  padding: 1px 3px;
+  font-size: var(--font-2xs);
+  font-weight: var(--font-semibold);
+}
+
+.FaceReviewSummary__face {
+  width: 86px;
+  border: 1px solid var(--warning);
+  background: var(--bg-tertiary);
+}
+
+.FaceReviewSummary__meta {
+  display: grid;
+  gap: 2px;
+  border-top: 1px solid var(--warning);
+  padding: 4px 5px;
+}
+
+.FaceReviewSummary__meta strong {
+  color: var(--text-primary);
+  font-size: var(--font-xs);
+}
+
+.FaceReviewSummary__meta span {
+  color: var(--text-muted);
+  font-size: var(--font-2xs);
+}
+
+@media (max-width: 360px) {
+  .FacePeopleSummary__header,
+  .FaceReviewSummary__header {
+    align-items: start;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .FacePeopleSummary__header span,
+  .FaceReviewSummary__header span {
+    text-align: left;
+  }
+}

@@ -1,4 +1,4 @@
-import type { TranscriptWord } from '../../../types';
+import type { TranscriptWord } from '../../../types/clipMetadata';
 
 const SEGMENT_GAP_SECONDS = 1.5;
 const TARGET_SEGMENT_SECONDS = 12;

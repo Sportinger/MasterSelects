@@ -37,6 +37,7 @@ import type { AnthropicMessage, AnthropicToolResultBlock, FlashBoardChatCompleti
 
 const FLASHBOARD_LEMONADE_TOOL_NAMES = new Set([
   'getTimelineState',
+  'getTimelineAnalysis',
   'getClipDetails',
   'getClipFaceAnalysis',
   'startClipFaceAnalysis',

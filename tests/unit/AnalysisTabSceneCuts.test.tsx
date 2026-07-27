@@ -3,10 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AnalysisTab } from '../../src/components/panels/properties/AnalysisTab';
 import type { MediaFile } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
-import type {
-  ClipAnalysis,
-  TimelineClip,
-} from '../../src/types';
+import type { ClipAnalysis } from '../../src/types/clipMetadata';
+import type { TimelineClip } from '../../src/types/timeline';
 import type {
   SceneCutAnalysis,
   SceneCutPoint,
@@ -30,16 +28,30 @@ const sceneDescriberMock = vi.hoisted(() => ({
   describeClip: vi.fn().mockResolvedValue(undefined),
 }));
 
+const clipTranscriberMock = vi.hoisted(() => ({
+  transcribeClip: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../../src/stores/mediaStore', () => {
   const useMediaStore = Object.assign(
     (selector: (state: typeof mediaStoreMock) => unknown) => selector(mediaStoreMock),
-    { getState: () => mediaStoreMock },
+    {
+      getState: () => mediaStoreMock,
+      subscribe: () => () => undefined,
+    },
   );
+  (globalThis as typeof globalThis & {
+    __mediaStoreModule?: { useMediaStore: typeof useMediaStore };
+  }).__mediaStoreModule = { useMediaStore };
   return { useMediaStore };
 });
 
 vi.mock('../../src/services/clipAnalyzer', () => clipAnalyzerMock);
 vi.mock('../../src/services/sceneDescriber', () => sceneDescriberMock);
+vi.mock('../../src/services/clipTranscriber', () => clipTranscriberMock);
+vi.mock('../../src/services/agentTimeline/runtime/persistence/agentTimelineRuntimePersistence', () => ({
+  startAgentTimelineRuntimePersistence: vi.fn(),
+}));
 
 function createSceneCut(timestamp: number, frameNumber: number): SceneCutPoint {
   return {
@@ -262,22 +274,26 @@ describe('AnalysisTab scene-cut counter', () => {
 
     fireEvent.click(within(metricsAction as HTMLElement).getByRole('button', { name: 'Reanalyze' }));
     await vi.waitFor(() => {
-      expect(clipAnalyzerMock.analyzeClip).toHaveBeenCalledWith('clip-1', {
+      expect(clipAnalyzerMock.analyzeClip).toHaveBeenCalledWith('clip-1', expect.objectContaining({
         target: 'metrics',
         force: true,
-      });
+        sourceRange: { start: 2, end: 8 },
+        sampleIntervalMs: 500,
+      }));
     });
 
     fireEvent.click(within(facesAction as HTMLElement).getByRole('button', { name: 'Analyze' }));
     await vi.waitFor(() => {
-      expect(clipAnalyzerMock.analyzeClip).toHaveBeenCalledWith('clip-1', {
+      expect(clipAnalyzerMock.analyzeClip).toHaveBeenCalledWith('clip-1', expect.objectContaining({
         target: 'faces',
         force: false,
-      });
+        sourceRange: { start: 2, end: 8 },
+        faceSampleIntervalMs: 500,
+      }));
     });
   });
 
-  it('analyzes every channel sequentially from the top-level action', async () => {
+  it('runs the default channels without starting optional scene descriptions', async () => {
     prepareStores('none', 0, false);
 
     render(
@@ -297,18 +313,87 @@ describe('AnalysisTab scene-cut counter', () => {
     });
 
     await vi.waitFor(() => {
-      expect(clipAnalyzerMock.analyzeClip).toHaveBeenCalledWith('clip-1', {
+      expect(clipAnalyzerMock.analyzeClip).toHaveBeenCalledWith('clip-1', expect.objectContaining({
         target: 'all',
         force: false,
-      });
+        sourceRange: { start: 2, end: 8 },
+        sampleIntervalMs: 500,
+        faceSampleIntervalMs: 500,
+      }));
       expect(mediaStoreMock.analyzeSceneCuts).toHaveBeenCalledWith('media-1', {
         force: false,
       });
-      expect(sceneDescriberMock.describeClip).toHaveBeenCalledWith('clip-1');
+      expect(sceneDescriberMock.describeClip).not.toHaveBeenCalled();
+      expect(clipTranscriberMock.transcribeClip).toHaveBeenCalledWith('clip-1', 'auto');
     });
     expect(clipAnalyzerMock.analyzeClip.mock.invocationCallOrder[0])
       .toBeLessThan(mediaStoreMock.analyzeSceneCuts.mock.invocationCallOrder[0]);
-    expect(mediaStoreMock.analyzeSceneCuts.mock.invocationCallOrder[0])
-      .toBeLessThan(sceneDescriberMock.describeClip.mock.invocationCallOrder[0]);
+  });
+
+  it('forwards supported scope and Quick cadence to the local visual runner', async () => {
+    prepareStores('none', 0, false);
+
+    render(
+      <AnalysisTab
+        clipId="clip-1"
+        analysis={undefined}
+        analysisStatus="none"
+        analysisProgress={0}
+        clipStartTime={0}
+        inPoint={2}
+        outPoint={8}
+      />,
+    );
+
+    expect(screen.getByRole('region', { name: 'Analysis scope and profile' }))
+      .toHaveTextContent('Scope');
+    expect(screen.getByRole('button', { name: 'Used Ranges' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Selection' })).toBeDisabled();
+    expect(screen.getByText(/receive this exact source range and selected cadence/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Quick' }));
+    expect(screen.getByRole('button', { name: 'Quick' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('low cost')).toBeInTheDocument();
+
+    const metricsAction = screen.getByText('Focus & Motion').closest('.analysis-action-row');
+    expect(metricsAction).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(within(metricsAction as HTMLElement).getByRole('button', { name: 'Analyze' }));
+    });
+    await vi.waitFor(() => {
+      expect(clipAnalyzerMock.analyzeClip).toHaveBeenCalledWith('clip-1', expect.objectContaining({
+        target: 'metrics',
+        force: false,
+        sourceRange: { start: 2, end: 8 },
+        sampleIntervalMs: 1000,
+      }));
+    });
+  });
+
+  it('does not falsely run Deep or source-wide face identities', () => {
+    prepareStores('none', 0, false);
+
+    render(
+      <AnalysisTab
+        clipId="clip-1"
+        analysis={undefined}
+        analysisStatus="none"
+        analysisProgress={0}
+        clipStartTime={0}
+        inPoint={2}
+        outPoint={8}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deep' }));
+    expect(screen.getByText(/Blocked: Deep is blocked until matching real-media benchmark evidence/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Analyze All' })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Balanced' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Source' }));
+    const facesAction = screen.getByText('Faces', { selector: '.analysis-action-title' })
+      .closest('.analysis-action-row');
+    expect(within(facesAction as HTMLElement).getByRole('button', { name: 'Analyze' })).toBeDisabled();
+    expect(screen.getByText('Unavailable for source scope')).toBeInTheDocument();
   });
 });

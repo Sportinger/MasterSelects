@@ -1,5 +1,3 @@
-import { useTimelineStore } from '../../stores/timeline';
-import { useMediaStore } from '../../stores/mediaStore';
 import type {
   TranscriptFusionArtifact,
   TranscriptFusionProgress,
@@ -8,6 +6,10 @@ import type {
 } from '../../types/clipMetadata';
 import { updateClipTranscript, type ClipTranscriptUpdate } from './artifactPersistence';
 import { terminateTranscriptionWorker } from './workerClient';
+import {
+  findTimelineAnalysisClip,
+  updateTimelineAnalysisMediaFiles,
+} from '../timeline/timelineRuntimeCoordinator';
 
 interface ActiveTranscriptionRun {
   clipId: string;
@@ -49,8 +51,8 @@ function restoreRun(run: ActiveTranscriptionRun): void {
     words: run.clipSnapshot.words,
   });
   if (!run.mediaFileId || !run.mediaSnapshot) return;
-  useMediaStore.setState(state => ({
-    files: state.files.map(file => file.id === run.mediaFileId
+  updateTimelineAnalysisMediaFiles(files =>
+    files.map(file => file.id === run.mediaFileId
       ? {
           ...file,
           transcript: run.mediaSnapshot?.words,
@@ -58,12 +60,12 @@ function restoreRun(run: ActiveTranscriptionRun): void {
           transcriptFusionProgress: run.mediaSnapshot?.progress,
           transcriptStatus: run.mediaSnapshot?.status,
         }
-      : file),
-  }));
+      : file)
+  );
 }
 
 function recoverOrphanedRun(clipId: string): void {
-  const clip = useTimelineStore.getState().clips.find(candidate => candidate.id === clipId);
+  const clip = findTimelineAnalysisClip(clipId);
   const words = clip?.transcript;
   const status: TranscriptStatus = words?.length ? 'ready' : 'none';
   updateClipTranscript(clipId, {
@@ -73,8 +75,8 @@ function recoverOrphanedRun(clipId: string): void {
   });
   const mediaFileId = clip?.source?.mediaFileId || clip?.mediaFileId;
   if (!mediaFileId) return;
-  useMediaStore.setState(state => ({
-    files: state.files.map(file => file.id === mediaFileId
+  updateTimelineAnalysisMediaFiles(files =>
+    files.map(file => file.id === mediaFileId
       ? {
           ...file,
           transcriptStatus: status,
@@ -96,8 +98,8 @@ function recoverOrphanedRun(clipId: string): void {
               }
             : undefined,
         }
-      : file),
-  }));
+      : file)
+  );
 }
 
 export function hasActiveTranscriptionRun(): boolean {

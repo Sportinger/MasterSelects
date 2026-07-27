@@ -1,10 +1,15 @@
 import { useMemo } from 'react';
-import type { FrameAnalysisData } from '../../../types';
-import { collectFaceReviewCandidates } from '../../../services/faceAnalysis/faceReviewCandidates';
+import type { FrameAnalysisData } from '../../../types/clipMetadata';
+import {
+  collectFaceReviewCandidates,
+  type FaceReviewCandidate,
+} from '../../../services/faceAnalysis/faceReviewCandidates';
 import { FaceCropThumbnail } from './FaceCropThumbnail';
 import { writeFaceDrag } from './faceDragPayload';
+import './FacePeopleSummary.css';
 
 interface FaceReviewSummaryProps {
+  candidates?: readonly FaceReviewCandidate[];
   frames: readonly FrameAnalysisData[];
   sourceFile?: File;
   onSelectSourceTime: (sourceTime: number) => void;
@@ -17,20 +22,24 @@ function formatTimestamp(seconds: number): string {
 }
 
 export function FaceReviewSummary({
+  candidates: providedCandidates,
   frames,
   sourceFile,
   onSelectSourceTime,
 }: FaceReviewSummaryProps) {
-  const candidates = useMemo(() => collectFaceReviewCandidates(frames), [frames]);
+  const candidates = useMemo(
+    () => providedCandidates ?? collectFaceReviewCandidates(frames),
+    [frames, providedCandidates],
+  );
   if (candidates.length === 0) return null;
 
   return (
-    <div className="properties-section">
-      <h4>Needs review ({candidates.length})</h4>
-      <div style={{ color: 'var(--text-muted)', fontSize: '10px', marginBottom: '7px', marginTop: '-3px' }}>
-        Small or brief yellow detections are grouped into short visual tracks. Drag one onto a person to assign it.
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
+    <section className="FaceReviewSummary" aria-label="Faces needing review">
+      <header className="FaceReviewSummary__header">
+        <h4>Needs review ({candidates.length})</h4>
+        <span>Drag a detection onto a person to assign it.</span>
+      </header>
+      <div className="FaceReviewSummary__grid">
         {candidates.map((candidate, index) => (
           <button
             key={candidate.id}
@@ -44,16 +53,7 @@ export function FaceReviewSummary({
             })}
             onClick={() => onSelectSourceTime(candidate.sample.timestamp)}
             title={`Review face ${index + 1} at ${formatTimestamp(candidate.sample.timestamp)}. Drag onto a person to assign.`}
-            style={{
-              appearance: 'none',
-              background: 'transparent',
-              border: 0,
-              cursor: 'grab',
-              height: '86px',
-              padding: 0,
-              position: 'relative',
-              width: '86px',
-            }}
+            className="FaceReviewSummary__face"
           >
             <FaceCropThumbnail
               file={sourceFile}
@@ -61,21 +61,8 @@ export function FaceReviewSummary({
               size={86}
               alt={`Review face ${index + 1} at ${formatTimestamp(candidate.sample.timestamp)}`}
             />
-            <span style={{
-              background: 'linear-gradient(180deg, rgba(0,0,0,.58), rgba(0,0,0,.06) 45%, rgba(0,0,0,.78))',
-              border: '1px solid #f6bd60',
-              borderRadius: '4px',
-              color: 'white',
-              display: 'flex',
-              flexDirection: 'column',
-              fontSize: '9px',
-              inset: 0,
-              justifyContent: 'space-between',
-              padding: '5px',
-              position: 'absolute',
-              textAlign: 'left',
-            }}>
-              <span style={{ fontSize: '10px', fontWeight: 700 }}>Review {index + 1}</span>
+            <span className="FaceReviewSummary__meta">
+              <strong>Review {index + 1}</strong>
               <span>
                 {formatTimestamp(candidate.firstSeen)}
                 {candidate.observationCount > 1 ? ` · ${candidate.observationCount} frames` : ''}
@@ -84,6 +71,6 @@ export function FaceReviewSummary({
           </button>
         ))}
       </div>
-    </div>
+    </section>
   );
 }

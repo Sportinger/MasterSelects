@@ -16,7 +16,6 @@ import {
 } from './FlashBoardPromptRefinerResponseMapping';
 import { prepareReferenceImages } from './FlashBoardPromptRefinerReferences';
 import type {
-  OpenAIResponsePayload,
   PreparedPromptReference,
   RefineFlashBoardPromptInput,
   RefineFlashBoardPromptStreamOptions,
@@ -173,5 +172,5 @@ export async function refineFlashBoardPromptTransport(input: RefineFlashBoardPro
     throw new Error('Kie.ai returned an empty response.');
   }
 
-  return extractRefinedPromptFromOpenAIResponse(payload as OpenAIResponsePayload);
+  return extractRefinedPromptFromOpenAIResponse(payload);
 }

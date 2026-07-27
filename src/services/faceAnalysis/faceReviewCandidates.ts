@@ -1,4 +1,8 @@
-import type { FaceAnalysisBox, FaceFrameDetection, FrameAnalysisData } from '../../types';
+import type {
+  FaceAnalysisBox,
+  FaceFrameDetection,
+  FrameAnalysisData,
+} from '../../types/clipMetadata';
 
 export interface FaceReviewCandidate {
   id: string;

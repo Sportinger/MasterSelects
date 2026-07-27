@@ -1,9 +1,12 @@
 import type { ClipAnalysis, FacePersonSummary } from '../../types/clipMetadata';
-import { useTimelineStore } from '../../stores/timeline';
 import { triggerTimelineSave } from '../../stores/mediaStore';
 import { projectFileService } from '../projectFileService';
 import { applySharedClipAnalysisState } from '../clipAnalysis/sourceAnalysisSharing';
 import { summarizeCachedFaces } from './faceIdentityTracker';
+import {
+  findTimelineAnalysisClip,
+  updateTimelineAnalysisClips,
+} from '../timeline/timelineRuntimeCoordinator';
 
 function targetPerson(analysis: ClipAnalysis, personId: string): FacePersonSummary | null {
   return analysis.faceAnalysis?.people.find(person => person.id === personId) ?? null;
@@ -64,15 +67,15 @@ function assignFaceIdsToPerson(
 }
 
 async function persistCorrection(clipId: string, nextAnalysis: ClipAnalysis): Promise<void> {
-  const clip = useTimelineStore.getState().clips.find(candidate => candidate.id === clipId);
+  const clip = findTimelineAnalysisClip(clipId);
   if (!clip) return;
-  useTimelineStore.setState(state => ({
-    clips: applySharedClipAnalysisState(
-      state.clips,
+  updateTimelineAnalysisClips(clips =>
+    applySharedClipAnalysisState(
+      clips,
       clipId,
       candidate => ({ ...candidate, analysis: nextAnalysis }),
-    ),
-  }));
+    )
+  );
   const mediaId = clip.source?.mediaFileId ?? clip.mediaFileId;
   if (mediaId && projectFileService.isProjectOpen()) {
     const storedRanges = (await projectFileService.getAnalysisRanges(mediaId))
@@ -105,7 +108,7 @@ export async function mergeFacePeople(
   targetPersonId: string,
 ): Promise<void> {
   if (sourcePersonId === targetPersonId) return;
-  const clip = useTimelineStore.getState().clips.find(candidate => candidate.id === clipId);
+  const clip = findTimelineAnalysisClip(clipId);
   const analysis = clip?.analysis;
   if (!analysis) return;
   const target = targetPerson(analysis, targetPersonId);
@@ -123,7 +126,7 @@ export async function moveFaceAppearance(
   timestamp: number,
 ): Promise<void> {
   if (sourcePersonId === targetPersonId) return;
-  const clip = useTimelineStore.getState().clips.find(candidate => candidate.id === clipId);
+  const clip = findTimelineAnalysisClip(clipId);
   const analysis = clip?.analysis;
   if (!analysis) return;
   const source = targetPerson(analysis, sourcePersonId);
@@ -148,7 +151,7 @@ export async function assignReviewFaces(
   targetPersonId: string,
 ): Promise<void> {
   if (faceIds.length === 0) return;
-  const clip = useTimelineStore.getState().clips.find(candidate => candidate.id === clipId);
+  const clip = findTimelineAnalysisClip(clipId);
   const analysis = clip?.analysis;
   if (!analysis) return;
   const target = targetPerson(analysis, targetPersonId);

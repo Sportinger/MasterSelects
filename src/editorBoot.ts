@@ -5,8 +5,10 @@ import { NativeHelperClient } from './services/nativeHelper/NativeHelperClient';
 import { useSettingsStore } from './stores/settingsStore';
 import { installRuntimeDiagnostics } from './services/runtimeDiagnostics';
 import { getStemSeparationService } from './services/audio/stemSeparation';
+import { startEditorAgentTimelinePersistence } from './services/agentTimeline/runtime/persistence/editorPersistenceBootstrap';
 
 installRuntimeDiagnostics();
+startEditorAgentTimelinePersistence();
 
 function warmNativeHelperForProjectBackend(): void {
   if (typeof window === 'undefined' || isFileSystemAccessSupported()) {

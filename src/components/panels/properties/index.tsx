@@ -33,7 +33,6 @@ const ColorTab = lazy(() => import('./ColorTab').then(m => ({ default: m.ColorTa
 const EffectsTab = lazy(() => import('./EffectsTab').then(m => ({ default: m.EffectsTab })));
 const AudioEditStackTab = lazy(() => import('./AudioEditStackTab').then(m => ({ default: m.AudioEditStackTab })));
 const MasksTab = lazy(() => import('./MasksTab').then(m => ({ default: m.MasksTab })));
-const TranscriptTab = lazy(() => import('./TranscriptTab').then(m => ({ default: m.TranscriptTab })));
 const AnalysisTab = lazy(() => import('./AnalysisTab').then(m => ({ default: m.AnalysisTab })));
 const BlendshapesTab = lazy(() => import('./BlendshapesTab').then(m => ({ default: m.BlendshapesTab })));
 const GaussianSplatTab = lazy(() => import('./GaussianSplatTab').then(m => ({ default: m.GaussianSplatTab })));
@@ -281,7 +280,7 @@ export function PropertiesPanel() {
     const handler = (e: Event) => {
       const tab = (e as CustomEvent).detail?.tab as PropertiesTab;
       if (!tab) return;
-      const requestedTab = tab === 'camera' ? 'transform' : tab;
+      const requestedTab = tab === 'camera' ? 'transform' : tab === 'transcript' ? 'analysis' : tab;
       // Store as pending so clip-switch effect doesn't override it
       pendingTabRef.current = requestedTab;
       setActiveTab(requestedTab);
@@ -517,8 +516,8 @@ export function PropertiesPanel() {
             <button className={`tab-btn ${activeTab === 'audio-edits' ? 'active' : ''}`} onClick={() => setActiveTab('audio-edits')}>
               Audio Edits {audioEditCount > 0 && <span className="badge">{audioEditCount}</span>}
             </button>
-            <button className={`tab-btn ${activeTab === 'transcript' ? 'active' : ''}`} onClick={() => setActiveTab('transcript')}>
-              Transcript {transcriptWords.length > 0 && <span className="badge">{transcriptWords.length}</span>}
+            <button className={`tab-btn ${activeTab === 'analysis' ? 'active' : ''}`} onClick={() => setActiveTab('analysis')}>
+              Analysis
             </button>
           </>
         ) : isCameraClip ? (
@@ -624,9 +623,6 @@ export function PropertiesPanel() {
             )}
             {!isSolidClip && !isVectorAnimationClip && !isLightClip && (
               <>
-                <button className={`tab-btn ${activeTab === 'transcript' ? 'active' : ''}`} onClick={() => setActiveTab('transcript')}>
-                  Transcript {transcriptWords.length > 0 && <span className="badge">{transcriptWords.length}</span>}
-                </button>
                 <button className={`tab-btn ${activeTab === 'analysis' ? 'active' : ''}`} onClick={() => setActiveTab('analysis')}>
                   Analysis {selectedClip.analysisStatus === 'ready' && <span className="badge">✓</span>}
                 </button>
@@ -671,20 +667,7 @@ export function PropertiesPanel() {
           {activeTab === 'effects' && !isLightClip && <EffectsTab clipId={selectedClip.id} effects={selectedClip.effects || []} isAudioClip={isAudioClip} />}
           {activeTab === 'audio-edits' && isAudioClip && <AudioEditStackTab clipId={selectedClip.id} />}
           {activeTab === 'masks' && !isAudioClip && !isLightClip && <MasksTab clipId={selectedClip.id} masks={selectedClip.masks} />}
-          {activeTab === 'transcript' && !isLightClip && (
-            <TranscriptTab
-              clipId={selectedClip.id}
-              transcript={transcriptWords}
-              transcriptStatus={transcriptStatus}
-              transcriptProgress={transcriptProgress}
-              clipStartTime={selectedClip.startTime}
-              clipDuration={selectedClip.duration}
-              inPoint={selectedClip.inPoint}
-              outPoint={selectedClip.outPoint}
-              reversed={selectedClip.reversed}
-            />
-          )}
-          {activeTab === 'analysis' && !isAudioClip && !isLightClip && (
+          {activeTab === 'analysis' && !isLightClip && (
             <AnalysisTab
               clipId={selectedClip.id}
               analysis={selectedClip.analysis}
@@ -697,6 +680,9 @@ export function PropertiesPanel() {
               sceneDescriptionStatus={selectedClip.sceneDescriptionStatus}
               sceneDescriptionProgress={selectedClip.sceneDescriptionProgress}
               sceneDescriptionMessage={selectedClip.sceneDescriptionMessage}
+              transcriptStatus={transcriptStatus}
+              transcriptProgress={transcriptProgress}
+              transcript={transcriptWords}
             />
           )}
         </Suspense>

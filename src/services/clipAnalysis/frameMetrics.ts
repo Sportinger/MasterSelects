@@ -102,14 +102,20 @@ export function analyzeMotion(
   };
 }
 
+export interface FrameVisualMetrics {
+  sharpness: number;
+  brightness: number;
+}
+
 /**
- * Analyze sharpness/focus using Laplacian variance
- * Returns 0-1 (blurry to sharp)
+ * Computes sharpness and mean luma in one sampled pixel pass. Keeping both
+ * values together avoids a second full-frame walk in the sparse analyzer.
  */
-export function analyzeSharpness(frame: ImageData): number {
+export function analyzeFrameVisualMetrics(frame: ImageData): FrameVisualMetrics {
   const { width, height, data } = frame;
   let variance = 0;
   let mean = 0;
+  let luma = 0;
   const values: number[] = [];
 
   for (let y = 1; y < height - 1; y += 2) {
@@ -133,16 +139,29 @@ export function analyzeSharpness(frame: ImageData): number {
       const lap = 4 * c - t - b - l - r;
       values.push(lap);
       mean += lap;
+      luma += c;
     }
   }
 
+  if (values.length === 0) return { sharpness: 0, brightness: 0 };
   mean /= values.length;
   for (const v of values) {
     variance += (v - mean) ** 2;
   }
   variance /= values.length;
 
-  return Math.min(1, Math.sqrt(variance) / 50);
+  return {
+    sharpness: Math.min(1, Math.sqrt(variance) / 50),
+    brightness: Math.min(1, Math.max(0, luma / values.length / 255)),
+  };
+}
+
+/**
+ * Analyze sharpness/focus using Laplacian variance.
+ * Kept as a compatibility surface for focused callers and tests.
+ */
+export function analyzeSharpness(frame: ImageData): number {
+  return analyzeFrameVisualMetrics(frame).sharpness;
 }
 
 /**

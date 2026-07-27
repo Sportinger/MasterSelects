@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { FacePersonSummary, FrameAnalysisData } from '../../src/types';
+import type { FacePersonSummary, FrameAnalysisData } from '../../src/types/clipMetadata';
 import { FacePeopleSummary } from '../../src/components/panels/properties/FacePeopleSummary';
 
 vi.mock('../../src/components/panels/properties/FaceCropThumbnail', () => ({
@@ -56,7 +56,7 @@ describe('FacePeopleSummary', () => {
     renderSummary();
 
     const thumbnail = screen.getByRole('button', { name: 'View Person 1 appearances' });
-    expect(thumbnail).toHaveStyle({ height: '86px', width: '86px' });
+    expect(thumbnail).toHaveClass('FacePeopleSummary__personButton');
     expect(screen.queryByText('View appearances')).not.toBeInTheDocument();
     expect(screen.queryByText('Person 1 appearances')).not.toBeInTheDocument();
 
