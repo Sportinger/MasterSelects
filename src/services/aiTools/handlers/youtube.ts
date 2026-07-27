@@ -1,4 +1,4 @@
-// YouTube AI Tool Handlers
+﻿// YouTube AI Tool Handlers
 
 import { Logger } from '../../logger';
 import { NativeHelperClient } from '../../nativeHelper';
@@ -14,7 +14,7 @@ import {
   describeMutationEntities,
   type MutationEntitySnapshot,
 } from './mutationEntityResults';
-import type { TimelineClip, TimelineTrack } from '../../../types';
+import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
 
 const log = Logger.create('AITool:YouTube');
 
@@ -378,7 +378,7 @@ export async function handleDownloadAndImportVideo(args: Record<string, unknown>
       }
     );
 
-    // Complete the download — convert pending clip to real clip
+    // Complete the download â€” convert pending clip to real clip
     await useTimelineStore.getState().completeDownload(clipId, file);
 
     log.info(`Download complete: ${title}, file size: ${(file.size / 1024 / 1024).toFixed(1)}MB`);

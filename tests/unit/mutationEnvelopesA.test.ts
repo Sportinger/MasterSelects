@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+﻿import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { handleDeleteClip } from '../../src/services/aiTools/handlers/clips/delete';
 import { handleAddEffect } from '../../src/services/aiTools/handlers/effects';
@@ -7,7 +7,7 @@ import { handleUpdateMask } from '../../src/services/aiTools/handlers/masks';
 import { handleSetTransform } from '../../src/services/aiTools/handlers/transform';
 import type { ToolResult } from '../../src/services/aiTools/types';
 import { useTimelineStore } from '../../src/stores/timeline';
-import type { ClipMask } from '../../src/types';
+import type { ClipMask } from '../../src/types/masks';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 
 const initialTimelineState = useTimelineStore.getState();

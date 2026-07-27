@@ -1,4 +1,4 @@
-// Local file import tool handlers: importLocalFiles (with optional timeline
+﻿// Local file import tool handlers: importLocalFiles (with optional timeline
 // placement) and listLocalFiles, gated by the file access broker.
 
 import { useMediaStore } from '../../../../stores/mediaStore';
@@ -23,7 +23,7 @@ import {
   describeMutationEntities,
   type MutationEntitySnapshot,
 } from '../mutationEntityResults';
-import type { TimelineClip, TimelineTrack } from '../../../../types';
+import type { TimelineClip, TimelineTrack } from '../../../../types/timeline';
 
 const log = Logger.create('AITool:Media');
 

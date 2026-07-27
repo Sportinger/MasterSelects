@@ -223,6 +223,7 @@ describe('getTimelineAnalysis AI tool', () => {
     };
     expect(data.bounds).toEqual({ limit: 500, maxBytes: 256 * 1024 });
     expect(data.page.events.map((event) => event.type)).toEqual([
+      'camera-motion',
       'person-visible',
       'speech',
       'cut',

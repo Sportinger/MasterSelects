@@ -25,7 +25,7 @@ const availability = {
 function measurement(cacheState: 'cold' | 'warm'): AgentTimelineBenchmarkMeasurement {
   return {
     id: `real-${cacheState}`, realMedia: true, profile: 'balanced', channels: ['text'],
-    platform: 'windows', deviceClass: 'test', scenarioId: 'ocr-titles', cacheState,
+    platform: 'windows', deviceClass: 'test', baselinePlatform: 'windows', baselineDeviceClass: 'test', scenarioId: 'ocr-titles', cacheState,
     baselineKind: 'standalone-cut', sourceDurationSeconds: 60, wallTimeSeconds: 5,
     baselineWallTimeSeconds: 4, peakMemoryBytes: 100_000_000, artifactBytes: 1_000,
     redundantDecodedSeconds: 0,

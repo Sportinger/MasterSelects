@@ -161,7 +161,7 @@ export async function runLocalBenchmarkPass(options: RunLocalBenchmarkOptions): 
       runtimeEvidence: observability?.runtimeEvidence,
       detail: execution.detail,
     };
-    if (request.cacheState === 'warm' && (result.redundantDecodedSeconds === null || result.redundantDecodedSeconds !== 0)) {
+    if (execution.status === 'completed' && request.cacheState === 'warm' && (result.redundantDecodedSeconds === null || result.redundantDecodedSeconds !== 0)) {
       return {
         ...result,
         status: 'blocked',
