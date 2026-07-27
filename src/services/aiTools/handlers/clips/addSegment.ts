@@ -1,6 +1,10 @@
 import { useTimelineStore } from '../../../../stores/timeline';
 import { useMediaStore } from '../../../../stores/mediaStore';
 import type { ToolResult } from '../../types.ts';
+import {
+  captureMutationEntitySnapshot,
+  describeMutationEntities,
+} from '../mutationEntityResults';
 
 /**
  * Add a clip segment from the media pool with specific in/out points.
@@ -42,15 +46,14 @@ export async function handleAddClipSegment(
 
   const duration = outPoint - inPoint;
 
-  // Snapshot clip count before adding
-  const clipsBefore = new Set(timelineStore.clips.map(c => c.id));
+  const mutationSnapshot = captureMutationEntitySnapshot('clip', timelineStore.clips);
 
   // Add the clip (this creates video + linked audio for video files)
   await timelineStore.addClip(trackId, mediaFile.file, startTime, duration, mediaFileId);
 
   // Find newly created clips
   const clipsAfter = useTimelineStore.getState().clips;
-  const newClips = clipsAfter.filter(c => !clipsBefore.has(c.id));
+  const newClips = clipsAfter.filter(c => !mutationSnapshot.entitiesById.has(c.id));
 
   if (newClips.length === 0) {
     return { success: false, error: 'Failed to create clip' };
@@ -97,6 +100,10 @@ export async function handleAddClipSegment(
         outPoint: c.outPoint,
         linkedClipId: c.linkedClipId,
       })),
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().clips,
+      ),
     },
   };
 }

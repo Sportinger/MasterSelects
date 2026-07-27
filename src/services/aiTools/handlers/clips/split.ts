@@ -1,8 +1,11 @@
 import { useTimelineStore } from '../../../../stores/timeline';
 import type { TimelineClip } from '../../../../types/timeline';
-import { getTimelineRevision } from '../../../../stores/timeline/revisionMiddleware';
 import type { ToolResult } from '../../types.ts';
 import { isAIExecutionActive } from '../../executionState';
+import {
+  captureMutationEntitySnapshot,
+  describeMutationEntities,
+} from '../mutationEntityResults';
 import type { TimelineStore } from './runtime';
 import { logSplitCheckpoint, splitClipBatch } from './runtime';
 
@@ -25,10 +28,14 @@ export async function handleSplitClip(
     return { success: false, error: `Split time ${splitTime}s is outside clip range (${clip.startTime}s - ${clipEnd}s)` };
   }
 
-  const mutationSnapshot = captureClipMutationSnapshot([
+  const targetClipIds = [
     clip.id,
     withLinked ? clip.linkedClipId : undefined,
-  ]);
+  ].filter((id): id is string => id !== undefined);
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'clip',
+    useTimelineStore.getState().clips,
+  );
   const splitResult = timelineStore.applyTimelineEditOperation({
     id: `ai-split-clip:${clipId}:${splitTime}`,
     type: 'split-at-time',
@@ -66,7 +73,15 @@ export async function handleSplitClip(
       splitAt: splitTime,
       originalClipId: clipId,
       withLinked,
-      ...describeClipMutation(mutationSnapshot),
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().clips,
+        {
+          updatedEntityIds: targetClipIds,
+          // Source clips are transformed into parts, not semantically deleted by a split.
+          excludedDeletedEntityIds: targetClipIds,
+        },
+      ),
     },
   };
 }
@@ -121,10 +136,14 @@ export async function handleSplitClipEvenly(
     splitTimes.push(clipStart + partDuration * i);
   }
 
-  const mutationSnapshot = captureClipMutationSnapshot([
+  const targetClipIds = [
     clip.id,
     withLinked ? clip.linkedClipId : undefined,
-  ]);
+  ].filter((id): id is string => id !== undefined);
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'clip',
+    useTimelineStore.getState().clips,
+  );
   if (isAIExecutionActive()) {
     logSplitCheckpoint('split-evenly:start', clip, splitTimes.length, withLinked);
     const trackId = clip.trackId;
@@ -153,7 +172,14 @@ export async function handleSplitClipEvenly(
       clipName,
       partDuration,
       withLinked,
-      ...describeClipMutation(mutationSnapshot),
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().clips,
+        {
+          updatedEntityIds: targetClipIds,
+          excludedDeletedEntityIds: targetClipIds,
+        },
+      ),
     },
   };
 }
@@ -183,10 +209,14 @@ export async function handleSplitClipAtTimes(
     return { success: false, error: `No valid split times within clip range (${clipStart}s - ${clipEnd}s)` };
   }
 
-  const mutationSnapshot = captureClipMutationSnapshot([
+  const targetClipIds = [
     clip.id,
     withLinked ? clip.linkedClipId : undefined,
-  ]);
+  ].filter((id): id is string => id !== undefined);
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'clip',
+    useTimelineStore.getState().clips,
+  );
   if (isAIExecutionActive()) {
     logSplitCheckpoint('split-at-times:start', clip, validTimes.length, withLinked);
     const trackId = clip.trackId;
@@ -214,37 +244,14 @@ export async function handleSplitClipAtTimes(
       splitTimes: validTimes,
       resultingParts: validTimes.length + 1,
       withLinked,
-      ...describeClipMutation(mutationSnapshot),
-    },
-  };
-}
-
-function captureClipMutationSnapshot(targetClipIds: Array<string | undefined>) {
-  const clips = useTimelineStore.getState().clips;
-  return {
-    clipsById: new Map(clips.map((clip) => [clip.id, clip])),
-    targetClipIds: new Set(targetClipIds.filter((id): id is string => id !== undefined)),
-    stateRevisionBefore: getTimelineRevision(),
-  };
-}
-
-function describeClipMutation(snapshot: ReturnType<typeof captureClipMutationSnapshot>) {
-  const clipsAfter = useTimelineStore.getState().clips;
-  const clipsAfterById = new Map(clipsAfter.map((clip) => [clip.id, clip]));
-  const entity = (id: string) => ({ kind: 'clip' as const, id });
-
-  return {
-    stateRevisionBefore: snapshot.stateRevisionBefore,
-    stateRevisionAfter: getTimelineRevision(),
-    entities: {
-      created: clipsAfter.filter((clip) => !snapshot.clipsById.has(clip.id)).map((clip) => entity(clip.id)),
-      updated: [...snapshot.targetClipIds]
-        .filter((id) => clipsAfterById.has(id) && clipsAfterById.get(id) !== snapshot.clipsById.get(id))
-        .map(entity),
-      // Source clips are transformed into parts, not semantically deleted by a split.
-      deleted: [...snapshot.clipsById.keys()]
-        .filter((id) => !snapshot.targetClipIds.has(id) && !clipsAfterById.has(id))
-        .map(entity),
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().clips,
+        {
+          updatedEntityIds: targetClipIds,
+          excludedDeletedEntityIds: targetClipIds,
+        },
+      ),
     },
   };
 }

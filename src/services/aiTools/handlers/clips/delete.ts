@@ -1,7 +1,10 @@
 import { useTimelineStore } from '../../../../stores/timeline';
-import { getTimelineRevision } from '../../../../stores/timeline/revisionMiddleware';
 import type { ToolResult } from '../../types.ts';
 import { isAIExecutionActive } from '../../executionState';
+import {
+  captureMutationEntitySnapshot,
+  describeMutationEntities,
+} from '../mutationEntityResults';
 import type { TimelineStore } from './runtime';
 import { getClipColor } from './runtime';
 
@@ -15,6 +18,10 @@ export async function handleDeleteClip(
   if (!clip) {
     return { success: false, error: `Clip not found: ${clipId}` };
   }
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'clip',
+    useTimelineStore.getState().clips,
+  );
 
   // Visual feedback: delete ghost before removing
   if (isAIExecutionActive()) {
@@ -52,7 +59,18 @@ export async function handleDeleteClip(
     };
   }
 
-  return { success: true, data: { deletedClipId: clipId, clipName: clip.name, withLinked } };
+  return {
+    success: true,
+    data: {
+      deletedClipId: clipId,
+      clipName: clip.name,
+      withLinked,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().clips,
+      ),
+    },
+  };
 }
 
 export async function handleDeleteClips(
@@ -62,13 +80,23 @@ export async function handleDeleteClips(
   const clipIds = args.clipIds as string[];
   const withLinked = (args.withLinked as boolean | undefined) ?? true;
   const currentClips = useTimelineStore.getState().clips;
+  const mutationSnapshot = captureMutationEntitySnapshot('clip', currentClips);
   const deleted = clipIds.filter((clipId) => currentClips.some((clip) => clip.id === clipId));
   const notFound = clipIds.filter((clipId) => !currentClips.some((clip) => clip.id === clipId));
 
   if (deleted.length === 0) {
     return {
       success: true,
-      data: { deleted, notFound, deletedCount: 0, withLinked },
+      data: {
+        deleted,
+        notFound,
+        deletedCount: 0,
+        withLinked,
+        ...describeMutationEntities(
+          mutationSnapshot,
+          useTimelineStore.getState().clips,
+        ),
+      },
     };
   }
 
@@ -104,7 +132,16 @@ export async function handleDeleteClips(
 
   return {
     success: true,
-    data: { deleted, notFound, deletedCount: deleted.length, withLinked },
+    data: {
+      deleted,
+      notFound,
+      deletedCount: deleted.length,
+      withLinked,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().clips,
+      ),
+    },
   };
 }
 
@@ -123,10 +160,12 @@ export async function handleCutRangesFromClip(
 
   const trackId = initialClip.trackId;
   const results: Array<{ range: { start: number; end: number }; status: string }> = [];
-  const mutationSnapshot = captureClipMutationSnapshot([
-    initialClip.id,
-    initialClip.linkedClipId,
-  ]);
+  const targetClipIds = [initialClip.id, initialClip.linkedClipId]
+    .filter((id): id is string => id !== undefined);
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'clip',
+    useTimelineStore.getState().clips,
+  );
 
   // Sort ranges from END to START (so we don't shift positions)
   const sortedRanges = [...ranges].sort((a, b) => b.timelineStart - a.timelineStart);
@@ -245,36 +284,11 @@ export async function handleCutRangesFromClip(
       rangesProcessed: ranges.length,
       rangesRemoved: removedCount,
       results,
-      ...describeClipMutation(mutationSnapshot),
-    },
-  };
-}
-
-function captureClipMutationSnapshot(targetClipIds: Array<string | undefined>) {
-  const clips = useTimelineStore.getState().clips;
-  return {
-    clipsById: new Map(clips.map((clip) => [clip.id, clip])),
-    targetClipIds: new Set(targetClipIds.filter((id): id is string => id !== undefined)),
-    stateRevisionBefore: getTimelineRevision(),
-  };
-}
-
-function describeClipMutation(snapshot: ReturnType<typeof captureClipMutationSnapshot>) {
-  const clipsAfter = useTimelineStore.getState().clips;
-  const clipsAfterById = new Map(clipsAfter.map((clip) => [clip.id, clip]));
-  const entity = (id: string) => ({ kind: 'clip' as const, id });
-
-  return {
-    stateRevisionBefore: snapshot.stateRevisionBefore,
-    stateRevisionAfter: getTimelineRevision(),
-    entities: {
-      created: clipsAfter.filter((clip) => !snapshot.clipsById.has(clip.id)).map((clip) => entity(clip.id)),
-      updated: [...snapshot.targetClipIds]
-        .filter((id) => clipsAfterById.has(id) && clipsAfterById.get(id) !== snapshot.clipsById.get(id))
-        .map(entity),
-      deleted: [...snapshot.clipsById.keys()]
-        .filter((id) => !clipsAfterById.has(id))
-        .map(entity),
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().clips,
+        { updatedEntityIds: targetClipIds },
+      ),
     },
   };
 }

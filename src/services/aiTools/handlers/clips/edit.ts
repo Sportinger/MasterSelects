@@ -1,7 +1,10 @@
 import { useTimelineStore } from '../../../../stores/timeline';
-import { getTimelineRevision } from '../../../../stores/timeline/revisionMiddleware';
 import type { ToolResult } from '../../types.ts';
 import { isAIExecutionActive } from '../../executionState';
+import {
+  captureMutationEntitySnapshot,
+  describeMutationEntities,
+} from '../mutationEntityResults';
 import type { TimelineStore } from './runtime';
 
 export async function handleMoveClip(
@@ -67,7 +70,6 @@ export async function handleMoveClip(
     },
   };
 }
-
 export async function handleTrimClip(
   args: Record<string, unknown>,
   timelineStore: TimelineStore
@@ -87,7 +89,12 @@ export async function handleTrimClip(
 
   const oldInPoint = clip.inPoint;
   const oldOutPoint = clip.outPoint;
-  const mutationSnapshot = captureClipMutationSnapshot([clip.id, clip.linkedClipId]);
+  const targetClipIds = [clip.id, clip.linkedClipId]
+    .filter((id): id is string => id !== undefined);
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'clip',
+    useTimelineStore.getState().clips,
+  );
   const trimResult = timelineStore.applyTimelineEditOperation({
     id: `ai-trim-clip:${clipId}:${inPoint}:${outPoint}`,
     type: 'trim-clip',
@@ -129,7 +136,11 @@ export async function handleTrimClip(
       inPoint,
       outPoint,
       newDuration: outPoint - inPoint,
-      ...describeClipMutation(mutationSnapshot),
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().clips,
+        { updatedEntityIds: targetClipIds },
+      ),
     },
   };
 }
@@ -234,35 +245,6 @@ export async function handleReorderClips(
         newStartTime: newPositions.get(id),
         position: i + 1,
       })),
-    },
-  };
-}
-
-function captureClipMutationSnapshot(targetClipIds: Array<string | undefined>) {
-  const clips = useTimelineStore.getState().clips;
-  return {
-    clipsById: new Map(clips.map((clip) => [clip.id, clip])),
-    targetClipIds: new Set(targetClipIds.filter((id): id is string => id !== undefined)),
-    stateRevisionBefore: getTimelineRevision(),
-  };
-}
-
-function describeClipMutation(snapshot: ReturnType<typeof captureClipMutationSnapshot>) {
-  const clipsAfter = useTimelineStore.getState().clips;
-  const clipsAfterById = new Map(clipsAfter.map((clip) => [clip.id, clip]));
-  const entity = (id: string) => ({ kind: 'clip' as const, id });
-
-  return {
-    stateRevisionBefore: snapshot.stateRevisionBefore,
-    stateRevisionAfter: getTimelineRevision(),
-    entities: {
-      created: clipsAfter.filter((clip) => !snapshot.clipsById.has(clip.id)).map((clip) => entity(clip.id)),
-      updated: [...snapshot.targetClipIds]
-        .filter((id) => clipsAfterById.has(id) && clipsAfterById.get(id) !== snapshot.clipsById.get(id))
-        .map(entity),
-      deleted: [...snapshot.clipsById.keys()]
-        .filter((id) => !clipsAfterById.has(id))
-        .map(entity),
     },
   };
 }
