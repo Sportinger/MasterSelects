@@ -24,6 +24,7 @@ export interface HistoryTimelineRestoreCurrentState {
   selectedLayerId?: string | null;
   clipKeyframes?: ReadonlyMap<string, readonly Keyframe[]>;
   markers?: Readonly<HistoryTimelineEditState['timeline']['markers']>;
+  tempoMap?: HistoryTimelineEditState['timeline']['tempoMap'];
   masterAudioState?: HistoryTimelineEditState['timeline']['masterAudioState'];
 }
 
@@ -37,6 +38,7 @@ export interface HistoryTimelineRestoreState {
   selectedLayerId: string | null;
   clipKeyframes: Map<string, Keyframe[]>;
   markers: HistoryTimelineEditState['timeline']['markers'];
+  tempoMap?: HistoryTimelineEditState['timeline']['tempoMap'];
   masterAudioState?: HistoryTimelineEditState['timeline']['masterAudioState'];
 }
 
@@ -318,6 +320,11 @@ export function createHistoryTimelineRestoreState(
       selectedLayerId: historyState.timeline.selectedLayerId,
       clipKeyframes: restoredKeyframes,
       markers: clonePlain(historyState.timeline.markers),
+      tempoMap: clonePlain(historyState.timeline.tempoMap ?? currentTimeline.tempoMap),
+      // History entries captured before #299 carry no tempo map, and the result
+      // of this function is fed straight to the store's shallow-merging
+      // setState — so an `undefined` here would CLOBBER the live tempo map
+      // rather than leave it alone. Fall back to the current one.
       masterAudioState: clonePlain(historyState.timeline.masterAudioState),
     },
     diagnostics: {

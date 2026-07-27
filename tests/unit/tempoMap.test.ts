@@ -8,7 +8,7 @@ import {
 } from '../../src/timeline/tempo/TempoMap';
 
 const FOUR_FOUR_60: TempoMap = {
-  events: [{ time: 0, bpm: 60, numerator: 4, denominator: 4 }],
+  events: [{ id: 'ev-1', time: 0, bpm: 60, numerator: 4, denominator: 4 }],
 };
 
 describe('TempoMap — single 4/4 @ 60 BPM segment', () => {
@@ -55,8 +55,8 @@ describe('TempoMap — multi-segment (tempo change)', () => {
   // 4/4 @ 60 for the first 2 bars (8s), then 4/4 @ 120 (beats every 0.5s).
   const map: TempoMap = {
     events: [
-      { time: 0, bpm: 60, numerator: 4, denominator: 4 },
-      { time: 8, bpm: 120, numerator: 4, denominator: 4 },
+      { id: 'ev-2', time: 0, bpm: 60, numerator: 4, denominator: 4 },
+      { id: 'ev-3', time: 8, bpm: 120, numerator: 4, denominator: 4 },
     ],
   };
 
@@ -81,8 +81,8 @@ describe('TempoMap — meter change', () => {
   // 4/4 for bar 1 (4s @ 60), then 3/4 from bar 2 onward.
   const map: TempoMap = {
     events: [
-      { time: 0, bpm: 60, numerator: 4, denominator: 4 },
-      { time: 4, bpm: 60, numerator: 3, denominator: 4 },
+      { id: 'ev-4', time: 0, bpm: 60, numerator: 4, denominator: 4 },
+      { id: 'ev-5', time: 4, bpm: 60, numerator: 3, denominator: 4 },
     ],
   };
 

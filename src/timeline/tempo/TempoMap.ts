@@ -45,7 +45,13 @@ interface TempoSegment {
   startPhase: number;  // cumulative bar phase at startTime
 }
 
-const FALLBACK_EVENT: TempoEvent = { time: 0, bpm: 60, numerator: 4, denominator: 4 };
+const FALLBACK_EVENT: TempoEvent = {
+  id: 'tempo-fallback',
+  time: 0,
+  bpm: 60,
+  numerator: 4,
+  denominator: 4,
+};
 
 function beatSecondsFor(event: TempoEvent): number {
   // Quarter note = 60/bpm seconds; the counted beat is a 1/denominator note.

@@ -8,7 +8,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RulerLaneFormat } from '../../types';
 import { useTimelineStore } from '../../stores/timeline';
-import { selectRulerLanes } from '../../stores/timeline/selectors';
+import { selectRulerLanes, selectTimelineGridSubdivision } from '../../stores/timeline/selectors';
+import {
+  TIMELINE_GRID_SUBDIVISIONS,
+  TIMELINE_GRID_SUBDIVISION_LABELS,
+} from '../../timeline/tempo/barsGrid';
 import './TimelineControlsViewDropdown.css';
 
 const LANE_OPTIONS: { format: RulerLaneFormat; label: string }[] = [
@@ -20,6 +24,8 @@ const LANE_OPTIONS: { format: RulerLaneFormat; label: string }[] = [
 
 export function RulerLanesMenu() {
   const lanes = useTimelineStore(selectRulerLanes);
+  const gridSubdivision = useTimelineStore(selectTimelineGridSubdivision);
+  const setTimelineGridSubdivision = useTimelineStore((state) => state.setTimelineGridSubdivision);
   // Select actions individually — they are stable references, so no re-render churn.
   const addRulerLane = useTimelineStore((state) => state.addRulerLane);
   const removeRulerLane = useTimelineStore((state) => state.removeRulerLane);
@@ -74,6 +80,24 @@ export function RulerLanesMenu() {
               </div>
             );
           })}
+          {/* The grid resolution only means anything while a bars ruler is on
+              (§3.5: an enabled bars ruler is what switches the body grid), so it
+              lives here rather than as a second toolbar dropdown. */}
+          {lanes.some((lane) => lane.format === 'bars') && (
+            <>
+              <div className="view-dropdown-divider" />
+              {TIMELINE_GRID_SUBDIVISIONS.map((subdivision) => (
+                <div
+                  key={subdivision}
+                  className={`view-dropdown-item ${gridSubdivision === subdivision ? 'active' : ''}`}
+                  onClick={() => setTimelineGridSubdivision(subdivision)}
+                >
+                  <span className={`view-check ${gridSubdivision === subdivision ? 'checked' : ''}`}>✓</span>
+                  <span>{`Grid: ${TIMELINE_GRID_SUBDIVISION_LABELS[subdivision]}`}</span>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       )}
     </div>

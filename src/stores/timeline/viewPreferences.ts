@@ -1,8 +1,14 @@
+import {
+  TIMELINE_GRID_SUBDIVISIONS,
+  type TimelineGridSubdivision,
+} from '../../timeline/tempo/barsGrid';
+
 const AUDIO_LAYER_ADVANCED_MODE_STORAGE_KEY = 'masterselects.audioLayerAdvancedMode';
 const TIMELINE_TRACK_FOCUS_MODE_STORAGE_KEY = 'masterselects.timelineTrackFocusMode';
 const TIMELINE_TRACK_HEADER_WIDTH_STORAGE_KEY = 'masterselects.timelineTrackHeaderWidth';
 const TIMELINE_SPLIT_RATIO_STORAGE_KEY = 'masterselects.timelineSplitRatio';
 const TIMELINE_SNAPPING_ENABLED_STORAGE_KEY = 'masterselects.timelineSnappingEnabled';
+const TIMELINE_GRID_SUBDIVISION_STORAGE_KEY = 'masterselects.timelineGridSubdivision';
 
 type TimelineTrackFocusModePreference = 'balanced' | 'audio' | 'video';
 
@@ -81,6 +87,31 @@ export function readStoredTimelineSnappingEnabled(fallback: boolean): boolean {
 
 export function persistTimelineSnappingEnabled(enabled: boolean): void {
   persistStoredValue(TIMELINE_SNAPPING_ENABLED_STORAGE_KEY, enabled ? 'true' : 'false');
+}
+
+// Which musical division the bars grid and its snapping use (issue #299). A
+// per-user view preference like snapping — never project content.
+export function readStoredTimelineGridSubdivision(
+  fallback: TimelineGridSubdivision,
+): TimelineGridSubdivision {
+  if (!canUseLocalStorage()) {
+    return fallback;
+  }
+
+  try {
+    const stored = localStorage.getItem(TIMELINE_GRID_SUBDIVISION_STORAGE_KEY);
+    if (stored && (TIMELINE_GRID_SUBDIVISIONS as string[]).includes(stored)) {
+      return stored as TimelineGridSubdivision;
+    }
+  } catch {
+    // localStorage can be unavailable in restricted browser contexts.
+  }
+
+  return fallback;
+}
+
+export function persistTimelineGridSubdivision(subdivision: TimelineGridSubdivision): void {
+  persistStoredValue(TIMELINE_GRID_SUBDIVISION_STORAGE_KEY, subdivision);
 }
 
 export function readStoredTimelineTrackFocusMode(

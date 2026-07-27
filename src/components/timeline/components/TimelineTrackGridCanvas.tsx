@@ -1,7 +1,10 @@
 import { memo, useLayoutEffect, useRef, useState } from 'react';
 import { useMediaStore } from '../../../stores/mediaStore';
+import { useTimelineStore } from '../../../stores/timeline';
+import { selectTempoMap } from '../../../stores/timeline/selectors';
 import {
   alignTimelineGridPixel,
+  createBarsGridPlan,
   createTimelineGridPlan,
   getTimelineDevicePixelRatio,
 } from '../utils/timelineGrid';
@@ -46,6 +49,31 @@ function paintGridLines(
   }
 }
 
+// Tempo lines are non-uniform, so the bars grid paints explicit times rather
+// than an interval. Same dpr-snapping and viewport clipping as paintGridLines.
+function paintGridLinesAt(
+  context: CanvasRenderingContext2D,
+  color: string,
+  opacity: number,
+  times: readonly number[],
+  zoom: number,
+  scrollX: number,
+  widthDevicePx: number,
+  heightDevicePx: number,
+  devicePixelRatio: number,
+): void {
+  if (opacity <= 0 || times.length === 0) return;
+
+  context.globalAlpha = opacity;
+  context.fillStyle = color;
+
+  for (const time of times) {
+    const deviceX = Math.round((time * zoom - scrollX) * devicePixelRatio);
+    if (deviceX < 0 || deviceX >= widthDevicePx) continue;
+    context.fillRect(deviceX, 0, 1, heightDevicePx);
+  }
+}
+
 // CSS repeating gradients cannot snap individual repetitions to device pixels,
 // so fractional frame/time intervals smear into uneven or missing lines. This
 // canvas paints every grid line separately, snapped, viewport-sized only.
@@ -58,6 +86,13 @@ export const TimelineTrackGridCanvas = memo(function TimelineTrackGridCanvas({
 }: TimelineTrackGridCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const frameRate = useMediaStore((state) => state.getActiveComposition()?.frameRate ?? 30);
+  // §3.5: an ENABLED Bars+Beats ruler wins the grid — no separate active-lane
+  // selection, so the lines behind the clips always match the ruler above them.
+  const barsLaneEnabled = useTimelineStore(
+    (state) => state.rulerLanes.some((lane) => lane.format === 'bars'),
+  );
+  const tempoMap = useTimelineStore(selectTempoMap);
+  const gridSubdivision = useTimelineStore((state) => state.timelineGridSubdivision);
   const devicePixelRatio = getTimelineDevicePixelRatio();
   const alignedScrollX = alignTimelineGridPixel(scrollX, devicePixelRatio);
   // The viewportWidth prop is the row width, which matches the content width
@@ -95,8 +130,34 @@ export const TimelineTrackGridCanvas = memo(function TimelineTrackGridCanvas({
 
     context.clearRect(0, 0, widthDevicePx, heightDevicePx);
 
-    const plan = createTimelineGridPlan({ zoom, frameRate });
     const color = resolveGridColor(canvas, trackType);
+
+    if (barsLaneEnabled) {
+      const barsPlan = createBarsGridPlan({
+        tempoMap,
+        zoom,
+        startTime: alignedScrollX / zoom,
+        endTime: (alignedScrollX + canvasWidth) / zoom,
+        subdivision: gridSubdivision,
+      });
+      // Bars read strongest, then beats, then sub-beat lines — the musical
+      // hierarchy has to be visible at a glance, unlike the flat time grid.
+      const layers: Array<[readonly number[], number]> = [
+        [barsPlan.subdivisionTimes, 0.35],
+        [barsPlan.beatTimes, 0.6],
+        [barsPlan.barTimes, 1],
+      ];
+      for (const [times, opacity] of layers) {
+        paintGridLinesAt(
+          context, color, opacity, times, zoom, alignedScrollX,
+          widthDevicePx, heightDevicePx, devicePixelRatio,
+        );
+      }
+      context.globalAlpha = 1;
+      return;
+    }
+
+    const plan = createTimelineGridPlan({ zoom, frameRate });
     paintGridLines(
       context,
       color,
@@ -118,7 +179,7 @@ export const TimelineTrackGridCanvas = memo(function TimelineTrackGridCanvas({
       devicePixelRatio,
     );
     context.globalAlpha = 1;
-  }, [alignedScrollX, canvasWidth, devicePixelRatio, frameRate, height, trackType, zoom]);
+  }, [alignedScrollX, barsLaneEnabled, canvasWidth, devicePixelRatio, frameRate, gridSubdivision, height, tempoMap, trackType, zoom]);
 
   return (
     <canvas

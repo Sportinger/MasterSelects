@@ -65,6 +65,12 @@ export function applyHistorySnapshot(
         clipKeyframes: restoredKeyframes,
         markers: deepClone(snapshot.timeline.markers || []),
       };
+
+      // Absent on history entries captured before #299 — leave the live tempo
+      // map alone rather than clobbering it with undefined.
+      if (snapshot.timeline.tempoMap) {
+        timelineState.tempoMap = deepClone(snapshot.timeline.tempoMap);
+      }
     }
 
     if ('masterAudioState' in currentTimeline || snapshot.timeline.masterAudioState !== undefined) {

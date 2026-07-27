@@ -10,6 +10,7 @@ import type {
   Layer,
   MasterAudioState,
   SerializableClip,
+  TempoMap,
   TimelineClip,
   TimelineTrack,
   TrackAudioState,
@@ -145,6 +146,8 @@ export interface HistoryTimelineEditState {
     selectedLayerId: string | null;
     clipKeyframes: Record<string, Keyframe[]>;
     markers: TimelineMarker[];
+    // Optional so schema v1 entries written before #299 stay readable.
+    tempoMap?: TempoMap;
     masterAudioState?: MasterAudioState;
   };
 }
@@ -162,6 +165,7 @@ export interface CreateHistoryTimelineEditStateInput {
   selectedLayerId?: string | null;
   clipKeyframes?: Map<string, Keyframe[]> | Record<string, Keyframe[]>;
   markers?: TimelineMarker[];
+  tempoMap?: TempoMap;
   masterAudioState?: MasterAudioState;
 }
 
@@ -559,6 +563,7 @@ export function createHistoryTimelineEditState(
         ? Object.fromEntries(input.clipKeyframes)
         : input.clipKeyframes ?? {}),
       markers: cloneHistoryPlainData(input.markers ?? []),
+      tempoMap: input.tempoMap ? cloneHistoryPlainData(input.tempoMap) : undefined,
       masterAudioState: cloneAudioPlainData<MasterAudioState>(input.masterAudioState),
     },
   };

@@ -330,8 +330,10 @@ export interface RulerLane {
 }
 
 // One tempo / time-signature segment, effective from `time` onward until the
-// next event. A single 4/4 @ 60 BPM event today; a sorted list of N later.
+// next event. Invariants (sort, uniqueness, pinned first event, clamps) live in
+// `src/timeline/tempo/tempoEdits.ts`.
 export interface TempoEvent {
+  id: string;   // stable identity for editing, dragging and React keys (#299)
   time: number; // seconds, sorted ascending; first event is at 0
   bpm: number;
   numerator: number;

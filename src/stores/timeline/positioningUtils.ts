@@ -2,7 +2,8 @@
 // Extracted from index.ts for maintainability
 
 import type { SliceCreator, TimelineClip, TimelineUtils } from './types';
-import { SNAP_THRESHOLD_SECONDS } from './constants';
+import { SNAP_THRESHOLD_SECONDS, TIMELINE_GRID_SNAP_THRESHOLD_PX } from './constants';
+import { collectBarsGridSnapTimes } from '../../timeline/tempo/barsGrid';
 import { getTrackOverlapPolicy } from './helpers/overlapPolicy';
 
 type PositioningUtils = Pick<
@@ -35,9 +36,11 @@ export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get)
     let snapEdgeTime = 0; // The actual edge time where the snap occurs (for indicator)
     let minSnapDistance = SNAP_THRESHOLD_SECONDS;
 
-    const trySnapToTime = (edgeTime: number) => {
+    // `threshold` lets tempo-grid candidates use a zoom-derived window while
+    // clip edges and the playhead keep the fixed seconds one.
+    const trySnapToTime = (edgeTime: number, threshold = SNAP_THRESHOLD_SECONDS) => {
       const distStart = Math.abs(desiredStartTime - edgeTime);
-      if (distStart < minSnapDistance) {
+      if (distStart < Math.min(minSnapDistance, threshold)) {
         snappedStart = edgeTime;
         snapEdgeTime = edgeTime;
         minSnapDistance = distStart;
@@ -45,7 +48,7 @@ export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get)
       }
 
       const distEnd = Math.abs(desiredEndTime - edgeTime);
-      if (distEnd < minSnapDistance) {
+      if (distEnd < Math.min(minSnapDistance, threshold)) {
         snappedStart = edgeTime - clipDuration;
         snapEdgeTime = edgeTime;
         minSnapDistance = distEnd;
@@ -63,6 +66,32 @@ export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get)
 
     // Snap start/end of moving clip to playhead
     trySnapToTime(playheadPosition);
+
+    // Tempo grid (issue #299, §3.5): candidates only when a Bars+Beats ruler is
+    // enabled, so what is drawn behind the clips is exactly what snaps. The
+    // threshold is PIXEL-derived, unlike the clip-edge/playhead candidates
+    // above: a 1/16 at 120 BPM is 0.125 s apart, narrower than the fixed
+    // SNAP_THRESHOLD_SECONDS, which would leave grid snapping permanently
+    // engaged with overlapping capture zones.
+    const { rulerLanes, tempoMap, timelineGridSubdivision, zoom } = get();
+    if (rulerLanes.some(lane => lane.format === 'bars')) {
+      const gridThresholdSeconds = TIMELINE_GRID_SNAP_THRESHOLD_PX / Math.max(1e-6, zoom);
+      const gridCandidates = new Set<number>();
+      for (const time of [desiredStartTime, desiredEndTime]) {
+        for (const candidate of collectBarsGridSnapTimes({
+          tempoMap,
+          zoom,
+          centerTime: time,
+          radiusSeconds: gridThresholdSeconds,
+          subdivision: timelineGridSubdivision,
+        })) {
+          gridCandidates.add(candidate);
+        }
+      }
+      for (const candidate of gridCandidates) {
+        trySnapToTime(candidate, gridThresholdSeconds);
+      }
+    }
 
     // Also snap to timeline start (0)
     const distToTimelineStart = Math.abs(desiredStartTime);

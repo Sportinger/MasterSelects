@@ -16,7 +16,7 @@ import { resolvePlaybackStartPosition, resolvePlaybackStopPosition } from './pla
 import { prewarmProxyFramesForTimelinePosition } from '../../services/proxyFramePrewarm';
 import {
   persistAudioLayerAdvancedMode,
-  persistTimelineSnappingEnabled,
+  persistTimelineGridSubdivision, persistTimelineSnappingEnabled,
   persistTimelineSplitRatio,
   persistTimelineTrackFocusMode,
   persistTimelineTrackHeaderWidth,
@@ -277,6 +277,11 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
       persistTimelineSnappingEnabled(snappingEnabled);
       return { snappingEnabled };
     });
+  },
+
+  setTimelineGridSubdivision: (subdivision) => {
+    persistTimelineGridSubdivision(subdivision);
+    set({ timelineGridSubdivision: subdivision });
   },
 
   setScrollX: (scrollX) => {
