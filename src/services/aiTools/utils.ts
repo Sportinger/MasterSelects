@@ -201,6 +201,10 @@ export function formatTrackInfo(track: TimelineTrack, clips: TimelineClip[]) {
       startTime: c.startTime,
       endTime: c.startTime + c.duration,
       duration: c.duration,
+      // agent-kernel WP2: source-space + linkage identity for the kernel adapter
+      inPoint: c.inPoint,
+      outPoint: c.outPoint,
+      linkedClipId: c.linkedClipId,
       sourceType: c.source?.type,
       signalAssetId: c.signalAssetId,
       signalRefId: c.signalRefId,
