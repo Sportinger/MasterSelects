@@ -72,6 +72,11 @@ export const DEFAULT_TRACKS: TimelineTrack[] = [
 
 // Snap threshold in seconds (clips will snap when within this distance)
 export const SNAP_THRESHOLD_SECONDS = 0.15;
+// Tempo-grid snapping is measured in PIXELS, not seconds: musical divisions get
+// arbitrarily close as tempo rises or subdivision shrinks, so a fixed seconds
+// window would capture several lines at once (issue #299). Matches the timeline
+// tool dispatcher's existing pixel budget.
+export const TIMELINE_GRID_SNAP_THRESHOLD_PX = 10;
 
 // Resistance threshold - how far past a clip edge the user must drag to "break through"
 // and be allowed to overlap (in PIXELS). Higher = harder to overlap.

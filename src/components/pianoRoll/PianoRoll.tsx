@@ -14,7 +14,7 @@ import { previewMidiNote } from '../../services/audio/midiPlaybackScheduler';
 import type { MidiNote } from '../../types/midiClip';
 import { computeGhostNotes } from './ghostNotes';
 import { PianoRollScrollbars, PIANO_ROLL_SCROLLBAR } from './PianoRollScrollbars';
-import { PianoRollRuler, PIANO_ROLL_RULER_H, PART_BORDER_COLOR } from './PianoRollRuler';
+import { PianoRollRuler, pianoRollRulerHeight, PART_BORDER_COLOR } from './PianoRollRuler';
 import { PianoRollGridLines } from './PianoRollGridLines';
 import { buildPianoRollGrid } from './pianoRollGrid';
 import { clipLocalToContentTime, contentTimeToClipLocal, isNoteStartInWindow, type MidiClipWindow } from '../../services/midi/midiClipTiming';
@@ -256,6 +256,12 @@ export function PianoRoll({ clipId }: PianoRollProps) {
   // piano-roll ruler are identical to the timeline at the same musical positions
   // (#249). Stable identity unless the tempo/meter map actually changes.
   const tempoMap = useTimelineStore(selectTempoMap);
+  // The Tempo lane follows the timeline's Rulers checklist, so one toggle drives
+  // both views rather than a second hidden setting (#299).
+  const showTempoLane = useTimelineStore(
+    (state) => state.rulerLanes.some((lane) => lane.format === 'tempo'),
+  );
+  const rulerHeight = pianoRollRulerHeight(showTempoLane ? 3 : 2);
   const addMidiNote = useTimelineStore((state) => state.addMidiNote);
   const addMidiNotes = useTimelineStore((state) => state.addMidiNotes);
   const updateMidiNote = useTimelineStore((state) => state.updateMidiNote);
@@ -1053,7 +1059,7 @@ export function PianoRoll({ clipId }: PianoRollProps) {
           imperative translateX (no React state; scrolling must not re-render the
           notes). The track viewport clips ticks scrolled in behind the spacer. */}
       <div style={{
-        display: 'flex', flexShrink: 0, height: PIANO_ROLL_RULER_H,
+        display: 'flex', flexShrink: 0, height: rulerHeight,
         // Match the main timeline ruler background (--bg-tertiary, #1e1e1e dark).
         background: '#1e1e1e', borderBottom: '1px solid #2a2a2a', overflow: 'hidden',
       }}>
@@ -1075,6 +1081,7 @@ export function PianoRoll({ clipId }: PianoRollProps) {
           >
             <PianoRollRuler
               rulerTicks={pianoRollGrid.rulerTicks}
+              tempoEvents={showTempoLane ? tempoMap.events : undefined}
               clipStartTime={effStartTime}
               clipDuration={clipDuration}
               pxPerSec={pxPerSec}

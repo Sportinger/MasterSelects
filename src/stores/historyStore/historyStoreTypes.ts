@@ -1,7 +1,7 @@
 import type { MasterAudioState } from '../../types/audio';
 import type { Keyframe } from '../../types/keyframes';
 import type { Layer } from '../../types/layers';
-import type { TimelineClip, TimelineTrack } from '../../types/timeline';
+import type { TempoMap, TimelineClip, TimelineTrack } from '../../types/timeline';
 import type {
   Composition,
   MathSceneItem,
@@ -42,6 +42,9 @@ export interface StateSnapshot {
     selectedLayerId: string | null;
     clipKeyframes: Record<string, Keyframe[]>;
     markers: TimelineMarker[];
+    // Tempo map is CONTENT and participates in undo (#299); ruler lanes and
+    // the active lane stay out as view state.
+    tempoMap?: TempoMap;
     masterAudioState?: MasterAudioState;
   };
   timelineEditState?: HistoryTimelineEditState;
@@ -145,6 +148,7 @@ export interface TimelineStoreState {
   selectedLayerId: string | null;
   clipKeyframes: Map<string, Keyframe[]>;
   markers: TimelineMarker[];
+  tempoMap?: TempoMap;
   masterAudioState?: MasterAudioState;
   isExporting?: boolean;
 }

@@ -15,7 +15,8 @@ import type { RulerLane, RulerLaneActions, RulerLaneFormat, SliceCreator } from 
 import { rulerLaneIdForFormat } from '../../timeline/tempo/rulerDefaults';
 
 // Top → bottom stacking order for enabled lanes.
-const RULER_LANE_FORMAT_ORDER: RulerLaneFormat[] = ['time', 'timecode', 'frames', 'bars'];
+// Tempo sits directly under the bars ruler it edits.
+const RULER_LANE_FORMAT_ORDER: RulerLaneFormat[] = ['time', 'timecode', 'frames', 'bars', 'tempo'];
 
 function byFormatOrder(a: RulerLane, b: RulerLane): number {
   return RULER_LANE_FORMAT_ORDER.indexOf(a.format) - RULER_LANE_FORMAT_ORDER.indexOf(b.format);
@@ -49,7 +50,10 @@ export const createRulerSlice: SliceCreator<RulerLaneActions> = (set, get) => ({
     set(state => {
       if (laneId === null) return { activeRulerLaneId: null };
       // Ignore ids that do not reference a current lane.
-      if (!state.rulerLanes.some(lane => lane.id === laneId)) return {};
+      const lane = state.rulerLanes.find(candidate => candidate.id === laneId);
+      if (!lane) return {};
+      // The tempo lane is an editor, not a timebase — it can never be active.
+      if (lane.format === 'tempo') return {};
       return { activeRulerLaneId: laneId };
     });
   },

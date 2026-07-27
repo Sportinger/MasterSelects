@@ -46,6 +46,14 @@ export interface TimelineState {
   trackHeaderWidth: number;
   timelineSplitRatio: number | null;
   snappingEnabled: boolean;
+  // Musical division the bars grid draws and snaps to (issue #299). View state:
+  // persisted per user in localStorage, never in the project.
+  timelineGridSubdivision: import('../../../timeline/tempo/barsGrid').TimelineGridSubdivision;
+  // Metronome (issue #299). View state: per-user localStorage, never project
+  // content, exactly like snappingEnabled.
+  metronomeEnabled: boolean;
+  metronomeVolume: number; // 0..1
+  metronomeMode: import('../../../services/audio/metronomeScheduler').MetronomeMode;
   isPlaying: boolean;
   isDraggingPlayhead: boolean;
   playbackWarmup: PlaybackWarmupState | null;

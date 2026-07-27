@@ -37,6 +37,7 @@ function createTimelineSnapshot(refs: HistoryStoreRefs): StateSnapshot['timeline
     selectedLayerId: timeline?.selectedLayerId || null,
     clipKeyframes: keyframesObj,
     markers: deepClone(timeline?.markers || []),
+    tempoMap: deepClone(timeline?.tempoMap),
     masterAudioState: cloneMasterAudioState(timeline?.masterAudioState),
   };
 }
@@ -62,6 +63,7 @@ function createTimelineEditStateSnapshot(
     selectedLayerId: timeline.selectedLayerId || null,
     clipKeyframes: timeline.clipKeyframes,
     markers: timeline.markers || [],
+    tempoMap: timeline.tempoMap,
     masterAudioState: timeline.masterAudioState,
   });
 }
@@ -87,6 +89,7 @@ function createTimelineSnapshotFromEditState(
       ])
     ),
     markers: deepClone(restored.markers),
+    tempoMap: deepClone(restored.tempoMap),
     masterAudioState: cloneMasterAudioState(restored.masterAudioState),
   };
 }

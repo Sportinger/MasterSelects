@@ -1,5 +1,25 @@
 import type { RulerLaneFormat, TempoMap } from '../../../types';
 import { iterateBarBeatLines } from '../../../timeline/tempo/TempoMap';
+import {
+  MIN_BAR_LABEL_PX,
+  MIN_BAR_TICK_PX,
+  MIN_BEAT_TICK_PX,
+} from '../../../timeline/tempo/barsGrid';
+
+// The tempo-driven body grid lives with the tempo math (both stores and
+// components consume it); re-exported here so ruler and grid callers share one
+// import path.
+export {
+  createBarsGridPlan,
+  collectBarsGridSnapTimes,
+  TIMELINE_GRID_SUBDIVISIONS,
+  TIMELINE_GRID_SUBDIVISION_LABELS,
+} from '../../../timeline/tempo/barsGrid';
+export type {
+  BarsGridPlan,
+  BarsGridPlanInput,
+  TimelineGridSubdivision,
+} from '../../../timeline/tempo/barsGrid';
 
 export type TimelineGridMode = 'frame' | 'time';
 
@@ -195,7 +215,7 @@ export interface RulerTick {
 }
 
 export interface LinearLaneTicksInput {
-  format: Exclude<RulerLaneFormat, 'bars'>;
+  format: Exclude<RulerLaneFormat, 'bars' | 'tempo'>;
   zoom: number;
   frameRate?: number | null;
   startTime: number;
@@ -289,10 +309,6 @@ export interface BarsLaneTicksInput {
   endTime: number;
   duration: number;
 }
-
-const MIN_BEAT_TICK_PX = 14;
-const MIN_BAR_TICK_PX = 4;
-const MIN_BAR_LABEL_PX = 36;
 
 // Bars lane: time projected through the TempoMap (variable spacing ready; constant
 // for the single 4/4@60 map). Thins by pixel spacing so beats/bars never merge.

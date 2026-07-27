@@ -23,6 +23,7 @@ import { createTrackSlice } from '../../src/stores/timeline/trackSlice';
 import { createKeyframeSlice } from '../../src/stores/timeline/keyframeSlice';
 import { createMarkerSlice } from '../../src/stores/timeline/markerSlice';
 import { createRulerSlice } from '../../src/stores/timeline/rulerSlice';
+import { createTempoSlice } from '../../src/stores/timeline/tempoSlice';
 import { createDefaultRulerLaneState } from '../../src/timeline/tempo/rulerDefaults';
 import { createMaskSlice } from '../../src/stores/timeline/maskSlice';
 import { createClipSlice } from '../../src/stores/timeline/clipSlice';
@@ -149,6 +150,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
     const keyframeActions = createKeyframeSlice(set, get);
     const markerActions = createMarkerSlice(set, get);
     const rulerActions = createRulerSlice(set, get);
+    const tempoActions = createTempoSlice(set, get);
     const maskActions = createMaskSlice(set, get);
     const clipActions = createClipSlice(set, get);
     const textClipActions = createTextClipSlice(set, get);
@@ -413,6 +415,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
       ...keyframeActions,
       ...markerActions,
       ...rulerActions,
+      ...tempoActions,
       ...maskActions,
       ...clipActions,
       ...textClipActions,

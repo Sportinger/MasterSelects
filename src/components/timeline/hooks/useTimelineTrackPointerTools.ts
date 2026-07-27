@@ -65,6 +65,11 @@ export function useTimelineTrackPointerTools({
       clientX,
       rectLeft: clipLeft,
       altKey,
+      // Tempo grid (issue #299, §3.5) — an enabled Bars+Beats ruler makes tool
+      // drags snap to the same lines the grid draws, matching the clip drag path.
+      tempoMap: timelineState.tempoMap,
+      barsLaneEnabled: timelineState.rulerLanes.some((lane) => lane.format === 'bars'),
+      gridSubdivision: timelineState.timelineGridSubdivision,
     };
   }, [activeTimelineToolId, allTrackClips, clips, timelineClipGeometryById, track]);
 
