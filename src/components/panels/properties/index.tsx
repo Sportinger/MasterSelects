@@ -219,7 +219,13 @@ export function PropertiesPanel() {
       }
 
       if (selectedPropertiesTrack) {
-        setActiveTab(selectedPropertiesTrack.type === 'audio' ? 'track-effects' : 'track-controls');
+        // A MIDI track opens on its instrument — that is what you actually reach
+        // for when you select one; volume/pan already live in the mixer.
+        if (selectedPropertiesTrack.type === 'midi') {
+          setActiveTab('track-instrument');
+        } else {
+          setActiveTab(selectedPropertiesTrack.type === 'audio' ? 'track-effects' : 'track-controls');
+        }
         return;
       }
 
