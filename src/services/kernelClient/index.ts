@@ -17,9 +17,11 @@ import type {
 } from './types';
 
 export type {
+  KernelCompileAbortReason,
   KernelCompileCompiledResponse,
   KernelCompileRequest,
   KernelCompileResponse,
+  KernelCompileSetup,
   KernelCompileStoppedResponse,
   KernelFingerprintAssert,
   KernelHealthResponse,
@@ -35,6 +37,7 @@ export type {
   KernelServiceFailure,
   KernelServiceResult,
   KernelServiceSuccess,
+  KernelTranscriptMoment,
   KernelValidateRequest,
   KernelValidateResponse,
 } from './types';

@@ -10,7 +10,16 @@ import {
   type AgentTransaction,
 } from '../aiTools/agentTransaction';
 import { KernelServiceClient } from './index';
+import {
+  formatAssumptionNote,
+  formatStoryVerificationDetails,
+} from './storyVerification';
+import {
+  buildTranscriptMoments,
+  TRANSCRIPT_MOMENT_INDEX_VERSION,
+} from './transcriptMoments';
 import type {
+  KernelCompileAbortReason,
   KernelCompileCompiledResponse,
   KernelCompileResponse,
   KernelResolvedCall,
@@ -103,6 +112,15 @@ function parseResolvedCall(value: unknown): KernelResolvedCall | undefined {
   return { stepId, tool, args: value.args };
 }
 
+function parseAbortReason(value: unknown): KernelCompileAbortReason | undefined {
+  const reason = readString(value);
+  return reason === 'notMechanicalTask'
+    || reason === 'storyPathNeedsProvider'
+    || reason === 'storyPathNeedsMoments'
+    ? reason
+    : undefined;
+}
+
 function parseCompileResponse(value: unknown): KernelCompileResponse | undefined {
   if (!isRecord(value)) {
     return undefined;
@@ -115,10 +133,12 @@ function parseCompileResponse(value: unknown): KernelCompileResponse | undefined
   }
 
   if (status === 'aborted' || status === 'failed') {
+    const reason = parseAbortReason(value.reason);
     return {
       runId,
       status,
       failures: value.failures,
+      ...(reason === undefined ? {} : { reason }),
     };
   }
 
@@ -140,13 +160,39 @@ function parseCompileResponse(value: unknown): KernelCompileResponse | undefined
     )
     ? { simulatedVideoClipIds: [...value.segments.simulatedVideoClipIds] }
     : undefined;
+  const modeValue = readString(value.mode)?.toLowerCase();
+  const mode = modeValue === 'story' || modeValue === 'mechanical'
+    ? modeValue
+    : undefined;
+  if (modeValue !== undefined && mode === undefined) {
+    return undefined;
+  }
+
+  let setup: KernelCompileCompiledResponse['setup'];
+  if (value.setup !== undefined) {
+    if (!isRecord(value.setup) || !isRecord(value.setup.newComposition)) {
+      return undefined;
+    }
+    const name = readString(value.setup.newComposition.name);
+    const durationSeconds = value.setup.newComposition.durationSeconds;
+    if (!name
+      || typeof durationSeconds !== 'number'
+      || !Number.isFinite(durationSeconds)
+      || durationSeconds <= 0) {
+      return undefined;
+    }
+    setup = { newComposition: { name, durationSeconds } };
+  }
 
   return {
     runId,
     status,
+    ...(mode === undefined ? {} : { mode }),
     taskContract: value.taskContract,
     plan: value.plan,
+    blueprintSummary: value.blueprintSummary,
     resolvedCalls: resolvedCalls as KernelResolvedCall[],
+    ...(setup === undefined ? {} : { setup }),
     ...(segments === undefined ? {} : { segments }),
     expectedFingerprint: value.expectedFingerprint,
     summary: value.summary,
@@ -176,8 +222,8 @@ function parseCompleteResponse(value: unknown): KernelRunCompleteResponse | unde
 
 // Snapshots go through the semantic tool gateway like every other kernel
 // interaction (plan §8.3) — the gateway never reads stores directly.
-async function buildTimelineSnapshot(): Promise<unknown> {
-  const [execution] = await executeAIToolCalls(
+async function buildTimelineSnapshot(executor: ExecuteToolCalls): Promise<unknown> {
+  const [execution] = await executor(
     [{ id: 'kernel-snapshot', tool: 'getTimelineState', args: {} }],
     'chat',
     { guidedReplay: false, suppressHistory: true },
@@ -411,20 +457,25 @@ export async function tryKernelFirst(
     return { handled: false };
   }
 
-  const getSnapshot = deps.getSnapshot ?? buildTimelineSnapshot;
   const client = deps.client ?? new KernelServiceClient({
     authToken: config.token,
     baseUrl: config.baseUrl,
     fetchImpl: deps.fetchImpl,
   });
+  const executeToolCalls = deps.executeToolCalls ?? executeAIToolCalls;
+  const getSnapshot = deps.getSnapshot ?? (() => buildTimelineSnapshot(executeToolCalls));
 
   let compiled: KernelCompileResponse;
   try {
     const snapshot = await getSnapshot();
+    const moments = await buildTranscriptMoments(snapshot, executeToolCalls);
     const compileResult = await client.compile({
       request,
       snapshot,
       ...(deps.seed === undefined ? {} : { seed: deps.seed }),
+      ...(moments.length === 0
+        ? {}
+        : { moments, indexVersion: TRANSCRIPT_MOMENT_INDEX_VERSION }),
     });
     if (!compileResult.ok) {
       return { handled: false };
@@ -452,7 +503,6 @@ export async function tryKernelFirst(
 
   const compiledPlan: KernelCompileCompiledResponse = compiled;
   const transaction = transactionAdapter(deps.transaction);
-  const executeToolCalls = deps.executeToolCalls ?? executeAIToolCalls;
   let agentTransaction: AgentTransaction | undefined;
 
   const failureResult = (detail: unknown): KernelChatGatewayResult => {
@@ -472,6 +522,32 @@ export async function tryKernelFirst(
 
   try {
     agentTransaction = transaction.begin(`Kernel task: ${compiledPlan.runId}`);
+
+    if (compiledPlan.setup?.newComposition) {
+      const setupCall: KernelResolvedCall = {
+        stepId: 'kernel-setup-new-composition',
+        tool: 'createComposition',
+        args: {
+          name: compiledPlan.setup.newComposition.name,
+          duration: compiledPlan.setup.newComposition.durationSeconds,
+          openAfterCreate: true,
+        },
+      };
+      const setupExecution: AIToolCallExecution = {
+        id: setupCall.stepId,
+        tool: setupCall.tool,
+        args: setupCall.args,
+      };
+      const setupResults = await executeToolCalls([setupExecution], 'chat', {
+        guidedReplay: false,
+        suppressHistory: true,
+      });
+      const setupFailure = toolExecutionFailure([setupCall], setupResults);
+      if (setupFailure) {
+        transaction.abort(agentTransaction);
+        return failureResult(setupFailure);
+      }
+    }
 
     // Runtime id binding: reorder calls reference simulated segment ids.
     // After the split executes, map them positionally onto the real ids
@@ -537,8 +613,9 @@ export async function tryKernelFirst(
   }
 
   let completion: KernelRunCompleteResponse;
+  let finalSnapshot: unknown;
   try {
-    const finalSnapshot = await getSnapshot();
+    finalSnapshot = await getSnapshot();
     const completeResult = await client.completeRun(compiledPlan.runId, { finalSnapshot });
     if (!completeResult.ok) {
       return verificationFailure(compiledPlan.runId, completeResult.error);
@@ -572,6 +649,22 @@ export async function tryKernelFirst(
   }
 
   const fingerprintShort = shortFingerprint(fingerprint);
+  if (compiledPlan.mode === 'story') {
+    const details = formatStoryVerificationDetails(
+      finalSnapshot,
+      completion.verificationReport,
+      compiledPlan.summary,
+      compiledPlan.blueprintSummary,
+    );
+    const assumptionNote = formatAssumptionNote(compiledPlan.blueprintSummary);
+    return {
+      handled: true,
+      message: `Kernel-verifiziert (${fingerprintShort}): ${details}`
+        + (assumptionNote ? `\n${assumptionNote}` : ''),
+      runId: compiledPlan.runId,
+    };
+  }
+
   const details = formatVerificationDetails(
     completion.verificationReport,
     compiledPlan.summary,

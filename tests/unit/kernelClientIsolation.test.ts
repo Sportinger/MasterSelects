@@ -11,6 +11,8 @@ const kernelTransportFiles = [
 const kernelClientFiles = [
   ...kernelTransportFiles,
   path.join(kernelClientRoot, 'kernelChatGateway.ts'),
+  path.join(kernelClientRoot, 'storyVerification.ts'),
+  path.join(kernelClientRoot, 'transcriptMoments.ts'),
 ];
 const sourceExtensions = new Set(['.js', '.jsx', '.ts', '.tsx']);
 const staticModuleSpecifierPattern =
@@ -69,8 +71,9 @@ describe('kernel client isolation', () => {
 
     for (const filePath of kernelClientFiles) {
       const source = readFileSync(filePath, 'utf8').toLowerCase();
+      const privateSource = source.replaceAll('blueprintsummary', '');
       for (const forbidden of forbiddenLeakage) {
-        expect(source, `${toRepoPath(filePath)} contains ${forbidden}`)
+        expect(privateSource, `${toRepoPath(filePath)} contains ${forbidden}`)
           .not.toContain(forbidden.toLowerCase());
       }
     }

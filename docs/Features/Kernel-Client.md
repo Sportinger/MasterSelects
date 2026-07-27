@@ -36,24 +36,40 @@ protect the local profile.
 
 1. It calls the same `handleGetTimelineState` handler used by the semantic
    `getTimelineState` tool and sends that compact snapshot with the request to
-   `POST /kernel/compile`.
+   `POST /kernel/compile`. For transcript-bearing timeline clips, the app also
+   reads bounded `getClipTranscript` pages through the semantic gateway and
+   builds source-time moment handles locally. Paging stops at 400 transcript
+   words across the request.
 2. A compiled response must contain a run ID and validated concrete
    `resolvedCalls` (`stepId`, `tool`, and object `args`). The browser executes
    those calls in order through `executeAIToolCalls(..., 'chat')`.
-3. The gateway opens one `beginAgentTransaction` for the task and invokes the
+3. A story response may request `setup.newComposition`. The app creates and
+   opens that composition through the semantic `createComposition` tool before
+   executing the resolved story calls, so the final snapshot and verification
+   describe the new timeline.
+4. The gateway opens one `beginAgentTransaction` for the task and invokes the
    semantic executor with nested history suppressed. A successful group is
    committed as one undo point. Any failed or missing tool result aborts the
    transaction, rolls the whole group back through `abortAgentTransaction`,
    warns in the console, and returns control to community chat.
-4. After a successful commit, it rebuilds the snapshot with the same timeline
+5. After a successful commit, it rebuilds the snapshot with the same timeline
    handler and sends `{ finalSnapshot }` to
    `POST /kernel/runs/:runId/complete`.
-5. A successful `fingerprintAssert.matches` result is shown in chat with the
+6. A successful `fingerprintAssert.matches` result is shown in chat with the
    short fingerprint plus verified video/audio clip counts and occupied span from
-   the verification report or compile summary.
+   the verification report or compile summary. Story results use the concise
+   `N Clips, belegt bis Xs` form and add a one-line assumption note when the
+   compile summary reports assumptions.
 
 The service endpoints are authenticated with `Authorization: Bearer <token>`.
 The browser never asks the service to mutate editor state directly.
+
+Transcript indexing remains app-side and uses the user's existing local
+analysis. Moment payloads contain only the media-file ID, source-time start/end,
+transcript text, confidence, and the `app-transcript-v1` index version. No raw
+media, audio, video frames, or analysis artifacts are sent. These text-and-time
+moments are sent solely to the kernel service configured in `ms.kernel.url` as
+part of that user's compile request.
 
 ## Routing And Fallback
 
@@ -61,7 +77,7 @@ The browser never asks the service to mutate editor state directly.
 |---|---|---|
 | Storage unavailable, URL/token missing, or `ms.kernel.enabled` exactly `false` | Not handled | Continue through the community provider. |
 | Compile HTTP/network error or malformed response | Not handled | Continue through the community provider. |
-| Compile status `aborted` | Not handled | Fall back silently; this is the mechanical-coverage escape hatch. |
+| Compile status `aborted`, including `notMechanicalTask`, `storyPathNeedsProvider`, or `storyPathNeedsMoments` | Not handled | Fall back silently to the community provider. |
 | Compile status `failed` | Handled failure | Surface the kernel failure without running tools. |
 | Any local tool failure or executor exception | Roll back, then not handled | Warn in the console and continue through the community provider. |
 | Completion transport/error response after a committed mutation | Handled failure | Surface the verification failure; do not run a second provider against mutated state. |
@@ -79,10 +95,11 @@ boundary. They may import only relative modules resolving inside
 `src/services/kernelClient/` and must not import stores, engines, app feature
 implementations, or external packages.
 
-`kernelChatGateway.ts` is deliberately the app-side integration layer: it may
-import the timeline store, the `getTimelineState` handler, the semantic tool
-executor, and the agent transaction API. It still contains no kernel logic,
-prompt, rubric, or pack assets.
+`kernelChatGateway.ts`, `transcriptMoments.ts`, and `storyVerification.ts` are
+deliberately app-side integration and presentation modules: they may use the
+semantic tool executor and agent transaction API. They still contain no kernel
+logic, prompt, rubric, or pack assets, and the moment builder does not read
+timeline or media stores directly.
 
 `tests/unit/kernelClientIsolation.test.ts` keeps the guard honest by applying
 the strict import rules only to `index.ts` and `types.ts`, scanning every
@@ -97,8 +114,8 @@ If FlashBoard unexpectedly uses community chat, check:
 1. `ms.kernel.url` and `ms.kernel.token` are both present and nonblank.
 2. `ms.kernel.enabled` is not the exact string `false`.
 3. The configured service is reachable and accepts the bearer token.
-4. `/kernel/compile` did not return `aborted`, an HTTP failure, or an invalid
-   response.
+4. `/kernel/compile` did not return `aborted` (including a story-provider or
+   missing-moments fallback), an HTTP failure, or an invalid response.
 5. The browser console has no rolled-back semantic tool failure warning.
 
 If the timeline changed but verification failed, inspect the run ID and the
@@ -110,4 +127,5 @@ transaction commits.
 *Source: `src/services/kernelClient/`,
 `src/services/flashboard/FlashBoardChatService.ts`,
 `tests/unit/kernelChatGatewayCutover.test.ts`,
+`tests/unit/transcriptMoments.test.ts`,
 `tests/unit/kernelClientIsolation.test.ts`*

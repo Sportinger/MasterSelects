@@ -34,8 +34,23 @@ const initialSnapshot = {
   occupancy: { occupied: { startSeconds: 0, endSeconds: 8, spanSeconds: 8 } },
 };
 const finalSnapshot = {
+  duration: 24,
   totalClips: 3,
   occupancy: { occupied: { startSeconds: 0, endSeconds: 12, spanSeconds: 12 } },
+};
+const transcriptSnapshot = {
+  ...initialSnapshot,
+  videoTracks: [{
+    id: 'video-1',
+    clips: [{
+      id: 'clip-1',
+      mediaId: 'media-1',
+      inPoint: 2,
+      outPoint: 8,
+      hasTranscript: true,
+    }],
+  }],
+  audioTracks: [],
 };
 const resolvedCalls = [
   { stepId: 'step-1', tool: 'splitClip', args: { clipId: 'clip-1', splitTime: 4 } },
@@ -55,6 +70,21 @@ function compiledResponse() {
       occupiedEndSeconds: 12,
     },
     taskContract: { task: 'cutover-test' },
+  };
+}
+
+function storyCompiledResponse(withSetup = true, withAssumptions = true) {
+  return {
+    ...compiledResponse(),
+    mode: 'story',
+    blueprintSummary: {
+      assumptionReport: withAssumptions
+        ? ['Die Reihenfolge folgt den verfuegbaren Transkriptstellen.']
+        : [],
+    },
+    ...(withSetup
+      ? { setup: { newComposition: { name: 'Story Cut', durationSeconds: 24 } } }
+      : {}),
   };
 }
 
@@ -167,9 +197,121 @@ describe('kernel chat gateway WP11 cutover', () => {
     expect(JSON.parse(completeInit.body as string)).toEqual({ finalSnapshot });
   });
 
-  it('falls back silently when compile aborts', async () => {
+  it('builds local moments, creates and opens the story composition, then verifies resolved calls', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(storyCompiledResponse()))
+      .mockResolvedValueOnce(jsonResponse(completedResponse()));
+    const getSnapshot = vi.fn()
+      .mockResolvedValueOnce(transcriptSnapshot)
+      .mockResolvedValueOnce(finalSnapshot);
+    const executeToolCalls = vi.fn(async (
+      calls: AIToolCallExecution[],
+    ): Promise<AIToolCallExecutionResult[]> => calls.map((call) => ({
+      ...(call.id === undefined ? {} : { id: call.id }),
+      tool: call.tool,
+      result: call.tool === 'getClipTranscript'
+        ? {
+            success: true,
+            data: {
+              hasTranscript: true,
+              hasMore: false,
+              nextOffset: null,
+              segments: [{ start: 2.5, end: 3.25, text: 'Ein guter Moment.' }],
+            },
+          }
+        : { success: true },
+    })));
+    const transaction = createTransactionMocks();
+
+    const result = await tryKernelFirst('Baue daraus eine kurze Story', {
+      executeToolCalls,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      getSnapshot,
+      storage: configuredStorage(),
+      transaction,
+    });
+
+    expect(result).toEqual({
+      handled: true,
+      message: 'Kernel-verifiziert (abcdef12): 3 Clips, belegt bis 12s\n'
+        + 'Annahmen: Die Reihenfolge folgt den verfuegbaren Transkriptstellen.',
+      runId: 'run-1',
+    });
+    expect(executeToolCalls.mock.calls.map((call) => call[0]?.[0]?.tool)).toEqual([
+      'getClipTranscript',
+      'createComposition',
+      'splitClip',
+      'moveClip',
+    ]);
+    expect(executeToolCalls).toHaveBeenNthCalledWith(2, [{
+      id: 'kernel-setup-new-composition',
+      tool: 'createComposition',
+      args: {
+        name: 'Story Cut',
+        duration: 24,
+        openAfterCreate: true,
+      },
+    }], 'chat', {
+      guidedReplay: false,
+      suppressHistory: true,
+    });
+    expect(transaction.commit).toHaveBeenCalledWith(transaction.agentTransaction);
+
+    const [, compileInit] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(compileInit.body as string)).toEqual({
+      request: 'Baue daraus eine kurze Story',
+      snapshot: transcriptSnapshot,
+      indexVersion: 'app-transcript-v1',
+      moments: [{
+        handle: '$m1',
+        source: 'media-1',
+        sourceRange: [2.5, 3.25],
+        evidence: { transcript: 'Ein guter Moment.' },
+        confidence: 1,
+        indexVersion: 'app-transcript-v1',
+      }],
+    });
+    const [completeUrl] = fetchImpl.mock.calls[1] as unknown as [string, RequestInit];
+    expect(completeUrl).toBe('http://kernel.test/kernel/runs/run-1/complete');
+  });
+
+  it('executes a story response without setup through the existing per-call path', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(storyCompiledResponse(false, false)))
+      .mockResolvedValueOnce(jsonResponse(completedResponse()));
+    const executeToolCalls = perCallSuccess();
+    const transaction = createTransactionMocks();
+
+    const result = await tryKernelFirst('Ordne die Story', {
+      executeToolCalls,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      getSnapshot: vi.fn()
+        .mockResolvedValueOnce(initialSnapshot)
+        .mockResolvedValueOnce(finalSnapshot),
+      storage: configuredStorage(),
+      transaction,
+    });
+
+    expect(result).toEqual({
+      handled: true,
+      message: 'Kernel-verifiziert (abcdef12): 3 Clips, belegt bis 12s',
+      runId: 'run-1',
+    });
+    expect(executeToolCalls.mock.calls.map((call) => call[0]?.[0]?.tool)).toEqual([
+      'splitClip',
+      'moveClip',
+    ]);
+    expect(transaction.commit).toHaveBeenCalledWith(transaction.agentTransaction);
+  });
+
+  it.each([
+    'notMechanicalTask',
+    'storyPathNeedsProvider',
+    'storyPathNeedsMoments',
+  ])('falls back silently when compile aborts with %s', async (reason) => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({
       failures: ['mechanical coverage not migrated'],
+      reason,
       runId: 'run-aborted',
       status: 'aborted',
     }));
