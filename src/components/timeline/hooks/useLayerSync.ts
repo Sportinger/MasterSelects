@@ -7,7 +7,6 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { renderHostPort } from '../../../services/render/renderHostPort';
 import { ensureMidiPlaybackScheduler } from '../../../services/audio/midiPlaybackScheduler';
-import { ensureMetronomeScheduler } from '../../../services/audio/metronomeScheduler';
 import { getEffectiveScale } from '../../../utils/transformScale';
 import { vectorAnimationRuntimeManager } from '../../../services/vectorAnimation/VectorAnimationRuntimeManager';
 import { isVectorAnimationSourceType } from '../../../types/vectorAnimation';
@@ -155,7 +154,6 @@ export function useLayerSync({
   // It subscribes to transport state globally; this just guarantees one-time init.
   useEffect(() => {
     ensureMidiPlaybackScheduler();
-    ensureMetronomeScheduler();
   }, []);
 
   // Main layer sync effect

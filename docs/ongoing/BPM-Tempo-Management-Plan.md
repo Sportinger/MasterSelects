@@ -2,8 +2,22 @@
 
 # BPM / Tempo Management + Metronome (Plan)
 
-**Status:** In progress — Packets 1, 2 and 4 landed; 3, 5, 6, 7 open.
-Issue: #299. Branch: `299-add-bpm-management`.
+**Status:** Complete. All seven packets landed on `299-add-bpm-management`
+(commits `5d9c01b5`, `e9155b6c`, `bcabd928`, `cddf7e55`, `c153e645`, plus docs).
+Feature documentation: [`docs/Features/Tempo-And-Metronome.md`](../Features/Tempo-And-Metronome.md).
+Count-in is the one deferred item (see Packet 6).
+
+**Where the shipped feature differs from this plan** — three decisions were wrong
+as written and were changed while building. They are recorded in §11 rather than
+edited into the sections above, so the reasoning survives:
+
+1. **Ramps exist** (§3.3 declared them out of scope).
+2. **Content is anchored to quarter notes**, not `old map → bar/beat → new map`
+   (Packet 2). Bar/beat caused a real bug.
+3. **Tempo marks re-anchor musically** on every edit — not in the plan at all.
+
+Issue: #299. Branch: `299-add-bpm-management`. Move this file to
+`docs/completed/` once the branch is merged.
 
 Turns the read-only `TempoMap` shipped by issue #257 into an **editable tempo
 track**, makes tempo actually drive the timeline **grid and snapping**, makes
@@ -323,10 +337,28 @@ with negative `inPoint` survives; a two-segment map remaps across the boundary
 correctly; a meter change off the downbeat round-trips; one undo reverts both
 tempo and notes.
 
-### Packet 3 — Tempo ruler lane (edit UI)
+### Packet 3 — Tempo ruler lane (edit UI) — **DONE**
 
 **Goal:** the lane the user asked for — under the bars ruler, toggled from the
 Rulers checklist.
+
+**Landed 2026-07-27** (`bcabd928`). Shipped differently from the spec below in
+three places, all on user feedback:
+
+- Editing is **menu-driven**, not double-click: right-click a flag for *Change
+  tempo* / *Change time signature* / *Ramp from previous tempo* / *Delete*, and
+  right-click the lane for *Add tempo change* / *Add time signature change*.
+  Insertion arms the relevant editor with its value selected, so the next
+  keystroke replaces it.
+- Flags read `4/4 - BPM = 120`, and editing swaps **only the value being changed**
+  for a field — replacing the whole label with a bare input lost the context.
+- The lane is mirrored **read-only in the piano roll**, above its Bars ruler.
+
+Two implementation traps worth remembering: the menu **must** portal to
+`document.body` (the lane sits inside `.time-ruler`, which has a transform and
+two `overflow: hidden` wrappers, so a `position: fixed` menu resolves against the
+wrong box and is clipped away), and outside-press dismissal **must** listen in
+the capture phase, because the flags themselves stop `mousedown` propagation.
 
 - `RulerLaneFormat` gains `'tempo'`; add to `RULER_LANE_FORMAT_ORDER` in
   `rulerSlice.ts` (last) and to `LANE_OPTIONS` in `RulerLanesMenu.tsx`
@@ -460,9 +492,15 @@ and low zoom the snap threshold shrinks with the pixel budget instead of
 capturing every position; Alt still bypasses; with no bars lane enabled the
 canvas output and both snap paths are byte-identical to today.
 
-### Packet 5 — Metronome click engine
+### Packet 5 — Metronome click engine — **DONE**
 
 **Goal:** an audible, sample-accurate click driven by the tempo map.
+
+**Landed 2026-07-27** (`c153e645`). Shipped as specified. The three metronome
+store fields were pulled forward from Packet 6, since the engine needs something
+to read. The click tracks ramps for free — `iterateBarBeatLines` already handles
+them — which is verified by a test asserting the gaps shrink monotonically
+through an accelerando.
 
 - New `src/services/audio/metronomeScheduler.ts`, structured on
   `midiPlaybackScheduler.ts` (the proven template): 25 ms timer, 0.12 s
@@ -488,9 +526,15 @@ canvas output and both snap paths are byte-identical to today.
 with a downbeat every 4; a tempo change mid-window shifts subsequent clicks; a
 seek flushes and re-anchors; nothing is scheduled at 2x or while exporting.
 
-### Packet 6 — Metronome UI, preferences, count-in
+### Packet 6 — Metronome UI + preferences — **DONE** (count-in deferred)
 
 **Goal:** the toggle the user asked for, right of the Rulers dropdown.
+
+**Landed 2026-07-27** (`c153e645`). The button toggles the click; a separate
+caret opens a popover with volume and *Every beat* / *Bars only* — two targets,
+so one click never means two things. **Count-in is deferred** for the reason in
+§8.3; the plan explicitly allowed shipping the toggle and volume first rather
+than bending playback.
 
 - Store field `metronomeEnabled` + `readStoredMetronomeEnabled` /
   `persistMetronomeEnabled` in `viewPreferences.ts`, plus click volume, mode
@@ -512,7 +556,12 @@ seek flushes and re-anchors; nothing is scheduled at 2x or while exporting.
 **Checks:** toggle survives reload; enabling mid-playback starts clicking on
 the next beat; disabling stops immediately; export output contains no click.
 
-### Packet 7 — Docs
+### Packet 7 — Docs — **DONE**
+
+**Landed 2026-07-27.** New `docs/Features/Tempo-And-Metronome.md`;
+`docs/Features/Timeline-Rulers.md` carries a superseded-in-part banner and its
+two now-false claims are corrected in place; `docs/Features/README.md` indexes
+the new page. §11 below records where the shipped feature differs from this plan.
 
 - New `docs/Features/Tempo-And-Metronome.md`; flip `docs/Features/Timeline-Rulers.md`
   from "ships no grid/snap behavior" to the real state and cross-link;
@@ -562,7 +611,10 @@ None of these block starting Packet 1.
 2. **Piano-roll snapping.** Notes are free-placed by deliberate decision
    (issue #182). Now that a musical grid exists, should the piano roll get an
    optional snap-to-subdivision (off by default), or stay free?
-3. **Count-in scope.** Ship in Packet 6, or split out (§Packet 6)?
+3. **Count-in scope.** ~~Ship in Packet 6, or split out?~~ **Split out.** A real
+   pre-count sounds the click for N bars while content stays silent, which needs a
+   new transport phase; `play()` has nowhere for "running but not advancing".
+   Deferred rather than bending playback.
 4. **Keyboard shortcut for the click.** Cubase/Logic use `C`. Needs a conflict
    check against existing timeline/piano-roll bindings before assigning.
 
@@ -597,3 +649,52 @@ Focused `vitest` + `npx tsc -b` per packet. Full `npm run build`,
 `npm run lint`, `npm run test` — all three, no fail-fast — before any commit at
 a normal-command boundary. DOM-only and viewport-windowed throughout; the click
 adds no GPU surface, so no new Mesa exposure.
+
+## 11. What changed while building
+
+### 11.1 Ramps are supported (contradicts §3.3)
+
+§3.3 ruled out ramps because they force the segment walk to integrate over a
+varying tempo. The user asked for them, so `TempoMap.ts` now does exactly that:
+elapsed beats are quadratic in time and the inverse solves the quadratic in
+closed form. `TempoEvent.curve` is `'jump' | 'ramp'`, optional and absent-reads-as
+-jump, so no migration. Every consumer inherited it for free.
+
+### 11.2 Content is anchored to QUARTER NOTES, not bar/beat (contradicts Packet 2)
+
+Packet 2 specified `barBeatToSeconds(newMap, secondsToBarBeat(oldMap, t))`. That
+is wrong: a time signature only groups beats, so re-grouping bars changed a
+note's (bar, beat) address without changing when it should play, and a pure
+4/4 → 3/4 change at the same BPM physically moved every note (6 s → 5 s). The
+ruler stayed correct while the content slid out from under it.
+
+`remapAcrossMaps` now uses `secondsToQuarters` / `quartersToSeconds`. A meter
+change is an exact identity for content; tempo changes still move it by the tempo
+ratio. `barBeatToSecondsAt` remains for callers that genuinely want bar/beat.
+
+### 11.3 Tempo marks re-anchor musically (not in the plan)
+
+Tempo events are stored in seconds, but a mark means "90 BPM at bar 11". Turning
+one into a ramp changes how long the preceding interval takes, so the mark kept
+its second and drifted off its bar (bar 11 → bar 11.5). `reanchorTempoEvents`
+now reads each event's quarter position in the map it was placed against and
+rebuilds the seconds under the new profile. An explicitly set position (insert or
+drag) is pinned, so a dragged flag lands where it was dropped.
+
+### 11.4 Smaller deviations
+
+- **§3.5 (new)**: an *enabled* Bars+Beats lane wins the grid; `activeRulerLaneId`
+  is retired as a grid seam. Requiring a second invisible selection was bad UX.
+- **Packet 4** shipped a shared grid generator rather than a full shared snap
+  candidate provider — merging the two paths' clip-edge logic would have changed
+  existing snap behaviour outside the packet's goal.
+- **Packet 4**'s subdivision picker lives inside the Rulers menu behind a `+`
+  expander on the Bars + Beats row, not as a second toolbar dropdown.
+- **Packet 5** pulled the three metronome store fields forward from Packet 6, so
+  the engine had something to read.
+- **Packet 3 extra**: the tempo lane is mirrored read-only in the piano roll,
+  above its Bars ruler, following the same Rulers → Tempo toggle.
+- Two bugs found by mutation-testing our own tests: history restore returning
+  `tempoMap: undefined` clobbered the live map through zustand's shallow merge,
+  and the grid window overscanned forward but not backward, dropping sub-beat
+  lines at the left edge.
