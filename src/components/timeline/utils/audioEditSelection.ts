@@ -1,11 +1,18 @@
+import { findNearestZeroCrossing } from '../../../services/audio/sampleAccurateSnap';
 import type { TimelineAudioRegionSelection } from '../../../stores/timeline/types';
 import type { TimelineClip } from '../../../types';
+
+export interface AudioSampleSnapInput {
+  channelData: Float32Array;
+  sampleRate: number;
+}
 
 export interface AudioRegionSelectionInput {
   clip: Pick<TimelineClip, 'id' | 'trackId' | 'startTime' | 'duration' | 'inPoint' | 'outPoint' | 'reversed' | 'waveform'>;
   anchorTimelineTime: number;
   focusTimelineTime: number;
   snapThresholdSeconds?: number;
+  sampleSnap?: AudioSampleSnapInput;
 }
 
 export interface MoveAudioRegionSelectionInput {
@@ -20,6 +27,7 @@ export interface ResizeAudioRegionSelectionInput {
   edge: 'left' | 'right';
   focusTimelineTime: number;
   snapThresholdSeconds?: number;
+  sampleSnap?: AudioSampleSnapInput;
 }
 
 interface SnapResult {
@@ -66,19 +74,37 @@ function snapTimelineTimeToWaveformValley(
   clip: AudioRegionSelectionInput['clip'],
   timelineTime: number,
   thresholdSeconds: number,
+  sampleSnap?: AudioSampleSnapInput,
 ): SnapResult {
   const clipStart = clip.startTime;
   const clipEnd = clip.startTime + Math.max(0.001, clip.duration);
   const clampedTimelineTime = clamp(timelineTime, clipStart, clipEnd);
   const sourceTime = timelineTimeToSourceTime(clip, clampedTimelineTime);
   const waveform = clip.waveform ?? [];
-
-  if (waveform.length < 3 || thresholdSeconds <= 0) {
-    return { timelineTime: clampedTimelineTime, sourceTime, snapped: false };
-  }
-
   const sourceStart = clip.inPoint ?? 0;
   const sourceEnd = Math.max(sourceStart, clip.outPoint ?? sourceStart + clip.duration);
+
+  const refineToZeroCrossing = (candidateSourceTime: number): SnapResult | null => {
+    if (!sampleSnap || thresholdSeconds <= 0) return null;
+    const refined = findNearestZeroCrossing(
+      sampleSnap.channelData,
+      sampleSnap.sampleRate,
+      candidateSourceTime,
+      thresholdSeconds,
+    );
+    if (refined === null || refined < sourceStart || refined > sourceEnd) return null;
+    return {
+      timelineTime: clamp(sourceTimeToTimelineTime(clip, refined), clipStart, clipEnd),
+      sourceTime: refined,
+      snapped: true,
+    };
+  };
+
+  if (waveform.length < 3 || thresholdSeconds <= 0) {
+    return refineToZeroCrossing(sourceTime)
+      ?? { timelineTime: clampedTimelineTime, sourceTime, snapped: false };
+  }
+
   const sourceSpan = Math.max(0.001, sourceEnd - sourceStart);
   const sourceRatio = clamp((sourceTime - sourceStart) / sourceSpan, 0, 1);
   const centerIndex = Math.round(sourceRatio * (waveform.length - 1));
@@ -101,10 +127,10 @@ function snapTimelineTimeToWaveformValley(
   const snappedSourceTime = sourceStart + (bestIndex / Math.max(1, waveform.length - 1)) * sourceSpan;
   const snappedTimelineTime = clamp(sourceTimeToTimelineTime(clip, snappedSourceTime), clipStart, clipEnd);
 
-  return {
+  return refineToZeroCrossing(snappedSourceTime) ?? {
     timelineTime: snappedTimelineTime,
     sourceTime: snappedSourceTime,
-    snapped: bestIndex !== centerIndex,
+    snapped: sampleSnap ? false : bestIndex !== centerIndex,
   };
 }
 
@@ -112,8 +138,8 @@ export function resolveTimelineAudioRegionSelection(
   input: AudioRegionSelectionInput,
 ): TimelineAudioRegionSelection {
   const threshold = Math.max(0, input.snapThresholdSeconds ?? 0);
-  const anchor = snapTimelineTimeToWaveformValley(input.clip, input.anchorTimelineTime, threshold);
-  const focus = snapTimelineTimeToWaveformValley(input.clip, input.focusTimelineTime, threshold);
+  const anchor = snapTimelineTimeToWaveformValley(input.clip, input.anchorTimelineTime, threshold, input.sampleSnap);
+  const focus = snapTimelineTimeToWaveformValley(input.clip, input.focusTimelineTime, threshold, input.sampleSnap);
   const startTime = Math.min(anchor.timelineTime, focus.timelineTime);
   const endTime = Math.max(anchor.timelineTime, focus.timelineTime);
   const sourceStart = Math.min(anchor.sourceTime, focus.sourceTime);
@@ -158,5 +184,6 @@ export function resizeTimelineAudioRegionSelection(
       : input.selection.startTime,
     focusTimelineTime: input.focusTimelineTime,
     snapThresholdSeconds: input.snapThresholdSeconds,
+    sampleSnap: input.sampleSnap,
   });
 }
