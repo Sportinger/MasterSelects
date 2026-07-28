@@ -1762,6 +1762,12 @@
   overflow: hidden;
 }
 
+.properties-panel .properties-content.properties-content--analysis {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .properties-tab-content {
   padding: var(--sp-2);
 }

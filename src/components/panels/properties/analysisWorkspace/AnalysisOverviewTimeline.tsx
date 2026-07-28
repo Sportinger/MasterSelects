@@ -7,6 +7,7 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from 'react';
+import { IconChevronDown } from '@tabler/icons-react';
 import { prefersSoftwareTimelineCanvas } from '../../../timeline/utils/timelineCanvasPlatform';
 import {
   ANALYSIS_OVERVIEW_LANE_KINDS,
@@ -102,6 +103,7 @@ export function AnalysisOverviewTimeline({
   const scrubbingRef = useRef(false);
   const [measuredWidth, setMeasuredWidth] = useState(width ?? 1);
   const [hover, setHover] = useState<HoverDetail | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
   const viewportWidth = Math.max(1, Math.floor(width ?? measuredWidth));
   const compact = viewportWidth < 360;
   const startTime = finiteStartTime(analysis.startTime);
@@ -320,15 +322,25 @@ export function AnalysisOverviewTimeline({
 
   return (
     <section
-      className={`AnalysisOverview${compact ? ' AnalysisOverview--compact' : ''}`}
+      className={[
+        'AnalysisOverview',
+        compact ? 'AnalysisOverview--compact' : '',
+        collapsed ? 'AnalysisOverview--collapsed' : '',
+      ].filter(Boolean).join(' ')}
       aria-label="Analysis overview"
       style={width === undefined ? undefined : { width }}
     >
       <header className="AnalysisOverview__header">
-        <span className="AnalysisOverview__title">
-          Analysis map
+        <button
+          type="button"
+          className="AnalysisOverview__title AnalysisOverview__toggle"
+          aria-expanded={!collapsed}
+          onClick={() => setCollapsed((current) => !current)}
+        >
+          <IconChevronDown aria-hidden="true" size={15} stroke={1.8} />
+          <span>Analysis map</span>
           <small>{layout.present.length}/{ANALYSIS_OVERVIEW_LANE_KINDS.length} signals</small>
-        </span>
+        </button>
         <output className="AnalysisOverview__clock" aria-live="off">
           <strong>{formatTime(playheadTime)}</strong>
           <span>/ {formatTime(endTime)}</span>

@@ -1,3 +1,12 @@
+import { useState, type ReactNode } from 'react';
+import {
+  IconActivity,
+  IconCut,
+  IconFileText,
+  IconSettings,
+  IconSparkles,
+  IconUsers,
+} from '@tabler/icons-react';
 import type { AnalysisStatus } from '../../../types/clipMetadata';
 import type {
   AgentTimelineAnalysisEstimate,
@@ -25,6 +34,7 @@ interface AnalysisAction {
 
 interface AnalysisActionCenterProps {
   actions: readonly AnalysisAction[];
+  advancedControls?: ReactNode;
   configuration?: AnalysisActionConfiguration;
   analyzeAllDisabled?: boolean;
   analyzeAllRunning?: boolean;
@@ -55,77 +65,67 @@ function isRunning(state: ActionState): boolean {
   return state === 'analyzing' || state === 'describing' || state === 'transcribing';
 }
 
-function actionLabel(state: ActionState): string {
-  if (state === 'ready') return 'Reanalyze';
-  if (state === 'error') return 'Retry';
+function actionIntent(action: AnalysisAction): string {
+  if (isRunning(action.state)) return 'Cancel';
+  if (action.secondaryAction) return action.secondaryAction.label;
+  if (action.state === 'ready') return 'Reanalyze';
+  if (action.state === 'error') return 'Retry';
   return 'Analyze';
 }
 
-function AnalysisActionRow({ action }: { action: AnalysisAction }) {
+function compactStatus(action: AnalysisAction): string | undefined {
+  const leadingValue = action.statusText.match(/^(\d+(?:\.\d+)?%?)/)?.[1];
+  if (isRunning(action.state)) return leadingValue ?? '…';
+  if (action.state === 'error') return '!';
+  if (action.state !== 'ready') return undefined;
+  if (action.id === 'metrics' && leadingValue === '100%') return undefined;
+  return leadingValue;
+}
+
+function ActionIcon({ id }: { id: string }) {
+  const props = { 'aria-hidden': true, size: 15, stroke: 1.9 } as const;
+  if (id === 'metrics') return <IconActivity {...props} />;
+  if (id === 'faces') return <IconUsers {...props} />;
+  if (id === 'cuts') return <IconCut {...props} />;
+  if (id === 'transcript') return <IconFileText {...props} />;
+  return <IconSparkles {...props} />;
+}
+
+function AnalysisActionPill({ action }: { action: AnalysisAction }) {
   const running = isRunning(action.state);
+  const status = compactStatus(action);
+  const onClick = running
+    ? (action.onCancel ?? action.onRun)
+    : (action.secondaryAction?.onClick ?? action.onRun);
   return (
-    <div className="analysis-action-row">
-      <div className="analysis-action-copy">
-        <span className="analysis-action-title">{action.title}</span>
-        <span className="analysis-action-detail">{action.detail}</span>
-        <span className={`analysis-action-status state-${action.state}`}>
-          {action.statusText}
-        </span>
-      </div>
-      <div className="analysis-action-buttons">
-        {action.secondaryAction && !running && (
-          <button
-            type="button"
-            className="btn btn-sm btn-accent"
-            onClick={action.secondaryAction.onClick}
-            disabled={action.disabled}
-          >
-            {action.secondaryAction.label}
-          </button>
-        )}
-        <button
-          type="button"
-          className={`btn btn-sm${running ? ' btn-danger' : ''}`}
-          onClick={running ? action.onCancel : action.onRun}
-          disabled={action.disabled && !running}
-        >
-          {running ? 'Cancel' : actionLabel(action.state)}
-        </button>
-      </div>
-    </div>
+    <button
+      type="button"
+      className={[
+        'analysis-action-pill',
+        `state-${action.state}`,
+        `analysis-action-pill--${action.id}`,
+      ].join(' ')}
+      disabled={Boolean(action.disabled && !running)}
+      onClick={onClick}
+      title={`${action.detail} · ${action.statusText} · ${actionIntent(action)}`}
+    >
+      <ActionIcon id={action.id} />
+      <span>{action.title}</span>
+      {status && <strong>{status}</strong>}
+    </button>
   );
 }
 
-function formatDuration(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return '0s';
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainder = Math.round(seconds % 60);
-  return remainder > 0 ? `${minutes}m ${remainder}s` : `${minutes}m`;
-}
-
-function formatWork(estimate: AgentTimelineAnalysisEstimate, channel: string): string | undefined {
-  const entry = estimate.channels.find((candidate) => candidate.channel === channel);
-  if (!entry?.workItemKind || entry.estimatedWorkItems === undefined) return undefined;
-  const label = entry.workItemKind === 'candidate-samples'
-    ? 'candidate samples'
-    : entry.workItemKind;
-  return `${entry.estimatedWorkItems.toLocaleString()} ${label}`;
-}
-
 function AnalysisConfigurationControls({ configuration }: { configuration: AnalysisActionConfiguration }) {
-  const { estimate } = configuration;
-  const work = estimate
-    ? [
-      formatWork(estimate, 'cuts'),
-      formatWork(estimate, 'quality'),
-      formatWork(estimate, 'people'),
-      formatWork(estimate, 'text'),
-    ].filter((item): item is string => Boolean(item))
-    : [];
-
   return (
-    <section className="analysis-configuration" aria-label="Analysis scope and profile">
+    <section className="analysis-settings-area" aria-label="Focus, motion, and face settings">
+      <h5 className="analysis-settings-area__title">
+        <IconActivity aria-hidden="true" size={14} stroke={1.9} />
+        <span>Focus &amp; motion</span>
+        <span className="analysis-settings-area__divider">/</span>
+        <IconUsers aria-hidden="true" size={14} stroke={1.9} />
+        <span>Faces</span>
+      </h5>
       <div className="analysis-configuration__groups">
         <div className="analysis-choice-group" role="group" aria-label="Analysis scope">
           <span className="analysis-choice-group__label">Scope</span>
@@ -162,32 +162,13 @@ function AnalysisConfigurationControls({ configuration }: { configuration: Analy
           </div>
         </div>
       </div>
-      <div className="analysis-estimate" aria-live="polite">
-        {estimate ? (
-          <>
-            <span className={`analysis-estimate__cost analysis-estimate__cost--${estimate.relativeCost}`}>
-              {estimate.relativeCost} cost
-            </span>
-            <span>{formatDuration(estimate.uncachedDurationSeconds)} uncached / {formatDuration(estimate.totalDurationSeconds)}</span>
-            {work.length > 0 && <span>{work.join(' · ')}</span>}
-            <span>{estimate.channels.reduce((total, entry) => total + entry.reusableDurationSeconds, 0) > 0
-              ? 'Warm-cache artifacts reused'
-              : 'No reusable artifacts in this scope'}</span>
-            <span>{estimate.estimatedWallTimeSeconds
-              ? `${formatDuration(estimate.estimatedWallTimeSeconds.minimum)}–${formatDuration(estimate.estimatedWallTimeSeconds.maximum)} on ${estimate.estimatedWallTimeSeconds.deviceClass}`
-              : 'Time estimate awaits a matching device benchmark'}</span>
-          </>
-        ) : (
-          <span>{configuration.estimateUnavailableReason ?? 'Choose an available scope to preview work.'}</span>
-        )}
-      </div>
-      <p className="analysis-configuration__note">{configuration.executionNote}</p>
     </section>
   );
 }
 
 export function AnalysisActionCenter({
   actions,
+  advancedControls,
   configuration,
   analyzeAllDisabled = false,
   analyzeAllRunning = false,
@@ -195,33 +176,49 @@ export function AnalysisActionCenter({
   onAnalyzeAll,
   onClearAll,
 }: AnalysisActionCenterProps) {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   return (
-    <div className="properties-section analysis-action-center">
-      <div className="analysis-action-heading">
+    <section className="properties-section analysis-action-center">
+      <div className="analysis-action-bar">
         <h4>Analysis</h4>
-        <div className="analysis-action-global-buttons">
-          <button
-            type="button"
-            className="btn btn-sm btn-accent"
-            onClick={onAnalyzeAll}
-            disabled={analyzeAllDisabled}
-          >
-            {analyzeAllRunning ? 'Analyzing All…' : 'Analyze All'}
-          </button>
-          <button
-            type="button"
-            className="btn btn-sm btn-danger"
-            onClick={onClearAll}
-            disabled={clearDisabled}
-          >
-            Clear Analysis
-          </button>
+        <div className="analysis-action-pills">
+          {actions.map((action) => <AnalysisActionPill key={action.id} action={action} />)}
         </div>
+        <button
+          type="button"
+          className="analysis-action-all"
+          onClick={onAnalyzeAll}
+          disabled={analyzeAllDisabled}
+        >
+          {analyzeAllRunning ? 'Analyzing…' : 'Analyze all'}
+        </button>
+        <button
+          type="button"
+          className={`analysis-action-settings${advancedOpen ? ' is-open' : ''}`}
+          aria-expanded={advancedOpen}
+          aria-label="Analysis settings"
+          title="Analysis settings"
+          onClick={() => setAdvancedOpen((open) => !open)}
+        >
+          <IconSettings aria-hidden="true" size={16} stroke={1.9} />
+        </button>
       </div>
-      {configuration && <AnalysisConfigurationControls configuration={configuration} />}
-      <div className="analysis-action-list">
-        {actions.map(action => <AnalysisActionRow key={action.id} action={action} />)}
-      </div>
-    </div>
+      {advancedOpen && (
+        <div className="analysis-action-advanced">
+          {configuration && <AnalysisConfigurationControls configuration={configuration} />}
+          {advancedControls}
+          <div className="analysis-action-advanced__footer">
+            <button
+              type="button"
+              className="analysis-action-clear"
+              onClick={onClearAll}
+              disabled={clearDisabled}
+            >
+              Clear analysis
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }

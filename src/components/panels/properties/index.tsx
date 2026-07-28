@@ -216,13 +216,7 @@ export function PropertiesPanel() {
       }
 
       if (selectedPropertiesTrack) {
-        // A MIDI track opens on its instrument — that is what you actually reach
-        // for when you select one; volume/pan already live in the mixer.
-        if (selectedPropertiesTrack.type === 'midi') {
-          setActiveTab('track-instrument');
-        } else {
-          setActiveTab(selectedPropertiesTrack.type === 'audio' ? 'track-effects' : 'track-controls');
-        }
+        setActiveTab(selectedPropertiesTrack.type === 'audio' ? 'track-effects' : 'track-controls');
         return;
       }
 
@@ -646,7 +640,7 @@ export function PropertiesPanel() {
         )}
       </PropertiesTabStrip>
 
-      <div className={`properties-content ${activeTab === 'transcript' ? 'properties-content--transcript' : ''}`}>
+      <div className={`properties-content ${activeTab === 'transcript' ? 'properties-content--transcript' : activeTab === 'analysis' ? 'properties-content--analysis' : ''}`}>
         <Suspense fallback={<TabLoading />}>
           {activeTab === 'live' && isLiveInputClip && <LiveInputTab clipId={selectedClip.id} />}
           {activeTab === 'text' && isTextClip && selectedClip.textProperties && (

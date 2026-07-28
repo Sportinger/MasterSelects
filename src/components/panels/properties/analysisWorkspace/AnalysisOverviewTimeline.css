@@ -27,6 +27,25 @@
   letter-spacing: var(--tracking-normal);
 }
 
+.AnalysisOverview__toggle {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.AnalysisOverview__toggle:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.AnalysisOverview__toggle > svg {
+  flex: 0 0 auto;
+  transition: transform 140ms ease;
+}
+
 .AnalysisOverview__title small {
   padding: 2px var(--sp-1);
   border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border-color));
@@ -326,6 +345,20 @@
   border: 0;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+.AnalysisOverview--collapsed .AnalysisOverview__header {
+  margin-bottom: 0;
+}
+
+.AnalysisOverview--collapsed .AnalysisOverview__toggle > svg {
+  transform: rotate(-90deg);
+}
+
+.AnalysisOverview--collapsed .AnalysisOverview__shell,
+.AnalysisOverview--collapsed .AnalysisOverview__axis,
+.AnalysisOverview--collapsed .AnalysisOverview__missingNote {
+  display: none;
 }
 
 .AnalysisOverview--compact {
