@@ -59,6 +59,7 @@ const MAX_HISTORY_BRANCHES = 24;
 const MAX_PERSISTED_HISTORY_SNAPSHOTS = 32;
 const PERSIST_HISTORY_SNAPSHOTS = false;
 const HISTORY_CAPTURE_WARN_MS = 24;
+let nextBatchId = 1;
 
 // Callback to flush pending debounced captures before undo/redo (set by useGlobalHistory)
 // Flush = execute the pending capture immediately so its state isn't lost
@@ -142,6 +143,7 @@ function isTimelineHistoryLocked(): boolean {
 function flushPendingCapture(): void {
   flushPendingCaptureCallback?.();
 }
+export const flushPendingHistoryCapture = flushPendingCapture;
 
 function suppressCaptures(): void {
   suppressCapturesCallback?.();
@@ -392,20 +394,31 @@ export const useHistoryStore = create<HistoryState>()(
     ),
 
     startBatch: (label: string) => {
-      if (isHistoryDisabledForDebug()) return;
+      const existingBatchId = get().batchId;
+      if (isHistoryDisabledForDebug() || existingBatchId !== null) {
+        return { opened: false, batchId: existingBatchId };
+      }
+
+      // Materialize a recent debounced user edit before the batch snapshot is
+      // seeded, so the user edit remains its own undo step.
+      flushPendingCapture();
 
       const { batchId, currentSnapshot } = get();
-      if (batchId !== null) return; // Already batching
+      if (batchId !== null) {
+        return { opened: false, batchId }; // The flush callback opened a foreign batch.
+      }
 
       // Capture initial state before batch
       if (!currentSnapshot) {
         set({ currentSnapshot: createSnapshot('initial') });
       }
 
+      const openedBatchId = nextBatchId++;
       set({
-        batchId: Date.now(),
+        batchId: openedBatchId,
         batchLabel: label,
       });
+      return { opened: true, batchId: openedBatchId };
     },
 
     endBatch: () => {
@@ -454,6 +467,27 @@ export const useHistoryStore = create<HistoryState>()(
           batchId: null,
           batchLabel: null,
         });
+      }
+    },
+
+    cancelBatch: () => {
+      const { batchId, currentSnapshot } = get();
+      if (batchId === null) return;
+
+      try {
+        if (currentSnapshot) {
+          applySnapshot(currentSnapshot);
+        }
+      } finally {
+        set({
+          batchId: null,
+          batchLabel: null,
+        });
+        // Restoring the pre-batch snapshot can synchronously schedule another
+        // debounced capture. Suppress first, then flush: useGlobalHistory's
+        // callback clears that timer and drops it while suppression is active.
+        suppressCaptures();
+        flushPendingCapture();
       }
     },
 
@@ -509,6 +543,7 @@ export const undo = historyFacade.undo;
 export const redo = historyFacade.redo;
 export const startBatch = historyFacade.startBatch;
 export const endBatch = historyFacade.endBatch;
+export const cancelHistoryBatch = historyFacade.cancelHistoryBatch;
 export const recordHistoryEvent = historyFacade.recordHistoryEvent;
 export const restoreHistoryEntry = historyFacade.restoreHistoryEntry;
 export const restoreHistoryBranch = historyFacade.restoreHistoryBranch;

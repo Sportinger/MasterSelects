@@ -172,7 +172,7 @@ export const clipToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'cutRangesFromClip',
-      description: 'Cut out multiple time ranges from a clip. This is the preferred way to remove multiple sections (like all low-focus parts). It handles clip ID changes automatically by processing from end to start.',
+      description: 'Remove multiple TIMELINE ranges from one clip in a single call. This is the preferred tool for low-quality ranges and for the complement of face-analysis KEEP ranges. It handles clip-ID changes from its own splits by processing end-to-start and applies the cuts to linked audio automatically; do not pre-split the clip or delete its audio separately.',
       parameters: {
         type: 'object',
         properties: {
@@ -190,7 +190,7 @@ export const clipToolDefinitions: ToolDefinition[] = [
               },
               required: ['timelineStart', 'timelineEnd'],
             },
-            description: 'Array of time ranges to cut out (in timeline time). Use the timelineStart/timelineEnd values from findLowQualitySections.',
+            description: 'Ranges to REMOVE in timeline seconds. Use returned ranges directly for low-quality removal. To keep one analyzed person, merge that person\'s getClipFaceAnalysis appearance ranges, compute their complement inside the returned timelineRange, and pass the complement here.',
           },
         },
         required: ['clipId', 'ranges'],

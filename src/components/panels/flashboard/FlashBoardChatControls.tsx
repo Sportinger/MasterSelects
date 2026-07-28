@@ -26,8 +26,6 @@ interface FlashBoardChatControlsProps {
   chatProvider: FlashBoardChatProvider;
   chatProviderLabel: string;
   chatProviderOptions: FlashBoardChatProviderOption[];
-  editOptionsMode: boolean;
-  editOptionsModeEnabled: boolean;
   chatReasoningEffortOptions: ChatReasoningOption[];
   chatReasoningSupported: boolean;
   chatTemperature: number;
@@ -46,7 +44,6 @@ interface FlashBoardChatControlsProps {
   onChatTemperatureChange: (temperature: number) => void;
   onClearChatHistory: () => void;
   onClosePopover: (popover: NonNullable<ChatControlsPopover>) => void;
-  onEditOptionsModeToggle: () => void;
   onLemonadeContextSizeChange: (contextSize: number) => void;
   onOpenPromptBook: () => void;
   onOpenPopover: (popover: NonNullable<ChatControlsPopover>) => void;
@@ -63,8 +60,6 @@ export function FlashBoardChatControls({
   chatProvider,
   chatProviderLabel,
   chatProviderOptions,
-  editOptionsMode,
-  editOptionsModeEnabled,
   chatReasoningEffortOptions,
   chatReasoningSupported,
   chatTemperature,
@@ -83,7 +78,6 @@ export function FlashBoardChatControls({
   onChatTemperatureChange,
   onClearChatHistory,
   onClosePopover,
-  onEditOptionsModeToggle,
   onLemonadeContextSizeChange,
   onOpenPromptBook,
   onOpenPopover,
@@ -104,7 +98,9 @@ export function FlashBoardChatControls({
         <button
           className={`fb-pill ${activePopover === 'chatModel' ? 'active' : ''}`}
           onClick={() => onOpenPopover('chatModel')}
-          title={`Model: ${activeChatModel?.label ?? activeChatModelId}`}
+          title={activeChatModel?.supportsTools === false
+            ? `Model: ${activeChatModel.label}. Chat only; this model cannot operate editor tools.`
+            : `Model: ${activeChatModel?.label ?? activeChatModelId}`}
         >
           <span className="fb-pill-label">{activeChatModel?.label ?? activeChatModelId}</span>
         </button>
@@ -134,19 +130,6 @@ export function FlashBoardChatControls({
         >
           <span className="fb-pill-label">{chatTemperatureSupported ? `Temp ${chatTemperature.toFixed(1)}` : 'Fixed temp'}</span>
         </button>
-        {editOptionsModeEnabled && (
-          <button
-            className={`fb-pill fb-chat-options-pill ${editOptionsMode ? 'active' : ''}`}
-            type="button"
-            onClick={onEditOptionsModeToggle}
-            disabled={isChatting}
-            title={editOptionsMode
-              ? 'Plan 3 mode on - next prompt proposes three edit choices before applying.'
-              : 'Plan 3 mode off - click to propose three edit choices before applying.'}
-          >
-            <span className="fb-pill-label">Plan 3</span>
-          </button>
-        )}
         <button
           className="fb-pill fb-prompt-book-pill"
           type="button"
@@ -207,7 +190,9 @@ export function FlashBoardChatControls({
                     onClosePopover('chatModel');
                   }}
                   disabled={isChatting}
-                  title={model.id}
+                  title={model.supportsTools
+                    ? `${model.id} · editor tools enabled`
+                    : `${model.id} · chat only; editor tools unavailable`}
                 >
                   <span className="fb-popover-pill-label">{model.label}</span>
                 </button>

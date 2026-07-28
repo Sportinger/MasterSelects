@@ -112,6 +112,47 @@ describe('clipboard paste data-only media reload', () => {
     expect(pastedAudio.source).not.toHaveProperty('audioElement');
   });
 
+  it('keeps pasted video clips attached to the same source analysis cache', async () => {
+    const videoFile = createFile('video.mp4', 'video/mp4');
+    const analysis = {
+      frames: [{
+        timestamp: 2,
+        motion: 0.2,
+        globalMotion: 0.1,
+        localMotion: 0.3,
+        focus: 0.8,
+        brightness: 0.5,
+        faceCount: 0,
+      }],
+      sampleInterval: 500,
+    };
+    vi.mocked(useMediaStore.getState).mockReturnValue({
+      files: [{ id: 'media-video', name: 'video.mp4', file: videoFile, duration: 12 }],
+    } as unknown as ReturnType<typeof useMediaStore.getState>);
+    useTimelineStore.setState({
+      clipboardData: [
+        createClipboardClip({
+          analysis,
+          analysisStatus: 'ready',
+          faceAnalysisStatus: 'ready',
+          inPoint: 1,
+          outPoint: 4,
+          duration: 3,
+        }),
+      ],
+    });
+
+    useTimelineStore.getState().pasteClips();
+    await flushPasteReload();
+
+    const pasted = useTimelineStore.getState().clips[0];
+    expect(pasted.analysis).toBe(analysis);
+    expect(pasted.analysisStatus).toBe('ready');
+    expect(pasted.faceAnalysisStatus).toBe('ready');
+    expect(pasted.inPoint).toBe(1);
+    expect(pasted.outPoint).toBe(4);
+  });
+
   it('pastes model clips with media-owned urls instead of unmanaged object urls', async () => {
     const modelFile = createFile('hero.glb', 'model/gltf-binary');
     vi.mocked(useMediaStore.getState).mockReturnValue({

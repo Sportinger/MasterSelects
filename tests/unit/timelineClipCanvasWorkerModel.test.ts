@@ -385,6 +385,7 @@ describe('timeline clip canvas worker model', () => {
             kind: 'passive-decorations',
             badges: [{ label: 'L', fill: 'rgba(15, 23, 42, 0.86)' }],
             progressBars: [{ progress: 42, color: 'rgba(96, 165, 250, 0.9)' }],
+            sceneCutMarkers: new Float32Array([0.25, 0.75]),
             transcriptMarkers: new Float32Array([0.1, 0.2, 0.4, 0.5]),
           },
         }],
@@ -415,8 +416,25 @@ describe('timeline clip canvas worker model', () => {
       expect.closeTo(0.4),
       expect.closeTo(0.5),
     ]);
+    expect(Array.from(passiveDecorations?.sceneCutMarkers ?? [])).toEqual([
+      expect.closeTo(0.25),
+      expect.closeTo(0.75),
+    ]);
+    const sceneCutResource = result.message?.paintResources.resources.find(
+      (resource) => resource.kind === 'scene-cut-markers',
+    );
+    const passiveFacet = result.message?.clips[0]?.paintPacket.facets.find(
+      (facet) => facet.kind === 'passive-decorations',
+    );
+    expect(sceneCutResource).toMatchObject({
+      byteEstimate: 8,
+      transferMode: 'transfer',
+    });
+    expect(passiveFacet?.resourceRefIds).toContain(sceneCutResource?.id);
+    expect(result.message?.clips[0]?.paintPacket.resourceRefIds).toContain(sceneCutResource?.id);
     expect(result.transferables).toEqual([
       passiveDecorations?.transcriptMarkers?.buffer,
+      passiveDecorations?.sceneCutMarkers?.buffer,
     ]);
   });
 

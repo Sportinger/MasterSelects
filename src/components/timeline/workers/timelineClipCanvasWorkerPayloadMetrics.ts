@@ -20,6 +20,7 @@ export function estimateWorkerPayloadResourceBytes(payloads: WorkerPaintPayloadT
     0,
   ) + payloads.passiveDecorations.reduce(
     (total, payload) => total +
+      (payload.resource.sceneCutMarkers?.byteLength ?? 0) +
       (payload.resource.transcriptMarkers?.byteLength ?? 0) +
       (payload.resource.analysisOverlay?.points.byteLength ?? 0),
     0,

@@ -4,6 +4,7 @@ import {
   drawTimelineClipCanvasPassiveProgressBars,
 } from './timelineClipCanvasPassiveBadgePainter';
 import { drawTimelineClipCanvasPassiveAnalysisOverlay } from './timelineClipCanvasPassiveAnalysisPainter';
+import { drawTimelineClipCanvasFaceRanges } from './timelineClipCanvasFaceRangePainter';
 import type { TimelineClipCanvasTrimGeometry } from './timelineClipCanvasTrimResource';
 import type {
   TimelineClipCanvasWorkerPassiveBadge,
@@ -58,11 +59,15 @@ export function drawTimelineClipCanvasPassiveDecorations(
   w: number,
   h: number,
   drawBadges = true,
+  showFaceRanges = false,
 ): void {
   ctx.save();
   ctx.beginPath();
   ctx.roundRect(x, top, w, h, Math.min(4, h / 4));
   ctx.clip();
+  if (showFaceRanges) {
+    drawTimelineClipCanvasFaceRanges(ctx, clip, geometry, x, top, w, h);
+  }
   drawTimelineClipCanvasPassiveAnalysisOverlay(ctx, clip, geometry, x, top, w, h);
   drawTimelineClipCanvasTranscriptMarkers(ctx, clip, geometry, x, top, w, h);
   drawTimelineClipCanvasPassiveProgressBars(ctx, progressBars, x, top, w);

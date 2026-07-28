@@ -2,7 +2,7 @@
 
 [← Back to Index](./README.md)
 
-GPT-powered editing with 86 exported model tools across 16 exported definition groups, OpenAI/Cloud or local Lemonade chat providers, multi-provider AI video/image/audio generation, transcription, multicam EDL generation, browser-local SAM 2 segmentation, native-helper MatAnyone2 matting, and local MuScriptor music-to-MIDI.
+Model-powered editing with the shared editor tool catalog, Kie.ai Cloud or local Lemonade chat providers, multi-provider AI video/image/audio generation, transcription, multicam EDL generation, browser-local SAM 2 segmentation, native-helper MatAnyone2 matting, and local MuScriptor music-to-MIDI.
 
 ---
 
@@ -25,12 +25,19 @@ GPT-powered editing with 86 exported model tools across 16 exported definition g
 
 ## FlashBoard Chat
 
+> **Kernel-first routing:** when an agent-kernel service is configured
+> (`ms.kernel.url` + `ms.kernel.token`), mechanical editing requests are
+> compiled, simulated, and verified by the kernel and executed locally in
+> one undo group before any provider call happens; everything else falls
+> back to the chat loop described below. See
+> `docs/Features/Kernel-Client.md` for the full flow and fallback matrix.
+
 ### Location
 - Floating FlashBoard composer chat mode
 
 ### Features
 - Interactive chat interface
-- Compact provider and model menus for OpenAI/Cloud or Lemonade Local
+- Compact provider and model menus for Kie.ai or Lemonade Local
 - Conversation history
 - Clear chat button
 - Auto-scrolling
@@ -40,12 +47,16 @@ GPT-powered editing with 86 exported model tools across 16 exported definition g
 
 | Provider | Runtime | Configuration |
 |---|---|---|
-| `OpenAI / Cloud` | MasterSelects hosted chat when available, otherwise a user-supplied OpenAI API key | Preferences -> API Keys for BYO OpenAI key |
+| `Kie.ai` | MasterSelects hosted chat when available, otherwise a user-supplied Kie.ai API key in development | Preferences -> API Keys for BYO Kie.ai key |
 | `Lemonade Local` | OpenAI-compatible Lemonade Server running on the user's machine | Preferences -> General -> AI Features |
+
+Hosted Kie.ai chat keeps the provider key on the Cloudflare backend. Development BYO calls use the same-origin Kie proxy, so GPT and Claude models share one configured Kie.ai key instead of separate OpenAI and Anthropic chat keys.
 
 Lemonade defaults to `http://localhost:13305/api/v1` and sends chat completions to `/chat/completions`. The endpoint, model, and optional context size are stored in local settings, and the settings panel can check `/models` to verify the server and discover locally available models. Lemonade endpoints are restricted to loopback hosts (`localhost`, `127.0.0.1`, or `::1`) so timeline context and tool results are not sent to a remote URL by mistake.
 
-The Lemonade integration is scoped to FlashBoard Chat. Transcription providers remain `local`, `openai`, `assemblyai`, and `deepgram`.
+The Lemonade integration is scoped to FlashBoard Chat. Transcription modes are
+`local`, `openai`, `assemblyai`, `deepgram`, and the `hybrid` Deepgram + OpenAI
+fusion path.
 
 ### Lemonade Local Setup
 
@@ -61,7 +72,7 @@ Manually imported Lemonade models may be exposed with a `user.` prefix, for exam
 
 Lemonade is a provider, not an editor bridge. It can return OpenAI-compatible tool-call suggestions, but MasterSelects still applies the chat approval mode and routes execution through the shared AI tool dispatcher.
 
-Because local FLM models have a smaller practical prompt budget than hosted models, Lemonade editor mode sends a compact high-use tool set instead of the full 86-tool catalog. The full exported catalog remains available to OpenAI/Cloud and to the local/native bridge.
+Because local FLM models have a smaller practical prompt budget than hosted models, Lemonade editor mode sends a compact high-use tool set. Kie.ai chat receives up to 128 definitions, with timeline and face-analysis editing tools prioritized to stay within the provider limit. The full exported catalog remains available to the local/native bridge.
 
 Lemonade chat responses use the OpenAI-compatible SSE streaming endpoint, so text appears incrementally in FlashBoard Chat while the local model is generating. Tool calls are collected from the streamed deltas and executed after the assistant response finishes. The initial response timeout is 180 seconds and only covers reaching the SSE stream; once streaming starts, a 90-second idle timeout catches stalled local models without cutting off active long-running generations. Lemonade uses a shorter editor system prompt, compact tool results, and a lower completion-token limit than hosted models. Empty Lemonade streams include the model `finish_reason` when available, so output/context-limit stops are reported as actionable local-model errors instead of a generic empty response. If a local model still stalls after a tool result, MasterSelects times out the follow-up request and shows a deterministic tool-result summary instead of leaving the chat empty.
 
@@ -69,22 +80,20 @@ In Lemonade editor mode, each new user request is sent as a fresh tool-capable t
 
 FlashBoard Chat includes a `PromptBook` button for provider-specific system prompt overrides, generation prompts, generated media, chat history, and tool-call history. Prompts can be saved into the current project folder under `Prompts/*.prompt.json`, reloaded from the saved prompt list, reset to the built-in prompt, imported from a text/Markdown file, and exported as a `.txt` file. The active override and its `Send current MasterSelects context` setting are still mirrored in app settings so the chat can use them immediately. The old docked AI Chat panel is retired; the floating FlashBoard Chat is the primary AI editing surface.
 
-The `Options` chat pill enables the Phase A multi-option prototype. In this mode the next request asks the provider for 2-3 text-only edit approaches and explicitly avoids tool execution. Parsed options appear with `Use` buttons; choosing one sends a normal edit request that applies the selected approach through the existing tool dispatcher. This bounds the prototype to one planning round plus one apply round, guarded by `flags.flashBoardChatEditOptions`.
-
 ### Available Models
 
-OpenAI / Cloud:
+Kie.ai:
 
 ```
-GPT-5.2, GPT-5.2 Pro
-GPT-5.1, GPT-5.1 Codex, GPT-5.1 Codex Mini
-GPT-5, GPT-5 Mini, GPT-5 Nano
-GPT-4.1, GPT-4.1 Mini, GPT-4.1 Nano
-GPT-4o, GPT-4o Mini
-o3, o4-mini, o3-pro (reasoning)
+GPT 5.6 Luna, GPT 5.6 Terra, GPT 5.6 Sol
+GPT 5.5, GPT 5.4
+Claude Opus 4.8, Claude Sonnet 5
+Claude Fable 5 (chat only)
 ```
 
-Default model: `gpt-5.1`
+Default model: `gpt-5-6-luna`
+
+GPT models use Kie.ai's `/codex/v1/responses` protocol. Opus 4.8 and Sonnet 5 use `/claude/v1/messages` with editor tools. Kie.ai documents Fable 5 as not supporting function calls, so the UI labels it `chat only` and never exposes editor tools to that model.
 
 Lemonade Local presets:
 
@@ -105,7 +114,7 @@ When enabled:
 - The chat UI applies its own approval gate before calling mutating or sensitive tools
 - AI can manipulate timeline directly
 
-The current model-exposed surface is 86 exported tool definitions across 16 exported definition groups. `openComposition` and `searchVideos` are both mapped through the shared handler registry. There is also a `gaussian.ts` definition file, but it is not part of the exported `AI_TOOLS` array yet, so those tools are not currently exposed to the chat model.
+The model-facing catalog is selected from the exported definition groups and capped at 128 tools for Kie.ai requests. Core timeline and face-analysis tools are placed first before the cap is applied. `openComposition` and `searchVideos` are both mapped through the shared handler registry. There is also a `gaussian.ts` definition file, but it is not part of the exported `AI_TOOLS` array yet, so those tools are not currently exposed to the chat model.
 
 In development, the same shared tool surface is also exposed in the browser console:
 
@@ -141,9 +150,9 @@ The old dock-level AI Generative tab is deprecated and removed from default and 
 - Nano Banana 2 and Nano Banana Pro accept up to 14 ordered reference images through Kie.ai; Nano Banana 2 is also available through EvoLink. Kie.ai and Cloud Seedance 2.0 / Fast accept multimodal image/video/audio references and send audio references as `reference_audio_urls` for lip-sync / performance timing; the composer labels generic references as `REF 1`, `REF 2`, ... so prompts can refer to them explicitly
 - Seedance 2.0 standard and Fast cannot combine strict `first_frame_url` / `last_frame_url` with multimodal references in the same Kie.ai request, so IN / OUT cards are converted to image references when REF media is present. Audio references are passed separately as input drivers through `reference_audio_urls`; adding one to Seedance automatically enables the `Sound` toggle so the Kie.ai request also sends `generate_audio: true`. Audio-only Seedance references are blocked locally because Seedance requires audio references to be paired with at least one image or video anchor.
 - Suno Music and Suno Sounds are separate Music-category targets. Suno Music keeps the lyrics/style/negative-tags controls; Suno Sounds uses the normal prompt box plus the mode button for one-shot/loop sounds. Both run through hosted Cloud credits from the Media generator tray.
-- The wand button in the composer refines the current prompt with GPT-5.5 through the hosted Cloudflare `/api/ai/chat` route by default. In non-production development it can still use a local OpenAI key when that key is explicitly marked as default; that BYO path streams real deltas into the Magic prompt while the original prompt stays available in a compact restore/dismiss box. The Original and Magic prompt boxes expand on focus for full reading/editing, and the Original text remains selectable for copying. The Magic prompt opens at full height briefly after refinement, then collapses to a compact scrollable height so the Generate controls stay anchored. Hosted refinement is non-streaming because `/api/ai/chat` does not expose prompt-refiner streaming. Suno Music, Suno Sounds, Nano Banana, GPT Image, Flux, Flux Kontext, Recraft/Topaz utilities, Seedream, Imagen, Kling, Seedance, Veo, and Runway targets use model-specific guidance so the refined prompt follows the selected model's input style and constraints.
-- The collapsed Media tray shows separate `Chat` and `Generate` launch buttons. `Chat` opens a compact chat prompt window with OpenAI/Cloud model selection, OpenAI reasoning effort for GPT-5.x models, a visible per-round credit estimate, a provider-scoped `PromptBook`, and a temperature slider when the selected model accepts temperature. The selected reasoning effort is applied to BYO Responses and every hosted Chat Completions round. Non-production development can still expose Anthropic and Lemonade for local testing; Lemonade reuses the persisted AI provider/model/context-size settings and falls back to the first discovered local model when the saved preset is not installed. The selected OpenAI/Lemonade provider survives minimize/reopen, app restart, and HMR remount; Anthropic remains a development-only session selection.
-- Compact chat requests include the Media-chat system prompt, current timeline summary by default, and callable AI tools. For visual questions and content-aware edits such as funny, highlight, storytelling, or scene-based cuts, the agent samples 3-8 timeline moments with `getFramesAtTimes`; captured frame grids are attached as real multimodal image inputs on OpenAI Cloud, OpenAI BYO, and Anthropic follow-up rounds instead of being reduced to text metadata. Transcript remixes convert source-word timestamps through the clip's placement, trim, speed, and reverse state, then continue from `splitClipAtTimes` through a fresh timeline read to `reorderClips` in the same turn because the split creates the IDs needed for the final arrangement. The PromptBook system-prompt editor can disable and save that live context per provider preset. Tool calls route through the shared `executeAIToolCalls(..., 'chat')` dispatcher; actions that require confirmation are denied in the compact flow and reported back to the model unless the approval mode allows them automatically. In chat mode, approval is toggled from the left `Auto` segment of the `Chat` split-button`; the main button area still sends the prompt.
+- The wand button in the composer refines the current prompt with GPT 5.6 Luna through Kie.ai. Hosted use goes through Cloudflare `/api/ai/chat`; non-production BYO use goes through the same-origin Kie proxy with the user's default Kie.ai key. The Original and Magic prompt boxes expand on focus for full reading/editing, and the Original text remains selectable for copying. The Magic prompt opens at full height briefly after refinement, then collapses to a compact scrollable height so the Generate controls stay anchored. Suno Music, Suno Sounds, Nano Banana, GPT Image, Flux, Flux Kontext, Recraft/Topaz utilities, Seedream, Imagen, Kling, Seedance, Veo, and Runway targets use model-specific guidance so the refined prompt follows the selected model's input style and constraints.
+- The collapsed Media tray shows separate `Chat` and `Generate` launch buttons. `Chat` opens a compact chat prompt window with Kie.ai model selection, reasoning effort for GPT models, a visible per-round credit estimate, a provider-scoped `PromptBook`, and a temperature slider when the selected model accepts temperature. GPT calls use Kie's Responses protocol; Claude calls use Kie's Messages protocol. Lemonade remains available for local testing outside production. The selected Kie.ai/Lemonade provider survives minimize/reopen, app restart, and HMR remount.
+- Compact chat requests include the Media-chat system prompt, current timeline summary by default, and callable AI tools. For visual questions and content-aware edits such as funny, highlight, storytelling, or scene-based cuts, the agent samples 3-8 timeline moments with `getFramesAtTimes`; captured frame grids are attached as real multimodal image inputs on Kie.ai GPT and tool-capable Claude follow-up rounds instead of being reduced to text metadata. Transcript remixes convert source-word timestamps through the clip's placement, trim, speed, and reverse state, then continue from `splitClipAtTimes` through a fresh timeline read to `reorderClips` in the same turn because the split creates the IDs needed for the final arrangement. Fable 5 is deliberately discussion-only because its Kie.ai route does not support function calls. The PromptBook system-prompt editor can disable and save live context per provider preset. Tool calls route through the shared `executeAIToolCalls(..., 'chat')` dispatcher; actions that require confirmation are denied in the compact flow and reported back to the model unless the approval mode allows them automatically. Chat approval defaults to `Auto`, so editor actions can run immediately; users can toggle it from the left `Auto` segment of the `Chat` split-button, while the main button area still sends the prompt.
 - Queued and running generations appear as Media Panel preview cards with output type, status, elapsed timer, prompt, metadata, and progress when the provider reports it. The tray can keep 100 local jobs active; hosted Kie.ai task starts are globally paced through a Cloudflare Durable Object at 19 starts per 10 seconds, so image, video, and Suno bursts share one provider-safe lane instead of producing 429s.
 - The tray reuses the FlashBoard queue/import runtime without showing the full node canvas
 
@@ -153,13 +162,12 @@ The current generator stack is no longer best described as "PiAPI as one unified
 
 | Backend | Where it is used | Notes |
 |---------|------------------|-------|
-| `Kie.ai` | Hosted FlashBoard media via MasterSelects Cloud | Video providers come from Kie.ai through `/api/ai/video`; image providers include Kie Market jobs plus dedicated Flux Kontext routes in the FlashBoard catalog |
+| `Kie.ai` | Hosted and development-BYO FlashBoard media, compact chat, prompt refinement, and AI node authoring | Chat routes use `/codex/v1/responses` or `/claude/v1/messages`; media uses Kie Market jobs plus dedicated provider routes |
 | `EvoLink` | FlashBoard image generation | User-supplied key must be unlocked and marked as default; Nano Banana 2 uses EvoLink's async `gemini-3.1-flash-image-preview` task flow with up to 14 reference images |
-| `MasterSelects Cloud` | FlashBoard production and hosted development | Hosted credits/account flow; production uses Cloudflare secrets only. FlashBoard uses hosted Kling/Seedance/Nano Banana through `/api/ai/video`, hosted ElevenLabs speech, OpenAI transcription, and Suno music through `/api/ai/audio`, and hosted OpenAI chat/refinement through `/api/ai/chat` |
+| `MasterSelects Cloud` | FlashBoard production and hosted development | Hosted credits/account flow; production uses Cloudflare secrets only. FlashBoard uses hosted Kie.ai chat/refinement through `/api/ai/chat`, Kie media through `/api/ai/video`, hosted ElevenLabs speech, OpenAI or Deepgram transcription, and Suno music through `/api/ai/audio` |
 | `ElevenLabs` | FlashBoard audio generation in development/BYO flows | User-supplied keys are development-only when explicitly unlocked and marked as default; production text-to-speech uses the Cloudflare `ELEVENLABS_API_KEY` secret |
 | `Suno` | FlashBoard music and sound generation | Suno Music and Suno Sounds use the hosted Cloud path from the Media generator tray |
-| `OpenAI` | FlashBoard prompt refinement and compact chat | Production uses the Cloudflare `OPENAI_API_KEY` secret and charges hosted credits per model round; development can still use BYO OpenAI when explicitly marked as default |
-| `Anthropic` | FlashBoard compact chat in development/BYO flows | User-supplied Anthropic key must be unlocked and marked as default; used only for prompt discussion, not media generation |
+| `OpenAI` | Hosted moderation and transcription only | `OPENAI_API_KEY` is no longer used for generative chat, prompt refinement, or AI node authoring |
 | `Lemonade` | FlashBoard compact chat | Local loopback Lemonade Server; model list is discovered from `/models` when the chat controls are opened, and explicit context sizes are applied through `/load` with `ctx_size` before chat |
 | `PiAPI` | Legacy compatibility and some catalog/pricing metadata | Still present in older history/key migration paths and FlashBoard pricing/catalog helpers, but not the primary runtime path the current panel describes |
 
@@ -297,9 +305,16 @@ See [MuScriptor Music-to-MIDI](./MuScriptor.md) for the complete runtime, mappin
 
 ## AI Editor Tools
 
-### 86 Tools across 16 Exported Definition Groups
+### Tool Registry (parity-gated)
 
-> **Note:** The 86-tool count is the model-exposed `AI_TOOLS` catalog. Bridge-only diagnostics can exist as handler/policy entries without being exposed to the chat model. Gaussian Splat tool definitions also exist in `src/services/aiTools/definitions/gaussian.ts`, but that file is not currently exported through `AI_TOOLS`.
+The registry currently holds 133 tool definitions, of which 97 are exposed
+to the chat model (policy-gated; the dev bridge additionally sees
+diagnostics-only tools). Exact counts are locked by
+`tests/unit/aiToolRegistryParity.test.ts` and mirrored 1:1 by the agent
+kernel's manifest registry — a tool that is only partially registered
+(definition, policy, or handler missing) fails the build.
+
+> **Note:** Kie.ai requests are capped at 128 model-exposed tools. Bridge-only diagnostics can exist as handler/policy entries without being exposed to the chat model. Gaussian Splat tool definitions also exist in `src/services/aiTools/definitions/gaussian.ts`, but that file is not currently exported through `AI_TOOLS`.
 
 The exported tool groups are:
 - Timeline state and selection
@@ -424,7 +439,7 @@ Authenticated users can inspect that history through:
 
 ## Transcription
 
-### 4 Providers
+### Provider modes
 
 #### Local Whisper (Browser)
 - Uses `@huggingface/transformers`
@@ -439,9 +454,9 @@ Model: whisper-1
 Format: verbose_json
 Granularity: word
 ```
-- Signed-in accounts always use the hosted OpenAI Whisper path through
-  MasterSelects credits, currently 6 credits per minute rounded up to the next
-  whole credit.
+- Signed-in accounts can choose hosted OpenAI Whisper or Deepgram through
+  MasterSelects credits. OpenAI costs 6 credits per minute and Deepgram costs
+  13 credits per minute; both are rounded up to the next whole credit.
 - On the plain Vite dev server, if the hosted `/api/ai/audio` route is not
   available, clip transcription falls back to the configured provider, or to
   local Whisper when no BYO provider key is configured.
@@ -466,21 +481,60 @@ Polling: 2-minute timeout
 #### Deepgram
 ```
 Endpoint: /v1/listen
-Model: nova-2
-Features: Punctuation, speaker diarization
+Model: nova-3
+Features: Smart formatting, word timestamps/confidence, automatic language detection, speaker diarization v2
 ```
+
+- Signed-in Deepgram requests use the Cloudflare `DEEPGRAM_API_KEY` secret and
+  the Nova-3 model, so the key never reaches the browser. Signed-out BYO
+  requests use the same Nova-3 quality settings with the locally stored key.
+- Both paths request `diarize_model=latest`, currently Deepgram's v2 batch
+  diarizer, which enables diarization by itself, plus utterance detection.
+  Per-word
+  speaker labels, transcription confidence, speaker
+  confidence, and source-relative word timestamps are retained in the
+  MasterSelects transcript. An explicitly selected language is sent as a
+  language hint; `auto` enables Deepgram language detection.
+
+#### Best Quality: Deepgram Text + OpenAI Speakers
+
+Best Quality extracts each audio range once and runs Deepgram Nova-3 and OpenAI
+`gpt-4o-transcribe-diarize` in parallel. Provider ownership is fixed and fully
+deterministic:
+
+- Deepgram owns the exact transcript text, word timestamps, punctuation, and
+  per-word confidence. OpenAI text never replaces or challenges a Deepgram word.
+- OpenAI owns the speaker partition. Its timestamped diarized segments are
+  projected onto Deepgram words by word-center time, and speaker labels are
+  canonicalized by first appearance (`Speaker 1`, `Speaker 2`, ...).
+- If OpenAI diarization is unavailable, the completed Deepgram speaker labels
+  remain as the fallback.
+
+There is no provider-disagreement queue, red conflict state, or transcript
+review agent in this mode. The result is ready automatically when both provider
+responses have been combined. Project transcript artifacts retain both raw
+provider runs and deterministic speaker-assignment patches for provenance, but
+the displayed words stay purely Deepgram.
+
+Signed-out Best Quality use requires both Deepgram and OpenAI keys. Signed-in use
+routes both transcription requests through hosted credits; Kie.ai is not part of
+this pipeline. The live header shows Deepgram, OpenAI, and speaker application as
+three compact stages. One abort controller owns the complete run and is
+forwarded to direct provider fetches and hosted Cloudflare requests. Cancelling
+restores the pre-run transcript/artifact snapshot and prevents late responses
+from overwriting a newer run.
 
 ---
 
 ## Multicam EDL
 
-### Claude API Integration
+### Kie.ai Claude Integration
 ```typescript
 // Endpoint
-https://api.anthropic.com/v1/messages
+/claude/v1/messages
 
 // Model
-claude-sonnet-4-20250514
+claude-sonnet-5
 
 // Max tokens
 4096
@@ -502,7 +556,7 @@ A dedicated `MultiCamPanel` component provides the workflow UI:
 - Audio-based sync between cameras
 - CV analysis per camera
 - Transcript generation via local Whisper
-- EDL generation via Claude API
+- EDL generation via Claude Sonnet 5 on Kie.ai
 - Apply EDL directly to the timeline
 
 ---
@@ -512,7 +566,6 @@ A dedicated `MultiCamPanel` component provides the workflow UI:
 ### API Keys
 Settings dialog -> API Keys:
 - OpenAI API key
-- Anthropic API key
 - Kie.ai API key
 - PiAPI key (legacy compatibility)
 - Kling access and secret keys (legacy compatibility)
@@ -521,7 +574,7 @@ Settings dialog -> API Keys:
 - YouTube Data API v3 key
 
 Multicam panel -> Settings:
-- Claude API key for multicam EDL generation
+- Kie.ai API key for multicam EDL generation
 
 Hosted cloud access for chat/video does not use a user-entered API key in the desktop settings panel. It comes from the signed-in hosted account and credit balance.
 

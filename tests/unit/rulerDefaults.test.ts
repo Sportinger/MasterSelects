@@ -9,13 +9,35 @@ import {
   normalizeRulerLaneState,
   TIME_RULER_LANE_ID,
 } from '../../src/timeline/tempo/rulerDefaults';
+import { PROJECT_TEMPO_EVENT_ID } from '../../src/timeline/tempo/tempoEdits';
 
 describe('rulerDefaults', () => {
   it('default tempo map is a single 4/4 @ 60 BPM event at t=0', () => {
     const map = createDefaultTempoMap();
     expect(map.events).toEqual([
-      { time: 0, bpm: DEFAULT_TEMPO_BPM, numerator: 4, denominator: 4 },
+      {
+        id: PROJECT_TEMPO_EVENT_ID,
+        time: 0,
+        bpm: DEFAULT_TEMPO_BPM,
+        numerator: 4,
+        denominator: 4,
+        curve: 'jump',
+      },
     ]);
+  });
+
+  // #299: the durable tier has optional ids, so load-time normalization is what
+  // makes a pre-#299 project editable.
+  it('backfills tempo-event ids for projects saved before #299', () => {
+    const normalized = normalizeRulerLaneState({
+      tempoMap: { events: [
+        { time: 0, bpm: 60, numerator: 4, denominator: 4 },
+        { time: 8, bpm: 120, numerator: 4, denominator: 4 },
+      ] },
+    });
+    const ids = normalized.tempoMap.events.map(event => event.id);
+    expect(ids.every(id => typeof id === 'string' && id.length > 0)).toBe(true);
+    expect(new Set(ids).size).toBe(2);
   });
 
   it('default lanes are a single Time lane with the stable id', () => {
@@ -83,5 +105,44 @@ describe('rulerDefaults', () => {
       });
       expect(normalized.activeRulerLaneId).toBe('lane-x');
     });
+  });
+});
+
+// Persistence round trip for tempo-event ids (issue #299, Packet 1).
+//
+// Save, load and composition-switch all funnel through normalizeRulerLaneState
+// (projectSave.ts, loadTimelineHydration.ts, serializationUtils.ts), so the trip
+// is exercised here at that single seam rather than through the whole IO stack.
+describe('tempo events across save / load / composition switch', () => {
+  it('keeps ids stable through repeated normalization', () => {
+    const authored = normalizeRulerLaneState({
+      tempoMap: { events: [
+        { time: 0, bpm: 60, numerator: 4, denominator: 4 },
+        { time: 8, bpm: 120, numerator: 3, denominator: 4 },
+      ] },
+    }).tempoMap;
+
+    // save -> load -> switch away -> switch back
+    let current = authored;
+    for (let pass = 0; pass < 3; pass += 1) {
+      current = normalizeRulerLaneState({ tempoMap: structuredClone(current) }).tempoMap;
+    }
+
+    expect(current.events).toEqual(authored.events);
+  });
+
+  it('survives the durable tier, where the id is optional', () => {
+    const runtime = normalizeRulerLaneState({
+      tempoMap: { events: [{ id: 'kept', time: 0, bpm: 96, numerator: 5, denominator: 8 }] },
+    }).tempoMap;
+
+    // ProjectTempoEvent is structurally the runtime event with an optional id.
+    const durable: { events: Array<{ id?: string; time: number; bpm: number; numerator: number; denominator: number }> } =
+      JSON.parse(JSON.stringify(runtime));
+    const reloaded = normalizeRulerLaneState({ tempoMap: durable }).tempoMap;
+
+    expect(reloaded.events).toEqual([
+      { id: 'kept', time: 0, bpm: 96, numerator: 5, denominator: 8, curve: 'jump' },
+    ]);
   });
 });

@@ -13,10 +13,12 @@ export {
   handleDeleteClips,
 } from './clips/delete';
 export {
-  handleMoveClip,
-  handleReorderClips,
   handleTrimClip,
 } from './clips/edit';
+export {
+  handleMoveClip,
+  handleReorderClips,
+} from './clips/entityReporting';
 export {
   handleClearSelection,
   handleSelectClips,

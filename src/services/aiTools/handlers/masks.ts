@@ -3,6 +3,10 @@ import type { ToolResult } from '../types';
 import { selectClipAndOpenTab } from '../aiFeedback';
 import { createMaskPathProperty } from '../../../types';
 import type { ClipMask, MaskPathKeyframeValue, MaskVertex, MaskVertexHandleMode } from '../../../types';
+import {
+  captureMutationEntitySnapshot,
+  describeMutationEntities,
+} from './mutationEntityResults';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
@@ -65,6 +69,7 @@ export async function handleAddRectangleMask(
   const clip = timelineStore.clips.find(c => c.id === clipId);
   if (!clip) return { success: false, error: `Clip not found: ${clipId}` };
 
+  const mutationSnapshot = captureMutationEntitySnapshot('mask', clip.masks ?? []);
   const { addRectangleMask } = useTimelineStore.getState();
   const maskId = addRectangleMask(clipId);
 
@@ -73,7 +78,12 @@ export async function handleAddRectangleMask(
 
   return {
     success: true,
-    data: { clipId, maskId, type: 'rectangle' },
+    data: {
+      clipId,
+      maskId,
+      type: 'rectangle',
+      ...describeMutationEntities(mutationSnapshot, getClipMasks(clipId)),
+    },
   };
 }
 
@@ -85,6 +95,7 @@ export async function handleAddEllipseMask(
   const clip = timelineStore.clips.find(c => c.id === clipId);
   if (!clip) return { success: false, error: `Clip not found: ${clipId}` };
 
+  const mutationSnapshot = captureMutationEntitySnapshot('mask', clip.masks ?? []);
   const { addEllipseMask } = useTimelineStore.getState();
   const maskId = addEllipseMask(clipId);
 
@@ -93,7 +104,12 @@ export async function handleAddEllipseMask(
 
   return {
     success: true,
-    data: { clipId, maskId, type: 'ellipse' },
+    data: {
+      clipId,
+      maskId,
+      type: 'ellipse',
+      ...describeMutationEntities(mutationSnapshot, getClipMasks(clipId)),
+    },
   };
 }
 
@@ -122,6 +138,7 @@ export async function handleAddMask(
     if (maskData[key] === undefined) delete maskData[key];
   }
 
+  const mutationSnapshot = captureMutationEntitySnapshot('mask', clip.masks ?? []);
   const { addMask, invalidateCache } = useTimelineStore.getState();
   const maskId = addMask(clipId, maskData as never);
 
@@ -150,7 +167,12 @@ export async function handleAddMask(
 
   return {
     success: true,
-    data: { clipId, maskId, vertexCount: vertices.length },
+    data: {
+      clipId,
+      maskId,
+      vertexCount: vertices.length,
+      ...describeMutationEntities(mutationSnapshot, getClipMasks(clipId)),
+    },
   };
 }
 
@@ -166,6 +188,7 @@ export async function handleRemoveMask(
   const mask = (clip.masks || []).find(m => m.id === maskId);
   if (!mask) return { success: false, error: `Mask not found: ${maskId}` };
 
+  const mutationSnapshot = captureMutationEntitySnapshot('mask', clip.masks ?? []);
   const { removeMask } = useTimelineStore.getState();
   removeMask(clipId, maskId);
 
@@ -174,7 +197,11 @@ export async function handleRemoveMask(
 
   return {
     success: true,
-    data: { clipId, removedMaskId: maskId },
+    data: {
+      clipId,
+      removedMaskId: maskId,
+      ...describeMutationEntities(mutationSnapshot, getClipMasks(clipId)),
+    },
   };
 }
 
@@ -212,12 +239,18 @@ export async function handleUpdateMask(
     return { success: false, error: 'No mask properties provided' };
   }
 
+  const mutationSnapshot = captureMutationEntitySnapshot('mask', clip.masks ?? []);
   const { updateMask } = useTimelineStore.getState();
   updateMask(clipId, maskId, updates as never);
 
   return {
     success: true,
-    data: { clipId, maskId, updatedProperties: Object.keys(updates) },
+    data: {
+      clipId,
+      maskId,
+      updatedProperties: Object.keys(updates),
+      ...describeMutationEntities(mutationSnapshot, getClipMasks(clipId)),
+    },
   };
 }
 
@@ -233,6 +266,7 @@ export async function handleAddVertex(
   const mask = (clip.masks || []).find(m => m.id === maskId);
   if (!mask) return { success: false, error: `Mask not found: ${maskId}` };
 
+  const mutationSnapshot = captureMutationEntitySnapshot('mask', clip.masks ?? []);
   const { addVertex } = useTimelineStore.getState();
   const vertexId = addVertex(clipId, maskId, {
     x: args.x as number,
@@ -244,7 +278,14 @@ export async function handleAddVertex(
 
   return {
     success: true,
-    data: { clipId, maskId, vertexId, x: args.x, y: args.y },
+    data: {
+      clipId,
+      maskId,
+      vertexId,
+      x: args.x,
+      y: args.y,
+      ...describeMutationEntities(mutationSnapshot, getClipMasks(clipId)),
+    },
   };
 }
 
@@ -264,12 +305,18 @@ export async function handleRemoveVertex(
   const vertex = mask.vertices.find(v => v.id === vertexId);
   if (!vertex) return { success: false, error: `Vertex not found: ${vertexId}` };
 
+  const mutationSnapshot = captureMutationEntitySnapshot('mask', clip.masks ?? []);
   const { removeVertex } = useTimelineStore.getState();
   removeVertex(clipId, maskId, vertexId);
 
   return {
     success: true,
-    data: { clipId, maskId, removedVertexId: vertexId },
+    data: {
+      clipId,
+      maskId,
+      removedVertexId: vertexId,
+      ...describeMutationEntities(mutationSnapshot, getClipMasks(clipId)),
+    },
   };
 }
 
@@ -310,12 +357,19 @@ export async function handleUpdateVertex(
     return { success: false, error: 'No vertex properties provided' };
   }
 
+  const mutationSnapshot = captureMutationEntitySnapshot('mask', clip.masks ?? []);
   const { updateVertex } = useTimelineStore.getState();
   updateVertex(clipId, maskId, vertexId, updates as never);
 
   return {
     success: true,
-    data: { clipId, maskId, vertexId, updatedProperties: Object.keys(updates) },
+    data: {
+      clipId,
+      maskId,
+      vertexId,
+      updatedProperties: Object.keys(updates),
+      ...describeMutationEntities(mutationSnapshot, getClipMasks(clipId)),
+    },
   };
 }
 
@@ -335,6 +389,10 @@ export async function handleAddMaskPathKeyframe(
   if (!mask) return { success: false, error: `Mask not found: ${maskId}` };
 
   const pathValue = normalizeMaskPathValue(args.pathValue, mask);
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'keyframe',
+    timelineStore.getClipKeyframes(clipId),
+  );
   const { addMaskPathKeyframe, invalidateCache } = useTimelineStore.getState();
   addMaskPathKeyframe(clipId, maskId, pathValue, time, easing);
   invalidateCache();
@@ -360,8 +418,16 @@ export async function handleAddMaskPathKeyframe(
       time: newKeyframe?.time ?? time,
       vertexCount: newKeyframe?.pathValue?.vertices.length ?? pathValue?.vertices.length ?? mask.vertices.length,
       pathValue: newKeyframe?.pathValue ?? pathValue,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().getClipKeyframes(clipId),
+      ),
     },
   };
+}
+
+function getClipMasks(clipId: string) {
+  return useTimelineStore.getState().clips.find((clip) => clip.id === clipId)?.masks ?? [];
 }
 
 function normalizeMaskPathValue(value: unknown, mask: ClipMask): MaskPathKeyframeValue | undefined {

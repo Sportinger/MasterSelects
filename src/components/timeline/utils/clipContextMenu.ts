@@ -506,6 +506,16 @@ export function executeClipContextMenuStemSeparation(input: {
   return true;
 }
 
+export function executeClipContextMenuSceneCutAnalysis(input: {
+  mediaFile: ClipContextMenuMediaFileLike | null | undefined;
+  proxyStore: Pick<ClipContextMenuProxyStoreLike, 'analyzeSceneCuts'>;
+  force?: boolean;
+}): boolean {
+  if (!input.mediaFile) return false;
+  input.proxyStore.analyzeSceneCuts(input.mediaFile.id, { force: input.force });
+  return true;
+}
+
 export function executeClipContextMenuMusicToMidi(input: {
   clipId: string | null | undefined;
   canExecute: boolean;
@@ -540,6 +550,12 @@ export async function executeClipContextMenuCommand(
         proxyStore: context.proxyStore,
         action: command.action,
         options: command.options,
+      });
+    case 'scene-cut-analysis':
+      return executeClipContextMenuSceneCutAnalysis({
+        mediaFile: context.mediaFile,
+        proxyStore: context.proxyStore,
+        force: command.force,
       });
     case 'regenerate-thumbnails': {
       if (!context.mediaFile) {

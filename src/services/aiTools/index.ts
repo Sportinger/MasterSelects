@@ -9,7 +9,7 @@ const log = Logger.create('AITool');
 import { flags } from '../../engine/featureFlags';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { startBatch, endBatch } from '../../stores/historyStore';
+import { startBatch, endBatch, useHistoryStore } from '../../stores/historyStore';
 import type {
   AIToolCallExecution,
   AIToolCallExecutionResult,
@@ -22,6 +22,12 @@ import { handleExecuteBatch } from './handlers/batch';
 import { setAIExecutionActive, setStaggerBudget } from './executionState';
 import { checkToolAccess } from './policy';
 import type { CallerContext } from './policy';
+import { beginAIToolAudit, completeAIToolAudit } from './audit';
+import {
+  abortAgentTransaction, attachGroupedPartialFailure, beginAgentTransaction,
+  commitAgentTransaction, completeAgentToolAudit, completeOrDeferAgentToolAudit,
+  createAgentTransactionRollbackReason, createGroupedPartialFailureInfo, createGroupedRollbackReason, type AgentToolAuditCompletion,
+} from './agentTransaction';
 import {
   compileGuidedToolCall,
   compileGuidedToolCalls,
@@ -81,26 +87,45 @@ export { isAIExecutionActive } from './executionState';
  * Main entry point for AI chat integration.
  * @param callerContext identifies who is calling (chat, devBridge, etc.)
  */
-export async function executeAITool(
-  toolName: string,
-  args: Record<string, unknown>,
-  callerContext: CallerContext = 'internal',
-  options: AIToolExecutionOptions = {},
+export function executeAITool(
+  toolName: string, args: Record<string, unknown>,
+  callerContext: CallerContext = 'internal', options: AIToolExecutionOptions = {},
 ): Promise<ToolResult> {
+  return executeAIToolWithDeferredAudit(toolName, args, callerContext, options);
+}
+
+async function executeAIToolWithDeferredAudit(
+  toolName: string, args: Record<string, unknown>,
+  callerContext: CallerContext, options: AIToolExecutionOptions,
+  deferAuditCompletion?: (completion: AgentToolAuditCompletion) => void,
+): Promise<ToolResult> {
+  const audit = beginAIToolAudit({
+    args,
+    callerContext,
+    options,
+    providerToolCallId: options.auditProviderToolCallId,
+    tool: toolName,
+  });
   // Policy gate: check if caller is allowed to execute this tool
   const access = checkToolAccess(toolName, callerContext);
   if (!access.allowed) {
     log.warn(`Policy denied: ${toolName} from ${callerContext} — ${access.reason}`);
-    return { success: false, error: access.reason };
+    const result = { success: false, error: access.reason };
+    completeOrDeferAgentToolAudit({ callId: audit.callId, tool: toolName, result, error: access.reason, explicitStatus: 'denied' }, deferAuditCompletion);
+    return result;
   }
 
   const useGuidedExecution = shouldUseGuidedAIToolExecution(callerContext, options);
   setAIExecutionActive(true, useGuidedExecution ? getGuidedLegacyFeedback(options) : getLegacyFeedback(options));
   try {
-    if (useGuidedExecution) {
-      return await executeGuidedAITool(toolName, args, callerContext, options);
-    }
-    return await _executeAIToolInternal(toolName, args, callerContext, options);
+    const result = useGuidedExecution
+      ? await executeGuidedAITool(toolName, args, callerContext, options)
+      : await _executeAIToolInternal(toolName, args, callerContext, options);
+    completeOrDeferAgentToolAudit({ callId: audit.callId, tool: toolName, result }, deferAuditCompletion);
+    return result;
+  } catch (error) {
+    completeOrDeferAgentToolAudit({ callId: audit.callId, tool: toolName, error }, deferAuditCompletion);
+    throw error;
   } finally {
     setAIExecutionActive(false);
   }
@@ -120,12 +145,23 @@ export async function executeAIToolCalls(
   }
 
   const allowedCalls: AIToolCallExecution[] = [];
+  const auditCallIds = new Map<AIToolCallExecution, string>();
   const policyResults = new Map<string, ToolResult>();
   for (const toolCall of toolCalls) {
+    const audit = beginAIToolAudit({
+      args: toolCall.args,
+      callerContext,
+      options,
+      providerToolCallId: toolCall.id,
+      tool: toolCall.tool,
+    });
+    auditCallIds.set(toolCall, audit.callId);
     const access = checkToolAccess(toolCall.tool, callerContext);
     if (!access.allowed) {
       log.warn(`Policy denied: ${toolCall.tool} from ${callerContext} â€” ${access.reason}`);
-      policyResults.set(getToolCallResultKey(toolCall), { success: false, error: access.reason });
+      const result = { success: false, error: access.reason };
+      policyResults.set(getToolCallResultKey(toolCall), result);
+      completeAIToolAudit(audit.callId, result, access.reason, 'denied');
     } else {
       allowedCalls.push(toolCall);
     }
@@ -142,17 +178,57 @@ export async function executeAIToolCalls(
     }));
   }
 
-  setAIExecutionActive(true, getGuidedLegacyFeedback(options));
+  const transaction = beginTransactionForToolCalls(allowedCalls, options);
   try {
-    const guidedResults = await executeGuidedAIToolCallGroup(allowedCalls, callerContext, options);
+    setAIExecutionActive(true, getGuidedLegacyFeedback(options));
+    const guidedResults = await executeGuidedAIToolCallGroup(allowedCalls, callerContext, {
+      ...options,
+      suppressHistory: transaction ? true : options.suppressHistory,
+    });
     const guidedResultByKey = new Map(guidedResults.map((result) => [getToolCallResultKey(result), result.result]));
-    return toolCalls.map((toolCall) => ({
+    let results: AIToolCallExecutionResult[] = toolCalls.map((toolCall) => ({
       id: toolCall.id,
       tool: toolCall.tool,
       result: policyResults.get(getToolCallResultKey(toolCall))
         ?? guidedResultByKey.get(getToolCallResultKey(toolCall))
         ?? createMissingGroupedToolResult(toolCall.tool),
     }));
+    const partialFailure = createGroupedPartialFailureInfo(
+      results,
+      transaction,
+      options.suppressHistory === true,
+    );
+    if (partialFailure) {
+      if (transaction) {
+        abortAgentTransaction(transaction);
+      }
+      results = attachGroupedPartialFailure(results, partialFailure);
+    } else if (transaction) {
+      commitAgentTransaction(transaction);
+    }
+    const rollbackReason = partialFailure?.rolledBack ? createGroupedRollbackReason(partialFailure) : undefined;
+    for (const [index, toolCall] of allowedCalls.entries()) {
+      const callId = auditCallIds.get(toolCall);
+      const resultKey = getToolCallResultKey(toolCall);
+      const finalResult = results.find(
+        (entry) => getToolCallResultKey(entry) === resultKey,
+      )?.result;
+      const result = rollbackReason !== undefined && MODIFYING_TOOLS.has(toolCall.tool)
+        ? guidedResults[index]?.result ?? finalResult
+        : finalResult;
+      if (callId && result) completeAgentToolAudit({ callId, tool: toolCall.tool, result }, rollbackReason);
+    }
+    return results;
+  } catch (error) {
+    const rollbackReason = transaction ? createAgentTransactionRollbackReason(transaction, error) : undefined;
+    if (transaction) {
+      abortAgentTransaction(transaction);
+    }
+    for (const toolCall of allowedCalls) {
+      const callId = auditCallIds.get(toolCall);
+      if (callId) completeAgentToolAudit({ callId, tool: toolCall.tool, error }, rollbackReason);
+    }
+    throw error;
   } finally {
     setAIExecutionActive(false);
   }
@@ -170,17 +246,19 @@ async function _executeAIToolInternal(
 
   // Special-case: executeBatch wraps all sub-actions in a single undo group
   if (toolName === 'executeBatch') {
-    if (!options.suppressHistory) {
+    const ownsBatch = !options.suppressHistory
+      && useHistoryStore.getState().batchId === null;
+    if (ownsBatch) {
       startBatch('AI: batch');
     }
     try {
       const result = await handleExecuteBatch(args, callerContext, options);
-      if (!options.suppressHistory) {
+      if (ownsBatch) {
         endBatch();
       }
       return result;
     } catch (error) {
-      if (!options.suppressHistory) {
+      if (ownsBatch) {
         endBatch();
       }
       log.error('Error executing batch', error);
@@ -248,6 +326,9 @@ async function executeGuidedAITool(
   options: AIToolExecutionOptions,
 ): Promise<ToolResult> {
   const inlineBatchExecution = toolName === 'executeBatch';
+  const ownsInlineBatch = inlineBatchExecution
+    && !options.suppressHistory
+    && useHistoryStore.getState().batchId === null;
   const compiled = compileGuidedToolCall({
     tool: toolName,
     args,
@@ -260,7 +341,9 @@ async function executeGuidedAITool(
     executeTool: (tool, toolArgs, nestedCallerContext, nestedOptions) => (
       _executeAIToolInternal(tool, toolArgs, nestedCallerContext, {
         ...nestedOptions,
-        suppressHistory: inlineBatchExecution || nestedOptions?.suppressHistory,
+        suppressHistory: inlineBatchExecution
+          || options.suppressHistory
+          || nestedOptions?.suppressHistory,
       })
     ),
   });
@@ -271,7 +354,7 @@ async function executeGuidedAITool(
   }));
 
   try {
-    if (inlineBatchExecution) {
+    if (ownsInlineBatch) {
       startBatch('AI: batch');
     }
     const result = await runtime.startSession({
@@ -293,7 +376,7 @@ async function executeGuidedAITool(
       ? batchToolResultFromGuidedSession(args, result)
       : toolResultFromGuidedSession(toolName, result);
   } finally {
-    if (inlineBatchExecution) {
+    if (ownsInlineBatch) {
       endBatch();
     }
     unregisterHandlers();
@@ -314,7 +397,10 @@ async function executeGuidedAIToolCallGroup(
     defaultCallerContext: callerContext,
     defaultLegacyFeedback: getGuidedLegacyFeedback(options),
     executeTool: (tool, toolArgs, nestedCallerContext, nestedOptions) => (
-      _executeAIToolInternal(tool, toolArgs, nestedCallerContext, nestedOptions)
+      _executeAIToolInternal(tool, toolArgs, nestedCallerContext, {
+        ...nestedOptions,
+        suppressHistory: options.suppressHistory || nestedOptions?.suppressHistory,
+      })
     ),
   });
   const runtime = getGuidedActionRuntime();
@@ -353,23 +439,76 @@ async function executeAIToolCallsDirect(
   callerContext: CallerContext,
   options: AIToolExecutionOptions,
 ): Promise<AIToolCallExecutionResult[]> {
+  const auditCompletions: AgentToolAuditCompletion[] = [];
   const results: AIToolCallExecutionResult[] = [];
-  for (let index = 0; index < toolCalls.length; index++) {
-    const toolCall = toolCalls[index];
-    if (!toolCall) {
-      continue;
+  const transaction = beginTransactionForToolCalls(toolCalls, options);
+  try {
+    for (let index = 0; index < toolCalls.length; index++) {
+      const toolCall = toolCalls[index];
+      if (!toolCall) {
+        continue;
+      }
+      const result = await executeAIToolWithDeferredAudit(toolCall.tool, toolCall.args, callerContext, {
+        ...options,
+        auditProviderToolCallId: toolCall.id,
+        guidedReplayRemainingCalls: toolCalls.length - index,
+        suppressHistory: transaction ? true : options.suppressHistory,
+      }, (completion) => auditCompletions.push(completion));
+      results.push({
+        id: toolCall.id,
+        tool: toolCall.tool,
+        result,
+      });
     }
-    const result = await executeAITool(toolCall.tool, toolCall.args, callerContext, {
-      ...options,
-      guidedReplayRemainingCalls: toolCalls.length - index,
-    });
-    results.push({
-      id: toolCall.id,
-      tool: toolCall.tool,
-      result,
-    });
+    const partialFailure = createGroupedPartialFailureInfo(
+      results,
+      transaction,
+      options.suppressHistory === true,
+    );
+    let finalResults = results;
+    let rollbackReason: string | undefined;
+    if (partialFailure) {
+      if (transaction) {
+        abortAgentTransaction(transaction);
+      }
+      finalResults = attachGroupedPartialFailure(results, partialFailure);
+      rollbackReason = partialFailure.rolledBack ? createGroupedRollbackReason(partialFailure) : undefined;
+    } else if (transaction) {
+      commitAgentTransaction(transaction);
+    }
+    for (const [index, completion] of auditCompletions.entries()) {
+      const result = rollbackReason !== undefined && MODIFYING_TOOLS.has(completion.tool)
+        ? completion.result
+        : finalResults[index]?.result ?? completion.result;
+      completeAgentToolAudit({ ...completion, result }, rollbackReason);
+    }
+    return finalResults;
+  } catch (error) {
+    const rollbackReason = transaction ? createAgentTransactionRollbackReason(transaction, error) : undefined;
+    if (transaction) {
+      abortAgentTransaction(transaction);
+    }
+    for (const completion of auditCompletions) {
+      completeAgentToolAudit(completion, rollbackReason);
+    }
+    throw error;
   }
-  return results;
+}
+
+function beginTransactionForToolCalls(
+  toolCalls: AIToolCallExecution[],
+  options: AIToolExecutionOptions,
+) {
+  if (options.suppressHistory
+    || !toolCalls.some((toolCall) => MODIFYING_TOOLS.has(toolCall.tool))) {
+    return null;
+  }
+
+  const firstTool = toolCalls[0]?.tool ?? 'unknown';
+  const additionalToolCount = toolCalls.length - 1;
+  return beginAgentTransaction(
+    `AI task: ${firstTool}${additionalToolCount > 0 ? ` +${additionalToolCount}` : ''}`,
+  );
 }
 
 function shouldUseGuidedAIToolExecution(

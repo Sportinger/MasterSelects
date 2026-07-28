@@ -18,6 +18,9 @@ export type MediaSourceReplacementPatch = Partial<Pick<
   | 'proxyFps'
   | 'proxyFormat'
   | 'proxyVideoUrl'
+  | 'sceneCutStatus'
+  | 'sceneCutProgress'
+  | 'sceneCutAnalysis'
   | 'hasProxyAudio'
   | 'audioProxyStatus'
   | 'audioProxyProgress'
@@ -40,6 +43,9 @@ export function createMediaSourceReplacementResetPatch(fileHash?: string): Media
     proxyFps: undefined,
     proxyFormat: undefined,
     proxyVideoUrl: undefined,
+    sceneCutStatus: undefined,
+    sceneCutProgress: undefined,
+    sceneCutAnalysis: undefined,
     hasProxyAudio: undefined,
     audioProxyStatus: undefined,
     audioProxyProgress: undefined,

@@ -2,6 +2,10 @@
 
 import { useTimelineStore } from '../../../stores/timeline';
 import type { ToolResult } from '../types';
+import {
+  captureMutationEntitySnapshot,
+  describeMutationEntities,
+} from './mutationEntityResults';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
@@ -10,6 +14,10 @@ export async function handleCreateTrack(
   timelineStore: TimelineStore
 ): Promise<ToolResult> {
   const type = args.type as 'video' | 'audio';
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'track',
+    useTimelineStore.getState().tracks,
+  );
   const trackId = timelineStore.addTrack(type);
   const track = timelineStore.tracks.find(t => t.id === trackId);
 
@@ -19,6 +27,10 @@ export async function handleCreateTrack(
       trackId,
       trackName: track?.name,
       trackType: type,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().tracks,
+      ),
     },
   };
 }
@@ -33,8 +45,22 @@ export async function handleDeleteTrack(
     return { success: false, error: `Track not found: ${trackId}` };
   }
 
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'track',
+    useTimelineStore.getState().tracks,
+  );
   timelineStore.removeTrack(trackId);
-  return { success: true, data: { deletedTrackId: trackId, trackName: track.name } };
+  return {
+    success: true,
+    data: {
+      deletedTrackId: trackId,
+      trackName: track.name,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().tracks,
+      ),
+    },
+  };
 }
 
 export async function handleSetTrackVisibility(
@@ -49,8 +75,22 @@ export async function handleSetTrackVisibility(
     return { success: false, error: `Track not found: ${trackId}` };
   }
 
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'track',
+    useTimelineStore.getState().tracks,
+  );
   timelineStore.setTrackVisible(trackId, visible);
-  return { success: true, data: { trackId, visible } };
+  return {
+    success: true,
+    data: {
+      trackId,
+      visible,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().tracks,
+      ),
+    },
+  };
 }
 
 export async function handleSetTrackMuted(
@@ -65,6 +105,20 @@ export async function handleSetTrackMuted(
     return { success: false, error: `Track not found: ${trackId}` };
   }
 
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'track',
+    useTimelineStore.getState().tracks,
+  );
   timelineStore.setTrackMuted(trackId, muted);
-  return { success: true, data: { trackId, muted } };
+  return {
+    success: true,
+    data: {
+      trackId,
+      muted,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().tracks,
+      ),
+    },
+  };
 }

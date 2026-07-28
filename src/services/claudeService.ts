@@ -1,5 +1,5 @@
-// Claude Service
-// Interfaces with Claude API to generate edit decision lists
+// Kie.ai Claude Service
+// Uses Claude through Kie.ai to generate edit decision lists.
 
 import { Logger } from './logger';
 import type {
@@ -10,8 +10,10 @@ import type {
   EditStyle,
 } from '../stores/multicamStore';
 import { apiKeyManager } from './apiKeyManager';
+import { requestKieChatByo } from './kieAi/chatTransport';
 
-const log = Logger.create('ClaudeService');
+const log = Logger.create('KieEdlService');
+const KIE_EDL_MODEL = 'claude-sonnet-5';
 
 type ParsedEDLItem = {
   start?: unknown;
@@ -253,32 +255,25 @@ function parseEDLResponse(response: string, cameras: MultiCamSource[]): EditDeci
   }
 }
 
-class ClaudeService {
-  private apiEndpoint = 'https://api.anthropic.com/v1/messages';
-
+class KieEdlService {
   /**
-   * Generate an EDL using Claude
+   * Generate an EDL using Claude Sonnet through Kie.ai.
    */
   async generateEDL(params: GenerateEDLParams): Promise<EditDecision[]> {
-    const apiKey = await apiKeyManager.getKey();
+    const apiKey = await apiKeyManager.getKeyByType('kieai');
     if (!apiKey) {
-      throw new Error('API key not configured');
+      throw new Error('Kie.ai API key not configured');
     }
 
     const prompt = buildPrompt(params);
     log.info('Generating EDL...');
 
     try {
-      const response = await fetch(this.apiEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+      const data = await requestKieChatByo({
+        apiKey,
+        endpoint: '/claude/v1/messages',
+        body: {
+          model: KIE_EDL_MODEL,
           max_tokens: 4096,
           messages: [
             {
@@ -286,31 +281,30 @@ class ClaudeService {
               content: prompt,
             },
           ],
-        }),
+        },
       });
+      const responseRecord = data && typeof data === 'object'
+        ? data as Record<string, unknown>
+        : null;
+      const contentItems = Array.isArray(responseRecord?.content)
+        ? responseRecord.content
+        : [];
+      const content = contentItems.find((item) => (
+        item
+        && typeof item === 'object'
+        && (item as Record<string, unknown>).type === 'text'
+        && typeof (item as Record<string, unknown>).text === 'string'
+      ));
+      const responseText = content && typeof content === 'object'
+        ? (content as Record<string, unknown>).text
+        : null;
 
-      if (!response.ok) {
-        const errorBody = await response.text();
-        log.error(`API error: ${response.status}`, errorBody);
-
-        if (response.status === 401) {
-          throw new Error('Invalid API key. Please check your Claude API key in settings.');
-        } else if (response.status === 429) {
-          throw new Error('Rate limited. Please wait a moment and try again.');
-        } else {
-          throw new Error(`API request failed: ${response.status}`);
-        }
-      }
-
-      const data = await response.json();
-      const content = data.content?.[0]?.text;
-
-      if (!content) {
-        throw new Error('Empty response from Claude');
+      if (typeof responseText !== 'string' || !responseText.trim()) {
+        throw new Error('Empty response from Kie.ai Claude');
       }
 
       log.debug('Received response, parsing EDL...');
-      const edl = parseEDLResponse(content, params.cameras);
+      const edl = parseEDLResponse(responseText, params.cameras);
 
       log.info(`Generated ${edl.length} edit decisions`);
       return edl;
@@ -322,4 +316,4 @@ class ClaudeService {
 }
 
 // Singleton instance
-export const claudeService = new ClaudeService();
+export const kieEdlService = new KieEdlService();

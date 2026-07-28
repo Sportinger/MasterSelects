@@ -471,7 +471,7 @@ export const useMultiCamStore = create<MultiCamStore>()(
       if (!apiKeySet) {
         set({
           edlStatus: 'error',
-          edlError: 'API key not set. Please configure your Claude API key in settings.',
+          edlError: 'API key not set. Please configure your Kie.ai API key in settings.',
         });
         return;
       }
@@ -482,10 +482,9 @@ export const useMultiCamStore = create<MultiCamStore>()(
       });
 
       try {
-        // Import Claude service dynamically
-        const { claudeService } = await import('../services/claudeService');
+        const { kieEdlService } = await import('../services/claudeService');
 
-        const edl = await claudeService.generateEDL({
+        const edl = await kieEdlService.generateEDL({
           cameras,
           analysis,
           transcript,
@@ -611,11 +610,10 @@ export const useMultiCamStore = create<MultiCamStore>()(
 
     setApiKey: async (key: string) => {
       try {
-        // Import API key manager dynamically
         const { apiKeyManager } = await import('../services/apiKeyManager');
-        await apiKeyManager.storeKey(key);
+        await apiKeyManager.storeKeyByType('kieai', key);
         set({ apiKeySet: true, apiKey: null }); // Don't store raw key in state
-        log.info('API key stored');
+        log.info('Kie.ai API key stored');
       } catch (error) {
         log.error('Failed to store API key:', error);
         throw error;
@@ -625,9 +623,9 @@ export const useMultiCamStore = create<MultiCamStore>()(
     clearApiKey: async () => {
       try {
         const { apiKeyManager } = await import('../services/apiKeyManager');
-        await apiKeyManager.clearKey();
+        await apiKeyManager.clearKeyByType('kieai');
         set({ apiKeySet: false, apiKey: null });
-        log.info('API key cleared');
+        log.info('Kie.ai API key cleared');
       } catch (error) {
         log.error('Failed to clear API key:', error);
       }
@@ -679,7 +677,7 @@ if (typeof window !== 'undefined') {
   setTimeout(async () => {
     try {
       const { apiKeyManager } = await import('../services/apiKeyManager');
-      const hasKey = await apiKeyManager.hasKey();
+      const hasKey = await apiKeyManager.hasKeyByType('kieai');
       useMultiCamStore.setState({ apiKeySet: hasKey });
     } catch (error) {
       log.warn('Failed to check API key:', error);

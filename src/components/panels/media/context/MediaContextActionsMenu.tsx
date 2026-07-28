@@ -55,7 +55,11 @@ export interface MediaContextActionsMenuProps {
   onOpenImageCrop: (mediaFile: MediaFile) => void;
   onOpenSolidSettings: (solidItem: SolidItem) => void;
   onCancelProxyGeneration: (mediaFileId: string) => void;
-  onGenerateProxy: (mediaFileId: string, options: { force: boolean }) => void;
+  onGenerateProxy: (
+    mediaFileId: string,
+    options: { force?: boolean },
+  ) => void;
+  onAnalyzeSceneCuts: (mediaFileId: string, options: { force?: boolean }) => void;
   onRegenerateThumbnails: (mediaFile: MediaFile) => void;
   onRegenerateAudioProxy: (mediaFile: MediaFile, force: boolean) => void;
   onRegenerateWaveform: (mediaFile: MediaFile) => void;
@@ -123,6 +127,7 @@ export function MediaContextActionsMenu({
   onOpenSolidSettings,
   onCancelProxyGeneration,
   onGenerateProxy,
+  onAnalyzeSceneCuts,
   onRegenerateThumbnails,
   onRegenerateAudioProxy,
   onRegenerateWaveform,
@@ -287,6 +292,7 @@ export function MediaContextActionsMenu({
               hasSourceSpectrogram={hasSourceSpectrogram}
               onCancelProxyGeneration={onCancelProxyGeneration}
               onGenerateProxy={onGenerateProxy}
+              onAnalyzeSceneCuts={onAnalyzeSceneCuts}
               onRegenerateThumbnails={onRegenerateThumbnails}
               onRegenerateAudioProxy={onRegenerateAudioProxy}
               onRegenerateWaveform={onRegenerateWaveform}

@@ -1,4 +1,7 @@
-import * as ort from 'onnxruntime-web/webgpu';
+// Face analysis runs on ONNX Runtime's WASM build. The WebGPU bundle can hang
+// while compiling YuNet/SFace on otherwise usable Windows WebGPU adapters;
+// keeping this independent of the renderer makes analysis reliably cancellable.
+import * as ort from 'onnxruntime-web/wasm';
 import type {
   FaceAnalysisBackend,
   FaceAnalysisBox,
@@ -13,6 +16,10 @@ import type {
 const YUNET_SCORE_THRESHOLD = 0.72;
 const YUNET_NMS_THRESHOLD = 0.3;
 const YUNET_STRIDES = [8, 16, 32] as const;
+// The face canvas has a 640 px maximum edge. Smaller detections remain visible
+// for visual review, but cannot produce an SFace descriptor reliable enough to
+// enter an automatic person group.
+const MIN_RECOGNITION_FACE_SIZE = 36;
 const SFACE_SIZE = 112;
 const SFACE_TARGET: readonly [number, number][] = [
   [38.2946, 51.6963],
@@ -70,26 +77,9 @@ function createSession(
   });
 }
 
-async function createSessions(preferWebGpu: boolean): Promise<void> {
+async function createSessions(): Promise<void> {
   if (!yunetModelBuffer || !sfaceModelBuffer) {
     throw new Error('YuNet and SFace model buffers are unavailable.');
-  }
-
-  const canUseWebGpu = preferWebGpu && Boolean(
-    (self.navigator as Navigator & { gpu?: GPU }).gpu,
-  );
-  if (canUseWebGpu) {
-    try {
-      [yunetSession, sfaceSession] = await Promise.all([
-        createSession(yunetModelBuffer, ['webgpu', 'wasm']),
-        createSession(sfaceModelBuffer, ['webgpu', 'wasm']),
-      ]);
-      loadedBackend = 'webgpu';
-      return;
-    } catch {
-      yunetSession = null;
-      sfaceSession = null;
-    }
   }
 
   [yunetSession, sfaceSession] = await Promise.all([
@@ -365,12 +355,14 @@ async function analyzeFrame(
   const detections: FaceRuntimeDetection[] = [];
 
   for (const face of faces) {
+    const identityEligible = Math.min(face.box.width, face.box.height) >= MIN_RECOGNITION_FACE_SIZE;
     const input = prepareSFaceInput(rgba, width, height, face.landmarks);
     const output = await sfaceSession.run({ data: input });
     const embeddingValue = output.fc1 ?? output[sfaceSession.outputNames[0] ?? 'fc1'];
     if (!embeddingValue) throw new Error('SFace embedding output is missing.');
     detections.push({
       confidence: face.confidence,
+      identityEligible,
       box: normalizeBox(face.box, width, height),
       landmarks: normalizeLandmarks(face.landmarks, width, height),
       embedding: normalizeEmbedding(embeddingValue.data as ort.TypedTensor<'float32'>['data']),
@@ -385,13 +377,7 @@ async function analyzeWithFallback(
   width: number,
   height: number,
 ): Promise<FaceRuntimeDetection[]> {
-  try {
-    return await analyzeFrame(rgba, width, height);
-  } catch (error) {
-    if (loadedBackend !== 'webgpu') throw error;
-    await createSessions(false);
-    return analyzeFrame(rgba, width, height);
-  }
+  return analyzeFrame(rgba, width, height);
 }
 
 self.onmessage = async (event: MessageEvent<FaceWorkerRequest>) => {
@@ -400,7 +386,7 @@ self.onmessage = async (event: MessageEvent<FaceWorkerRequest>) => {
     if (message.type === 'initialize') {
       yunetModelBuffer = message.yunetBuffer;
       sfaceModelBuffer = message.sfaceBuffer;
-      await createSessions(message.preferWebGpu);
+      await createSessions();
       post({ type: 'ready', backend: loadedBackend });
       return;
     }

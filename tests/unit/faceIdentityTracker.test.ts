@@ -38,6 +38,19 @@ describe('FaceIdentityTracker', () => {
     expect(summary.people[0]?.appearances).toEqual([{ start: 1, end: 1.5 }]);
   });
 
+  it('keeps the same person together across a non-adjacent pose change', () => {
+    const tracker = new FaceIdentityTracker();
+
+    const frontal = tracker.track(1, [detection([1, 0, 0])]);
+    // Cosine similarity 0.4: above SFace's calibrated 0.363 same-person
+    // boundary, but below the old overly strict 0.45 application cutoff.
+    const profile = tracker.track(5, [detection([0.4, Math.sqrt(0.84), 0], 0.55)]);
+
+    expect(frontal[0]?.personId).toBe('person-1');
+    expect(profile[0]?.personId).toBe('person-1');
+    expect(tracker.summarize('wasm').people).toHaveLength(1);
+  });
+
   it('reconstructs compact people summaries from cached observations', () => {
     const frames = [
       {
@@ -75,4 +88,3 @@ describe('FaceIdentityTracker', () => {
     });
   });
 });
-

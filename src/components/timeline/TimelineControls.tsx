@@ -20,6 +20,7 @@ import { useTimelineStore } from '../../stores/timeline';
 import { AudioEffectStackControl } from '../panels/properties/AudioEffectStackControl';
 import { AudioLevelMeter } from './components/AudioLevelMeter';
 import { RulerLanesMenu } from './RulerLanesMenu';
+import { MetronomeButton } from './MetronomeButton';
 import { TimelineToolPalette } from './tools/TimelineToolPalette';
 import { AudioExportPipeline } from '../../engine/audio/AudioExportPipeline';
 import { audioRecordingService } from '../../services/audio/AudioRecordingService';
@@ -84,6 +85,8 @@ function TimelineControlsComponent({
   const masterDropdownRef = useRef<HTMLDivElement>(null);
   const masterAudioState = useTimelineStore(state => state.masterAudioState);
   const runAudioExportPreflight = useTimelineStore(state => state.runAudioExportPreflight);
+  const showFaceRanges = useTimelineStore(state => state.showFaceRanges);
+  const toggleFaceRanges = useTimelineStore(state => state.toggleFaceRanges);
   const timelineTracks = useTimelineStore(state => state.tracks);
   const propertiesSelection = useTimelineStore(state => state.propertiesSelection);
   const armedAudioTracks = useMemo(
@@ -442,6 +445,7 @@ function TimelineControlsComponent({
       </div>
       <div className="timeline-ram-preview">
         <RulerLanesMenu />
+        <MetronomeButton />
         <div className="view-dropdown" ref={viewDropdownRef}>
           <button
             className={`btn btn-sm ${viewDropdownOpen ? 'btn-active' : ''}`}
@@ -479,6 +483,13 @@ function TimelineControlsComponent({
               >
                 <span className={`view-check ${waveformsEnabled ? 'checked' : ''}`}>✓</span>
                 <span>Waveforms</span>
+              </div>
+              <div
+                className="view-dropdown-item"
+                onClick={toggleFaceRanges}
+              >
+                <span className={`view-check ${showFaceRanges ? 'checked' : ''}`}>âœ“</span>
+                <span>Face Ranges</span>
               </div>
               <div className="view-dropdown-divider" />
               <div

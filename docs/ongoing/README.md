@@ -8,10 +8,12 @@ note here when a plan still has unresolved gates or intentionally deferred work.
 
 | File | Status | Why It Stays Here |
 |---|---|---|
+| [Agent-Timeline-Analysis-Index-Plan.md](./Agent-Timeline-Analysis-Index-Plan.md) | Planning and cost validation | Versioned, range-queryable agent timeline, eight derived channels, and a unified visual scene/transcript analysis workspace; benchmark and granularity gates are still open. |
 | [Browser-Local-Background-Removal-Plan.md](./Browser-Local-Background-Removal-Plan.md) | Planning | Browser-local background removal is still open. |
 | [Screen-Capture-Panel-Plan.md](./Screen-Capture-Panel-Plan.md) | Manual validation pending | P1-P9 implementation and local build/lint/test gates are green; real picker/audio/crop, 10-minute memory, interrupted-tab recovery, pushed Security Checks, and final archive remain open. |
 | [Native-Helper-Codec-Service.md](./Native-Helper-Codec-Service.md) | Draft plan | Native helper codec commands are not implemented server-side yet. |
 | [Transition-Nested-Composition-Architecture.md](./Transition-Nested-Composition-Architecture.md) | Runtime smoke pending | Transition rendering is now statically rebuilt as hidden nested compositions; Bridge/export smoke checks still need approval. |
+| [BPM-Tempo-Management-Plan.md](./BPM-Tempo-Management-Plan.md) | Complete | Issue #299: editable tempo track with ramps, tempo-driven grid/snap, MIDI follows tempo, metronome click. All 7 packets landed on `299-add-bpm-management`; count-in deferred. Feature docs: [Tempo And Metronome](../Features/Tempo-And-Metronome.md). |
 | [Timeline-Section-Split-Jitter-Bug.md](./Timeline-Section-Split-Jitter-Bug.md) | **TODO / open bug** | Timeline section jitters vertically when editing a selected track's panel in a short window; root-caused with live data, fix not started (pre-existing, not synth). |
 
 ## Recently Archived

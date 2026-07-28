@@ -6,7 +6,7 @@
 export type ThemeMode = 'dark' | 'light' | 'midnight' | 'system' | 'crazy' | 'custom';
 
 // Transcription provider options
-export type TranscriptionProvider = 'local' | 'openai' | 'assemblyai' | 'deepgram';
+export type TranscriptionProvider = 'local' | 'openai' | 'assemblyai' | 'deepgram' | 'hybrid';
 
 // Preview quality options (multiplier on base resolution)
 export type PreviewQuality = 1 | 0.5 | 0.25;
@@ -41,11 +41,11 @@ export function clampShortcutDisplayScale(value: number): number {
 
 export interface APIKeys {
   openai: string;
-  anthropic: string; // Anthropic key for Claude chat models
+  anthropic: string; // Legacy Anthropic key retained for settings migration
   assemblyai: string;
   deepgram: string;
   piapi: string;  // PiAPI key for AI video generation (Kling, Luma, etc.)
-  kieai: string;  // Kie.ai key for Kling 3.0 and Nano Banana 2
+  kieai: string;  // Kie.ai key for chat plus hosted media providers
   evolink: string; // EvoLink key for Nano Banana 2 fallback image generation
   elevenlabs: string; // ElevenLabs key for AI audio generation
   youtube: string; // YouTube Data API v3 key (optional, Invidious works without)

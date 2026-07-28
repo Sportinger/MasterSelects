@@ -8,12 +8,15 @@ import {
   mapAssemblyAIWords,
   mapDeepgramWords,
   mapOpenAIWords,
+  expandDiarizedSegmentsToWords,
+  type TranscriptApiSegment,
   type TranscriptApiWord,
 } from './resultMapping';
 
 const log = Logger.create('ClipTranscriber');
 
 interface OpenAITranscriptionResponse {
+  segments?: TranscriptApiSegment[];
   words?: Array<{ word: string; start: number; end: number }>;
 }
 
@@ -36,7 +39,13 @@ interface DeepgramResponse {
 
 type TranscriptUpdater = (clipId: string, data: ClipTranscriptUpdate) => void;
 
-const OPENAI_MAX_BYTES = 24 * 1024 * 1024;
+const HOSTED_TRANSCRIPTION_MAX_BYTES = 24 * 1024 * 1024;
+type HostedTranscriptionProvider = 'deepgram' | 'openai';
+export type OpenAITranscriptionVariant = 'word-timestamps' | 'diarized-speakers';
+export interface TranscriptionRequestOptions {
+  openAIVariant?: OpenAITranscriptionVariant;
+  signal?: AbortSignal;
+}
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -49,6 +58,8 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 function createHostedTranscriptionIdempotencyKey(
+  provider: HostedTranscriptionProvider,
+  openAIVariant: OpenAITranscriptionVariant,
   clipId: string,
   requestId: string,
   audioBlob: Blob,
@@ -57,7 +68,8 @@ function createHostedTranscriptionIdempotencyKey(
   chunkIndex?: number,
 ): string {
   const chunk = chunkIndex === undefined ? 'single' : `chunk-${chunkIndex}`;
-  return `transcription:${requestId}:${clipId}:${Math.round(inPointOffset * 1000)}:${audioBlob.size}:${language}:${chunk}`;
+  const variant = provider === 'openai' ? `:${openAIVariant}` : '';
+  return `transcription:${provider}${variant}:${requestId}:${clipId}:${Math.round(inPointOffset * 1000)}:${audioBlob.size}:${language}:${chunk}`;
 }
 
 function createHostedTranscriptionRequestId(): string {
@@ -74,14 +86,40 @@ export async function transcribeWithCloudProvider(
   apiKey: string,
   inPointOffset: number,
   updateClipTranscript: TranscriptUpdater,
+  options?: TranscriptionRequestOptions,
 ): Promise<TranscriptWord[]> {
   switch (provider) {
     case 'openai':
-      return transcribeWithOpenAI(clipId, audioBlob, language, apiKey, inPointOffset, updateClipTranscript);
+      return transcribeWithOpenAI(
+        clipId,
+        audioBlob,
+        language,
+        apiKey,
+        inPointOffset,
+        updateClipTranscript,
+        options?.openAIVariant,
+        options?.signal,
+      );
     case 'assemblyai':
-      return transcribeWithAssemblyAI(clipId, audioBlob, language, apiKey, inPointOffset, updateClipTranscript);
+      return transcribeWithAssemblyAI(
+        clipId,
+        audioBlob,
+        language,
+        apiKey,
+        inPointOffset,
+        updateClipTranscript,
+        options?.signal,
+      );
     case 'deepgram':
-      return transcribeWithDeepgram(clipId, audioBlob, language, apiKey, inPointOffset, updateClipTranscript);
+      return transcribeWithDeepgram(
+        clipId,
+        audioBlob,
+        language,
+        apiKey,
+        inPointOffset,
+        updateClipTranscript,
+        options?.signal,
+      );
     default:
       throw new Error(`Unknown provider: ${provider}`);
   }
@@ -91,20 +129,31 @@ async function openAISingleRequest(
   audioBlob: Blob,
   language: string,
   apiKey: string,
-): Promise<Array<{ word: string; start: number; end: number }>> {
+  variant: OpenAITranscriptionVariant,
+  signal?: AbortSignal,
+): Promise<TranscriptApiWord[]> {
   const formData = new FormData();
   formData.append('file', audioBlob, 'audio.wav');
-  formData.append('model', 'whisper-1');
+  formData.append(
+    'model',
+    variant === 'diarized-speakers' ? 'gpt-4o-transcribe-diarize' : 'whisper-1',
+  );
   if (language !== 'auto') {
     formData.append('language', language);
   }
-  formData.append('response_format', 'verbose_json');
-  formData.append('timestamp_granularities[]', 'word');
+  if (variant === 'diarized-speakers') {
+    formData.append('response_format', 'diarized_json');
+    formData.append('chunking_strategy', 'auto');
+  } else {
+    formData.append('response_format', 'verbose_json');
+    formData.append('timestamp_granularities[]', 'word');
+  }
 
   const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}` },
     body: formData,
+    signal,
   });
 
   if (!response.ok) {
@@ -113,20 +162,27 @@ async function openAISingleRequest(
   }
 
   const result = await response.json() as OpenAITranscriptionResponse;
-  return result.words || [];
+  return variant === 'diarized-speakers'
+    ? expandDiarizedSegmentsToWords(result.segments ?? [])
+    : result.words ?? [];
 }
 
-async function hostedOpenAISingleRequest(
+async function hostedTranscriptionSingleRequest(
+  provider: HostedTranscriptionProvider,
+  openAIVariant: OpenAITranscriptionVariant,
   clipId: string,
   requestId: string,
   audioBlob: Blob,
   language: string,
   inPointOffset: number,
+  signal?: AbortSignal,
   chunkIndex?: number,
-): Promise<Array<{ word: string; start: number; end: number }>> {
+): Promise<TranscriptApiWord[]> {
   const response = await cloudApi.ai.audio.transcription({
     action: 'transcription',
     idempotencyKey: createHostedTranscriptionIdempotencyKey(
+      provider,
+      openAIVariant,
       clipId,
       requestId,
       audioBlob,
@@ -139,46 +195,73 @@ async function hostedOpenAISingleRequest(
       fileName: 'audio.wav',
       language,
       mimeType: audioBlob.type || 'audio/wav',
+      provider,
+      ...(provider === 'openai' ? { variant: openAIVariant } : {}),
     },
-  });
+  }, signal);
 
   if (typeof response.creditBalance === 'number') {
     useAccountStore.getState().applyHostedCreditBalance(response.creditBalance);
   }
 
   if (!response.ok) {
-    throw new Error(response.error?.message ?? 'Hosted OpenAI transcription failed.');
+    throw new Error(response.error?.message ?? `Hosted ${provider === 'deepgram' ? 'Deepgram' : 'OpenAI'} transcription failed.`);
   }
 
   return response.data?.words ?? [];
 }
 
-export async function transcribeWithHostedOpenAI(
+export function mapHostedTranscriptionWords(
+  provider: HostedTranscriptionProvider,
+  rawWords: TranscriptApiWord[],
+  inPointOffset: number,
+  startIndex: number = 0,
+): TranscriptWord[] {
+  return provider === 'deepgram'
+    ? mapDeepgramWords(rawWords, inPointOffset, startIndex)
+    : mapOpenAIWords(rawWords, inPointOffset, startIndex);
+}
+
+export async function transcribeWithHostedProvider(
+  provider: HostedTranscriptionProvider,
   clipId: string,
   audioBlob: Blob,
   language: string,
   inPointOffset: number,
   updateClipTranscript: TranscriptUpdater,
+  options?: TranscriptionRequestOptions,
 ): Promise<TranscriptWord[]> {
   const requestId = createHostedTranscriptionRequestId();
+  const providerName = provider === 'deepgram' ? 'Deepgram' : 'OpenAI Cloud';
+  const openAIVariant = options?.openAIVariant ?? 'word-timestamps';
 
-  if (audioBlob.size <= OPENAI_MAX_BYTES) {
-    updateClipTranscript(clipId, { progress: 20, message: 'Sending to OpenAI Cloud...' });
-    const rawWords = await hostedOpenAISingleRequest(clipId, requestId, audioBlob, language, inPointOffset);
+  if (audioBlob.size <= HOSTED_TRANSCRIPTION_MAX_BYTES) {
+    updateClipTranscript(clipId, { progress: 20, message: `Sending to ${providerName}...` });
+    const rawWords = await hostedTranscriptionSingleRequest(
+      provider,
+      openAIVariant,
+      clipId,
+      requestId,
+      audioBlob,
+      language,
+      inPointOffset,
+      options?.signal,
+    );
     updateClipTranscript(clipId, { progress: 80, message: 'Processing response...' });
-    return mapOpenAIWords(rawWords, inPointOffset);
+    return mapHostedTranscriptionWords(provider, rawWords, inPointOffset);
   }
 
   log.info(`Audio WAV is ${(audioBlob.size / 1024 / 1024).toFixed(1)}MB, splitting into chunks...`);
   updateClipTranscript(clipId, { progress: 10, message: 'Audio too large, splitting...' });
 
   const fullBuffer = await decodeAudioBlob(audioBlob);
-  const chunks = splitAudioBuffer(fullBuffer, OPENAI_MAX_BYTES);
+  const chunks = splitAudioBuffer(fullBuffer, HOSTED_TRANSCRIPTION_MAX_BYTES);
   const allWords: TranscriptWord[] = [];
   let globalWordIndex = 0;
   let sampleOffset = 0;
 
   for (let index = 0; index < chunks.length; index += 1) {
+    options?.signal?.throwIfAborted();
     const chunkTimeOffset = sampleOffset / fullBuffer.sampleRate;
     const progressBase = 15 + (70 * index / chunks.length);
     const progressEnd = 15 + (70 * (index + 1) / chunks.length);
@@ -189,15 +272,23 @@ export async function transcribeWithHostedOpenAI(
     });
 
     const chunkWav = await audioBufferToWav(chunks[index]);
-    const rawWords = await hostedOpenAISingleRequest(
+    const rawWords = await hostedTranscriptionSingleRequest(
+      provider,
+      openAIVariant,
       clipId,
       requestId,
       chunkWav,
       language,
       chunkTimeOffset + inPointOffset,
+      options?.signal,
       index,
     );
-    const mappedWords = mapOpenAIWords(rawWords, chunkTimeOffset + inPointOffset, globalWordIndex);
+    const mappedWords = mapHostedTranscriptionWords(
+      provider,
+      rawWords,
+      chunkTimeOffset + inPointOffset,
+      globalWordIndex,
+    );
     allWords.push(...mappedWords);
     globalWordIndex += mappedWords.length;
     sampleOffset += chunks[index].length;
@@ -212,6 +303,16 @@ export async function transcribeWithHostedOpenAI(
   return allWords;
 }
 
+export function transcribeWithHostedOpenAI(
+  clipId: string,
+  audioBlob: Blob,
+  language: string,
+  inPointOffset: number,
+  updateClipTranscript: TranscriptUpdater,
+): Promise<TranscriptWord[]> {
+  return transcribeWithHostedProvider('openai', clipId, audioBlob, language, inPointOffset, updateClipTranscript);
+}
+
 async function transcribeWithOpenAI(
   clipId: string,
   audioBlob: Blob,
@@ -219,11 +320,13 @@ async function transcribeWithOpenAI(
   apiKey: string,
   inPointOffset: number,
   updateClipTranscript: TranscriptUpdater,
+  variant: OpenAITranscriptionVariant = 'word-timestamps',
+  signal?: AbortSignal,
 ): Promise<TranscriptWord[]> {
-  if (audioBlob.size <= OPENAI_MAX_BYTES) {
+  if (audioBlob.size <= HOSTED_TRANSCRIPTION_MAX_BYTES) {
     updateClipTranscript(clipId, { progress: 20, message: 'Sending to OpenAI...' });
 
-    const rawWords = await openAISingleRequest(audioBlob, language, apiKey);
+    const rawWords = await openAISingleRequest(audioBlob, language, apiKey, variant, signal);
 
     updateClipTranscript(clipId, { progress: 80, message: 'Processing response...' });
 
@@ -234,7 +337,7 @@ async function transcribeWithOpenAI(
   updateClipTranscript(clipId, { progress: 10, message: 'Audio too large, splitting...' });
 
   const fullBuffer = await decodeAudioBlob(audioBlob);
-  const chunks = splitAudioBuffer(fullBuffer, OPENAI_MAX_BYTES);
+  const chunks = splitAudioBuffer(fullBuffer, HOSTED_TRANSCRIPTION_MAX_BYTES);
   log.info(`Split into ${chunks.length} chunks`);
 
   const allWords: TranscriptWord[] = [];
@@ -243,6 +346,7 @@ async function transcribeWithOpenAI(
   let sampleOffset = 0;
 
   for (let i = 0; i < chunks.length; i++) {
+    signal?.throwIfAborted();
     const chunkTimeOffset = sampleOffset / sampleRate;
     const progressBase = 15 + (70 * i / chunks.length);
     const progressEnd = 15 + (70 * (i + 1) / chunks.length);
@@ -253,7 +357,7 @@ async function transcribeWithOpenAI(
     });
 
     const chunkWav = await audioBufferToWav(chunks[i]);
-    const rawWords = await openAISingleRequest(chunkWav, language, apiKey);
+    const rawWords = await openAISingleRequest(chunkWav, language, apiKey, variant, signal);
     const mappedWords = mapOpenAIWords(rawWords, chunkTimeOffset + inPointOffset, globalWordIndex);
     allWords.push(...mappedWords);
     globalWordIndex += mappedWords.length;
@@ -277,6 +381,7 @@ async function transcribeWithAssemblyAI(
   apiKey: string,
   inPointOffset: number,
   updateClipTranscript: TranscriptUpdater,
+  signal?: AbortSignal,
 ): Promise<TranscriptWord[]> {
   updateClipTranscript(clipId, {
     progress: 15,
@@ -290,6 +395,7 @@ async function transcribeWithAssemblyAI(
       'Content-Type': 'application/octet-stream',
     },
     body: audioBlob,
+    signal,
   });
 
   if (!uploadResponse.ok) {
@@ -330,6 +436,7 @@ async function transcribeWithAssemblyAI(
         ? { language_detection: true }
         : { language_code: languageMap[language] || language }),
     }),
+    signal,
   });
 
   if (!transcriptResponse.ok) {
@@ -342,11 +449,14 @@ async function transcribeWithAssemblyAI(
   const maxAttempts = 120;
 
   while (attempts < maxAttempts) {
+    signal?.throwIfAborted();
     await new Promise((resolve) => setTimeout(resolve, 1000));
+    signal?.throwIfAborted();
     attempts++;
 
     const pollResponse = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
       headers: { Authorization: apiKey },
+      signal,
     });
 
     result = await pollResponse.json() as AssemblyTranscriptResponse;
@@ -383,6 +493,7 @@ async function transcribeWithDeepgram(
   apiKey: string,
   inPointOffset: number,
   updateClipTranscript: TranscriptUpdater,
+  signal?: AbortSignal,
 ): Promise<TranscriptWord[]> {
   updateClipTranscript(clipId, {
     progress: 20,
@@ -390,9 +501,10 @@ async function transcribeWithDeepgram(
   });
 
   const params = new URLSearchParams({
-    model: 'nova-2',
-    punctuate: 'true',
-    utterances: 'false',
+    diarize_model: 'latest',
+    model: 'nova-3',
+    smart_format: 'true',
+    utterances: 'true',
   });
   if (language === 'auto') {
     params.set('detect_language', 'true');
@@ -407,6 +519,7 @@ async function transcribeWithDeepgram(
       'Content-Type': 'audio/wav',
     },
     body: audioBlob,
+    signal,
   });
 
   if (!response.ok) {

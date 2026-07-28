@@ -29,6 +29,7 @@ export interface AIToolCallExecutionResult {
 }
 
 export interface AIToolExecutionOptions {
+  auditProviderToolCallId?: string;
   signal?: AbortSignal;
   staggerBudgetMs?: number;
   suppressHistory?: boolean;
@@ -53,6 +54,8 @@ export const MODIFYING_TOOLS = new Set([
   'createComposition', 'importLocalFiles',
   'createStressTestProjectFixture',
   'executeBatch',
+  // Face-analysis corrections
+  'mergeClipFacePeople', 'moveClipFaceAppearance', 'assignClipFaceReviewCandidate',
   // YouTube
   'downloadAndImportVideo',
   // Transform & Effects

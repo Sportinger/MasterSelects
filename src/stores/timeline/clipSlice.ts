@@ -53,7 +53,6 @@ function deepCloneClipProps(clip: TimelineClip): Partial<TimelineClip> {
     ...(clip.textProperties ? { textProperties: structuredClone(clip.textProperties) } : {}),
     ...(clip.transitionIn ? { transitionIn: structuredClone(clip.transitionIn) } : {}),
     ...(clip.transitionOut ? { transitionOut: structuredClone(clip.transitionOut) } : {}),
-    ...(clip.analysis ? { analysis: structuredClone(clip.analysis) } : {}),
   };
 }
 

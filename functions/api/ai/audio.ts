@@ -20,6 +20,9 @@ import {
   type HostedSunoTask,
 } from '../../lib/providers/kieai';
 import {
+  handleHostedDeepgramTranscriptionRequest,
+} from '../../lib/providers/deepgramTranscriptionRoute';
+import {
   handleHostedOpenAITranscriptionRequest,
 } from '../../lib/providers/openaiTranscriptionRoute';
 import {
@@ -88,7 +91,7 @@ function buildCapabilityResponse(context: AppContext, hostedContext: HostedAiCon
     elevenlabs: buildHostedElevenLabsCapabilities(),
     openaiTranscription: {
       creditsPerMinute: 6,
-      model: 'whisper-1',
+      models: ['whisper-1', 'gpt-4o-transcribe-diarize'],
       provider: 'openai',
     },
     suno: {
@@ -368,6 +371,24 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     const accessError = requireHostedAudioAccess(hostedContext, requestId);
     if (accessError) {
       return accessError;
+    }
+
+    const transcriptionProvider = typeof paramsInput === 'object'
+      && paramsInput !== null
+      && 'provider' in paramsInput
+      && paramsInput.provider === 'deepgram'
+      ? 'deepgram'
+      : 'openai';
+
+    if (transcriptionProvider === 'deepgram') {
+      return handleHostedDeepgramTranscriptionRequest({
+        billing: hostedContext.billing,
+        context,
+        idempotencyKey: rawBody.idempotencyKey,
+        paramsInput,
+        requestId,
+        user: hostedContext.user!,
+      });
     }
 
     return handleHostedOpenAITranscriptionRequest({

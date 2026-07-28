@@ -24,6 +24,7 @@ import type { TimelineClip, TimelineTrack, SerializableClip } from '../types';
 import { generateWaveformFromBuffer } from '../stores/timeline/helpers/waveformHelpers';
 import { MAX_NESTING_DEPTH } from '../stores/timeline/constants';
 import { blobUrlManager } from '../stores/timeline/helpers/blobUrlManager';
+import { computeTimelineOccupancy } from './timeline/timelineOccupancy';
 
 export interface CompositionMixdownResult {
   buffer: AudioBuffer;
@@ -122,7 +123,11 @@ class CompositionAudioMixerService {
 
     // Extract and decode audio from each clip
     const trackDataList: AudioTrackData[] = [];
-    const duration = composition.duration || Math.max(...clips.map(c => c.startTime + c.duration), 10);
+    // occupiedEnd: the mixdown spans actual clip occupancy, not composition tail padding.
+    const duration = computeTimelineOccupancy(
+      clips as TimelineClip[],
+      tracks,
+    ).occupied?.endSeconds ?? 0;
 
     for (let i = 0; i < audioClips.length; i++) {
       const clip = audioClips[i];

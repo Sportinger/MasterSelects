@@ -1,6 +1,9 @@
 import type { Env } from '../env';
 
-const OPENAI_TRANSCRIPTION_MODEL = 'whisper-1';
+export type OpenAITranscriptionVariant = 'word-timestamps' | 'diarized-speakers';
+
+const OPENAI_WORD_TRANSCRIPTION_MODEL = 'whisper-1';
+const OPENAI_DIARIZED_TRANSCRIPTION_MODEL = 'gpt-4o-transcribe-diarize';
 const OPENAI_TRANSCRIPTION_USD_PER_MINUTE = 0.006;
 const HOSTED_MASTERSELECTS_USD_PER_CREDIT = 0.001;
 
@@ -9,6 +12,7 @@ export interface HostedOpenAITranscriptionParams {
   fileName: string;
   language?: string;
   mimeType: string;
+  variant?: OpenAITranscriptionVariant;
 }
 
 export interface PreparedHostedOpenAITranscription {
@@ -17,15 +21,27 @@ export interface PreparedHostedOpenAITranscription {
   fileName: string;
   language?: string;
   mimeType: string;
+  variant: OpenAITranscriptionVariant;
 }
 
 export interface HostedOpenAITranscriptionResult {
   durationSeconds: number;
   model: string;
-  words: Array<{ word: string; start: number; end: number }>;
+  words: Array<{
+    end: number;
+    speaker?: number | string;
+    start: number;
+    word: string;
+  }>;
 }
 
 interface OpenAITranscriptionResponse {
+  segments?: Array<{
+    end?: number;
+    speaker?: number | string;
+    start?: number;
+    text?: string;
+  }>;
   words?: Array<{ word: string; start: number; end: number }>;
 }
 
@@ -35,6 +51,48 @@ function asString(value: unknown): string | undefined {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function normalizeOpenAITranscriptionVariant(value: unknown): OpenAITranscriptionVariant {
+  return value === 'diarized-speakers' || value === 'diarized-review'
+    ? 'diarized-speakers'
+    : 'word-timestamps';
+}
+
+function transcriptTokenWeight(value: string): number {
+  const normalizedLength = Array.from(value.replace(/[^\p{L}\p{N}]/gu, '')).length;
+  return Math.max(1, normalizedLength);
+}
+
+function expandDiarizedSegments(
+  segments: NonNullable<OpenAITranscriptionResponse['segments']>,
+): HostedOpenAITranscriptionResult['words'] {
+  return segments.flatMap((segment) => {
+    const tokens = segment.text?.trim().split(/\s+/).filter(Boolean) ?? [];
+    if (tokens.length === 0) return [];
+
+    const start = typeof segment.start === 'number' ? segment.start : 0;
+    const requestedEnd = typeof segment.end === 'number' ? segment.end : start + tokens.length * 0.2;
+    const end = Math.max(start + tokens.length * 0.04, requestedEnd);
+    const duration = end - start;
+    const weights = tokens.map(transcriptTokenWeight);
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+    let cursor = start;
+
+    return tokens.map((token, index) => {
+      const tokenEnd = index === tokens.length - 1
+        ? end
+        : cursor + duration * (weights[index] / totalWeight);
+      const word = {
+        end: tokenEnd,
+        speaker: segment.speaker,
+        start: cursor,
+        word: token,
+      };
+      cursor = tokenEnd;
+      return word;
+    });
+  });
 }
 
 function getOpenAIKey(env: Env): string {
@@ -104,6 +162,7 @@ export function normalizeHostedOpenAITranscriptionParams(value: unknown): Hosted
     fileName: asString(value.fileName ?? value.file_name) ?? 'audio.wav',
     language: asString(value.language),
     mimeType: asString(value.mimeType ?? value.mime_type) ?? 'audio/wav',
+    variant: normalizeOpenAITranscriptionVariant(value.variant),
   };
 }
 
@@ -117,6 +176,7 @@ export function prepareHostedOpenAITranscription(
     fileName: params.fileName,
     language: params.language === 'auto' ? undefined : params.language,
     mimeType: params.mimeType,
+    variant: params.variant ?? 'word-timestamps',
   };
 }
 
@@ -130,11 +190,19 @@ export async function createHostedOpenAITranscription(
   env: Env,
   input: PreparedHostedOpenAITranscription,
 ): Promise<HostedOpenAITranscriptionResult> {
+  const model = input.variant === 'diarized-speakers'
+    ? OPENAI_DIARIZED_TRANSCRIPTION_MODEL
+    : OPENAI_WORD_TRANSCRIPTION_MODEL;
   const formData = new FormData();
   formData.append('file', new Blob([copyBytesToArrayBuffer(input.bytes)], { type: input.mimeType }), input.fileName);
-  formData.append('model', OPENAI_TRANSCRIPTION_MODEL);
-  formData.append('response_format', 'verbose_json');
-  formData.append('timestamp_granularities[]', 'word');
+  formData.append('model', model);
+  if (input.variant === 'diarized-speakers') {
+    formData.append('response_format', 'diarized_json');
+    formData.append('chunking_strategy', 'auto');
+  } else {
+    formData.append('response_format', 'verbose_json');
+    formData.append('timestamp_granularities[]', 'word');
+  }
   if (input.language) formData.append('language', input.language);
 
   const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
@@ -152,7 +220,9 @@ export async function createHostedOpenAITranscription(
 
   return {
     durationSeconds: input.durationSeconds,
-    model: OPENAI_TRANSCRIPTION_MODEL,
-    words: payload?.words ?? [],
+    model,
+    words: input.variant === 'diarized-speakers'
+      ? expandDiarizedSegments(payload?.segments ?? [])
+      : payload?.words ?? [],
   };
 }

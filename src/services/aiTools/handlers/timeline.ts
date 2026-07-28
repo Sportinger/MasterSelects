@@ -1,8 +1,10 @@
 // Timeline Tool Handlers
 
 import { useTimelineStore } from '../../../stores/timeline';
+import { computeTimelineOccupancy } from '../../timeline/timelineOccupancy';
 import type { ToolResult } from '../types';
 import { formatTrackInfo } from '../utils';
+import { clipHasTranscript } from '../../transcription/clipTranscriptResolver';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
@@ -27,6 +29,7 @@ export async function handleGetTimelineState(
 
   const videoTracks = tracks.filter(t => t.type === 'video').map(t => formatTrackInfo(t, clips));
   const audioTracks = tracks.filter(t => t.type === 'audio').map(t => formatTrackInfo(t, clips));
+  const occupancy = computeTimelineOccupancy(clips, tracks);
 
   // Get details of selected clips
   const selectedClipIdsArray = Array.from(selectedClipIds);
@@ -42,8 +45,11 @@ export async function handleGetTimelineState(
       startTime: clip.startTime,
       endTime: clip.startTime + clip.duration,
       duration: clip.duration,
+      inPoint: clip.inPoint,
+      outPoint: clip.outPoint,
+      linkedClipId: clip.linkedClipId,
       hasAnalysis: clip.analysisStatus === 'ready',
-      hasTranscript: clip.transcriptStatus === 'ready' || !!clip.transcript?.length,
+      hasTranscript: clipHasTranscript(clip),
     };
   }).filter(Boolean);
 
@@ -67,6 +73,18 @@ export async function handleGetTimelineState(
       // Tracks with their clips
       videoTracks,
       audioTracks,
+      occupancy: {
+        stateRevision: timelineStore.timelineRevision,
+        occupied: occupancy.occupied,
+        clipDurationSumSeconds: occupancy.clipDurationSumSeconds,
+        gapCount: occupancy.gaps.length,
+        overlapCount: occupancy.overlaps.length,
+        perTrack: occupancy.perTrack.map(({ trackId, occupied, clipCount }) => ({
+          trackId,
+          occupied,
+          clipCount,
+        })),
+      },
     },
   };
 }

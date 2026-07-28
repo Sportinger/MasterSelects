@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 
 import type { TimelineStore, TimelineUtils, TimelineClip, Keyframe } from './types';
+import { withTimelineRevision } from './revisionMiddleware';
 import { DEFAULT_TRACKS, DEFAULT_TRACK_HEADER_WIDTH, MIN_TRACK_HEADER_WIDTH, MAX_TRACK_HEADER_WIDTH } from './constants';
 import { createDefaultTempoMap, createDefaultRulerLanes, getDefaultActiveRulerLaneId } from '../../timeline/tempo/rulerDefaults';
 
@@ -35,6 +36,7 @@ import { createKeyframeSlice } from './keyframeSlice';
 import { createMaskSlice } from './maskSlice';
 import { createMarkerSlice } from './markerSlice';
 import { createRulerSlice } from './rulerSlice';
+import { createTempoSlice } from './tempoSlice';
 import { createTransitionSlice } from './transitionSlice';
 import { createNodeGraphSlice } from './nodeGraphSlice';
 import { createClipboardSlice } from './clipboardSlice';
@@ -45,6 +47,10 @@ import { Logger } from '../../services/logger';
 import { lockTimelineEditActions } from './exportEditLock';
 import {
   readStoredAudioLayerAdvancedMode,
+  readStoredMetronomeEnabled,
+  readStoredMetronomeMode,
+  readStoredMetronomeVolume,
+  readStoredTimelineGridSubdivision,
   readStoredTimelineSnappingEnabled,
   readStoredTimelineSplitRatio,
   readStoredTimelineTrackFocusMode,
@@ -72,7 +78,7 @@ export { setClipStemSeparationRunner } from './stemSeparationSlice';
 export * from './selectors';
 
 export const useTimelineStore = create<TimelineStore>()(
-  subscribeWithSelector((set, get) => {
+  subscribeWithSelector(withTimelineRevision((set, get) => {
     // Create all slices
     const trackActions = createTrackSlice(set, get);
     const clipActions = createClipSlice(set, get);
@@ -102,6 +108,7 @@ export const useTimelineStore = create<TimelineStore>()(
     const maskActions = createMaskSlice(set, get);
     const markerActions = createMarkerSlice(set, get);
     const rulerActions = createRulerSlice(set, get);
+    const tempoActions = createTempoSlice(set, get);
     const transitionActions = createTransitionSlice(set, get);
     const nodeGraphActions = createNodeGraphSlice(set, get);
     const clipboardActions = createClipboardSlice(set, get);
@@ -184,6 +191,10 @@ export const useTimelineStore = create<TimelineStore>()(
       ),
       timelineSplitRatio: readStoredTimelineSplitRatio(null),
       snappingEnabled: readStoredTimelineSnappingEnabled(true),
+      timelineGridSubdivision: readStoredTimelineGridSubdivision('beat'),
+      metronomeEnabled: readStoredMetronomeEnabled(false),
+      metronomeVolume: readStoredMetronomeVolume(0.6),
+      metronomeMode: readStoredMetronomeMode('beats'),
       isPlaying: false,
       isDraggingPlayhead: false,
       playbackWarmup: null,
@@ -243,6 +254,7 @@ export const useTimelineStore = create<TimelineStore>()(
       audioRegionClipboard: null,
       showAudioRegionEditMarkers: true,
       showTranscriptMarkers: true,
+      showFaceRanges: true,
       clipStemSeparationJobs: {},
 
       // Keyframe animation state
@@ -319,6 +331,9 @@ export const useTimelineStore = create<TimelineStore>()(
 
       // Async session guard for composition switches / reloads
       timelineSessionId: 0,
+
+      // Monotonic durable timeline edit revision for stale-plan detection
+      timelineRevision: 0,
     };
 
     // Layer actions (render layers for engine, moved from mixerStore)
@@ -404,6 +419,7 @@ export const useTimelineStore = create<TimelineStore>()(
       ...maskActions,
       ...markerActions,
       ...rulerActions,
+      ...tempoActions,
       ...transitionActions,
       ...nodeGraphActions,
       ...clipboardActions,
@@ -415,5 +431,9 @@ export const useTimelineStore = create<TimelineStore>()(
       ...initialState,
       ...actions,
     };
-  })
+  }))
 );
+
+(globalThis as typeof globalThis & {
+  __timelineStoreModule?: { useTimelineStore: typeof useTimelineStore };
+}).__timelineStoreModule = { useTimelineStore };

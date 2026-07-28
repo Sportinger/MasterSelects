@@ -21,7 +21,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 | **WebGPU Rendering** | Shared render path for main preview, independent targets, output windows, and export |
 | **Timeline Editing** | Multi-track editing, nested compositions, markers, transitions, shortcuts, and keyframes |
 | **Node Workspace** | Dockable selected-clip processing graph derived from live timeline state |
-| **AI Control** | OpenAI/Cloud or local Lemonade chat with 86 exported model tools plus local/native bridge access for external agents |
+| **AI Control** | OpenAI/Cloud or local Lemonade chat with a live model-tool registry plus authenticated bridge and MCP access for external agents |
 | **Media Generator Tray** | FlashBoard video/image/audio generation embedded in the Media Panel with queue previews and media import |
 | **3D Layers** | Shared-scene 3D layers, camera clips, Gaussian splats, and splat effectors |
 | **Vector Animation** | Lottie and Rive clips with canvas playback, bounce modes, render resolution overrides, keyframed state/data inputs, and export |
@@ -42,7 +42,8 @@ The docs in this folder were re-audited against the current codebase and now tra
 |---|---|
 | [Timeline](./Timeline.md) | Tracks, clips, nested comps, markers, selection, and editing flow |
 | [Transition Compositions](./Transition-Compositions.md) | Mapped-v3 transition source layout, templates, parity, and explicit legacy upgrades |
-| [Timeline Rulers](./Timeline-Rulers.md) | Stacked multi-ruler lanes (time/timecode/frames/bars) via the **Rulers** checklist, TempoMap-driven bars+beats, per-composition persistence, and the click-to-select active-lane seam (#257) |
+| [Timeline Rulers](./Timeline-Rulers.md) | Stacked multi-ruler lanes (time/timecode/frames/bars/tempo) via the **Rulers** checklist, TempoMap-driven bars+beats, and per-composition persistence (#257) |
+| [Tempo And Metronome](./Tempo-And-Metronome.md) | Editable tempo track with BPM/meter flags and ramps, tempo-driven grid and snapping, MIDI content that follows tempo, and a metronome click (#299) |
 | [Slot Grid](./Slot-Grid.md) | 12x4 live grid overlay, slot clip trimming, layer triggering, and deck warmup behavior |
 | [Keyframes](./Keyframes.md) | Animated properties, effect params, masks, fades, easing, and visibility rules |
 | [Preview](./Preview.md) | Main preview, source monitor, output windows, RAM preview, and target routing |
@@ -83,6 +84,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 |---|---|
 | [Landing Page](./Landing-Page.md) | Dev-only front page concept, separate URL strategy, and current landing/editor split |
 | [AI Integration](./AI-Integration.md) | OpenAI/Cloud and Lemonade chat, 86 exported model tools, segmentation, transcription, and bridge behavior |
+| [AI Bridge Control](./AI-Bridge-Control.md) | Authenticated session, schema, execution, replay, history, and MCP access to the live in-app AI tool surface |
 | [MuScriptor Music-to-MIDI](./MuScriptor.md) | Local Native Helper audio-to-MIDI transcription, model setup, instrument mapping, and atomic timeline commit |
 | [Credit Claims](./Credit-Claims.md) | Cloudflare-backed reward links for manually granted hosted credits |
 | [Guided Action Runtime Plan](./Guided-Action-Runtime-Plan.md) | Target architecture for AI action replay, interactive tutorials, guided workflows, and parallel implementation workstreams |

@@ -1,4 +1,5 @@
 import { clampPlaybackTime, type TimelineStore } from './runtime';
+import { computeTimelineOccupancy } from '../../../timeline/timelineOccupancy';
 
 export type PlaybackPathPreset = 'play_scrub_stress_v1';
 
@@ -28,6 +29,11 @@ export interface PlaybackPathAnchor {
 }
 
 export function findPlaybackPathAnchor(timelineStore: TimelineStore): PlaybackPathAnchor {
+  // occupiedEnd: agent playback paths exclude UI-only trailing timeline padding.
+  const occupiedEnd = computeTimelineOccupancy(
+    timelineStore.clips,
+    timelineStore.tracks,
+  ).occupied?.endSeconds ?? 0;
   const videoTrackIds = new Set(
     timelineStore.tracks
       .filter((track) => track.type === 'video')
@@ -43,19 +49,14 @@ export function findPlaybackPathAnchor(timelineStore: TimelineStore): PlaybackPa
 
   if (!activeClip) {
     return {
-      clipStartTime: clampPlaybackTime(timelineStore.playheadPosition, timelineStore.duration),
-      playableEndTime: timelineStore.duration,
+      clipStartTime: clampPlaybackTime(timelineStore.playheadPosition, occupiedEnd),
+      playableEndTime: occupiedEnd,
     };
   }
 
-  const playableEndTime = Math.max(
-    activeClip.startTime + activeClip.duration,
-    ...videoClips.map((clip) => clip.startTime + clip.duration),
-  );
-
   return {
     clipStartTime: activeClip.startTime,
-    playableEndTime: clampPlaybackTime(playableEndTime, timelineStore.duration),
+    playableEndTime: occupiedEnd,
     clipId: activeClip.id,
     clipName: activeClip.name,
   };

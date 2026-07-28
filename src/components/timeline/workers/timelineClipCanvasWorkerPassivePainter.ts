@@ -5,6 +5,7 @@ import type {
   TimelineClipCanvasWorkerPassiveBadge as WorkerPassiveBadge,
   TimelineClipCanvasWorkerProgressBar as WorkerProgressBar,
 } from '../utils/timelineClipCanvasWorkerContract';
+import { drawTimelineClipCanvasSceneCutMarkers } from '../utils/timelineClipCanvasSceneCutPainter';
 
 type WorkerPassiveDecorationsPayloadByFacetId = ReadonlyMap<
   string,
@@ -101,6 +102,54 @@ function drawWorkerTranscriptMarkers(
   }
 }
 
+function drawWorkerFaceRanges(
+  context: OffscreenCanvasRenderingContext2D,
+  ranges: Float32Array | undefined,
+  x: number,
+  top: number,
+  width: number,
+  height: number,
+): void {
+  if (!ranges || ranges.length < 5 || width < 12) return;
+
+  const bandHeight = Math.max(2, Math.min(4, height * 0.12));
+  for (let index = 0; index + 4 < ranges.length; index += 5) {
+    const start = clamp01(ranges[index] ?? 0);
+    const end = Math.max(start, clamp01(ranges[index + 1] ?? start));
+    const red = Math.round(ranges[index + 2] ?? 250);
+    const green = Math.round(ranges[index + 3] ?? 204);
+    const blue = Math.round(ranges[index + 4] ?? 21);
+    const left = x + start * width;
+    const rangeWidth = Math.max(1, (end - start) * width);
+    context.fillStyle = `rgba(${red}, ${green}, ${blue}, 0.16)`;
+    context.fillRect(left, top, rangeWidth, height);
+    context.fillStyle = `rgba(${red}, ${green}, ${blue}, 0.78)`;
+    context.fillRect(left, top + height - bandHeight, rangeWidth, bandHeight);
+  }
+}
+
+function drawWorkerFaceMarkers(
+  context: OffscreenCanvasRenderingContext2D,
+  markers: Float32Array | undefined,
+  x: number,
+  top: number,
+  width: number,
+): void {
+  if (!markers || markers.length < 5 || width < 24) return;
+
+  for (let index = 0; index + 4 < markers.length; index += 5) {
+    const px = x + clamp01(markers[index] ?? 0) * width;
+    const slot = Math.max(0, Math.min(2, Math.round(markers[index + 1] ?? 0)));
+    const red = Math.round(markers[index + 2] ?? 250);
+    const green = Math.round(markers[index + 3] ?? 204);
+    const blue = Math.round(markers[index + 4] ?? 21);
+    context.beginPath();
+    context.arc(px, top + 7 + slot * 4, 2, 0, Math.PI * 2);
+    context.fillStyle = `rgb(${red}, ${green}, ${blue})`;
+    context.fill();
+  }
+}
+
 function drawWorkerAnalysisSeries(
   context: OffscreenCanvasRenderingContext2D,
   points: Float32Array,
@@ -154,6 +203,7 @@ function drawWorkerAnalysisOverlay(
   top: number,
   width: number,
   height: number,
+  drawGenericFaceMarkers: boolean,
 ): void {
   if (!overlay || width < 24) return;
   const pointCount = Math.min(overlay.pointCount, Math.floor(overlay.points.length / 4));
@@ -189,13 +239,15 @@ function drawWorkerAnalysisOverlay(
     'rgba(59, 130, 246, 0.10)',
   );
 
-  context.fillStyle = 'rgba(250, 204, 21, 0.82)';
-  for (let index = 0; index < pointCount; index += 1) {
-    if ((overlay.points[index * 4 + 3] ?? 0) <= 0) continue;
-    const px = x + clamp01(overlay.points[index * 4] ?? 0) * width;
-    context.beginPath();
-    context.arc(px, top + 7, 2, 0, Math.PI * 2);
-    context.fill();
+  if (drawGenericFaceMarkers) {
+    context.fillStyle = 'rgba(250, 204, 21, 0.82)';
+    for (let index = 0; index < pointCount; index += 1) {
+      if ((overlay.points[index * 4 + 3] ?? 0) <= 0) continue;
+      const px = x + clamp01(overlay.points[index * 4] ?? 0) * width;
+      context.beginPath();
+      context.arc(px, top + 7, 2, 0, Math.PI * 2);
+      context.fill();
+    }
   }
   context.restore();
 }
@@ -218,9 +270,12 @@ export function drawWorkerPassiveDecorations(
   context.beginPath();
   context.roundRect(x, top, width, height - 2, Math.min(4, (height - 2) / 4));
   context.clip();
-  drawWorkerAnalysisOverlay(context, decorations.analysisOverlay, x, top, width, height - 2);
+  drawWorkerFaceRanges(context, decorations.faceRanges, x, top, width, height - 2);
+  drawWorkerAnalysisOverlay(context, decorations.analysisOverlay, x, top, width, height - 2, !decorations.faceMarkers);
+  drawWorkerFaceMarkers(context, decorations.faceMarkers, x, top, width);
   drawWorkerTranscriptMarkers(context, decorations.transcriptMarkers, x, top, width, height - 2);
   drawWorkerClipProgressBars(context, decorations.progressBars, x, top, width);
+  drawTimelineClipCanvasSceneCutMarkers(context, decorations.sceneCutMarkers, x, top, width, height - 2);
   if (drawBadges) {
     drawWorkerClipBadges(context, decorations.badges, x, top, width);
   }

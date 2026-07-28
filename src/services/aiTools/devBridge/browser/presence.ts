@@ -40,15 +40,23 @@ export function getTabPriorityDelayMs(isTargetedRequest = false): number {
 export function registerBridgePresence(
   hot: BrowserHot,
   createDisposable: () => () => void,
+  getSessionDetails?: () => Record<string, unknown>,
 ): () => void {
   let presenceIntervalId: number | null = null;
   const sendPresence = () => {
+    let session: Record<string, unknown> | undefined;
+    try {
+      session = getSessionDetails?.();
+    } catch {
+      // Presence must remain available even if optional project metadata cannot be read.
+    }
     hot.send('ai-tools:presence', {
       tabId,
       visibilityState: typeof document !== 'undefined' ? document.visibilityState : 'hidden',
       hasFocus: typeof document !== 'undefined' && typeof document.hasFocus === 'function'
         ? document.hasFocus()
         : false,
+      session,
     });
   };
 

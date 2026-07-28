@@ -1,7 +1,11 @@
 import type { ToolDefinition, ToolResult } from '../aiTools';
 
-export type FlashBoardChatProvider = 'openai' | 'anthropic' | 'lemonade';
+export type FlashBoardChatProvider = 'kie' | 'lemonade';
+export type FlashBoardKieChatProtocol = 'claude-messages' | 'openai-responses';
 export type FlashBoardOpenAiReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh';
+export type FlashBoardChatPromptVersion = 'v2' | 'legacy-v1';
+export type FlashBoardChatRunSource = 'ui' | 'bridge' | 'mcp' | 'test';
+export type FlashBoardChatToolExecutionMode = 'normal' | 'read-only';
 
 export interface FlashBoardChatProviderOption {
   id: FlashBoardChatProvider;
@@ -10,29 +14,36 @@ export interface FlashBoardChatProviderOption {
 
 export interface FlashBoardChatModelOption {
   id: string;
+  kieProtocol?: FlashBoardKieChatProtocol;
   label: string;
   provider: FlashBoardChatProvider;
   supportsTemperature: boolean;
+  supportsTools: boolean;
   supportsReasoningEffort?: boolean;
   reasoningEfforts?: FlashBoardOpenAiReasoningEffort[];
-  maxTokensParameter?: 'max_tokens' | 'max_completion_tokens';
 }
 
 export interface FlashBoardChatRequest {
-  anthropicApiKey?: string;
   hostedAvailable?: boolean;
+  idempotencyKey?: string;
+  kieAiApiKey?: string;
   lemonadeContextSize?: number;
   lemonadeEndpoint?: string;
   model: string;
   onExecutedToolCalls?: (toolCalls: FlashBoardExecutedToolCall[]) => void;
-  openAiApiKey?: string;
+  onRunCompleted?: (run: import('./FlashBoardChatRunAudit').FlashBoardChatRunRecord) => void;
   openAiReasoningEffort?: FlashBoardOpenAiReasoningEffort;
+  playbookPrompt?: string;
   prompt: string;
+  promptVersion?: FlashBoardChatPromptVersion;
   provider: FlashBoardChatProvider;
+  runSource?: FlashBoardChatRunSource;
   signal?: AbortSignal;
   systemPromptIncludeContext?: boolean;
+  systemPromptIncludePlaybook?: boolean;
   systemPromptOverride?: string;
   temperature: number;
+  toolExecutionMode?: FlashBoardChatToolExecutionMode;
 }
 
 export type FlashBoardApprovalMode = 'auto' | 'confirm-destructive' | 'confirm-all-mutating';

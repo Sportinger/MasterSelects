@@ -1,21 +1,29 @@
 // MediaStore types - extracted from mediaStore.ts
 
 import type {
-  AnalysisStatus,
   CompositionTimelineData,
   GaussianSplatSequenceData,
   MediaFileAudioAnalysisRefs,
   MediaFileStemInfo,
   ModelSequenceData,
+} from '../../types';
+import type {
+  AnalysisStatus,
+  TranscriptFusionArtifact,
+  TranscriptFusionProgress,
   TranscriptStatus,
   TranscriptWord,
-} from '../../types';
+} from '../../types/clipMetadata';
 import type { TransitionCompositionLink } from '../../types/timelineCore';
 import type { SplatEffectorSettings } from '../../types/splatEffector';
 import type { LightClipSettings } from '../../types/light';
 import type { VectorAnimationMetadata, VectorAnimationProvider } from '../../types/vectorAnimation';
 import type { ShapePrimitive } from '../../types/motionDesign';
 import type { LiveInputSource } from '../../types/liveInput';
+import type {
+  SceneCutAnalysis,
+  SceneCutAnalysisStatus,
+} from '../../types/sceneCutAnalysis';
 import type {
   SignalArtifact,
   SignalAsset,
@@ -129,6 +137,9 @@ export interface MediaFile extends MediaItem {
   proxyFrameCount?: number;
   proxyFps?: number;
   proxyFormat?: ProxyFormat;
+  sceneCutStatus?: SceneCutAnalysisStatus;
+  sceneCutProgress?: number;
+  sceneCutAnalysis?: SceneCutAnalysis;
   hasProxyAudio?: boolean;
   audioProxyStatus?: ProxyStatus;
   audioProxyProgress?: number;
@@ -138,6 +149,8 @@ export interface MediaFile extends MediaItem {
   // Transcript support
   transcriptStatus?: TranscriptStatus;
   transcript?: TranscriptWord[];
+  transcriptArtifact?: TranscriptFusionArtifact;
+  transcriptFusionProgress?: TranscriptFusionProgress;
   transcriptCoverage?: number;  // 0-1, how much of total duration is transcribed
   transcribedRanges?: [number, number][];  // Time ranges that have been transcribed
   // Analysis support (CV or AI describe)

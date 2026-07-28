@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "masterselects": {
+      "command": "node",
+      "args": [
+        "scripts/masterselects-mcp.mjs"
+      ],
+      "env": {
+        "MASTERSELECTS_BRIDGE_URL": "http://localhost:5173",
+        "MASTERSELECTS_BRIDGE_SURFACE": "chat"
+      }
+    }
+  }
+}

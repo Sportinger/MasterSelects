@@ -7,10 +7,16 @@ import {
 } from '../../../stores/mediaStore/helpers/proxyCompleteness';
 import { projectFileService, type ProjectFolder, type ProjectMediaFile } from '../../projectFileService';
 import type { LabelColor } from '../../../stores/mediaStore/types';
-import type { AnalysisStatus, TranscriptStatus, TranscriptWord } from '../../../types';
+import type {
+  AnalysisStatus,
+  TranscriptFusionArtifact,
+  TranscriptStatus,
+  TranscriptWord,
+} from '../../../types/clipMetadata';
 import { yieldToBrowser } from './loadProgress';
 import { calcRangeCoverage, projectMediaCanHaveAudio } from './loadMediaCacheHydration';
 import { hydrateProjectMediaRuntimeSources } from './loadMediaRuntimeSources';
+import { isCurrentSceneCutAnalysis } from '../../sceneCutDetection/sceneCutDetector';
 
 const log = Logger.create('ProjectSync');
 
@@ -60,6 +66,7 @@ export async function convertProjectMediaToStore(
 
     let transcriptStatus: TranscriptStatus = 'none';
     let transcript: TranscriptWord[] | undefined;
+    let transcriptArtifact: TranscriptFusionArtifact | undefined;
     let transcriptCoverage = 0;
     let transcribedRanges: [number, number][] | undefined;
     if (!deferCacheChecks && projectFileService.isProjectOpen()) {
@@ -70,6 +77,7 @@ export async function convertProjectMediaToStore(
           if (words && words.length > 0) {
             transcriptStatus = 'ready';
             transcript = words;
+            transcriptArtifact = saved.artifact as TranscriptFusionArtifact | undefined;
             transcribedRanges = saved.transcribedRanges;
             if (pm.duration && pm.duration > 0) {
               transcriptCoverage = transcribedRanges?.length
@@ -171,6 +179,17 @@ export async function convertProjectMediaToStore(
       proxyFps: proxyStatus === 'ready' ? proxyFps : undefined,
       proxyProgress,
       proxyFormat,
+      sceneCutStatus: isCurrentSceneCutAnalysis(
+        pm.sceneCutAnalysis,
+        runtimeSources.representativeFile,
+      ) ? 'ready' : 'none',
+      sceneCutProgress: isCurrentSceneCutAnalysis(
+        pm.sceneCutAnalysis,
+        runtimeSources.representativeFile,
+      ) ? 100 : 0,
+      sceneCutAnalysis: pm.sceneCutAnalysis
+        ? structuredClone(pm.sceneCutAnalysis)
+        : undefined,
       hasProxyAudio,
       audioProxyStatus,
       audioProxyProgress,
@@ -190,6 +209,7 @@ export async function convertProjectMediaToStore(
       labelColor: pm.labelColor as LabelColor | undefined,
       transcriptStatus,
       transcript,
+      transcriptArtifact,
       transcriptCoverage,
       transcribedRanges,
       analysisStatus,

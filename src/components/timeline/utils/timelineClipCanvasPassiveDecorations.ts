@@ -1,10 +1,17 @@
 import { isTimelineClipCanvasAudioClip, type TimelineClipCanvasAudioClipInput } from './timelineClipCanvasAudio';
+import { isSceneCutTimestampInSourceRange } from '../../../services/sceneCutDetection/sceneCutRange';
 import type {
   TimelineClipCanvasWorkerAnalysisOverlayResource,
   TimelineClipCanvasWorkerPassiveBadge,
   TimelineClipCanvasWorkerPassiveDecorationsResource,
   TimelineClipCanvasWorkerProgressBar,
 } from './timelineClipCanvasWorkerContract';
+import {
+  collectTimelineFaceIdentityRanges,
+  collectTimelineFaceRanges,
+  getTimelineFaceIdentityColor,
+  getTimelineFaceIdentityRangeRatios,
+} from './timelineFaceRangeOverlay';
 
 export interface TimelineClipCanvasMediaStatus {
   proxyStatus?: string;
@@ -12,6 +19,7 @@ export interface TimelineClipCanvasMediaStatus {
   audioProxyStatus?: string;
   audioProxyProgress?: number;
   hasProxyAudio?: boolean;
+  sceneCutTimestamps?: readonly number[];
 }
 
 export interface TimelineClipCanvasTranscriptMarkerInput {
@@ -25,6 +33,7 @@ export interface TimelineClipCanvasAnalysisFrameInput {
   globalMotion?: number;
   motion?: number;
   faceCount?: number;
+  faces?: readonly { personId: string; identityEligible?: boolean }[];
 }
 
 export interface TimelineClipCanvasPassiveDecorationClipInput extends TimelineClipCanvasAudioClipInput {
@@ -41,6 +50,12 @@ export interface TimelineClipCanvasPassiveDecorationClipInput extends TimelineCl
   transcriptProgress?: number;
   analysis?: {
     frames?: readonly TimelineClipCanvasAnalysisFrameInput[];
+    faceAnalysis?: {
+      people?: readonly {
+        id: string;
+        appearances?: readonly { start: number; end: number }[];
+      }[];
+    };
   };
   analysisStatus?: string;
   analysisProgress?: number;
@@ -140,14 +155,42 @@ export function hasTimelineClipCanvasPassiveDecorations(
     clip.reversed ||
     (clip.transcriptStatus && clip.transcriptStatus !== 'none') ||
     (clip.analysisStatus && clip.analysisStatus !== 'none') ||
+    collectTimelineFaceRanges(clip).length > 0 ||
     mediaStatus?.proxyStatus === 'generating' ||
     mediaStatus?.proxyStatus === 'ready' ||
     mediaStatus?.proxyStatus === 'error' ||
     mediaStatus?.audioProxyStatus === 'generating' ||
     mediaStatus?.audioProxyStatus === 'ready' ||
     mediaStatus?.audioProxyStatus === 'error' ||
-    mediaStatus?.hasProxyAudio
+    mediaStatus?.hasProxyAudio ||
+    (!isTimelineClipCanvasAudioClip(clip) && Boolean(mediaStatus?.sceneCutTimestamps?.length))
   );
+}
+
+export function createTimelineClipCanvasSceneCutMarkers(input: {
+  clip: TimelineClipCanvasPassiveDecorationClipInput;
+  mediaStatus?: TimelineClipCanvasMediaStatus;
+  inPoint?: number;
+  outPoint?: number;
+}): Float32Array | undefined {
+  const { clip, mediaStatus } = input;
+  const timestamps = mediaStatus?.sceneCutTimestamps;
+  if (!timestamps?.length || isTimelineClipCanvasAudioClip(clip)) return undefined;
+
+  const inPoint = input.inPoint ?? clip.inPoint ?? 0;
+  const outPoint = input.outPoint ?? clip.outPoint ?? inPoint + clip.duration;
+  const sourceSpan = outPoint - inPoint;
+  if (!Number.isFinite(sourceSpan) || sourceSpan <= 0) return undefined;
+
+  const ratios: number[] = [];
+  for (const timestamp of timestamps) {
+    if (!isSceneCutTimestampInSourceRange(timestamp, inPoint, outPoint)) continue;
+    const ratio = clip.reversed
+      ? (outPoint - timestamp) / sourceSpan
+      : (timestamp - inPoint) / sourceSpan;
+    if (ratio > 0 && ratio < 1) ratios.push(ratio);
+  }
+  return ratios.length > 0 ? Float32Array.from(ratios) : undefined;
 }
 
 export function createTimelineClipCanvasWorkerTranscriptMarkers(
@@ -223,22 +266,76 @@ export function createTimelineClipCanvasWorkerAnalysisOverlay(input: {
     : undefined;
 }
 
+export function createTimelineClipCanvasWorkerFaceRanges(input: {
+  clip: TimelineClipCanvasPassiveDecorationClipInput;
+  enabled: boolean;
+}): Float32Array | undefined {
+  const { clip, enabled } = input;
+  if (!enabled || isTimelineClipCanvasAudioClip(clip)) return undefined;
+
+  const inPoint = clip.inPoint ?? 0;
+  const outPoint = clip.outPoint ?? inPoint + clip.duration;
+  const ratios = getTimelineFaceIdentityRangeRatios(
+    collectTimelineFaceIdentityRanges(clip),
+    inPoint,
+    outPoint,
+    clip.reversed,
+  );
+  return ratios.length > 0
+    ? Float32Array.from(ratios.flatMap((range) => {
+      const color = getTimelineFaceIdentityColor(range.personId);
+      return [range.start, range.end, ...color.rgb];
+    }))
+    : undefined;
+}
+
+export function createTimelineClipCanvasWorkerFaceMarkers(
+  clip: TimelineClipCanvasPassiveDecorationClipInput,
+): Float32Array | undefined {
+  if (isTimelineClipCanvasAudioClip(clip)) return undefined;
+  const frames = clip.analysis?.frames;
+  if (!frames?.length) return undefined;
+
+  const inPoint = clip.inPoint ?? 0;
+  const outPoint = clip.outPoint ?? inPoint + clip.duration;
+  const sourceSpan = Math.max(0.001, outPoint - inPoint);
+  const values: number[] = [];
+  for (const frame of frames) {
+    if (frame.timestamp < inPoint || frame.timestamp > outPoint) continue;
+    const ratio = clip.reversed
+      ? (outPoint - frame.timestamp) / sourceSpan
+      : (frame.timestamp - inPoint) / sourceSpan;
+    frame.faces?.filter((face) => face.identityEligible !== false).slice(0, 3).forEach((face, index) => {
+      const color = getTimelineFaceIdentityColor(face.personId);
+      values.push(Math.max(0, Math.min(1, ratio)), index, ...color.rgb);
+    });
+  }
+  return values.length > 0 ? Float32Array.from(values) : undefined;
+}
+
 export function createTimelineClipCanvasWorkerPassiveDecorationsResource(input: {
   clip: TimelineClipCanvasPassiveDecorationClipInput;
   mediaStatus?: TimelineClipCanvasMediaStatus;
   clipWidth?: number;
+  showFaceRanges?: boolean;
 }): TimelineClipCanvasWorkerPassiveDecorationsResource | undefined {
-  const { clip, mediaStatus, clipWidth = 0 } = input;
+  const { clip, mediaStatus, clipWidth = 0, showFaceRanges = false } = input;
   const badges = getTimelineClipCanvasPassiveDecorationBadges(clip, mediaStatus);
   const progressBars = getTimelineClipCanvasPassiveDecorationProgressBars(clip, mediaStatus);
+  const sceneCutMarkers = createTimelineClipCanvasSceneCutMarkers({ clip, mediaStatus });
   const transcriptMarkers = createTimelineClipCanvasWorkerTranscriptMarkers(clip);
+  const faceRanges = createTimelineClipCanvasWorkerFaceRanges({ clip, enabled: showFaceRanges });
+  const faceMarkers = createTimelineClipCanvasWorkerFaceMarkers(clip);
   const analysisOverlay = createTimelineClipCanvasWorkerAnalysisOverlay({ clip, clipWidth });
-  if (badges.length === 0 && progressBars.length === 0 && !transcriptMarkers && !analysisOverlay) return undefined;
+  if (badges.length === 0 && progressBars.length === 0 && !sceneCutMarkers && !transcriptMarkers && !faceRanges && !faceMarkers && !analysisOverlay) return undefined;
   return {
     kind: 'passive-decorations',
     badges,
     progressBars,
+    sceneCutMarkers,
     transcriptMarkers,
+    faceRanges,
+    faceMarkers,
     analysisOverlay,
   };
 }

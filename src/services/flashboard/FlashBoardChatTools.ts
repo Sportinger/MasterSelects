@@ -7,7 +7,11 @@ import {
   type ToolResult,
 } from '../aiTools';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { FLASHBOARD_CHAT_MAX_TOOL_ITERATIONS, FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS } from './FlashBoardChatConfig';
+import {
+  FLASHBOARD_CHAT_MAX_PROVIDER_TOOLS,
+  FLASHBOARD_CHAT_MAX_TOOL_ITERATIONS,
+  FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS,
+} from './FlashBoardChatConfig';
 import {
   findFlashBoardChatImageData,
   redactFlashBoardChatImageData,
@@ -16,12 +20,37 @@ import type {
   AnthropicToolDefinition,
   FlashBoardApprovalMode,
   FlashBoardChatCompletionMessage,
+  FlashBoardChatToolExecutionMode,
   FlashBoardExecutedToolCall,
   FlashBoardToolCall,
   OpenAiResponsesToolDefinition,
 } from './FlashBoardChatTypes';
 
-export const OPENAI_RESPONSES_TOOLS: OpenAiResponsesToolDefinition[] = AI_TOOLS.map((tool) => ({
+const FLASHBOARD_CHAT_PRIORITY_TOOL_NAMES = new Set([
+  'getTimelineState',
+  'getTimelineAnalysis',
+  'getClipDetails',
+  'getClipFaceAnalysis',
+  'startClipFaceAnalysis',
+  'mergeClipFacePeople',
+  'moveClipFaceAppearance',
+  'assignClipFaceReviewCandidate',
+  'cutRangesFromClip',
+  'splitClip',
+  'deleteClip',
+  'trimClip',
+]);
+
+const eligibleFlashBoardChatTools = AI_TOOLS.filter((tool) => (
+  getToolPolicy(tool.function.name)?.allowedCallers.includes('chat') === true
+));
+
+export const FLASHBOARD_CHAT_TOOLS = [
+  ...eligibleFlashBoardChatTools.filter((tool) => FLASHBOARD_CHAT_PRIORITY_TOOL_NAMES.has(tool.function.name)),
+  ...eligibleFlashBoardChatTools.filter((tool) => !FLASHBOARD_CHAT_PRIORITY_TOOL_NAMES.has(tool.function.name)),
+].slice(0, FLASHBOARD_CHAT_MAX_PROVIDER_TOOLS);
+
+export const OPENAI_RESPONSES_TOOLS: OpenAiResponsesToolDefinition[] = FLASHBOARD_CHAT_TOOLS.map((tool) => ({
   type: 'function',
   name: tool.function.name,
   description: tool.function.description,
@@ -29,7 +58,7 @@ export const OPENAI_RESPONSES_TOOLS: OpenAiResponsesToolDefinition[] = AI_TOOLS.
   strict: false,
 }));
 
-export const ANTHROPIC_TOOLS: AnthropicToolDefinition[] = AI_TOOLS.map((tool) => ({
+export const ANTHROPIC_TOOLS: AnthropicToolDefinition[] = FLASHBOARD_CHAT_TOOLS.map((tool) => ({
   name: tool.function.name,
   description: tool.function.description,
   input_schema: tool.function.parameters,
@@ -76,7 +105,7 @@ function shouldRequireConfirmation(
   return !policy.readOnly;
 }
 
-function sanitizeToolResultValue(value: unknown, depth = 0): unknown {
+function sanitizeToolResultValue(value: unknown, depth = 0, maximumDepth = 4): unknown {
   if (typeof value === 'string') {
     if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(value)) {
       return '[image data omitted from compact chat context]';
@@ -93,12 +122,14 @@ function sanitizeToolResultValue(value: unknown, depth = 0): unknown {
     return value;
   }
 
-  if (depth >= 4) {
+  if (depth >= maximumDepth) {
     return '[truncated nested value]';
   }
 
   if (Array.isArray(value)) {
-    const items = value.slice(0, 30).map((item) => sanitizeToolResultValue(item, depth + 1));
+    const items = value.slice(0, 30).map((item) => (
+      sanitizeToolResultValue(item, depth + 1, maximumDepth)
+    ));
     if (value.length > 30) {
       items.push(`[${value.length - 30} more items truncated]`);
     }
@@ -109,7 +140,7 @@ function sanitizeToolResultValue(value: unknown, depth = 0): unknown {
     const entries = Object.entries(value as Record<string, unknown>);
     const sanitized: Record<string, unknown> = {};
     for (const [key, nestedValue] of entries.slice(0, 50)) {
-      sanitized[key] = sanitizeToolResultValue(nestedValue, depth + 1);
+      sanitized[key] = sanitizeToolResultValue(nestedValue, depth + 1, maximumDepth);
     }
     if (entries.length > 50) {
       sanitized.__truncatedKeys = entries.length - 50;
@@ -120,10 +151,18 @@ function sanitizeToolResultValue(value: unknown, depth = 0): unknown {
   return String(value);
 }
 
-function formatToolResultForModel(result: ToolResult, maxLength: number): string {
+function formatToolResultForModel(
+  result: ToolResult,
+  maxLength: number,
+  toolName?: string,
+): string {
   const sanitized = JSON.stringify({
     success: result.success,
-    data: sanitizeToolResultValue(result.data),
+    data: sanitizeToolResultValue(
+      result.data,
+      0,
+      toolName === 'getTimelineAnalysis' ? 8 : 4,
+    ),
     error: result.error,
   });
 
@@ -156,6 +195,7 @@ export function formatToolFollowupFallback(executedToolCalls: FlashBoardExecuted
 export async function executeFlashBoardToolCalls(
   toolCalls: FlashBoardToolCall[],
   maxToolResultChars: number,
+  options: { toolExecutionMode?: FlashBoardChatToolExecutionMode } = {},
 ): Promise<FlashBoardExecutedToolCall[]> {
   const approvalMode = useSettingsStore.getState().aiApprovalMode;
   const guidedReplayBudgetController = createGuidedReplayBudgetController();
@@ -166,8 +206,33 @@ export async function executeFlashBoardToolCalls(
   }> = [];
 
   for (const toolCall of toolCalls) {
-    const args = parseToolArguments(toolCall.arguments);
+    const parsedArgs = parseToolArguments(toolCall.arguments);
+    const args = toolCall.name === 'getTimelineAnalysis'
+      ? {
+          ...parsedArgs,
+          limit: Math.min(
+            maxToolResultChars <= 2500 ? 5 : 25,
+            Math.max(1, Number(parsedArgs.limit) || 25),
+          ),
+          maxBytes: Math.min(
+            Math.max(1024, maxToolResultChars - 512),
+            Math.max(1, Number(parsedArgs.maxBytes) || 6 * 1024),
+          ),
+        }
+      : parsedArgs;
     const policy = getToolPolicy(toolCall.name);
+
+    if (options.toolExecutionMode === 'read-only' && policy?.readOnly !== true) {
+      preparedToolCalls.push({
+        args,
+        toolCall,
+        result: {
+          success: false,
+          error: `Tool "${toolCall.name}" is mutating and this diagnostic chat run is read-only.`,
+        },
+      });
+      continue;
+    }
 
     if (shouldRequireConfirmation(policy, approvalMode)) {
       preparedToolCalls.push({
@@ -221,7 +286,11 @@ export async function executeFlashBoardToolCalls(
     return {
       toolCall,
       result: resolvedResult,
-      modelContent: formatToolResultForModel(resolvedResult, maxToolResultChars),
+      modelContent: formatToolResultForModel(
+        resolvedResult,
+        maxToolResultChars,
+        toolCall.name,
+      ),
     };
   });
 }
@@ -236,6 +305,7 @@ export async function runChatCompletionToolLoop(
   maxToolResultChars = FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS,
   onExecutedToolCalls?: (toolCalls: FlashBoardExecutedToolCall[]) => void,
   includeToolResultImages = false,
+  toolExecutionMode: FlashBoardChatToolExecutionMode = 'normal',
 ): Promise<string> {
   const executedToolCalls: FlashBoardExecutedToolCall[] = [];
 
@@ -263,7 +333,11 @@ export async function runChatCompletionToolLoop(
       })),
     });
 
-    const toolResults = await executeFlashBoardToolCalls(result.toolCalls, maxToolResultChars);
+    const toolResults = await executeFlashBoardToolCalls(
+      result.toolCalls,
+      maxToolResultChars,
+      { toolExecutionMode },
+    );
     executedToolCalls.push(...toolResults);
     onExecutedToolCalls?.(prepareFlashBoardToolCallsForHistory(toolResults));
     for (const toolResult of toolResults) {

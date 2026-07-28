@@ -4,11 +4,13 @@ import { FileStorageService } from '../core/FileStorageService';
 
 /**
  * Stored transcript format.
- * Backward compatible: old format was just TranscriptWord[], new format is { words, transcribedRanges }.
+ * Backward compatible: old format was just TranscriptWord[]. The object format
+ * also retains optional hybrid-provider provenance.
  */
-interface StoredTranscript {
+export interface StoredTranscript {
   words: unknown[];
   transcribedRanges?: [number, number][];
+  artifact?: unknown;
 }
 
 export class TranscriptService {

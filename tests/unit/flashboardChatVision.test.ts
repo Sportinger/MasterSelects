@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sendFlashBoardChatMessage } from '../../src/services/flashboard/FlashBoardChatService';
 import {
+  executeFlashBoardToolCalls,
   getFlashBoardToolResultImage,
   prepareFlashBoardToolCallsForHistory,
 } from '../../src/services/flashboard/FlashBoardChatTools';
@@ -65,28 +66,42 @@ describe('FlashBoard compact-chat vision follow-ups', () => {
     expect(JSON.stringify(history)).toContain('[image omitted from chat history]');
   });
 
+  it('technically blocks mutating tools during diagnostic read-only chat runs', async () => {
+    const results = await executeFlashBoardToolCalls([{
+      id: 'delete-1',
+      name: 'deleteClip',
+      arguments: '{"clipId":"clip-1"}',
+    }], 8_000, { toolExecutionMode: 'read-only' });
+
+    expect(results[0]?.result).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/read-only/i),
+    });
+    expect(mocks.executeAIToolCalls).not.toHaveBeenCalled();
+  });
+
   it('sends captured pixels through every cloud vision payload', async () => {
     const executedToolCalls: unknown[] = [];
-    const openAiFetch = vi.fn()
+    const kieFetch = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({
         output: [{ type: 'function_call', call_id: 'capture-1', name: 'captureFrame', arguments: '{"time":2}' }],
       }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         output: [{ type: 'message', content: [{ type: 'output_text', text: 'A person enters the room.' }] }],
       }), { status: 200 }));
-    vi.stubGlobal('fetch', openAiFetch);
+    vi.stubGlobal('fetch', kieFetch);
 
     await sendFlashBoardChatMessage({
-      model: 'gpt-5.5',
+      kieAiApiKey: 'kie-test',
+      model: 'gpt-5-6-luna',
       onExecutedToolCalls: (toolCalls) => executedToolCalls.push(...toolCalls),
-      openAiApiKey: 'sk-test',
       prompt: 'What happens?',
-      provider: 'openai',
+      provider: 'kie',
       temperature: 0.7,
     });
 
-    const responsesBody = JSON.parse(String(openAiFetch.mock.calls[1]?.[1]?.body));
-    expect(responsesBody.input).toEqual(expect.arrayContaining([expect.objectContaining({
+    const responsesProxyBody = JSON.parse(String(kieFetch.mock.calls[1]?.[1]?.body));
+    expect(responsesProxyBody.body.input).toEqual(expect.arrayContaining([expect.objectContaining({
       role: 'user',
       content: expect.arrayContaining([{
         type: 'input_image',
@@ -99,32 +114,33 @@ describe('FlashBoard compact-chat vision follow-ups', () => {
     const hostedFetch = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({
         ok: true,
-        data: { choices: [{ message: { content: null, tool_calls: [{
-          id: 'capture-1',
-          type: 'function',
-          function: { name: 'captureFrame', arguments: '{"time":2}' },
-        }] } }] },
+        data: {
+          output: [{ type: 'function_call', call_id: 'capture-1', name: 'captureFrame', arguments: '{"time":2}' }],
+        },
       }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         ok: true,
-        data: { choices: [{ message: { content: 'A person enters the room.' } }] },
+        data: {
+          output: [{ type: 'message', content: [{ type: 'output_text', text: 'A person enters the room.' }] }],
+        },
       }), { status: 200 }));
     vi.stubGlobal('fetch', hostedFetch);
 
     await sendFlashBoardChatMessage({
       hostedAvailable: true,
-      model: 'gpt-5.5',
+      model: 'gpt-5-6-luna',
       prompt: 'What happens?',
-      provider: 'openai',
+      provider: 'kie',
       temperature: 0.7,
     });
 
     const hostedBody = JSON.parse(String(hostedFetch.mock.calls[1]?.[1]?.body));
-    expect(hostedBody.messages).toEqual(expect.arrayContaining([expect.objectContaining({
+    expect(hostedBody.input).toEqual(expect.arrayContaining([expect.objectContaining({
       role: 'user',
       content: expect.arrayContaining([{
-        type: 'image_url',
-        image_url: { detail: 'high', url: DATA_URL },
+        type: 'input_image',
+        image_url: DATA_URL,
+        detail: 'high',
       }]),
     })]));
 
@@ -138,15 +154,15 @@ describe('FlashBoard compact-chat vision follow-ups', () => {
     vi.stubGlobal('fetch', anthropicFetch);
 
     await sendFlashBoardChatMessage({
-      anthropicApiKey: 'sk-ant-test',
-      model: 'claude-opus-4-1-20250805',
+      kieAiApiKey: 'kie-test',
+      model: 'claude-opus-4-8',
       prompt: 'What happens?',
-      provider: 'anthropic',
+      provider: 'kie',
       temperature: 0.7,
     });
 
-    const anthropicBody = JSON.parse(String(anthropicFetch.mock.calls[1]?.[1]?.body));
-    expect(anthropicBody.messages.at(-1)?.content[0]).toEqual(expect.objectContaining({
+    const anthropicProxyBody = JSON.parse(String(anthropicFetch.mock.calls[1]?.[1]?.body));
+    expect(anthropicProxyBody.body.messages.at(-1)?.content[0]).toEqual(expect.objectContaining({
       type: 'tool_result',
       content: expect.arrayContaining([{
         type: 'image',

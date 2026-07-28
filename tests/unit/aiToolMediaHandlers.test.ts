@@ -40,6 +40,13 @@ describe('AI tool media handlers', () => {
         type: 'file',
         removedClipCount: 3,
         artifactFailures: ['artifact-missing'],
+        stateRevisionBefore: null,
+        stateRevisionAfter: null,
+        entities: {
+          created: [],
+          updated: [],
+          deleted: [{ kind: 'mediaItem', id: 'media-1' }],
+        },
       },
     });
   });

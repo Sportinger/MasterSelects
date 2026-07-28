@@ -238,6 +238,18 @@ describe('timeline edit operations kernel', () => {
   });
 
   it('bulk splits one linked clip through the operation kernel', () => {
+    const analysis = {
+      frames: [{
+        timestamp: 4,
+        motion: 0.2,
+        globalMotion: 0.1,
+        localMotion: 0.3,
+        focus: 0.8,
+        brightness: 0.5,
+        faceCount: 0,
+      }],
+      sampleInterval: 500,
+    };
     const video = createMockClip({
       id: 'video-1',
       trackId: 'video-1',
@@ -246,6 +258,8 @@ describe('timeline edit operations kernel', () => {
       inPoint: 0,
       outPoint: 12,
       linkedClipId: 'audio-1',
+      analysis,
+      analysisStatus: 'ready',
     });
     const audio = createMockClip({
       id: 'audio-1',
@@ -282,6 +296,7 @@ describe('timeline edit operations kernel', () => {
       [4, 4],
       [8, 4],
     ]);
+    expect(clips.filter((clip) => clip.trackId === 'video-1').every((clip) => clip.analysis === analysis)).toBe(true);
     expect([...useTimelineStore.getState().selectedClipIds]).toHaveLength(1);
   });
 
@@ -2436,6 +2451,18 @@ describe('timeline edit operations kernel', () => {
   });
 
   it('trims linked clips through the operation kernel', () => {
+    const analysis = {
+      frames: [{
+        timestamp: 2,
+        motion: 0.2,
+        globalMotion: 0.1,
+        localMotion: 0.3,
+        focus: 0.8,
+        brightness: 0.5,
+        faceCount: 0,
+      }],
+      sampleInterval: 500,
+    };
     const video = createMockClip({
       id: 'video-1',
       trackId: 'video-1',
@@ -2444,6 +2471,8 @@ describe('timeline edit operations kernel', () => {
       inPoint: 0,
       outPoint: 8,
       linkedClipId: 'audio-1',
+      analysis,
+      analysisStatus: 'ready',
     });
     const audio = createMockClip({
       id: 'audio-1',
@@ -2477,6 +2506,7 @@ describe('timeline edit operations kernel', () => {
       ['video-1', 1, 6, 5],
       ['audio-1', 1, 6, 5],
     ]);
+    expect(useTimelineStore.getState().clips.find(clip => clip.id === 'video-1')?.analysis).toBe(analysis);
   });
 
   it('preserves linked clip duration differences when trimming again after an independent trim', () => {

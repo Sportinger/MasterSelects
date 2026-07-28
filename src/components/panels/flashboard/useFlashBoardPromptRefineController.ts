@@ -41,7 +41,7 @@ interface UseFlashBoardPromptRefineControllerInput {
   isSunoMode: boolean;
   mode: string;
   multiShots: boolean;
-  openAiApiKey: string;
+  kieAiApiKey: string;
   openAuthDialog: () => void;
   openPricingDialog: () => void;
   openSettings: () => void;
@@ -80,7 +80,7 @@ export function useFlashBoardPromptRefineController({
   isSunoMode,
   mode,
   multiShots,
-  openAiApiKey,
+  kieAiApiKey,
   openAuthDialog,
   openPricingDialog,
   openSettings,
@@ -179,7 +179,7 @@ export function useFlashBoardPromptRefineController({
         setPromptRefineError('Enable hosted credits to refine prompts.');
         openPricingDialog();
       } else {
-        setPromptRefineError('Add an OpenAI API key in Settings to refine prompts.');
+        setPromptRefineError('Add a Kie.ai API key in Settings to refine prompts.');
         openSettings();
       }
       return;
@@ -215,7 +215,7 @@ export function useFlashBoardPromptRefineController({
 
     try {
       const refinerInput = buildFlashBoardPromptRefineInput({
-        apiKey: openAiApiKey,
+        apiKey: kieAiApiKey,
         prompt,
         entry: selectedEntry,
         service,
@@ -301,7 +301,7 @@ export function useFlashBoardPromptRefineController({
     isSunoMode,
     mode,
     multiShots,
-    openAiApiKey,
+    kieAiApiKey,
     openAuthDialog,
     openPricingDialog,
     openSettings,

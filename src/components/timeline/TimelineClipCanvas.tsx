@@ -7,6 +7,7 @@
 import { memo, useMemo, useReducer, useRef } from 'react';
 import type { TimelineAudioDisplayMode, TimelineClipDragPreview } from '../../stores/timeline/types';
 import { useMediaStore } from '../../stores/mediaStore';
+import { useTimelineStore } from '../../stores/timeline';
 import {
   TIMELINE_CLIP_CANVAS_LOD_BAR_PX,
   TIMELINE_CLIP_CANVAS_LOD_LABEL_PX,
@@ -35,7 +36,6 @@ import type { TimelineClipCanvasSpectrogramTileSetMap } from './utils/timelineCl
 import type { TimelineClipCanvasWaveformPyramidMap } from './utils/timelineClipCanvasWaveformResource';
 import {
   hasTimelineClipCanvasPassiveDecorations,
-  type TimelineClipCanvasMediaStatus,
 } from './utils/timelineClipCanvasPassiveDecorations';
 import {
   collectTimelineClipCanvasWorkerThumbnailPreparation,
@@ -51,6 +51,7 @@ import {
   getTimelineClipCanvasWorkerEligibility,
 } from './utils/timelineClipCanvasWorkerModel';
 import {
+  createTimelineClipCanvasMediaStatusMap,
   createTimelineClipCanvasChromeOverlays,
   getTimelineClipCanvasMediaStatus,
 } from './utils/timelineClipCanvasChromeOverlays';
@@ -109,6 +110,7 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     clipTrim,
   } = props;
   const clipBodyColor = trackColor === 'transparent' ? NEUTRAL_CLIP_COLOR : trackColor;
+  const showFaceRanges = useTimelineStore((state) => state.showFaceRanges);
   const mediaFilesState = useMediaStore((state) => state.files);
   const mediaFiles = useMemo(
     () => (Array.isArray(mediaFilesState) ? mediaFilesState : []),
@@ -174,19 +176,10 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     requestRedraw: bumpRedraw,
   });
 
-  const mediaFileStatusById = useMemo(() => {
-    const map = new Map<string, TimelineClipCanvasMediaStatus>();
-    for (const file of mediaFiles) {
-      map.set(file.id, {
-        proxyStatus: file.proxyStatus,
-        proxyProgress: file.proxyProgress,
-        audioProxyStatus: file.audioProxyStatus,
-        audioProxyProgress: file.audioProxyProgress,
-        hasProxyAudio: file.hasProxyAudio,
-      });
-    }
-    return map;
-  }, [mediaFiles]);
+  const mediaFileStatusById = useMemo(
+    () => createTimelineClipCanvasMediaStatusMap(mediaFiles),
+    [mediaFiles],
+  );
   const workerThumbnailPreparation = useMemo(
     () => {
       void redrawNonce;
@@ -240,13 +233,14 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
       minThumbnailWidth: LOD_THUMB_PX,
       thumbnailSlotPx: CANVAS_THUMB_SLOT_PX,
       maxThumbnailSlots: MAX_THUMB_SLOTS,
+      showFaceRanges,
       resolveGeometry: (clip) => resolveClipGeometry(clip as TimelinePaintSourceClip, geometryProps),
       getMediaStatus: (clip) => getTimelineClipCanvasMediaStatus(clip as TimelinePaintSourceClip, mediaFileStatusById),
     });
       void redrawNonce;
       return preparedResources;
     },
-    [audioDisplayMode, canvasOffsetX, clipTrim, clips, cssWidth, geometryProps, height, mediaFileStatusById, redrawNonce, scrollX, spectrogramTileSets, timeToPixel, viewportWidth, waveformPyramids, waveformsEnabled],
+    [audioDisplayMode, canvasOffsetX, clipTrim, clips, cssWidth, geometryProps, height, mediaFileStatusById, redrawNonce, scrollX, showFaceRanges, spectrogramTileSets, timeToPixel, viewportWidth, waveformPyramids, waveformsEnabled],
   );
   const workerDrawableClips = useMemo(
     () => createWorkerDrawableClips(clips, geometryProps),
@@ -337,6 +331,7 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     viewportWidth,
     waveformsEnabled,
     audioDisplayMode,
+    showFaceRanges,
     clipDrag,
     clipDragPreview,
     clipTrim,

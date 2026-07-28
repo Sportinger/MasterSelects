@@ -1,0 +1,84 @@
+export type FlashBoardChatPlaybookId =
+  | 'analysis'
+  | 'face'
+  | 'montage'
+  | 'quality'
+  | 'silence'
+  | 'transcript'
+  | 'visual';
+
+interface FlashBoardChatPlaybook {
+  id: FlashBoardChatPlaybookId;
+  matches: RegExp;
+  text: string;
+}
+
+const PLAYBOOKS: FlashBoardChatPlaybook[] = [
+  {
+    id: 'montage',
+    matches: /\b(?:montage|random|shuffle|zusammenschnitt|highlight|best of|cuts?|clips?|segmente?)\b/i,
+    text: `MONTAGE / MANY CUTS
+- Inspect sources and durations first. getMediaItems is one-folder-only; recurse into returned folders.
+- Build source montages with <=25 addClipSegment actions per executeBatch. Use video sources, clamp source ranges, and place slices sequentially.
+- For split-and-shuffle, splitClipAtTimes first, re-read the timeline for new IDs, then reorderClips. Splitting alone does not create variety.
+- Video slices may create linked audio. Keep or remove it intentionally and report the choice.`,
+  },
+  {
+    id: 'transcript',
+    matches: /\b(?:transcript|subtitle|speech|sentence|word|phrase|dialog|untertitel|transkript|satz|w[oö]rter?)\b/i,
+    text: `TRANSCRIPT
+- Read long transcripts in bounded source-time windows with getClipTranscript(sourceStart, sourceEnd, offset, limit); follow nextOffset while hasMore is true.
+- Transcript timestamps are source time. Use getClipDetails before converting them for timeline editing.
+- A transcript remix is not finished after splitting: re-read generated clip IDs, reorder wanted pieces, and remove unwanted pieces.`,
+  },
+  {
+    id: 'face',
+    matches: /\b(?:face|person|people|speaker|gesicht|person|menschen?)\b/i,
+    text: `FACE / PERSON
+- Call getClipFaceAnalysis before starting new analysis. If it is still analyzing, report progress and stop this turn.
+- Resolve visible labels through personId; never invent internal IDs.
+- For keep-only edits, use keepOnlyCutPlan.recommendedToolCall unchanged. Correct identity groups before editing when review data is ambiguous.`,
+  },
+  {
+    id: 'silence',
+    matches: /\b(?:silence|silent|pause|dead air|stille|pausen?)\b/i,
+    text: `SILENCE
+- Call findSilentSections once, inspect its mapped timeline ranges, then remove all accepted ranges with one cutRangesFromClip call.
+- Preserve linked audio unless the user explicitly wants only one side changed.`,
+  },
+  {
+    id: 'quality',
+    matches: /\b(?:blurry|blur|dark|shaky|quality|focus|motion|brightness|unscharf|dunkel|verwackelt|qualit[aä]t)\b/i,
+    text: `ANALYSIS / QUALITY
+- Start with compact getClipAnalysis. Request includeFrames only for a bounded source range that needs inspection.
+- Use findLowQualitySections for threshold-based edits, then remove accepted ranges in bulk.`,
+  },
+  {
+    id: 'visual',
+    matches: /\b(?:look|visual(?:ly)?|frame|scene|shot|preview|sieht|visuell(?:e|en|er|es)?|bild|szene|einstellung|vorschau)\b/i,
+    text: `VISUAL VERIFICATION
+- Sample 3-8 relevant frames in one getFramesAtTimes call before making content claims.
+- After a visual edit, verify with captureFrame, getFramesAtTimes, or getCutPreviewQuad. Transcript text is not visual evidence.`,
+  },
+  {
+    id: 'analysis',
+    matches: /\b(?:analyse|analysis|analyze|analysier|motion|bewegung)\b/i,
+    text: `ANALYSIS
+- Prefer summaries first. Query detailed frames only for a bounded source range and with an explicit limit.
+- Treat returned measurements as evidence; do not infer unseen action between samples.`,
+  },
+];
+
+export function selectFlashBoardChatPlaybooks(prompt: string): FlashBoardChatPlaybookId[] {
+  return PLAYBOOKS
+    .filter((playbook) => playbook.matches.test(prompt))
+    .map((playbook) => playbook.id);
+}
+
+export function buildFlashBoardChatPlaybookInjection(prompt: string): string {
+  const selected = new Set(selectFlashBoardChatPlaybooks(prompt));
+  return PLAYBOOKS
+    .filter((playbook) => selected.has(playbook.id))
+    .map((playbook) => playbook.text)
+    .join('\n\n');
+}

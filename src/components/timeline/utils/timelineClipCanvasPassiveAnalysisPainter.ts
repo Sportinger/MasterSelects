@@ -1,6 +1,7 @@
 import type { TimelinePaintSourceClip } from '../../../timeline';
 import { isTimelineClipCanvasAudioClip } from './timelineClipCanvasAudio';
 import type { TimelineClipCanvasTrimGeometry } from './timelineClipCanvasTrimResource';
+import { getTimelineFaceIdentityColor } from './timelineFaceRangeOverlay';
 
 export function drawTimelineClipCanvasPassiveAnalysisOverlay(
   ctx: CanvasRenderingContext2D,
@@ -78,12 +79,22 @@ export function drawTimelineClipCanvasPassiveAnalysisOverlay(
   drawSeries((frame) => frame.focus ?? 0, 1, 'rgba(34, 197, 94, 0.82)', 'rgba(34, 197, 94, 0.12)');
   drawSeries((frame) => frame.globalMotion ?? frame.motion ?? 0, 1.5, 'rgba(59, 130, 246, 0.72)', 'rgba(59, 130, 246, 0.10)');
 
-  ctx.fillStyle = 'rgba(250, 204, 21, 0.82)';
   for (const frame of sampled) {
     if ((frame.faceCount ?? 0) <= 0) continue;
-    ctx.beginPath();
-    ctx.arc(xForTime(frame.timestamp), top + 7, 2, 0, Math.PI * 2);
-    ctx.fill();
+    const faces = frame.faces;
+    if (!faces?.length) {
+      ctx.fillStyle = 'rgba(250, 204, 21, 0.82)';
+      ctx.beginPath();
+      ctx.arc(xForTime(frame.timestamp), top + 7, 2, 0, Math.PI * 2);
+      ctx.fill();
+      continue;
+    }
+    faces.filter((face) => face.identityEligible !== false).slice(0, 3).forEach((face, index) => {
+      ctx.fillStyle = getTimelineFaceIdentityColor(face.personId).css;
+      ctx.beginPath();
+      ctx.arc(xForTime(frame.timestamp), top + 7 + index * 4, 2, 0, Math.PI * 2);
+      ctx.fill();
+    });
   }
 
   ctx.restore();

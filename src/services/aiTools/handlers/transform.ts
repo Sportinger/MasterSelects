@@ -1,6 +1,10 @@
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
 import type { ToolResult } from '../types';
+import {
+  captureMutationEntitySnapshot,
+  describeMutationEntities,
+} from './mutationEntityResults';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
@@ -72,6 +76,7 @@ export async function handleSetTransform(
     return { success: false, error: 'No transform properties provided' };
   }
 
+  const mutationSnapshot = captureMutationEntitySnapshot('transform', [clip]);
   const { updateClipTransform, invalidateCache } = useTimelineStore.getState();
   updateClipTransform(clipId, updates);
   invalidateCache();
@@ -81,6 +86,10 @@ export async function handleSetTransform(
     data: {
       clipId,
       updatedProperties: Object.keys(updates),
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().clips.filter((candidate) => candidate.id === clipId),
+      ),
     },
   };
 }

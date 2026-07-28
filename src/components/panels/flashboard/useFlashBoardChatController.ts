@@ -15,7 +15,6 @@ import {
   type FlashBoardChatProvider,
   type FlashBoardOpenAiReasoningEffort,
 } from '../../../services/flashboard/FlashBoardChatService';
-import { flags } from '../../../engine/featureFlags';
 import { useFlashBoardStore } from '../../../stores/flashboardStore';
 import { appendFlashBoardPromptHistoryEntry } from '../../../stores/flashboardStore/activeGenerationRecords';
 import type { AIProvider } from '../../../stores/settingsStore';
@@ -33,12 +32,6 @@ import {
 } from './FlashBoardChatOptionsPlanner';
 import type { FlashBoardChatMessage } from './FlashBoardChatOutput';
 import {
-  buildFlashBoardChatApplyOptionPrompt,
-  buildFlashBoardChatEditOptionsPrompt,
-  parseFlashBoardChatEditOptions,
-  type FlashBoardChatEditOption,
-} from './FlashBoardChatEditOptions';
-import {
   buildFlashBoardChatCompletionMessages,
   buildFlashBoardChatErrorMessages,
   buildFlashBoardChatOptimisticMessages,
@@ -49,24 +42,22 @@ interface UseFlashBoardChatControllerInput {
   aiProvider: AIProvider;
   aiSystemPromptSendContext: Partial<Record<AIProvider, boolean>>;
   aiSystemPromptOverrides: Partial<Record<AIProvider, string>>;
-  anthropicApiKey: string;
   closePopover: () => void;
-  hasAnthropicKey: boolean;
   hasHostedSession: boolean;
-  hasOpenAiKey: boolean;
+  hasKieAiKey: boolean;
   hostedAIEnabled: boolean;
   initialMode: 'generate' | 'chat';
   lemonadeContextSize: number;
   lemonadeEndpoint: string;
   lemonadeModel: string;
-  openAiApiKey: string;
+  kieAiApiKey: string;
   openAuthDialog: () => void;
   openPricingDialog: () => void;
   openSettings: () => void;
   setAiProvider: (provider: AIProvider) => void;
   setLemonadeModel: (model: string) => void;
   useHostedProductionProviders: boolean;
-  useOpenAiKeyByDefault: boolean;
+  useKieAiKeyByDefault: boolean;
 }
 
 function createFlashBoardChatMessageId(role: FlashBoardChatMessage['role']): string {
@@ -77,30 +68,30 @@ export function useFlashBoardChatController({
   aiProvider,
   aiSystemPromptSendContext,
   aiSystemPromptOverrides,
-  anthropicApiKey,
   closePopover,
-  hasAnthropicKey,
   hasHostedSession,
-  hasOpenAiKey,
+  hasKieAiKey,
   hostedAIEnabled,
   initialMode,
   lemonadeContextSize,
   lemonadeEndpoint,
   lemonadeModel,
-  openAiApiKey,
+  kieAiApiKey,
   openAuthDialog,
   openPricingDialog,
   openSettings,
   setAiProvider,
   setLemonadeModel,
   useHostedProductionProviders,
-  useOpenAiKeyByDefault,
+  useKieAiKeyByDefault,
 }: UseFlashBoardChatControllerInput) {
   const chatAbortRef = useRef<AbortController | null>(null);
   const copiedChatResetTimeoutRef = useRef<number | null>(null);
   const [chatPanelOpen, setChatPanelOpen] = useState(initialMode === 'chat');
   const [chatPrompt, setChatPrompt] = useState('');
-  const [chatProvider, setChatProvider] = useState<FlashBoardChatProvider>(aiProvider);
+  const [chatProvider, setChatProvider] = useState<FlashBoardChatProvider>(
+    aiProvider === 'lemonade' ? 'lemonade' : 'kie',
+  );
   const [chatModel, setChatModelState] = useState(
     aiProvider === 'lemonade' ? (lemonadeModel.trim() || DEFAULT_LEMONADE_MODEL) : DEFAULT_FLASHBOARD_CHAT_MODEL,
   );
@@ -119,17 +110,13 @@ export function useFlashBoardChatController({
   const [copiedChatMessageId, setCopiedChatMessageId] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
   const [isChatting, setIsChatting] = useState(false);
-  const [chatOptionsMode, setChatOptionsMode] = useState(false);
   const [lemonadeStatus, setLemonadeStatus] = useState<'idle' | 'checking' | 'online' | 'offline'>('idle');
   const [lemonadeModels, setLemonadeModels] = useState<LemonadeModelInfo[]>([]);
-  const chatOptionsModeEnabled = flags.flashBoardChatEditOptions;
   const chatSystemPromptProvider: AIProvider = chatProvider === 'lemonade' ? 'lemonade' : 'openai';
   const chatSystemPromptSendContext = aiSystemPromptSendContext[chatSystemPromptProvider] !== false;
-  const chatSystemPromptOverride = chatProvider === 'anthropic'
-    ? undefined
-    : aiSystemPromptOverrides[chatSystemPromptProvider]?.trim()
-      ? aiSystemPromptOverrides[chatSystemPromptProvider]
-      : undefined;
+  const chatSystemPromptOverride = aiSystemPromptOverrides[chatSystemPromptProvider]?.trim()
+    ? aiSystemPromptOverrides[chatSystemPromptProvider]
+    : undefined;
 
   const chatOptionsState = useMemo(() => buildFlashBoardChatOptionsState({
     chatModel,
@@ -137,8 +124,8 @@ export function useFlashBoardChatController({
     isChatting,
     lemonadeModels,
     useHostedProductionProviders,
-    useOpenAiKeyByDefault,
-  }), [chatModel, chatProvider, isChatting, lemonadeModels, useHostedProductionProviders, useOpenAiKeyByDefault]);
+    useKieAiKeyByDefault,
+  }), [chatModel, chatProvider, isChatting, lemonadeModels, useHostedProductionProviders, useKieAiKeyByDefault]);
   const {
     activeChatModelId,
     chatModelOptions,
@@ -146,9 +133,9 @@ export function useFlashBoardChatController({
     chatReasoningEffortOptions,
     chatReasoningSupported,
   } = chatOptionsState;
-  const canUseHostedChat = Boolean(chatProvider === 'openai' && hasHostedSession && hostedAIEnabled);
-  const canUseByoChat = Boolean(chatProvider === 'openai' && !useHostedProductionProviders && hasOpenAiKey);
-  const shouldUseHostedChat = Boolean(canUseHostedChat && (useHostedProductionProviders || !useOpenAiKeyByDefault));
+  const canUseHostedChat = Boolean(chatProvider === 'kie' && hasHostedSession && hostedAIEnabled);
+  const canUseByoChat = Boolean(chatProvider === 'kie' && !useHostedProductionProviders && hasKieAiKey);
+  const shouldUseHostedChat = Boolean(canUseHostedChat && (useHostedProductionProviders || !useKieAiKeyByDefault));
   const showChatCloudActions = Boolean(chatError && !hasHostedSession && /sign in/i.test(chatError));
 
   useEffect(() => {
@@ -165,11 +152,12 @@ export function useFlashBoardChatController({
   }, [initialMode]);
 
   useEffect(() => {
-    if (isChatting || chatProvider === 'anthropic' || chatProvider === aiProvider) {
+    const settingsChatProvider: FlashBoardChatProvider = aiProvider === 'lemonade' ? 'lemonade' : 'kie';
+    if (isChatting || chatProvider === settingsChatProvider) {
       return;
     }
 
-    setChatProvider(aiProvider);
+    setChatProvider(settingsChatProvider);
     setChatModelState(
       aiProvider === 'lemonade'
         ? (lemonadeModel.trim() || DEFAULT_LEMONADE_MODEL)
@@ -211,7 +199,7 @@ export function useFlashBoardChatController({
 
   const handleChatProviderSelect = useCallback((provider: FlashBoardChatProvider) => {
     setChatProvider(provider);
-    if (provider !== 'anthropic') setAiProvider(provider);
+    setAiProvider(provider === 'lemonade' ? 'lemonade' : 'openai');
     setChatError(null);
 
     const nextDefaultModel = buildFlashBoardChatProviderDefaultModel(provider, lemonadeModels);
@@ -234,35 +222,25 @@ export function useFlashBoardChatController({
     }
   }, [chatProvider, chatProviderOptions, handleChatProviderSelect]);
 
-  const submitChatPrompt = useCallback(async (
-    promptOverride?: string,
-    options: { optionsMode?: boolean; visiblePrompt?: string } = {},
-  ) => {
+  const submitChatPrompt = useCallback(async () => {
     closePopover();
 
-    const effectiveChatPrompt = (promptOverride ?? chatPrompt).trim();
-    const useEditOptions = chatOptionsModeEnabled && (options.optionsMode ?? chatOptionsMode);
-    const requestPrompt = effectiveChatPrompt && useEditOptions
-      ? buildFlashBoardChatEditOptionsPrompt(effectiveChatPrompt)
-      : effectiveChatPrompt;
-    const visibleUserPrompt = options.visiblePrompt ?? effectiveChatPrompt;
+    const effectiveChatPrompt = chatPrompt.trim();
     const chatSendPlan = buildFlashBoardChatSendPlan({
       activeChatModelId,
-      anthropicApiKey,
       canUseByoChat,
       canUseHostedChat,
       chatMessages,
       chatPanelOpen,
       chatProvider,
       chatTemperature,
-      effectiveChatPrompt: requestPrompt,
-      hasAnthropicKey,
+      effectiveChatPrompt,
       hasHostedSession,
       hostedAIEnabled,
       isChatting,
       lemonadeContextSize,
       lemonadeEndpoint,
-      openAiApiKey,
+      kieAiApiKey,
       openAiReasoningEffort,
       shouldUseHostedChat,
       useHostedProductionProviders,
@@ -295,35 +273,33 @@ export function useFlashBoardChatController({
     const optimisticMessages = buildFlashBoardChatOptimisticMessages({
       assistantMessageId,
       userMessageId,
-      userPrompt: visibleUserPrompt,
+      userPrompt: effectiveChatPrompt,
     });
 
     setIsChatting(true);
     setChatError(null);
-    if (promptOverride === undefined) {
-      setChatPrompt('');
-    }
+    setChatPrompt('');
     setChatMessages((current) => [
       ...current,
       ...optimisticMessages,
     ]);
-    appendFlashBoardPromptHistoryEntry({ kind: 'chat', prompt: visibleUserPrompt });
+    appendFlashBoardPromptHistoryEntry({ kind: 'chat', prompt: effectiveChatPrompt });
 
     try {
       const executedToolCalls: FlashBoardExecutedToolCall[] = [];
       const response = await sendFlashBoardChatMessage({
         ...chatSendPlan.request,
         onExecutedToolCalls: (toolCalls) => executedToolCalls.push(...toolCalls),
+        playbookPrompt: effectiveChatPrompt,
         signal: abortController.signal,
         systemPromptIncludeContext: chatSystemPromptSendContext,
         systemPromptOverride: chatSystemPromptOverride,
       });
-      const editOptions = useEditOptions ? parseFlashBoardChatEditOptions(response) : undefined;
       setChatMessages((current) => buildFlashBoardChatCompletionMessages(
         current,
         assistantMessageId,
         response,
-        editOptions,
+        undefined,
         executedToolCalls,
       ));
     } catch (error) {
@@ -339,11 +315,8 @@ export function useFlashBoardChatController({
     }
   }, [
     activeChatModelId,
-    anthropicApiKey,
     chatSystemPromptOverride,
     chatSystemPromptSendContext,
-    chatOptionsMode,
-    chatOptionsModeEnabled,
     chatMessages,
     chatPanelOpen,
     chatPrompt,
@@ -352,13 +325,12 @@ export function useFlashBoardChatController({
     closePopover,
     canUseByoChat,
     canUseHostedChat,
-    hasAnthropicKey,
+    kieAiApiKey,
     hostedAIEnabled,
     hasHostedSession,
     isChatting,
     lemonadeContextSize,
     lemonadeEndpoint,
-    openAiApiKey,
     openAiReasoningEffort,
     openAuthDialog,
     openPricingDialog,
@@ -370,16 +342,6 @@ export function useFlashBoardChatController({
 
   const handleChatButtonClick = useCallback(async () => {
     await submitChatPrompt();
-  }, [submitChatPrompt]);
-
-  const handleEditOptionSelect = useCallback((option: FlashBoardChatEditOption) => {
-    void submitChatPrompt(
-      buildFlashBoardChatApplyOptionPrompt(option),
-      {
-        optionsMode: false,
-        visiblePrompt: `Use option ${option.index}: ${option.title}`,
-      },
-    );
   }, [submitChatPrompt]);
 
   const handleClearChatHistory = useCallback(() => {
@@ -459,8 +421,6 @@ export function useFlashBoardChatController({
     ...chatOptionsState,
     chatError,
     chatMessages,
-    chatOptionsMode,
-    chatOptionsModeEnabled,
     chatPanelOpen,
     chatPrompt,
     chatProvider,
@@ -470,7 +430,6 @@ export function useFlashBoardChatController({
     handleChatButtonClick,
     handleChatInputKeyDown,
     handleChatMessageDoubleClick,
-    handleEditOptionSelect,
     handleChatProviderSelect,
     handleChatPromptChange,
     handleClearChatHistory,
@@ -480,7 +439,6 @@ export function useFlashBoardChatController({
     openAiReasoningEffort,
     chatSystemPromptProvider,
     chatSystemPromptSendContext,
-    setChatOptionsMode,
     setChatModel: handleChatModelSelect,
     setChatTemperature,
     setOpenAiReasoningEffort,

@@ -2,6 +2,10 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { getAllEffects, getDefaultParams, hasEffect, getCategoriesWithEffects } from '../../../effects';
 import type { ToolResult } from '../types';
 import { selectClipAndOpenTab } from '../aiFeedback';
+import {
+  captureMutationEntitySnapshot,
+  describeMutationEntities,
+} from './mutationEntityResults';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
@@ -46,6 +50,7 @@ export async function handleAddEffect(
     return { success: false, error: `Unknown effect type: ${effectType}. Available: ${available}` };
   }
 
+  const mutationSnapshot = captureMutationEntitySnapshot('effect', clip.effects);
   const { addClipEffect, updateClipEffect, invalidateCache } = useTimelineStore.getState();
   addClipEffect(clipId, effectType);
 
@@ -70,6 +75,10 @@ export async function handleAddEffect(
       effectId: newEffect?.id,
       effectType,
       params: newEffect ? { ...getDefaultParams(effectType), ...customParams } : getDefaultParams(effectType),
+      ...describeMutationEntities(
+        mutationSnapshot,
+        getClipEffects(clipId),
+      ),
     },
   };
 }
@@ -87,6 +96,7 @@ export async function handleRemoveEffect(
   const effect = clip.effects.find(e => e.id === effectId);
   if (!effect) return { success: false, error: `Effect not found: ${effectId}` };
 
+  const mutationSnapshot = captureMutationEntitySnapshot('effect', clip.effects);
   const { removeClipEffect, invalidateCache } = useTimelineStore.getState();
   removeClipEffect(clipId, effectId);
   invalidateCache();
@@ -96,7 +106,15 @@ export async function handleRemoveEffect(
 
   return {
     success: true,
-    data: { clipId, removedEffectId: effectId, removedEffectType: effect.type },
+    data: {
+      clipId,
+      removedEffectId: effectId,
+      removedEffectType: effect.type,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        getClipEffects(clipId),
+      ),
+    },
   };
 }
 
@@ -114,6 +132,7 @@ export async function handleUpdateEffect(
   const effect = clip.effects.find(e => e.id === effectId);
   if (!effect) return { success: false, error: `Effect not found: ${effectId}` };
 
+  const mutationSnapshot = captureMutationEntitySnapshot('effect', clip.effects);
   const { updateClipEffect, invalidateCache } = useTimelineStore.getState();
   updateClipEffect(clipId, effectId, params as Partial<Record<string, string | number | boolean>>);
   invalidateCache();
@@ -123,6 +142,18 @@ export async function handleUpdateEffect(
 
   return {
     success: true,
-    data: { clipId, effectId, updatedParams: Object.keys(params) },
+    data: {
+      clipId,
+      effectId,
+      updatedParams: Object.keys(params),
+      ...describeMutationEntities(
+        mutationSnapshot,
+        getClipEffects(clipId),
+      ),
+    },
   };
+}
+
+function getClipEffects(clipId: string) {
+  return useTimelineStore.getState().clips.find((clip) => clip.id === clipId)?.effects ?? [];
 }

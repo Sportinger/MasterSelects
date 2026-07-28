@@ -4,15 +4,65 @@ import type {
   ParsedSunoPromptRefinement,
 } from './FlashBoardPromptRefinerTypes';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || typeof value === 'string';
+}
+
+function isOpenAIResponsePayload(value: unknown): value is OpenAIResponsePayload {
+  if (!isRecord(value) || !isOptionalString(value.output_text)) {
+    return false;
+  }
+
+  if (value.output !== undefined) {
+    if (!Array.isArray(value.output)) {
+      return false;
+    }
+    for (const item of value.output) {
+      if (!isRecord(item) || !isOptionalString(item.type)) {
+        return false;
+      }
+      if (item.content === undefined) {
+        continue;
+      }
+      if (!Array.isArray(item.content)) {
+        return false;
+      }
+      for (const content of item.content) {
+        if (!isRecord(content)
+          || !isOptionalString(content.type)
+          || !isOptionalString(content.text)) {
+          return false;
+        }
+      }
+    }
+  }
+
+  if (value.error !== undefined) {
+    if (!isRecord(value.error) || !isOptionalString(value.error.message)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export function getOpenAIErrorMessage(
-  payload: OpenAIResponsePayload | null,
+  payload: unknown,
   status: number,
   statusText: string,
 ): string {
-  return payload?.error?.message || statusText || `OpenAI request failed with status ${status}`;
+  const responsePayload = isOpenAIResponsePayload(payload) ? payload : null;
+  return responsePayload?.error?.message || statusText || `Kie.ai Responses request failed with status ${status}`;
 }
 
-export function getResponseOutputText(payload: OpenAIResponsePayload): string {
+export function getResponseOutputText(payload: unknown): string {
+  if (!isOpenAIResponsePayload(payload)) {
+    return '';
+  }
   if (typeof payload.output_text === 'string') {
     return payload.output_text;
   }
@@ -151,7 +201,7 @@ export function parseOpenAIStreamFrame(frame: string): OpenAIStreamEvent | null 
 
 export async function* readOpenAIStreamEvents(response: Response): AsyncGenerator<OpenAIStreamEvent> {
   if (!response.body) {
-    throw new Error('OpenAI streaming is not available in this browser.');
+    throw new Error('Kie.ai Responses streaming is not available in this browser.');
   }
 
   const reader = response.body.getReader();
@@ -186,11 +236,11 @@ export async function* readOpenAIStreamEvents(response: Response): AsyncGenerato
   }
 }
 
-export function extractRefinedPromptFromOpenAIResponse(payload: OpenAIResponsePayload): string {
+export function extractRefinedPromptFromOpenAIResponse(payload: unknown): string {
   const outputText = getResponseOutputText(payload);
 
   if (!outputText) {
-    throw new Error('OpenAI returned an empty prompt refinement.');
+    throw new Error('Kie.ai returned an empty prompt refinement.');
   }
 
   const parsed = parseJsonObject(outputText);
@@ -199,7 +249,7 @@ export function extractRefinedPromptFromOpenAIResponse(payload: OpenAIResponsePa
     : null;
 
   if (typeof prompt !== 'string' || !prompt.trim()) {
-    throw new Error('OpenAI returned an invalid prompt refinement.');
+    throw new Error('Kie.ai returned an invalid prompt refinement.');
   }
 
   return prompt.trim();

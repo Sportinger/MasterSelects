@@ -89,9 +89,14 @@ function devBridgeFixture(): ToolPolicyEntry {
 const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   // ── READ-ONLY (low risk) ──────────────────────────────────────────────
   ['getTimelineState', readOnly()],
+  ['verifyTimelineInvariants', {
+    ...readOnly(),
+    allowedCallers: ['chat', 'devBridge'],
+  }],
   ['getClipDetails', readOnly()],
   ['getClipsInTimeRange', readOnly()],
   ['getMediaItems', readOnly()],
+  ['getTimelineAnalysis', readOnly()],
   ['getClipAnalysis', readOnly()],
   ['getClipFaceAnalysis', readOnly()],
   ['getClipTranscript', readOnly()],
@@ -475,6 +480,9 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['removeMarker', mutatingLow()],
   ['startClipAnalysis', mutatingLow()],
   ['startClipFaceAnalysis', mutatingLow()],
+  ['mergeClipFacePeople', mutatingLow()],
+  ['moveClipFaceAppearance', mutatingLow()],
+  ['assignClipFaceReviewCandidate', mutatingLow()],
   ['startClipTranscription', mutatingLow()],
   ['searchYouTube', mutatingLow()],
   // searchVideos is the definition name for the same handler as searchYouTube
@@ -500,6 +508,11 @@ export function normalizeToolName(toolName: string): string {
  */
 export function getToolPolicy(toolName: string): ToolPolicyEntry | undefined {
   return TOOL_POLICY_MAP.get(normalizeToolName(toolName));
+}
+
+/** Return the names registered in the policy map for parity checks. */
+export function getRegisteredToolPolicyNames(): string[] {
+  return [...TOOL_POLICY_MAP.keys()];
 }
 
 /**

@@ -7,7 +7,7 @@ export const batchToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'executeBatch',
-      description: 'Execute multiple timeline/media actions in sequence as a single batch. Use this for efficiency when you need to perform multiple operations (e.g. multiple splits, delete + move, etc.). All actions share a single undo point. Important: each action gets fresh state, so clip IDs from earlier splits are available to later actions.',
+      description: 'Execute multiple timeline/media actions in sequence with one undo point. This is not transactional: if one action fails, successful sibling actions remain applied, so inspect every returned result and repair only failures. Each action gets fresh state, so IDs created by earlier actions are available later. Use bare tool names such as splitClip, never namespaced names such as functions.splitClip.',
       parameters: {
         type: 'object',
         properties: {

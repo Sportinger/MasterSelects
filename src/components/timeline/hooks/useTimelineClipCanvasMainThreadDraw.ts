@@ -1,6 +1,5 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import { flags } from '../../../engine/featureFlags';
-import { prefersSoftwareTimelineCanvas } from '../utils/timelineCanvasPlatform';
 import {
   reportTimelineCanvasDrawDiagnostics,
   unregisterTimelineCanvasDrawDiagnostics,
@@ -9,6 +8,7 @@ import type { TimelineAudioDisplayMode } from '../../../stores/timeline/types';
 import type { TimelinePaintSourceClip } from '../../../timeline';
 import type { TimelineClipCanvasMediaStatus } from '../utils/timelineClipCanvasPassiveDecorations';
 import { drawTimelineClipCanvasMainThread } from '../utils/timelineClipCanvasMainThreadDraw';
+import { prepareTimelineClipCanvasMainThreadSurface } from '../utils/timelineClipCanvasMainThreadSurface';
 import type { TimelineClipCanvasSpectrogramTileSetMap } from '../utils/timelineClipCanvasSpectrogramResource';
 import type { TimelineClipCanvasTrimGeometry } from '../utils/timelineClipCanvasTrimResource';
 import type { TimelineClipCanvasWaveformPyramidMap } from '../utils/timelineClipCanvasWaveformResource';
@@ -35,6 +35,7 @@ interface TimelineClipCanvasMainThreadDrawInput {
   viewportWidth: number;
   waveformsEnabled?: boolean;
   audioDisplayMode?: TimelineAudioDisplayMode;
+  showFaceRanges: boolean;
   clipDrag?: unknown;
   clipDragPreview?: unknown;
   clipTrim?: unknown;
@@ -76,6 +77,7 @@ export function useTimelineClipCanvasMainThreadDraw(input: TimelineClipCanvasMai
     viewportWidth,
     waveformsEnabled,
     audioDisplayMode,
+    showFaceRanges,
     clipDrag,
     clipDragPreview,
     clipTrim,
@@ -106,47 +108,15 @@ export function useTimelineClipCanvasMainThreadDraw(input: TimelineClipCanvasMai
     if (workerMode) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    let ctx: CanvasRenderingContext2D | null = null;
-    try {
-      // On Linux/Mesa a GPU-accelerated 2D canvas loses its contents when the
-      // window is minimized/restored (repainting only on the next interaction).
-      // `willReadFrequently` forces a CPU raster surface that survives visibility
-      // changes and composites reliably.
-      // See docs/Features/Linux-Mesa-GPU.md (mode 3) and issue #259.
-      ctx = canvas.getContext('2d', prefersSoftwareTimelineCanvas() ? { willReadFrequently: true } : undefined);
-    } catch {
-      return;
-    }
-    if (!ctx) return;
+    const surface = prepareTimelineClipCanvasMainThreadSurface(canvas, cssWidth, height, canvasOffsetX);
+    if (!surface) return;
+    const { ctx, dpr, resizedBackingStore } = surface;
     markMainThreadCanvasContextInitialized();
 
-    const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1;
-    const targetWidth = Math.round(cssWidth * dpr);
-    const targetHeight = Math.round(height * dpr);
     // Assigning canvas.width/height resets the bitmap to transparent. Deferring
     // the repaint to rAF lets the browser composite that cleared canvas first,
     // showing as clips blinking while dragging a track's height (most visible on
     // Linux's software raster) — so a resize must repaint synchronously below.
-    const resizedBackingStore = canvas.width !== targetWidth || canvas.height !== targetHeight;
-    if (canvas.width !== targetWidth) {
-      canvas.width = targetWidth;
-    }
-    if (canvas.height !== targetHeight) {
-      canvas.height = targetHeight;
-    }
-    const cssWidthStyle = `${cssWidth}px`;
-    const cssHeightStyle = `${height}px`;
-    const cssLeftStyle = `${canvasOffsetX}px`;
-    if (canvas.style.left !== cssLeftStyle) {
-      canvas.style.left = cssLeftStyle;
-    }
-    if (canvas.style.width !== cssWidthStyle) {
-      canvas.style.width = cssWidthStyle;
-    }
-    if (canvas.style.height !== cssHeightStyle) {
-      canvas.style.height = cssHeightStyle;
-    }
-
     const paint = () => {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const diagnostics = drawTimelineClipCanvasMainThread({
@@ -161,6 +131,7 @@ export function useTimelineClipCanvasMainThreadDraw(input: TimelineClipCanvasMai
         viewportWidth,
         waveformsEnabled,
         audioDisplayMode,
+        showFaceRanges,
         waveformPyramids,
         spectrogramTileSets,
         mediaThumbnailUrlsById,
@@ -215,5 +186,5 @@ export function useTimelineClipCanvasMainThreadDraw(input: TimelineClipCanvasMai
     };
     // scrollX intentionally excluded; scrollBucket drives viewport-thumbnail redraws.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workerMode, clips, trackId, height, cssWidth, canvasOffsetX, timeToPixel, selectedClipIds, hoveredClipId, trackColor, scrollBucket, viewportWidth, waveformsEnabled, audioDisplayMode, clipDrag, clipDragPreview, clipTrim, waveformPyramids, spectrogramTileSets, mediaFileStatusById, mediaThumbnailUrlsById, redrawNonce, workerEligibility, workerRuntimeFallbackReason, workerCanvasGeneration, markMainThreadCanvasContextInitialized]);
+  }, [workerMode, clips, trackId, height, cssWidth, canvasOffsetX, timeToPixel, selectedClipIds, hoveredClipId, trackColor, scrollBucket, viewportWidth, waveformsEnabled, audioDisplayMode, showFaceRanges, clipDrag, clipDragPreview, clipTrim, waveformPyramids, spectrogramTileSets, mediaFileStatusById, mediaThumbnailUrlsById, redrawNonce, workerEligibility, workerRuntimeFallbackReason, workerCanvasGeneration, markMainThreadCanvasContextInitialized]);
 }

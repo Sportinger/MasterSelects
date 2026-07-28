@@ -1,0 +1,278 @@
+.AnalysisSceneCard {
+  min-width: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  padding: var(--sp-2);
+}
+
+.AnalysisSceneCard__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.AnalysisSceneCard__eyebrow {
+  margin: 0 0 2px;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.AnalysisSceneCard h3,
+.AnalysisSceneCard h4 {
+  margin: 0;
+  font-size: var(--font-lg);
+}
+
+.AnalysisSceneCard h3 span,
+.AnalysisSceneCard__muted,
+.AnalysisSceneCard small {
+  color: var(--text-muted);
+  font-weight: var(--font-normal);
+}
+
+.AnalysisSceneCard__keyframe,
+.AnalysisSceneCard__action,
+.AnalysisSceneTranscript__time {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  padding: var(--sp-1) var(--sp-1-5);
+  cursor: pointer;
+}
+
+.AnalysisSceneCard__keyframe:hover,
+.AnalysisSceneCard__action:hover,
+.AnalysisSceneTranscript__time:hover {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.AnalysisSceneCard__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--sp-2);
+  margin: var(--sp-3) 0;
+}
+
+.AnalysisSceneCard__fact {
+  min-width: 0;
+}
+
+.AnalysisSceneCard__fact dt {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.AnalysisSceneCard__fact dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+  font-size: var(--font-md);
+}
+
+.AnalysisSceneCard__section {
+  margin-top: var(--sp-2-5);
+  border-top: 1px solid var(--border-color);
+  padding-top: var(--sp-2-5);
+}
+
+.AnalysisSceneCard__section > p {
+  margin: var(--sp-1-5) 0;
+  font-size: var(--font-md);
+}
+
+.AnalysisSceneCard__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1-5);
+  margin-top: var(--sp-1-5);
+}
+
+.AnalysisSceneCard__speaker {
+  color: var(--text-secondary);
+}
+
+.AnalysisScenePersonChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  max-width: 100%;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: var(--sp-1) var(--sp-1-5);
+  cursor: pointer;
+}
+
+.AnalysisScenePersonChip:hover {
+  background: var(--bg-hover);
+}
+
+.AnalysisScenePersonChip--selected {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.AnalysisScenePersonChip__marker {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-full);
+  background: var(--text-muted);
+}
+
+.AnalysisScenePersonChip--active .AnalysisScenePersonChip__marker {
+  background: var(--success-light);
+}
+
+.AnalysisScenePersonChip--offscreen .AnalysisScenePersonChip__marker {
+  background: var(--warning-light);
+}
+
+.AnalysisScenePersonChip__detail {
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+}
+
+.AnalysisSceneCard__list {
+  display: grid;
+  gap: var(--sp-1);
+  margin: var(--sp-1-5) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.AnalysisSceneCard__list li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  font-size: var(--font-md);
+}
+
+.AnalysisSceneCard__list small {
+  text-align: right;
+}
+
+.AnalysisSceneCard__issue--critical span {
+  color: var(--danger-light);
+}
+
+.AnalysisSceneCard__issue--warning span {
+  color: var(--warning-light);
+}
+
+.AnalysisSceneCard__coverage {
+  display: grid;
+  gap: 3px;
+  margin-top: var(--sp-2-5);
+  border-left: 2px solid var(--warning-light);
+  background: color-mix(in srgb, var(--warning) 10%, var(--bg-secondary));
+  color: var(--text-secondary);
+  padding: var(--sp-2);
+  font-size: var(--font-sm);
+}
+
+.AnalysisSceneCard__coverage strong {
+  color: var(--warning-light);
+  font-size: var(--font-md);
+}
+
+.AnalysisSceneTranscript {
+  display: grid;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  border-top: 1px solid var(--border-color);
+  padding-top: var(--sp-2-5);
+}
+
+.AnalysisSceneTranscript__turn {
+  min-width: 0;
+}
+
+.AnalysisSceneTranscript__header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1-5);
+  font-size: var(--font-sm);
+}
+
+.AnalysisSceneTranscript__speaker {
+  color: var(--accent);
+  font-weight: var(--font-semibold);
+}
+
+.AnalysisSceneTranscript__state {
+  color: var(--text-muted);
+}
+
+.AnalysisSceneTranscript__state--active {
+  color: var(--success-light);
+}
+
+.AnalysisSceneTranscript__state--offscreen {
+  color: var(--warning-light);
+}
+
+.AnalysisSceneTranscript__time {
+  margin-left: auto;
+  padding: 2px var(--sp-1);
+  font-size: var(--font-xs);
+}
+
+.AnalysisSceneTranscript__words {
+  display: block;
+  margin-top: 3px;
+  line-height: 1.65;
+}
+
+.AnalysisSceneTranscript__word {
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  padding: 1px 2px;
+  cursor: pointer;
+}
+
+.AnalysisSceneTranscript__word:hover,
+.AnalysisSceneTranscript__word:focus-visible {
+  outline: none;
+  background: var(--bg-hover);
+}
+
+.AnalysisSceneTranscript__word--active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.AnalysisSceneTranscript__word--review {
+  text-decoration: underline wavy var(--warning-light);
+}
+
+.AnalysisSceneTranscript__empty,
+.AnalysisSceneTranscript__more {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+@media (max-width: 360px) {
+  .AnalysisSceneCard__header,
+  .AnalysisSceneCard__list li {
+    display: grid;
+  }
+
+  .AnalysisSceneCard__list li {
+    gap: 1px;
+  }
+
+  .AnalysisSceneCard__list small {
+    text-align: left;
+  }
+}

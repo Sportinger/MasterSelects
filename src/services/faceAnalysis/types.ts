@@ -12,6 +12,8 @@ export interface FaceModelLoadProgress {
 
 export interface FaceRuntimeDetection {
   confidence: number;
+  /** Small faces remain visible as review boxes but do not enter identity groups. */
+  identityEligible?: boolean;
   box: FaceAnalysisBox;
   landmarks: FaceAnalysisPoint[];
   embedding: Float32Array;
@@ -26,7 +28,6 @@ export type FaceWorkerRequest =
       type: 'initialize';
       yunetBuffer: ArrayBuffer;
       sfaceBuffer: ArrayBuffer;
-      preferWebGpu: boolean;
     }
   | {
       type: 'analyze-frame';

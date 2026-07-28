@@ -9,7 +9,7 @@ import { NativeProjectCoreService } from './core/NativeProjectCoreService';
 import { NativeHelperClient } from '../nativeHelper/NativeHelperClient';
 import { ProjectCoreService } from './core/ProjectCoreService';
 import { AnalysisService } from './domains/AnalysisService';
-import { TranscriptService } from './domains/TranscriptService';
+import { TranscriptService, type StoredTranscript } from './domains/TranscriptService';
 import { CacheService } from './domains/CacheService';
 import { ProxyStorageService, type ProxyFrameScanProgressCallback, type ProxyFrameWriter } from './domains/ProxyStorageService';
 import { RawMediaService } from './domains/RawMediaService';
@@ -605,16 +605,19 @@ class ProjectFileService {
     inPoint: number,
     outPoint: number,
     frames: unknown[],
-    sampleInterval: number
+    sampleInterval: number,
+    faceAnalysis?: unknown,
   ): Promise<boolean> {
-    return artifactStorageDelegates.saveAnalysis(this.artifactStorageContext, mediaId, inPoint, outPoint, frames, sampleInterval);
+    return artifactStorageDelegates.saveAnalysis(
+      this.artifactStorageContext, mediaId, inPoint, outPoint, frames, sampleInterval, faceAnalysis,
+    );
   }
 
   async getAnalysis(
     mediaId: string,
     inPoint: number,
     outPoint: number
-  ): Promise<{ frames: unknown[]; sampleInterval: number } | null> {
+  ): Promise<{ frames: unknown[]; sampleInterval: number; faceAnalysis?: unknown } | null> {
     return artifactStorageDelegates.getAnalysis(this.artifactStorageContext, mediaId, inPoint, outPoint);
   }
 
@@ -646,7 +649,7 @@ class ProjectFileService {
     return artifactStorageDelegates.saveTranscript(this.artifactStorageContext, mediaId, transcript, transcribedRanges);
   }
 
-  async getTranscript(mediaId: string): Promise<{ words: unknown[]; transcribedRanges?: [number, number][] } | null> {
+  async getTranscript(mediaId: string): Promise<StoredTranscript | null> {
     return artifactStorageDelegates.getTranscript(this.artifactStorageContext, mediaId);
   }
 

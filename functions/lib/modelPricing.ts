@@ -58,9 +58,17 @@ const MODEL_PRICING: Record<string, ModelPricingEntry> = {
   'gpt-5.1-codex':      { creditCost: 5,  tier: 'high' },
   'gpt-5.4':            { creditCost: 5,  tier: 'high' },
   'gpt-5.5':            { creditCost: 5,  tier: 'high' },
+  'gpt-5-4':            { creditCost: 5,  tier: 'high' },
+  'gpt-5-5':            { creditCost: 5,  tier: 'high' },
+  'gpt-5-6-luna':       { creditCost: 3,  tier: 'mid' },
+  'gpt-5-6-terra':      { creditCost: 5,  tier: 'high' },
+  'claude-sonnet-5':    { creditCost: 5,  tier: 'high' },
   'o3':                 { creditCost: 5,  tier: 'high' },
 
   // --- Tier: premium (8-50 credits) ---
+  'gpt-5-6-sol':        { creditCost: 8,  tier: 'premium' },
+  'claude-opus-4-8':    { creditCost: 8,  tier: 'premium' },
+  'claude-fable-5':     { creditCost: 10, tier: 'premium' },
   'gpt-5.2':            { creditCost: 8,  tier: 'premium' },
   'gpt-5.2-pro':        { creditCost: 10, tier: 'premium' },
   'o3-pro':             { creditCost: 50, tier: 'premium' },

@@ -1,6 +1,10 @@
 import { useTimelineStore } from '../../../../stores/timeline';
 import { undo as historyUndo, redo as historyRedo } from '../../../../stores/historyStore';
 import { animateMarker, flashPreviewCanvas } from '../../aiFeedback';
+import {
+  captureMutationEntitySnapshot,
+  describeMutationEntities,
+} from '../mutationEntityResults';
 import type { PlaybackToolResult, TimelineStore } from './runtime';
 
 export async function handlePlay(
@@ -28,6 +32,10 @@ export async function handleSetClipSpeed(
   if (!clip) return { success: false, error: `Clip not found: ${clipId}` };
 
   const store = useTimelineStore.getState();
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'clip',
+    store.clips,
+  );
 
   if (args.speed !== undefined) {
     const speed = args.speed as number;
@@ -60,6 +68,10 @@ export async function handleSetClipSpeed(
       speed: finalClip?.speed ?? 1,
       reversed: finalClip?.reversed ?? false,
       preservesPitch: finalClip?.preservesPitch ?? true,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().clips,
+      ),
     },
   };
 }
@@ -84,6 +96,10 @@ export async function handleAddMarker(
   const label = args.label as string | undefined;
   const color = args.color as string | undefined;
 
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'marker',
+    useTimelineStore.getState().markers,
+  );
   const markerId = timelineStore.addMarker(time, label, color);
 
   // Visual feedback: marker pop animation.
@@ -91,7 +107,16 @@ export async function handleAddMarker(
 
   return {
     success: true,
-    data: { markerId, time, label, color },
+    data: {
+      markerId,
+      time,
+      label,
+      color,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().markers,
+      ),
+    },
   };
 }
 
@@ -118,10 +143,23 @@ export async function handleRemoveMarker(
   timelineStore: TimelineStore
 ): Promise<PlaybackToolResult> {
   const markerId = args.markerId as string;
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'marker',
+    useTimelineStore.getState().markers,
+  );
 
   // Visual feedback: marker fade animation before removal.
   animateMarker(markerId, 'remove');
 
   timelineStore.removeMarker(markerId);
-  return { success: true, data: { removedMarkerId: markerId } };
+  return {
+    success: true,
+    data: {
+      removedMarkerId: markerId,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().markers,
+      ),
+    },
+  };
 }

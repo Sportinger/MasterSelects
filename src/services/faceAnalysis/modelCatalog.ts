@@ -1,4 +1,8 @@
-export const FACE_ANALYSIS_MODEL_VERSION = 'yunet-2026may+sface-2021dec-v1';
+// Keep model bytes cached across identity-tracker refinements. Analysis data
+// carries its own version below so prior person assignments are never reused
+// after the grouping algorithm changes.
+export const FACE_MODEL_CACHE_VERSION = 'yunet-2026may+sface-2021dec-v1';
+export const FACE_ANALYSIS_MODEL_VERSION = 'yunet-2026may+sface-2021dec-v4';
 
 export interface FaceModelCatalogEntry {
   id: 'yunet' | 'sface';

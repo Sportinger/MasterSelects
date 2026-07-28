@@ -45,6 +45,7 @@ const TRANSCRIPTION_PROVIDER_LABELS: Record<TranscriptionProvider, string> = {
   openai: 'OpenAI Whisper API',
   assemblyai: 'AssemblyAI',
   deepgram: 'Deepgram',
+  hybrid: 'Best Quality: Deepgram + OpenAI',
 };
 
 function getFrameExportFilename(clip: TimelineClip | null | undefined, playheadPosition: number): string {
@@ -114,6 +115,8 @@ export function TimelineContextMenu({
 }: TimelineContextMenuProps) {
   const { menuRef: contextMenuRef, adjustedPosition: contextMenuPosition } = useContextMenuPosition(contextMenu);
   const playheadPosition = useTimelineStore((state) => state.playheadPosition);
+  const showFaceRanges = useTimelineStore((state) => state.showFaceRanges);
+  const toggleFaceRanges = useTimelineStore((state) => state.toggleFaceRanges);
   const [showCopiedPromptToast, setShowCopiedPromptToast] = useState(false);
   const copiedPromptTimeoutRef = useRef<number | null>(null);
   const confirmPromptCopied = useCallback(() => {
@@ -175,7 +178,11 @@ export function TimelineContextMenu({
   const openSettings = useSettingsStore((state) => state.openSettings);
   const isSignedIn = useAccountStore((state) => Boolean(state.session?.authenticated));
   const activeTranscriptionProviderLabel = isSignedIn
-    ? 'OpenAI Whisper Cloud'
+    ? transcriptionProvider === 'deepgram'
+      ? 'Deepgram Cloud'
+      : transcriptionProvider === 'hybrid'
+        ? 'Best Quality: Deepgram + OpenAI'
+        : 'OpenAI Whisper Cloud'
     : TRANSCRIPTION_PROVIDER_LABELS[transcriptionProvider];
 
   if (!contextMenu) return copiedPromptToast;
@@ -211,6 +218,9 @@ export function TimelineContextMenu({
     showColorClipboardTopLevel,
   } = menuModel;
   const isVideoMedia = mediaFile?.type === 'video' || isVideo;
+  const hasFaceRanges = Boolean(clip?.analysis?.faceAnalysis?.people.some((person) =>
+    person.appearances.some((appearance) => appearance.end >= appearance.start),
+  )) || Boolean(clip?.analysis?.frames.some((frame) => (frame.faceCount ?? 0) > 0));
   const canExportCurrentFrame = Boolean(clip && !isAudio && !isMidi);
   const allClips = [...clipMap.values()];
   const syncAudioClipIds = new Set(targetClipIds
@@ -398,12 +408,25 @@ export function TimelineContextMenu({
         <>
           <div className="context-menu-separator" />
           {isVideo && (
+            <>
               <div
                 className={`context-menu-item ${thumbnailsEnabled ? 'checked' : ''}`}
                 onClick={() => runCommand({ kind: 'toggle-thumbnails', canExecute: true })}
               >
-              {thumbnailsEnabled ? '\u2713 ' : ''}Show Thumbnail
-            </div>
+                {thumbnailsEnabled ? '\u2713 ' : ''}Show Thumbnail
+              </div>
+              {hasFaceRanges && (
+                <div
+                  className={`context-menu-item ${showFaceRanges ? 'checked' : ''}`}
+                  onClick={() => {
+                    toggleFaceRanges();
+                    setContextMenu(null);
+                  }}
+                >
+                  {showFaceRanges ? '\u2713 ' : ''}Face Ranges
+                </div>
+              )}
+            </>
           )}
           {isAudio && (
             <>

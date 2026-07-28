@@ -198,7 +198,7 @@ export function AIFeaturesSettings({ embedded }: AIFeaturesSettingsProps = {}) {
             value={aiProvider}
             onChange={(e) => setAiProvider(e.target.value as 'openai' | 'lemonade')}
           >
-            <option value="openai">OpenAI / Cloud</option>
+            <option value="openai">Kie.ai / Cloud</option>
             <option value="lemonade">Lemonade Local</option>
           </select>
         </label>

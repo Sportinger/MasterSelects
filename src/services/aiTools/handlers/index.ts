@@ -17,6 +17,7 @@ import {
   handleSetPlayhead,
   handleSetInOutPoints,
 } from './timeline';
+import { handleVerifyTimelineInvariants } from './verifyTimelineInvariants';
 
 import {
   handleGetClipDetails,
@@ -52,13 +53,17 @@ import {
   handleStartClipFaceAnalysis,
   handleStartClipTranscription,
 } from './analysis';
+import {
+  handleAssignClipFaceReviewCandidate,
+  handleMergeClipFacePeople,
+  handleMoveClipFaceAppearance,
+} from './faceAnalysisCorrections';
 
 import {
   handleCaptureFrame,
   handleGetCutPreviewQuad,
   handleGetFramesAtTimes,
 } from './preview';
-import { handleRunPixelParticleDisintegrateQa } from './pixelParticleDisintegrateQa';
 
 import {
   handleGetMediaItems,
@@ -99,7 +104,6 @@ import {
   handlePlay,
   handlePause,
   handleSimulateFrameKeypresses,
-  handleMonitorManualPause,
   handleSimulateScrub,
   handleSimulatePlayback,
   handleSimulatePlaybackPulses,
@@ -127,7 +131,6 @@ import {
   handleAddVertex,
   handleRemoveVertex,
   handleUpdateVertex,
-  handleAddMaskPathKeyframe,
 } from './masks';
 
 import {
@@ -194,80 +197,8 @@ import {
   handleGetNodeWorkspaceDebugState,
   handleSendAINodePrompt,
 } from './nodeWorkspace';
-
-// Handler registry - maps tool names to handler functions
-const timelineHandlers: Record<string, (args: Record<string, unknown>, store: ReturnType<typeof useTimelineStore.getState>, callerContext?: CallerContext) => Promise<ToolResult>> = {
-  getTimelineState: handleGetTimelineState,
-  setPlayhead: handleSetPlayhead,
-  setInOutPoints: handleSetInOutPoints,
-  getClipDetails: handleGetClipDetails,
-  getClipsInTimeRange: handleGetClipsInTimeRange,
-  splitClip: handleSplitClip,
-  deleteClip: handleDeleteClip,
-  deleteClips: handleDeleteClips,
-  cutRangesFromClip: handleCutRangesFromClip,
-  moveClip: handleMoveClip,
-  trimClip: handleTrimClip,
-  splitClipEvenly: handleSplitClipEvenly,
-  splitClipAtTimes: handleSplitClipAtTimes,
-  reorderClips: handleReorderClips,
-  selectClips: handleSelectClips,
-  clearSelection: handleClearSelection,
-  createTrack: handleCreateTrack,
-  deleteTrack: handleDeleteTrack,
-  setTrackVisibility: handleSetTrackVisibility,
-  setTrackMuted: handleSetTrackMuted,
-  getClipAnalysis: handleGetClipAnalysis,
-  getClipFaceAnalysis: handleGetClipFaceAnalysis,
-  getClipTranscript: handleGetClipTranscript,
-  findSilentSections: handleFindSilentSections,
-  findLowQualitySections: handleFindLowQualitySections,
-  startClipAnalysis: handleStartClipAnalysis,
-  startClipFaceAnalysis: handleStartClipFaceAnalysis,
-  startClipTranscription: handleStartClipTranscription,
-  captureFrame: handleCaptureFrame,
-  getCutPreviewQuad: handleGetCutPreviewQuad,
-  getFramesAtTimes: handleGetFramesAtTimes,
-  runPixelParticleDisintegrateQa: async (args: Record<string, unknown>) =>
-    handleRunPixelParticleDisintegrateQa(args),
-  // Transform
-  setTransform: handleSetTransform,
-  // Effects
-  addEffect: handleAddEffect,
-  removeEffect: handleRemoveEffect,
-  updateEffect: handleUpdateEffect,
-  // Keyframes
-  getKeyframes: handleGetKeyframes,
-  addKeyframe: handleAddKeyframe,
-  // Playback & Control
-  play: handlePlay,
-  pause: handlePause,
-  monitorManualPause: handleMonitorManualPause,
-  simulateFrameKeypresses: handleSimulateFrameKeypresses,
-  simulateScrub: handleSimulateScrub,
-  simulatePlayback: handleSimulatePlayback,
-  simulatePlaybackPulses: handleSimulatePlaybackPulses,
-  simulatePlaybackPath: handleSimulatePlaybackPath,
-  setClipSpeed: handleSetClipSpeed,
-  // Markers
-  addMarker: handleAddMarker,
-  getMarkers: handleGetMarkers,
-  removeMarker: handleRemoveMarker,
-  // Transitions
-  addTransition: handleAddTransition,
-  removeTransition: handleRemoveTransition,
-  // Masks
-  getMasks: handleGetMasks,
-  addRectangleMask: handleAddRectangleMask,
-  addEllipseMask: handleAddEllipseMask,
-  addMask: handleAddMask,
-  removeMask: handleRemoveMask,
-  updateMask: handleUpdateMask,
-  addVertex: handleAddVertex,
-  removeVertex: handleRemoveVertex,
-  updateVertex: handleUpdateVertex,
-  addMaskPathKeyframe: handleAddMaskPathKeyframe,
-};
+import { handleGetTimelineAnalysis } from './agentTimeline';
+import { timelineHandlers } from './timelineHandlerRegistry';
 
 const mediaHandlers: Record<string, (args: Record<string, unknown>, store: ReturnType<typeof useMediaStore.getState>, callerContext?: CallerContext) => Promise<ToolResult>> = {
   getMediaItems: handleGetMediaItems,
@@ -545,6 +476,20 @@ async function handleSwitchDockLayout(args: Record<string, unknown>): Promise<To
   };
 }
 
+/** Return every name accepted by the dispatcher for registry parity checks. */
+export function getRegisteredToolHandlerNames(): string[] {
+  return [...new Set([
+    // executeBatch is dispatched by the outer app tool executor.
+    'executeBatch',
+    'getTimelineAnalysis',
+    'verifyTimelineInvariants',
+    ...Object.keys(timelineHandlers),
+    ...Object.keys(mediaHandlers),
+    ...Object.keys(selfContainedHandlers),
+    ...Object.keys(youtubeHandlers),
+  ])];
+}
+
 /**
  * Execute a tool by name
  * Dispatches to the appropriate handler based on tool name
@@ -559,6 +504,14 @@ export async function executeToolInternal(
   // Strip provider namespace prefixes (e.g. OpenAI's `functions.addClipSegment`)
   // so dispatch matches the registered handler name.
   toolName = normalizeToolName(toolName);
+
+  if (toolName === 'getTimelineAnalysis') {
+    return handleGetTimelineAnalysis(args, timelineStore, mediaStore);
+  }
+
+  if (toolName === 'verifyTimelineInvariants') {
+    return handleVerifyTimelineInvariants(args, timelineStore);
+  }
 
   // Check timeline handlers first
   if (toolName in timelineHandlers) {
@@ -611,8 +564,12 @@ export {
   handleSetTrackVisibility,
   handleSetTrackMuted,
   // Analysis
+  handleGetTimelineAnalysis,
   handleGetClipAnalysis,
   handleGetClipFaceAnalysis,
+  handleMergeClipFacePeople,
+  handleMoveClipFaceAppearance,
+  handleAssignClipFaceReviewCandidate,
   handleGetClipTranscript,
   handleFindSilentSections,
   handleFindLowQualitySections,

@@ -11,6 +11,8 @@ import {
   getNormalizedSampleTimestampUs,
 } from './sampleTiming';
 
+const SCENE_CUT_FEED_STRIDE = 4;
+
 interface ProxyGenerationLogger {
   debug(message: string, data?: unknown): void;
   info(message: string, data?: unknown): void;
@@ -31,6 +33,8 @@ export interface ProxySampleProcessingController {
   startEncodeWorkers(): void;
   queueDecodedFrames(): void;
   waitForEncodeBackpressure(): Promise<void>;
+  waitForSceneCutBackpressure(): Promise<void>;
+  isSceneCutAnalysisActive(): boolean;
   getDecodedFrameCount(): number;
   closeDecodedFrames(): void;
   isEncodeStopRequested(): boolean;
@@ -42,7 +46,15 @@ export interface ProxySampleProcessingController {
   log: ProxyGenerationLogger;
 }
 
-export async function processProxySamples(controller: ProxySampleProcessingController): Promise<void> {
+export interface ProxySampleProcessingResult {
+  decodeErrors: number;
+  expectedFrameCount: number;
+  skippedSamplesBeforeFirstKeyframe: number;
+}
+
+export async function processProxySamples(
+  controller: ProxySampleProcessingController,
+): Promise<ProxySampleProcessingResult> {
   const {
     decoder,
     samples,
@@ -108,15 +120,25 @@ export async function processProxySamples(controller: ProxySampleProcessingContr
             log.error('Decode chunk failed', error);
           }
           if (decodeErrors > 50) {
-            log.error('Too many decode errors, stopping');
-            return;
+            throw new Error('Proxy decode stopped after more than 50 chunk errors.');
           }
+        }
+
+        if (
+          controller.isSceneCutAnalysisActive() &&
+          (i - batchStart + 1) % SCENE_CUT_FEED_STRIDE === 0
+        ) {
+          await new Promise(resolve => setTimeout(resolve, 0));
+          controller.queueDecodedFrames();
+          await controller.waitForEncodeBackpressure();
+          await controller.waitForSceneCutBackpressure();
         }
       }
 
       await new Promise(resolve => setTimeout(resolve, 0));
       controller.queueDecodedFrames();
       await controller.waitForEncodeBackpressure();
+      await controller.waitForSceneCutBackpressure();
     }
 
     const flushTimeoutMs = Math.max(
@@ -138,6 +160,7 @@ export async function processProxySamples(controller: ProxySampleProcessingContr
 
     await new Promise(resolve => setTimeout(resolve, 10));
     controller.queueDecodedFrames();
+    await controller.waitForSceneCutBackpressure();
   } catch (error) {
     primaryError = error;
     controller.requestEncodeStop();
@@ -170,6 +193,11 @@ export async function processProxySamples(controller: ProxySampleProcessingContr
   const fps = processedFrames / (totalTime / 1000);
   log.info(`Complete: ${processedFrames}/${controller.totalFrames} frames in ${(totalTime / 1000).toFixed(1)}s (${fps.toFixed(1)} fps encode)`);
   controller.logPerformance(totalTime);
+  return {
+    decodeErrors,
+    expectedFrameCount: sortedSamples.length,
+    skippedSamplesBeforeFirstKeyframe: firstKeyframeIdx,
+  };
 }
 
 async function flushProxyDecoder(
@@ -202,6 +230,7 @@ async function flushProxyDecoder(
 
     controller.queueDecodedFrames();
     await controller.waitForEncodeBackpressure();
+    await controller.waitForSceneCutBackpressure();
     if (controller.getDecodedFrameCount() === 0) {
       await new Promise(resolve => setTimeout(resolve, 20));
     }

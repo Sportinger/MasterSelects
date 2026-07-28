@@ -100,10 +100,16 @@ export interface ProjectMarker {
 // to the runtime `TempoEvent` / `TempoMap` / `RulerLane`; kept as distinct names
 // so the schema tier owns its own shape (matching ProjectMarker vs TimelineMarker).
 export interface ProjectTempoEvent {
+  // Optional in the durable tier: projects saved before #299 have no ids, and
+  // `normalizeRulerLaneState` backfills them on load. No version bump needed.
+  id?: string;
   time: number; // seconds, sorted ascending; first event is at 0
   bpm: number;
   numerator: number;
   denominator: number;
+  // 'ramp' = the tempo glides into this event from the previous one (#299).
+  // Absent reads as 'jump', so pre-ramp projects are unchanged.
+  curve?: 'jump' | 'ramp';
 }
 
 export interface ProjectTempoMap {

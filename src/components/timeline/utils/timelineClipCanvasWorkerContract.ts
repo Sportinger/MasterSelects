@@ -34,7 +34,10 @@ export interface TimelineClipCanvasWorkerPassiveDecorationsResource {
   kind: 'passive-decorations';
   badges?: readonly TimelineClipCanvasWorkerPassiveBadge[];
   progressBars?: readonly TimelineClipCanvasWorkerProgressBar[];
+  sceneCutMarkers?: Float32Array;
   transcriptMarkers?: Float32Array;
+  faceRanges?: Float32Array;
+  faceMarkers?: Float32Array;
   analysisOverlay?: TimelineClipCanvasWorkerAnalysisOverlayResource;
 }
 

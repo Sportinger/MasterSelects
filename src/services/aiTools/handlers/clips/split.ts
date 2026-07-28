@@ -2,6 +2,10 @@ import { useTimelineStore } from '../../../../stores/timeline';
 import type { TimelineClip } from '../../../../types/timeline';
 import type { ToolResult } from '../../types.ts';
 import { isAIExecutionActive } from '../../executionState';
+import {
+  captureMutationEntitySnapshot,
+  describeMutationEntities,
+} from '../mutationEntityResults';
 import type { TimelineStore } from './runtime';
 import { logSplitCheckpoint, splitClipBatch } from './runtime';
 
@@ -24,6 +28,14 @@ export async function handleSplitClip(
     return { success: false, error: `Split time ${splitTime}s is outside clip range (${clip.startTime}s - ${clipEnd}s)` };
   }
 
+  const targetClipIds = [
+    clip.id,
+    withLinked ? clip.linkedClipId : undefined,
+  ].filter((id): id is string => id !== undefined);
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'clip',
+    useTimelineStore.getState().clips,
+  );
   const splitResult = timelineStore.applyTimelineEditOperation({
     id: `ai-split-clip:${clipId}:${splitTime}`,
     type: 'split-at-time',
@@ -55,7 +67,23 @@ export async function handleSplitClip(
     }
   }
 
-  return { success: true, data: { splitAt: splitTime, originalClipId: clipId, withLinked } };
+  return {
+    success: true,
+    data: {
+      splitAt: splitTime,
+      originalClipId: clipId,
+      withLinked,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().clips,
+        {
+          updatedEntityIds: targetClipIds,
+          // Source clips are transformed into parts, not semantically deleted by a split.
+          excludedDeletedEntityIds: targetClipIds,
+        },
+      ),
+    },
+  };
 }
 
 function resolveSplitClipTarget(
@@ -108,6 +136,14 @@ export async function handleSplitClipEvenly(
     splitTimes.push(clipStart + partDuration * i);
   }
 
+  const targetClipIds = [
+    clip.id,
+    withLinked ? clip.linkedClipId : undefined,
+  ].filter((id): id is string => id !== undefined);
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'clip',
+    useTimelineStore.getState().clips,
+  );
   if (isAIExecutionActive()) {
     logSplitCheckpoint('split-evenly:start', clip, splitTimes.length, withLinked);
     const trackId = clip.trackId;
@@ -130,7 +166,21 @@ export async function handleSplitClipEvenly(
 
   return {
     success: true,
-    data: { parts, splitTimes, clipName, partDuration, withLinked },
+    data: {
+      parts,
+      splitTimes,
+      clipName,
+      partDuration,
+      withLinked,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().clips,
+        {
+          updatedEntityIds: targetClipIds,
+          excludedDeletedEntityIds: targetClipIds,
+        },
+      ),
+    },
   };
 }
 
@@ -159,6 +209,14 @@ export async function handleSplitClipAtTimes(
     return { success: false, error: `No valid split times within clip range (${clipStart}s - ${clipEnd}s)` };
   }
 
+  const targetClipIds = [
+    clip.id,
+    withLinked ? clip.linkedClipId : undefined,
+  ].filter((id): id is string => id !== undefined);
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'clip',
+    useTimelineStore.getState().clips,
+  );
   if (isAIExecutionActive()) {
     logSplitCheckpoint('split-at-times:start', clip, validTimes.length, withLinked);
     const trackId = clip.trackId;
@@ -179,8 +237,38 @@ export async function handleSplitClipAtTimes(
     splitClipBatch(clip, validTimes, withLinked);
   }
 
+  const clipsAfter = useTimelineStore.getState().clips;
+  const videoSegments = clipsAfter
+    .filter((candidate) => (
+      candidate.trackId === clip.trackId
+      && candidate.startTime >= clipStart - 0.001
+      && candidate.startTime + candidate.duration <= clipEnd + 0.001
+    ))
+    .toSorted((a, b) => a.startTime - b.startTime);
+
   return {
     success: true,
-    data: { splitCount: validTimes.length, splitTimes: validTimes, resultingParts: validTimes.length + 1, withLinked },
+    data: {
+      splitCount: validTimes.length,
+      splitTimes: validTimes,
+      resultingParts: validTimes.length + 1,
+      withLinked,
+      // Runtime segment binding payload (agent-kernel plan section 6.2):
+      // segment ids in timeline order so downstream steps never copy ID lists.
+      segments: {
+        videoClipIds: videoSegments.map((segment) => segment.id),
+        audioClipIds: videoSegments
+          .map((segment) => segment.linkedClipId)
+          .filter((id): id is string => typeof id === 'string'),
+      },
+      ...describeMutationEntities(
+        mutationSnapshot,
+        clipsAfter,
+        {
+          updatedEntityIds: targetClipIds,
+          excludedDeletedEntityIds: targetClipIds,
+        },
+      ),
+    },
   };
 }

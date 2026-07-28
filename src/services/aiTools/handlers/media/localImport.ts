@@ -1,4 +1,4 @@
-// Local file import tool handlers: importLocalFiles (with optional timeline
+﻿// Local file import tool handlers: importLocalFiles (with optional timeline
 // placement) and listLocalFiles, gated by the file access broker.
 
 import { useMediaStore } from '../../../../stores/mediaStore';
@@ -8,6 +8,7 @@ import type { CallerContext } from '../../policy';
 import { Logger } from '../../../logger';
 import { activateDockPanel, flashPreviewCanvas } from '../../aiFeedback';
 import { validateFilePath, getAllowedRoots } from '../../../security/fileAccessBroker';
+import { computeTimelineOccupancy } from '../../../timeline/timelineOccupancy';
 import {
   placeSignalAssetOnTimeline,
 } from '../../../../runtime/renderers/signalTimelineRendererAdapter';
@@ -17,8 +18,61 @@ import {
   normalizeLocalPath,
 } from './localFileAccess';
 import { waitForCompositionReady, type MediaStore } from './runtime';
+import {
+  captureMutationEntitySnapshot,
+  describeMutationEntities,
+  type MutationEntitySnapshot,
+} from '../mutationEntityResults';
+import type { TimelineClip, TimelineTrack } from '../../../../types/timeline';
 
 const log = Logger.create('AITool:Media');
+
+const IMPORT_MUTATION_WARNINGS = [
+  'The shared mutation entity model has no mediaItem kind yet; imported mediaItem refs use clip.',
+  'Waveform, audio-proxy, and video-proxy generation may continue asynchronously after imported media items are returned.',
+];
+
+function createImportMutationEnvelope(
+  importedIds: readonly string[],
+  mediaItemIdsBefore: ReadonlySet<string>,
+  trackSnapshot: MutationEntitySnapshot<TimelineTrack>,
+  clipSnapshot: MutationEntitySnapshot<TimelineClip>,
+) {
+  const trackEnvelope = describeMutationEntities(trackSnapshot, useTimelineStore.getState().tracks);
+  const clipEnvelope = describeMutationEntities(clipSnapshot, useTimelineStore.getState().clips);
+  const stateRevisionBefore = Math.min(
+    trackEnvelope.stateRevisionBefore,
+    clipEnvelope.stateRevisionBefore,
+  );
+  const stateRevisionAfter = Math.max(
+    trackEnvelope.stateRevisionAfter,
+    clipEnvelope.stateRevisionAfter,
+  );
+  const revisionAdvanced = stateRevisionAfter > stateRevisionBefore;
+  const createdMediaItemIds = [...new Set(importedIds)]
+    .filter((id) => !mediaItemIdsBefore.has(id));
+
+  return {
+    stateRevisionBefore: revisionAdvanced ? stateRevisionBefore : null,
+    stateRevisionAfter: revisionAdvanced ? stateRevisionAfter : null,
+    entities: {
+      created: [
+        ...createdMediaItemIds.map((id) => ({ kind: 'mediaItem' as const, id })),
+        ...trackEnvelope.entities.created,
+        ...clipEnvelope.entities.created,
+      ],
+      updated: [
+        ...trackEnvelope.entities.updated,
+        ...clipEnvelope.entities.updated,
+      ],
+      deleted: [
+        ...trackEnvelope.entities.deleted,
+        ...clipEnvelope.entities.deleted,
+      ],
+    },
+    warnings: IMPORT_MUTATION_WARNINGS,
+  };
+}
 
 type LocalFileImportStage =
   | 'validate'
@@ -27,6 +81,15 @@ type LocalFileImportStage =
   | 'mediaStore.importFile'
   | 'timelinePlacement';
 
+export function resolveLocalImportAppendPoint(targetTrackId: string): number {
+  const { clips, tracks } = useTimelineStore.getState();
+  const existingClips = clips.filter(clip => clip.trackId === targetTrackId);
+  // agent-kernel WP2: canonical occupancy semantics
+  return existingClips.length > 0
+    ? computeTimelineOccupancy(existingClips, tracks).occupied?.endSeconds ?? 0
+    : 0;
+}
+
 export async function handleImportLocalFiles(
   args: Record<string, unknown>,
   mediaStore: MediaStore,
@@ -34,6 +97,18 @@ export async function handleImportLocalFiles(
 ): Promise<ToolResult> {
   const paths = args.paths as string[];
   const addToTimeline = (args.addToTimeline as boolean) || false;
+  const mediaItemIdsBefore = new Set([
+    ...(mediaStore.files ?? []).map((file) => file.id),
+    ...(mediaStore.signalAssets ?? []).map((item) => item.id),
+  ]);
+  const trackSnapshot = captureMutationEntitySnapshot(
+    'track',
+    useTimelineStore.getState().tracks,
+  );
+  const clipSnapshot = captureMutationEntitySnapshot(
+    'clip',
+    useTimelineStore.getState().clips,
+  );
 
   // Visual feedback: activate media panel during import
   activateDockPanel('media');
@@ -149,10 +224,7 @@ export async function handleImportLocalFiles(
       currentTime = requestedStartTime;
     } else {
       // Append after last clip on this track
-      const existingClips = useTimelineStore.getState().clips.filter(c => c.trackId === targetTrackId);
-      currentTime = existingClips.length > 0
-        ? Math.max(...existingClips.map(c => c.startTime + c.duration))
-        : 0;
+      currentTime = resolveLocalImportAppendPoint(targetTrackId);
     }
 
     const placedClips: Array<{ name: string; trackId: string; startTime: number; clipId?: string; type?: string }> = [];
@@ -200,6 +272,12 @@ export async function handleImportLocalFiles(
         totalFailed: errors.length,
         placedClips,
         trackId: targetTrackId,
+        ...createImportMutationEnvelope(
+          results.map((result) => result.id),
+          mediaItemIdsBefore,
+          trackSnapshot,
+          clipSnapshot,
+        ),
       },
     };
   }
@@ -211,6 +289,12 @@ export async function handleImportLocalFiles(
       errors: errors.length > 0 ? errors : undefined,
       totalImported: results.length,
       totalFailed: errors.length,
+      ...createImportMutationEnvelope(
+        results.map((result) => result.id),
+        mediaItemIdsBefore,
+        trackSnapshot,
+        clipSnapshot,
+      ),
     },
   };
 }

@@ -3,6 +3,7 @@ import { useMediaStore } from '../stores/mediaStore';
 import { useTimelineStore } from '../stores/timeline';
 import { Logger } from './logger';
 import { createDefaultRulerLaneState } from '../timeline/tempo/rulerDefaults';
+import { computeTimelineOccupancy } from './timeline/timelineOccupancy';
 
 const log = Logger.create('TimelineSubcomposition');
 
@@ -121,9 +122,10 @@ export async function createSubcompositionFromSelection(anchorClipId: string): P
     return { success: false, reason: 'Selection would create a composition cycle' };
   }
 
-  const selectionStart = Math.min(...selectedClips.map(clip => clip.startTime));
-  const selectionEnd = Math.max(...selectedClips.map(clip => clip.startTime + clip.duration));
-  const selectionDuration = Math.max(0.001, selectionEnd - selectionStart);
+  const selectionOccupancy = computeTimelineOccupancy(selectedClips, tracks);
+  const selectionStart = selectionOccupancy.occupied?.startSeconds ?? 0;
+  // compositionDuration: the nested composition is the selected clips' occupied span.
+  const selectionDuration = Math.max(0.001, selectionOccupancy.occupied?.spanSeconds ?? 0);
   const sourceTimeline = timelineStore.getSerializableState();
   const timelineData = buildNestedTimelineData(
     sourceTimeline,

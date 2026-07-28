@@ -13,6 +13,7 @@ const wranglerCliPath = path.join(repoRoot, 'node_modules', 'wrangler', 'bin', '
 const devVarsPath = path.join(repoRoot, '.dev.vars');
 const localWorkerSecretKeys = [
   'OPENAI_API_KEY',
+  'DEEPGRAM_API_KEY',
   'KIEAI_API_KEY',
   'ELEVENLABS_API_KEY',
   'ANTHROPIC_API_KEY',
@@ -246,5 +247,9 @@ process.on('SIGTERM', () => {
 });
 
 ensureLocalDevVars();
+if (process.argv.includes('--sync-secrets-only')) {
+  process.exit(0);
+}
+
 startVite();
 startApi();

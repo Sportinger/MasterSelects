@@ -1,9 +1,7 @@
 import type { ClipboardActions, SliceCreator, ClipboardClipData, ClipboardKeyframeData, Keyframe } from './types';
-import type { EasingType, AnimatableProperty } from '../../types';
-import {
-  createEffectProperty,
-  ensureColorCorrectionState,
-} from '../../types';
+import type { EasingType, AnimatableProperty } from '../../types/animationProperties';
+import { createEffectProperty } from '../../types/animationProperties';
+import { ensureColorCorrectionState } from '../../types/colorCorrection';
 import { Logger } from '../../services/logger';
 import { captureSnapshot } from '../historyStore';
 import { generateEffectId } from './helpers/idGenerator';
@@ -17,6 +15,7 @@ import {
 import { createClipboardMediaReloadPatch } from '../../services/timeline/timelineMediaSourceRuntimeRestore';
 import { createPastedClipboardClipsPlan } from './clipboard/clipboardClipPastePlanner';
 import { filterPasteableClipboardData } from './clipboard/clipboardPastedClipSource';
+import { createClipboardClipAnalysisMetadata } from './clipboard/clipboardClipAnalysisMetadata';
 import { useMediaStore } from '../mediaStore';
 import {
   clampClipboardKeyframeTime,
@@ -26,7 +25,6 @@ import {
   getClipboardTargetClipIds,
   parseClipboardEffectKeyframeProperty,
 } from './clipboard/clipboardEffectKeyframes';
-
 const log = Logger.create('Clipboard');
 function randomSuffix(): string { return Math.random().toString(36).substr(2, 5); }
 export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) => ({
@@ -136,6 +134,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
                 : undefined,
             }
           : undefined,
+        ...createClipboardClipAnalysisMetadata(clip),
         isComposition: clip.isComposition,
         compositionId: clip.compositionId,
         is3D: clip.is3D,

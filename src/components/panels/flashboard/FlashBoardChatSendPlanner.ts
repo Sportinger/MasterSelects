@@ -3,14 +3,16 @@ import type {
   FlashBoardChatRequest,
   FlashBoardOpenAiReasoningEffort,
 } from '../../../services/flashboard/FlashBoardChatService';
+import { buildFlashBoardChatRequestPrompt } from '../../../services/flashboard/FlashBoardChatHistory';
 import type { FlashBoardChatMessage } from './FlashBoardChatOutput';
+
+export { buildFlashBoardChatRequestPrompt } from '../../../services/flashboard/FlashBoardChatHistory';
 
 type FlashBoardChatDialogTarget = 'auth' | 'pricing' | 'settings';
 type FlashBoardChatPlannedRequest = Omit<FlashBoardChatRequest, 'signal'>;
 
 interface BuildFlashBoardChatSendPlanInput {
   activeChatModelId: string;
-  anthropicApiKey: string;
   canUseByoChat: boolean;
   canUseHostedChat: boolean;
   chatMessages: FlashBoardChatMessage[];
@@ -18,13 +20,12 @@ interface BuildFlashBoardChatSendPlanInput {
   chatProvider: FlashBoardChatProvider;
   chatTemperature: number;
   effectiveChatPrompt: string;
-  hasAnthropicKey: boolean;
   hasHostedSession: boolean;
   hostedAIEnabled: boolean;
   isChatting: boolean;
   lemonadeContextSize: number;
   lemonadeEndpoint: string;
-  openAiApiKey: string;
+  kieAiApiKey: string;
   openAiReasoningEffort: FlashBoardOpenAiReasoningEffort;
   shouldUseHostedChat: boolean;
   useHostedProductionProviders: boolean;
@@ -36,21 +37,8 @@ export type FlashBoardChatSendPlan =
   | { action: 'error'; dialogTarget?: FlashBoardChatDialogTarget; errorMessage: string }
   | { action: 'send'; request: FlashBoardChatPlannedRequest };
 
-export function buildFlashBoardChatRequestPrompt(
-  messages: FlashBoardChatMessage[],
-  nextUserPrompt: string,
-): string {
-  const previousContext = messages
-    .filter((message) => !message.isPending && !message.isError && message.text.trim())
-    .map((message) => `${message.role === 'user' ? 'User' : 'Assistant'}: ${message.text.trim()}`)
-    .join('\n\n');
-
-  return previousContext ? `${previousContext}\n\nUser: ${nextUserPrompt}` : nextUserPrompt;
-}
-
 export function buildFlashBoardChatSendPlan({
   activeChatModelId,
-  anthropicApiKey,
   canUseByoChat,
   canUseHostedChat,
   chatMessages,
@@ -58,13 +46,12 @@ export function buildFlashBoardChatSendPlan({
   chatProvider,
   chatTemperature,
   effectiveChatPrompt,
-  hasAnthropicKey,
   hasHostedSession,
   hostedAIEnabled,
   isChatting,
   lemonadeContextSize,
   lemonadeEndpoint,
-  openAiApiKey,
+  kieAiApiKey,
   openAiReasoningEffort,
   shouldUseHostedChat,
   useHostedProductionProviders,
@@ -81,7 +68,7 @@ export function buildFlashBoardChatSendPlan({
     return { action: 'error', errorMessage: 'Write a chat prompt before starting chat.' };
   }
 
-  if (chatProvider === 'openai' && !canUseHostedChat && !canUseByoChat) {
+  if (chatProvider === 'kie' && !canUseHostedChat && !canUseByoChat) {
     return {
       action: 'error',
       dialogTarget: useHostedProductionProviders || !hasHostedSession
@@ -89,27 +76,18 @@ export function buildFlashBoardChatSendPlan({
         : !hostedAIEnabled ? 'pricing' : 'settings',
       errorMessage: useHostedProductionProviders
         ? 'Sign in and enable hosted credits to use compact chat.'
-        : 'Sign in or add an OpenAI API key in Settings to use compact chat.',
-    };
-  }
-
-  if (chatProvider === 'anthropic' && !hasAnthropicKey) {
-    return {
-      action: 'error',
-      dialogTarget: 'settings',
-      errorMessage: 'Add an Anthropic API key in Settings to use Claude chat.',
+        : 'Sign in or add a Kie.ai API key in Settings to use compact chat.',
     };
   }
 
   return {
     action: 'send',
     request: {
-      anthropicApiKey,
       hostedAvailable: shouldUseHostedChat,
+      kieAiApiKey,
       lemonadeContextSize: chatProvider === 'lemonade' ? lemonadeContextSize : undefined,
       lemonadeEndpoint,
       model: activeChatModelId,
-      openAiApiKey,
       openAiReasoningEffort,
       prompt: buildFlashBoardChatRequestPrompt(chatMessages, effectiveChatPrompt),
       provider: chatProvider,

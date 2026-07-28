@@ -144,10 +144,11 @@ export const cloudApi = {
       capabilities(): Promise<CloudAiCapabilitiesResponse> {
         return requestJson<CloudAiCapabilitiesResponse>('/api/ai/chat', { method: 'GET' });
       },
-      create(body: CloudAiChatRequest): Promise<CloudAiGatewayEnvelope> {
+      create(body: CloudAiChatRequest, signal?: AbortSignal): Promise<CloudAiGatewayEnvelope> {
         return requestJson<CloudAiGatewayEnvelope>('/api/ai/chat', {
           body: JSON.stringify(body),
           method: 'POST',
+          signal,
           timeoutMs: AI_CHAT_REQUEST_TIMEOUT_MS,
         });
       },
@@ -213,10 +214,14 @@ export const cloudApi = {
           signal,
         });
       },
-      transcription(body: CloudAiAudioTranscriptionRequest): Promise<CloudAiGatewayEnvelope<CloudAiAudioTranscriptionResponse>> {
+      transcription(
+        body: CloudAiAudioTranscriptionRequest,
+        signal?: AbortSignal,
+      ): Promise<CloudAiGatewayEnvelope<CloudAiAudioTranscriptionResponse>> {
         return requestJson<CloudAiGatewayEnvelope<CloudAiAudioTranscriptionResponse>>('/api/ai/audio', {
           body: JSON.stringify(body),
           method: 'POST',
+          signal,
           timeoutMs: 300_000,
         });
       },

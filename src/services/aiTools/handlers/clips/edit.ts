@@ -1,6 +1,10 @@
 import { useTimelineStore } from '../../../../stores/timeline';
 import type { ToolResult } from '../../types.ts';
 import { isAIExecutionActive } from '../../executionState';
+import {
+  captureMutationEntitySnapshot,
+  describeMutationEntities,
+} from '../mutationEntityResults';
 import type { TimelineStore } from './runtime';
 
 export async function handleMoveClip(
@@ -66,7 +70,6 @@ export async function handleMoveClip(
     },
   };
 }
-
 export async function handleTrimClip(
   args: Record<string, unknown>,
   timelineStore: TimelineStore
@@ -86,6 +89,12 @@ export async function handleTrimClip(
 
   const oldInPoint = clip.inPoint;
   const oldOutPoint = clip.outPoint;
+  const targetClipIds = [clip.id, clip.linkedClipId]
+    .filter((id): id is string => id !== undefined);
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'clip',
+    useTimelineStore.getState().clips,
+  );
   const trimResult = timelineStore.applyTimelineEditOperation({
     id: `ai-trim-clip:${clipId}:${inPoint}:${outPoint}`,
     type: 'trim-clip',
@@ -120,7 +129,20 @@ export async function handleTrimClip(
     }
   }
 
-  return { success: true, data: { clipId, inPoint, outPoint, newDuration: outPoint - inPoint } };
+  return {
+    success: true,
+    data: {
+      clipId,
+      inPoint,
+      outPoint,
+      newDuration: outPoint - inPoint,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().clips,
+        { updatedEntityIds: targetClipIds },
+      ),
+    },
+  };
 }
 
 export async function handleReorderClips(

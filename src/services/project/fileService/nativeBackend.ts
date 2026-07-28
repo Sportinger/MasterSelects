@@ -16,6 +16,19 @@ type IterableDirectoryHandle = FileSystemDirectoryHandle & {
   values(): AsyncIterableIterator<FileSystemDirectoryHandle | FileSystemFileHandle>;
 };
 
+interface NativeAnalysisRange {
+  frames: unknown[];
+  sampleInterval: number;
+  faceAnalysis?: unknown;
+  createdAt: number;
+}
+
+interface NativeAnalysisFile {
+  schemaVersion?: 2;
+  mediaFileId: string;
+  analyses: Record<string, NativeAnalysisRange>;
+}
+
 export function joinProjectPath(...parts: string[]): string {
   return parts
     .map((part) => part.replace(/\\/g, '/').replace(/\/+$/, ''))
@@ -24,6 +37,126 @@ export function joinProjectPath(...parts: string[]): string {
 
 export function normalizeNativePath(path: string): string {
   return path.trim().replace(/\\/g, '/').replace(/\/+$/, '');
+}
+
+function nativeAnalysisPath(projectPath: string, mediaId: string): string {
+  return joinProjectPath(projectPath, PROJECT_FOLDERS.ANALYSIS, `${mediaId}.json`);
+}
+
+function nativeAnalysisRangeKey(inPoint: number, outPoint: number): string {
+  return `${inPoint.toFixed(3)}-${outPoint.toFixed(3)}`;
+}
+
+function timestampFromFrame(frame: unknown): number {
+  if (typeof frame !== 'object' || frame === null || !('timestamp' in frame)) return 0;
+  const timestamp = (frame as { timestamp?: unknown }).timestamp;
+  return typeof timestamp === 'number' ? timestamp : 0;
+}
+
+async function readNativeAnalysisFile(projectPath: string, mediaId: string): Promise<NativeAnalysisFile | null> {
+  const buffer = await NativeHelperClient.getDownloadedFile(nativeAnalysisPath(projectPath, mediaId));
+  if (!buffer) return null;
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(buffer)) as NativeAnalysisFile;
+    return parsed && typeof parsed === 'object' && parsed.analyses ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeNativeAnalysisFile(projectPath: string, mediaId: string, analysis: NativeAnalysisFile): Promise<boolean> {
+  const folderPath = joinProjectPath(projectPath, PROJECT_FOLDERS.ANALYSIS);
+  await NativeHelperClient.createDir(folderPath);
+  return NativeHelperClient.writeFileBinary(
+    nativeAnalysisPath(projectPath, mediaId),
+    new TextEncoder().encode(JSON.stringify(analysis, null, 2)),
+  );
+}
+
+export async function saveAnalysisNative(
+  projectPath: string | null | undefined,
+  mediaId: string,
+  inPoint: number,
+  outPoint: number,
+  frames: unknown[],
+  sampleInterval: number,
+  faceAnalysis?: unknown,
+): Promise<boolean> {
+  if (!projectPath) return false;
+  const analysis = await readNativeAnalysisFile(projectPath, mediaId) ?? {
+    schemaVersion: 2 as const,
+    mediaFileId: mediaId,
+    analyses: {},
+  };
+  analysis.schemaVersion = 2;
+  analysis.analyses[nativeAnalysisRangeKey(inPoint, outPoint)] = {
+    frames,
+    sampleInterval,
+    faceAnalysis,
+    createdAt: Date.now(),
+  };
+  return writeNativeAnalysisFile(projectPath, mediaId, analysis);
+}
+
+export async function getAnalysisNative(
+  projectPath: string | null | undefined,
+  mediaId: string,
+  inPoint: number,
+  outPoint: number,
+): Promise<{ frames: unknown[]; sampleInterval: number; faceAnalysis?: unknown } | null> {
+  if (!projectPath) return null;
+  const analysis = await readNativeAnalysisFile(projectPath, mediaId);
+  const range = analysis?.analyses[nativeAnalysisRangeKey(inPoint, outPoint)];
+  return range
+    ? { frames: range.frames, sampleInterval: range.sampleInterval, faceAnalysis: range.faceAnalysis }
+    : null;
+}
+
+export async function getAnalysisRangesNative(
+  projectPath: string | null | undefined,
+  mediaId: string,
+): Promise<string[]> {
+  if (!projectPath) return [];
+  return Object.keys((await readNativeAnalysisFile(projectPath, mediaId))?.analyses ?? {});
+}
+
+export async function getAllAnalysisMergedNative(
+  projectPath: string | null | undefined,
+  mediaId: string,
+): Promise<{ frames: unknown[]; sampleInterval: number } | null> {
+  if (!projectPath) return null;
+  const ranges = Object.values((await readNativeAnalysisFile(projectPath, mediaId))?.analyses ?? {});
+  if (ranges.length === 0) return null;
+  const frames = ranges.flatMap(range => range.frames).toSorted(
+    (left, right) => timestampFromFrame(left) - timestampFromFrame(right),
+  );
+  const seen = new Set<number>();
+  const deduplicatedFrames = frames.filter((frame) => {
+    const timestamp = Math.round(timestampFromFrame(frame) * 1000);
+    if (seen.has(timestamp)) return false;
+    seen.add(timestamp);
+    return true;
+  });
+  return {
+    frames: deduplicatedFrames,
+    sampleInterval: Math.min(...ranges.map(range => range.sampleInterval)),
+  };
+}
+
+export async function deleteAnalysisRangeNative(
+  projectPath: string | null | undefined,
+  mediaId: string,
+  inPoint: number,
+  outPoint: number,
+): Promise<boolean> {
+  if (!projectPath) return false;
+  const analysis = await readNativeAnalysisFile(projectPath, mediaId);
+  if (!analysis) return true;
+  delete analysis.analyses[nativeAnalysisRangeKey(inPoint, outPoint)];
+  if (Object.keys(analysis.analyses).length === 0) {
+    return NativeHelperClient.deleteFile(nativeAnalysisPath(projectPath, mediaId));
+  }
+  return writeNativeAnalysisFile(projectPath, mediaId, analysis);
 }
 
 export async function pickNativeFolder(title: string, defaultPath?: string | null): Promise<string | null> {

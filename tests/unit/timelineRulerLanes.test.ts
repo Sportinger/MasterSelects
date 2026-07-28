@@ -7,7 +7,7 @@ import {
 } from '../../src/components/timeline/utils/timelineGrid';
 
 const FOUR_FOUR_60: TempoMap = {
-  events: [{ time: 0, bpm: 60, numerator: 4, denominator: 4 }],
+  events: [{ id: 'ev-1', time: 0, bpm: 60, numerator: 4, denominator: 4 }],
 };
 
 // The component multiplies time * zoom for the pixel position, so these tests

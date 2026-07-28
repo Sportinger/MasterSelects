@@ -31,10 +31,24 @@ describe('timeline clipboard routing', () => {
   });
 
   it('clears stale keyframes when copying clips', () => {
+    const analysis = {
+      frames: [{
+        timestamp: 1,
+        motion: 0.2,
+        globalMotion: 0.1,
+        localMotion: 0.3,
+        focus: 0.8,
+        brightness: 0.5,
+        faceCount: 0,
+      }],
+      sampleInterval: 500,
+    };
     const clip = createMockClip({
       id: 'clip-1',
       mediaFileId: 'media-1',
       source: { type: 'video', mediaFileId: 'media-1', naturalDuration: 5 },
+      analysis,
+      analysisStatus: 'ready',
     });
 
     useTimelineStore.setState({
@@ -52,6 +66,8 @@ describe('timeline clipboard routing', () => {
     useTimelineStore.getState().copyClips();
 
     expect(useTimelineStore.getState().clipboardData).toHaveLength(1);
+    expect(useTimelineStore.getState().clipboardData?.[0].analysis).toBe(analysis);
+    expect(useTimelineStore.getState().clipboardData?.[0].analysisStatus).toBe('ready');
     expect(useTimelineStore.getState().clipboardKeyframes).toBeNull();
   });
 

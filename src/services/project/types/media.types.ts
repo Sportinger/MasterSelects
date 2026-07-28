@@ -3,6 +3,7 @@
 import type { VectorAnimationMetadata } from '../../../types/vectorAnimation';
 import type { MediaFileAudioAnalysisRefs, MediaFileStemInfo } from '../../../types/audio';
 import type { LiveInputSource } from '../../../types/liveInput';
+import type { SceneCutAnalysis } from '../../../types/sceneCutAnalysis';
 import type {
   ProjectGaussianSplatSequenceData,
   ProjectModelSequenceData,
@@ -42,6 +43,7 @@ export interface ProjectMediaFile {
   // Proxy status
   hasProxy: boolean;
   proxyFormat?: 'jpeg-sequence' | 'mp4-all-intra';
+  sceneCutAnalysis?: SceneCutAnalysis;
   hasAudioProxy?: boolean;
   audioProxyStorageKey?: string;
 

@@ -1,8 +1,13 @@
 import { AI_TOOLS, executeAITool, getQuickTimelineSummary } from '../../index';
+import { describeAgentControlSession, handleAgentControlRequest } from './agentControl';
 import { collectDebugState } from './debugState';
 import { installRealClipDragRecorder } from './debugActions/realClipDragRecorder';
 import { runDebugAction } from './debugActions';
 import { inspectGuidedBridgeTool, resolveBridgeToolExecution } from './guidedOptions';
+import {
+  isAgentTimelineLocalBenchmarkTool,
+  runAgentTimelineLocalBenchmark,
+} from '../../../agentTimeline/benchmark/localBenchmarkRunner/browserLocalBenchmarkRunner';
 import {
   getTabPriorityDelayMs,
   registerBridgePresence,
@@ -11,7 +16,42 @@ import {
 } from './presence';
 
 export function registerDevBridgeBrowserClient(hot: BrowserHot): void {
-  const sendPresence = registerBridgePresence(hot, installRealClipDragRecorder);
+  const sendPresence = registerBridgePresence(
+    hot,
+    installRealClipDragRecorder,
+    describeAgentControlSession,
+  );
+
+  hot.on('agent-control:request', async (data: {
+    requestId: string;
+    operation: string;
+    args?: Record<string, unknown>;
+    targetTabId?: string | null;
+  }) => {
+    if (data.targetTabId && data.targetTabId !== tabId) {
+      return;
+    }
+
+    try {
+      const delayMs = getTabPriorityDelayMs(data.targetTabId === tabId);
+      if (delayMs < 0) {
+        return;
+      }
+      if (delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+      sendPresence();
+      hot.send('agent-control:result', {
+        requestId: data.requestId,
+        result: await handleAgentControlRequest(data.operation, data.args ?? {}),
+      });
+    } catch (error: unknown) {
+      hot.send('agent-control:result', {
+        requestId: data.requestId,
+        result: { success: false, error: error instanceof Error ? error.message : String(error) },
+      });
+    }
+  });
 
   hot.on('ai-tools:execute', async (data: {
     requestId: string;
@@ -41,6 +81,8 @@ export function registerDevBridgeBrowserClient(hot: BrowserHot): void {
         result = { success: true, data: getQuickTimelineSummary() };
       } else if (data.tool === '_inspectGuided') {
         result = inspectGuidedBridgeTool(data.args);
+      } else if (isAgentTimelineLocalBenchmarkTool(data.tool)) {
+        result = { success: true, data: await runAgentTimelineLocalBenchmark(data.args) };
       } else {
         const execution = resolveBridgeToolExecution(data.args, data.options);
         result = await executeAITool(data.tool, execution.args, 'devBridge', execution.options);

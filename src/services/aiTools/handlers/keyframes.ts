@@ -3,6 +3,10 @@ import type { ToolResult } from '../types';
 import type { AnimatableProperty, EasingType } from '../../../types';
 import { animateKeyframe } from '../aiFeedback';
 import { normalizeEasingType } from '../../../utils/easing';
+import {
+  captureMutationEntitySnapshot,
+  describeMutationEntities,
+} from './mutationEntityResults';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
@@ -52,6 +56,10 @@ export async function handleAddKeyframe(
   const clip = timelineStore.clips.find(c => c.id === clipId);
   if (!clip) return { success: false, error: `Clip not found: ${clipId}` };
 
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'keyframe',
+    timelineStore.getClipKeyframes(clipId),
+  );
   const { addKeyframe, invalidateCache } = useTimelineStore.getState();
   addKeyframe(clipId, property, value, time, easing);
   invalidateCache();
@@ -72,6 +80,10 @@ export async function handleAddKeyframe(
       value,
       time: newKf?.time ?? time,
       easing: normalizeEasingType(newKf?.easing ?? easing, 'ease-in-out'),
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().getClipKeyframes(clipId),
+      ),
     },
   };
 }
@@ -81,6 +93,7 @@ export async function handleRemoveKeyframe(
 ): Promise<ToolResult> {
   const keyframeId = args.keyframeId as string;
 
+  const mutationSnapshot = captureMutationEntitySnapshot('keyframe', getAllKeyframes());
   const { removeKeyframe, invalidateCache } = useTimelineStore.getState();
   removeKeyframe(keyframeId);
   invalidateCache();
@@ -90,6 +103,16 @@ export async function handleRemoveKeyframe(
 
   return {
     success: true,
-    data: { removedKeyframeId: keyframeId },
+    data: {
+      removedKeyframeId: keyframeId,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        getAllKeyframes(),
+      ),
+    },
   };
+}
+
+function getAllKeyframes() {
+  return [...useTimelineStore.getState().clipKeyframes.values()].flat();
 }

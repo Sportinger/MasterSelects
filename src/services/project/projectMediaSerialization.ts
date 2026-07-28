@@ -70,6 +70,9 @@ export function convertMediaFiles(files: MediaFile[]): ProjectMediaFile[] {
       splatFrameCount: file.splatFrameCount ?? file.gaussianSplatSequence?.frameCount,
       hasProxy,
       proxyFormat: hasProxy ? file.proxyFormat : undefined,
+      sceneCutAnalysis: file.sceneCutAnalysis
+        ? structuredClone(file.sceneCutAnalysis)
+        : undefined,
       hasAudioProxy: file.hasProxyAudio === true || file.audioProxyStatus === 'ready',
       audioProxyStorageKey: file.audioProxyStorageKey || file.fileHash || file.id,
       audioAnalysisRefs: file.audioAnalysisRefs ? structuredClone(file.audioAnalysisRefs) : undefined,

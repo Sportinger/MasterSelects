@@ -353,7 +353,7 @@ See [Slot Grid](./Slot-Grid.md) for the current live/deck behavior, slot-clip tr
 
 ## Properties Panel
 
-The unified Properties panel adapts its tabs to the selected clip type, selected audio track/layer, selected master bus, and slot-grid mode. Tab labels are scoped with `CLIP`, `TRACK`, or `MASTER`; transcript tabs are shown only for clip targets. Linked video/audio companions share the same `CLIP Transcript` state, so selecting either side opens the same transcript view.
+The unified Properties panel adapts its tabs to the selected clip type, selected audio track/layer, selected master bus, and slot-grid mode. The dock tab already identifies the current clip, track, or master target, so the inner tab labels stay compact and do not repeat that scope. Transcript controls live inside Analysis; linked video/audio companions share the same transcript state, so selecting either side opens the same Analysis workspace.
 
 Selecting a timeline transition switches the panel to `TRANSITION Parameters`.
 That tab shows the transition type, first-pass centered placement with timeline
@@ -369,26 +369,77 @@ same source-handle edges.
 
 | Tab | Contents |
 |-----|----------|
-| **CLIP Transform** | Position, scale, rotation, opacity, blend mode, and speed |
-| **CLIP Effects** | GPU effects list with parameters |
-| **CLIP Masks** | Mask shapes with mode and feather controls |
-| **CLIP Transcript** | Speech-to-text transcript with playback sync |
-| **CLIP Analysis** | Focus, motion, face, and AI scene metadata |
+| **Transform** | Position, scale, rotation, opacity, blend mode, and speed |
+| **Effects** | GPU effects list with parameters |
+| **Masks** | Mask shapes with mode and feather controls |
+| **Analysis** | Shared analysis map, transcript controls, and compact scene blobs with faces, synchronized dialogue, cuts, metrics, quality, and descriptions |
+
+The Analysis workspace uses one source-time model for its graph and scene
+list. Each virtualized scene blob keeps speaker face crops on the left, larger
+word-synchronized dialogue in the center, and range/duration on the right.
+The flat inspector directly beneath the graph replaces the former Current
+Frame and Summary boxes with playhead metrics and clip-wide counters. Clicking
+a blob expands its scene-scoped people, appearances, identity correction drop
+targets, review detections, camera/focus/motion facts, description provenance,
+coverage, quality notices, OCR, and transcript in place. Person chips filter
+the scene list, while **Next appearance** advances in source time. Face crops
+remain lazy because only the bounded virtualized window and the open scene
+resolve thumbnails. Contextual People and Needs Review controls stay in their
+expanded scene; the source-wide correction strip follows the list.
+
+The scene list is followed by a compact source-wide people/review strip for
+the complete correction workflow. It deliberately reuses the same person and
+review identities as scene cards: drag a person to merge, an appearance to
+move it, or a review track to assign it. Crop loading is viewport-lazy while
+the virtualized scene window and crop cache keep scrolling bounded.
+
+The Action Center above the map uses the same flat 2px control treatment as
+the rest of Properties. Its analysis actions use three compact equal-height
+cards per row at normal panel widths, with integrated status and action
+controls instead of full-width button bars. Scope and profile selectors update
+a read-only estimate before any work starts, including cached reuse and known
+frame/sample counts. A matching real-device benchmark adds a time range.
+Quick/Balanced Focus/Motion and Faces execute with the selected source interval
+and sampling cadence; frame-accurate cuts remain source-wide. Deep/Custom stay
+blocked without qualifying evidence. **Analyze All** deliberately excludes AI
+scene descriptions, which remain an explicit opt-in because they can incur
+provider cost and share visual content externally.
+
+Analysis contains the transcript workspace header for provider and language
+selection, start/continue/cancel/clear, fusion progress, coverage, and shared
+search. The same search filters the virtualized scene list. Words are grouped
+into timestamped speaker turns; clicking a compact or expanded word seeks the
+playhead to that source position. During playback, the currently spoken word
+and speaker turn are highlighted and the active scene transcript follows them.
+Scrubbing updates the same highlight without animated lag.
+
+Best Quality uses a fixed provider split: Deepgram supplies every displayed word
+and timestamp, while OpenAI supplies the speaker turns. The completed summary
+states these two roles directly; it has no agreement percentage, conflict count,
+review queue, or agent state.
+
+The transcript workspace header uses one compact surface for language, quality
+mode, actions, progress, coverage, and search. An active run
+replaces the completed-result summary instead of stacking contradictory states.
+Best Quality shows Deepgram, OpenAI, and Speakers as three compact stages beneath
+one overall progress rail. Cancel aborts local, direct-provider, hosted
+Cloudflare requests and restores the previously completed
+transcript when re-transcription is stopped.
 
 ### Audio Clip Tabs
 
 | Tab | Contents |
 |-----|----------|
-| **CLIP Effects** | Audio effects and linked audio controls |
-| **CLIP Audio Edits** | Non-destructive edit-stack operations |
-| **CLIP Transcript** | Speech-to-text transcript, shared with the linked video clip when present |
+| **Effects** | Audio effects and linked audio controls |
+| **Audio Edits** | Non-destructive edit-stack operations |
+| **Analysis** | Audio-safe analysis workspace with the shared transcript and its provider controls; visual channels remain explicitly unavailable |
 
 ### Audio Track And Master Tabs
 
 | Target | Tabs |
 |--------|------|
-| **Audio track/layer** | TRACK Controls, TRACK Effects, TRACK Sends |
-| **Master bus** | MASTER Controls, MASTER Effects |
+| **Audio track/layer** | Controls, Effects, Sends |
+| **Master bus** | Controls, Effects |
 
 ### Text and 3D Text Tabs
 
@@ -430,6 +481,15 @@ same source-handle edges.
 ### Tab Behavior
 
 - Tabs switch automatically based on clip type
+- Properties tabs hide their horizontal scrollbar. Compact previous/next
+  controls appear only when more tabs exist in that direction and reveal one
+  additional tab per click. Manual navigation stays where the user leaves it;
+  when the active tab is outside the viewport, its direction control is
+  highlighted instead of pulling the strip back automatically. Hovering a
+  direction control advances one additional tab every 500 ms until the pointer
+  leaves it or the strip reaches that end. A manual click advances immediately,
+  pauses that hover timer for two seconds, and then resumes the 500 ms cadence.
+  Tab movement and direction-control entry/exit are animated smoothly.
 - Clicking an audio track/layer in the Timeline or a strip in the Audio Mixer selects the same `TRACK` Properties target, highlights both surfaces, and smoothly reveals off-screen timeline audio layers
 - Clicking the master bus selects the `MASTER` Properties target
 - Badge counts appear for effects, masks, transcripts, and analysis readiness

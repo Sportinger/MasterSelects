@@ -1,5 +1,6 @@
 import type {
   BezierHandle,
+  ClipAnalysis,
   ClipAudioState,
   ClipMask,
   ClipTransform,
@@ -9,6 +10,7 @@ import type {
   Keyframe,
   MathSceneDefinition,
   SerializableClip,
+  TimelineClip,
   TransitionOverlayClipDefinition,
 } from '../../../types';
 import type { MotionLayerDefinition } from '../../../types/motionDesign';
@@ -62,6 +64,12 @@ export interface ClipboardClipData {
   waveform?: number[];
   waveformChannels?: number[][];
   audioAnalysisRefs?: Pick<ClipAudioState, 'processedAnalysisRefs' | 'sourceAnalysisRefs'>;
+  analysis?: ClipAnalysis;
+  analysisStatus?: TimelineClip['analysisStatus'];
+  analysisProgress?: number;
+  faceAnalysisStatus?: TimelineClip['faceAnalysisStatus'];
+  faceAnalysisProgress?: number;
+  faceAnalysisMessage?: string;
   isComposition?: boolean;
   compositionId?: string;
   is3D?: boolean;

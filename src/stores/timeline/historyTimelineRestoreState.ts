@@ -13,6 +13,8 @@ import type {
   HistoryTimelineRuntimeRef,
   HistoryTimelineTrackEditState,
 } from './historyTimelineEditState';
+import { getClipAnalysisSourceId } from '../../services/clipAnalysis/sourceAnalysisSharing';
+import { resolveClipTranscriptWords } from '../../services/transcription/clipTranscriptResolver';
 
 export interface HistoryTimelineRestoreCurrentState {
   clips?: readonly TimelineClip[];
@@ -24,6 +26,7 @@ export interface HistoryTimelineRestoreCurrentState {
   selectedLayerId?: string | null;
   clipKeyframes?: ReadonlyMap<string, readonly Keyframe[]>;
   markers?: Readonly<HistoryTimelineEditState['timeline']['markers']>;
+  tempoMap?: HistoryTimelineEditState['timeline']['tempoMap'];
   masterAudioState?: HistoryTimelineEditState['timeline']['masterAudioState'];
 }
 
@@ -37,6 +40,7 @@ export interface HistoryTimelineRestoreState {
   selectedLayerId: string | null;
   clipKeyframes: Map<string, Keyframe[]>;
   markers: HistoryTimelineEditState['timeline']['markers'];
+  tempoMap?: HistoryTimelineEditState['timeline']['tempoMap'];
   masterAudioState?: HistoryTimelineEditState['timeline']['masterAudioState'];
 }
 
@@ -135,6 +139,7 @@ function createDataOnlyClipSource(
 function createRestoredClip(
   clip: HistoryTimelineClipEditState,
   currentClip: TimelineClip | undefined,
+  currentAnalysisSource: TimelineClip | undefined,
   options: CreateHistoryTimelineRestoreStateOptions,
 ): { clip: TimelineClip; reusedRuntime: boolean } {
   const reusedRuntime = Boolean(
@@ -175,8 +180,20 @@ function createRestoredClip(
       nodeGraph: clonePlain(clip.nodeGraph),
       masks: clonePlain(clip.masks),
       transcriptStatus: clip.transcriptStatus,
+      // History states don't carry transcript words (media file is the anchor);
+      // reuse the live clip's words or re-derive them from the media store.
+      transcript: currentClip?.transcript ?? resolveClipTranscriptWords({
+        transcript: undefined,
+        mediaFileId: clip.mediaFileId ?? clip.runtimeRef.mediaFileId,
+        source: null,
+      }),
+      analysis: clip.analysisStatus && clip.analysisStatus !== 'none'
+        ? currentAnalysisSource?.analysis
+        : undefined,
       analysisStatus: clip.analysisStatus,
+      analysisProgress: currentAnalysisSource?.analysisProgress,
       faceAnalysisStatus: clip.faceAnalysisStatus,
+      faceAnalysisProgress: currentAnalysisSource?.faceAnalysisProgress,
       faceAnalysisMessage: clip.faceAnalysisMessage,
       sceneDescriptionStatus: clip.sceneDescriptionStatus,
       reversed: clip.reversed,
@@ -277,13 +294,29 @@ export function createHistoryTimelineRestoreState(
   const currentClipsById = new Map(
     (currentTimeline.clips ?? []).map((clip) => [clip.id, clip])
   );
+  const currentAnalysisBySourceId = new Map<string, TimelineClip>();
+  for (const clip of currentTimeline.clips ?? []) {
+    const sourceId = getClipAnalysisSourceId(clip);
+    if (sourceId && clip.analysis && !currentAnalysisBySourceId.has(sourceId)) {
+      currentAnalysisBySourceId.set(sourceId, clip);
+    }
+  }
   const currentLayersById = new Map(
     (currentTimeline.layers ?? []).filter(Boolean).map((layer) => [layer.id, layer])
   );
   const reusedRuntimeClipIds: string[] = [];
   const deferredRuntimeClipIds: string[] = [];
   const restoredClipEntries = historyState.timeline.clips.map((clip) => {
-    const restored = createRestoredClip(clip, currentClipsById.get(clip.id), options);
+    const currentClip = currentClipsById.get(clip.id);
+    const sourceId = clip.sourceType === 'video'
+      ? clip.mediaFileId ?? clip.runtimeRef.mediaFileId
+      : undefined;
+    const restored = createRestoredClip(
+      clip,
+      currentClip,
+      currentClip?.analysis ? currentClip : sourceId ? currentAnalysisBySourceId.get(sourceId) : undefined,
+      options,
+    );
     if (restored.reusedRuntime) {
       reusedRuntimeClipIds.push(clip.id);
     } else if (!(clip.liveInputId ?? clip.runtimeRef.liveInputId)) {
@@ -320,6 +353,11 @@ export function createHistoryTimelineRestoreState(
       selectedLayerId: historyState.timeline.selectedLayerId,
       clipKeyframes: restoredKeyframes,
       markers: clonePlain(historyState.timeline.markers),
+      tempoMap: clonePlain(historyState.timeline.tempoMap ?? currentTimeline.tempoMap),
+      // History entries captured before #299 carry no tempo map, and the result
+      // of this function is fed straight to the store's shallow-merging
+      // setState — so an `undefined` here would CLOBBER the live tempo map
+      // rather than leave it alone. Fall back to the current one.
       masterAudioState: clonePlain(historyState.timeline.masterAudioState),
     },
     diagnostics: {

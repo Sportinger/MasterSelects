@@ -11,11 +11,15 @@ import {
 import { projectFileService } from '../../../services/projectFileService';
 import { useTimelineStore } from '../../timeline';
 import { Logger } from '../../../services/logger';
+import { isCurrentSceneCutAnalysis } from '../../../services/sceneCutDetection/sceneCutDetector';
+import type { SceneCutAnalysis } from '../../../types/sceneCutAnalysis';
+import { createSceneCutAnalysisAction } from './proxy/sceneCutActions';
+import {
+  activeProxyGenerations,
+  type ProxyJobController,
+} from './proxy/jobRegistry';
 
 const log = Logger.create('Proxy');
-
-// Track active generations for cancellation
-const activeProxyGenerations = new Map<string, { cancelled: boolean }>();
 
 /** Check if a proxy is complete (>= 98% of expected frames) */
 function isProxyComplete(file: MediaFile, frameCountOverride?: number): boolean {
@@ -28,7 +32,11 @@ export interface ProxyActions {
   setProxyEnabled: (enabled: boolean) => void;
   toggleProxyEnabled: () => void;
   startProxyGenerationQueue: () => void;
-  generateProxy: (mediaFileId: string, options?: { force?: boolean }) => Promise<void>;
+  generateProxy: (
+    mediaFileId: string,
+    options?: { force?: boolean },
+  ) => Promise<void>;
+  analyzeSceneCuts: (mediaFileId: string, options?: { force?: boolean }) => Promise<void>;
   generateAudioProxy: (mediaFileId: string, options?: { force?: boolean }) => Promise<void>;
   cancelProxyGeneration: (mediaFileId: string) => void;
   updateProxyProgress: (mediaFileId: string, progress: number) => void;
@@ -142,7 +150,10 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
     );
   },
 
-  generateProxy: async (mediaFileId: string, options: { force?: boolean } = {}) => {
+  generateProxy: async (
+    mediaFileId: string,
+    options: { force?: boolean } = {},
+  ) => {
     const { files, currentlyGeneratingProxyId } = get();
 
     if (currentlyGeneratingProxyId) {
@@ -161,12 +172,19 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
       return;
     }
 
+    const controller: ProxyJobController = {
+      cancelled: false,
+      kind: 'proxy',
+    };
+    activeProxyGenerations.set(mediaFileId, controller);
     set({ currentlyGeneratingProxyId: mediaFileId });
     log.info(`Starting generation for ${mediaFile.name}...`);
 
     const storageKey = mediaFile.fileHash || mediaFileId;
     const proxyFps = getExpectedProxyFps(mediaFile.proxyFps ?? mediaFile.fps);
-    let controller: { cancelled: boolean } | null = null;
+    const shouldAnalyzeSceneCuts =
+      options.force === true ||
+      !isCurrentSceneCutAnalysis(mediaFile.sceneCutAnalysis, mediaFile.file);
     try {
       if (options.force) {
         await projectFileService.deleteEntry('PROXY', storageKey, { recursive: true });
@@ -175,7 +193,11 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
       const existingFrameIndices = options.force
         ? new Set<number>()
         : await projectFileService.getProxyFrameIndices(storageKey);
-      if (!options.force && isProxyFrameIndexSetComplete(existingFrameIndices, mediaFile.duration, proxyFps)) {
+      if (controller.cancelled) return;
+      if (
+        !options.force &&
+        isProxyFrameIndexSetComplete(existingFrameIndices, mediaFile.duration, proxyFps)
+      ) {
         const frameCount = existingFrameIndices.size;
         log.debug('Already complete:', mediaFile.name);
         set((s) => ({
@@ -188,16 +210,18 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
                   proxyFrameCount: frameCount,
                   proxyFps,
                   proxyFormat: 'jpeg-sequence' as const,
+                  sceneCutStatus: isCurrentSceneCutAnalysis(f.sceneCutAnalysis, f.file)
+                    ? 'ready' as const
+                    : f.sceneCutStatus,
+                  sceneCutProgress: isCurrentSceneCutAnalysis(f.sceneCutAnalysis, f.file)
+                    ? 100
+                    : f.sceneCutProgress,
                 }
               : f
           ),
         }));
         return;
       }
-
-      // Set up cancellation
-      controller = { cancelled: false };
-      activeProxyGenerations.set(mediaFileId, controller);
 
       // Inline setProxyStatus and updateProxyProgress
       set((state) => ({
@@ -209,6 +233,8 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
                 proxyProgress: getProxyProgressFromFrameIndices(existingFrameIndices, mediaFile.duration, proxyFps),
                 proxyFps,
                 proxyFormat: 'jpeg-sequence' as const,
+                sceneCutStatus: shouldAnalyzeSceneCuts ? 'analyzing' as const : f.sceneCutStatus,
+                sceneCutProgress: shouldAnalyzeSceneCuts ? 0 : f.sceneCutProgress,
               }
             : f
         ),
@@ -218,7 +244,12 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
       const updateProgress = (progress: number) => {
         set((state) => ({
           files: state.files.map((f) =>
-            f.id === mediaFileId ? { ...f, proxyProgress: progress } : f
+            f.id === mediaFileId
+              ? {
+                  ...f,
+                  proxyProgress: progress,
+                }
+              : f
           ),
         }));
       };
@@ -229,10 +260,45 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
         storageKey,
         controller,
         updateProgress,
-        existingFrameIndices
+        existingFrameIndices,
+        shouldAnalyzeSceneCuts,
+        (progress) => {
+          if (!shouldAnalyzeSceneCuts) return;
+          set((state) => ({
+            files: state.files.map((file) =>
+              file.id === mediaFileId
+                ? { ...file, sceneCutProgress: progress }
+                : file
+            ),
+          }));
+        },
       );
 
       if (result && !controller.cancelled) {
+        if (shouldAnalyzeSceneCuts) {
+          set((state) => ({
+            files: state.files.map((file) => {
+              if (file.id !== mediaFileId) return file;
+              if (result.sceneCutAnalysis) {
+                return {
+                  ...file,
+                  sceneCutStatus: 'ready' as const,
+                  sceneCutProgress: 100,
+                  sceneCutAnalysis: result.sceneCutAnalysis,
+                };
+              }
+              return {
+                ...file,
+                sceneCutStatus: 'error' as const,
+                sceneCutProgress: 0,
+              };
+            }),
+          }));
+          if (result.sceneCutError) {
+            log.warn(`Scene-cut analysis failed for ${mediaFile.name}: ${result.sceneCutError}`);
+          }
+        }
+
         const resultComplete = isProxyFrameIndexSetComplete(result.frameIndices, mediaFile.duration, result.fps);
         if (!result || !resultComplete) {
           log.error('Generation incomplete:', {
@@ -263,6 +329,13 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
                   proxyFrameCount: completeResult.frameCount,
                   proxyFps: completeResult.fps,
                   proxyFormat: 'jpeg-sequence' as const,
+                  sceneCutStatus: completeResult.sceneCutAnalysis
+                    ? 'ready' as const
+                    : f.sceneCutStatus,
+                  sceneCutProgress: completeResult.sceneCutAnalysis
+                    ? 100
+                    : f.sceneCutProgress,
+                  sceneCutAnalysis: completeResult.sceneCutAnalysis ?? f.sceneCutAnalysis,
                 }
               : f
           ),
@@ -342,49 +415,70 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
         }));
       }
     } catch (e) {
+      if (controller.cancelled) return;
       log.error('Generation failed:', e);
       set((state) => ({
         files: state.files.map((f) =>
-          f.id === mediaFileId ? { ...f, proxyStatus: 'error' as ProxyStatus } : f
+          f.id === mediaFileId
+            ? {
+                ...f,
+                proxyStatus: 'error' as ProxyStatus,
+                sceneCutStatus: shouldAnalyzeSceneCuts ? 'error' as const : f.sceneCutStatus,
+                sceneCutProgress: shouldAnalyzeSceneCuts ? 0 : f.sceneCutProgress,
+              }
+            : f
         ),
       }));
     } finally {
-      activeProxyGenerations.delete(mediaFileId);
-      set({ currentlyGeneratingProxyId: null });
-      queueMicrotask(() => {
-        (get() as MediaState & ProxyActions).startProxyGenerationQueue();
-      });
+      if (activeProxyGenerations.get(mediaFileId) === controller) {
+        activeProxyGenerations.delete(mediaFileId);
+        if (get().currentlyGeneratingProxyId === mediaFileId) {
+          set({ currentlyGeneratingProxyId: null });
+        }
+        queueMicrotask(() => {
+          (get() as MediaState & ProxyActions).startProxyGenerationQueue();
+        });
+      }
     }
   },
 
   cancelProxyGeneration: (mediaFileId: string) => {
     const controller = activeProxyGenerations.get(mediaFileId);
-    if (controller) {
-      controller.cancelled = true;
-      log.info('Cancelled:', mediaFileId);
-    }
+    if (!controller) return;
 
-    const { currentlyGeneratingProxyId, files } = get();
-    if (currentlyGeneratingProxyId === mediaFileId) {
-      const mediaFile = files.find((f) => f.id === mediaFileId);
-      const hasCompleteProxy = mediaFile ? isProxyComplete(mediaFile) : false;
+    controller.cancelled = true;
+    log.info('Cancelled:', mediaFileId);
 
-      set((state) => ({
-        currentlyGeneratingProxyId: null,
-        files: state.files.map((f) =>
-          f.id === mediaFileId
-            ? {
-                ...f,
-                proxyStatus: (hasCompleteProxy ? 'ready' : 'none') as ProxyStatus,
-                proxyProgress: hasCompleteProxy ? 100 : 0,
-                proxyFps: hasCompleteProxy ? f.proxyFps : undefined,
-                proxyFormat: hasCompleteProxy ? f.proxyFormat : undefined,
-              }
-            : f
-        ),
-      }));
-    }
+    set((state) => ({
+      files: state.files.map((file) => {
+        if (file.id !== mediaFileId) return file;
+        const hasCurrentSceneCuts = isCurrentSceneCutAnalysis(
+          file.sceneCutAnalysis,
+          file.file,
+        );
+        if (controller.kind === 'scene-cuts') {
+          return {
+            ...file,
+            sceneCutStatus: hasCurrentSceneCuts ? 'ready' as const : 'none' as const,
+            sceneCutProgress: hasCurrentSceneCuts ? 100 : 0,
+          };
+        }
+
+        const hasCompleteProxy = isProxyComplete(file);
+        return {
+          ...file,
+          proxyStatus: (hasCompleteProxy ? 'ready' : 'none') as ProxyStatus,
+          proxyProgress: hasCompleteProxy ? 100 : 0,
+          proxyFps: hasCompleteProxy ? file.proxyFps : undefined,
+          proxyFormat: hasCompleteProxy ? file.proxyFormat : undefined,
+          sceneCutStatus: hasCurrentSceneCuts ? 'ready' as const : 'none' as const,
+          sceneCutProgress: hasCurrentSceneCuts ? 100 : 0,
+        };
+      }),
+    }));
   },
+
+  analyzeSceneCuts: createSceneCutAnalysisAction(set, get),
 
   generateAudioProxy: async (mediaFileId: string, options: { force?: boolean } = {}) => {
     const mediaFile = get().files.find((f) => f.id === mediaFileId);
@@ -469,8 +563,16 @@ async function generateImageProxy(
   storageKey: string,
   controller: { cancelled: boolean },
   updateProgress: (progress: number) => void,
-  existingFrameIndices: Set<number>
-): Promise<{ frameCount: number; fps: number; frameIndices: Set<number> } | null> {
+  existingFrameIndices: Set<number>,
+  analyzeSceneCuts: boolean,
+  updateSceneCutProgress: (progress: number) => void,
+): Promise<{
+  frameCount: number;
+  fps: number;
+  frameIndices: Set<number>;
+  sceneCutAnalysis?: SceneCutAnalysis;
+  sceneCutError?: string;
+} | null> {
   const { getProxyGenerator } = await import('../../../services/proxyGenerator');
   const generator = getProxyGenerator();
   const writer = await projectFileService.createProxyFrameWriter(storageKey);
@@ -489,7 +591,11 @@ async function generateImageProxy(
         throw new Error(`Failed to save JPEG proxy frame ${frame.frameIndex}`);
       }
     },
-    existingFrameIndices
+    existingFrameIndices,
+    {
+      analyzeSceneCuts,
+      onSceneCutProgress: updateSceneCutProgress,
+    },
   ).finally(async () => {
     try {
       await writer.close?.();
@@ -503,6 +609,8 @@ async function generateImageProxy(
     frameCount: result.frameIndices.size,
     fps: result.fps,
     frameIndices: result.frameIndices,
+    sceneCutAnalysis: result.sceneCutAnalysis,
+    sceneCutError: result.sceneCutError,
   };
 }
 

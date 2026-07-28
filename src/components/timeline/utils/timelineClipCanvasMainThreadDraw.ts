@@ -8,11 +8,13 @@ import { drawTimelineClipCanvasFadeCurve } from './timelineClipCanvasFadeCurvePa
 import { drawTimelineClipCanvasMidiPreviewResource } from './timelineClipCanvasMidiPreviewPainter';
 import { createTimelineClipCanvasWorkerMidiPreviewResource } from './timelineClipCanvasMidiResource';
 import {
+  createTimelineClipCanvasSceneCutMarkers,
   getTimelineClipCanvasPassiveDecorationBadges,
   getTimelineClipCanvasPassiveDecorationProgressBars,
   type TimelineClipCanvasMediaStatus,
 } from './timelineClipCanvasPassiveDecorations';
 import { drawTimelineClipCanvasPassiveDecorations } from './timelineClipCanvasPassiveDecorationsPainter';
+import { drawTimelineClipCanvasSceneCutMarkers } from './timelineClipCanvasSceneCutPainter';
 import { getTimelineClipCanvasSpectrogramTileSetForClip, type TimelineClipCanvasSpectrogramTileSetMap } from './timelineClipCanvasSpectrogramResource';
 import { drawTimelineClipCanvasSourceExtensionGhosts } from './timelineClipCanvasSourceExtensionGhostPainter';
 import { drawTimelineClipCanvasThumbnails } from './timelineClipCanvasThumbnailPainter';
@@ -36,6 +38,7 @@ export interface TimelineClipCanvasMainThreadDrawInput {
   viewportWidth: number;
   waveformsEnabled?: boolean;
   audioDisplayMode?: TimelineAudioDisplayMode;
+  showFaceRanges?: boolean;
   waveformPyramids?: TimelineClipCanvasWaveformPyramidMap;
   spectrogramTileSets?: TimelineClipCanvasSpectrogramTileSetMap;
   mediaThumbnailUrlsById?: ReadonlyMap<string, string | undefined>;
@@ -90,6 +93,7 @@ export function drawTimelineClipCanvasMainThread(
     viewportWidth,
     waveformsEnabled,
     audioDisplayMode = 'detailed',
+    showFaceRanges = false,
     waveformPyramids,
     spectrogramTileSets,
     mediaThumbnailUrlsById,
@@ -158,6 +162,12 @@ export function drawTimelineClipCanvasMainThread(
     const mediaStatus = getMediaStatus(clip);
     const badges = getTimelineClipCanvasPassiveDecorationBadges(clip, mediaStatus);
     const progressBars = getTimelineClipCanvasPassiveDecorationProgressBars(clip, mediaStatus);
+    const sceneCutMarkers = createTimelineClipCanvasSceneCutMarkers({
+      clip,
+      mediaStatus,
+      inPoint: geometry.inPoint,
+      outPoint: geometry.outPoint,
+    });
     const top = 1;
     const h = height - 2;
     const visibleStartRatio = Math.max(0, Math.min(1, (visibleAbsLeft - absoluteX) / Math.max(1, absoluteW)));
@@ -312,7 +322,8 @@ export function drawTimelineClipCanvasMainThread(
 
     drawTimelineClipCanvasSourceExtensionGhosts(ctx, geometry, top, h, renderVisibleLeft, renderVisibleRight, canvasOffsetX, timeToPixel);
     drawTimelineClipCanvasFadeCurve(ctx, clip.fade, x, top, w, h);
-    drawTimelineClipCanvasPassiveDecorations(ctx, clip, geometry, badges, progressBars, x, top, w, h, false);
+    drawTimelineClipCanvasPassiveDecorations(ctx, clip, geometry, badges, progressBars, x, top, w, h, false, showFaceRanges);
+    drawTimelineClipCanvasSceneCutMarkers(ctx, sceneCutMarkers, x, top, w, h);
 
     ctx.beginPath();
     ctx.roundRect(x, top, w, h, radius);

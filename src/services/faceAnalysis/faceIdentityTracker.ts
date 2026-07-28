@@ -7,15 +7,21 @@ import type {
 import { FACE_ANALYSIS_MODEL_VERSION } from './modelCatalog';
 import type { FaceRuntimeDetection } from './types';
 
-const IDENTITY_COSINE_THRESHOLD = 0.45;
+// OpenCV's SFace cosine calibration uses 0.363 as its same-person boundary.
+// A higher cutoff fragmented a person into several labels when their pose or
+// lighting changed between the half-second samples.
+const IDENTITY_COSINE_THRESHOLD = 0.363;
 const ADJACENT_COSINE_THRESHOLD = 0.28;
 const MAX_ADJACENT_GAP_SECONDS = 2.5;
 const APPEARANCE_GAP_SECONDS = 1.25;
+const MAX_IDENTITY_EXEMPLARS = 8;
+const EXEMPLAR_NOVELTY_THRESHOLD = 0.9;
 
 interface IdentityState {
   id: string;
   label: string;
   embedding: Float32Array;
+  exemplars: Float32Array[];
   firstSeen: number;
   lastSeen: number;
   sampleCount: number;
@@ -67,6 +73,25 @@ function normalizedBlend(current: Float32Array, next: Float32Array, sampleCount:
   return result;
 }
 
+function identitySimilarity(identity: IdentityState, embedding: Float32Array): number {
+  let best = cosineSimilarity(identity.embedding, embedding);
+  for (const exemplar of identity.exemplars) {
+    best = Math.max(best, cosineSimilarity(exemplar, embedding));
+  }
+  return best;
+}
+
+function rememberIdentityExemplar(identity: IdentityState, embedding: Float32Array): void {
+  if (identity.exemplars.length >= MAX_IDENTITY_EXEMPLARS) return;
+  const bestSimilarity = identity.exemplars.reduce(
+    (best, exemplar) => Math.max(best, cosineSimilarity(exemplar, embedding)),
+    -1,
+  );
+  if (bestSimilarity < EXEMPLAR_NOVELTY_THRESHOLD) {
+    identity.exemplars.push(embedding.slice());
+  }
+}
+
 function toPersonSummary(identity: IdentityState): FacePersonSummary {
   return {
     id: identity.id,
@@ -95,12 +120,24 @@ export class FaceIdentityTracker {
     return detections
       .toSorted((a, b) => b.confidence - a.confidence)
       .map((detection) => {
+        if (detection.identityEligible === false) {
+          this.observationIndex += 1;
+          return {
+            id: `review-face-${this.observationIndex}`,
+            personId: `review-${this.observationIndex}`,
+            label: 'Review face',
+            identityEligible: false,
+            confidence: detection.confidence,
+            box: detection.box,
+            landmarks: detection.landmarks,
+          };
+        }
         let best: IdentityState | null = null;
         let bestScore = -Infinity;
 
         for (const identity of this.identities) {
           if (usedIdentities.has(identity.id)) continue;
-          const similarity = cosineSimilarity(identity.embedding, detection.embedding);
+          const similarity = identitySimilarity(identity, detection.embedding);
           const iou = intersectionOverUnion(identity.lastBox, detection.box);
           const isAdjacent = timestamp - identity.lastSeen <= MAX_ADJACENT_GAP_SECONDS;
           const qualifies = similarity >= IDENTITY_COSINE_THRESHOLD
@@ -119,6 +156,7 @@ export class FaceIdentityTracker {
             id: `${this.identityPrefix}${number}`,
             label: `Person ${number}`,
             embedding: detection.embedding.slice(),
+            exemplars: [detection.embedding.slice()],
             firstSeen: timestamp,
             lastSeen: timestamp,
             sampleCount: 0,
@@ -135,6 +173,7 @@ export class FaceIdentityTracker {
         best.confidenceSum += detection.confidence;
         best.maxConfidence = Math.max(best.maxConfidence, detection.confidence);
         best.embedding = normalizedBlend(best.embedding, detection.embedding, best.sampleCount);
+        rememberIdentityExemplar(best, detection.embedding);
         best.lastBox = detection.box;
         const lastAppearance = best.appearances[best.appearances.length - 1];
         if (lastAppearance && timestamp - lastAppearance.end <= APPEARANCE_GAP_SECONDS) {
@@ -149,6 +188,7 @@ export class FaceIdentityTracker {
           id: `${best.id}-face-${this.observationIndex}`,
           personId: best.id,
           label: best.label,
+          identityEligible: true,
           confidence: detection.confidence,
           box: detection.box,
           landmarks: detection.landmarks,
@@ -186,6 +226,7 @@ export function summarizeCachedFaces(
 
   for (const frame of frames) {
     for (const face of frame.faces ?? []) {
+      if (face.identityEligible === false) continue;
       const current = people.get(face.personId);
       if (!current) {
         people.set(face.personId, {

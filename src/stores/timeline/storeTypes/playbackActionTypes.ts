@@ -30,6 +30,14 @@ export interface PlaybackActions {
   stop: () => void;
   setZoom: (zoom: number) => void;
   toggleSnapping: () => void;
+  toggleMetronome: () => void;
+  setMetronomeVolume: (volume: number) => void;
+  setMetronomeMode: (
+    mode: import('../../../services/audio/metronomeScheduler').MetronomeMode,
+  ) => void;
+  setTimelineGridSubdivision: (
+    subdivision: import('../../../timeline/tempo/barsGrid').TimelineGridSubdivision,
+  ) => void;
   setScrollX: (scrollX: number) => void;
   setInPoint: (time: number | null) => void;
   setOutPoint: (time: number | null) => void;
@@ -69,6 +77,8 @@ export interface PlaybackActions {
   setShowAudioRegionEditMarkers: (enabled: boolean) => void;
   toggleTranscriptMarkers: () => void;
   setShowTranscriptMarkers: (enabled: boolean) => void;
+  toggleFaceRanges: () => void;
+  setShowFaceRanges: (enabled: boolean) => void;
 }
 
 export interface TimelineToolActions {
