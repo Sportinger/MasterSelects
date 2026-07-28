@@ -261,6 +261,7 @@ export interface CoreClipActions {
   generateLoudnessForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
   generateBeatOnsetForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
   generateFrequencyPhaseForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
+  generateAudioIntelligenceForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
   cancelAudioAnalysisForClip: (clipId: string) => void;
   setClipParent: (clipId: string, parentClipId: string | null) => void;
   getClipChildren: (clipId: string) => TimelineClip[];
