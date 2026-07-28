@@ -31,6 +31,15 @@ evidence is capped at 20 entries, pauses at 10, and emphasis at 10.
 
 ---
 
+## Production Default
+
+Production builds route kernel traffic through the same-origin Pages proxy
+`/api/kernel/*` by default. The proxy forwards only `health`, `compile`, and
+`runs/:id/complete`, requires a signed-in app session for the POST routes, and
+attaches the service bearer token server-side, so browsers never hold a kernel
+credential. The `localStorage` keys below remain the explicit override, and
+`ms.kernel.enabled` = `false` is the kill switch in every environment.
+
 ## Local Configuration
 
 The gateway reads exactly three `localStorage` entries:
@@ -80,7 +89,7 @@ The browser never asks the service to mutate editor state directly.
 | Storage unavailable, URL/token missing, or `ms.kernel.enabled` exactly `false` | Not handled | Continue through the community provider. |
 | Compile HTTP/network error or malformed response | Not handled | Continue through the community provider. |
 | Compile status `aborted` | Not handled | Fall back silently; this is the mechanical-coverage escape hatch. |
-| Compile status `failed` | Handled failure | Surface the kernel failure without running tools. |
+| Compile status `failed` | Not handled | Fall back silently; the failure detail stays in the gateway log. Pre-execution failures never surface because nothing was mutated. |
 | Any local tool failure or executor exception | Roll back, then not handled | Warn in the console and continue through the community provider. |
 | Completion transport/error response after a committed mutation | Handled failure | Surface the verification failure; do not run a second provider against mutated state. |
 | Fingerprint mismatch | Handled failure | Surface the mismatch honestly; do not fall back because state was already mutated. |
@@ -110,14 +119,26 @@ three storage key names.
 
 ## Troubleshooting
 
+Every routing decision and fallback reason is logged through the app logger:
+run `Logger.enable('KernelGateway')` in the browser console and repeat the
+prompt. `compile:aborted` and `compile:failed` fallbacks, transport errors,
+and rollback causes all appear there with their reason strings.
+
 If FlashBoard unexpectedly uses community chat, check:
 
-1. `ms.kernel.url` and `ms.kernel.token` are both present and nonblank.
-2. `ms.kernel.enabled` is not the exact string `false`.
-3. The configured service is reachable and accepts the bearer token.
-4. `/kernel/compile` did not return `aborted`, an HTTP failure, or an invalid
-   response.
+1. In production: the user is signed in (the `/api/kernel/*` proxy rejects
+   anonymous POSTs) and `ms.kernel.enabled` is not the exact string `false`.
+2. In development: `ms.kernel.url` and `ms.kernel.token` are both present and
+   nonblank.
+3. The configured service is reachable (`GET <url>/kernel/health`) and accepts
+   the bearer token.
+4. `/kernel/compile` did not return `aborted`, `failed`, an HTTP failure, or
+   an invalid response (see the gateway log).
 5. The browser console has no rolled-back semantic tool failure warning.
+
+Operators with service access can additionally watch requests flow through
+the kernel in real time via the service's own login-protected monitor page at
+`<service origin>/kernel/monitor`; its content is outside this repository.
 
 If the timeline changed but verification failed, inspect the run ID and the
 completion response. The gateway intentionally does not fall back after the

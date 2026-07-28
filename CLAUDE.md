@@ -444,6 +444,27 @@ scrubSettleState) before editing. Browser globals: `window.__WC_PIPELINE__`,
 `Logger.enable('WebCodecsPlayer,PlaybackHealth,LayerCollector')` and
 `Logger.enable('VideoSyncManager,ParallelDecode,RenderLoop')`.
 
+### Kernel-first chat routing
+
+AI-chat turns may be compiled and verified by an external kernel service
+before the community-provider loop runs; the service is a separate private
+project, and this repo contains only the client boundary
+(`src/services/kernelClient/`). What an agent here needs to know:
+
+- Debug routing with `Logger.enable('KernelGateway')` — every handled turn,
+  fallback reason, and rollback cause is logged with its reason string.
+- Dev config: `ms.kernel.url` / `ms.kernel.token` / `ms.kernel.enabled`
+  localStorage keys. Production defaults to the same-origin `/api/kernel/*`
+  proxy for signed-in users; `ms.kernel.enabled` = `false` kills routing
+  everywhere.
+- Kernel-handled turns answer with the fixed `Kernel-verifiziert (<hash>)`
+  format and consume no provider credits; prose answers indicate the
+  community-provider path ran instead.
+- Never add kernel-internal vocabulary, prompts, or evaluation assets to this
+  repo; `tests/unit/kernelClientIsolation.test.ts` enforces the boundary.
+
+Full client contract and troubleshooting: `docs/Features/Kernel-Client.md`.
+
 Details: `docs/Features/Debugging.md`, `docs/Features/Playback-Debugging.md`.
 
 ---
