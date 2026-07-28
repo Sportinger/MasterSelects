@@ -100,6 +100,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['getClipAnalysis', readOnly()],
   ['getClipFaceAnalysis', readOnly()],
   ['getClipTranscript', readOnly()],
+  ['getSpeechMarkers', readOnly()],
   ['findSilentSections', readOnly()],
   ['findLowQualitySections', readOnly()],
   ['getKeyframes', readOnly()],
@@ -484,6 +485,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['moveClipFaceAppearance', mutatingLow()],
   ['assignClipFaceReviewCandidate', mutatingLow()],
   ['startClipTranscription', mutatingLow()],
+  ['startClipAudioIntelligence', mutatingLow()],
   ['searchYouTube', mutatingLow()],
   // searchVideos is the definition name for the same handler as searchYouTube
   ['searchVideos', mutatingLow()],

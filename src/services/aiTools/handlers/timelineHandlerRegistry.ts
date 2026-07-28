@@ -29,14 +29,18 @@ import {
 } from './tracks';
 import {
   handleFindLowQualitySections,
-  handleFindSilentSections,
   handleGetClipAnalysis,
   handleGetClipFaceAnalysis,
   handleGetClipTranscript,
+} from './analysis';
+import { handleFindSilentSections } from './clipSilence';
+import {
   handleStartClipAnalysis,
+  handleStartClipAudioIntelligence,
   handleStartClipFaceAnalysis,
   handleStartClipTranscription,
-} from './analysis';
+} from './analysisStarters';
+import { handleGetSpeechMarkers } from './speechMarkers';
 import {
   handleAssignClipFaceReviewCandidate,
   handleMergeClipFacePeople,
@@ -124,9 +128,11 @@ export const timelineHandlers: Readonly<Record<string, TimelineHandler>> = {
   moveClipFaceAppearance: handleMoveClipFaceAppearance,
   assignClipFaceReviewCandidate: handleAssignClipFaceReviewCandidate,
   getClipTranscript: handleGetClipTranscript,
+  getSpeechMarkers: handleGetSpeechMarkers,
   findSilentSections: handleFindSilentSections,
   findLowQualitySections: handleFindLowQualitySections,
   startClipAnalysis: handleStartClipAnalysis,
+  startClipAudioIntelligence: handleStartClipAudioIntelligence,
   startClipFaceAnalysis: handleStartClipFaceAnalysis,
   startClipTranscription: handleStartClipTranscription,
   captureFrame: handleCaptureFrame,
