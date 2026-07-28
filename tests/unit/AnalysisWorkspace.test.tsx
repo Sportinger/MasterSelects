@@ -55,11 +55,13 @@ describe('AnalysisWorkspace', () => {
     expect(screen.queryByText('Ava')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Seek word Hello' }));
     expect(onSeekSourceTime).toHaveBeenCalledWith(0.5);
-    fireEvent.click(screen.getByRole('button', { name: 'Scene 1' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Scene 1\b/ }));
     expect(onSeekSourceTime).toHaveBeenCalledWith(0);
     fireEvent.click(screen.getByRole('button', { name: 'Seek to speech segment 1 in scene 1' }));
     expect(onSeekSourceTime).toHaveBeenCalledWith(0.5);
-    expect(screen.queryByText('People')).not.toBeInTheDocument();
+    // The overview map's "People" lane label is legitimate; only a People
+    // statistics section (heading) would be redundant in the workspace.
+    expect(screen.queryByRole('heading', { name: 'People' })).not.toBeInTheDocument();
   });
 
   it('shows several speech segments without inventing visual scene cuts', () => {

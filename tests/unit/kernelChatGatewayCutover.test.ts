@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+﻿import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   AIToolCallExecution,
   AIToolCallExecutionResult,
@@ -239,11 +239,12 @@ describe('kernel chat gateway WP11 cutover', () => {
     });
     expect(executeToolCalls.mock.calls.map((call) => call[0]?.[0]?.tool)).toEqual([
       'getClipTranscript',
+      'getSpeechMarkers',
       'createComposition',
       'splitClip',
       'moveClip',
     ]);
-    expect(executeToolCalls).toHaveBeenNthCalledWith(2, [{
+    expect(executeToolCalls).toHaveBeenNthCalledWith(3, [{
       id: 'kernel-setup-new-composition',
       tool: 'createComposition',
       args: {
@@ -261,7 +262,7 @@ describe('kernel chat gateway WP11 cutover', () => {
     expect(JSON.parse(compileInit.body as string)).toEqual({
       request: 'Baue daraus eine kurze Story',
       snapshot: transcriptSnapshot,
-      indexVersion: 'app-transcript-v1',
+      indexVersion: 'app-transcript-v2',
       moments: [{
         schemaVersion: 1,
         handle: '$m1',
@@ -269,7 +270,7 @@ describe('kernel chat gateway WP11 cutover', () => {
         sourceRange: { startSeconds: 2.5, endSeconds: 3.25 },
         evidence: { transcript: 'Ein guter Moment.' },
         confidence: 1,
-        indexVersion: 'app-transcript-v1',
+        indexVersion: 'app-transcript-v2',
         analysisSources: ['transcript'],
       }],
     });

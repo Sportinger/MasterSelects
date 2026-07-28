@@ -88,7 +88,8 @@ describe('transcript moments', () => {
         analysisSources: ['transcript'],
       },
     ]);
-    expect(executor).toHaveBeenCalledTimes(2);
+    // Two transcript pages plus the trailing speech-marker read (v2).
+    expect(executor).toHaveBeenCalledTimes(3);
     expect(executor).toHaveBeenNthCalledWith(2, [{
       id: 'kernel-transcript-clip-1-2',
       tool: 'getClipTranscript',
@@ -141,8 +142,11 @@ describe('transcript moments', () => {
       handle: '$m400',
       evidence: { transcript: 'word-400' },
     });
-    expect(executor).toHaveBeenCalledTimes(4);
-    expect(executor.mock.calls.at(-1)?.[0]?.[0]?.args).toMatchObject({
+    // Four transcript pages plus the trailing speech-marker read (v2).
+    expect(executor).toHaveBeenCalledTimes(5);
+    // The last call is the speech-marker read; the final transcript page
+    // sits directly before it.
+    expect(executor.mock.calls.at(-2)?.[0]?.[0]?.args).toMatchObject({
       offset: 360,
       limit: 40,
     });

@@ -80,8 +80,8 @@ describe('AnalysisSceneList', () => {
       />,
     );
 
-    const items = screen.getAllByRole('listitem');
-    expect(items.length).toBeLessThan(10);
+    const rows = screen.getAllByRole('listitem');
+    expect(rows.length).toBeLessThan(10);
     fireEvent.click(screen.getByRole('button', { name: 'Seek to scene 2' }));
     expect(onItemSelect).toHaveBeenCalledWith(expect.objectContaining({
       scene: expect.objectContaining({ id: 'scene-1' }),
