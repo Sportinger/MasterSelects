@@ -9,6 +9,7 @@ import type { TimelineToolId, TimelineToolPreview, TimelineToolPreviewGhostRange
 import { LAYER_BUILDER_CONSTANTS } from '../../../services/layerBuilder/types';
 import { MIN_CLIP_DURATION } from '../timelineRenderConstants';
 import { computeTrimTiming, trimOriginalsFromClip } from '../utils/clipTrimTiming';
+import { isTimelineSnappingActive } from '../utils/timelineSnappingModifiers';
 
 const EPSILON = 0.0001;
 // Pixel radius within which a trim edge snaps to a clip edge / playhead / marker.
@@ -135,7 +136,7 @@ function adjustTrimDelta(
     : trim.originalStartTime + trim.originalDuration;
   const desiredEdge = originalEdge + rawDelta;
 
-  if (snap.enabled && !trim.altKey && snap.threshold > 0) {
+  if (snap.enabled && snap.threshold > 0) {
     let best: number | null = null;
     let bestDist = snap.threshold;
     for (const target of snap.times) {
@@ -340,7 +341,10 @@ export function useClipTrim({
       const snapTimes = getTrimSnapTimes(clipMap, trim.clipId, playheadPosition, markers);
       const threshold = Math.abs(pixelToTime(TRIM_SNAP_PIXELS));
       return adjustTrimDelta(trim, rawDelta, isAudioClip(clip), {
-        enabled: snappingEnabled,
+        enabled: isTimelineSnappingActive(snappingEnabled, {
+          altKey: trim.altKey,
+          shiftKey: trim.singleClip === true,
+        }),
         times: snapTimes,
         threshold,
       });

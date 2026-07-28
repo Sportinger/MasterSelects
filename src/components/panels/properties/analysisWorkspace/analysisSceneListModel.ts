@@ -53,10 +53,12 @@ export function buildAnalysisSceneListItems(
     pauses?: readonly AnalysisTranscriptChunkPause[];
     markers?: readonly AnalysisSceneSpeechMarker[];
     energyCurve?: AnalysisSceneSparklineCurve;
+    maxTextCharacters?: number;
   },
 ): readonly AnalysisSceneListItem[] {
   return scenes.flatMap(scene => buildAnalysisTranscriptChunks(scene, {
     pauses: options?.pauses,
+    maxTextCharacters: options?.maxTextCharacters,
   }).map(transcriptChunk => ({
     id: transcriptChunk.id,
     scene,
@@ -123,6 +125,19 @@ export function getAnalysisSceneWindow(
   let end = start;
   while (end < layout.rows.length && layout.rows[end].offset <= rangeEnd) end += 1;
   return { start, end };
+}
+
+export function getAnalysisSceneCenteredScrollTop(
+  layout: AnalysisSceneLayout,
+  rowIndex: number,
+  viewportHeight: number,
+): number {
+  const row = layout.rows[rowIndex];
+  if (!row) return 0;
+  const safeViewportHeight = Math.max(1, viewportHeight);
+  const centeredScrollTop = row.offset + (row.height / 2) - (safeViewportHeight / 2);
+  const maxScrollTop = Math.max(0, layout.totalHeight - safeViewportHeight);
+  return Math.min(maxScrollTop, Math.max(0, centeredScrollTop));
 }
 
 export function buildAnalysisSceneLayout(

@@ -3,6 +3,7 @@
 
 import { useState, useCallback, useEffect, type RefObject } from 'react';
 import type { TimelineMarker } from '../../../stores/timeline/types';
+import { isTimelineSnappingActive } from '../utils/timelineSnappingModifiers';
 
 interface TimelineMarkerDragState {
   markerId: string;
@@ -113,8 +114,7 @@ export function useMarkerDrag({
       const x = e.clientX - rect.left + scrollX;
       let time = pixelToTime(x);
 
-      // Apply snapping if enabled (and not holding Alt)
-      const shouldSnap = snappingEnabled !== e.altKey;
+      const shouldSnap = isTimelineSnappingActive(snappingEnabled, e);
       if (shouldSnap) {
         const snapTimes = getSnapTargetTimes();
         // Also snap to playhead
@@ -172,8 +172,7 @@ export function useMarkerDrag({
       const x = e.clientX - trackRect.left + scrollX;
       let time = pixelToTime(x);
 
-      // Apply snapping if enabled (and not holding Alt)
-      const shouldSnap = snappingEnabled !== e.altKey;
+      const shouldSnap = isTimelineSnappingActive(snappingEnabled, e);
       if (shouldSnap) {
         const snapTimes = getSnapTargetTimes();
         snapTimes.push(playheadPosition);

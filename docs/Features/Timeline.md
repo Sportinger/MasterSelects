@@ -160,7 +160,7 @@ getTrackChildren()  // Query child tracks
 | Delete all gaps | Available from the empty timeline right-click menu; closes all gaps on unlocked visible tracks as one undoable operation. |
 | Fit comp to window | Available from the zoom controls and empty timeline right-click menu. |
 | Right-drag empty space or clips | Scrubs the playhead without opening the timeline context menu; context menus open only for a single right-click. |
-| Edge playhead drag | Left-drag the ruler or playhead head against either visible lane edge to auto-scroll proportionally; snapping and `Alt` behavior remain active. Snapping to a clip end lands on its last visible composition frame instead of the exclusive time immediately after it. |
+| Edge playhead drag | Left-drag the ruler or playhead head against either visible lane edge to auto-scroll proportionally; persistent snapping plus the `Shift` temporary-enable and `Alt` bypass modifiers remain active. Snapping to a clip end lands on its last visible composition frame instead of the exclusive time immediately after it. |
 | Sync via Audio | Clip context menu action for selections with at least two audible clips; aligns selected audio/video pairs by waveform correlation and writes one manual linked group. |
 | Lift range | Available in the Cut flyout after drawing a Range Selection; removes the range and leaves a gap. |
 | Extract range | Available in the Cut flyout after drawing a Range Selection; removes the range and ripples following clips left. |
@@ -338,7 +338,7 @@ The toolbar and wheel gestures still drive playback and navigation:
 - Left/Right arrows step frame by frame.
 - The ruler is a stack of independent **ruler lanes** (Time / Timecode / Frames / Bars+Beats) toggled from the **Rulers** checklist next to the View dropdown; each lane keeps a fixed format and only its tick density adapts to zoom (no frame↔time crossfade). Bars+Beats is projected through a per-composition TempoMap. Clicking a lane marks it active (highlighted) as the future snap target. See [Timeline Rulers](./Timeline-Rulers.md).
 - The timeline **body** lane grid (behind clips, distinct from the ruler) still uses the active composition frame rate at deep zoom: the base time grid crossfades out while frame-accurate grid lines fade in with zoom.
-- `Alt+Scroll` or `Ctrl+Scroll` zooms the timeline around the mouse pointer by default; Preferences -> General -> Timeline can switch the zoom anchor to the playhead. Faster wheel gestures use larger zoom steps.
+- `Alt+Scroll` or `Ctrl+Scroll` zooms the timeline around the mouse pointer by default; Preferences -> General -> Timeline can switch the zoom anchor to the playhead. While zooming in near either lane edge, a magnetic 48 px edge zone preserves the corresponding visible time boundary so the nearby beginning or end is not pushed offscreen. Timeline zoom remains contained behind the dedicated navigator instead of exposing a second native panel scrollbar. Faster wheel gestures use larger zoom steps.
 - `Shift+Scroll` pans horizontally.
 - Vertical scroll snaps to track boundaries.
 - `Ctrl+Shift+Scroll` or `Cmd+Shift+Scroll` toggles slot-grid view.

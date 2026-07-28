@@ -37,6 +37,7 @@ export type {
   KernelServiceFailure,
   KernelServiceResult,
   KernelServiceSuccess,
+  KernelSilenceRange,
   KernelTranscriptMoment,
   KernelValidateRequest,
   KernelValidateResponse,
@@ -129,7 +130,7 @@ export class KernelServiceClient {
   ): Promise<KernelServiceResult<KernelCompileResponse>> {
     return this.request('/kernel/compile', true, {
       method: 'POST',
-      body: JSON.stringify(input),
+      body: JSON.stringify({ ...input }),
     }, { timeoutMs: COMPILE_TIMEOUT_MS, ...options });
   }
 

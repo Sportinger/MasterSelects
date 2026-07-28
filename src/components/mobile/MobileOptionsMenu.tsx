@@ -2,9 +2,15 @@
 
 import { useCallback, useState, useEffect } from 'react';
 import { undo, redo } from '../../stores/historyStore';
-import { saveCurrentProject, openExistingProject, createNewProject } from '../../services/projectSync';
+import {
+  openExistingProject,
+  saveCurrentProject,
+  syncStoresToProject,
+} from '../../services/projectSync';
 import { projectFileService } from '../../services/projectFileService';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useMediaStore } from '../../stores/mediaStore';
+import { ProjectNameDialog } from '../common/ProjectNameDialog';
 
 interface MobileOptionsMenuProps {
   isOpen: boolean;
@@ -16,6 +22,7 @@ export function MobileOptionsMenu({ isOpen, onClose }: MobileOptionsMenuProps) {
 
   // Project name state
   const [projectName, setProjectName] = useState('Untitled');
+  const [showProjectNameDialog, setShowProjectNameDialog] = useState(false);
 
   // Sync project name from service when menu opens
   useEffect(() => {
@@ -25,12 +32,27 @@ export function MobileOptionsMenu({ isOpen, onClose }: MobileOptionsMenuProps) {
   }, [isOpen]);
 
   // File actions
-  const handleNew = useCallback(async () => {
-    const name = prompt('Project name:', 'New Project');
-    if (name) {
-      await createNewProject(name);
-      onClose();
+  const handleNew = useCallback(() => {
+    setShowProjectNameDialog(true);
+  }, []);
+
+  const handleCreateNewProject = useCallback(async (name: string): Promise<string | null> => {
+    const created = await projectFileService.createProject(name);
+    if (!created) {
+      return 'No project folder was selected, or the folder could not be created.';
     }
+
+    useMediaStore.getState().newProject();
+    useMediaStore.getState().setProjectName(name);
+    await syncStoresToProject();
+    const saved = await projectFileService.saveProject();
+    if (!saved) {
+      return 'The project folder was created, but project.json could not be saved.';
+    }
+
+    setProjectName(name);
+    onClose();
+    return null;
   }, [onClose]);
 
   const handleOpen = useCallback(async () => {
@@ -56,11 +78,12 @@ export function MobileOptionsMenu({ isOpen, onClose }: MobileOptionsMenuProps) {
   }, [setForceDesktopMode]);
 
   return (
-    <div
-      className={`mobile-options-menu ${isOpen ? 'open' : ''}`}
-      onClick={onClose}
-    >
-      <div className="mobile-options-content" onClick={(e) => e.stopPropagation()}>
+    <>
+      <div
+        className={`mobile-options-menu ${isOpen ? 'open' : ''}`}
+        onClick={onClose}
+      >
+        <div className="mobile-options-content" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="mobile-panel-header">
           <h3>Options</h3>
@@ -144,7 +167,17 @@ export function MobileOptionsMenu({ isOpen, onClose }: MobileOptionsMenuProps) {
         <div className="mobile-options-footer">
           <span>MASterSelects Mobile</span>
         </div>
+        </div>
       </div>
-    </div>
+      {showProjectNameDialog && (
+        <ProjectNameDialog
+          mode="new"
+          initialName="New Project"
+          hasUnsavedChanges={projectFileService.hasUnsavedChanges()}
+          onClose={() => setShowProjectNameDialog(false)}
+          onSubmit={handleCreateNewProject}
+        />
+      )}
+    </>
   );
 }

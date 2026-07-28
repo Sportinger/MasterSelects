@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { TIMELINE_END_PADDING_PX } from '../utils/timelineHostConstants';
 import { clampValue } from '../utils/timelineHostLayout';
+import { isTimelineSnappingActive } from '../utils/timelineSnappingModifiers';
 
 const PLAYHEAD_EDGE_ZONE_PX = 96;
 const PLAYHEAD_EDGE_SCROLL_SPEED_PX_PER_SECOND = 1200;
@@ -46,7 +47,7 @@ export function usePlayheadSnap({
 
     let animationFrameId: number | null = null;
     let lastFrameAt: number | null = null;
-    let pointer: { clientX: number; altKey: boolean } | null = null;
+    let pointer: { clientX: number; altKey: boolean; shiftKey: boolean } | null = null;
 
     const stopAutoScroll = () => {
       pointer = null;
@@ -57,17 +58,14 @@ export function usePlayheadSnap({
       }
     };
 
-    const updatePlayhead = (clientX: number, altKey: boolean) => {
+    const updatePlayhead = (clientX: number, altKey: boolean, shiftKey: boolean) => {
       const timeline = timelineRef.current;
       if (!timeline) return;
       const rect = timeline.getBoundingClientRect();
       const x = clientX - rect.left + scrollXRef.current;
       let time = pixelToTime(x);
 
-      // Snapping with Alt-key toggle:
-      // - When snapping enabled: snap by default, Alt temporarily disables
-      // - When snapping disabled: don't snap, Alt temporarily enables
-      const shouldSnap = snappingEnabled !== altKey;
+      const shouldSnap = isTimelineSnappingActive(snappingEnabled, { altKey, shiftKey });
 
       if (shouldSnap) {
         const snapTimes = getSnapTargetTimes('last-frame');
@@ -134,7 +132,7 @@ export function usePlayheadSnap({
       if (nextScrollX !== scrollXRef.current) {
         scrollXRef.current = nextScrollX;
         setScrollX(nextScrollX);
-        updatePlayhead(pointer!.clientX, pointer!.altKey);
+        updatePlayhead(pointer!.clientX, pointer!.altKey, pointer!.shiftKey);
       }
       animationFrameId = requestAnimationFrame(autoScroll);
     };
@@ -144,8 +142,8 @@ export function usePlayheadSnap({
       // Edge auto-scroll belongs only to left-button ruler/playhead drags.
       if ((e.buttons & 1) === 0) return;
 
-      pointer = { clientX: e.clientX, altKey: e.altKey };
-      updatePlayhead(e.clientX, e.altKey);
+      pointer = { clientX: e.clientX, altKey: e.altKey, shiftKey: e.shiftKey };
+      updatePlayhead(e.clientX, e.altKey, e.shiftKey);
       if (!getEdgeScroll()) {
         stopAutoScroll();
       } else if (animationFrameId === null) {

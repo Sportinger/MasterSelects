@@ -122,8 +122,9 @@ retired. `activeRulerLaneId` now means only the lane highlight.
 Grid snapping uses a **pixel-derived threshold** (10 px), not the fixed
 `SNAP_THRESHOLD_SECONDS` used for clip edges and the playhead. A 1/16 at 120 BPM
 is 0.125 s apart — narrower than that fixed window — so a seconds threshold would
-leave grid snapping permanently engaged with overlapping capture zones. Alt still
-bypasses snapping entirely.
+leave grid snapping permanently engaged with overlapping capture zones. Shift
+temporarily enables snapping when the toolbar toggle is off; Alt always bypasses
+snapping entirely.
 
 Both snap paths are covered: `getSnappedPosition` (clip drags) and
 `resolveTimelineClipPointerTime` (tool-driven interactions).

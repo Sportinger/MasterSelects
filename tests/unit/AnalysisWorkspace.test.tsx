@@ -59,6 +59,7 @@ describe('AnalysisWorkspace', () => {
     expect(onSeekSourceTime).toHaveBeenCalledWith(0);
     fireEvent.click(screen.getByRole('button', { name: 'Seek to speech segment 1 in scene 1' }));
     expect(onSeekSourceTime).toHaveBeenCalledWith(0.5);
+    expect(screen.queryByText('00:00.5–00:00.8')).not.toBeInTheDocument();
     // The overview map's "People" lane label is legitimate; only a People
     // statistics section (heading) would be redundant in the workspace.
     expect(screen.queryByRole('heading', { name: 'People' })).not.toBeInTheDocument();

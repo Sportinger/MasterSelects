@@ -1,5 +1,6 @@
 // Timeline Tool Handlers
 
+import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import { computeTimelineOccupancy } from '../../timeline/timelineOccupancy';
 import type { ToolResult } from '../types';
@@ -53,9 +54,14 @@ export async function handleGetTimelineState(
     };
   }).filter(Boolean);
 
+  const { activeCompositionId, compositions } = useMediaStore.getState();
+  const activeComposition = compositions.find((c) => c.id === activeCompositionId);
+
   return {
     success: true,
     data: {
+      activeCompositionId: activeCompositionId ?? null,
+      activeCompositionName: activeComposition?.name ?? null,
       playheadPosition,
       duration,
       inPoint,

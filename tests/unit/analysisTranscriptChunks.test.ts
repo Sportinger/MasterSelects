@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ANALYSIS_TRANSCRIPT_CHUNK_MAX_SECONDS,
   buildAnalysisTranscriptChunks,
+  getAnalysisTranscriptCharacterCapacity,
 } from '../../src/components/panels/properties/analysisWorkspace/analysisTranscriptChunks';
 import type {
   AnalysisSceneTranscriptWord,
@@ -83,6 +84,32 @@ describe('analysis transcript chunks', () => {
     expect(chunks.length).toBeLessThan(10);
     expect(chunks.every(chunk => chunk.words.length > 1)).toBe(true);
     expect(chunks.flatMap(chunk => chunk.words)).toHaveLength(words.length);
+  });
+
+  it('adapts presentation chunks to the available transcript width', () => {
+    const words = Array.from({ length: 40 }, (_, index) => (
+      word(index, 'Ava', `word${index}`, index * 0.1)
+    )).map(item => ({ ...item, end: item.start + 0.08 }));
+    const narrowChunks = buildAnalysisTranscriptChunks(scene(words, 4), {
+      maxTextCharacters: 32,
+    });
+    const wideChunks = buildAnalysisTranscriptChunks(scene(words, 4), {
+      maxTextCharacters: 96,
+    });
+
+    expect(narrowChunks.length).toBeGreaterThan(wideChunks.length);
+    expect(narrowChunks.flatMap(chunk => chunk.words.map(item => item.id)))
+      .toEqual(words.map(item => item.id));
+    expect(wideChunks.flatMap(chunk => chunk.words.map(item => item.id)))
+      .toEqual(words.map(item => item.id));
+  });
+
+  it('turns measured text width into a bounded character budget', () => {
+    expect(getAnalysisTranscriptCharacterCapacity(208)).toBe(32);
+    expect(getAnalysisTranscriptCharacterCapacity(624)).toBe(96);
+    expect(getAnalysisTranscriptCharacterCapacity(20)).toBe(24);
+    expect(getAnalysisTranscriptCharacterCapacity(2000)).toBe(180);
+    expect(getAnalysisTranscriptCharacterCapacity(0)).toBeUndefined();
   });
 
   it('hard-splits a speaker change even before the target duration', () => {

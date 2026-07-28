@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   isProjectOpen: vi.fn(() => true),
   markDirty: vi.fn(),
+  createProject: vi.fn(async () => true),
+  saveProject: vi.fn(async () => true),
   isProjectStoreSyncInProgress: vi.fn(() => false),
+  syncStoresToProject: vi.fn(async () => undefined),
   saveCurrentProject: vi.fn(async () => true),
   loadProjectToStores: vi.fn(async () => undefined),
   mediaSubscribe: vi.fn(),
@@ -22,16 +25,16 @@ vi.mock('../../src/services/projectFileService', () => ({
   projectFileService: {
     isProjectOpen: mocks.isProjectOpen,
     markDirty: mocks.markDirty,
-    saveProject: vi.fn(async () => true),
+    saveProject: mocks.saveProject,
     closeProject: vi.fn(),
-    createProject: vi.fn(async () => true),
+    createProject: mocks.createProject,
     openProject: vi.fn(async () => true),
   },
 }));
 
 vi.mock('../../src/services/project/projectSave', () => ({
   isProjectStoreSyncInProgress: mocks.isProjectStoreSyncInProgress,
-  syncStoresToProject: vi.fn(async () => undefined),
+  syncStoresToProject: mocks.syncStoresToProject,
   saveCurrentProject: mocks.saveCurrentProject,
 }));
 
@@ -106,6 +109,8 @@ describe('project lifecycle auto sync', () => {
     mocks.settingsState.saveMode = 'manual';
     mocks.isProjectOpen.mockReturnValue(true);
     mocks.isProjectStoreSyncInProgress.mockReturnValue(false);
+    mocks.createProject.mockResolvedValue(true);
+    mocks.saveProject.mockResolvedValue(true);
   });
 
   it('marks the project dirty when persisted MIDI bindings change', async () => {
@@ -144,5 +149,15 @@ describe('project lifecycle auto sync', () => {
     for (const dispose of disposers.slice(0, 10)) {
       expect(dispose).toHaveBeenCalledTimes(1);
     }
+  });
+
+  it('reports a failed initial project write to the caller', async () => {
+    mocks.saveProject.mockResolvedValue(false);
+    const { createNewProject } = await import('../../src/services/project/projectLifecycle');
+
+    await expect(createNewProject('Project With Spaces')).resolves.toBe(false);
+    expect(mocks.createProject).toHaveBeenCalledWith('Project With Spaces');
+    expect(mocks.syncStoresToProject).toHaveBeenCalledTimes(1);
+    expect(mocks.saveProject).toHaveBeenCalledTimes(1);
   });
 });

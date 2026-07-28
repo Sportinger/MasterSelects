@@ -172,7 +172,7 @@ export const clipToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'cutRangesFromClip',
-      description: 'Remove multiple TIMELINE ranges from one clip in a single call. This is the preferred tool for low-quality ranges and for the complement of face-analysis KEEP ranges. It handles clip-ID changes from its own splits by processing end-to-start and applies the cuts to linked audio automatically; do not pre-split the clip or delete its audio separately.',
+      description: 'Remove multiple TIMELINE ranges from one clip in a single call. This is the preferred tool for low-quality ranges and for the complement of face-analysis KEEP ranges. It handles clip-ID changes from its own splits by processing end-to-start and applies the cuts to linked audio automatically; set ripple to true to close each removed gap. Do not pre-split the clip or delete its audio separately.',
       parameters: {
         type: 'object',
         properties: {
@@ -191,6 +191,10 @@ export const clipToolDefinitions: ToolDefinition[] = [
               required: ['timelineStart', 'timelineEnd'],
             },
             description: 'Ranges to REMOVE in timeline seconds. Use returned ranges directly for low-quality removal. To keep one analyzed person, merge that person\'s getClipFaceAnalysis appearance ranges, compute their complement inside the returned timelineRange, and pass the complement here.',
+          },
+          ripple: {
+            type: 'boolean',
+            description: 'Close each removed timeline gap by shifting later clips on the affected video/audio tracks (default: false).',
           },
         },
         required: ['clipId', 'ranges'],

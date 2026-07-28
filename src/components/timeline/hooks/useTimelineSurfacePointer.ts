@@ -10,6 +10,7 @@ import {
   clampValue,
   shouldIgnoreTimelineSurfaceToolTarget,
 } from '../utils/timelineHostLayout';
+import { calculateTimelineZoomScrollX } from '../utils/timelineZoomAnchor';
 
 interface UseTimelineSurfacePointerProps {
   trackLanesRef: RefObject<HTMLDivElement | null>;
@@ -87,12 +88,18 @@ export function useTimelineSurfacePointer({
     if (activeTimelineToolId === 'zoom') {
       const viewportWidth = getTimelineViewportWidth();
       const pointerX = getTimelineSurfacePointerX(event.clientX);
-      const pointerTime = Math.max(0, (scrollX + pointerX) / Math.max(MIN_ZOOM, zoom));
       const dynamicMinZoom = Math.max(MIN_ZOOM, (viewportWidth - TIMELINE_END_PADDING_PX) / Math.max(0.001, duration));
       const zoomMultiplier = event.altKey || event.shiftKey ? 1 / 1.35 : 1.35;
       const nextZoom = clampValue(zoom * zoomMultiplier, dynamicMinZoom, MAX_ZOOM);
       const nextMaxScrollX = Math.max(0, duration * nextZoom - viewportWidth + TIMELINE_END_PADDING_PX);
-      const nextScrollX = clampValue(pointerTime * nextZoom - pointerX, 0, nextMaxScrollX);
+      const nextScrollX = calculateTimelineZoomScrollX({
+        scrollX,
+        zoom,
+        nextZoom,
+        pointerX,
+        viewportWidth,
+        maxScrollX: nextMaxScrollX,
+      });
 
       setZoom(nextZoom);
       setScrollX(nextScrollX);

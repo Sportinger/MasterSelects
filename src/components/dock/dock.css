@@ -599,7 +599,8 @@
   font-size: calc(1em * var(--panel-zoom, 1));
 }
 
-.dock-panel-content-inner--media {
+.dock-panel-content-inner--media,
+.dock-panel-content-inner--timeline {
   overflow: hidden;
 }
 

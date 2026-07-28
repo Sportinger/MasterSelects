@@ -402,7 +402,9 @@ Temporary camera `NO KF` live offsets are intentionally not saved. They only aff
 
 ### New Project
 - File menu -> New Project (`Ctrl+N`)
-- Prompts for project name
+- Opens the in-app project setup dialog; spaces are supported and invalid filesystem characters are reported inline
+- Keeps the dialog open with the entered name when folder selection or project creation fails
+- Shows the unsaved-work warning inside the dialog instead of a browser-native confirmation
 - Opens folder picker (FSA) or OS folder picker (Native Helper)
 - Creates project subfolder with `project.json` and all required subfolders
 
@@ -414,7 +416,7 @@ Temporary camera `NO KF` live offsets are intentionally not saved. They only aff
 
 ### Save As
 - File menu -> Save As (`Ctrl+Shift+S`)
-- Prompts for new project name
+- Reuses the in-app project-name dialog instead of a browser-native prompt
 - Creates a new project in the same parent folder
 - Current state synced to the new project
 

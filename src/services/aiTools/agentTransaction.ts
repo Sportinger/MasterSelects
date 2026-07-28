@@ -85,6 +85,10 @@ function hasHistoryBatchOwnership(transaction: AgentTransaction): boolean {
   return false;
 }
 
+export function hasAgentTransactionOwnership(transaction: AgentTransaction): boolean {
+  return useHistoryStore.getState().batchId === transaction.historyBatchId;
+}
+
 export function commitAgentTransaction(
   transaction: AgentTransaction,
 ): AgentTransactionCommitResult {

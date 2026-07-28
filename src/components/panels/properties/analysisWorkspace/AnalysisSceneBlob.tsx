@@ -156,10 +156,16 @@ export function AnalysisSceneBlob({
       <div className="AnalysisSceneBlob__summary">
         {identitySummary(scene, transcriptChunk, renderPersonThumbnail)}
         <span className={`AnalysisSceneBlob__speech${energyCurve ? ' AnalysisSceneBlob__speech--withSparkline' : ''}`}>
-          <small>
+          <button
+            type="button"
+            className="AnalysisSceneBlob__segmentSeek"
+            aria-label={seekLabel}
+            onClick={onChunkSelect}
+            title={`${formatAnalysisSceneTime(transcriptChunk.start)}–${formatAnalysisSceneTime(transcriptChunk.end)} · ${duration.toFixed(1)}s`}
+          >
             Scene {scene.index ?? '–'} · {scene.boundarySource === 'scene-block' ? 'described scene' : 'shot'}
             {hasMultipleParts ? ` · speech ${transcriptChunk.partIndex}/${transcriptChunk.partCount}` : ''}
-          </small>
+          </button>
           {compactTranscript(transcriptChunk, sourceTime, markers, onWordClick)}
           {energyCurve && (
             <AnalysisSceneSparkline
@@ -169,15 +175,6 @@ export function AnalysisSceneBlob({
             />
           )}
         </span>
-        <button
-          type="button"
-          className="AnalysisSceneBlob__time AnalysisSceneBlob__summarySeek"
-          aria-label={seekLabel}
-          onClick={onChunkSelect}
-        >
-          <strong>{formatAnalysisSceneTime(transcriptChunk.start)}–{formatAnalysisSceneTime(transcriptChunk.end)}</strong>
-          <small>{duration.toFixed(1)}s</small>
-        </button>
       </div>
     </article>
   );

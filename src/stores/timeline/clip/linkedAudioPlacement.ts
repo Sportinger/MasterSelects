@@ -3,13 +3,17 @@ import type { TimelineClip, TimelineTrack } from '../../../types';
 type LinkedAudioPlacementClip = Pick<TimelineClip, 'trackId' | 'startTime' | 'duration'>;
 type LinkedAudioPlacementTrack = Pick<TimelineTrack, 'id' | 'type' | 'locked'>;
 
+// Linked-trim float noise must not spawn tracks; 1 microsecond is below frame/sample granularity.
+const PLACEMENT_EPSILON_SECONDS = 1e-6;
+
 function overlaps(
   clip: LinkedAudioPlacementClip,
   startTime: number,
   endTime: number,
 ): boolean {
   const clipEnd = clip.startTime + clip.duration;
-  return !(endTime <= clip.startTime || startTime >= clipEnd);
+  return endTime > clip.startTime + PLACEMENT_EPSILON_SECONDS &&
+    startTime < clipEnd - PLACEMENT_EPSILON_SECONDS;
 }
 
 function canUseTrack(

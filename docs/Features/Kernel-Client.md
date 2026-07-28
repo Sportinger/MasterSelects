@@ -67,6 +67,9 @@ protect the local profile.
 2. A compiled response must contain a run ID and validated concrete
    `resolvedCalls` (`stepId`, `tool`, and object `args`). The browser executes
    those calls in order through `executeAIToolCalls(..., 'chat')`.
+   Mechanical remove-silence plans resolve `cutRangesFromClip` with
+   `ripple: true`, matching the kernel simulation by closing removed gaps on
+   the linked video/audio tracks.
 3. The gateway opens one `beginAgentTransaction` for the task and invokes the
    semantic executor with nested history suppressed. A successful group is
    committed as one undo point. Any failed or missing tool result aborts the

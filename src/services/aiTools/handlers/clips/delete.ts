@@ -8,6 +8,8 @@ import {
 import type { TimelineStore } from './runtime';
 import { getClipColor } from './runtime';
 
+const TIMELINE_EPSILON = 1e-6;
+
 export async function handleDeleteClip(
   args: Record<string, unknown>,
   timelineStore: TimelineStore
@@ -151,11 +153,25 @@ export async function handleCutRangesFromClip(
 ): Promise<ToolResult> {
   const clipId = args.clipId as string;
   const ranges = args.ranges as Array<{ timelineStart: number; timelineEnd: number }>;
+  const ripple = args.ripple === true;
 
   // Get initial clip info
   const initialClip = timelineStore.clips.find(c => c.id === clipId);
   if (!initialClip) {
     return { success: false, error: `Clip not found: ${clipId}` };
+  }
+  const initialClipEnd = initialClip.startTime + initialClip.duration;
+  if (
+    ranges.length === 0 ||
+    ranges.some(({ timelineStart, timelineEnd }) =>
+      !Number.isFinite(timelineStart) ||
+      !Number.isFinite(timelineEnd) ||
+      timelineEnd <= timelineStart ||
+      timelineStart < initialClip.startTime - TIMELINE_EPSILON ||
+      timelineEnd > initialClipEnd + TIMELINE_EPSILON
+    )
+  ) {
+    return { success: false, error: 'Cut ranges must be finite, non-empty, have end after start, and stay inside the target clip.' };
   }
 
   const trackId = initialClip.trackId;
@@ -167,7 +183,8 @@ export async function handleCutRangesFromClip(
     useTimelineStore.getState().clips,
   );
 
-  // Sort ranges from END to START (so we don't shift positions)
+  // End-to-start keeps every supplied timeline range valid even when later
+  // deletions ripple subsequent clips to the left.
   const sortedRanges = [...ranges].sort((a, b) => b.timelineStart - a.timelineStart);
 
   for (const range of sortedRanges) {
@@ -178,8 +195,8 @@ export async function handleCutRangesFromClip(
     const currentClips = useTimelineStore.getState().clips;
     const targetClip = currentClips.find(c =>
       c.trackId === trackId &&
-      c.startTime <= timelineStart &&
-      c.startTime + c.duration >= timelineEnd
+      c.startTime <= timelineStart + TIMELINE_EPSILON &&
+      c.startTime + c.duration >= timelineEnd - TIMELINE_EPSILON
     );
 
     if (!targetClip) {
@@ -191,7 +208,7 @@ export async function handleCutRangesFromClip(
 
     try {
       // Split at the end of the range (if not at clip boundary)
-      if (timelineEnd < clipEnd - 0.01) {
+      if (timelineEnd < clipEnd - TIMELINE_EPSILON) {
         const splitEndResult = timelineStore.applyTimelineEditOperation({
           id: `ai-cut-range-split-end:${targetClip.id}:${timelineEnd}`,
           type: 'split-at-time',
@@ -215,8 +232,8 @@ export async function handleCutRangesFromClip(
       const clipsAfterEndSplit = useTimelineStore.getState().clips;
       const clipForStartSplit = clipsAfterEndSplit.find(c =>
         c.trackId === trackId &&
-        c.startTime <= timelineStart &&
-        c.startTime + c.duration >= timelineStart + 0.01
+        c.startTime <= timelineStart + TIMELINE_EPSILON &&
+        c.startTime + c.duration >= timelineStart + TIMELINE_EPSILON
       );
 
       if (!clipForStartSplit) {
@@ -225,7 +242,7 @@ export async function handleCutRangesFromClip(
       }
 
       // Split at the start of the range (if not at clip boundary)
-      if (timelineStart > clipForStartSplit.startTime + 0.01) {
+      if (timelineStart > clipForStartSplit.startTime + TIMELINE_EPSILON) {
         const splitStartResult = timelineStore.applyTimelineEditOperation({
           id: `ai-cut-range-split-start:${clipForStartSplit.id}:${timelineStart}`,
           type: 'split-at-time',
@@ -249,13 +266,13 @@ export async function handleCutRangesFromClip(
       const clipsAfterSplits = useTimelineStore.getState().clips;
       const clipToDelete = clipsAfterSplits.find(c =>
         c.trackId === trackId &&
-        Math.abs(c.startTime - timelineStart) < 0.1
+        Math.abs(c.startTime - timelineStart) <= TIMELINE_EPSILON
       );
 
       if (clipToDelete) {
         const deleteResult = timelineStore.applyTimelineEditOperation({
           id: `ai-cut-range-delete:${clipToDelete.id}`,
-          type: 'delete-clips',
+          type: ripple ? 'ripple-delete-selection' : 'delete-clips',
           clipIds: [clipToDelete.id],
           includeLinked: true,
         }, {
@@ -277,10 +294,13 @@ export async function handleCutRangesFromClip(
   }
 
   const removedCount = results.filter(r => r.status === 'removed').length;
+  const success = removedCount === sortedRanges.length;
   return {
-    success: true,
+    success,
+    ...(!success ? { error: `Removed ${removedCount} of ${sortedRanges.length} requested ranges.` } : {}),
     data: {
       originalClipId: clipId,
+      ripple,
       rangesProcessed: ranges.length,
       rangesRemoved: removedCount,
       results,

@@ -5,6 +5,7 @@ import {
   collectBarsGridSnapTimes,
   type TimelineGridSubdivision,
 } from '../../../../timeline/tempo/barsGrid';
+import { isTimelineSnappingActive } from '../../utils/timelineSnappingModifiers';
 
 export const TIMELINE_TOOL_SNAP_THRESHOLD_PX = 10;
 
@@ -21,6 +22,7 @@ export interface TimelineClipPointerContext {
   clientX: number;
   rectLeft: number;
   altKey: boolean;
+  shiftKey: boolean;
   // Tempo grid (issue #299, §3.5). Optional so call sites that predate the
   // feature keep today's clip-edge/playhead snapping unchanged; supplying a
   // tempoMap with barsLaneEnabled adds the same bar/beat candidates the clip
@@ -312,7 +314,7 @@ export function resolveTimelineClipPointerTime(context: TimelineClipPointerConte
   const displayDuration = Math.max(0.001, context.displayDuration);
   const localX = clamp(context.clientX - context.rectLeft, 0, width);
   const rawTime = context.displayStartTime + (localX / width) * displayDuration;
-  const shouldSnap = context.snappingEnabled !== context.altKey;
+  const shouldSnap = isTimelineSnappingActive(context.snappingEnabled, context);
 
   if (!shouldSnap) {
     return { rawTime, time: rawTime, snapped: false };
@@ -356,6 +358,7 @@ export function dispatchTimelineClipPointerMove(
       ...context,
       snappingEnabled: false,
       altKey: false,
+      shiftKey: false,
     });
     return {
       handled: true,
@@ -406,6 +409,7 @@ export function dispatchTimelineClipPointerClick(
       ...context,
       snappingEnabled: false,
       altKey: false,
+      shiftKey: false,
     });
     return {
       handled: true,
