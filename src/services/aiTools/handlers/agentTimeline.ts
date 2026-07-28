@@ -25,6 +25,10 @@ import { createAgentTimelineReadApi } from '../../agentTimeline/api/agentTimelin
 import { buildOccurrenceMappingIndex } from '../../agentTimeline/mapping/occurrenceMappingIndex';
 import { planCanonicalSourceRanges } from '../../agentTimeline/query/rangeQueryPlanning';
 import { materializeLegacyAgentTimelineReadSource } from '../../agentTimeline/runtime/legacyReadSource/materializeLegacyReadSource';
+import {
+  loadAudioIntelligencePayloads,
+  type AudioIntelligencePayloads,
+} from '../../agentTimeline/artifacts/audioIntelligencePayloadLoader';
 import { sourceIdentityRuntimeCache } from '../../agentTimeline/runtime/sourceIdentityCache';
 import { PersistentAgentTimelineShardReader } from '../../agentTimeline/runtime/persistence/persistentShardReader';
 import {
@@ -600,16 +604,24 @@ export async function handleGetTimelineAnalysis(
 
   let sourceIdentity: SourceIdentity;
   let audioArtifacts: readonly AudioAnalysisArtifact[] = [];
+  let audioIntelligence: AudioIntelligencePayloads = {};
   try {
-    [sourceIdentity, audioArtifacts] = await Promise.all([
+    const needsAudioIntelligence = request.channels.some((channel) =>
+      channel === 'audio' || channel === 'quality' || channel === 'speech');
+    const audioArtifactsPromise: Promise<readonly AudioAnalysisArtifact[]> = needsAudioIntelligence
+      ? dependencies.listAudioArtifacts(target.mediaFileId).then((artifacts) => usableAudioArtifacts(
+        artifacts,
+        target.mediaFileId,
+        target.durationSeconds,
+      ))
+      : Promise.resolve([]);
+    [sourceIdentity, audioArtifacts, audioIntelligence] = await Promise.all([
       dependencies.getSourceIdentity(target.sourceFile),
-      request.channels.includes('audio')
-        ? dependencies.listAudioArtifacts(target.mediaFileId).then((artifacts) => usableAudioArtifacts(
-          artifacts,
-          target.mediaFileId,
-          target.durationSeconds,
-        ))
-        : Promise.resolve([]),
+      audioArtifactsPromise,
+      audioArtifactsPromise.then((artifacts) => loadAudioIntelligencePayloads(
+        artifacts,
+        createCurrentAudioArtifactStore(),
+      )),
     ]);
   } catch (error) {
     return failure(
@@ -647,6 +659,9 @@ export async function handleGetTimelineAnalysis(
           sceneDescriptions: { value: legacyArtifacts.descriptions },
         } : {}),
         ...(audioArtifacts.length > 0 ? { audioArtifacts: { value: audioArtifacts } } : {}),
+        ...(Object.keys(audioIntelligence).length > 0
+          ? { audioIntelligence: { value: audioIntelligence } }
+          : {}),
         occurrenceMapping,
         mappingSourceId: target.mediaFileId,
       });

@@ -6,6 +6,7 @@ import type { SourceIdentity } from '../../../../types/agentTimeline/sourceIdent
 import type { AgentTimelineShardWrite } from '../../../../types/agentTimeline/storage';
 import type { AudioAnalysisArtifact } from '../../../audio/audioArtifactTypes';
 import { materializeLegacyAgentTimelineReadSource } from '../legacyReadSource/materializeLegacyReadSource';
+import { loadAudioIntelligencePayloads } from '../../artifacts/audioIntelligencePayloadLoader';
 import { sourceIdentityRuntimeCache } from '../sourceIdentityCache';
 import type { AgentTimelineArtifactStorage } from '../../storage/AgentTimelineArtifactStorage';
 import {
@@ -233,9 +234,14 @@ export class AgentTimelineRuntimePersistence {
     const input = this.inputFor(mediaFileId);
     if (!input || !this.isCurrent(mediaFileId, generation, input.source)) return;
     try {
-      const [sourceIdentity, audioArtifacts] = await Promise.all([
+      const audioArtifactsPromise = this.dependencies.listAudioArtifacts(mediaFileId);
+      const [sourceIdentity, audioArtifacts, audioIntelligence] = await Promise.all([
         this.dependencies.getSourceIdentity(input.source),
-        this.dependencies.listAudioArtifacts(mediaFileId),
+        audioArtifactsPromise,
+        audioArtifactsPromise.then(async (artifacts) => {
+          const { createCurrentAudioArtifactStore } = await import('../../../audio/timelineWaveformPyramidCache');
+          return loadAudioIntelligencePayloads(artifacts, createCurrentAudioArtifactStore());
+        }),
       ]);
       if (!this.isCurrent(mediaFileId, generation, input.source)) return;
       const clips = input.sourceClips;
@@ -260,6 +266,9 @@ export class AgentTimelineRuntimePersistence {
         ...(sceneCuts ? { sceneCuts: { value: sceneCuts } } : {}),
         ...(descriptions ? { sceneDescriptions: { value: descriptions } } : {}),
         ...(usableAudio.length > 0 ? { audioArtifacts: { value: usableAudio } } : {}),
+        ...(Object.keys(audioIntelligence).length > 0
+          ? { audioIntelligence: { value: audioIntelligence } }
+          : {}),
       });
       const writes = await Promise.all(materialized.shardIndex.entries.map(async ({ shard }) => shardWrite(
         shard,
