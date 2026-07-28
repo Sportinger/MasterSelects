@@ -522,15 +522,14 @@ export async function tryKernelFirst(
       });
       return { handled: false };
     }
-    log.warn('kernel compile failed', {
+    // Compile failures happen before any local mutation, so the legacy
+    // loop can still serve the request. Honest failures are reserved for
+    // post-execution states (deferred rollback, fingerprint mismatch).
+    log.warn('kernel compile failed; falling back', {
       runId: compiled.runId,
       failures: compiled.failures,
     });
-    return {
-      handled: true,
-      message: failedMessage(compiled.failures),
-      runId: compiled.runId,
-    };
+    return { handled: false };
   }
 
   const compiledPlan: KernelCompileCompiledResponse = compiled;
