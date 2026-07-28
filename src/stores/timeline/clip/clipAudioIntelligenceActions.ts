@@ -3,7 +3,10 @@ import { updateClipById } from '../helpers/clipStateHelpers';
 import { AudioIntelligenceGenerator } from '../../../services/audio/intelligence/AudioIntelligenceGenerator';
 import { getAudioIntelligenceRuntime } from '../../../services/audio/intelligence/AudioIntelligenceRuntime';
 import type { AudioIntelligenceFeature } from '../../../services/audio/intelligence/audioIntelligenceTypes';
+import { computeTranscriptWordsHash } from '../../../services/audio/transcriptTimingManifest';
 import { createCurrentAudioArtifactStore } from '../../../services/audio/timelineWaveformPyramidCache';
+import { getAgentTimelineProfileSettings } from '../../../services/agentTimeline/profiles/analysisProfiles';
+import { resolveClipTranscriptWords } from '../../../services/transcription/clipTranscriptResolver';
 import { isPreparedClipAudioAnalysisInputStale } from '../../../services/audio/ClipAudioAnalysisOrchestrator';
 import { clipAudioAnalysisJobService } from '../../../services/audio/ClipAudioAnalysisJobService';
 import type { GenerateClipAudioAnalysisOptions } from '../types';
@@ -21,7 +24,43 @@ import {
 
 const log = Logger.create('ClipAudioIntelligence');
 
-const AUDIO_INTELLIGENCE_FEATURES: ReadonlySet<AudioIntelligenceFeature> = new Set(['vad']);
+const AUDIO_INTELLIGENCE_FEATURES: ReadonlySet<AudioIntelligenceFeature> = new Set([
+  'vad',
+  'alignment',
+  'speech-markers',
+  'prosody',
+  'room-tone',
+]);
+
+type AudioIntelligenceActionOptions = GenerateClipAudioAnalysisOptions & {
+  features?: ReadonlySet<AudioIntelligenceFeature>;
+};
+
+function storedLanguage(): string | undefined {
+  const language = globalThis.localStorage?.getItem('transcriptLanguage');
+  return language && language !== 'auto' ? language : undefined;
+}
+
+function analysisHopSeconds(): number {
+  const stored = globalThis.localStorage?.getItem('analysisProfile');
+  const profile = stored === 'quick' || stored === 'deep' || stored === 'balanced'
+    ? stored
+    : 'balanced';
+  return Math.min(getAgentTimelineProfileSettings(profile).audioHopSeconds ?? 0.05, 0.05);
+}
+
+function hasRequestedArtifacts(
+  refs: NonNullable<NonNullable<ReturnType<ClipActionContext['get']>['clips'][number]['audioState']>['sourceAnalysisRefs']> | undefined,
+  features: ReadonlySet<AudioIntelligenceFeature>,
+): boolean {
+  return [...features].every((feature) => {
+    if (feature === 'vad') return Boolean(refs?.voiceActivityId);
+    if (feature === 'alignment') return Boolean(refs?.transcriptTimingId);
+    if (feature === 'speech-markers') return Boolean(refs?.speechMarkersId);
+    if (feature === 'prosody') return Boolean(refs?.prosodyContourId);
+    return Boolean(refs?.roomToneProfileId);
+  });
+}
 
 export async function generateAudioIntelligenceForClipAction(
   context: ClipActionContext,
@@ -29,16 +68,24 @@ export async function generateAudioIntelligenceForClipAction(
   options: GenerateClipAudioAnalysisOptions = {},
 ): Promise<void> {
   const { get, set } = context;
+  const requestedFeatures = (options as AudioIntelligenceActionOptions).features
+    ?? AUDIO_INTELLIGENCE_FEATURES;
   // Audio intelligence always analyzes the source audio (needsProcessed
   // false), so the skip check only consults sourceAnalysisRefs.
   const clip = get().clips.find(c => c.id === clipId);
   if (!clip || clip.waveformGenerating) return;
-  if (!options.force && clip.audioState?.sourceAnalysisRefs?.voiceActivityId) return;
+  if (!options.force && hasRequestedArtifacts(clip.audioState?.sourceAnalysisRefs, requestedFeatures)) return;
 
   set({ clips: updateClipById(get().clips, clipId, createAudioAnalysisJobUpdate({
     kind: 'audio-intelligence',
     label: 'Audio Intelligence',
-    artifactKinds: ['voice-activity'],
+    artifactKinds: [...requestedFeatures].map((feature) => {
+      if (feature === 'vad') return 'voice-activity';
+      if (feature === 'alignment') return 'transcript-timing';
+      if (feature === 'speech-markers') return 'speech-markers';
+      if (feature === 'prosody') return 'prosody-contour';
+      return 'room-tone-profile';
+    }),
     processed: false,
   })) });
 
@@ -52,11 +99,25 @@ export async function generateAudioIntelligenceForClipAction(
         artifactStore: store,
         runtime: getAudioIntelligenceRuntime(),
       });
+      const currentSourceClip = get().clips.find(c => c.id === clipId);
+      const transcriptWords = currentSourceClip
+        ? resolveClipTranscriptWords(currentSourceClip)
+        : undefined;
+      const transcript = transcriptWords ? {
+        words: transcriptWords,
+        hash: await computeTranscriptWordsHash(transcriptWords),
+        language: storedLanguage(),
+        wordSource: transcriptWords.some(word => word.sourceProvider)
+          ? 'provider' as const
+          : 'synthetic' as const,
+      } : undefined;
       const generated = await generator.generate({
         mediaFileId: prepared.mediaFileId,
         sourceFingerprint: prepared.sourceFingerprint,
         buffer: prepared.analysisBuffer,
-        features: AUDIO_INTELLIGENCE_FEATURES,
+        features: requestedFeatures,
+        transcript,
+        profile: { hopSeconds: analysisHopSeconds() },
         clipAudioStateHash: prepared.clipAudioStateHash,
         decoderId: prepared.decoderId,
         decoderVersion: prepared.decoderVersion,
@@ -72,12 +133,20 @@ export async function generateAudioIntelligenceForClipAction(
         return;
       }
       const voiceActivityId = generated.artifacts.voiceActivity?.manifestRef.artifactId;
+      const transcriptTimingId = generated.artifacts.transcriptTiming?.manifestRef.artifactId;
+      const speechMarkersId = generated.artifacts.speechMarkers?.manifestRef.artifactId;
+      const prosodyContourId = generated.artifacts.prosodyContour?.manifestRef.artifactId;
+      const roomToneProfileId = generated.artifacts.roomToneProfile?.manifestRef.artifactId;
       set({ clips: updateClipById(get().clips, clipId, {
         audioState: {
           ...(currentClip.audioState ?? {}),
           sourceAnalysisRefs: {
             ...(currentClip.audioState?.sourceAnalysisRefs ?? {}),
             ...(voiceActivityId ? { voiceActivityId } : {}),
+            ...(transcriptTimingId ? { transcriptTimingId } : {}),
+            ...(speechMarkersId ? { speechMarkersId } : {}),
+            ...(prosodyContourId ? { prosodyContourId } : {}),
+            ...(roomToneProfileId ? { roomToneProfileId } : {}),
           },
         },
         ...clearAudioAnalysisJobUpdate(),

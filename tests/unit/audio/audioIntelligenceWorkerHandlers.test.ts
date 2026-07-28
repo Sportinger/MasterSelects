@@ -6,6 +6,7 @@ import {
 } from '../../../src/runtime/worker';
 import {
   createAudioIntelligenceWorkerHandlers,
+  type AudioIntelligenceWorkerHandlerOptions,
   type VadSessionLike,
 } from '../../../src/services/audio/intelligence/worker/handlers';
 import type {
@@ -61,7 +62,10 @@ interface FakeSessionOptions {
   hangUntilAborted?: boolean;
 }
 
-function createHarness(sessionOptions: FakeSessionOptions = {}) {
+function createHarness(
+  sessionOptions: FakeSessionOptions = {},
+  handlerOptions: Partial<Omit<AudioIntelligenceWorkerHandlerOptions, 'createSession'>> = {},
+) {
   const events: RuntimeWorkerOutboundMessage[] = [];
   const transferLists: Transferable[][] = [];
   const releaseCalls: number[] = [];
@@ -90,7 +94,7 @@ function createHarness(sessionOptions: FakeSessionOptions = {}) {
   });
 
   const host = new WorkerRuntimeHost({
-    handlers: createAudioIntelligenceWorkerHandlers({ createSession }),
+    handlers: createAudioIntelligenceWorkerHandlers({ createSession, ...handlerOptions }),
     now: () => '2026-07-28T00:00:00.000Z',
     postMessage: (message, transfer = []) => {
       events.push(message);
@@ -241,5 +245,62 @@ describe('audio intelligence worker handlers', () => {
 
     expect(harness.createSession).toHaveBeenCalledTimes(2);
     expect(harness.releaseCalls).toEqual([0]);
+  });
+
+  it('loads and releases a PCM token and runs an injected alignment handler through the host', async () => {
+    const refineWordTimings = vi.fn(() => [{
+      wordId: 'word-1',
+      alignedStart: 2.1,
+      alignedEnd: 2.5,
+      confidence: 0.95,
+    }]);
+    const harness = createHarness({}, { refineWordTimings });
+    harness.startJob('job-load-pcm', 'audio-intel.load-pcm', {
+      pcm: new Float32Array(320).fill(0.25),
+      sampleRate: 16_000,
+      offsetSeconds: 2,
+    });
+    const loaded = await waitForTerminal(harness.events, 'job-load-pcm');
+    expect(loaded.type).toBe('runtime.job.completed');
+    const loadOutput = (loaded as {
+      output: { token: string; energy: { values: Float32Array; hopSeconds: number; startSeconds: number } };
+    }).output;
+    expect(loadOutput.token).toBeTruthy();
+    expect(loadOutput.energy.hopSeconds).toBe(0.01);
+    expect(loadOutput.energy.startSeconds).toBe(2);
+    expect(loadOutput.energy.values).toHaveLength(2);
+    const loadIndex = harness.events.indexOf(loaded);
+    expect(harness.transferLists[loadIndex]).toContain(loadOutput.energy.values.buffer);
+
+    harness.startJob('job-align', 'audio-intel.align', {
+      token: loadOutput.token,
+      words: [{ id: 'word-1', text: 'hello', start: 2, end: 2.4 }],
+      wordSource: 'provider',
+      vadSegments: [{ start: 2, end: 3, confidence: 0.9 }],
+    });
+    const aligned = await waitForTerminal(harness.events, 'job-align');
+    expect(aligned).toMatchObject({
+      type: 'runtime.job.completed',
+      output: [{ wordId: 'word-1', alignedStart: 2.1, alignedEnd: 2.5 }],
+    });
+    expect(refineWordTimings).toHaveBeenCalledWith(expect.objectContaining({
+      energy: expect.objectContaining({ hopSeconds: 0.01, startSeconds: 2 }),
+    }));
+
+    harness.startJob('job-release-pcm', 'audio-intel.release-pcm', { token: loadOutput.token });
+    expect(await waitForTerminal(harness.events, 'job-release-pcm')).toMatchObject({
+      type: 'runtime.job.completed',
+      output: { released: true },
+    });
+    harness.startJob('job-align-released', 'audio-intel.align', {
+      token: loadOutput.token,
+      words: [],
+      wordSource: 'provider',
+      vadSegments: [],
+    });
+    expect(await waitForTerminal(harness.events, 'job-align-released')).toMatchObject({
+      type: 'runtime.job.failed',
+      error: { message: expect.stringContaining('unavailable') },
+    });
   });
 });

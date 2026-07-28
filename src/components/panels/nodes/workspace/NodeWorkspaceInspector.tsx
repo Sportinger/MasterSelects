@@ -17,6 +17,7 @@ type AudioAnalysisArtifactKind =
   | 'onset-map'
   | 'phase-correlation'
   | 'frequency-summary'
+  | 'transcript-timing'
   | 'voice-activity'
   | 'speech-markers'
   | 'prosody-contour'
@@ -31,6 +32,11 @@ const IMPLEMENTED_AUDIO_ANALYSIS_KINDS = new Set<string>([
   'onset-map',
   'phase-correlation',
   'frequency-summary',
+  'transcript-timing',
+  'voice-activity',
+  'speech-markers',
+  'prosody-contour',
+  'room-tone-profile',
 ]);
 
 const AI_SEED_AUDIO_PORT_KINDS = new Set([

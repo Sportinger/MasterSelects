@@ -7,12 +7,30 @@ import {
 } from '../../../runtime/worker';
 import {
   AUDIO_INTELLIGENCE_ANALYSIS_SAMPLE_RATE,
+  AUDIO_INTELLIGENCE_ALIGNMENT_HANDLER_ID,
   AUDIO_INTELLIGENCE_INIT_HANDLER_ID,
+  AUDIO_INTELLIGENCE_LOAD_PCM_HANDLER_ID,
+  AUDIO_INTELLIGENCE_PROSODY_HANDLER_ID,
   AUDIO_INTELLIGENCE_PROVIDER_ID,
+  AUDIO_INTELLIGENCE_RELEASE_PCM_HANDLER_ID,
+  AUDIO_INTELLIGENCE_ROOM_TONE_HANDLER_ID,
+  AUDIO_INTELLIGENCE_SPEECH_MARKERS_HANDLER_ID,
   AUDIO_INTELLIGENCE_VAD_HANDLER_ID,
   AudioIntelligenceError,
+  type AudioIntelligenceAlignmentJobInput,
+  type AudioIntelligenceAlignmentJobOutput,
   type AudioIntelligenceInitJobInput,
   type AudioIntelligenceInitJobOutput,
+  type AudioIntelligenceLoadPcmJobInput,
+  type AudioIntelligenceLoadPcmJobOutput,
+  type AudioIntelligenceProsodyJobInput,
+  type AudioIntelligenceProsodyJobOutput,
+  type AudioIntelligenceReleasePcmJobInput,
+  type AudioIntelligenceReleasePcmJobOutput,
+  type AudioIntelligenceRoomToneJobInput,
+  type AudioIntelligenceRoomToneJobOutput,
+  type AudioIntelligenceSpeechMarkersJobInput,
+  type AudioIntelligenceSpeechMarkersJobOutput,
   type AudioIntelligenceStageProgress,
   type AudioIntelligenceVadJobInput,
   type AudioIntelligenceVadJobOutput,
@@ -150,10 +168,12 @@ async function loadModelBuffer(
   return buffer;
 }
 
-export interface RunVadOptions {
+export interface RunAudioIntelligenceJobOptions {
   signal?: AbortSignal;
   onProgress?: (progress: AudioIntelligenceStageProgress) => void;
 }
+
+export type RunVadOptions = RunAudioIntelligenceJobOptions;
 
 export class AudioIntelligenceRuntime {
   private worker: Worker | null = null;
@@ -189,13 +209,97 @@ export class AudioIntelligenceRuntime {
     return this.waitForPrepare(flight, options);
   }
 
-  // Consumes (transfers) the pcm buffer; callers must pass a Float32Array they
-  // own, never an AudioBuffer's live channel data.
+  // Direct PCM is retained for backwards compatibility. Composite runs load it
+  // once and pass the returned token to VAD and every subsequent feature.
   async runVad(
-    pcm: Float32Array,
+    pcmOrToken: Float32Array | string,
     config: VoiceActivityConfig,
     options: RunVadOptions = {},
   ): Promise<AudioIntelligenceVadJobOutput> {
+    const input: AudioIntelligenceVadJobInput = {
+      ...(typeof pcmOrToken === 'string' ? { token: pcmOrToken } : { pcm: pcmOrToken }),
+      sampleRate: AUDIO_INTELLIGENCE_ANALYSIS_SAMPLE_RATE,
+      offsetSeconds: 0,
+      config,
+    };
+    return this.runWorkerJob(
+      AUDIO_INTELLIGENCE_VAD_HANDLER_ID,
+      input,
+      options,
+      'vad',
+      typeof pcmOrToken === 'string' ? [] : [pcmOrToken.buffer],
+    );
+  }
+
+  async loadPcm(
+    pcm: Float32Array,
+    sampleRate = AUDIO_INTELLIGENCE_ANALYSIS_SAMPLE_RATE,
+    offsetSeconds = 0,
+    options: RunAudioIntelligenceJobOptions = {},
+  ): Promise<AudioIntelligenceLoadPcmJobOutput> {
+    return this.runWorkerJob<AudioIntelligenceLoadPcmJobInput, AudioIntelligenceLoadPcmJobOutput>(
+      AUDIO_INTELLIGENCE_LOAD_PCM_HANDLER_ID,
+      {
+        pcm,
+        sampleRate,
+        offsetSeconds,
+      },
+      options,
+      undefined,
+      [pcm.buffer],
+    );
+  }
+
+  async releasePcm(
+    token: string,
+    options: RunAudioIntelligenceJobOptions = {},
+  ): Promise<AudioIntelligenceReleasePcmJobOutput> {
+    return this.runWorkerJob<
+      AudioIntelligenceReleasePcmJobInput,
+      AudioIntelligenceReleasePcmJobOutput
+    >(AUDIO_INTELLIGENCE_RELEASE_PCM_HANDLER_ID, { token }, options);
+  }
+
+  async runAlignment(
+    input: AudioIntelligenceAlignmentJobInput,
+    options: RunAudioIntelligenceJobOptions = {},
+  ): Promise<AudioIntelligenceAlignmentJobOutput> {
+    return this.runWorkerJob(AUDIO_INTELLIGENCE_ALIGNMENT_HANDLER_ID, input, options, 'alignment');
+  }
+
+  async runSpeechMarkers(
+    input: AudioIntelligenceSpeechMarkersJobInput,
+    options: RunAudioIntelligenceJobOptions = {},
+  ): Promise<AudioIntelligenceSpeechMarkersJobOutput> {
+    return this.runWorkerJob(
+      AUDIO_INTELLIGENCE_SPEECH_MARKERS_HANDLER_ID,
+      input,
+      options,
+      'speech-markers',
+    );
+  }
+
+  async runProsody(
+    input: AudioIntelligenceProsodyJobInput,
+    options: RunAudioIntelligenceJobOptions = {},
+  ): Promise<AudioIntelligenceProsodyJobOutput> {
+    return this.runWorkerJob(AUDIO_INTELLIGENCE_PROSODY_HANDLER_ID, input, options, 'prosody');
+  }
+
+  async runRoomTone(
+    input: AudioIntelligenceRoomToneJobInput,
+    options: RunAudioIntelligenceJobOptions = {},
+  ): Promise<AudioIntelligenceRoomToneJobOutput> {
+    return this.runWorkerJob(AUDIO_INTELLIGENCE_ROOM_TONE_HANDLER_ID, input, options, 'room-tone');
+  }
+
+  private async runWorkerJob<Input, Output>(
+    handlerId: string,
+    input: Input,
+    options: RunAudioIntelligenceJobOptions,
+    feature?: AudioIntelligenceStageProgress['feature'],
+    transfer: Transferable[] = [],
+  ): Promise<Output> {
     throwIfAborted(options.signal);
     await this.prepare(options);
     throwIfAborted(options.signal);
@@ -205,29 +309,21 @@ export class AudioIntelligenceRuntime {
         code: 'worker-unavailable',
       });
     }
-
-    const input: AudioIntelligenceVadJobInput = {
-      pcm,
-      sampleRate: AUDIO_INTELLIGENCE_ANALYSIS_SAMPLE_RATE,
-      offsetSeconds: 0,
-      config,
-    };
-    const handle = client.runJob<AudioIntelligenceVadJobInput, AudioIntelligenceVadJobOutput>({
+    const handle = client.runJob<Input, Output>({
       providerId: AUDIO_INTELLIGENCE_PROVIDER_ID,
-      handlerId: AUDIO_INTELLIGENCE_VAD_HANDLER_ID,
+      handlerId,
       input,
     }, {
-      transfer: [pcm.buffer],
+      transfer,
       signal: options.signal,
       onEvent: (event: RuntimeWorkerOutboundMessage) => {
-        if (event.type === 'runtime.job.progress') {
-          options.onProgress?.({
-            stage: event.progress.stage ?? 'vad',
-            progress: event.progress.value,
-            feature: 'vad',
-            message: event.progress.message,
-          });
-        }
+        if (event.type !== 'runtime.job.progress') return;
+        options.onProgress?.({
+          stage: event.progress.stage ?? handlerId,
+          progress: event.progress.value,
+          feature,
+          message: event.progress.message,
+        });
       },
     });
 

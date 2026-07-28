@@ -1,54 +1,96 @@
-import { sha256ArrayBuffer } from '../../../artifacts';
-import type { JsonValue, SignalMetadata } from '../../../signals';
+import type { SignalMetadata } from '../../../signals';
+import type { TranscriptWord } from '../../../types/clipMetadata';
 import {
-  createAudioAnalysisCacheKey,
   createAudioAnalysisManifestRefFromArtifact,
-  isAudioAnalysisArtifactStaleForInput,
   type AudioAnalysisManifestRef,
 } from '../audioAnalysisManifestKeys';
 import type { AudioArtifactStore } from '../AudioArtifactStore';
-import type {
-  AudioAnalysisArtifact,
-  AudioChannelLayout,
-} from '../audioArtifactTypes';
-import {
-  AUDIO_SPAN_LIST_PAYLOAD_VERSION,
-  VOICE_ACTIVITY_MANIFEST_VERSION,
-  createVoiceActivityManifest,
-  encodeAudioSpanListPayload,
-  spansToFloat32,
-  type AudioSpan,
-  type VoiceActivityConfig,
-} from '../voiceActivityManifest';
+import type { AudioAnalysisArtifact, AudioChannelLayout } from '../audioArtifactTypes';
 import { resampleAudioBuffer } from '../audioResample';
+import {
+  createTranscriptTimingFingerprint,
+  type AlignedWordTiming,
+} from '../transcriptTimingManifest';
+import type { AudioSpan, VoiceActivityConfig } from '../voiceActivityManifest';
+import { writeTranscriptTimingArtifact } from './alignment/transcriptTimingWriter';
+import {
+  AUDIO_INTELLIGENCE_STAGE_ANALYZERS,
+  AUDIO_INTELLIGENCE_VAD_ANALYZER_VERSION,
+  AUDIO_SPAN_LIST_PAYLOAD_MIME_TYPE,
+  createAudioIntelligenceVadAnalyzerVersion,
+  findFreshAudioArtifact,
+  prosodyAnalyzerVersion,
+  readAlignedWordTimings,
+  readVoiceActivitySegments,
+  writeVoiceActivityArtifact,
+  type AudioPersistenceContext,
+} from './audioIntelligencePersistence';
 import {
   AUDIO_INTELLIGENCE_ANALYSIS_SAMPLE_RATE,
   AudioIntelligenceError,
   DEFAULT_VOICE_ACTIVITY_CONFIG,
   isAudioIntelligenceCancellation,
+  type AudioIntelligenceAlignmentJobInput,
+  type AudioIntelligenceAlignmentJobOutput,
   type AudioIntelligenceFeature,
+  type AudioIntelligenceLoadPcmJobOutput,
+  type AudioIntelligenceProsodyJobInput,
+  type AudioIntelligenceProsodyJobOutput,
+  type AudioIntelligenceReleasePcmJobOutput,
+  type AudioIntelligenceRoomToneJobInput,
+  type AudioIntelligenceRoomToneJobOutput,
+  type AudioIntelligenceSpeechMarkersJobInput,
+  type AudioIntelligenceSpeechMarkersJobOutput,
   type AudioIntelligenceStageProgress,
   type AudioIntelligenceVadJobOutput,
 } from './audioIntelligenceTypes';
-import { requireAudioIntelligenceModel } from './audioIntelligenceModelCatalog';
+import { writeProsodyContourArtifact } from './prosody/prosodyWriter';
+import { writeRoomToneProfileArtifact } from './roomTone/roomToneWriter';
+import { writeSpeechMarkersArtifact } from './speechMarkers/speechMarkersWriter';
 
-export const AUDIO_INTELLIGENCE_VAD_ANALYZER_VERSION =
-  'masterselects.audio-intelligence.vad@1.0.0+silero-v5.1.2';
-export const AUDIO_SPAN_LIST_PAYLOAD_MIME_TYPE = 'application/vnd.masterselects.audio-span-list';
+export {
+  AUDIO_INTELLIGENCE_VAD_ANALYZER_VERSION,
+  AUDIO_SPAN_LIST_PAYLOAD_MIME_TYPE,
+  createAudioIntelligenceVadAnalyzerVersion,
+};
 
 const DEFAULT_DECODER_ID = 'audio-buffer';
 const DEFAULT_DECODER_VERSION = '1.0.0';
-const textEncoder = new TextEncoder();
+
+interface RuntimeOptions {
+  signal?: AbortSignal;
+  onProgress?: (progress: AudioIntelligenceStageProgress) => void;
+}
 
 export interface AudioIntelligenceRuntimeLike {
-  runVad(
+  loadPcm(
     pcm: Float32Array,
+    sampleRate?: number,
+    offsetSeconds?: number,
+    options?: RuntimeOptions,
+  ): Promise<AudioIntelligenceLoadPcmJobOutput>;
+  releasePcm(token: string, options?: RuntimeOptions): Promise<AudioIntelligenceReleasePcmJobOutput>;
+  runVad(
+    pcmOrToken: Float32Array | string,
     config: VoiceActivityConfig,
-    options?: {
-      signal?: AbortSignal;
-      onProgress?: (progress: AudioIntelligenceStageProgress) => void;
-    },
+    options?: RuntimeOptions,
   ): Promise<AudioIntelligenceVadJobOutput>;
+  runAlignment(
+    input: AudioIntelligenceAlignmentJobInput,
+    options?: RuntimeOptions,
+  ): Promise<AudioIntelligenceAlignmentJobOutput>;
+  runSpeechMarkers(
+    input: AudioIntelligenceSpeechMarkersJobInput,
+    options?: RuntimeOptions,
+  ): Promise<AudioIntelligenceSpeechMarkersJobOutput>;
+  runProsody(
+    input: AudioIntelligenceProsodyJobInput,
+    options?: RuntimeOptions,
+  ): Promise<AudioIntelligenceProsodyJobOutput>;
+  runRoomTone(
+    input: AudioIntelligenceRoomToneJobInput,
+    options?: RuntimeOptions,
+  ): Promise<AudioIntelligenceRoomToneJobOutput>;
 }
 
 export interface AudioIntelligenceGeneratorOptions {
@@ -59,6 +101,13 @@ export interface AudioIntelligenceGeneratorOptions {
   createJobId?: () => string;
 }
 
+export interface AudioIntelligenceTranscriptInput {
+  words: readonly TranscriptWord[];
+  hash: string;
+  language?: string;
+  wordSource: 'synthetic' | 'provider';
+}
+
 export interface AudioIntelligenceRequest {
   jobId?: string;
   mediaFileId: string;
@@ -66,24 +115,40 @@ export interface AudioIntelligenceRequest {
   buffer: AudioBuffer;
   features: ReadonlySet<AudioIntelligenceFeature>;
   vadConfig?: Partial<VoiceActivityConfig>;
+  transcript?: AudioIntelligenceTranscriptInput;
+  profile?: { hopSeconds: number };
   clipAudioStateHash?: string;
   decoderId?: string;
   decoderVersion?: string;
   metadata?: SignalMetadata;
 }
 
+export interface AudioIntelligenceSkip {
+  feature: AudioIntelligenceFeature;
+  reason: string;
+}
+
 export interface AudioIntelligenceResult {
   jobId: string;
-  artifacts: { voiceActivity?: AudioAnalysisArtifact };
-  refs: { voiceActivity?: AudioAnalysisManifestRef };
-  skipped: AudioIntelligenceFeature[];
+  artifacts: {
+    voiceActivity?: AudioAnalysisArtifact;
+    transcriptTiming?: AudioAnalysisArtifact;
+    speechMarkers?: AudioAnalysisArtifact;
+    prosodyContour?: AudioAnalysisArtifact;
+    roomToneProfile?: AudioAnalysisArtifact;
+  };
+  refs: {
+    voiceActivity?: AudioAnalysisManifestRef;
+    transcriptTiming?: AudioAnalysisManifestRef;
+    speechMarkers?: AudioAnalysisManifestRef;
+    prosodyContour?: AudioAnalysisManifestRef;
+    roomToneProfile?: AudioAnalysisManifestRef;
+  };
+  skipped: AudioIntelligenceSkip[];
   deferred: AudioIntelligenceFeature[];
 }
 
-export interface AudioIntelligenceGenerateOptions {
-  signal?: AbortSignal;
-  onProgress?: (progress: AudioIntelligenceStageProgress) => void;
-}
+export interface AudioIntelligenceGenerateOptions extends RuntimeOptions {}
 
 function defaultNow(): string {
   return new Date().toISOString();
@@ -111,30 +176,11 @@ function cancelledError(jobId: string, reason?: unknown): AudioIntelligenceError
 }
 
 function throwIfCancelled(signal: AbortSignal | undefined, jobId: string): void {
-  if (signal?.aborted) {
-    throw cancelledError(jobId, getAbortReason(signal));
-  }
+  if (signal?.aborted) throw cancelledError(jobId, getAbortReason(signal));
 }
 
 function finiteNumber(value: number): boolean {
   return typeof value === 'number' && Number.isFinite(value);
-}
-
-function toTimestamp(value: string): number {
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : Date.now();
-}
-
-function describeAnalysisChannelLayout(): AudioChannelLayout {
-  return { kind: 'mono', channelCount: 1, labels: ['Mix'] };
-}
-
-function describeSourceChannelLayout(channelCount: number): AudioChannelLayout {
-  if (channelCount === 1) return { kind: 'mono', channelCount, labels: ['M'] };
-  if (channelCount === 2) return { kind: 'stereo', channelCount, labels: ['L', 'R'] };
-  if (channelCount > 2 && channelCount <= 8) return { kind: 'surround', channelCount };
-  if (channelCount > 8) return { kind: 'discrete', channelCount };
-  return { kind: 'unknown', channelCount: Math.max(0, channelCount) };
 }
 
 function validateAudioBuffer(buffer: AudioBuffer): void {
@@ -156,40 +202,43 @@ function validateAudioBuffer(buffer: AudioBuffer): void {
   }
 }
 
-function summarizeSpans(spans: readonly AudioSpan[], duration: number) {
-  const speechSeconds = spans.reduce((sum, span) => sum + Math.max(0, span.end - span.start), 0);
-  return {
-    speechSeconds,
-    speechRatio: duration > 0 ? Math.min(1, speechSeconds / duration) : 0,
-    segmentCount: spans.length,
-  };
+function describeAnalysisChannelLayout(): AudioChannelLayout {
+  return { kind: 'mono', channelCount: 1, labels: ['Mix'] };
 }
 
-async function deterministicHashId(prefix: string, cacheKey: string): Promise<string> {
-  const bytes = textEncoder.encode(cacheKey);
-  const hash = await sha256ArrayBuffer(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
-  return `${prefix}:${hash}`;
+function describeSourceChannelLayout(channelCount: number): AudioChannelLayout {
+  if (channelCount === 1) return { kind: 'mono', channelCount, labels: ['M'] };
+  if (channelCount === 2) return { kind: 'stereo', channelCount, labels: ['L', 'R'] };
+  if (channelCount > 2 && channelCount <= 8) return { kind: 'surround', channelCount };
+  if (channelCount > 8) return { kind: 'discrete', channelCount };
+  return { kind: 'unknown', channelCount: Math.max(0, channelCount) };
 }
 
-export function createAudioIntelligenceVadAnalyzerVersion(
-  config: VoiceActivityConfig,
-  baseVersion = AUDIO_INTELLIGENCE_VAD_ANALYZER_VERSION,
-): string {
-  const model = requireAudioIntelligenceModel('silero-vad');
-  return [
-    baseVersion,
-    `manifest=v${VOICE_ACTIVITY_MANIFEST_VERSION}`,
-    `payload=v${AUDIO_SPAN_LIST_PAYLOAD_VERSION}`,
-    `model=${model.id}@${model.version}`,
-    `threshold=${config.threshold}`,
-    `negThreshold=${config.negThreshold}`,
-    `minSpeechMs=${config.minSpeechMs}`,
-    `minSilenceMs=${config.minSilenceMs}`,
-    `padMs=${config.padMs}`,
-    `frame=${config.frameSamples}`,
-    `rate=${AUDIO_INTELLIGENCE_ANALYSIS_SAMPLE_RATE}`,
-    'channels=mono-ch0',
-  ].join(';');
+function addArtifact(
+  result: AudioIntelligenceResult,
+  key: keyof AudioIntelligenceResult['artifacts'],
+  artifact: AudioAnalysisArtifact,
+): void {
+  result.artifacts[key] = artifact;
+  result.refs[key] = createAudioAnalysisManifestRefFromArtifact(artifact);
+}
+
+function wordsWithAlignment(
+  words: readonly TranscriptWord[],
+  timings: readonly AlignedWordTiming[] | undefined,
+): TranscriptWord[] {
+  if (!timings) return [...words];
+  const byId = new Map(timings.map(timing => [timing.wordId, timing]));
+  return words.map((word) => {
+    const timing = byId.get(word.id);
+    return timing ? {
+      ...word,
+      alignedStart: timing.alignedStart,
+      alignedEnd: timing.alignedEnd,
+      alignmentConfidence: timing.confidence,
+      alignmentMethod: 'acoustic-refine',
+    } : word;
+  });
 }
 
 export class AudioIntelligenceGenerator {
@@ -212,7 +261,7 @@ export class AudioIntelligenceGenerator {
     options: AudioIntelligenceGenerateOptions = {},
   ): Promise<AudioIntelligenceResult> {
     const jobId = request.jobId ?? this.createJobId();
-
+    let pcmToken: string | undefined;
     try {
       validateAudioBuffer(request.buffer);
       const result: AudioIntelligenceResult = {
@@ -222,15 +271,254 @@ export class AudioIntelligenceGenerator {
         skipped: [],
         deferred: [],
       };
+      if (request.features.size === 0) return result;
 
-      for (const feature of request.features) {
-        if (feature !== 'vad') {
-          result.deferred.push(feature);
+      const context: AudioPersistenceContext = {
+        artifactStore: this.artifactStore,
+        mediaFileId: request.mediaFileId,
+        sourceFingerprint: request.sourceFingerprint,
+        clipAudioStateHash: request.clipAudioStateHash,
+        sampleRate: request.buffer.sampleRate,
+        duration: request.buffer.duration,
+        channelLayout: describeAnalysisChannelLayout(),
+        sourceChannelLayout: describeSourceChannelLayout(request.buffer.numberOfChannels),
+        decoderId: request.decoderId ?? DEFAULT_DECODER_ID,
+        decoderVersion: request.decoderVersion ?? DEFAULT_DECODER_VERSION,
+        metadata: request.metadata,
+      };
+      const ensurePcmToken = async (): Promise<string> => {
+        if (pcmToken) return pcmToken;
+        options.onProgress?.({ stage: 'resampling', progress: 0.02 });
+        throwIfCancelled(options.signal, jobId);
+        let pcm = resampleAudioBuffer(request.buffer, AUDIO_INTELLIGENCE_ANALYSIS_SAMPLE_RATE);
+        if (request.buffer.sampleRate === AUDIO_INTELLIGENCE_ANALYSIS_SAMPLE_RATE) pcm = pcm.slice();
+        const loaded = await this.runtime.loadPcm(
+          pcm,
+          AUDIO_INTELLIGENCE_ANALYSIS_SAMPLE_RATE,
+          0,
+          options,
+        );
+        pcmToken = loaded.token;
+        return pcmToken;
+      };
+
+      const config: VoiceActivityConfig = { ...DEFAULT_VOICE_ACTIVITY_CONFIG, ...request.vadConfig };
+      if (config.frameSamples !== DEFAULT_VOICE_ACTIVITY_CONFIG.frameSamples) {
+        throw new AudioIntelligenceError(
+          `Audio intelligence VAD requires frameSamples=${DEFAULT_VOICE_ACTIVITY_CONFIG.frameSamples} `
+          + `for Silero inference, got ${config.frameSamples}.`,
+          { code: 'invalid-input', recoverable: false },
+        );
+      }
+      const vadAnalyzer = createAudioIntelligenceVadAnalyzerVersion(config, this.baseAnalyzerVersion);
+      let vadArtifact = await findFreshAudioArtifact(
+        context,
+        'voice-activity',
+        request.sourceFingerprint,
+        vadAnalyzer,
+      );
+      throwIfCancelled(options.signal, jobId);
+      let vadSegments: AudioSpan[];
+      if (vadArtifact) {
+        vadSegments = await readVoiceActivitySegments(this.artifactStore, vadArtifact);
+        addArtifact(result, 'voiceActivity', vadArtifact);
+        if (request.features.has('vad')) {
+          result.skipped.push({ feature: 'vad', reason: 'Fresh voice-activity artifact reused.' });
+        }
+      } else {
+        const token = await ensurePcmToken();
+        const vad = await this.runtime.runVad(token, config, options);
+        throwIfCancelled(options.signal, jobId);
+        vadSegments = vad.segments;
+        vadArtifact = await writeVoiceActivityArtifact(context, {
+          segments: vadSegments,
+          config,
+          analyzerVersion: vadAnalyzer,
+          generatedAt: this.now(),
+          checkCancelled: () => throwIfCancelled(options.signal, jobId),
+        });
+        addArtifact(result, 'voiceActivity', vadArtifact);
+        options.onProgress?.({ stage: 'vad-stored', progress: 1, feature: 'vad' });
+        throwIfCancelled(options.signal, jobId);
+      }
+
+      let alignedTimings: AlignedWordTiming[] | undefined;
+      if (request.features.has('alignment')) {
+        if (!request.transcript) {
+          result.skipped.push({ feature: 'alignment', reason: 'Transcript unavailable.' });
+        } else {
+          const fingerprint = createTranscriptTimingFingerprint(
+            request.sourceFingerprint,
+            request.transcript.hash,
+          );
+          const fresh = await findFreshAudioArtifact(
+            context,
+            'transcript-timing',
+            fingerprint,
+            AUDIO_INTELLIGENCE_STAGE_ANALYZERS.alignment,
+          );
+          throwIfCancelled(options.signal, jobId);
+          if (fresh) {
+            alignedTimings = await readAlignedWordTimings(this.artifactStore, fresh);
+            addArtifact(result, 'transcriptTiming', fresh);
+            result.skipped.push({ feature: 'alignment', reason: 'Fresh transcript-timing artifact reused.' });
+          } else {
+            alignedTimings = await this.runtime.runAlignment({
+              token: await ensurePcmToken(),
+              words: request.transcript.words,
+              wordSource: request.transcript.wordSource,
+              vadSegments,
+            }, options);
+            throwIfCancelled(options.signal, jobId);
+            const artifact = await writeTranscriptTimingArtifact({
+              artifactStore: this.artifactStore,
+              mediaFileId: request.mediaFileId,
+              audioFingerprint: request.sourceFingerprint,
+              transcriptHash: request.transcript.hash,
+              clipAudioStateHash: request.clipAudioStateHash,
+              sampleRate: request.buffer.sampleRate,
+              channelLayout: context.channelLayout,
+              duration: request.buffer.duration,
+              timings: alignedTimings,
+              method: 'acoustic-refine',
+              sourceVoiceActivityArtifactId: vadArtifact.id,
+              decoderId: request.decoderId,
+              decoderVersion: request.decoderVersion,
+            });
+            addArtifact(result, 'transcriptTiming', artifact);
+            options.onProgress?.({ stage: 'alignment-stored', progress: 1, feature: 'alignment' });
+            throwIfCancelled(options.signal, jobId);
+          }
         }
       }
 
-      if (request.features.has('vad')) {
-        await this.generateVad(jobId, request, options, result);
+      if (request.features.has('room-tone')) {
+        const fresh = await findFreshAudioArtifact(
+          context,
+          'room-tone-profile',
+          request.sourceFingerprint,
+          AUDIO_INTELLIGENCE_STAGE_ANALYZERS.roomTone,
+        );
+        throwIfCancelled(options.signal, jobId);
+        if (fresh) {
+          addArtifact(result, 'roomToneProfile', fresh);
+          result.skipped.push({ feature: 'room-tone', reason: 'Fresh room-tone profile reused.' });
+        } else {
+          const roomTone = await this.runtime.runRoomTone({
+            token: await ensurePcmToken(),
+            vadSegments,
+          }, options);
+          throwIfCancelled(options.signal, jobId);
+          const artifact = await writeRoomToneProfileArtifact({
+            artifactStore: this.artifactStore,
+            mediaFileId: request.mediaFileId,
+            sourceFingerprint: request.sourceFingerprint,
+            clipAudioStateHash: request.clipAudioStateHash,
+            sampleRate: request.buffer.sampleRate,
+            channelLayout: context.channelLayout,
+            duration: request.buffer.duration,
+            result: roomTone,
+            sourceVoiceActivityArtifactId: vadArtifact.id,
+            decoderId: request.decoderId,
+            decoderVersion: request.decoderVersion,
+          });
+          addArtifact(result, 'roomToneProfile', artifact);
+          options.onProgress?.({ stage: 'room-tone-stored', progress: 1, feature: 'room-tone' });
+          throwIfCancelled(options.signal, jobId);
+        }
+      }
+
+      if (request.features.has('speech-markers')) {
+        const markerFingerprint = request.transcript
+          ? createTranscriptTimingFingerprint(request.sourceFingerprint, request.transcript.hash)
+          : request.sourceFingerprint;
+        const fresh = await findFreshAudioArtifact(
+          context,
+          'speech-markers',
+          markerFingerprint,
+          AUDIO_INTELLIGENCE_STAGE_ANALYZERS.speechMarkers,
+        );
+        throwIfCancelled(options.signal, jobId);
+        if (fresh) {
+          addArtifact(result, 'speechMarkers', fresh);
+          result.skipped.push({ feature: 'speech-markers', reason: 'Fresh speech-markers artifact reused.' });
+        } else {
+          const markers = await this.runtime.runSpeechMarkers({
+            token: await ensurePcmToken(),
+            vadSegments,
+            words: request.transcript
+              ? wordsWithAlignment(request.transcript.words, alignedTimings)
+              : undefined,
+            language: request.transcript?.language,
+          }, options);
+          throwIfCancelled(options.signal, jobId);
+          const artifact = await writeSpeechMarkersArtifact({
+            artifactStore: this.artifactStore,
+            mediaFileId: request.mediaFileId,
+            sourceFingerprint: markerFingerprint,
+            clipAudioStateHash: request.clipAudioStateHash,
+            sampleRate: request.buffer.sampleRate,
+            channelLayout: context.channelLayout,
+            duration: request.buffer.duration,
+            markers,
+            sourceVoiceActivityArtifactId: vadArtifact.id,
+            transcriptHash: request.transcript?.hash,
+            decoderId: request.decoderId,
+            decoderVersion: request.decoderVersion,
+          });
+          addArtifact(result, 'speechMarkers', artifact);
+          options.onProgress?.({ stage: 'speech-markers-stored', progress: 1, feature: 'speech-markers' });
+          throwIfCancelled(options.signal, jobId);
+        }
+        if (!request.transcript) {
+          result.skipped.push({
+            feature: 'speech-markers',
+            reason: 'Transcript unavailable; filler detection skipped (breath markers retained).',
+          });
+        }
+      }
+
+      if (request.features.has('prosody')) {
+        const hopSeconds = Math.min(0.05, Math.max(0.01, request.profile?.hopSeconds ?? 0.05));
+        const prosodyFingerprint = request.transcript && alignedTimings
+          ? createTranscriptTimingFingerprint(request.sourceFingerprint, request.transcript.hash)
+          : request.sourceFingerprint;
+        const fresh = await findFreshAudioArtifact(
+          context,
+          'prosody-contour',
+          prosodyFingerprint,
+          prosodyAnalyzerVersion(hopSeconds),
+        );
+        throwIfCancelled(options.signal, jobId);
+        if (fresh) {
+          addArtifact(result, 'prosodyContour', fresh);
+          result.skipped.push({ feature: 'prosody', reason: 'Fresh prosody contour reused.' });
+        } else {
+          const prosody = await this.runtime.runProsody({
+            token: await ensurePcmToken(),
+            hopSeconds,
+            vadSegments,
+            alignedWords: alignedTimings,
+          }, options);
+          throwIfCancelled(options.signal, jobId);
+          const artifact = await writeProsodyContourArtifact({
+            artifactStore: this.artifactStore,
+            mediaFileId: request.mediaFileId,
+            sourceFingerprint: prosodyFingerprint,
+            clipAudioStateHash: request.clipAudioStateHash,
+            sampleRate: request.buffer.sampleRate,
+            analysisSampleRate: AUDIO_INTELLIGENCE_ANALYSIS_SAMPLE_RATE,
+            channelLayout: context.channelLayout,
+            duration: request.buffer.duration,
+            result: prosody,
+            sourceVoiceActivityArtifactId: vadArtifact.id,
+            decoderId: request.decoderId,
+            decoderVersion: request.decoderVersion,
+          });
+          addArtifact(result, 'prosodyContour', artifact);
+          options.onProgress?.({ stage: 'prosody-stored', progress: 1, feature: 'prosody' });
+          throwIfCancelled(options.signal, jobId);
+        }
       }
 
       options.onProgress?.({ stage: 'complete', progress: 1 });
@@ -243,147 +531,16 @@ export class AudioIntelligenceGenerator {
         options.onProgress?.({ stage: 'cancelled', progress: 0, message: cancellation.message });
         throw cancellation;
       }
-
       throw error instanceof AudioIntelligenceError
         ? error
         : new AudioIntelligenceError(
           `Audio intelligence ${jobId} failed: ${errorMessage(error)}`,
           { code: 'artifact-store-failed', cause: error },
         );
+    } finally {
+      if (pcmToken) {
+        await this.runtime.releasePcm(pcmToken).catch(() => undefined);
+      }
     }
-  }
-
-  private async generateVad(
-    jobId: string,
-    request: AudioIntelligenceRequest,
-    options: AudioIntelligenceGenerateOptions,
-    result: AudioIntelligenceResult,
-  ): Promise<void> {
-    const generatedAt = this.now();
-    const config: VoiceActivityConfig = { ...DEFAULT_VOICE_ACTIVITY_CONFIG, ...request.vadConfig };
-    if (config.frameSamples !== DEFAULT_VOICE_ACTIVITY_CONFIG.frameSamples) {
-      throw new AudioIntelligenceError(
-        `Audio intelligence VAD requires frameSamples=${DEFAULT_VOICE_ACTIVITY_CONFIG.frameSamples} `
-        + `for Silero inference, got ${config.frameSamples}.`,
-        { code: 'invalid-input', recoverable: false },
-      );
-    }
-    const analyzerVersion = createAudioIntelligenceVadAnalyzerVersion(config, this.baseAnalyzerVersion);
-    const channelLayout = describeAnalysisChannelLayout();
-    const model = requireAudioIntelligenceModel('silero-vad');
-    const cacheKeyInput = {
-      mediaFileId: request.mediaFileId,
-      sourceFingerprint: request.sourceFingerprint,
-      kind: 'voice-activity' as const,
-      analyzerVersion,
-      channelLayout,
-      sampleRate: request.buffer.sampleRate,
-      duration: request.buffer.duration,
-      clipAudioStateHash: request.clipAudioStateHash,
-    };
-    const cacheKey = createAudioAnalysisCacheKey(cacheKeyInput);
-
-    throwIfCancelled(options.signal, jobId);
-    const existing = await this.artifactStore.listAnalysisArtifacts(request.mediaFileId, 'voice-activity');
-    throwIfCancelled(options.signal, jobId);
-    const fresh = existing.find((artifact) => !isAudioAnalysisArtifactStaleForInput(artifact, cacheKeyInput));
-    if (fresh) {
-      result.artifacts.voiceActivity = fresh;
-      result.refs.voiceActivity = createAudioAnalysisManifestRefFromArtifact(fresh);
-      result.skipped.push('vad');
-      options.onProgress?.({ stage: 'vad-fresh', progress: 1, feature: 'vad', message: 'Voice activity is up to date' });
-      return;
-    }
-
-    options.onProgress?.({ stage: 'resampling', progress: 0.02, feature: 'vad' });
-    throwIfCancelled(options.signal, jobId);
-    let pcm = resampleAudioBuffer(request.buffer, AUDIO_INTELLIGENCE_ANALYSIS_SAMPLE_RATE);
-    if (request.buffer.sampleRate === AUDIO_INTELLIGENCE_ANALYSIS_SAMPLE_RATE) {
-      // runVad transfers the buffer to the worker; never detach an
-      // AudioBuffer's live channel data.
-      pcm = pcm.slice();
-    }
-
-    const vad = await this.runtime.runVad(pcm, config, {
-      signal: options.signal,
-      onProgress: (progress) => options.onProgress?.({
-        ...progress,
-        feature: 'vad',
-        progress: 0.05 + progress.progress * 0.85,
-      }),
-    });
-    throwIfCancelled(options.signal, jobId);
-
-    options.onProgress?.({ stage: 'storing', progress: 0.92, feature: 'vad', message: 'Storing voice activity' });
-    const payloadBytes = encodeAudioSpanListPayload({
-      header: {
-        schemaVersion: AUDIO_SPAN_LIST_PAYLOAD_VERSION,
-        kind: 'voice-activity-segments',
-        spanCount: vad.segments.length,
-        valueLayout: 'span-major',
-        valueEncoding: 'start-end-confidence-f32',
-        timeUnit: 'seconds',
-      },
-      values: spansToFloat32(vad.segments),
-    });
-    const payloadRef = await this.artifactStore.putPayload(new Blob([payloadBytes], {
-      type: AUDIO_SPAN_LIST_PAYLOAD_MIME_TYPE,
-    }), {
-      mediaFileId: request.mediaFileId,
-      kind: 'voice-activity',
-      sourceFingerprint: request.sourceFingerprint,
-      clipAudioStateHash: request.clipAudioStateHash,
-      mimeType: AUDIO_SPAN_LIST_PAYLOAD_MIME_TYPE,
-      analyzerVersion,
-      createdAt: generatedAt,
-      metadata: { cacheKey },
-    });
-    // Cancellation may leave this content-addressed payload orphaned; deduplication
-    // makes that safe and avoids deleting a payload shared by another artifact.
-    throwIfCancelled(options.signal, jobId);
-
-    const manifest = createVoiceActivityManifest({
-      mediaFileId: request.mediaFileId,
-      sourceFingerprint: request.sourceFingerprint,
-      clipAudioStateHash: request.clipAudioStateHash,
-      sampleRate: request.buffer.sampleRate,
-      analysisSampleRate: AUDIO_INTELLIGENCE_ANALYSIS_SAMPLE_RATE,
-      channelLayout,
-      duration: request.buffer.duration,
-      model: { id: model.id, version: model.version },
-      config,
-      segmentCount: vad.segments.length,
-      segmentsPayloadRef: payloadRef,
-      summary: summarizeSpans(vad.segments, request.buffer.duration),
-    });
-
-    const artifactId = await deterministicHashId('audio:voice-activity', cacheKey);
-    const artifactResult = await this.artifactStore.putAnalysisArtifact({
-      id: artifactId,
-      kind: 'voice-activity',
-      mediaFileId: request.mediaFileId,
-      sourceFingerprint: request.sourceFingerprint,
-      clipAudioStateHash: request.clipAudioStateHash,
-      decoderId: request.decoderId ?? DEFAULT_DECODER_ID,
-      decoderVersion: request.decoderVersion ?? DEFAULT_DECODER_VERSION,
-      analyzerVersion,
-      sampleRate: request.buffer.sampleRate,
-      channelLayout,
-      duration: request.buffer.duration,
-      payloadRefs: [payloadRef],
-      createdAt: toTimestamp(generatedAt),
-      stale: false,
-      metadata: {
-        ...(request.metadata ?? {}),
-        analysisKind: 'voice-activity',
-        cacheKey,
-        sourceChannelLayout: describeSourceChannelLayout(request.buffer.numberOfChannels) as unknown as JsonValue,
-        voiceActivityManifest: manifest as unknown as JsonValue,
-      },
-    });
-    throwIfCancelled(options.signal, jobId);
-
-    result.artifacts.voiceActivity = artifactResult.artifact;
-    result.refs.voiceActivity = createAudioAnalysisManifestRefFromArtifact(artifactResult.artifact);
   }
 }

@@ -23,6 +23,7 @@ interface TimelineAudioArtifactGenerationState {
   clipDragPreview?: unknown;
   generateProcessedWaveformForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
   generateSpectrogramForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
+  generateAudioIntelligenceForClip?: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
 }
 
 interface TimelineAudioArtifactGenerationDeps {
@@ -38,6 +39,8 @@ interface TimelineAudioArtifactGenerationRequest {
 
 const DEFAULT_PROCESSED_WAVEFORM_DERIVATION_DELAY_MS = 500;
 const DEFAULT_SPECTROGRAM_GENERATION_DELAY_MS = 650;
+const DEFAULT_AUDIO_INTELLIGENCE_GENERATION_DELAY_MS = 800;
+const AUDIO_INTELLIGENCE_WARMUP_ENABLED = false;
 
 const scheduledAudioArtifactTimers = new Map<string, TimerHandle>();
 const inFlightAudioArtifactGenerations = new Map<string, Promise<AudioArtifactGenerationStatus>>();
@@ -53,6 +56,7 @@ function getDefaultDeps(): TimelineAudioArtifactGenerationDeps {
         clipDragPreview: state.clipDragPreview,
         generateProcessedWaveformForClip: state.generateProcessedWaveformForClip,
         generateSpectrogramForClip: state.generateSpectrogramForClip,
+        generateAudioIntelligenceForClip: state.generateAudioIntelligenceForClip,
       };
     },
     ...getTimelineWarmupTimerDeps(),
@@ -132,6 +136,35 @@ async function warmSpectrogramTiles(
   return generation;
 }
 
+async function warmVoiceActivity(
+  request: TimelineAudioArtifactGenerationRequest,
+  deps: TimelineAudioArtifactGenerationDeps,
+): Promise<AudioArtifactGenerationStatus> {
+  const state = deps.getState();
+  if (state.isPlaying || state.clipDragPreview) return 'blocked';
+  const resolved = getClipAndKeyframes(state, request.clipId);
+  if (!resolved) return 'skipped';
+  const { clip } = resolved;
+  if (clip.waveformGenerating) return 'blocked';
+  if (clip.audioState?.sourceAnalysisRefs?.voiceActivityId) return 'ready';
+  if (!clip.isComposition && !clip.file) return 'skipped';
+  if (!state.generateAudioIntelligenceForClip) return 'skipped';
+
+  let generation = inFlightAudioArtifactGenerations.get(request.requestKey);
+  if (!generation) {
+    const vadOnlyOptions = {
+      features: new Set(['vad']),
+    } as GenerateClipAudioAnalysisOptions;
+    generation = state.generateAudioIntelligenceForClip(clip.id, vadOnlyOptions)
+      .then(() => 'generated' as const)
+      .finally(() => {
+        inFlightAudioArtifactGenerations.delete(request.requestKey);
+      });
+    inFlightAudioArtifactGenerations.set(request.requestKey, generation);
+  }
+  return generation;
+}
+
 function scheduleAudioArtifactGeneration(
   request: TimelineAudioArtifactGenerationRequest,
   warm: (
@@ -193,6 +226,24 @@ export function scheduleTimelineSpectrogramTileGeneration(
     {
       deps: options.deps,
       delayMs: options.delayMs ?? DEFAULT_SPECTROGRAM_GENERATION_DELAY_MS,
+    },
+  );
+}
+
+export function scheduleTimelineAudioIntelligenceWarmup(
+  request: TimelineAudioArtifactGenerationRequest,
+  options: {
+    deps?: TimelineAudioArtifactGenerationDeps;
+    delayMs?: number;
+  } = {},
+): () => void {
+  if (!AUDIO_INTELLIGENCE_WARMUP_ENABLED) return () => {};
+  return scheduleAudioArtifactGeneration(
+    request,
+    warmVoiceActivity,
+    {
+      deps: options.deps,
+      delayMs: options.delayMs ?? DEFAULT_AUDIO_INTELLIGENCE_GENERATION_DELAY_MS,
     },
   );
 }
