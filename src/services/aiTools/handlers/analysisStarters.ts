@@ -144,7 +144,10 @@ export async function handleStartClipAudioIntelligence(
   }
 
   selectClipAndOpenTab(clipId, 'analysis');
-  const options = features ? { features: new Set(features) } : undefined;
+  const options = {
+    ...(features ? { features: new Set(features) } : {}),
+    ...(args.force === true ? { force: true } : {}),
+  };
   void timelineStore.generateAudioIntelligenceForClip(clipId, options as never).catch(() => {
     // The store action persists job progress and handles its runtime failures.
   });

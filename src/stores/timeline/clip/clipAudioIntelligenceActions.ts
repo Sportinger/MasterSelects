@@ -153,35 +153,25 @@ export async function generateAudioIntelligenceForClipAction(
         waveformProgress: 100,
       }) });
 
-      if (generated.artifacts.transcriptTiming) {
-        // Dynamic import: applyAlignedTimings reads the timeline store, a
-        // static import from inside the store graph would be circular.
-        const { applyAlignedTimingsFromArtifact } = await import('../../../services/transcription/applyAlignedTimings');
-        const applied = await applyAlignedTimingsFromArtifact({
-          mediaFileId: prepared.mediaFileId,
-          artifact: generated.artifacts.transcriptTiming,
-          artifactStore: store,
-        });
-        if (applied.skipped) {
-          log.debug('Aligned timings not merged into transcript', applied);
-        } else {
-          log.info(`Merged aligned timings into ${applied.applied} transcript words`);
-        }
+      // Always merge from the freshest persisted artifacts: on re-runs the
+      // generator skips fresh stages, so the result may omit artifacts whose
+      // timings/emphasis still need applying. The apply functions are
+      // idempotent (already-applied/stale guards), so this is cheap.
+      // Dynamic import: applyAlignedTimings reads the timeline store, a
+      // static import from inside the store graph would be circular.
+      const { applyAlignedTimingsForMedia, applyWordEmphasisForMedia } =
+        await import('../../../services/transcription/applyAlignedTimings');
+      const appliedTimings = await applyAlignedTimingsForMedia(prepared.mediaFileId, store);
+      if (appliedTimings && !appliedTimings.skipped) {
+        log.info(`Merged aligned timings into ${appliedTimings.applied} transcript words`);
+      } else if (appliedTimings?.skipped !== 'already-applied') {
+        log.warn('Aligned timings not merged into transcript', appliedTimings ?? 'no artifact');
       }
-      if (generated.artifacts.prosodyContour) {
-        // Dynamic import: transcript artifact merging reads the timeline store,
-        // so a static import from inside the store graph would be circular.
-        const { applyWordEmphasisFromArtifact } = await import('../../../services/transcription/applyAlignedTimings');
-        const applied = await applyWordEmphasisFromArtifact({
-          mediaFileId: prepared.mediaFileId,
-          artifact: generated.artifacts.prosodyContour,
-          artifactStore: store,
-        });
-        if (applied.skipped) {
-          log.debug('Word emphasis not merged into transcript', applied);
-        } else {
-          log.info(`Merged emphasis into ${applied.applied} transcript words`);
-        }
+      const appliedEmphasis = await applyWordEmphasisForMedia(prepared.mediaFileId, store);
+      if (appliedEmphasis && !appliedEmphasis.skipped) {
+        log.info(`Merged emphasis into ${appliedEmphasis.applied} transcript words`);
+      } else if (appliedEmphasis?.skipped !== 'already-applied') {
+        log.warn('Word emphasis not merged into transcript', appliedEmphasis ?? 'no artifact');
       }
     });
   } catch (e) {

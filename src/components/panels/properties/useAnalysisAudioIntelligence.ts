@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { blobToArrayBuffer } from '../../../artifacts';
 import type { AudioAnalysisArtifact, AudioAnalysisArtifactKind } from '../../../services/audio/audioArtifactTypes';
+import { decodeDenseCurvePayload } from '../../../services/audio/denseCurvePayload';
+import type { ProsodyContourManifest } from '../../../services/audio/prosodyContourManifest';
 import { createCurrentAudioArtifactStore } from '../../../services/audio/timelineWaveformPyramidCache';
 import { loadAudioIntelligencePayloads } from '../../../services/agentTimeline/artifacts/audioIntelligencePayloadLoader';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { AnalysisWorkspaceAudioInput } from './analysisWorkspace/analysisWorkspaceAdapter';
 import type { AnalysisTranscriptChunkPause } from './analysisWorkspace/analysisTranscriptChunks';
 import type { AnalysisSceneSpeechMarker } from './analysisWorkspace/analysisSceneViewModel';
+import type { AnalysisSceneSparklineCurve } from './analysisWorkspace/AnalysisSceneSparkline';
 
 export type AnalysisAudioIntelligenceStatus = 'none' | 'partial' | 'ready';
 
@@ -75,6 +79,7 @@ export function useAnalysisAudioIntelligence(clipId: string) {
   const [lanes, setLanes] = useState<AnalysisWorkspaceAudioInput>();
   const [markers, setMarkers] = useState<readonly AnalysisAudioSpeechMarker[]>([]);
   const [pauses, setPauses] = useState<readonly AnalysisTranscriptChunkPause[]>([]);
+  const [energyCurve, setEnergyCurve] = useState<AnalysisSceneSparklineCurve>();
 
   useEffect(() => {
     let cancelled = false;
@@ -83,12 +88,14 @@ export function useAnalysisAudioIntelligence(clipId: string) {
       setLanes(undefined);
       setMarkers([]);
       setPauses([]);
+      setEnergyCurve(undefined);
       return () => { cancelled = true; };
     }
     setArtifacts([]);
     setLanes(undefined);
     setMarkers([]);
     setPauses([]);
+    setEnergyCurve(undefined);
     const ids = [clipState.loudnessEnvelopeId, clipState.voiceActivityId,
       clipState.transcriptTimingId, clipState.speechMarkersId, clipState.prosodyContourId,
       clipState.roomToneProfileId].filter((id): id is string => Boolean(id));
@@ -97,6 +104,33 @@ export function useAnalysisAudioIntelligence(clipId: string) {
       if (cancelled) return;
       const current = loaded.filter((artifact): artifact is AudioAnalysisArtifact => Boolean(artifact && !artifact.stale));
       const payloads = await loadAudioIntelligencePayloads(current, store);
+      if (cancelled) return;
+      const prosodyArtifact = current
+        .filter(artifact => artifact.kind === 'prosody-contour')
+        .toSorted((left, right) => right.createdAt - left.createdAt)[0];
+      let nextEnergyCurve: AnalysisSceneSparklineCurve | undefined;
+      try {
+        const manifest = prosodyArtifact?.metadata?.prosodyContourManifest as
+          | ProsodyContourManifest
+          | undefined;
+        const energyRef = manifest?.curves?.find(curve => curve.metric === 'energy-rms-db');
+        if (energyRef) {
+          const blob = await store.getPayload(energyRef.payloadRef.artifactId);
+          if (cancelled) return;
+          if (blob) {
+            const decoded = decodeDenseCurvePayload(await blobToArrayBuffer(blob));
+            if (decoded.header.metric === 'energy-rms-db') {
+              nextEnergyCurve = {
+                values: decoded.values,
+                hopSeconds: energyRef.hopDuration,
+                startSeconds: 0,
+              };
+            }
+          }
+        }
+      } catch {
+        nextEnergyCurve = undefined;
+      }
       if (cancelled) return;
       const curve = payloads.loudness?.curves[0];
       const speechMarkers = (payloads.speechMarkers?.markers ?? []).map(marker => ({
@@ -107,6 +141,7 @@ export function useAnalysisAudioIntelligence(clipId: string) {
       setArtifacts(current);
       setMarkers(speechMarkers);
       setPauses(deriveVadPauses(vadSegments));
+      setEnergyCurve(nextEnergyCurve);
       setLanes({
         levels: curve?.windows.map(window => ({
           start: window.start, end: window.end, loudnessDb: window.valueDb,
@@ -125,6 +160,7 @@ export function useAnalysisAudioIntelligence(clipId: string) {
         setLanes(undefined);
         setMarkers([]);
         setPauses([]);
+        setEnergyCurve(undefined);
       }
     });
     return () => { cancelled = true; };
@@ -154,6 +190,7 @@ export function useAnalysisAudioIntelligence(clipId: string) {
     lanes,
     markers,
     pauses,
+    energyCurve,
     status,
     features,
     hasAudio: clipState.hasAudio,

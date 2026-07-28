@@ -234,3 +234,16 @@ export async function applyAlignedTimingsForMedia(
     ? applyAlignedTimingsFromArtifact({ mediaFileId, artifact, artifactStore })
     : null;
 }
+
+export async function applyWordEmphasisForMedia(
+  mediaFileId: string,
+  artifactStore: AudioArtifactStore,
+): Promise<ApplyWordEmphasisResult | null> {
+  const artifacts = await artifactStore.listAnalysisArtifacts(mediaFileId, 'prosody-contour');
+  const artifact = artifacts
+    .filter(candidate => !candidate.stale && candidate.clipAudioStateHash === undefined)
+    .toSorted((left, right) => right.createdAt - left.createdAt)[0];
+  return artifact
+    ? applyWordEmphasisFromArtifact({ mediaFileId, artifact, artifactStore })
+    : null;
+}
