@@ -24,7 +24,7 @@ describe('KernelServiceClient', () => {
 
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe('http://127.0.0.1:8787/health');
+    expect(url).toBe('http://127.0.0.1:8787/kernel/health');
     expect(init.method).toBe('GET');
     expect(init.headers).toEqual({ Accept: 'application/json' });
     expect(result).toEqual({
@@ -152,6 +152,6 @@ describe('KernelServiceClient', () => {
 
     await expect(isKernelServiceAvailable(client)).resolves.toBe(true);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
-    expect(fetchImpl.mock.calls[0]?.[0]).toBe('http://127.0.0.1:8787/health');
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe('http://127.0.0.1:8787/kernel/health');
   });
 });
