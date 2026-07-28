@@ -49,6 +49,33 @@ describe('transcriptSegments', () => {
     expect(findActiveTranscriptWordIndex(transcript, 3)).toBeNull();
   });
 
+  it('prefers aligned timings for active-word lookup', () => {
+    const transcript = [{
+      ...word('word-0', 'Aligned', 0, 0.4),
+      alignedStart: 1,
+      alignedEnd: 1.4,
+      alignmentConfidence: 0.9,
+    }];
+
+    expect(findActiveTranscriptWordIndex(transcript, 0.2)).toBeNull();
+    expect(findActiveTranscriptWordIndex(transcript, 1.2)).toBe(0);
+  });
+
+  it('keeps provider-timing lookup unchanged without usable alignment', () => {
+    const rawTranscript = [word('word-0', 'Raw', 0, 0.4)];
+    const lowConfidenceTranscript = [{
+      ...rawTranscript[0],
+      alignedStart: 1,
+      alignedEnd: 1.4,
+      alignmentConfidence: 0.29,
+    }];
+
+    for (const sourceTime of [0, 0.2, 0.4, 0.5]) {
+      expect(findActiveTranscriptWordIndex(lowConfidenceTranscript, sourceTime))
+        .toBe(findActiveTranscriptWordIndex(rawTranscript, sourceTime));
+    }
+  });
+
   it('uses a stable visual tone for each speaker label', () => {
     expect(getTranscriptSpeakerTone('Speaker 1')).toBe(getTranscriptSpeakerTone('Speaker 1'));
     expect(getTranscriptSpeakerTone('Speaker 1')).toBeGreaterThanOrEqual(0);

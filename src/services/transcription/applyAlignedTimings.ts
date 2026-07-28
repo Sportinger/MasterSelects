@@ -11,6 +11,7 @@ import {
   type AlignedWordTiming,
   type TranscriptTimingManifest,
 } from '../audio/transcriptTimingManifest';
+import type { ProsodyContourManifest } from '../audio/prosodyContourManifest';
 import { projectFileService } from '../project/ProjectFileService';
 import { updateClipTranscript } from './artifactPersistence';
 
@@ -23,6 +24,17 @@ export interface ApplyAlignedTimingsInput {
 export interface ApplyAlignedTimingsResult {
   applied: number;
   skipped: 'stale-transcript' | 'already-applied' | 'no-transcript' | null;
+}
+
+export interface ApplyWordEmphasisInput {
+  mediaFileId: string;
+  artifact: AudioAnalysisArtifact;
+  artifactStore: AudioArtifactStore;
+}
+
+export interface ApplyWordEmphasisResult {
+  applied: number;
+  skipped: 'stale-transcript' | 'already-applied' | 'no-emphasis' | 'no-transcript' | null;
 }
 
 function transcriptTimingManifest(artifact: AudioAnalysisArtifact): TranscriptTimingManifest {
@@ -42,6 +54,20 @@ function timingMatches(
     && word.alignedEnd === timing.alignedEnd
     && word.alignmentConfidence === timing.confidence
     && word.alignmentMethod === method;
+}
+
+function prosodyContourManifest(artifact: AudioAnalysisArtifact): ProsodyContourManifest {
+  const manifest = artifact.metadata?.prosodyContourManifest;
+  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) {
+    throw new Error(`Prosody contour artifact ${artifact.id} has no prosody manifest.`);
+  }
+  return manifest as unknown as ProsodyContourManifest;
+}
+
+function transcriptHashFromFingerprint(sourceFingerprint: string): string | undefined {
+  const marker = '+transcript=';
+  const markerIndex = sourceFingerprint.lastIndexOf(marker);
+  return markerIndex < 0 ? undefined : sourceFingerprint.slice(markerIndex + marker.length);
 }
 
 export async function applyAlignedTimingsFromArtifact(
@@ -104,6 +130,77 @@ export async function applyAlignedTimingsFromArtifact(
     ? { ...mediaFile.transcriptArtifact, words: mergedWords }
     : undefined;
 
+  useMediaStore.setState(state => ({
+    files: state.files.map(file => file.id === input.mediaFileId
+      ? { ...file, transcript: mergedWords, transcriptArtifact }
+      : file),
+  }));
+
+  await projectFileService.saveTranscript(input.mediaFileId, {
+    words: mergedWords,
+    artifact: transcriptArtifact,
+  }, mediaFile.transcribedRanges).catch(() => false);
+
+  for (const clip of useTimelineStore.getState().clips) {
+    const clipMediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
+    if (clipMediaFileId === input.mediaFileId) {
+      updateClipTranscript(clip.id, { words: mergedWords });
+    }
+  }
+
+  return { applied, skipped: null };
+}
+
+export async function applyWordEmphasisFromArtifact(
+  input: ApplyWordEmphasisInput,
+): Promise<ApplyWordEmphasisResult> {
+  const storedArtifact = await input.artifactStore.getAnalysisArtifact(
+    input.artifact.manifestRef.artifactId,
+  );
+  if (!storedArtifact || storedArtifact.kind !== 'prosody-contour') {
+    throw new Error(`Prosody contour artifact not found: ${input.artifact.id}`);
+  }
+  if (storedArtifact.mediaFileId !== input.mediaFileId) {
+    throw new Error(`Prosody contour artifact ${storedArtifact.id} belongs to another media file.`);
+  }
+
+  const manifest = prosodyContourManifest(storedArtifact);
+  if (manifest.wordEmphasis === undefined) {
+    return { applied: 0, skipped: 'no-emphasis' };
+  }
+
+  const mediaFile = useMediaStore.getState().files.find(file => file.id === input.mediaFileId);
+  if (!mediaFile?.transcript?.length) {
+    return { applied: 0, skipped: 'no-transcript' };
+  }
+
+  const currentWords = mediaFile.transcript;
+  const expectedTranscriptHash = transcriptHashFromFingerprint(storedArtifact.sourceFingerprint);
+  if (
+    storedArtifact.stale
+    || (expectedTranscriptHash !== undefined
+      && await computeTranscriptWordsHash(currentWords) !== expectedTranscriptHash)
+  ) {
+    return { applied: 0, skipped: 'stale-transcript' };
+  }
+
+  const emphasisById = new Map(
+    manifest.wordEmphasis.map(entry => [entry.wordId, entry.emphasis]),
+  );
+  let applied = 0;
+  const mergedWords = currentWords.map(word => {
+    const emphasis = emphasisById.get(word.id);
+    if (emphasis === undefined || word.emphasis === emphasis) return word;
+    applied += 1;
+    return { ...word, emphasis };
+  });
+  if (applied === 0) {
+    return { applied: 0, skipped: 'already-applied' };
+  }
+
+  const transcriptArtifact = mediaFile.transcriptArtifact
+    ? { ...mediaFile.transcriptArtifact, words: mergedWords }
+    : undefined;
   useMediaStore.setState(state => ({
     files: state.files.map(file => file.id === input.mediaFileId
       ? { ...file, transcript: mergedWords, transcriptArtifact }

@@ -168,6 +168,21 @@ export async function generateAudioIntelligenceForClipAction(
           log.info(`Merged aligned timings into ${applied.applied} transcript words`);
         }
       }
+      if (generated.artifacts.prosodyContour) {
+        // Dynamic import: transcript artifact merging reads the timeline store,
+        // so a static import from inside the store graph would be circular.
+        const { applyWordEmphasisFromArtifact } = await import('../../../services/transcription/applyAlignedTimings');
+        const applied = await applyWordEmphasisFromArtifact({
+          mediaFileId: prepared.mediaFileId,
+          artifact: generated.artifacts.prosodyContour,
+          artifactStore: store,
+        });
+        if (applied.skipped) {
+          log.debug('Word emphasis not merged into transcript', applied);
+        } else {
+          log.info(`Merged emphasis into ${applied.applied} transcript words`);
+        }
+      }
     });
   } catch (e) {
     log[isAudioAnalysisCancellation(e) ? 'debug' : 'error']('Audio intelligence analysis failed', e);

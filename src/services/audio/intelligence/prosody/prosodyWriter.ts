@@ -18,7 +18,7 @@ import type { ProsodyAnalysisResult } from './prosodyAnalysis';
 const MIME_TYPE = 'application/vnd.masterselects.audio-dense-curve';
 const DEFAULT_DECODER_ID = 'audio-buffer';
 const DEFAULT_DECODER_VERSION = '1.0.0';
-const ANALYZER_BASE_VERSION = 'masterselects.audio-intelligence.prosody@1.0.0';
+const ANALYZER_BASE_VERSION = 'masterselects.audio-intelligence.prosody@1.1.0';
 const textEncoder = new TextEncoder();
 
 export interface WriteProsodyContourArtifactInput {
@@ -116,6 +116,7 @@ export async function writeProsodyContourArtifact(
     curves,
     sourceVoiceActivityArtifactId: input.sourceVoiceActivityArtifactId,
     summary: input.result.summary,
+    wordEmphasis: input.result.wordEmphasis,
   });
   const artifactId = await deterministicArtifactId(cacheKey);
   const stored = await input.artifactStore.putAnalysisArtifact({

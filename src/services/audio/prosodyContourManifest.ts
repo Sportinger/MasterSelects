@@ -27,6 +27,12 @@ export interface ProsodySummary {
   meanSpeechRateSps?: number;
 }
 
+export interface ProsodyWordEmphasis {
+  wordId: string;
+  emphasis: number;
+  f0MeanHz?: number;
+}
+
 export interface ProsodyContourManifest {
   schemaVersion: typeof PROSODY_CONTOUR_MANIFEST_VERSION;
   mediaFileId: string;
@@ -39,6 +45,7 @@ export interface ProsodyContourManifest {
   curves: ProsodyCurveRef[];
   sourceVoiceActivityArtifactId?: string;
   summary?: ProsodySummary;
+  wordEmphasis?: readonly ProsodyWordEmphasis[];
 }
 
 export interface CreateProsodyContourManifestInput extends Omit<ProsodyContourManifest, 'schemaVersion'> {
@@ -82,6 +89,15 @@ export function createProsodyContourManifest(
       }
       return curve;
     });
+  const wordEmphasis = input.wordEmphasis?.map((entry) => {
+    if (!entry.wordId.trim()) {
+      throw new Error('wordEmphasis.wordId must be a non-empty string.');
+    }
+    if (!Number.isFinite(entry.emphasis) || entry.emphasis < 0 || entry.emphasis > 1) {
+      throw new Error('wordEmphasis.emphasis must be within [0, 1].');
+    }
+    return { ...entry };
+  });
 
   return {
     schemaVersion: PROSODY_CONTOUR_MANIFEST_VERSION,
@@ -95,5 +111,6 @@ export function createProsodyContourManifest(
     curves,
     sourceVoiceActivityArtifactId: input.sourceVoiceActivityArtifactId,
     summary: input.summary ? { ...input.summary } : undefined,
+    wordEmphasis,
   };
 }

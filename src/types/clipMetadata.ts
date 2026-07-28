@@ -19,6 +19,7 @@ export interface TranscriptWord {
   alignedEnd?: number;
   alignmentConfidence?: number;
   alignmentMethod?: TranscriptAlignmentMethod;
+  emphasis?: number; // 0..1, prosody-derived
 }
 
 export type TranscriptAlignmentMethod = 'acoustic-refine' | 'ctc-align' | 'whisperx';

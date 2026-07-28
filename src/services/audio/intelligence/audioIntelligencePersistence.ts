@@ -32,7 +32,7 @@ import { ROOM_TONE_PROFILE_ANALYZER_VERSION } from './roomTone/roomToneWriter';
 export const AUDIO_INTELLIGENCE_VAD_ANALYZER_VERSION =
   'masterselects.audio-intelligence.vad@1.0.0+silero-v5.1.2';
 export const AUDIO_SPAN_LIST_PAYLOAD_MIME_TYPE = 'application/vnd.masterselects.audio-span-list';
-export const PROSODY_ANALYZER_BASE_VERSION = 'masterselects.audio-intelligence.prosody@1.0.0';
+export const PROSODY_ANALYZER_BASE_VERSION = 'masterselects.audio-intelligence.prosody@1.1.0';
 
 const DEFAULT_DECODER_ID = 'audio-buffer';
 const DEFAULT_DECODER_VERSION = '1.0.0';

@@ -257,6 +257,37 @@ describe('prosody contour manifest', () => {
     expect(manifest.curves[0].metric).toBe('f0-hz');
     expect(() => createProsodyContourManifest({ ...manifest, curves: [] })).toThrow();
   });
+
+  it('round-trips and validates per-word emphasis', () => {
+    const manifest = createProsodyContourManifest({
+      mediaFileId: 'media-1',
+      sourceFingerprint: 'fp-1+transcript=hash-1',
+      sampleRate: 48000,
+      analysisSampleRate: 16000,
+      channelLayout,
+      duration: 30,
+      curves: [
+        { metric: 'f0-hz', windowDuration: 0.04, hopDuration: 0.01, pointCount: 3000, payloadRef },
+      ],
+      wordEmphasis: [
+        { wordId: 'word-1', emphasis: 0.85, f0MeanHz: 126 },
+        { wordId: 'word-2', emphasis: 0.2 },
+      ],
+    });
+
+    expect(manifest.wordEmphasis).toEqual([
+      { wordId: 'word-1', emphasis: 0.85, f0MeanHz: 126 },
+      { wordId: 'word-2', emphasis: 0.2 },
+    ]);
+    expect(() => createProsodyContourManifest({
+      ...manifest,
+      wordEmphasis: [{ wordId: '', emphasis: 0.5 }],
+    })).toThrow('wordEmphasis.wordId must be a non-empty string.');
+    expect(() => createProsodyContourManifest({
+      ...manifest,
+      wordEmphasis: [{ wordId: 'word-1', emphasis: 1.01 }],
+    })).toThrow('wordEmphasis.emphasis must be within [0, 1].');
+  });
 });
 
 describe('room tone profile manifest', () => {

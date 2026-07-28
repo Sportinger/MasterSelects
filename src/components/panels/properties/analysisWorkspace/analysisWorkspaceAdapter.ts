@@ -17,6 +17,7 @@ import type {
   AnalysisSceneTranscriptWord,
   AnalysisSceneView,
 } from './analysisSceneViewModel';
+import { effectiveWordTiming } from '../../../../services/transcription/effectiveWordTiming';
 import { normalizedRanges, partitionIndexedRanges } from './analysisWorkspaceRangeIndex';
 
 /** The selected source-time interval; the out point is always exclusive. */
@@ -161,7 +162,8 @@ function peopleForScene(people: readonly FacePersonSummary[], scene: AnalysisSce
 
 function transcriptWords(words: readonly TranscriptWord[], bounds: AnalysisSceneRange): readonly AnalysisSceneTranscriptWord[] {
   return sorted(words.flatMap(word => {
-    const range = eventRange(word.start, word.end, bounds);
+    const timing = effectiveWordTiming(word);
+    const range = eventRange(timing.start, timing.end, bounds);
     if (!range) return [];
     return [{
       id: word.id,
@@ -171,6 +173,7 @@ function transcriptWords(words: readonly TranscriptWord[], bounds: AnalysisScene
       speakerLabel: word.speaker,
       confidence: score(word.confidence),
       needsReview: word.needsReview,
+      ...(word.emphasis !== undefined ? { emphasis: word.emphasis } : {}),
     }];
   }), (left, right) => left.start - right.start || left.end - right.end || left.id.localeCompare(right.id));
 }

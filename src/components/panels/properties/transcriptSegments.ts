@@ -1,4 +1,5 @@
 import type { TranscriptWord } from '../../../types/clipMetadata';
+import { effectiveWordTiming } from '../../../services/transcription/effectiveWordTiming';
 
 const SEGMENT_GAP_SECONDS = 1.5;
 const TARGET_SEGMENT_SECONDS = 12;
@@ -29,30 +30,32 @@ export function buildTranscriptSpeakerSegments(
 ): TranscriptSpeakerSegment[] {
   if (transcript.length === 0) return [];
 
-  const orderedWords = transcript.toSorted((left, right) => left.start - right.start);
+  const orderedWords = transcript.toSorted((left, right) =>
+    effectiveWordTiming(left).start - effectiveWordTiming(right).start);
   const segments: TranscriptSpeakerSegment[] = [];
   let current: TranscriptSpeakerSegment | null = null;
 
   for (const [wordIndex, word] of orderedWords.entries()) {
+    const timing = effectiveWordTiming(word);
     const speaker = getSpeakerLabel(word);
     const previousWord = current?.words.at(-1);
     const speakerChanged = current !== null && current.speaker !== speaker;
-    const gapExceeded = current !== null && word.start - current.endTime > SEGMENT_GAP_SECONDS;
+    const gapExceeded = current !== null && timing.start - current.endTime > SEGMENT_GAP_SECONDS;
     const reachedHardLimit = current !== null && current.words.length >= MAX_SEGMENT_WORDS;
     const reachedReadableBoundary = current !== null
       && previousWord !== undefined
       && current.words.length >= TARGET_SEGMENT_WORDS
-      && word.start - current.startTime >= TARGET_SEGMENT_SECONDS
+      && timing.start - current.startTime >= TARGET_SEGMENT_SECONDS
       && endsSentence(previousWord);
 
     if (!current || speakerChanged || gapExceeded || reachedHardLimit || reachedReadableBoundary) {
       if (current) segments.push(current);
       current = {
-        endTime: word.end,
+        endTime: timing.end,
         endWordIndex: wordIndex,
-        id: `segment-${wordIndex}-${word.start}`,
+        id: `segment-${wordIndex}-${timing.start}`,
         speaker,
-        startTime: word.start,
+        startTime: timing.start,
         startWordIndex: wordIndex,
         words: [word],
       };
@@ -60,7 +63,7 @@ export function buildTranscriptSpeakerSegments(
     }
 
     current.words.push(word);
-    current.endTime = Math.max(current.endTime, word.end);
+    current.endTime = Math.max(current.endTime, timing.end);
     current.endWordIndex = wordIndex;
   }
 
@@ -82,9 +85,10 @@ export function findActiveTranscriptWordIndex(
   while (left <= right) {
     const middle = Math.floor((left + right) / 2);
     const word = orderedTranscript[middle];
-    if (sourceTime < word.start) {
+    const timing = effectiveWordTiming(word);
+    if (sourceTime < timing.start) {
       right = middle - 1;
-    } else if (sourceTime > word.end) {
+    } else if (sourceTime > timing.end) {
       left = middle + 1;
     } else {
       return middle;
