@@ -466,6 +466,23 @@ export async function tryKernelFirst(
   if (!config) {
     return { handled: false };
   }
+  // Calibration switch: 'ms.kernel.fallback' = 'false' surfaces every
+  // kernel decline/failure honestly instead of running the community
+  // provider, so story-path calibration is never masked by the fallback.
+  let fallbackDisabled = false;
+  try {
+    fallbackDisabled = storage.getItem('ms.kernel.fallback') === 'false';
+  } catch {
+    fallbackDisabled = false;
+  }
+  const declineResult = (reason: string): KernelChatGatewayResult => (
+    fallbackDisabled
+      ? {
+          handled: true,
+          message: `Kernel-Pfad nicht erfolgreich (Fallback deaktiviert): ${reason}`,
+        }
+      : { handled: false }
+  );
 
   const client = deps.client ?? new KernelServiceClient({
     authToken: config.token,
@@ -496,7 +513,7 @@ export async function tryKernelFirst(
         status: compileResult.status,
         error: compileResult.error,
       });
-      return { handled: false };
+      return declineResult(`Compile-Transportfehler (${compileResult.status}): ${compileResult.error}`);
     }
 
     const parsed = parseCompileResponse(compileResult.data);
@@ -504,14 +521,14 @@ export async function tryKernelFirst(
       log.warn('kernel compile response unparseable; falling back', {
         data: compileResult.data,
       });
-      return { handled: false };
+      return declineResult('Compile-Antwort unlesbar');
     }
     compiled = parsed;
   } catch (error) {
     log.warn('kernel gateway threw before execution; falling back', {
       error: error instanceof Error ? error.message : String(error),
     });
-    return { handled: false };
+    return declineResult(`Gateway-Fehler vor Ausführung: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   if (compiled.status !== 'compiled') {
@@ -520,7 +537,8 @@ export async function tryKernelFirst(
         reason: compiled.reason,
         failures: compiled.failures,
       });
-      return { handled: false };
+      const abortFailures = Array.isArray(compiled.failures) ? compiled.failures : [];
+      return declineResult(`Kernel lehnte ab: ${compiled.reason}${abortFailures.length ? ` – ${abortFailures.join('; ')}` : ''}`);
     }
     // Compile failures happen before any local mutation, so the legacy
     // loop can still serve the request. Honest failures are reserved for
@@ -529,7 +547,8 @@ export async function tryKernelFirst(
       runId: compiled.runId,
       failures: compiled.failures,
     });
-    return { handled: false };
+    const compileFailures = Array.isArray(compiled.failures) ? compiled.failures : [];
+    return declineResult(`Story-Compile fehlgeschlagen: ${compileFailures.length ? compileFailures.join('; ') : 'unbekannt'}`);
   }
 
   const compiledPlan: KernelCompileCompiledResponse = compiled;
@@ -548,7 +567,7 @@ export async function tryKernelFirst(
       };
     }
     console.warn('Kernel tool execution failed; rolled back and falling back to community chat.', detail);
-    return { handled: false };
+    return declineResult(`Tool-Ausführung fehlgeschlagen (zurückgerollt): ${String(detail)}`);
   };
 
   try {

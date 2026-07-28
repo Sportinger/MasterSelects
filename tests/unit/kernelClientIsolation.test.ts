@@ -102,6 +102,7 @@ describe('kernel client isolation', () => {
 
     expect(gateKeys).toEqual([
       'ms.kernel.enabled',
+      'ms.kernel.fallback',
       'ms.kernel.token',
       'ms.kernel.url',
     ]);
