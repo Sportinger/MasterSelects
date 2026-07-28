@@ -179,6 +179,7 @@ export const classCHardTargets = [
   { path: 'src/services/clipAnalyzer.ts', maxCurrentHits: 4 },
   { path: 'src/services/clipTranscriber.ts', maxCurrentHits: 3 },
   { path: 'src/services/transcription/artifactPersistence.ts', maxCurrentHits: 2 },
+  { path: 'src/services/transcription/clipTranscriptResolver.ts', maxCurrentHits: 1 },
   { path: 'src/services/transcription/cloudProviders.ts', maxCurrentHits: 1 },
   { path: 'src/services/cloudAiService.ts', maxCurrentHits: 2 },
   { path: 'src/services/compositionAudioMixer.ts', maxCurrentHits: 2 },
@@ -277,6 +278,6 @@ export const classCHardTargets = [
 // in docs/completed/refactor/Complete-refactor.md — do not re-accumulate it here.
 export const getStateAccessPolicyBaselines = {
   allowedAdapterPathCount: 26,
-  classCHardTargetFileCount: 238, // +1 (#299): metronomeScheduler
-  classCHardTargetMaxHits: 678, // +4 (#299): metronomeScheduler, like its MIDI sibling
+  classCHardTargetFileCount: 239, // +1: clipTranscriptResolver (media-anchored transcript reads)
+  classCHardTargetMaxHits: 679, // +1: clipTranscriptResolver
 } as const;

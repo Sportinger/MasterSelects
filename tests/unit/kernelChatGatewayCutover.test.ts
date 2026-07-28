@@ -77,7 +77,7 @@ function storyCompiledResponse(withSetup = true, withAssumptions = true) {
   return {
     ...compiledResponse(),
     mode: 'story',
-    blueprintSummary: {
+    storySummary: {
       assumptionReport: withAssumptions
         ? ['Die Reihenfolge folgt den verfuegbaren Transkriptstellen.']
         : [],
@@ -263,12 +263,14 @@ describe('kernel chat gateway WP11 cutover', () => {
       snapshot: transcriptSnapshot,
       indexVersion: 'app-transcript-v1',
       moments: [{
+        schemaVersion: 1,
         handle: '$m1',
-        source: 'media-1',
-        sourceRange: [2.5, 3.25],
+        source: { mediaId: 'media-1' },
+        sourceRange: { startSeconds: 2.5, endSeconds: 3.25 },
         evidence: { transcript: 'Ein guter Moment.' },
         confidence: 1,
         indexVersion: 'app-transcript-v1',
+        analysisSources: ['transcript'],
       }],
     });
     const [completeUrl] = fetchImpl.mock.calls[1] as unknown as [string, RequestInit];
