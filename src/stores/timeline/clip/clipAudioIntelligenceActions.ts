@@ -152,6 +152,22 @@ export async function generateAudioIntelligenceForClipAction(
         ...clearAudioAnalysisJobUpdate(),
         waveformProgress: 100,
       }) });
+
+      if (generated.artifacts.transcriptTiming) {
+        // Dynamic import: applyAlignedTimings reads the timeline store, a
+        // static import from inside the store graph would be circular.
+        const { applyAlignedTimingsFromArtifact } = await import('../../../services/transcription/applyAlignedTimings');
+        const applied = await applyAlignedTimingsFromArtifact({
+          mediaFileId: prepared.mediaFileId,
+          artifact: generated.artifacts.transcriptTiming,
+          artifactStore: store,
+        });
+        if (applied.skipped) {
+          log.debug('Aligned timings not merged into transcript', applied);
+        } else {
+          log.info(`Merged aligned timings into ${applied.applied} transcript words`);
+        }
+      }
     });
   } catch (e) {
     log[isAudioAnalysisCancellation(e) ? 'debug' : 'error']('Audio intelligence analysis failed', e);
