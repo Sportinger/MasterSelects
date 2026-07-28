@@ -24,35 +24,61 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
 
-// Detect browser name and if it supports WebGPU
-// isChromium kept for legacy compat but now means "has WebGPU support"
-function detectBrowser(): { name: string; isChromium: boolean } {
-  const ua = navigator.userAgent;
+// Browser identity drives only the friendly Chrome recommendation. Runtime
+// capability decisions remain based on the actual WebGPU/FSA probes.
+type NavigatorWithBrowserBrands = Navigator & {
+  brave?: unknown;
+  userAgentData?: {
+    brands?: Array<{ brand: string }>;
+  };
+};
+
+interface BrowserInfo {
+  name: string;
+  isChrome: boolean;
+  hasWebGPU: boolean;
+}
+
+function detectBrowser(): BrowserInfo {
+  const browserNavigator = navigator as NavigatorWithBrowserBrands;
+  const ua = browserNavigator.userAgent;
   const hasWebGPU = typeof navigator.gpu !== 'undefined';
+  const brands = browserNavigator.userAgentData?.brands
+    ?.map(({ brand }) => brand.toLowerCase()) ?? [];
 
   // Check specific browsers (order matters - more specific first)
-  if (/Edg\//.test(ua)) {
-    return { name: 'Microsoft Edge', isChromium: true };
+  if (/Edg(?:A|iOS)?\//.test(ua) || brands.some((brand) => brand.includes('microsoft edge'))) {
+    return { name: 'Microsoft Edge', isChrome: false, hasWebGPU };
   }
-  if (/OPR\//.test(ua) || /Opera/.test(ua)) {
-    return { name: 'Opera', isChromium: true };
+  if (/OPR\/|OPiOS\/|Opera/.test(ua) || brands.some((brand) => brand.includes('opera'))) {
+    return { name: 'Opera', isChrome: false, hasWebGPU };
   }
-  if (/Chrome\//.test(ua) && !/Chromium\//.test(ua)) {
-    return { name: 'Google Chrome', isChromium: true };
+  if (browserNavigator.brave || brands.some((brand) => brand.includes('brave'))) {
+    return { name: 'Brave', isChrome: false, hasWebGPU };
+  }
+  if (/SamsungBrowser\//.test(ua)) {
+    return { name: 'Samsung Internet', isChrome: false, hasWebGPU };
+  }
+  if (/Vivaldi\//.test(ua)) {
+    return { name: 'Vivaldi', isChrome: false, hasWebGPU };
+  }
+  if (/Firefox\/|FxiOS\//.test(ua)) {
+    return { name: 'Firefox', isChrome: false, hasWebGPU };
   }
   if (/Chromium\//.test(ua)) {
-    return { name: 'Chromium', isChromium: true };
+    return { name: 'Chromium', isChrome: false, hasWebGPU };
   }
-  if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) {
-    // Safari 17+ supports WebGPU
-    return { name: 'Safari', isChromium: hasWebGPU };
+  if (
+    brands.some((brand) => brand === 'google chrome')
+    || (brands.length === 0 && /Chrome\/|CriOS\/|HeadlessChrome\//.test(ua))
+  ) {
+    return { name: 'Google Chrome', isChrome: true, hasWebGPU };
   }
-  if (/Firefox\//.test(ua)) {
-    return { name: 'Firefox', isChromium: hasWebGPU };
+  if (/Safari\//.test(ua)) {
+    return { name: 'Safari', isChrome: false, hasWebGPU };
   }
 
-  // Unknown browser — trust WebGPU detection
-  return { name: 'Unknown Browser', isChromium: hasWebGPU };
+  return { name: 'another browser', isChrome: false, hasWebGPU };
 }
 
 interface WelcomeOverlayProps {
@@ -95,7 +121,7 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
 
   const isSupported = isFileSystemAccessSupported();
   const browser = useMemo(() => detectBrowser(), []);
-  const needsNativeHelper = !isSupported && browser.isChromium; // Firefox with WebGPU but no FSA
+  const needsNativeHelper = !isSupported && browser.hasWebGPU;
 
   // Check Native Helper availability (only when FSA is not supported)
   useEffect(() => {
@@ -430,17 +456,21 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
 
         <p className="welcome-subtitle">Video editing in your browser</p>
 
-        {/* Browser Warning for non-Chromium browsers */}
-        {!browser.isChromium && (
+        {/* Friendly Chrome recommendation for every detected non-Chrome browser */}
+        {!browser.isChrome && (
           <div className="welcome-browser-warning">
             <svg className="welcome-browser-warning-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-              <line x1="12" y1="9" x2="12" y2="13"/>
-              <line x1="12" y1="17" x2="12.01" y2="17"/>
+              <circle cx="12" cy="12" r="10"/>
+              <circle cx="12" cy="12" r="4"/>
+              <line x1="21.17" y1="8" x2="12" y2="8"/>
+              <line x1="3.95" y1="6.06" x2="8.54" y2="14"/>
+              <line x1="10.88" y1="21.94" x2="15.46" y2="14"/>
             </svg>
-            <span className="welcome-browser-warning-label">Unsupported Browser</span>
-            <span className="welcome-browser-warning-name">{browser.name}</span>
-            <span className="welcome-browser-warning-desc">MasterSelects requires WebGPU. Supported browsers: Chrome 113+, Edge 113+, Safari 17+, Firefox 141+.</span>
+            <span className="welcome-browser-warning-label">For the best experience</span>
+            <span className="welcome-browser-warning-name">Chrome is recommended</span>
+            <span className="welcome-browser-warning-desc">
+              You are using {browser.name}. Safari works only on some systems, and Firefox needs the Native Helper for file-system access.
+            </span>
             <a className="welcome-browser-warning-btn" href="https://www.google.com/chrome/" target="_blank" rel="noopener noreferrer">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="10"/>
@@ -449,13 +479,13 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
                 <line x1="3.95" y1="6.06" x2="8.54" y2="14"/>
                 <line x1="10.88" y1="21.94" x2="15.46" y2="14"/>
               </svg>
-              Download Chrome
+              Get Google Chrome
             </a>
           </div>
         )}
 
         {/* Folder Selection Card - hide if browser not supported */}
-        {(isSupported || browser.isChromium) && (
+        {(isSupported || browser.hasWebGPU) && (
           <div className="welcome-folder-card">
             <div className="welcome-folder-card-header">
               <span className="welcome-folder-card-label">Project</span>

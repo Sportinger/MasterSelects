@@ -58,6 +58,11 @@
   position: relative;
 }
 
+.preview-container.mask-navigation-mode,
+.preview-container.mask-navigation-mode .preview-canvas-wrapper {
+  background: var(--preview-pasteboard-bg);
+}
+
 .preview-stats {
   position: absolute;
   top: 8px;

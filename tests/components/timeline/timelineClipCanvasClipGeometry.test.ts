@@ -66,6 +66,37 @@ describe('timeline clip canvas trim geometry', () => {
     expect(geometry.startTime).toBe(4);
   });
 
+  it('uses destination-track preview patches for multi-selected drag followers', () => {
+    const follower = clip({
+      id: 'follower',
+      trackId: 'video-2',
+      startTime: 3,
+    });
+    const activeDrag = drag({
+      multiSelectClipIds: ['follower'],
+      multiSelectTimeDelta: 2,
+    });
+    const preview = {
+      patches: {
+        follower: { startTime: 5, trackId: 'video-3' },
+      },
+    };
+
+    expect(resolveClipGeometry(follower, {
+      trackId: 'video-2',
+      clipDrag: activeDrag,
+      clipDragPreview: preview,
+    }).visible).toBe(false);
+    expect(resolveClipGeometry(follower, {
+      trackId: 'video-3',
+      clipDrag: activeDrag,
+      clipDragPreview: preview,
+    })).toMatchObject({
+      startTime: 5,
+      visible: true,
+    });
+  });
+
   it('resizes linked clips during trim preview', () => {
     const geometry = resolveClipGeometry(clip({
       id: 'audio',

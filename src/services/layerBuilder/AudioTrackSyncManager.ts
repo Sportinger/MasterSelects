@@ -16,7 +16,10 @@ import { useTimelineStore } from '../../stores/timeline';
 import { createSilentAudioMeterSnapshot } from '../audio/audioMetering';
 import { registerTimelineAudioPlaybackStopper } from '../audio/timelineAudioPlaybackStopper';
 import { clearMasterAudio, playheadState } from './PlayheadState';
-import { hydrateTimelineMediaWindow } from '../timeline/lazyMediaElements';
+import {
+  hydrateTimelineMediaWindow,
+  keepLazyTimelineAudioElementAlive,
+} from '../timeline/lazyMediaElements';
 import { resolveAudioSyncMedia } from './audioSyncMediaResolver';
 import { AudioTrackCompositionPlaybackMixdownManager } from './audioTrackCompositionPlaybackMixdowns';
 import { AudioTrackCrossfadeTransitionSync } from './audioTrackCrossfadeTransitions';
@@ -143,6 +146,9 @@ export class AudioTrackSyncManager {
   syncAudioElements(): void {
     const ctx = createFrameContext();
     const timelineState = useTimelineStore.getState();
+    for (const retainedAudio of this.audioHandoffs.getRetainedAudioElements()) {
+      keepLazyTimelineAudioElementAlive(retainedAudio, ctx.now);
+    }
     hydrateTimelineMediaWindow(ctx);
 
     if (!ctx.isPlaying && !ctx.isDraggingPlayhead) {

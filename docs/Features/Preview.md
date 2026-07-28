@@ -137,7 +137,7 @@ RAM preview is implemented by `RamPreviewEngine` and the timeline RAM preview sl
 - Slots can follow the active composition or pin a specific composition.
 - The auto-distribute mode maps the first four layers of a chosen composition to the four slots.
 - Isolated layer slots render the layer as its source by normalizing non-normal blend modes for that slot only. The original composition layer keeps its stored blend mode.
-- Every editable Preview panel owns its viewport camera and panel-sized render surface. Any number of visible panels can therefore show different live perspectives of the same composition while sharing timeline, selection, object transforms, and gizmo state.
+- Every camera-edit Preview owns its viewport camera and panel-sized render surface. Any number of visible panels can therefore show different live perspectives of the same composition while sharing timeline, selection, object transforms, and gizmo state.
 - A panel in Edit mode is rendered as an independent target; non-edit panels continue to show the timeline camera instead of inheriting or freezing the edited panel's view.
 
 ### Output Routing
@@ -157,7 +157,8 @@ Edit mode is a canvas overlay for layer transforms.
 - Selects a layer from the preview and syncs the corresponding clip in the timeline.
 - Shows bounding boxes and drag handles for the selected layer.
 - Supports zoom, pan, and transform gestures.
-- Uses the full panel viewport instead of constraining the edit surface to the composition aspect ratio, including for 2D layers.
+- 2D transform, text, and mask editing preserve the composition resolution and aspect ratio; only camera/3D edit views use the full panel viewport for an independent perspective.
+- Moving or scaling a layer publishes a transient render transform once per animation frame, so the canvas and edit handles stay live without rewriting the durable clip, mask state, or RAM-preview caches. The final transform is committed as one history batch when the pointer is released.
 - Multiple preview panels can mix edit and non-edit views at the same time. Camera and object changes update every visible view immediately, while each panel keeps its own perspective.
 - 3D object handles remain visible across preview modes; selecting one activates the native 3D scene gizmo for that clip.
 - In camera Edit mode, the independent editor camera always orbits the scene origin `(0, 0, 0)`; timeline and viewport selection do not change its pivot.

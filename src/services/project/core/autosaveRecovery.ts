@@ -21,6 +21,11 @@ function signalItemCount(project: ProjectFile): number {
     + (project.signals?.operators.length ?? 0);
 }
 
+function flashBoardItemCount(project: ProjectFile): number {
+  return (project.flashboard?.generationRecords.length ?? 0)
+    + (project.flashboard?.chatMessages?.length ?? 0);
+}
+
 export function hasMeaningfulContent(project: ProjectFile): boolean {
   return project.media.length > 0
     || signalItemCount(project) > 0
@@ -28,7 +33,7 @@ export function hasMeaningfulContent(project: ProjectFile): boolean {
     || project.compositions.length > 1
     || clipCount(project) > 0
     || generatedItemCount(project) > 0
-    || Boolean(project.flashboard?.generationRecords.length);
+    || flashBoardItemCount(project) > 0;
 }
 
 export function looksLikeFreshEmptyProject(project: ProjectFile): boolean {
@@ -37,7 +42,8 @@ export function looksLikeFreshEmptyProject(project: ProjectFile): boolean {
     && signalItemCount(project) === 0
     && project.compositions.length <= 1
     && clipCount(project) === 0
-    && generatedItemCount(project) === 0;
+    && generatedItemCount(project) === 0
+    && flashBoardItemCount(project) === 0;
 }
 
 export function shouldPreferAutosave(projectData: ProjectFile, autosaveData: ProjectFile | null): boolean {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AI_PANEL_TYPES,
   PANEL_CONFIGS,
+  PANEL_PICKER_HIDDEN_TYPES,
   SCOPE_PANEL_TYPES,
   WIP_PANEL_TYPES,
   type PanelType,
@@ -44,5 +45,14 @@ describe('dock panel configs', () => {
       expect(SCOPE_PANEL_TYPES as readonly string[]).not.toContain(type);
       expect(WIP_PANEL_TYPES as readonly string[]).not.toContain(type);
     });
+  });
+
+  it('keeps layout-only and legacy panels out of panel pickers', () => {
+    expect(PANEL_PICKER_HIDDEN_TYPES).toEqual(
+      expect.arrayContaining(['start', 'multicam', 'scene-description']),
+    );
+    expect(PANEL_CONFIGS.start).toBeDefined();
+    expect(PANEL_CONFIGS.multicam).toBeDefined();
+    expect(PANEL_CONFIGS['scene-description']).toBeDefined();
   });
 });

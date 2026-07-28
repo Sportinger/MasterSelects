@@ -26,7 +26,11 @@ import {
   type ResolvedLeadMove,
   type ResolveClipMoveRequestInput,
 } from './moveLeadResolution';
-import { isNewTrackTypeCompatible, isTrackCompatible } from './moveTrackCompatibility';
+import {
+  isNewTrackTypeCompatible,
+  isTrackCompatible,
+} from './moveTrackCompatibility';
+import { resolveSelectedClipTrackTargets } from './selectedClipTrackTargets';
 
 export type {
   MoveResolutionResistanceResult,
@@ -141,6 +145,7 @@ function collectMoveDrafts(
   leadClip: TimelineClip,
   requestedLeadStartTime: number,
   requestedLeadTrackId: string,
+  targetTrackIdByClipId: ReadonlyMap<string, string>,
 ): MoveDraft[] {
   const includeLinked = input.includeLinked !== false;
   const includeGroups = input.includeGroups !== false;
@@ -163,7 +168,9 @@ function collectMoveDrafts(
     addDraft(drafts, {
       clip,
       requestedStartTime: clip.id === leadClip.id ? requestedLeadStartTime : clip.startTime + requestedTimelineDelta,
-      requestedTrackId: clip.id === leadClip.id ? requestedLeadTrackId : clip.trackId,
+      requestedTrackId: clip.id === leadClip.id
+        ? requestedLeadTrackId
+        : targetTrackIdByClipId.get(clip.id) ?? clip.trackId,
       isLeadClip: clip.id === leadClip.id,
       linked: createLinkedResolution(includeLinked, [], []),
       linkedGroup: createGroupResolution(includeGroups, [], []),
@@ -301,7 +308,7 @@ function createResolvedMove(
     : Math.max(0, draft.clip.startTime + timelineDelta);
   const resolvedTrackId = draft.isLeadClip
     ? lead.trackId
-    : draft.clip.trackId;
+    : draft.requestedTrackId ?? draft.clip.trackId;
   const followerResistanceResult = draft.isLeadClip
     ? undefined
     : input.getPositionWithResistance?.(
@@ -558,8 +565,37 @@ export function resolveClipMoveRequest(
 
   const excludeClipIds = [...new Set(input.excludeClipIds ?? [])];
   const lead = resolveLeadMove(input, leadClip, targetTrackId, excludeClipIds);
+  const trackTargets = resolveSelectedClipTrackTargets(
+    input.tracks,
+    input.clips,
+    leadClip.id,
+    lead.trackId,
+    input.selectedClipIds,
+  );
+  if (trackTargets.invalidClipIds.length > 0) {
+    warnings.push({
+      code: 'unsupported',
+      message: 'The selected clips cannot preserve their relative track positions at this destination.',
+      clipId: trackTargets.invalidClipIds[0],
+      trackId: targetTrackId,
+    });
+    return {
+      id: input.id,
+      requestedClipIds: [...trackTargets.targetTrackIdByClipId.keys()],
+      resolvedMoves: [],
+      operation: resolvedClipMovesToMoveClipsOperation(input.id, []),
+      warnings,
+      parity: RESOLVED_MOVE_PARITY_REQUIRED,
+    };
+  }
   const timelineDelta = lead.startTime - leadClip.startTime;
-  const drafts = collectMoveDrafts(input, leadClip, input.requestedStartTime, targetTrackId);
+  const drafts = collectMoveDrafts(
+    input,
+    leadClip,
+    input.requestedStartTime,
+    targetTrackId,
+    trackTargets.targetTrackIdByClipId,
+  );
   if (!validateMoveDrafts(input, drafts, warnings)) {
     return {
       id: input.id,

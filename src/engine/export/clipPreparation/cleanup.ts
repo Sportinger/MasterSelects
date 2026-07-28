@@ -13,20 +13,41 @@ export function cleanupExportMode(
     parallelDecoder.cleanup();
   }
 
+  const releasedRuntimeSessions = new Set<string>();
+  const releasedRuntimeOwners = new Set<string>();
+  const cleanedPlayers = new Set<NonNullable<ExportClipState['webCodecsPlayer']>>();
+  const cleanedPreciseVideos = new Set<HTMLVideoElement>();
+  const revokedObjectUrls = new Set<string>();
+
   for (const state of clipStates.values()) {
-    if (state.runtimeSource?.runtimeSourceId && state.runtimeSource.runtimeSessionKey) {
+    const runtimeSessionId =
+      state.runtimeSource?.runtimeSourceId && state.runtimeSource.runtimeSessionKey
+        ? `${state.runtimeSource.runtimeSourceId}:${state.runtimeSource.runtimeSessionKey}`
+        : null;
+    if (runtimeSessionId && !releasedRuntimeSessions.has(runtimeSessionId)) {
+      releasedRuntimeSessions.add(runtimeSessionId);
       mediaRuntimeRegistry.releaseSession(
-        state.runtimeSource.runtimeSourceId,
-        state.runtimeSource.runtimeSessionKey
+        state.runtimeSource!.runtimeSourceId!,
+        state.runtimeSource!.runtimeSessionKey!
       );
     }
-    if (state.runtimeSource?.runtimeSourceId && state.runtimeOwnerId) {
+    const runtimeOwnerId =
+      state.runtimeSource?.runtimeSourceId && state.runtimeOwnerId
+        ? `${state.runtimeSource.runtimeSourceId}:${state.runtimeOwnerId}`
+        : null;
+    if (runtimeOwnerId && !releasedRuntimeOwners.has(runtimeOwnerId)) {
+      releasedRuntimeOwners.add(runtimeOwnerId);
       mediaRuntimeRegistry.releaseRuntime(
-        state.runtimeSource.runtimeSourceId,
-        state.runtimeOwnerId
+        state.runtimeSource!.runtimeSourceId!,
+        state.runtimeOwnerId!
       );
     }
-    if (state.webCodecsPlayer && state.isSequential) {
+    if (
+      state.webCodecsPlayer &&
+      state.isSequential &&
+      !cleanedPlayers.has(state.webCodecsPlayer)
+    ) {
+      cleanedPlayers.add(state.webCodecsPlayer);
       try {
         state.webCodecsPlayer.endSequentialExport();
         state.webCodecsPlayer.destroy();
@@ -34,7 +55,12 @@ export function cleanupExportMode(
         // Ignore cleanup errors
       }
     }
-    if (state.hasDedicatedPreciseVideoElement && state.preciseVideoElement) {
+    if (
+      state.hasDedicatedPreciseVideoElement &&
+      state.preciseVideoElement &&
+      !cleanedPreciseVideos.has(state.preciseVideoElement)
+    ) {
+      cleanedPreciseVideos.add(state.preciseVideoElement);
       try {
         state.preciseVideoElement.pause();
         state.preciseVideoElement.removeAttribute('src');
@@ -43,7 +69,8 @@ export function cleanupExportMode(
         // Ignore cleanup failures for detached export video elements.
       }
     }
-    if (state.preciseVideoObjectUrl) {
+    if (state.preciseVideoObjectUrl && !revokedObjectUrls.has(state.preciseVideoObjectUrl)) {
+      revokedObjectUrls.add(state.preciseVideoObjectUrl);
       try {
         URL.revokeObjectURL(state.preciseVideoObjectUrl);
       } catch {
@@ -59,7 +86,8 @@ export function cleanupExportMode(
         // Ignore cleanup failures for detached export image elements.
       }
     }
-    if (state.exportImageObjectUrl) {
+    if (state.exportImageObjectUrl && !revokedObjectUrls.has(state.exportImageObjectUrl)) {
+      revokedObjectUrls.add(state.exportImageObjectUrl);
       try {
         URL.revokeObjectURL(state.exportImageObjectUrl);
       } catch {

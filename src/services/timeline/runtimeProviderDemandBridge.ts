@@ -89,6 +89,10 @@ export type RuntimeProviderDemandResourceDetails =
       payloadKind?: 'motion-layer' | 'math-scene' | 'vector-animation' | 'midi' | 'node-graph' | 'data-signal' | 'unknown';
     })
   | (RuntimeProviderDemandDescriptorOptions & {
+      resourceKind: 'audio-buffer';
+      audioBufferId?: string;
+    })
+  | (RuntimeProviderDemandDescriptorOptions & {
       resourceKind: 'audio-source-clock';
       audioSourceId?: string;
       clockId?: string;
@@ -272,6 +276,12 @@ export function createRenderResourceDescriptorFromDemand(
           kind: 'motion-data',
           payloadId: details.payloadId ?? fallbackId,
           payloadKind: details.payloadKind ?? 'unknown',
+        };
+      case 'audio-buffer':
+        return {
+          ...base,
+          kind: 'audio-buffer',
+          audioBufferId: details.audioBufferId ?? fallbackId,
         };
       case 'audio-source-clock':
         return {

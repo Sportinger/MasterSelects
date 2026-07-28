@@ -1,7 +1,8 @@
 // Layer drag logic: move/scale layers in edit mode with document-level listeners + overlay drawing
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Layer, TimelineClip, TimelineTrack } from '../../types';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useTimelineStore } from '../../stores/timeline';
+import type { AnimatableProperty, Layer, TimelineClip, TimelineTrack } from '../../types';
 import {
   getLayerOverlayHandles,
   resolvePositionDeltaForCanvasDelta,
@@ -16,6 +17,13 @@ import {
   mergeSnapPointSets,
   resolveSnapDelta,
 } from './editModeSnapping';
+import {
+  commitLayerTransformDrag,
+  resolveClipScaleFromLayerScale,
+  type LayerTransformDragUpdate,
+} from './layerTransformDragCommit';
+
+export { resolveClipScaleFromLayerScale } from './layerTransformDragCommit';
 
 interface UseLayerDragParams {
   editMode: boolean;
@@ -30,7 +38,12 @@ interface UseLayerDragParams {
   selectedClipId: string | null;
   selectClip: (id: string | null) => void;
   selectLayer: (id: string | null) => void;
-  updateClipTransform: (clipId: string, transform: Partial<{ position: { x: number; y: number; z: number }; scale: { x: number; y: number } }>) => void;
+  hasKeyframes: (clipId: string, property?: AnimatableProperty) => boolean;
+  setPropertyValue: (clipId: string, property: AnimatableProperty, value: number) => void;
+  updateClipTransform: (
+    clipId: string,
+    transform: Partial<Pick<TimelineClip['transform'], 'position' | 'scale'>>,
+  ) => void;
   updateLayer: (layerId: string, updates: Partial<Layer>) => void;
   calculateLayerBounds: (layer: Layer, canvasW: number, canvasH: number, forcePos?: { x: number; y: number }) => LayerOverlayBounds;
   findLayerAtPosition: (containerX: number, containerY: number) => Layer | null;
@@ -69,37 +82,6 @@ interface MovePositionBasis {
 }
 
 const LAYER_SNAP_THRESHOLD_SCREEN_PX = 10;
-
-type PendingDragUpdate =
-  | {
-      mode: 'move';
-      layerId: string;
-      clipId?: string;
-      position: { x: number; y: number; z: number };
-    }
-  | {
-      mode: 'scale';
-      layerId: string;
-      clipId?: string;
-      scale: { x: number; y: number };
-    };
-
-function finiteNonZero(value: number | undefined, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) && Math.abs(value) > 0.000001
-    ? value
-    : fallback;
-}
-
-export function resolveClipScaleFromLayerScale(
-  layerScale: { x: number; y: number },
-  clipScale: TimelineClip['transform']['scale'] | undefined,
-): { x: number; y: number } {
-  const all = finiteNonZero(clipScale?.all, 1);
-  return {
-    x: layerScale.x / all,
-    y: layerScale.y / all,
-  };
-}
 
 function resolveLayerMoveSnapDelta(params: {
   layer: Layer;
@@ -147,6 +129,8 @@ export function useLayerDrag({
   selectedClipId,
   selectClip,
   selectLayer,
+  hasKeyframes,
+  setPropertyValue,
   updateClipTransform,
   updateLayer,
   calculateLayerBounds,
@@ -158,14 +142,18 @@ export function useLayerDrag({
   const [dragMode, setDragMode] = useState<'move' | 'scale'>('move');
   const [dragHandle, setDragHandle] = useState<string | null>(null);
   const [hoverHandle, setHoverHandle] = useState<string | null>(null);
+  const [dragPreviewRevision, setDragPreviewRevision] = useState(0);
+  const previewOwnerId = useId();
   const dragStart = useRef({ x: 0, y: 0, layerPosX: 0, layerPosY: 0, layerScaleX: 1, layerScaleY: 1 });
   const currentDragPos = useRef({ x: 0, y: 0 });
+  const currentDragScale = useRef({ x: 1, y: 1 });
   const layersRef = useRef(layers);
   const clipsRef = useRef(clips);
   const tracksRef = useRef(tracks);
   const movePositionBasis = useRef<MovePositionBasis | null>(null);
   const scaleDragBounds = useRef<LayerOverlayBounds | null>(null);
-  const pendingDragUpdate = useRef<PendingDragUpdate | null>(null);
+  const pendingDragUpdate = useRef<LayerTransformDragUpdate | null>(null);
+  const lastAppliedDragUpdate = useRef<LayerTransformDragUpdate | null>(null);
   const dragUpdateFrame = useRef<number | null>(null);
 
   useEffect(() => {
@@ -180,6 +168,12 @@ export function useLayerDrag({
     tracksRef.current = tracks;
   }, [tracks]);
 
+  const clearOwnedTransformPreview = useCallback(() => {
+    useTimelineStore.setState((state) => state.layerTransformPreview?.ownerId === previewOwnerId
+      ? { layerTransformPreview: null }
+      : {});
+  }, [previewOwnerId]);
+
   const flushPendingDragUpdate = useCallback(() => {
     dragUpdateFrame.current = null;
     const pending = pendingDragUpdate.current;
@@ -190,25 +184,37 @@ export function useLayerDrag({
     const clip = pending.clipId
       ? clipsRef.current.find((candidate) => candidate.id === pending.clipId)
       : undefined;
-    if (isClipOnLockedTrack(clip, tracksRef.current)) return;
-
-    if (pending.mode === 'move') {
-      updateLayer(pending.layerId, { position: pending.position });
-      if (pending.clipId) {
-        updateClipTransform(pending.clipId, { position: pending.position });
-      }
+    if (isClipOnLockedTrack(clip, tracksRef.current)) {
+      lastAppliedDragUpdate.current = null;
+      clearOwnedTransformPreview();
       return;
     }
 
-    updateLayer(pending.layerId, { scale: pending.scale });
-    if (pending.clipId) {
-      updateClipTransform(pending.clipId, {
-        scale: resolveClipScaleFromLayerScale(pending.scale, clip?.transform.scale),
-      });
+    lastAppliedDragUpdate.current = pending;
+    if (!clip) {
+      if (pending.mode === 'move') {
+        updateLayer(pending.layerId, { position: pending.position });
+      } else {
+        updateLayer(pending.layerId, { scale: pending.scale });
+      }
+      setDragPreviewRevision((revision) => revision + 1);
+      return;
     }
-  }, [updateClipTransform, updateLayer]);
 
-  const scheduleDragUpdate = useCallback((update: PendingDragUpdate) => {
+    const transform = pending.mode === 'move'
+      ? { position: pending.position }
+      : { scale: resolveClipScaleFromLayerScale(pending.scale, clip.transform.scale) };
+    useTimelineStore.setState({
+      layerTransformPreview: {
+        ownerId: previewOwnerId,
+        clipId: clip.id,
+        transform,
+      },
+    });
+    setDragPreviewRevision((revision) => revision + 1);
+  }, [clearOwnedTransformPreview, previewOwnerId, updateLayer]);
+
+  const scheduleDragUpdate = useCallback((update: LayerTransformDragUpdate) => {
     pendingDragUpdate.current = update;
 
     if (dragUpdateFrame.current === null) {
@@ -225,11 +231,47 @@ export function useLayerDrag({
     flushPendingDragUpdate();
   }, [flushPendingDragUpdate]);
 
+  const finishDrag = useCallback(() => {
+    flushPendingDragUpdateNow();
+    const pending = lastAppliedDragUpdate.current;
+    if (pending?.clipId) {
+      const clip = clipsRef.current.find((candidate) => candidate.id === pending.clipId);
+      if (clip && !isClipOnLockedTrack(clip, tracksRef.current)) {
+        commitLayerTransformDrag(pending, clip, {
+          hasKeyframes,
+          setPropertyValue,
+          updateClipTransform,
+          updateLayer,
+        });
+      }
+    }
+
+    clearOwnedTransformPreview();
+    pendingDragUpdate.current = null;
+    lastAppliedDragUpdate.current = null;
+    setIsDragging(false);
+    setDragLayerId(null);
+    setDragMode('move');
+    setDragHandle(null);
+    movePositionBasis.current = null;
+    scaleDragBounds.current = null;
+    currentDragPos.current = { x: 0, y: 0 };
+    currentDragScale.current = { x: 1, y: 1 };
+  }, [
+    clearOwnedTransformPreview,
+    flushPendingDragUpdateNow,
+    hasKeyframes,
+    setPropertyValue,
+    updateClipTransform,
+    updateLayer,
+  ]);
+
   useEffect(() => () => {
     if (dragUpdateFrame.current !== null) {
       cancelAnimationFrame(dragUpdateFrame.current);
     }
-  }, []);
+    clearOwnedTransformPreview();
+  }, [clearOwnedTransformPreview]);
 
   // Draw overlay with bounding boxes (full-container overlay)
   useEffect(() => {
@@ -268,7 +310,16 @@ export function useLayerDrag({
         const forcePos = (isDragging && dragMode === 'move' && layer.id === dragLayerId)
           ? currentDragPos.current
           : undefined;
-        const bounds = calculateLayerBounds(layer, canvasSize.width, canvasSize.height, forcePos);
+        const overlayLayer = isDragging && dragMode === 'scale' && layer.id === dragLayerId
+          ? {
+              ...layer,
+              scale: {
+                ...layer.scale,
+                ...currentDragScale.current,
+              },
+            }
+          : layer;
+        const bounds = calculateLayerBounds(overlayLayer, canvasSize.width, canvasSize.height, forcePos);
         const containerBounds = scaleLayerOverlayBounds(bounds, viewZoom, {
           x: canvasInContainer.x,
           y: canvasInContainer.y,
@@ -307,7 +358,7 @@ export function useLayerDrag({
     };
 
     draw();
-  }, [editMode, layers, selectedLayerId, selectedClipId, clips, canvasSize, canvasInContainer, viewZoom, calculateLayerBounds, isDragging, dragMode, dragLayerId, overlayRef]);
+  }, [editMode, layers, selectedLayerId, selectedClipId, clips, canvasSize, canvasInContainer, viewZoom, calculateLayerBounds, isDragging, dragMode, dragLayerId, dragPreviewRevision, overlayRef]);
 
   // Arrow keys nudge the selected layer while in edit mode. Step is sized in
   // screen pixels then converted to canvas space (divided by viewZoom) so the
@@ -366,6 +417,9 @@ export function useLayerDrag({
   const handleOverlayMouseDown = useCallback((e: React.MouseEvent) => {
     if (!editMode || !overlayRef.current || e.altKey) return;
     if (e.button !== 0) return;
+    pendingDragUpdate.current = null;
+    lastAppliedDragUpdate.current = null;
+    clearOwnedTransformPreview();
 
     const rect = overlayRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -378,6 +432,7 @@ export function useLayerDrag({
         movePositionBasis.current = null;
         scaleDragBounds.current = calculateLayerBounds(selectedLayer, canvasSize.width, canvasSize.height);
         currentDragPos.current = { x: selectedLayer.position.x, y: selectedLayer.position.y };
+        currentDragScale.current = { x: selectedLayer.scale.x, y: selectedLayer.scale.y };
         setIsDragging(true);
         setDragLayerId(selectedLayer.id);
         setDragMode('scale');
@@ -403,6 +458,7 @@ export function useLayerDrag({
       }
       selectLayer(layer.id);
       currentDragPos.current = { x: layer.position.x, y: layer.position.y };
+      currentDragScale.current = { x: layer.scale.x, y: layer.scale.y };
       scaleDragBounds.current = null;
 
       movePositionBasis.current = {
@@ -434,7 +490,7 @@ export function useLayerDrag({
       selectLayer(null);
       movePositionBasis.current = null;
     }
-  }, [editMode, findLayerAtPosition, findHandleAtPosition, clips, layers, selectedLayerId, selectClip, selectLayer, calculateLayerBounds, canvasSize, overlayRef]);
+  }, [editMode, findLayerAtPosition, findHandleAtPosition, clips, layers, selectedLayerId, selectClip, selectLayer, calculateLayerBounds, canvasSize, clearOwnedTransformPreview, overlayRef]);
 
   // Handle mouse move on overlay — detect handle hover
   const handleOverlayMouseMove = useCallback((e: React.MouseEvent) => {
@@ -454,14 +510,7 @@ export function useLayerDrag({
   }, [isDragging, selectedLayerId, layers, findHandleAtPosition, overlayRef]);
 
   // Handle mouse up
-  const handleOverlayMouseUp = useCallback(() => {
-    flushPendingDragUpdateNow();
-    setIsDragging(false);
-    setDragLayerId(null);
-    movePositionBasis.current = null;
-    scaleDragBounds.current = null;
-    currentDragPos.current = { x: 0, y: 0 };
-  }, [flushPendingDragUpdateNow]);
+  const handleOverlayMouseUp = useCallback(() => finishDrag(), [finishDrag]);
 
   // Document-level listeners during drag
   useEffect(() => {
@@ -471,9 +520,15 @@ export function useLayerDrag({
       if (!dragLayerId) return;
 
       const layer = layersRef.current.find(l => l?.id === dragLayerId);
-      if (!layer) return;
+      if (!layer) {
+        clearOwnedTransformPreview();
+        return;
+      }
       const clip = findClipForLayer(clipsRef.current, layer);
-      if (isClipOnLockedTrack(clip, tracksRef.current)) return;
+      if (isClipOnLockedTrack(clip, tracksRef.current)) {
+        clearOwnedTransformPreview();
+        return;
+      }
 
       const dx = e.clientX - dragStart.current.x;
       const dy = e.clientY - dragStart.current.y;
@@ -533,6 +588,7 @@ export function useLayerDrag({
 
         newScaleX = Math.max(0.01, Math.min(10, newScaleX));
         newScaleY = Math.max(0.01, Math.min(10, newScaleY));
+        currentDragScale.current = { x: newScaleX, y: newScaleY };
 
         scheduleDragUpdate({
           mode: 'scale',
@@ -598,23 +654,16 @@ export function useLayerDrag({
       }
     };
 
-    const handleDocumentMouseUp = () => {
-      flushPendingDragUpdateNow();
-      setIsDragging(false);
-      setDragLayerId(null);
-      setDragMode('move');
-      setDragHandle(null);
-      movePositionBasis.current = null;
-      scaleDragBounds.current = null;
-      currentDragPos.current = { x: 0, y: 0 };
-    };
+    const handleDocumentMouseUp = () => finishDrag();
 
     document.addEventListener('mousemove', handleDocumentMouseMove);
     document.addEventListener('mouseup', handleDocumentMouseUp);
+    window.addEventListener('blur', handleDocumentMouseUp);
 
     return () => {
       document.removeEventListener('mousemove', handleDocumentMouseMove);
       document.removeEventListener('mouseup', handleDocumentMouseUp);
+      window.removeEventListener('blur', handleDocumentMouseUp);
     };
   }, [
     isDragging,
@@ -624,7 +673,8 @@ export function useLayerDrag({
     viewZoom,
     canvasSize,
     calculateLayerBounds,
-    flushPendingDragUpdateNow,
+    clearOwnedTransformPreview,
+    finishDrag,
     scheduleDragUpdate,
   ]);
 

@@ -17,6 +17,17 @@ function isSwapFileAbortError(error: unknown): boolean {
     && error.message.includes('Failed to create swap file');
 }
 
+function isStaleFileSystemStateError(error: unknown): boolean {
+  return typeof error === 'object'
+    && error !== null
+    && 'name' in error
+    && error.name === 'InvalidStateError';
+}
+
+function isRecoverableProjectWriteError(error: unknown): boolean {
+  return isSwapFileAbortError(error) || isStaleFileSystemStateError(error);
+}
+
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -61,7 +72,7 @@ export async function writeFsaProjectJsonWithAutosaveFallback(
   try {
     await writeFsaProjectFile(handle, PROJECT_FILE_NAME, data);
   } catch (error) {
-    if (!isSwapFileAbortError(error)) {
+    if (!isRecoverableProjectWriteError(error)) {
       throw error;
     }
 
@@ -75,19 +86,21 @@ export async function writeFsaProjectFile(
   fileName: string,
   data: ProjectFile,
 ): Promise<void> {
-  const fileHandle = await handle.getFileHandle(fileName, { create: true });
   const content = JSON.stringify(data, null, 2);
   let lastError: unknown = null;
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
+      // Chromium can invalidate a FileSystemFileHandle when the file changed
+      // outside the cached interface object. Reacquire it for every attempt.
+      const fileHandle = await handle.getFileHandle(fileName, { create: true });
       const writable = await fileHandle.createWritable();
       await writable.write(content);
       await writable.close();
       return;
     } catch (error) {
       lastError = error;
-      if (!isSwapFileAbortError(error) || attempt === 2) {
+      if (!isRecoverableProjectWriteError(error) || attempt === 2) {
         break;
       }
       await wait(150 * (attempt + 1));

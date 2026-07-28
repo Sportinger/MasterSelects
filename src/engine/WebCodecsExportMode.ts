@@ -196,7 +196,24 @@ export class WebCodecsExportMode {
       try {
         decoder.decode(chunk);
       } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
+        const errorRecord = typeof e === 'object' && e !== null
+          ? e as { name?: unknown; message?: unknown }
+          : null;
+        const message = typeof errorRecord?.message === 'string'
+          ? errorRecord.message
+          : String(e);
+        const errorName = typeof errorRecord?.name === 'string' ? errorRecord.name : '';
+        if (
+          decoder.state === 'closed' ||
+          errorName === 'InvalidStateError' ||
+          errorName === 'EncodingError'
+        ) {
+          const decoderError = new Error(
+            `FAST export decoder closed while decoding sample ${i}: ${message}`
+          );
+          decoderError.name = 'FastExportDecoderClosedError';
+          throw decoderError;
+        }
         if (message.includes('key frame')) {
           throw new Error(`FAST export lost keyframe context near sample ${i}`);
         }

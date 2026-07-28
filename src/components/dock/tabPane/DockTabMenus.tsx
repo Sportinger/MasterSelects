@@ -1,11 +1,18 @@
 import type { RefObject } from 'react';
 
 import type { PanelType } from '../../../types/dock';
-import { MULTI_INSTANCE_PANEL_TYPES, PANEL_CONFIGS, WIP_PANEL_TYPES } from '../../../types/dock';
+import {
+  MULTI_INSTANCE_PANEL_TYPES,
+  PANEL_CONFIGS,
+  PANEL_PICKER_HIDDEN_TYPES,
+  WIP_PANEL_TYPES,
+} from '../../../types/dock';
 import { sortAddMenuPanelTypes } from './layoutMath';
 import type { DockTabContextMenuState } from './useTabPaneMenus';
 
-const CHANGE_TO_PANEL_TYPES = Object.keys(PANEL_CONFIGS) as PanelType[];
+const CHANGE_TO_PANEL_TYPES = (Object.keys(PANEL_CONFIGS) as PanelType[]).filter(
+  type => !PANEL_PICKER_HIDDEN_TYPES.includes(type),
+);
 const ADD_MENU_PANEL_TYPES = sortAddMenuPanelTypes(CHANGE_TO_PANEL_TYPES, MULTI_INSTANCE_PANEL_TYPES);
 
 interface DockTabMenusProps {

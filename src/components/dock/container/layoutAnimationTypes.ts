@@ -1,3 +1,8 @@
+import type {
+  DockLayoutStartTransitionDirection,
+  DockLayoutTransitionStaggerMode,
+} from '../../../types/dock';
+
 export interface DockLayoutAnimationRect {
   left: number;
   top: number;
@@ -21,6 +26,8 @@ export interface DockLayoutAnimationItem {
 
 export interface DockLayoutAnimationSnapshot {
   durationMs: number;
+  staggerMode: DockLayoutTransitionStaggerMode;
+  startTransitionDirection?: DockLayoutStartTransitionDirection;
   items: Map<string, DockLayoutAnimationItem>;
 }
 
@@ -38,6 +45,7 @@ export type DockLayoutEdge = 'left' | 'right' | 'top' | 'bottom';
 export const DOCK_LAYOUT_ANIMATION_SELECTOR = '[data-dock-layout-anim-id]';
 export const DOCK_LAYOUT_CHILD_ANIMATION_SELECTOR = '[data-dock-layout-child-anim-id]';
 export const DOCK_LAYOUT_ANIMATION_EASING = 'cubic-bezier(0.4, 0, 0.2, 1)';
+export const DOCK_LAYOUT_SEQUENCE_EASING = 'cubic-bezier(0.45, 0, 0.55, 1)';
 export const DOCK_LAYOUT_PUZZLE_STAGGER_MAX_RATIO = 0.22;
 export const DOCK_LAYOUT_PUZZLE_DURATION_RATIO = 0.72;
 export const DOCK_LAYOUT_ANIMATION_CLEANUP_BUFFER_MS = 180;

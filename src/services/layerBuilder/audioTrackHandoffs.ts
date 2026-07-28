@@ -35,6 +35,10 @@ export class AudioTrackHandoffManager {
     return this.handoffElements.has(audio);
   }
 
+  getRetainedAudioElements(): ReadonlySet<HTMLAudioElement> {
+    return this.handoffElements;
+  }
+
   getHandoffAudioElement(clipId: string): HTMLAudioElement | null {
     return this.handoffs.get(clipId) ?? null;
   }

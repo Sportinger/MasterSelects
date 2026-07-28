@@ -24,18 +24,17 @@ import { buildProjectAudioStateIndex } from '../audio/projectAudioState';
 import { createCurrentAudioArtifactStore } from '../audio/timelineWaveformPyramidCache';
 import { clonePersistedClipAudioState } from '../audio/clipAudioStatePersistence';
 import { flashBoardMediaBridge } from '../flashboard/FlashBoardMediaBridge';
-import { redactFlashBoardChatImageData } from '../flashboard/FlashBoardChatImageData';
 import { cloneClipNodeGraph } from '../nodeGraph';
 import { normalizeTransitionInstanceParams } from '../../transitions';
 import { syncTransitionCompositionTimelineToParent } from '../../stores/mediaStore/slices/composition/transitionCompositionSync';
 import type {
   ProjectFlashBoardComposerState,
-  ProjectFlashBoardChatMessage,
   ProjectFlashBoardGenerationMetadata,
   ProjectFlashBoardGenerationRecord,
   ProjectFlashBoardPromptHistoryEntry,
   ProjectFlashBoardState,
 } from './types/flashboard.types';
+import { serializeFlashBoardChatMessage } from './flashBoardChatProjectCodec';
 import {
   projectFileService,
   type ProjectComposition,
@@ -57,6 +56,7 @@ import {
   isProjectStoreSyncInProgress,
   withProjectStoreSyncGuard,
 } from './projectStoreSyncGuard';
+import { persistFlashBoardChatJournal } from './flashBoardChatProjectJournal';
 import type {
   ClipVideoState,
   SerializableClip,
@@ -375,19 +375,6 @@ function serializeFlashBoardPromptHistoryEntry(
   };
 }
 
-function serializeFlashBoardChatMessage(message: FlashBoardChatMessage): ProjectFlashBoardChatMessage {
-  return {
-    id: message.id,
-    role: message.role,
-    text: message.text,
-    createdAt: message.createdAt ? new Date(message.createdAt).toISOString() : undefined,
-    editOptions: message.editOptions,
-    isError: message.isError,
-    isPending: message.isPending,
-    toolCalls: redactFlashBoardChatImageData(message.toolCalls),
-  };
-}
-
 function serializeFlashBoardState(
   records: FlashBoardActiveGenerationRecord[],
   composer: FlashBoardComposerState,
@@ -673,6 +660,10 @@ export async function syncStoresToProject(): Promise<void> {
         getFlashBoardPromptHistory(),
         getFlashBoardChatMessages(),
       );
+
+      if (!await persistFlashBoardChatJournal(getFlashBoardChatMessages())) {
+        log.warn(' Chat journal could not be mirrored to the project folder');
+      }
     }
 
     log.info(' Synced stores to project');

@@ -247,6 +247,10 @@ describe('buildTranscriptMoments v2 evidence', () => {
     expect(moments.every(moment => moment.indexVersion === 'app-transcript-v2')).toBe(true);
     expect(moments.every(moment => moment.analysisSources.length === 1
       && moment.analysisSources[0] === 'transcript')).toBe(true);
-    expect(moments.every(moment => Object.keys(moment.evidence).join(',') === 'transcript')).toBe(true);
+    expect(moments.every(moment => typeof moment.evidence.transcript === 'string'
+      && Array.isArray(moment.evidence.words)
+      && !('pauses' in moment.evidence)
+      && !('emphasis' in moment.evidence)
+      && !('markers' in moment.evidence))).toBe(true);
   });
 });

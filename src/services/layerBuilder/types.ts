@@ -15,6 +15,7 @@ import type {
 import type { LightClipSettings } from '../../types/light';
 import type { VectorAnimationClipSettings } from '../../types/vectorAnimation';
 import type { Composition, MediaFile } from '../../stores/mediaStore/types';
+import type { TimelineLayerTransformPreview } from '../../stores/timeline/storeTypes/toolTypes';
 import type { AudioRouteEffectSettings, LiveAudioRouteProcessor } from '../audio/audioGraphRouteSettings';
 
 /**
@@ -44,6 +45,7 @@ export interface FrameContext {
   isPlaying: boolean;
   isDraggingPlayhead: boolean;
   hasClipDragPreview: boolean;
+  layerTransformPreview: TimelineLayerTransformPreview | null;
   playheadPosition: number;
   playbackSpeed: number;
   masterAudioState?: MasterAudioState;

@@ -83,4 +83,34 @@ describe('autosave recovery', () => {
 
     expect(shouldSkipEmptyProjectSave(project, autosave)).toBe(true);
   });
+
+  it('treats project chat messages as meaningful recoverable content', () => {
+    const project = createProject({ updatedAt: '2026-05-01T12:55:38.332Z' });
+    const autosave = createProject({
+      updatedAt: '2026-04-30T14:45:20.310Z',
+      flashboard: {
+        version: 1,
+        generationRecords: [],
+        generationMetadataByMediaId: {},
+        chatMessages: [{
+          id: 'assistant-1',
+          role: 'assistant',
+          text: 'Persisted answer',
+          toolCalls: [{
+            modelContent: '{"success":true}',
+            result: { success: true },
+            toolCall: {
+              id: 'tool-1',
+              name: 'getTimelineState',
+              arguments: '{}',
+            },
+          }],
+        }],
+      },
+    });
+
+    expect(shouldPreferAutosave(project, autosave)).toBe(true);
+    expect(shouldSkipEmptyProjectSave(project, autosave)).toBe(true);
+    expect(shouldSkipEmptyProjectSave(autosave, project)).toBe(false);
+  });
 });

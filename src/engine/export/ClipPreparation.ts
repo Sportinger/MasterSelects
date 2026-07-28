@@ -15,10 +15,14 @@ import { initializeFastMode } from './clipPreparation/fastMode';
 import { prepareImageClipsForExport } from './clipPreparation/mediaElements';
 import { initializePreciseMode } from './clipPreparation/preciseMode';
 import { getFastModeFileSizeStats, loadClipFileData } from './clipPreparation/sourceResolution';
+import { countFastSequentialVideoDecoders } from './clipPreparation/sourceSharing';
 
 const log = Logger.create('ClipPreparation');
 const FAST_EXPORT_SINGLE_FILE_LIMIT_BYTES = 1536 * 1024 * 1024; // 1.5 GB
 const FAST_EXPORT_TOTAL_FILE_LIMIT_BYTES = 2048 * 1024 * 1024; // 2 GB
+// Keep concurrently required FAST decoders within the export policy's native
+// decoder budget. Non-overlapping clips from one source share a decoder.
+const FAST_EXPORT_MAX_SEQUENTIAL_VIDEO_CLIPS = 8;
 
 interface FastExportFileSizeStats {
   totalBytes: number;
@@ -47,6 +51,13 @@ export function shouldUsePreciseForFastExportFileSizes(stats: FastExportFileSize
     stats.totalBytes >= FAST_EXPORT_TOTAL_FILE_LIMIT_BYTES;
 }
 
+export function shouldUsePreciseForFastExportClipTopology(
+  videoClips: readonly TimelineClip[]
+): boolean {
+  return countFastSequentialVideoDecoders(videoClips) >
+    FAST_EXPORT_MAX_SEQUENTIAL_VIDEO_CLIPS;
+}
+
 function formatLargeFastExportFallbackMessage(
   stats: FastExportFileSizeStats,
   videoClipCount: number
@@ -61,12 +72,22 @@ function formatLargeFastExportFallbackMessage(
   );
 }
 
-function shouldAutoFallbackToPrecise(error: unknown): boolean {
-  const message = error instanceof Error
-    ? `${error.name}: ${error.message}`
+export function shouldAutoFallbackToPrecise(error: unknown): boolean {
+  const errorRecord = typeof error === 'object' && error !== null
+    ? error as { name?: unknown; message?: unknown }
+    : null;
+  const errorName = typeof errorRecord?.name === 'string' ? errorRecord.name : '';
+  const errorMessage = typeof errorRecord?.message === 'string'
+    ? errorRecord.message
     : String(error);
+  const message = errorName ? `${errorName}: ${errorMessage}` : errorMessage;
 
   return (
+    errorName === 'InvalidStateError' ||
+    errorName === 'EncodingError' ||
+    message.includes('FAST export decoder') ||
+    message.includes('VideoDecoder') ||
+    message.includes('closed codec') ||
     message.includes('FAST export failed') ||
     message.includes('NotReadableError') ||
     message.includes('The requested file could not be read') ||
@@ -149,6 +170,18 @@ export async function prepareClipsForExport(
   log.info(`Preparing ${videoClips.length} video clips for ${exportMode.toUpperCase()} export...`);
 
   if (exportMode === 'precise') {
+    const result = await initializePreciseMode(videoClips, clipStates, mediaFiles, startTime, exportRunId);
+    endPrepare();
+    return withMedia(result);
+  }
+
+  if (shouldUsePreciseForFastExportClipTopology(videoClips)) {
+    const sequentialDecoderCount = countFastSequentialVideoDecoders(videoClips);
+    log.warn(
+      `FAST export is using PRECISE mode for ${videoClips.length} visible video clips ` +
+      `(required sequential decoders=${sequentialDecoderCount}, ` +
+      `limit=${FAST_EXPORT_MAX_SEQUENTIAL_VIDEO_CLIPS}).`
+    );
     const result = await initializePreciseMode(videoClips, clipStates, mediaFiles, startTime, exportRunId);
     endPrepare();
     return withMedia(result);

@@ -100,6 +100,16 @@ export function collectPanelTypes(node: DockNode, types: PanelType[]): void {
   }
 }
 
+export function nodeContainsPanelType(node: DockNode, panelType: PanelType): boolean {
+  if (node.kind === 'tab-group') {
+    return node.panels.some((panel) => panel.type === panelType);
+  }
+  return (
+    nodeContainsPanelType(node.children[0], panelType)
+    || nodeContainsPanelType(node.children[1], panelType)
+  );
+}
+
 // Helper: Find a tab group by ID
 export function findTabGroupById(node: DockNode, groupId: string): DockTabGroup | null {
   if (node.kind === 'tab-group') {

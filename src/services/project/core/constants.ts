@@ -17,6 +17,7 @@ export const PROJECT_FOLDERS = {
   BACKUPS: 'Backups',
   DOWNLOADS: 'Downloads',
   PROMPTS: 'Prompts',
+  AI_CHAT: 'AI/Chat',
 } as const;
 
 export type ProjectFolderKey = keyof typeof PROJECT_FOLDERS;
@@ -41,4 +42,5 @@ export const PROJECT_FOLDER_PATHS = [
   PROJECT_FOLDERS.BACKUPS,
   PROJECT_FOLDERS.DOWNLOADS,
   PROJECT_FOLDERS.PROMPTS,
+  PROJECT_FOLDERS.AI_CHAT,
 ] as const;

@@ -33,9 +33,10 @@ On first launch or when no project is open, the Welcome Overlay appears:
 
 | Browser | Behavior |
 |---------|----------|
-| Chrome / Edge / Chromium | Full FSA support -- folder picker opens natively |
-| Firefox | Uses **Native Helper** backend for persistence when the helper is connected |
-| Safari / other | **"Unsupported Browser"** warning with Chrome download link |
+| Google Chrome | Recommended experience; full FSA support when the platform exposes it |
+| Firefox | Shows the friendly Chrome recommendation and uses the **Native Helper** for file-system access |
+| Safari | Shows the friendly Chrome recommendation; runtime support is available only on some systems |
+| Edge / Chromium / Opera / Brave / other | Shows the friendly Chrome recommendation regardless of operating system; capabilities are still detected at runtime |
 
 For Firefox users:
 - The overlay checks if the Native Helper is running and connected

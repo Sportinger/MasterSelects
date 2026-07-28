@@ -1,6 +1,14 @@
 import type { DockLayoutAnimationRect } from './layoutAnimationTypes';
-import { DOCK_LAYOUT_ANIMATION_EASING, DOCK_LAYOUT_CHILD_ANIMATION_SELECTOR } from './layoutAnimationTypes';
-import { getPuzzleOvershoot, toPx } from './layoutAnimationMath';
+import {
+  DOCK_LAYOUT_ANIMATION_EASING,
+  DOCK_LAYOUT_CHILD_ANIMATION_SELECTOR,
+  DOCK_LAYOUT_SEQUENCE_EASING,
+} from './layoutAnimationTypes';
+import {
+  getPuzzleOvershoot,
+  getSequenceExitPreludeRect,
+  toPx,
+} from './layoutAnimationMath';
 
 export function cloneElementForLayoutTransition(element: HTMLElement, className: string): HTMLElement {
   const clone = element.cloneNode(true) as HTMLElement;
@@ -59,7 +67,57 @@ function createRectAnimation(
   durationMs: number,
   overshootDeltaX: number,
   overshootDeltaY: number,
+  anticipateExit: boolean,
 ): Animation {
+  if (anticipateExit && delayMs > 0) {
+    const preludeRect = getSequenceExitPreludeRect(startRect, endRect, delayMs);
+    const totalDurationMs = delayMs + durationMs;
+    const preludeOffset = delayMs / totalDurationMs;
+
+    element.style.right = 'auto';
+    element.style.bottom = 'auto';
+    element.style.left = toPx(startRect.left);
+    element.style.top = toPx(startRect.top);
+    element.style.width = toPx(startRect.width);
+    element.style.height = toPx(startRect.height);
+
+    return element.animate(
+      [
+        {
+          left: toPx(startRect.left),
+          top: toPx(startRect.top),
+          width: toPx(startRect.width),
+          height: toPx(startRect.height),
+          opacity: 1,
+          easing: 'cubic-bezier(0.33, 0, 0.67, 1)',
+          offset: 0,
+        },
+        {
+          left: toPx(preludeRect.left),
+          top: toPx(preludeRect.top),
+          width: toPx(preludeRect.width),
+          height: toPx(preludeRect.height),
+          opacity: 1,
+          easing: DOCK_LAYOUT_SEQUENCE_EASING,
+          offset: preludeOffset,
+        },
+        {
+          left: toPx(endRect.left),
+          top: toPx(endRect.top),
+          width: toPx(endRect.width),
+          height: toPx(endRect.height),
+          opacity: 0,
+          offset: 1,
+        },
+      ],
+      {
+        duration: totalDurationMs,
+        easing: 'linear',
+        fill: 'both',
+      },
+    );
+  }
+
   const overshootLeft = endRect.left + getPuzzleOvershoot(overshootDeltaX);
   const overshootTop = endRect.top + getPuzzleOvershoot(overshootDeltaY);
   const overshootWidth = endRect.width * 1.006;
@@ -117,6 +175,7 @@ export function pushElementLayoutAnimation({
   animations,
   onCleanup,
   zIndex,
+  anticipateExit = false,
 }: {
   overlay: HTMLElement;
   element: HTMLElement;
@@ -129,6 +188,7 @@ export function pushElementLayoutAnimation({
   animations: Animation[];
   onCleanup?: () => void;
   zIndex?: string;
+  anticipateExit?: boolean;
 }): Animation {
   if (zIndex) {
     element.style.zIndex = zIndex;
@@ -142,6 +202,7 @@ export function pushElementLayoutAnimation({
     durationMs,
     overshootDeltaX,
     overshootDeltaY,
+    anticipateExit,
   );
 
   const cleanup = () => {
@@ -165,6 +226,7 @@ export function pushLiveElementLayoutAnimation({
   durationMs,
   animations,
   zIndex,
+  overshoot = true,
 }: {
   element: HTMLElement;
   deltaX: number;
@@ -175,6 +237,7 @@ export function pushLiveElementLayoutAnimation({
   durationMs: number;
   animations: Animation[];
   zIndex?: string;
+  overshoot?: boolean;
 }): Animation {
   const originalPosition = element.style.position;
   const originalZIndex = element.style.zIndex;
@@ -194,24 +257,37 @@ export function pushLiveElementLayoutAnimation({
     : 'transform';
 
   const animation = element.animate(
-    [
-      {
-        transform: `translate3d(${deltaX}px, ${deltaY}px, 0) scale(${scaleX}, ${scaleY})`,
-        offset: 0,
-      },
-      {
-        transform: `translate3d(${getPuzzleOvershoot(deltaX)}px, ${getPuzzleOvershoot(deltaY)}px, 0) scale(1.006, 1.006)`,
-        offset: 0.82,
-      },
-      {
-        transform: 'translate3d(0, 0, 0) scale(1, 1)',
-        offset: 1,
-      },
-    ],
+    overshoot
+      ? [
+        {
+          transform: `translate3d(${deltaX}px, ${deltaY}px, 0) scale(${scaleX}, ${scaleY})`,
+          offset: 0,
+        },
+        {
+          transform: `translate3d(${getPuzzleOvershoot(deltaX)}px, ${getPuzzleOvershoot(deltaY)}px, 0) scale(1.006, 1.006)`,
+          offset: 0.82,
+        },
+        {
+          transform: 'translate3d(0, 0, 0) scale(1, 1)',
+          offset: 1,
+        },
+      ]
+      : [
+        {
+          transform: `translate3d(${deltaX}px, ${deltaY}px, 0) scale(${scaleX}, ${scaleY})`,
+          opacity: 0,
+          offset: 0,
+        },
+        {
+          transform: 'translate3d(0, 0, 0) scale(1, 1)',
+          opacity: 1,
+          offset: 1,
+        },
+      ],
     {
       delay: delayMs,
       duration: durationMs,
-      easing: DOCK_LAYOUT_ANIMATION_EASING,
+      easing: overshoot ? DOCK_LAYOUT_ANIMATION_EASING : DOCK_LAYOUT_SEQUENCE_EASING,
       fill: 'backwards',
     },
   );

@@ -1,4 +1,4 @@
-import type { TimelineClip, TimelineTrack } from '../../../types';
+import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
 
 type LinkedAudioPlacementClip = Pick<TimelineClip, 'trackId' | 'startTime' | 'duration'>;
 type LinkedAudioPlacementTrack = Pick<TimelineTrack, 'id' | 'type' | 'locked'>;

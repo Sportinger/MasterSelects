@@ -48,6 +48,8 @@ export function isRenderResourceDescriptor(value: unknown): value is RenderResou
       return typeof value.splatId === 'string';
     case 'motion-data':
       return typeof value.payloadId === 'string' && typeof value.payloadKind === 'string';
+    case 'audio-buffer':
+      return typeof value.audioBufferId === 'string';
     case 'audio-source-clock':
       return typeof value.audioSourceId === 'string';
     case 'runtime-binding':

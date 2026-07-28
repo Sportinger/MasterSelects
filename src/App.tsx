@@ -8,6 +8,7 @@ declare const __SHOW_CHANGELOG__: boolean;
 const SHOW_CHANGELOG = typeof __SHOW_CHANGELOG__ !== 'undefined' ? __SHOW_CHANGELOG__ : true;
 
 import { useState, useCallback, useEffect, lazy, Suspense } from 'react';
+import { flushSync } from 'react-dom';
 import { Toolbar } from './components/common/Toolbar';
 import { DockContainer } from './components/dock';
 import { AccountDialog } from './components/common/AccountDialog';
@@ -44,6 +45,15 @@ import { usePointerFocusHandoff } from './hooks/usePointerFocusHandoff';
 import { useAccountStore } from './stores/accountStore';
 import { useSettingsStore } from './stores/settingsStore';
 import { useUiSettingsStore } from './stores/uiSettingsStore';
+import {
+  FACTORY_START_LAYOUT_ID,
+  START_CHROME_EXIT_DELAY_MS,
+  START_CHROME_TRANSITION_DURATION_MS,
+  START_CHROME_TRANSITION_EVENT,
+  START_LAYOUT_REVEAL_DURATION_MS,
+  useDockStore,
+} from './stores/dockStore';
+import { nodeContainsPanelType } from './stores/dockStore/layoutTree';
 import { projectDB } from './services/projectDB';
 import { projectFileService } from './services/projectFileService';
 import { audioRoutingManager } from './services/audioRoutingManager';
@@ -75,6 +85,67 @@ function App() {
   const isMobile = useIsMobile();
   const forceMobile = useForceMobile();
   const forceDesktopMode = useSettingsStore((s) => s.forceDesktopMode);
+  const isStartLayout = useDockStore((s) => (
+    s.activeSavedLayoutId === FACTORY_START_LAYOUT_ID
+    || nodeContainsPanelType(s.layout.root, 'start')
+  ));
+  const [toolbarTransition, setToolbarTransition] = useState<'entering' | 'exiting' | null>(null);
+  const [showStartTransitionBackground, setShowStartTransitionBackground] = useState(false);
+  const toolbarChromeState = toolbarTransition ?? (isStartLayout ? 'hidden' : 'visible');
+
+  useEffect(() => {
+    let timeoutId: number | null = null;
+    let backgroundTimeoutId: number | null = null;
+
+    const handleStartChromeTransition = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      if (event.detail?.durationMs <= 0) return;
+      if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+
+      const nextTransition = event.detail?.direction === 'to-start'
+        ? 'exiting'
+        : event.detail?.direction === 'from-start'
+          ? 'entering'
+          : null;
+      if (!nextTransition) return;
+
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+      if (backgroundTimeoutId !== null) {
+        window.clearTimeout(backgroundTimeoutId);
+        backgroundTimeoutId = null;
+      }
+      flushSync(() => {
+        setToolbarTransition(nextTransition);
+        setShowStartTransitionBackground(nextTransition === 'entering');
+      });
+      if (nextTransition === 'entering') {
+        backgroundTimeoutId = window.setTimeout(() => {
+          setShowStartTransitionBackground(false);
+          backgroundTimeoutId = null;
+        }, event.detail.durationMs);
+      }
+      timeoutId = window.setTimeout(() => {
+        setToolbarTransition(null);
+        timeoutId = null;
+      }, (
+        START_CHROME_TRANSITION_DURATION_MS
+        + (nextTransition === 'exiting' ? START_CHROME_EXIT_DELAY_MS : 0)
+      ));
+    };
+
+    window.addEventListener(START_CHROME_TRANSITION_EVENT, handleStartChromeTransition);
+    return () => {
+      window.removeEventListener(START_CHROME_TRANSITION_EVENT, handleStartChromeTransition);
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+      if (backgroundTimeoutId !== null) {
+        window.clearTimeout(backgroundTimeoutId);
+      }
+    };
+  }, []);
 
   // Apply theme to document root
   useTheme();
@@ -126,6 +197,22 @@ function App() {
   const [isChecking, setIsChecking] = useState(true);
   const [hasStoredProject, setHasStoredProject] = useState(false);
   const [manuallyDismissed, setManuallyDismissed] = useState(false);
+  const [startupOverlaysReady, setStartupOverlaysReady] = useState(() => !isStartLayout);
+
+  useEffect(() => {
+    if (isStartLayout) {
+      const frameId = window.requestAnimationFrame(() => {
+        setStartupOverlaysReady(false);
+      });
+      return () => window.cancelAnimationFrame(frameId);
+    }
+
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    const timeoutId = window.setTimeout(() => {
+      setStartupOverlaysReady(true);
+    }, reduceMotion ? 0 : START_LAYOUT_REVEAL_DURATION_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [isStartLayout]);
 
   // Splash screen state - shown on startup with video + notices
   const [showSplash, setShowSplash] = useState(false);
@@ -321,12 +408,17 @@ function App() {
 
   // Show welcome if no stored project and not manually dismissed this session
   // Don't show while checking to avoid flash
-  const showWelcome = !isChecking && !hasStoredProject && !manuallyDismissed;
+  const showWelcome = startupOverlaysReady
+    && !isStartLayout
+    && !isChecking
+    && !hasStoredProject
+    && !manuallyDismissed;
   const shouldShowChangelogOnStartup = SHOW_CHANGELOG
     && shouldAutoShowChangelog(showChangelogOnStartup, lastSeenChangelogVersion, APP_VERSION);
   // Show Splash screen after initial check (when no welcome overlay)
   // This effect intentionally sets state based on derived conditions
   useEffect(() => {
+    if (!startupOverlaysReady || isStartLayout) return;
     if (!shouldShowChangelogOnStartup) return;
     if (isChecking) return;
 
@@ -336,7 +428,7 @@ function App() {
     // Show splash screen - this is intentional state sync, not a cascading render
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setShowSplash(true);
-  }, [isChecking, showWelcome, shouldShowChangelogOnStartup]);
+  }, [isChecking, isStartLayout, showWelcome, shouldShowChangelogOnStartup, startupOverlaysReady]);
 
   const handleWelcomeComplete = useCallback(() => {
     setManuallyDismissed(true);
@@ -471,74 +563,87 @@ function App() {
   }
 
   // Show mobile UI unless user explicitly requested desktop mode
-  const showMobileUI = (isMobile || forceMobile) && !forceDesktopMode;
+  const showMobileUI = !isStartLayout && (isMobile || forceMobile) && !forceDesktopMode;
   if (showMobileUI) {
     return <MobileApp />;
   }
 
   return (
-    <div className="app">
-      <LinuxVulkanWarning />
+    <div
+      className={[
+        'app',
+        isStartLayout ? 'app--start-layout' : 'app--editor-layout',
+        `app--toolbar-${toolbarChromeState}`,
+      ].filter(Boolean).join(' ')}
+    >
+      {!isStartLayout && <LinuxVulkanWarning />}
+      {showStartTransitionBackground && (
+        <div className="app-start-transition-background" aria-hidden="true" />
+      )}
       <Toolbar onOpenChangelog={() => setShowChangelog(true)} onOpenSplash={() => setShowSplash(true)} />
       <DockContainer />
-      <GuidedActionOverlay />
-      <ShortcutDisplayOverlay />
-      <ProjectLoadProgressOverlay />
-      <MuscriptorDialogHost />
-      <HistoryActionToast notice={historyNotice} onDone={clearHistoryNotice} />
-      {showWelcome && (
-        <WelcomeOverlay onComplete={handleWelcomeComplete} noFadeOnClose />
-      )}
-      {showSplash && (
-        <SplashScreen onClose={handleSplashClose} onOpenChangelog={handleSplashOpenChangelog} />
-      )}
-      {showChangelog && (
-        <WhatsNewDialog onClose={handleChangelogClose} />
-      )}
-      {showIndexedDBError && (
-        <IndexedDBErrorDialog onClose={handleIndexedDBErrorClose} />
-      )}
-      {showTutorial && (
-        <TutorialOverlay key={tutorialPart} onClose={handleTutorialClose} onSkip={handleTutorialSkip} part={tutorialPart} />
-      )}
-      {showCampaignDialog && (
-        <TutorialCampaignDialog
-          onClose={() => setShowCampaignDialog(false)}
-          onStartCampaign={handleStartCampaign}
-        />
-      )}
-      {activeCampaign && activeCampaign.interactive ? (
-        <InteractiveTutorialOverlay
-          key={`interactive-${activeCampaign.id}`}
-          campaign={INTERACTIVE_CAMPAIGNS.find(c => c.id === activeCampaign.id)!}
-          onClose={handleCampaignClose}
-          onSkip={handleCampaignSkip}
-        />
-      ) : activeCampaign ? (
-        <TutorialOverlay
-          key={`campaign-${activeCampaign.id}`}
-          onClose={handleCampaignClose}
-          onSkip={handleCampaignSkip}
-          campaignSteps={activeCampaign.steps}
-          campaignTitle={activeCampaign.title}
-        />
-      ) : null}
-      {accountDialog === 'auth' && <AuthDialog onClose={closeAccountDialog} />}
-      {accountDialog === 'pricing' && <PricingDialog onClose={closeAccountDialog} />}
-      {accountDialog === 'account' && (
-        <AccountDialog
-          initialRedeemCode={redeemCode}
-          onClose={closeAccountDialog}
-          onRedeemed={clearRedeemCode}
-        />
-      )}
-      {billingSuccessCelebration && (
-        <BillingSuccessCelebration
-          creditBalance={accountCreditBalance}
-          onClose={closeBillingSuccessCelebration}
-          planId={billingSuccessCelebration.planId}
-          key={billingSuccessCelebration.token}
-        />
+      {!isStartLayout && (
+        <>
+          <GuidedActionOverlay />
+          <ShortcutDisplayOverlay />
+          <ProjectLoadProgressOverlay />
+          <MuscriptorDialogHost />
+          <HistoryActionToast notice={historyNotice} onDone={clearHistoryNotice} />
+          {showWelcome && (
+            <WelcomeOverlay onComplete={handleWelcomeComplete} noFadeOnClose />
+          )}
+          {showSplash && startupOverlaysReady && (
+            <SplashScreen onClose={handleSplashClose} onOpenChangelog={handleSplashOpenChangelog} />
+          )}
+          {showChangelog && (
+            <WhatsNewDialog onClose={handleChangelogClose} />
+          )}
+          {showIndexedDBError && (
+            <IndexedDBErrorDialog onClose={handleIndexedDBErrorClose} />
+          )}
+          {showTutorial && (
+            <TutorialOverlay key={tutorialPart} onClose={handleTutorialClose} onSkip={handleTutorialSkip} part={tutorialPart} />
+          )}
+          {showCampaignDialog && (
+            <TutorialCampaignDialog
+              onClose={() => setShowCampaignDialog(false)}
+              onStartCampaign={handleStartCampaign}
+            />
+          )}
+          {activeCampaign && activeCampaign.interactive ? (
+            <InteractiveTutorialOverlay
+              key={`interactive-${activeCampaign.id}`}
+              campaign={INTERACTIVE_CAMPAIGNS.find(c => c.id === activeCampaign.id)!}
+              onClose={handleCampaignClose}
+              onSkip={handleCampaignSkip}
+            />
+          ) : activeCampaign ? (
+            <TutorialOverlay
+              key={`campaign-${activeCampaign.id}`}
+              onClose={handleCampaignClose}
+              onSkip={handleCampaignSkip}
+              campaignSteps={activeCampaign.steps}
+              campaignTitle={activeCampaign.title}
+            />
+          ) : null}
+          {accountDialog === 'auth' && <AuthDialog onClose={closeAccountDialog} />}
+          {accountDialog === 'pricing' && <PricingDialog onClose={closeAccountDialog} />}
+          {accountDialog === 'account' && (
+            <AccountDialog
+              initialRedeemCode={redeemCode}
+              onClose={closeAccountDialog}
+              onRedeemed={clearRedeemCode}
+            />
+          )}
+          {billingSuccessCelebration && (
+            <BillingSuccessCelebration
+              creditBalance={accountCreditBalance}
+              onClose={closeBillingSuccessCelebration}
+              planId={billingSuccessCelebration.planId}
+              key={billingSuccessCelebration.token}
+            />
+          )}
+        </>
       )}
     </div>
   );

@@ -474,6 +474,57 @@ export class AudioExportPipeline {
     onProgress?: AudioExportProgressCallback
   ): Promise<Map<string, AudioBuffer>> {
     const buffers = new Map<string, AudioBuffer>();
+    const sourceBuffersByMediaId = new Map<string, AudioBuffer>();
+    const sourceBuffersByFile = new WeakMap<File, AudioBuffer>();
+    const sourceBuffersByElement = new WeakMap<HTMLMediaElement, AudioBuffer>();
+    const retainedSourceBuffers = new WeakSet<AudioBuffer>();
+
+    const getSharedSourceBuffer = (
+      clip: TimelineClip,
+      mediaFileId: string | undefined,
+    ): AudioBuffer | undefined => {
+      if (clip.isComposition || clip.source?.type === 'midi') return undefined;
+      if (mediaFileId) {
+        const buffer = sourceBuffersByMediaId.get(mediaFileId);
+        if (buffer) return buffer;
+      }
+      if (clip.file) {
+        const buffer = sourceBuffersByFile.get(clip.file);
+        if (buffer) return buffer;
+      }
+      const mediaElement = clip.source?.audioElement ?? clip.source?.videoElement;
+      return mediaElement
+        ? sourceBuffersByElement.get(mediaElement)
+        : undefined;
+    };
+
+    const rememberSharedSourceBuffer = (
+      clip: TimelineClip,
+      mediaFileId: string | undefined,
+      buffer: AudioBuffer,
+    ): void => {
+      if (clip.isComposition || clip.source?.type === 'midi') return;
+      if (mediaFileId) {
+        sourceBuffersByMediaId.set(mediaFileId, buffer);
+      }
+      if (clip.file) {
+        sourceBuffersByFile.set(clip.file, buffer);
+      }
+      const mediaElement = clip.source?.audioElement ?? clip.source?.videoElement;
+      if (mediaElement) {
+        sourceBuffersByElement.set(mediaElement, buffer);
+      }
+    };
+
+    const retainSourceBuffer = (
+      clip: TimelineClip,
+      buffer: AudioBuffer,
+    ): void => {
+      if (retainedSourceBuffers.has(buffer)) return;
+      this.assertAudioBufferAdmission('source-buffer', buffer, clip);
+      this.reportAudioBuffer('source-buffer', buffer, clip);
+      retainedSourceBuffers.add(buffer);
+    };
 
     // Preload all GM wavetable samples once, before the clip loop. renderMidiClipToBuffer
     // schedules notes synchronously then renders immediately, so samples must already be
@@ -534,9 +585,8 @@ export class AudioExportPipeline {
             midiPlans.get(clip.id),
           );
           const buffer = midiBuffer ?? this.extractor.createSilentBuffer(Math.max(clip.duration, 0.001));
-          this.assertAudioBufferAdmission('source-buffer', buffer, clip);
           buffers.set(clip.id, buffer);
-          this.reportAudioBuffer('source-buffer', buffer, clip);
+          retainSourceBuffer(clip, buffer);
           continue;
         }
 
@@ -544,20 +594,26 @@ export class AudioExportPipeline {
         // PCM-WAV audio proxy on disk, instead of re-decoding the full source.
         // This is the same audio used for playback, so it stays consistent.
         const mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
-        let reusable: AudioBuffer | null = null;
-        if (!clip.isComposition && mediaFileId) {
+        const sharedSourceBuffer = getSharedSourceBuffer(clip, mediaFileId);
+        let reusable: AudioBuffer | null = sharedSourceBuffer ?? null;
+        if (!reusable && !clip.isComposition && mediaFileId) {
           reusable = proxyFrameCache.getCachedAudioBuffer(mediaFileId)
             ?? await proxyFrameCache.getAudioBuffer(mediaFileId);
         }
 
-        if (clip.isComposition) {
+        if (sharedSourceBuffer) {
+          buffer = sharedSourceBuffer;
+          log.debug(`Reusing export source audio for ${clip.name} (${mediaFileId ?? 'shared source'})`);
+        } else if (clip.isComposition) {
           const mixdown = await requestCompositionAudioMixdown(clip);
           if (!mixdown?.hasAudio) {
             log.debug(`Skipping nested comp without audio ${clip.name}`);
             continue;
           }
           buffer = mixdown.buffer;
-          this.assertAudioBufferAdmission('source-buffer', buffer, clip);
+          // Admission must succeed before committing lazily generated mixdown
+          // state to the timeline.
+          retainSourceBuffer(clip, buffer);
           applyCompositionAudioMixdownToTimelineClip(clip.id, mixdown);
           log.debug(`Using lazy mixdown buffer for nested comp ${clip.name}`);
         } else if (reusable) {
@@ -577,9 +633,9 @@ export class AudioExportPipeline {
           continue;
         }
 
-        this.assertAudioBufferAdmission('source-buffer', buffer, clip);
+        rememberSharedSourceBuffer(clip, mediaFileId, buffer);
         buffers.set(clip.id, buffer);
-        this.reportAudioBuffer('source-buffer', buffer, clip);
+        retainSourceBuffer(clip, buffer);
       } catch (error) {
         if (error instanceof Error && error.name === 'ExportAudioAdmissionError') {
           throw error;
@@ -588,9 +644,10 @@ export class AudioExportPipeline {
         // Create silent buffer as fallback
         const fallbackDuration = Math.max(clip.outPoint ?? clip.duration, clip.duration, 0.001);
         const fallbackBuffer = this.extractor.createSilentBuffer(fallbackDuration);
-        this.assertAudioBufferAdmission('source-buffer', fallbackBuffer, clip);
+        const mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
+        rememberSharedSourceBuffer(clip, mediaFileId, fallbackBuffer);
         buffers.set(clip.id, fallbackBuffer);
-        this.reportAudioBuffer('source-buffer', fallbackBuffer, clip);
+        retainSourceBuffer(clip, fallbackBuffer);
       }
     }
 

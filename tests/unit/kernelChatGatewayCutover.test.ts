@@ -273,7 +273,26 @@ describe('kernel chat gateway WP11 cutover', () => {
         handle: '$m1',
         source: { mediaId: 'media-1' },
         sourceRange: { startSeconds: 2.5, endSeconds: 3.25 },
-        evidence: { transcript: 'Ein guter Moment.' },
+        evidence: {
+          transcript: 'Ein guter Moment.',
+          words: [
+            {
+              text: 'Ein',
+              startSeconds: 2.5,
+              endSeconds: 2.5 + (0.75 * 3) / 14,
+            },
+            {
+              text: 'guter',
+              startSeconds: 2.5 + (0.75 * 3) / 14,
+              endSeconds: 2.5 + (0.75 * 8) / 14,
+            },
+            {
+              text: 'Moment.',
+              startSeconds: 2.5 + (0.75 * 8) / 14,
+              endSeconds: 3.25,
+            },
+          ],
+        },
         confidence: 1,
         indexVersion: 'app-transcript-v2',
         analysisSources: ['transcript'],

@@ -202,6 +202,7 @@ export type RenderResourceKind =
   | 'model'
   | 'gaussian-splat'
   | 'motion-data'
+  | 'audio-buffer'
   | 'audio-source-clock'
   | 'runtime-binding'
   | 'job';
@@ -306,6 +307,11 @@ export interface AudioSourceClockResourceDescriptor extends RenderResourceDescri
   hasAudioWorklet?: boolean;
 }
 
+export interface AudioBufferResourceDescriptor extends RenderResourceDescriptorBase {
+  kind: 'audio-buffer';
+  audioBufferId: string;
+}
+
 export interface RuntimeBindingResourceDescriptor extends RenderResourceDescriptorBase {
   kind: 'runtime-binding';
   runtime: Required<Pick<RenderRuntimeBindingDescriptor, 'runtimeSourceId' | 'runtimeSessionKey'>>;
@@ -337,6 +343,7 @@ export type RenderResourceDescriptor =
   | ModelResourceDescriptor
   | GaussianSplatResourceDescriptor
   | MotionDataResourceDescriptor
+  | AudioBufferResourceDescriptor
   | AudioSourceClockResourceDescriptor
   | RuntimeBindingResourceDescriptor
   | RuntimeJobResourceDescriptor;

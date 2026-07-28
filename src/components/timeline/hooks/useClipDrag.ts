@@ -13,7 +13,7 @@ import {
   clampSlipSourceDelta,
   collectDragExcludeClipIds,
   createClipDragTypedMoveCommitOperation,
-  getClipDragOverlapClipIds,
+  resolveClipDragGroupPlacement,
 } from '../utils/clipDragOperations';
 import { createClipDragMouseMoveScheduler } from '../utils/clipDragMouseMoveScheduler';
 import { setClipDragPreviewFromDrag } from '../utils/clipDragPreview';
@@ -66,6 +66,7 @@ export function useClipDrag({
   // Keep refs to current values for use in event handlers (avoid stale closures)
   const selectedClipIdsRef = useRef<Set<string>>(selectedClipIds);
   const clipMapRef = useRef<Map<string, TimelineClip>>(clipMap);
+  const tracksRef = useRef(tracks);
 
   useEffect(() => {
     selectedClipIdsRef.current = selectedClipIds;
@@ -75,9 +76,13 @@ export function useClipDrag({
     clipMapRef.current = clipMap;
   }, [clipMap]);
 
+  useEffect(() => {
+    tracksRef.current = tracks;
+  }, [tracks]);
+
   useEffect(() => () => {
     clearPendingClipDragStateTimer();
-    setClipDragPreviewFromDrag(null, clipMapRef.current);
+    setClipDragPreviewFromDrag(null, clipMapRef.current, tracksRef.current);
   }, [clearPendingClipDragStateTimer]);
 
   // Premiere-style clip drag
@@ -163,7 +168,7 @@ export function useClipDrag({
       let dragStarted = !shiftSelectionClickCandidate;
       if (dragStarted) {
         setClipDragStateForInteraction(initialDrag);
-        setClipDragPreviewFromDrag(initialDrag, currentClipMap);
+        setClipDragPreviewFromDrag(initialDrag, currentClipMap, tracksRef.current);
       }
 
       const processMouseMove = (moveEvent: MouseEvent) => {
@@ -212,7 +217,7 @@ export function useClipDrag({
             sourceTimeDelta: drag.toolGesture === 'slip' ? clampedDelta : undefined,
           };
           setClipDragStateForInteraction(newDrag);
-          setClipDragPreviewFromDrag(newDrag, clipMapRef.current);
+          setClipDragPreviewFromDrag(newDrag, clipMapRef.current, tracksRef.current);
           return;
         }
 
@@ -386,35 +391,10 @@ export function useClipDrag({
         const clipDuration = draggedClip?.duration || 0;
         const baseTime = snapped ? snappedTime : rawTime;
 
-        // Get all selected clip IDs AND their linked clips (for excluding from collision detection)
-        // This ensures video+audio pairs move as a unit
         const allSelectedIds = drag.multiSelectClipIds
           ? [drag.clipId, ...drag.multiSelectClipIds]
           : [drag.clipId];
-
-        // Also collect all linked clips of selected clips
-        const allExcludedIds = [...allSelectedIds];
-        for (const selId of allSelectedIds) {
-          const selClip = clipMap.get(selId);
-          if (selClip?.linkedClipId && !allExcludedIds.includes(selClip.linkedClipId)) {
-            allExcludedIds.push(selClip.linkedClipId);
-          }
-        }
-        const rawTimeDelta = baseTime - (draggedClip?.startTime ?? drag.originalStartTime);
-        const overlapClipIds = getClipDragOverlapClipIds(
-          clipMap,
-          {
-            ...drag,
-            currentTrackId: newTrackId,
-            snappedTime: baseTime,
-            altKeyPressed: moveEvent.altKey,
-            multiSelectTimeDelta: drag.multiSelectClipIds?.length ? rawTimeDelta : undefined,
-          },
-          baseTime,
-          newTrackId,
-          rawTimeDelta,
-          allExcludedIds,
-        );
+        const allExcludedIds = collectDragExcludeClipIds(allSelectedIds, clipMap);
 
         // Check primary clip with all related clips excluded
         const resistanceResult = getPositionWithResistance(
@@ -450,63 +430,19 @@ export function useClipDrag({
           }
         }
 
-        let timeDelta = resistedTime - (draggedClip?.startTime ?? drag.originalStartTime);
-
-        // Check ALL linked clips for resistance (not just the primary dragged clip's linked clip)
-        if (!moveEvent.altKey) {
-          for (const selId of allSelectedIds) {
-            const selClip = clipMap.get(selId);
-            if (!selClip?.linkedClipId) continue;
-
-            const linkedClip = clipMap.get(selClip.linkedClipId);
-            if (!linkedClip) continue;
-
-            const linkedNewTime = linkedClip.startTime + timeDelta;
-            const linkedResult = getPositionWithResistance(
-              linkedClip.id,
-              linkedNewTime,
-              linkedClip.trackId,
-              linkedClip.duration,
-              undefined,
-              allExcludedIds
-            );
-            // If linked clip has more resistance, use that position
-            const linkedTimeDelta = linkedResult.startTime - linkedClip.startTime;
-            if (Math.abs(linkedTimeDelta) < Math.abs(timeDelta)) {
-              // Linked clip is more constrained - adjust for the whole group
-              timeDelta = linkedTimeDelta;
-              resistedTime = (draggedClip?.startTime ?? drag.originalStartTime) + timeDelta;
-              forcingOverlap = linkedResult.forcingOverlap || forcingOverlap;
-            }
-          }
-        }
-
-        // For multi-select: check all other selected clips for resistance too
-        // The whole group should stop if ANY clip hits an obstacle
-        if (drag.multiSelectClipIds?.length && !forcingOverlap) {
-          for (const selectedId of drag.multiSelectClipIds) {
-            const selectedClip = clipMap.get(selectedId);
-            if (!selectedClip) continue;
-
-            const selectedNewTime = selectedClip.startTime + timeDelta;
-            const selectedResult = getPositionWithResistance(
-              selectedClip.id,
-              selectedNewTime,
-              selectedClip.trackId,
-              selectedClip.duration,
-              undefined,
-              allExcludedIds
-            );
-
-            // If this clip is more constrained, reduce the timeDelta for the whole group
-            const selectedActualDelta = selectedResult.startTime - selectedClip.startTime;
-            if (Math.abs(selectedActualDelta) < Math.abs(timeDelta)) {
-              timeDelta = selectedActualDelta;
-              resistedTime = (draggedClip?.startTime ?? drag.originalStartTime) + timeDelta;
-              forcingOverlap = selectedResult.forcingOverlap || forcingOverlap;
-            }
-          }
-        }
+        const groupPlacement = resolveClipDragGroupPlacement(
+          clipMap,
+          tracksRef.current,
+          { ...drag, altKeyPressed: moveEvent.altKey },
+          newTrackId,
+          resistedTime - (draggedClip?.startTime ?? drag.originalStartTime),
+          forcingOverlap,
+          allExcludedIds,
+          getPositionWithResistance,
+        );
+        const { overlapClipIds, timeDelta } = groupPlacement;
+        resistedTime = groupPlacement.primaryStartTime;
+        forcingOverlap = groupPlacement.forcingOverlap;
 
         // Calculate time delta for multi-select preview
         const multiSelectTimeDelta = drag.multiSelectClipIds?.length
@@ -528,7 +464,7 @@ export function useClipDrag({
           multiSelectTimeDelta,
         };
         setClipDragStateForInteraction(newDrag);
-        setClipDragPreviewFromDrag(newDrag, clipMapRef.current);
+        setClipDragPreviewFromDrag(newDrag, clipMapRef.current, tracksRef.current);
       };
 
       const mouseMoveScheduler = createClipDragMouseMoveScheduler(processMouseMove);
@@ -545,7 +481,7 @@ export function useClipDrag({
         if (shiftSelectionClickCandidate && !dragStarted) {
           selectClip(clipId, true);
           setClipDragStateForInteraction(null);
-          setClipDragPreviewFromDrag(null, clipMapRef.current);
+          setClipDragPreviewFromDrag(null, clipMapRef.current, tracksRef.current);
           cleanupDragListeners();
           return;
         }
@@ -583,7 +519,7 @@ export function useClipDrag({
               }
             }
             setClipDragStateForInteraction(null);
-            setClipDragPreviewFromDrag(null, clipMapRef.current);
+            setClipDragPreviewFromDrag(null, clipMapRef.current, tracksRef.current);
             cleanupDragListeners();
             return;
           }
@@ -600,7 +536,7 @@ export function useClipDrag({
                 draggedClipForDrop,
                 tracks,
               );
-          const currentTracksForCommit = useTimelineStore.getState().tracks;
+          const currentTracksForCommit = tracksRef.current;
 
           // Commit the already-calculated drag preview position. This keeps
           // snap hysteresis honest: if the clip is still visually held at a
@@ -700,7 +636,7 @@ export function useClipDrag({
           }
         }
         setClipDragStateForInteraction(null);
-        setClipDragPreviewFromDrag(null, clipMapRef.current);
+        setClipDragPreviewFromDrag(null, clipMapRef.current, tracksRef.current);
         cleanupDragListeners();
       };
 

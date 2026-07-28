@@ -119,6 +119,9 @@ All docked panels can be:
 ## Available Panels
 
 MasterSelects currently exposes 18 active dockable panel types, plus the Slot Grid overlay that sits on top of the Timeline. The old `ai-video`, `youtube`, and `download` panel types are treated as deprecated saved-layout migration targets; generation and downloads now live inside the Media Panel.
+`AI Scene Description` and `Multi-Cam` remain registered so existing saved
+layouts can load them, but they are hidden from the View, add-panel, and
+change-panel pickers.
 
 | Panel | Type ID | Surface |
 |-------|---------|---------|

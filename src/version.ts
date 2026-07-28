@@ -27,7 +27,7 @@ export const FEATURED_VIDEO: {
   title: 'MasterSelects Demo',
   banner: {
     type: 'success',
-    title: 'MasterSelects 2.4.3',
+    title: `MasterSelects ${APP_VERSION}`,
     message: 'Simple Synth release: subtractive filters, envelopes, LFO modulation, presets, CC automation, ergonomic knobs and interactive ADSR editing, plus cleaner audio/MIDI clip previews and playback/export-matched voice stealing.',
     animated: true,
   },
@@ -36,7 +36,7 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'MasterSelects 2.4.3',
+  title: `MasterSelects ${APP_VERSION}`,
   message: 'Simple Synth release: subtractive filters, envelopes, LFO modulation, presets, CC automation, ergonomic knobs and interactive ADSR editing, plus cleaner audio/MIDI clip previews and playback/export-matched voice stealing.',
   animated: true,
 };

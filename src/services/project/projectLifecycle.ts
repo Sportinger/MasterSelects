@@ -7,6 +7,7 @@ import { useTimelineStore } from '../../stores/timeline';
 import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import {
+  getFlashBoardChatMessages,
   resetFlashBoardActiveGenerationState,
   subscribeFlashBoardActiveGenerationRecords,
   subscribeFlashBoardChatMessages,
@@ -18,6 +19,7 @@ import { useMIDIStore } from '../../stores/midiStore';
 import { projectFileService } from '../projectFileService';
 import { isProjectStoreSyncInProgress, syncStoresToProject, saveCurrentProject } from './projectSave';
 import { loadProjectToStores } from './projectLoad';
+import { persistFlashBoardChatJournal } from './flashBoardChatProjectJournal';
 
 const log = Logger.create('ProjectSync');
 
@@ -338,6 +340,7 @@ export function setupAutoSync(): void {
   }));
   registerAutoSyncDisposer(subscribeFlashBoardChatMessages(() => {
     markProjectDirtyAndMaybeSave();
+    void persistFlashBoardChatJournal(getFlashBoardChatMessages());
   }));
 
   registerAutoSyncDisposer(useExportStore.subscribe(

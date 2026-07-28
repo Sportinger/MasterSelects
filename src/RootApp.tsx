@@ -1,6 +1,5 @@
 import { lazy, Suspense, type CSSProperties } from 'react';
 import { LegalDialog } from './components/common/LegalDialog';
-import { LandingPage } from './marketing/LandingPage';
 import type { EntryExperience } from './routing/entryExperience';
 
 const EditorApp = lazy(() => import('./App'));
@@ -34,10 +33,6 @@ export function RootApp({ initialExperience }: RootAppProps) {
         onClose={() => window.location.assign('/')}
       />
     );
-  }
-
-  if (initialExperience === 'landing') {
-    return <LandingPage />;
   }
 
   if (initialExperience === 'creditClaim') {

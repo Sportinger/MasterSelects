@@ -135,4 +135,73 @@ describe('ProjectCoreService save queue', () => {
     expect(projectWritable.write).not.toHaveBeenCalled();
     expect(autosaveWritable.write).toHaveBeenCalledTimes(1);
   });
+
+  it('reacquires a fresh file handle after Chromium invalidates cached file state', async () => {
+    const writable = {
+      write: vi.fn(async () => undefined),
+      close: vi.fn(async () => undefined),
+    } as unknown as FileSystemWritableFileStream;
+    const staleHandle = {
+      createWritable: vi.fn(async () => {
+        throw new DOMException(
+          'An operation that depends on state cached in an interface object was made but the state had changed since it was read from disk.',
+          'InvalidStateError',
+        );
+      }),
+    } as unknown as FileSystemFileHandle;
+    const freshHandle = {
+      createWritable: vi.fn(async () => writable),
+    } as unknown as FileSystemFileHandle;
+    let projectFileHandleReads = 0;
+    const getFileHandle = vi.fn(async (name: string) => {
+      if (name === 'project.autosave.json') {
+        throw new DOMException('File not found.', 'NotFoundError');
+      }
+      projectFileHandleReads += 1;
+      return projectFileHandleReads === 1 ? staleHandle : freshHandle;
+    });
+    const service = new ProjectCoreService({} as never) as TestProjectCoreService;
+    service.projectHandle = { getFileHandle } as unknown as FileSystemDirectoryHandle;
+    service.projectData = createProjectData();
+    service.saveKeysFile = vi.fn(async () => undefined);
+
+    service.markDirty();
+    const saved = await service.saveProject();
+
+    expect(saved).toBe(true);
+    expect(getFileHandle).toHaveBeenCalledTimes(3);
+    expect(staleHandle.createWritable).toHaveBeenCalledTimes(1);
+    expect(freshHandle.createWritable).toHaveBeenCalledTimes(1);
+    expect(writable.write).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to project.autosave.json after repeated stale-state failures', async () => {
+    const autosaveWritable = {
+      write: vi.fn(async () => undefined),
+      close: vi.fn(async () => undefined),
+    } as unknown as FileSystemWritableFileStream;
+    const staleProjectHandle = {
+      createWritable: vi.fn(async () => {
+        throw new DOMException('Cached file state changed.', 'InvalidStateError');
+      }),
+    } as unknown as FileSystemFileHandle;
+    const autosaveFileHandle = {
+      createWritable: vi.fn(async () => autosaveWritable),
+    } as unknown as FileSystemFileHandle;
+    const getFileHandle = vi.fn(async (name: string) => (
+      name === 'project.autosave.json' ? autosaveFileHandle : staleProjectHandle
+    ));
+    const service = new ProjectCoreService({} as never) as TestProjectCoreService;
+    service.projectHandle = { getFileHandle } as unknown as FileSystemDirectoryHandle;
+    service.projectData = createProjectData();
+    service.saveKeysFile = vi.fn(async () => undefined);
+
+    service.markDirty();
+    const saved = await service.saveProject();
+
+    expect(saved).toBe(true);
+    expect(staleProjectHandle.createWritable).toHaveBeenCalledTimes(3);
+    expect(autosaveFileHandle.createWritable).toHaveBeenCalledTimes(1);
+    expect(autosaveWritable.write).toHaveBeenCalledTimes(1);
+  });
 });

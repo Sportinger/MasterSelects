@@ -30,6 +30,8 @@ export interface KernelTranscriptMoment {
   sourceRange: { startSeconds: number; endSeconds: number };
   evidence: {
     transcript?: string;
+    /** Per-word source timings, chronological and complete for the moment. */
+    words?: { text: string; startSeconds: number; endSeconds: number }[];
     pauses?: { startSeconds: number; endSeconds: number }[];
     emphasis?: { text: string; startSeconds: number; score: number }[];
     markers?: {

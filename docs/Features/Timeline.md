@@ -172,6 +172,7 @@ getTrackChildren()  // Query child tracks
 | Blend mode | `+` / `-` cycles blend modes on selected clips. |
 
 - Linked clip partners use the same live drag geometry as the directly dragged clip, so linked audio/video and manual linked-group peers stay visually in sync while moving.
+- Dragging a multi-selection across video or audio tracks moves every selected clip in that track family by the same track-index delta, preserving relative layer spacing in the live preview and committed edit. Cross-family partners such as linked audio stay on their corresponding audio tracks.
 
 ### Copy and Paste
 - Copying clips includes linked audio automatically when the video clip is selected.
@@ -338,6 +339,7 @@ The toolbar and wheel gestures still drive playback and navigation:
 - Left/Right arrows step frame by frame.
 - The ruler is a stack of independent **ruler lanes** (Time / Timecode / Frames / Bars+Beats) toggled from the **Rulers** checklist next to the View dropdown; each lane keeps a fixed format and only its tick density adapts to zoom (no frame↔time crossfade). Bars+Beats is projected through a per-composition TempoMap. Clicking a lane marks it active (highlighted) as the future snap target. See [Timeline Rulers](./Timeline-Rulers.md).
 - The timeline **body** lane grid (behind clips, distinct from the ruler) still uses the active composition frame rate at deep zoom: the base time grid crossfades out while frame-accurate grid lines fade in with zoom.
+- Unselected clips keep persistent white edge brackets: each vertical edge has short top and bottom caps that fade inward, so adjacent clips form a visible `][` cut marker without obscuring thumbnails or waveforms. Selected clips retain the complete white outline.
 - `Alt+Scroll` or `Ctrl+Scroll` zooms the timeline around the mouse pointer by default; Preferences -> General -> Timeline can switch the zoom anchor to the playhead. While zooming in near either lane edge, a magnetic 48 px edge zone preserves the corresponding visible time boundary so the nearby beginning or end is not pushed offscreen. Timeline zoom remains contained behind the dedicated navigator instead of exposing a second native panel scrollbar. Faster wheel gestures use larger zoom steps.
 - `Shift+Scroll` pans horizontally.
 - Vertical scroll snaps to track boundaries.

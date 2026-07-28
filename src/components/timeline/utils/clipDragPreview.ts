@@ -1,17 +1,23 @@
-import type { TimelineClip } from '../../../types';
+import type { TimelineClip, TimelineTrack } from '../../../types';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { TimelineClipDragPreview } from '../../../stores/timeline/types';
+import { resolveSelectedClipTrackTargets } from '../../../stores/timeline/editOperations/selectedClipTrackTargets';
 import type { ClipDragState } from '../types';
 
 const CLIP_DRAG_PREVIEW_PUBLISH_INTERVAL_MS = 66;
 
 let lastClipDragPreviewPublishAt = 0;
-let pendingClipDragPreviewInput: { drag: ClipDragState; clipMap: Map<string, TimelineClip> } | null = null;
+let pendingClipDragPreviewInput: {
+  drag: ClipDragState;
+  clipMap: Map<string, TimelineClip>;
+  tracks: readonly TimelineTrack[];
+} | null = null;
 let pendingClipDragPreviewTimer: number | null = null;
 
-function buildClipDragPreview(
+export function buildClipDragPreview(
   drag: ClipDragState,
   clipMap: Map<string, TimelineClip>,
+  tracks: readonly TimelineTrack[],
 ): TimelineClipDragPreview | null {
   if (drag.toolGesture) return null;
 
@@ -23,20 +29,31 @@ function buildClipDragPreview(
   const movedClipIds = new Set<string>();
   const timeDelta = previewStartTime - movingClip.startTime;
   const shouldMoveLinkedOrGrouped = !drag.altKeyPressed;
+  const selectedDragIds = drag.multiSelectClipIds ?? [];
+  const trackTargets = resolveSelectedClipTrackTargets(
+    tracks,
+    [...clipMap.values()],
+    movingClip.id,
+    drag.currentTrackId,
+    [movingClip.id, ...selectedDragIds],
+  ).targetTrackIdByClipId;
 
   const addPatch = (clip: TimelineClip, startTime: number, trackId = clip.trackId) => {
     patches[clip.id] = { startTime, trackId };
     movedClipIds.add(clip.id);
   };
 
-  addPatch(movingClip, previewStartTime, drag.currentTrackId);
+  addPatch(movingClip, previewStartTime, trackTargets.get(movingClip.id) ?? drag.currentTrackId);
 
-  const selectedDragIds = drag.multiSelectClipIds ?? [];
   if (selectedDragIds.length > 0 && drag.multiSelectTimeDelta !== undefined) {
     for (const selectedId of selectedDragIds) {
       const selectedClip = clipMap.get(selectedId);
       if (!selectedClip || movedClipIds.has(selectedClip.id)) continue;
-      addPatch(selectedClip, selectedClip.startTime + drag.multiSelectTimeDelta);
+      addPatch(
+        selectedClip,
+        selectedClip.startTime + drag.multiSelectTimeDelta,
+        trackTargets.get(selectedClip.id) ?? selectedClip.trackId,
+      );
     }
   }
 
@@ -73,7 +90,11 @@ function clearPendingClipDragPreviewTimer(): void {
   pendingClipDragPreviewInput = null;
 }
 
-export function setClipDragPreviewFromDrag(drag: ClipDragState | null, clipMap: Map<string, TimelineClip>): void {
+export function setClipDragPreviewFromDrag(
+  drag: ClipDragState | null,
+  clipMap: Map<string, TimelineClip>,
+  tracks: readonly TimelineTrack[],
+): void {
   if (drag === null) {
     clearPendingClipDragPreviewTimer();
     publishClipDragPreview(null);
@@ -84,11 +105,11 @@ export function setClipDragPreviewFromDrag(drag: ClipDragState | null, clipMap: 
   const elapsed = now - lastClipDragPreviewPublishAt;
   if (elapsed >= CLIP_DRAG_PREVIEW_PUBLISH_INTERVAL_MS) {
     clearPendingClipDragPreviewTimer();
-    publishClipDragPreview(buildClipDragPreview(drag, clipMap));
+    publishClipDragPreview(buildClipDragPreview(drag, clipMap, tracks));
     return;
   }
 
-  pendingClipDragPreviewInput = { drag, clipMap };
+  pendingClipDragPreviewInput = { drag, clipMap, tracks };
   if (pendingClipDragPreviewTimer !== null) return;
 
   pendingClipDragPreviewTimer = window.setTimeout(() => {
@@ -96,7 +117,7 @@ export function setClipDragPreviewFromDrag(drag: ClipDragState | null, clipMap: 
     const nextInput = pendingClipDragPreviewInput;
     pendingClipDragPreviewInput = null;
     if (nextInput) {
-      publishClipDragPreview(buildClipDragPreview(nextInput.drag, nextInput.clipMap));
+      publishClipDragPreview(buildClipDragPreview(nextInput.drag, nextInput.clipMap, nextInput.tracks));
     }
   }, Math.max(0, CLIP_DRAG_PREVIEW_PUBLISH_INTERVAL_MS - elapsed));
 }

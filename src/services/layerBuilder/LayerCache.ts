@@ -4,6 +4,7 @@
 import { Logger } from '../logger';
 import type { Layer, TimelineClip, TimelineTrack } from '../../types';
 import type { FrameContext } from './types';
+import type { TimelineLayerTransformPreview } from '../../stores/timeline/storeTypes/toolTypes';
 import { liveInputRuntime } from '../mediaRuntime/liveInputRuntime';
 
 const log = Logger.create('LayerCache');
@@ -31,6 +32,7 @@ export class LayerCache {
   private lastIsPlaying = false;
   private lastPlaybackSpeed = 1;
   private lastProxyEnabled = false;
+  private lastLayerTransformPreview: TimelineLayerTransformPreview | null = null;
   private lastLiveInputRevision = -1;
 
   // Stats for debugging
@@ -58,6 +60,8 @@ export class LayerCache {
     const playingChanged = ctx.isPlaying !== this.lastIsPlaying;
     const playbackSpeedChanged = ctx.playbackSpeed !== this.lastPlaybackSpeed;
     const proxyChanged = ctx.proxyEnabled !== this.lastProxyEnabled;
+    const layerTransformPreviewChanged =
+      ctx.layerTransformPreview !== this.lastLayerTransformPreview;
     const liveInputRevision = liveInputRuntime.getRevision();
     const liveInputChanged = liveInputRevision !== this.lastLiveInputRevision;
 
@@ -68,6 +72,7 @@ export class LayerCache {
       playingChanged ||
       playbackSpeedChanged ||
       proxyChanged ||
+      layerTransformPreviewChanged ||
       liveInputChanged ||
       frameChanged;
 
@@ -90,6 +95,7 @@ export class LayerCache {
     this.lastIsPlaying = ctx.isPlaying;
     this.lastPlaybackSpeed = ctx.playbackSpeed;
     this.lastProxyEnabled = ctx.proxyEnabled;
+    this.lastLayerTransformPreview = ctx.layerTransformPreview;
     this.lastLiveInputRevision = liveInputRevision;
 
     return { useCache: false, layers: [] };

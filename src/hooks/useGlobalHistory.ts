@@ -168,8 +168,13 @@ const CLIP_HISTORY_SIGNATURE_SKIP_KEYS = new Set([
 const MEDIA_FILE_HISTORY_SIGNATURE_SKIP_KEYS = new Set([
   'file',
   'url',
+  'importProgress',
   'thumbnailUrl',
   'proxyVideoUrl',
+  'proxyProgress',
+  'audioProxyProgress',
+  'sceneCutProgress',
+  'transcriptFusionProgress',
   'waveform',
   'waveformChannels',
   'waveformProgress',
@@ -486,7 +491,12 @@ export function useGlobalHistory() {
           curr.files !== prev.files &&
           createMediaFilesHistorySignature(curr.files) !== createMediaFilesHistorySignature(prev.files)
         ) {
-          debouncedCapture(curr.files.length > prev.files.length ? 'Import file' : 'Remove file');
+          const label = curr.files.length > prev.files.length
+            ? 'Import file'
+            : curr.files.length < prev.files.length
+              ? 'Remove file'
+              : 'Modify file';
+          debouncedCapture(label);
         } else if (
           curr.compositions !== prev.compositions &&
           createCompositionHistorySignature(

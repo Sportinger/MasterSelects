@@ -1,3 +1,5 @@
+import type { ClipTransform } from '../../../types/timelineCore';
+
 export type MaskEditMode =
   | 'none'
   | 'drawing'
@@ -121,6 +123,12 @@ export interface TimelineClipDragPreviewPatch {
 
 export interface TimelineClipDragPreview {
   patches: Record<string, TimelineClipDragPreviewPatch>;
+}
+
+export interface TimelineLayerTransformPreview {
+  ownerId: string;
+  clipId: string;
+  transform: Partial<Pick<ClipTransform, 'position' | 'scale'>>;
 }
 
 export type TimelineAudioDisplayMode = 'compact' | 'detailed' | 'spectral';

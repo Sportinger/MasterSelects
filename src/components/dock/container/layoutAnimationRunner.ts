@@ -17,6 +17,8 @@ import {
   getDockLayoutEffectiveTiming,
   getDockLayoutOverlayZIndex,
   getPuzzleAnimationTiming,
+  getSequenceAnimationTiming,
+  getSequenceExitAnimationTiming,
   shouldAnimateLiveLayoutElement,
   toRelativeRect,
 } from './layoutAnimationMath';
@@ -30,6 +32,7 @@ function appendChildLayoutAnimations({
   delayMs,
   durationMs,
   animations,
+  staggerMode,
 }: {
   overlay: HTMLElement;
   containerRect: DOMRect;
@@ -39,6 +42,7 @@ function appendChildLayoutAnimations({
   delayMs: number;
   durationMs: number;
   animations: Animation[];
+  staggerMode: DockLayoutAnimationSnapshot['staggerMode'];
 }): void {
   if (previous.childItems.size === 0) return;
 
@@ -59,7 +63,13 @@ function appendChildLayoutAnimations({
 
     const childClone = cloneElementForLayoutTransition(targetChild, 'dock-layout-child-transition-clone');
     const originalVisibility = targetChild.style.visibility;
-    const childTiming = getDockLayoutEffectiveTiming(childId, snapshotDurationMs, delayMs, durationMs);
+    const childTiming = getDockLayoutEffectiveTiming(
+      childId,
+      snapshotDurationMs,
+      delayMs,
+      durationMs,
+      staggerMode,
+    );
     targetChild.style.visibility = 'hidden';
     pushElementLayoutAnimation({
       overlay,
@@ -81,8 +91,11 @@ function appendChildLayoutAnimations({
 
 export function animateDockLayoutTransition(container: HTMLElement, snapshot: DockLayoutAnimationSnapshot): Animation[] {
   if (
+    snapshot.durationMs <= 0
+    || (
     typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    )
   ) {
     return [];
   }
@@ -95,8 +108,16 @@ export function animateDockLayoutTransition(container: HTMLElement, snapshot: Do
   const overlay = createDockLayoutTransitionOverlay(container);
 
   nextElements.forEach((element) => {
+    if (snapshot.staggerMode === 'sequence' && !element.classList.contains('dock-tab-pane')) {
+      return;
+    }
+
     const id = element.dataset.dockLayoutAnimId;
     if (!id || nextIds.has(id)) return;
+    if (snapshot.staggerMode === 'sequence' && id === 'panel:start') {
+      nextIds.add(id);
+      return;
+    }
 
     const nextRect = element.getBoundingClientRect();
     if (nextRect.width <= 0 || nextRect.height <= 0) return;
@@ -106,13 +127,21 @@ export function animateDockLayoutTransition(container: HTMLElement, snapshot: Do
     const movementDistance = previous
       ? Math.hypot(previous.rect.left - nextRect.left, previous.rect.top - nextRect.top)
       : Math.min(nextRect.left - containerRect.left, containerRect.right - nextRect.right, nextRect.top - containerRect.top, containerRect.bottom - nextRect.bottom);
-    const timing = getPuzzleAnimationTiming(id, nextRect, containerRect, snapshot.durationMs, movementDistance);
+    const timing = snapshot.staggerMode === 'sequence'
+      ? getSequenceAnimationTiming(id, snapshot.durationMs)
+      : getPuzzleAnimationTiming(id, nextRect, containerRect, snapshot.durationMs, movementDistance);
 
     targets.push({ element, id, rect: nextRect, previous: previous ?? null, ...timing });
   });
 
   targets.forEach(({ element, id, rect: nextRect, previous, delayMs, durationMs }) => {
-    const panelTiming = getDockLayoutEffectiveTiming(id, snapshot.durationMs, delayMs, durationMs);
+    const panelTiming = getDockLayoutEffectiveTiming(
+      id,
+      snapshot.durationMs,
+      delayMs,
+      durationMs,
+      snapshot.staggerMode,
+    );
 
     if (previous) {
       const startRect = toRelativeRect(previous.rect, containerRect);
@@ -135,6 +164,7 @@ export function animateDockLayoutTransition(container: HTMLElement, snapshot: Do
           durationMs: panelTiming.durationMs,
           animations,
           zIndex: getDockLayoutOverlayZIndex(id, 'panel'),
+          overshoot: snapshot.staggerMode !== 'sequence',
         });
         return;
       }
@@ -172,6 +202,7 @@ export function animateDockLayoutTransition(container: HTMLElement, snapshot: Do
         delayMs: panelTiming.delayMs,
         durationMs: panelTiming.durationMs,
         animations,
+        staggerMode: snapshot.staggerMode,
       });
       return;
     }
@@ -179,7 +210,10 @@ export function animateDockLayoutTransition(container: HTMLElement, snapshot: Do
     const endRect = toRelativeRect(nextRect, containerRect);
     const startRect = getDockLayoutEdgeRect(endRect, containerRect);
 
-    if (shouldAnimateLiveLayoutElement(id)) {
+    if (
+      snapshot.staggerMode === 'sequence'
+      || shouldAnimateLiveLayoutElement(id)
+    ) {
       pushLiveElementLayoutAnimation({
         element,
         deltaX: startRect.left - endRect.left,
@@ -190,6 +224,7 @@ export function animateDockLayoutTransition(container: HTMLElement, snapshot: Do
         durationMs: panelTiming.durationMs,
         animations,
         zIndex: getDockLayoutOverlayZIndex(id, 'panel'),
+        overshoot: snapshot.staggerMode !== 'sequence',
       });
       return;
     }
@@ -217,12 +252,21 @@ export function animateDockLayoutTransition(container: HTMLElement, snapshot: Do
 
   snapshot.items.forEach((previous, id) => {
     if (nextIds.has(id)) return;
+    if (snapshot.staggerMode === 'sequence' && id === 'panel:start') return;
 
     const startRect = toRelativeRect(previous.rect, containerRect);
     const endRect = getDockLayoutEdgeRect(startRect, containerRect);
     const movementDistance = Math.hypot(startRect.left - endRect.left, startRect.top - endRect.top);
-    const timing = getPuzzleAnimationTiming(id, previous.rect, containerRect, snapshot.durationMs, movementDistance);
-    const panelTiming = getDockLayoutEffectiveTiming(id, snapshot.durationMs, timing.delayMs, timing.durationMs);
+    const timing = snapshot.staggerMode === 'sequence'
+      ? getSequenceExitAnimationTiming(id, snapshot.durationMs)
+      : getPuzzleAnimationTiming(id, previous.rect, containerRect, snapshot.durationMs, movementDistance);
+    const panelTiming = getDockLayoutEffectiveTiming(
+      id,
+      snapshot.durationMs,
+      timing.delayMs,
+      timing.durationMs,
+      snapshot.staggerMode,
+    );
 
     const exitElement = shouldAnimateLiveLayoutElement(id) && previous.liveElement
       ? previous.liveElement
@@ -244,6 +288,10 @@ export function animateDockLayoutTransition(container: HTMLElement, snapshot: Do
       overshootDeltaY: startRect.top - endRect.top,
       animations,
       zIndex: getDockLayoutOverlayZIndex(id, 'panel'),
+      anticipateExit: (
+        snapshot.staggerMode === 'sequence'
+        && snapshot.startTransitionDirection === 'to-start'
+      ),
     });
   });
 

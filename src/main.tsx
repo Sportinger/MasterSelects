@@ -6,7 +6,7 @@ import { resolveEntryExperience } from './routing/entryExperience'
 
 const initialExperience = resolveEntryExperience(window.location);
 
-if (initialExperience === 'editor') {
+if (initialExperience === 'editor' || initialExperience === 'landing') {
   void import('./editorBoot');
 }
 

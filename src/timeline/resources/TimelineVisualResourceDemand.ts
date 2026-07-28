@@ -33,6 +33,7 @@ export const TIMELINE_RUNTIME_RESOURCE_KINDS = [
   'model',
   'gaussian-splat',
   'motion-data',
+  'audio-buffer',
   'audio-source-clock',
   'runtime-binding',
   'job',

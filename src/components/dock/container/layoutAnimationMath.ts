@@ -1,4 +1,5 @@
 import type { DockLayoutAnimationRect, DockLayoutAnimationTarget, DockLayoutEdge } from './layoutAnimationTypes';
+import type { DockLayoutTransitionStaggerMode } from '../../../types/dock';
 import {
   DOCK_LAYOUT_PUZZLE_DURATION_RATIO,
   DOCK_LAYOUT_PUZZLE_STAGGER_MAX_RATIO,
@@ -103,6 +104,28 @@ export function getDockLayoutEdgeRect(rect: DockLayoutAnimationRect, containerRe
   }
 }
 
+export function getSequenceExitPreludeRect(
+  startRect: DockLayoutAnimationRect,
+  endRect: DockLayoutAnimationRect,
+  preludeDurationMs: number,
+): DockLayoutAnimationRect {
+  const deltaX = endRect.left - startRect.left;
+  const deltaY = endRect.top - startRect.top;
+  const distance = Math.hypot(deltaX, deltaY);
+  const preludeDistance = Math.min(
+    24,
+    distance * 0.05,
+    Math.max(0, preludeDurationMs) * 0.012,
+  );
+  const ratio = distance > 0 ? preludeDistance / distance : 0;
+
+  return {
+    ...startRect,
+    left: startRect.left + deltaX * ratio,
+    top: startRect.top + deltaY * ratio,
+  };
+}
+
 function isTimelineLayoutAnimationId(id: string): boolean {
   return id === 'panel:timeline' || id.startsWith('timeline-');
 }
@@ -118,6 +141,69 @@ export function shouldAnimateLiveLayoutElement(id: string): boolean {
   return isPreviewLayoutAnimationId(id) || id === 'panel:timeline' || id === 'panel:media';
 }
 
+function getSequenceStage(id: string): number {
+  if (id === 'panel:media' || id === 'panel:transitions') return 0;
+  if (isPreviewLayoutAnimationId(id)) return 1;
+  if (
+    id === 'panel:clip-properties'
+    || id === 'panel:export'
+    || id === 'panel:history'
+  ) {
+    return 2;
+  }
+  if (isTimelineLayoutAnimationId(id)) return 3;
+  return hashAnimationId(id) % 4;
+}
+
+function getStronglyOverlappingSequenceTiming(
+  stage: number,
+  availableDurationMs: number,
+  initialDelayMs = 0,
+  stageIntervalRatio = 0.15,
+): Pick<DockLayoutAnimationTarget, 'delayMs' | 'durationMs'> {
+  const stageIntervalMs = Math.round(availableDurationMs * stageIntervalRatio);
+  const durationMs = availableDurationMs - (stageIntervalMs * 3);
+  const delayMs = initialDelayMs + (stage * stageIntervalMs);
+
+  return { delayMs, durationMs };
+}
+
+export function getSequenceAnimationTiming(
+  id: string,
+  snapshotDurationMs: number,
+): Pick<DockLayoutAnimationTarget, 'delayMs' | 'durationMs'> {
+  const totalDurationMs = Math.max(600, snapshotDurationMs);
+
+  if (id === 'panel:start') {
+    return {
+      delayMs: 0,
+      durationMs: Math.round(totalDurationMs * 0.2),
+    };
+  }
+
+  const stage = getSequenceStage(id);
+  return getStronglyOverlappingSequenceTiming(stage, totalDurationMs);
+}
+
+export function getSequenceExitAnimationTiming(
+  id: string,
+  snapshotDurationMs: number,
+): Pick<DockLayoutAnimationTarget, 'delayMs' | 'durationMs'> {
+  const totalDurationMs = Math.max(600, snapshotDurationMs);
+  const stage = getSequenceStage(id);
+  const preludeDurationMs = Math.round(totalDurationMs * 0.1);
+  const availableDurationMs = totalDurationMs - preludeDurationMs;
+
+  // The outro should read as one coordinated exit. Its stages start especially
+  // close together while retaining the subtle shared drift at the beginning.
+  return getStronglyOverlappingSequenceTiming(
+    stage,
+    availableDurationMs,
+    preludeDurationMs,
+    0.075,
+  );
+}
+
 export function getDockLayoutOverlayZIndex(id: string, kind: 'panel' | 'child'): string {
   if (isTimelineLayoutAnimationId(id)) {
     return kind === 'child' ? '4' : '3';
@@ -131,8 +217,9 @@ export function getDockLayoutEffectiveTiming(
   snapshotDurationMs: number,
   delayMs: number,
   durationMs: number,
+  staggerMode: DockLayoutTransitionStaggerMode = 'puzzle',
 ): Pick<DockLayoutAnimationTarget, 'delayMs' | 'durationMs'> {
-  if (!isTimelineLayoutAnimationId(id)) {
+  if (staggerMode === 'sequence' || !isTimelineLayoutAnimationId(id)) {
     return { delayMs, durationMs };
   }
 

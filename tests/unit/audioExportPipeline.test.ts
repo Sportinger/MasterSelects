@@ -564,10 +564,10 @@ describe('AudioExportPipeline audio preflight', () => {
     const stats = timelineRuntimeCoordinator.getBridgeStats().policies.export;
     expect(stats.budgetReport.usage).toMatchObject({
       resources: 1,
-      audioSources: 1,
+      audioSources: 0,
     });
     expect(stats.resources[0]).toMatchObject({
-      kind: 'audio-source-clock',
+      kind: 'audio-buffer',
       owner: {
         ownerId: 'export:run:run-audio',
         clipId: 'reported-audio',
@@ -581,6 +581,41 @@ describe('AudioExportPipeline audio preflight', () => {
         'source-buffer',
       ]),
     });
+  });
+
+  it('decodes and retains a shared source buffer only once for dense cut-ups', async () => {
+    const sharedFile = new File(['audio'], 'shared.wav', { type: 'audio/wav' });
+    const buffer = createMockAudioBuffer();
+    const clips = Array.from({ length: 49 }, (_, index) => createClip({
+      id: `shared-audio-${index}`,
+      trackId: audioTrack.id,
+      startTime: index * 0.1,
+      duration: 0.1,
+      inPoint: index * 0.1,
+      outPoint: (index + 1) * 0.1,
+      file: sharedFile,
+      mediaFileId: undefined,
+      source: { type: 'audio' },
+    }));
+    const extractAudio = vi.fn(async () => buffer);
+    const pipeline = new AudioExportPipeline(undefined, {
+      exportRunId: 'run-shared-audio',
+    }) as AudioExportPipelineTestAccess;
+    pipeline.extractor = {
+      clearCache: vi.fn(),
+      extractAudio,
+    } as unknown as AudioExportPipelineTestAccess['extractor'];
+
+    const buffers = await pipeline.extractAllAudio(clips, [audioTrack]);
+
+    expect(extractAudio).toHaveBeenCalledOnce();
+    expect(buffers.size).toBe(49);
+    expect(new Set(buffers.values())).toEqual(new Set([buffer]));
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies.export.budgetReport.usage)
+      .toMatchObject({
+        resources: 1,
+        audioSources: 0,
+      });
   });
 
   it('throws source-buffer admission denial without falling back to silence', async () => {

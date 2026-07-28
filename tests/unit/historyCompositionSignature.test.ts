@@ -179,6 +179,31 @@ describe('history trigger signatures', () => {
       .toBe(createMediaFilesHistorySignature([before]));
   });
 
+  it('ignores transient media generation progress fields', () => {
+    const before: MediaFile = {
+      id: 'media-a',
+      name: 'dialog.mp4',
+      type: 'video',
+      parentId: null,
+      createdAt: 1,
+      url: 'blob:video',
+    };
+    const after: MediaFile = {
+      ...before,
+      importProgress: 45,
+      proxyProgress: 62,
+      audioProxyProgress: 31,
+      sceneCutProgress: 78,
+      transcriptFusionProgress: {
+        phase: 'fusing',
+        progress: 0.5,
+      } as MediaFile['transcriptFusionProgress'],
+    };
+
+    expect(createMediaFilesHistorySignature([after]))
+      .toBe(createMediaFilesHistorySignature([before]));
+  });
+
   it('tracks real media file edits after ignoring waveform metadata', () => {
     const before: MediaFile = {
       id: 'media-a',

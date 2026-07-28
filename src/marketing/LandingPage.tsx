@@ -6,16 +6,22 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
-import { IconArrowUp } from '@tabler/icons-react';
+import { IconArrowRight, IconArrowUp } from '@tabler/icons-react';
 import './landing.css';
 
 const MAX_INPUT_HEIGHT = 152;
 
 export interface LandingPageProps {
+  isOpeningEditor?: boolean;
+  onOpenEditor?: () => void;
   onSubmitPrompt?: (prompt: string) => Promise<void> | void;
 }
 
-export function LandingPage({ onSubmitPrompt }: LandingPageProps) {
+export function LandingPage({
+  isOpeningEditor = false,
+  onOpenEditor,
+  onSubmitPrompt,
+}: LandingPageProps) {
   const [draft, setDraft] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [announcement, setAnnouncement] = useState('');
@@ -83,8 +89,21 @@ export function LandingPage({ onSubmitPrompt }: LandingPageProps) {
   };
 
   return (
-    <main className="landing-page">
+    <main className={`landing-page ${isOpeningEditor ? 'is-opening-editor' : ''}`}>
       <div className="landing-atmosphere" aria-hidden="true" />
+
+      {onOpenEditor && (
+        <button
+          className="landing-open-editor"
+          type="button"
+          aria-label="Open MasterSelects editor"
+          disabled={isOpeningEditor}
+          onClick={onOpenEditor}
+        >
+          <span>{isOpeningEditor ? 'Opening' : 'Open'}</span>
+          <IconArrowRight aria-hidden="true" />
+        </button>
+      )}
 
       <form
         className="landing-chat-pill"

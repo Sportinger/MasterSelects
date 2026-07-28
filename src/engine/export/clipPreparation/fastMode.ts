@@ -15,6 +15,10 @@ import { type ClipFileDataCache, loadClipFileDataCached } from './sourceResoluti
 import { createExportRuntimeSource, getExportRuntimeOwnerId } from './runtimeBinding';
 import { getMappedClipSourceTime } from '../layerBuilder/timing';
 import { collectNestedVideoClips, type NestedVideoClip } from './nestedVideoClips';
+import {
+  collectShareableRegularVideoSourceKeys,
+  getExportSourceKey,
+} from './sourceSharing';
 
 const log = Logger.create('ClipPreparation');
 
@@ -30,7 +34,33 @@ export async function initializeFastMode(
 ): Promise<ClipPreparationModeResult> {
   const { WebCodecsPlayer } = await import('../../WebCodecsPlayer');
   const fileDataCache: ClipFileDataCache = new Map();
+  const shareableSourceKeys = collectShareableRegularVideoSourceKeys(videoClips);
+  const preparedSequentialSources = new Map<
+    string,
+    {
+      player: WebCodecsPlayer;
+      runtimeOwnerId: string;
+      runtimeSource: TimelineClip['source'];
+    }
+  >();
   const initializeSequentialClip = async (clip: TimelineClip): Promise<void> => {
+    const sourceKey = getExportSourceKey(clip);
+    const shareSourceResources = shareableSourceKeys.has(sourceKey);
+    const preparedSource = shareSourceResources
+      ? preparedSequentialSources.get(sourceKey)
+      : undefined;
+    if (preparedSource) {
+      clipStates.set(clip.id, {
+        clipId: clip.id,
+        webCodecsPlayer: preparedSource.player,
+        lastSampleIndex: preparedSource.player.getCurrentSampleIndex(),
+        isSequential: true,
+        runtimeSource: preparedSource.runtimeSource,
+      });
+      log.debug(`Clip ${clip.name}: reusing shared FAST source decoder`);
+      return;
+    }
+
     const mediaFileId = getClipMediaFileId(clip);
     const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
     const runtimeOwnerId = getExportRuntimeOwnerId(clip.id);
@@ -86,14 +116,27 @@ export async function initializeFastMode(
       await exportPlayer.prepareForSequentialExport(clipTime);
       endSeqPrep();
 
+      const runtimeSource = createExportRuntimeSource(
+        clip,
+        runtimeOwnerId,
+        exportPlayer,
+        exportRunId,
+      );
       clipStates.set(clip.id, {
         clipId: clip.id,
         webCodecsPlayer: exportPlayer,
         lastSampleIndex: exportPlayer.getCurrentSampleIndex(),
         isSequential: true,
         runtimeOwnerId,
-        runtimeSource: createExportRuntimeSource(clip, runtimeOwnerId, exportPlayer, exportRunId),
+        runtimeSource,
       });
+      if (shareSourceResources) {
+        preparedSequentialSources.set(sourceKey, {
+          player: exportPlayer,
+          runtimeOwnerId,
+          runtimeSource,
+        });
+      }
 
       log.debug(`Clip ${clip.name}: FAST mode enabled (${exportPlayer.width}x${exportPlayer.height})`);
     } catch (e) {
@@ -155,12 +198,23 @@ export async function initializeFastMode(
   }
 
   if (totalVideoClips >= 2) {
-    log.info(`Using multi-clip sequential WebCodecs export for ${regularVideoClips.length} regular video clips`);
-    for (const clip of regularVideoClips) {
+    log.info(
+      `Using source-shared sequential WebCodecs export for ` +
+      `${regularVideoClips.length} regular video clips`
+    );
+    for (const clip of [...regularVideoClips].sort((a, b) => a.startTime - b.startTime)) {
       await initializeSequentialClip(clip);
     }
 
-    log.info(`All ${regularVideoClips.length} clips using FAST WebCodecs sequential decoding`);
+    const decoderCount = new Set(
+      Array.from(clipStates.values())
+        .map(state => state.webCodecsPlayer)
+        .filter((player): player is WebCodecsPlayer => player !== null)
+    ).size;
+    log.info(
+      `All ${regularVideoClips.length} clips using ` +
+      `${decoderCount} FAST WebCodecs source decoder${decoderCount === 1 ? '' : 's'}`
+    );
     endPrepare();
 
     return {

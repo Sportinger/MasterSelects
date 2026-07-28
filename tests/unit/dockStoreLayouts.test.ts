@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   FACTORY_3D_EDIT_LAYOUT_ID,
   FACTORY_AUDIO_EDIT_LAYOUT_ID,
+  FACTORY_START_LAYOUT_ID,
   FACTORY_VIDEO_EDIT_LAYOUT_ID,
   getFactoryDockLayouts,
   useDockStore,
@@ -213,6 +214,39 @@ describe('dock store saved layouts', () => {
     expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'history']);
   });
 
+  it('does not restore the optional Start layout from a project', () => {
+    const startLayout = getFactoryDockLayouts()
+      .find((savedLayout) => savedLayout.id === FACTORY_START_LAYOUT_ID);
+    expect(startLayout).toBeDefined();
+
+    useDockStore.getState().setLayoutFromProject(startLayout!.layout);
+
+    const state = useDockStore.getState();
+    expect(state.activeSavedLayoutId).toBe(FACTORY_VIDEO_EDIT_LAYOUT_ID);
+    expect(findTabGroup(state.layout.root, 'left-group')).not.toBeNull();
+    expect(panelTypes(findTabGroup(state.layout.root, 'start-group'))).toEqual([]);
+  });
+
+  it('does not restore the optional Start layout from browser persistence', async () => {
+    const startLayout = getFactoryDockLayouts()
+      .find((savedLayout) => savedLayout.id === FACTORY_START_LAYOUT_ID);
+    expect(startLayout).toBeDefined();
+    localStorage.setItem('webvj-dock-layout', JSON.stringify({
+      state: {
+        layout: startLayout!.layout,
+        activeSavedLayoutId: FACTORY_START_LAYOUT_ID,
+      },
+      version: 0,
+    }));
+
+    await useDockStore.persist.rehydrate();
+
+    const state = useDockStore.getState();
+    expect(state.activeSavedLayoutId).toBe(FACTORY_VIDEO_EDIT_LAYOUT_ID);
+    expect(findTabGroup(state.layout.root, 'left-group')).not.toBeNull();
+    expect(findTabGroup(state.layout.root, 'start-group')).toBeNull();
+  });
+
   it('drops retired dock panel payload ids from restored project layouts', () => {
     const legacyLayout = {
       root: {
@@ -357,11 +391,28 @@ describe('dock store saved layouts', () => {
     expect(useTimelineStore.getState().playheadPosition).toBe(13);
   });
 
-  it('keeps the built-in video, audio, and 3D layouts as default favorites', () => {
+  it('loads the chat-only Start layout as a single full-size panel', () => {
+    useDockStore.getState().loadSavedLayout(FACTORY_START_LAYOUT_ID);
+
+    const state = useDockStore.getState();
+    expect(state.activeSavedLayoutId).toBe(FACTORY_START_LAYOUT_ID);
+    expect(state.layout).toMatchObject({
+      root: {
+        kind: 'tab-group',
+        id: 'start-group',
+        activeIndex: 0,
+        panels: [{ id: 'start', type: 'start', title: 'Start' }],
+      },
+      floatingPanels: [],
+    });
+  });
+
+  it('keeps Start as a factory favorite immediately after 3D Edit', () => {
     const savedLayouts = useDockStore.getState().savedLayouts;
     const videoLayout = savedLayouts.find((layout) => layout.id === FACTORY_VIDEO_EDIT_LAYOUT_ID);
     const audioLayout = savedLayouts.find((layout) => layout.id === FACTORY_AUDIO_EDIT_LAYOUT_ID);
     const threeDLayout = savedLayouts.find((layout) => layout.id === FACTORY_3D_EDIT_LAYOUT_ID);
+    const startLayout = savedLayouts.find((layout) => layout.id === FACTORY_START_LAYOUT_ID);
 
     expect(videoLayout).toMatchObject({
       name: 'VIDEO EDIT',
@@ -378,6 +429,17 @@ describe('dock store saved layouts', () => {
       favorite: true,
       factory: true,
     });
+    expect(startLayout).toMatchObject({
+      name: 'START',
+      favorite: true,
+      factory: true,
+    });
+    expect(savedLayouts.map((layout) => layout.id)).toEqual([
+      FACTORY_VIDEO_EDIT_LAYOUT_ID,
+      FACTORY_AUDIO_EDIT_LAYOUT_ID,
+      FACTORY_3D_EDIT_LAYOUT_ID,
+      FACTORY_START_LAYOUT_ID,
+    ]);
     expect(useDockStore.getState().defaultSavedLayoutId).toBe(FACTORY_VIDEO_EDIT_LAYOUT_ID);
   });
 

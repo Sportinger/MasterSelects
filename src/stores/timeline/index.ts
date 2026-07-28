@@ -275,6 +275,7 @@ export const useTimelineStore = create<TimelineStore>()(
       maskFeatherPreview: null as { maskId: string; edgeId: string | null; changedAt: number } | null,
       maskDrawStart: null as { x: number; y: number } | null,
       maskDragging: false,
+      maskEditPreview: null as import('./maskEditPreview').TimelineMaskEditPreview | null,
 
       // Tool mode
       toolMode: 'select' as const,
@@ -287,6 +288,7 @@ export const useTimelineStore = create<TimelineStore>()(
       timelineToolPreview: null as import('./types').TimelineToolPreview | null,
       transitionEditPreview: null as import('./types').TimelineTransitionEditPreview | null,
       clipDragPreview: null as import('./types').TimelineClipDragPreview | null,
+      layerTransformPreview: null as import('./types').TimelineLayerTransformPreview | null,
 
       // Timeline markers
       markers: [] as import('./types').TimelineMarker[],

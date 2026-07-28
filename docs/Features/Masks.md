@@ -10,6 +10,7 @@ MasterSelects supports per-clip vector masks with preview-overlay editing, selec
 - The properties panel exposes rectangle, ellipse, and pen creation.
 - The preview overlay supports vertex selection, handle mode toggles, edge insertion, edge dragging, and whole-mask dragging.
 - Mask drawing and editing can extend into preview pasteboard space outside the visible content.
+- Mask navigation preserves the composition aspect ratio and uses the same neutral pasteboard around it as the regular transform editor, keeping the composition boundary visible while zooming and panning.
 - Mask outlines, vertices, handles, and hit areas keep screen-stable sizes while zooming the preview.
 - Whole-mask dragging uses an internal mask offset; visible shape animation is driven by the `Mask Path` stopwatch.
 - Mask outlines are projected through the active layer transform, so 2D and 3D movement, scale, and rotation keep the editable overlay aligned with the rendered mask.
@@ -81,6 +82,7 @@ The preview overlay is implemented in `src/components/preview/MaskOverlay.tsx`.
 - Selected bezier vertices always show their handles, including when the outline is hidden or a handle is currently zero-length.
 - Mask geometry is edited in layer-local UV space and projected to the preview with the current layer transform.
 - Whole-mask dragging moves the internal `position.x` and `position.y` offset, leaving the stored vertex topology unchanged.
+- Whole-mask, vertex, bezier-handle, and edge drags use a transient evaluated-mask preview. The SVG overlay follows every animation frame, while project data, keyframes, cache invalidation, and undo history are committed only once when the pointer is released.
 - Dragging an edge moves the two adjacent vertices together.
 - Clicking an edge selects it. Clicking empty preview space clears vertex and edge selection.
 - Holding Shift while dragging an edge snaps that edge horizontal or vertical, whichever is closer.
@@ -174,6 +176,8 @@ If a clip has enabled masks, `LayerBuilderService` sets the layer's mask lookup 
 Export layers set the same `maskClipId`, and `ExportMaskTextures` generates full-resolution mask textures for WebCodecs, FFmpeg, and single-frame export before each render pass.
 `MaskTextureManager` falls back to a white texture when no mask texture exists.
 The mask is sampled in layer-local `clampedUV`, which keeps the rendered mask attached to the layer through position, scale, rotation, and perspective transforms.
+Layer-transform drags therefore reuse the existing clip-local mask texture: only the transient layer transform changes while dragging, and mask rasterization plus durable cache invalidation wait until the final transform commit.
+Mask-edit drags use a reduced-resolution, reduced-feather-quality mask texture during interaction and restore the full-resolution texture after the final commit. This keeps the composited result live without rebuilding durable clip and keyframe state on every pointer move.
 Preview and export evaluate mask keyframes before generating mask textures, so animated mask paths, animated mask offsets, and animated edge feather render through the same GPU mask path as static masks.
 When a 2D clip is promoted into the shared 3D scene as a plane, `NativeSceneRenderer` passes the same mask texture into the plane shader and samples it in plane UV space, so the mask follows 3D rotation and perspective instead of becoming a screen-space overlay.
 Per-mask opacity is ignored when generating the mask texture; layer opacity remains the opacity control.

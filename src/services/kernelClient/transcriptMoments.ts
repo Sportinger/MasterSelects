@@ -5,6 +5,7 @@ import {
 import type { KernelTranscriptMoment } from './types';
 
 export const TRANSCRIPT_MOMENT_INDEX_VERSION = 'app-transcript-v2';
+export const TRANSCRIPT_MOMENT_WORD_CAP = 400;
 const TRANSCRIPT_PAGE_SIZE = 120;
 const SPEECH_MARKERS_PAGE_SIZE = 250;
 // A longer pause represents a natural phrase boundary.
@@ -89,6 +90,49 @@ interface TranscriptWordSegment {
   wordCount: number;
 }
 
+function tokenWeight(token: string): number {
+  return Math.max(
+    1,
+    Array.from(token.replace(/[^\p{L}\p{N}]/gu, '')).length,
+  );
+}
+
+/**
+ * Most transcript providers already return one timed token per segment. Some
+ * fallbacks return a short phrase instead. Expand those phrases into stable,
+ * monotonic token spans so the kernel's `words` evidence is actually
+ * word-granular.
+ */
+function expandTimedWords(segment: TranscriptWordSegment): Array<{
+  text: string;
+  startSeconds: number;
+  endSeconds: number;
+}> {
+  const tokens = segment.text.trim().split(/\s+/u).filter(Boolean);
+  if (tokens.length <= 1) {
+    return tokens.length === 0
+      ? []
+      : [{
+          text: tokens[0] ?? segment.text,
+          startSeconds: segment.startSeconds,
+          endSeconds: segment.endSeconds,
+        }];
+  }
+
+  const duration = Math.max(0, segment.endSeconds - segment.startSeconds);
+  const weights = tokens.map(tokenWeight);
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  let cursor = segment.startSeconds;
+  return tokens.map((text, index) => {
+    const endSeconds = index === tokens.length - 1
+      ? segment.endSeconds
+      : cursor + duration * ((weights[index] ?? 1) / totalWeight);
+    const word = { text, startSeconds: cursor, endSeconds };
+    cursor = endSeconds;
+    return word;
+  });
+}
+
 function endsSentence(text: string): boolean {
   return /(?:\.\.\.|[.!?:;])\s*$/u.test(text);
 }
@@ -110,7 +154,10 @@ function appendPhraseMoments(
       handle: `$m${moments.length + 1}`,
       source: { mediaId: clip.mediaId },
       sourceRange: { startSeconds: first.startSeconds, endSeconds: last.endSeconds },
-      evidence: { transcript: chunk.map(word => word.text).join(' ').trim() },
+      evidence: {
+        transcript: chunk.map(word => word.text).join(' ').trim(),
+        words: chunk.flatMap(expandTimedWords),
+      },
       confidence: 1,
       indexVersion: TRANSCRIPT_MOMENT_INDEX_VERSION,
       analysisSources: ['transcript'],
@@ -264,8 +311,11 @@ export async function buildTranscriptMoments(
   executor: TranscriptMomentExecutor = executeAIToolCalls,
 ): Promise<KernelTranscriptMoment[]> {
   const moments: KernelTranscriptMoment[] = [];
+  let acceptedTranscriptWordCount = 0;
 
   for (const clip of transcriptClips(snapshot)) {
+    if (acceptedTranscriptWordCount >= TRANSCRIPT_MOMENT_WORD_CAP) break;
+
     const firstClipMomentIndex = moments.length;
     let offset = 0;
     const visitedOffsets = new Set<number>();
@@ -273,6 +323,9 @@ export async function buildTranscriptMoments(
 
     while (!visitedOffsets.has(offset)) {
       visitedOffsets.add(offset);
+      const remainingWordCount = TRANSCRIPT_MOMENT_WORD_CAP - acceptedTranscriptWordCount;
+      if (remainingWordCount <= 0) break;
+
       const execution: AIToolCallExecution = {
         id: `kernel-transcript-${clip.clipId}-${offset}`,
         tool: 'getClipTranscript',
@@ -281,7 +334,7 @@ export async function buildTranscriptMoments(
           ...(clip.sourceStart === undefined ? {} : { sourceStart: clip.sourceStart }),
           ...(clip.sourceEnd === undefined ? {} : { sourceEnd: clip.sourceEnd }),
           offset,
-          limit: TRANSCRIPT_PAGE_SIZE,
+          limit: Math.min(TRANSCRIPT_PAGE_SIZE, remainingWordCount),
           includeSegments: true,
         },
       };
@@ -294,6 +347,7 @@ export async function buildTranscriptMoments(
       const data = result.result.data;
       if (data.hasTranscript === false || !Array.isArray(data.segments)) break;
 
+      let reachedWordCap = false;
       for (const segment of data.segments) {
         if (!isRecord(segment)) continue;
 
@@ -304,9 +358,19 @@ export async function buildTranscriptMoments(
 
         const wordCount = countWords(text);
         if (wordCount === 0) continue;
+        if (acceptedTranscriptWordCount + wordCount > TRANSCRIPT_MOMENT_WORD_CAP) {
+          reachedWordCap = true;
+          break;
+        }
         words.push({ startSeconds: start, endSeconds: end, text, wordCount });
+        acceptedTranscriptWordCount += wordCount;
+        if (acceptedTranscriptWordCount >= TRANSCRIPT_MOMENT_WORD_CAP) {
+          reachedWordCap = true;
+          break;
+        }
       }
 
+      if (reachedWordCap) break;
       if (data.hasMore !== true) break;
 
       const nextOffset = readFiniteNumber(data.nextOffset);

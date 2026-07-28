@@ -1,12 +1,19 @@
 // Mask vertex/handle dragging with document-level listeners
 
-import { useRef, useCallback } from 'react';
+import { useCallback, useId, useRef } from 'react';
+import { startBatch } from '../../stores/historyStore';
 import { useTimelineStore } from '../../stores/timeline';
-import { createMaskPathProperty } from '../../types/animationProperties';
-import type { ClipMask, MaskPathKeyframeValue, MaskVertex } from '../../types/masks';
+import type { ClipMask, MaskVertex } from '../../types/masks';
 import type { TimelineClip } from '../../types/timeline';
-import { startBatch, endBatch } from '../../stores/historyStore';
 import { inferMaskVertexHandleMode } from '../../utils/maskVertexHandles';
+import {
+  applyMaskVertexUpdates,
+  clearMaskPathDragPreview,
+  commitMaskPathDrag,
+  publishMaskPathDragPreview,
+  type MaskPathDragBatch,
+  type MaskVertexUpdate,
+} from './maskPathDragPreview';
 
 function constrainHandleDelta(dx: number, dy: number, shiftKey: boolean): { x: number; y: number } {
   if (!shiftKey) return { x: dx, y: dy };
@@ -20,43 +27,6 @@ function constrainHandleDelta(dx: number, dy: number, shiftKey: boolean): { x: n
     x: Math.cos(snappedAngle) * length,
     y: Math.sin(snappedAngle) * length,
   };
-}
-
-function buildPathValueWithVertexUpdates(
-  mask: ClipMask,
-  vertexUpdates: Array<{ id: string; updates: Partial<MaskVertex> }>,
-): MaskPathKeyframeValue {
-  const updatesById = new Map(vertexUpdates.map(({ id, updates }) => [id, updates]));
-  return {
-    closed: mask.closed,
-    vertices: mask.vertices.map(vertex => {
-      const updates = updatesById.get(vertex.id);
-      const nextVertex = updates ? { ...vertex, ...updates } : vertex;
-      return {
-        ...nextVertex,
-        handleIn: updates?.handleIn ? { ...updates.handleIn } : { ...vertex.handleIn },
-        handleOut: updates?.handleOut ? { ...updates.handleOut } : { ...vertex.handleOut },
-      };
-    }),
-  };
-}
-
-function recordPathIfAnimated(clipId: string, mask: ClipMask, vertexUpdates: Array<{ id: string; updates: Partial<MaskVertex> }>): void {
-  const store = useTimelineStore.getState();
-  const property = createMaskPathProperty(mask.id);
-  if (!store.isRecording(clipId, property) && !store.hasKeyframes(clipId, property)) return;
-  store.addMaskPathKeyframe(
-    clipId,
-    mask.id,
-    buildPathValueWithVertexUpdates(mask, vertexUpdates),
-    undefined,
-    'linear',
-    {
-      phase: 'update',
-      source: 'ui',
-      historyLabel: 'Move mask vertices',
-    },
-  );
 }
 
 function lineIntersection(
@@ -122,11 +92,8 @@ export function useMaskVertexDrag(
   clientToLocalPoint?: (clientX: number, clientY: number) => { x: number; y: number } | null,
   onDragEnd?: (didDrag: boolean) => void,
 ) {
-  const {
-    selectVertex,
-    updateVertex,
-    setMaskDragging,
-  } = useTimelineStore();
+  const { selectVertex, setMaskDragging } = useTimelineStore();
+  const previewOwnerId = useId();
 
   const dragState = useRef<{
     vertexId: string | null;
@@ -211,7 +178,7 @@ export function useMaskVertexDrag(
       .filter(v => selectedIds.includes(v.id))
       .map(v => ({ id: v.id, x: v.x, y: v.y }));
 
-    startBatch(handleType === 'vertex' ? 'Move mask vertices' : 'Adjust mask bezier handle');
+    clearMaskPathDragPreview(previewOwnerId);
     setMaskDragging(true);
     const startLocalPoint = clientToLocalPoint?.(e.clientX, e.clientY);
 
@@ -240,6 +207,18 @@ export function useMaskVertexDrag(
 
     let latestMoveEvent: MouseEvent | null = null;
     let moveFrame: number | null = null;
+    let dragBatch: MaskPathDragBatch | null = null;
+    let latestVertexUpdates: MaskVertexUpdate[] = [];
+    let latestPreviewMask = activeMask;
+    const historyLabel = handleType === 'vertex'
+      ? 'Move mask vertices'
+      : 'Adjust mask bezier handle';
+
+    const publishVertexUpdates = (vertexUpdates: MaskVertexUpdate[]) => {
+      latestVertexUpdates = vertexUpdates;
+      latestPreviewMask = applyMaskVertexUpdates(activeMask, vertexUpdates);
+      publishMaskPathDragPreview(previewOwnerId, selectedClip.id, latestPreviewMask);
+    };
 
     const applyMouseMove = (moveEvent: MouseEvent) => {
       if (!dragState.current.vertexId || !dragState.current.handleType) return;
@@ -249,20 +228,28 @@ export function useMaskVertexDrag(
       if (!svg) return;
 
       const rect = svg.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
       const scaleX = canvasWidth / rect.width;
       const scaleY = canvasHeight / rect.height;
 
       const isShiftPressed = moveEvent.shiftKey;
-      if (Math.hypot(moveEvent.clientX - dragState.current.startX, moveEvent.clientY - dragState.current.startY) > 2) {
+      if (
+        !dragState.current.didDrag &&
+        Math.hypot(
+          moveEvent.clientX - dragState.current.startX,
+          moveEvent.clientY - dragState.current.startY,
+        ) > 2
+      ) {
         dragState.current.didDrag = true;
+        dragBatch = startBatch(historyLabel);
       }
+      if (!dragState.current.didDrag) return;
 
       if (isShiftPressed && !dragState.current.lastShiftState) {
         dragState.current.shiftStartX = moveEvent.clientX;
-        const { clips } = useTimelineStore.getState();
-        const clip = clips.find(c => c.id === selectedClip.id);
-        const mask = clip?.masks?.find(m => m.id === activeMask.id);
-        const currentVertex = mask?.vertices.find(v => v.id === dragState.current.vertexId);
+        const currentVertex = latestPreviewMask.vertices.find(
+          vertex => vertex.id === dragState.current.vertexId,
+        );
         if (currentVertex) {
           dragState.current.shiftStartVertexX = currentVertex.x;
           dragState.current.shiftStartVertexY = currentVertex.y;
@@ -277,19 +264,7 @@ export function useMaskVertexDrag(
           const normalizedShiftDx = shiftDx / canvasWidth;
           const scaleFactor = 1 + normalizedShiftDx * 5;
 
-          updateVertex(selectedClip.id, activeMask.id, dragState.current.vertexId, {
-            x: dragState.current.shiftStartVertexX,
-            y: dragState.current.shiftStartVertexY,
-            handleIn: {
-              x: dragState.current.startHandleInX * scaleFactor,
-              y: dragState.current.startHandleInY * scaleFactor,
-            },
-            handleOut: {
-              x: dragState.current.startHandleOutX * scaleFactor,
-              y: dragState.current.startHandleOutY * scaleFactor,
-            },
-          }, true);
-          recordPathIfAnimated(selectedClip.id, activeMask, [{
+          publishVertexUpdates([{
             id: dragState.current.vertexId,
             updates: {
               x: dragState.current.shiftStartVertexX,
@@ -332,8 +307,7 @@ export function useMaskVertexDrag(
               y: startVertex.y + axisLocked.dy,
             },
           }));
-          useTimelineStore.getState().updateVertices(selectedClip.id, activeMask.id, vertexUpdates, true);
-          recordPathIfAnimated(selectedClip.id, activeMask, vertexUpdates);
+          publishVertexUpdates(vertexUpdates);
         }
       } else {
         const handleKey = dragState.current.handleType;
@@ -352,10 +326,9 @@ export function useMaskVertexDrag(
           rawHandle.y,
           moveEvent.shiftKey,
         );
-        const currentVertex = useTimelineStore.getState()
-          .clips.find(c => c.id === selectedClip.id)
-          ?.masks?.find(m => m.id === activeMask.id)
-          ?.vertices.find(v => v.id === dragState.current.vertexId);
+        const currentVertex = latestPreviewMask.vertices.find(
+          vertex => vertex.id === dragState.current.vertexId,
+        );
         const currentMode = currentVertex ? inferMaskVertexHandleMode(currentVertex) : 'mirrored';
         const nextMode = moveEvent.altKey || currentMode === 'split' ? 'split' : 'mirrored';
         const updates = {
@@ -371,10 +344,7 @@ export function useMaskVertexDrag(
           };
         }
 
-        updateVertex(selectedClip.id, activeMask.id, dragState.current.vertexId, {
-          ...updates,
-        }, true);
-        recordPathIfAnimated(selectedClip.id, activeMask, [{
+        publishVertexUpdates([{
           id: dragState.current.vertexId,
           updates,
         }]);
@@ -403,10 +373,18 @@ export function useMaskVertexDrag(
         latestMoveEvent = null;
       }
       const didDrag = dragState.current.didDrag;
-      const store = useTimelineStore.getState();
-      store.invalidateCache();
+      if (didDrag && dragBatch) {
+        commitMaskPathDrag(
+          useTimelineStore.getState(),
+          selectedClip.id,
+          activeMask,
+          latestVertexUpdates,
+          historyLabel,
+          dragBatch,
+        );
+      }
+      clearMaskPathDragPreview(previewOwnerId);
       setMaskDragging(false);
-      endBatch();
       dragState.current = {
         vertexId: null,
         handleType: null,
@@ -431,12 +409,25 @@ export function useMaskVertexDrag(
       };
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('blur', handleMouseUp);
       onDragEnd?.(didDrag);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-  }, [activeMask, selectedClip, selectVertex, canvasWidth, canvasHeight, setMaskDragging, updateVertex, svgRef, clientToLocalPoint, onDragEnd]);
+    window.addEventListener('blur', handleMouseUp);
+  }, [
+    activeMask,
+    canvasHeight,
+    canvasWidth,
+    clientToLocalPoint,
+    onDragEnd,
+    previewOwnerId,
+    selectedClip,
+    selectVertex,
+    setMaskDragging,
+    svgRef,
+  ]);
 
   return { handleVertexMouseDown };
 }

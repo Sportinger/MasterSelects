@@ -5,6 +5,10 @@ import type { ClipPreparationModeResult, ExportClipState } from '../ClipPreparat
 import { createPreciseExportVideoElement, getClipWarmupSourceTime } from './mediaElements';
 import { createExportRuntimeSource, getExportRuntimeOwnerId } from './runtimeBinding';
 import { collectNestedVideoClips } from './nestedVideoClips';
+import {
+  collectShareableRegularVideoSourceKeys,
+  getExportSourceKey,
+} from './sourceSharing';
 
 const log = Logger.create('ClipPreparation');
 
@@ -16,31 +20,79 @@ export async function initializePreciseMode(
   exportRunId?: string
 ): Promise<ClipPreparationModeResult> {
   const preparedVideoClipIds = new Set<string>();
+  const shareablePreciseSourceKeys = collectShareableRegularVideoSourceKeys(videoClips);
+  const preparedRuntimeBindings = new Map<
+    string,
+    {
+      runtimeOwnerId: string;
+      runtimeSource: TimelineClip['source'];
+    }
+  >();
+  const preparedPreciseVideos = new Map<
+    string,
+    {
+      videoElement: HTMLVideoElement;
+      objectUrl?: string;
+    }
+  >();
   const registerPreciseClip = async (clip: TimelineClip, warmupTime: number): Promise<boolean | null> => {
     if (preparedVideoClipIds.has(clip.id)) return null;
     preparedVideoClipIds.add(clip.id);
 
-    const runtimeOwnerId = getExportRuntimeOwnerId(clip.id);
+    const runtimeBindingKey = getExportSourceKey(clip);
+    const shareSourceResources = shareablePreciseSourceKeys.has(runtimeBindingKey);
+    let runtimeBinding = shareSourceResources
+      ? preparedRuntimeBindings.get(runtimeBindingKey)
+      : undefined;
+    let runtimeOwnerId: string | undefined;
+    if (!runtimeBinding) {
+      runtimeOwnerId = getExportRuntimeOwnerId(clip.id);
+      runtimeBinding = {
+        runtimeOwnerId,
+        runtimeSource: createExportRuntimeSource(
+          clip,
+          runtimeOwnerId,
+          null,
+          exportRunId,
+        ),
+      };
+      if (shareSourceResources) {
+        preparedRuntimeBindings.set(runtimeBindingKey, runtimeBinding);
+      }
+    }
     const mediaFileId = clip.mediaFileId || clip.source?.mediaFileId;
     const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
-    const runtimeSource = createExportRuntimeSource(clip, runtimeOwnerId, null, exportRunId);
-    const preparedVideo = clip.source?.type === 'video'
-      ? await createPreciseExportVideoElement(clip, mediaFile, warmupTime, exportRunId)
+    let preparedVideo = shareSourceResources
+      ? preparedPreciseVideos.get(runtimeBindingKey) ?? null
       : null;
+    const ownsPreparedVideo = clip.source?.type === 'video' && !preparedVideo;
+    if (ownsPreparedVideo) {
+      preparedVideo = await createPreciseExportVideoElement(
+        clip,
+        mediaFile,
+        warmupTime,
+        exportRunId,
+      );
+      if (preparedVideo && shareSourceResources) {
+        preparedPreciseVideos.set(runtimeBindingKey, preparedVideo);
+      }
+    }
 
     clipStates.set(clip.id, {
       clipId: clip.id,
       webCodecsPlayer: null,
       lastSampleIndex: 0,
       isSequential: false,
-      runtimeOwnerId,
-      runtimeSource,
+      ...(runtimeOwnerId ? { runtimeOwnerId } : {}),
+      runtimeSource: runtimeBinding.runtimeSource,
       preciseVideoElement: preparedVideo?.videoElement ?? clip.source?.videoElement ?? null,
-      preciseVideoObjectUrl: preparedVideo?.objectUrl ?? null,
-      hasDedicatedPreciseVideoElement: !!preparedVideo,
+      preciseVideoObjectUrl: ownsPreparedVideo
+        ? preparedVideo?.objectUrl ?? null
+        : null,
+      hasDedicatedPreciseVideoElement: ownsPreparedVideo && !!preparedVideo,
     });
 
-    return !!preparedVideo;
+    return ownsPreparedVideo && !!preparedVideo;
   };
 
   let preciseClipCount = 0;

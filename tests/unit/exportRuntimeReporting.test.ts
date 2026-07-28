@@ -157,6 +157,46 @@ describe('exportRuntimeReporting', () => {
     });
   });
 
+  it('reports shared export runtimes and media providers only once', () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'paused', 'get').mockReturnValue(true);
+    const video = document.createElement('video');
+    const runtimeSource = {
+      type: 'video' as const,
+      runtimeSourceId: 'runtime-shared',
+      runtimeSessionKey: 'export:runtime-shared',
+      mediaFileId: 'media-shared',
+    };
+    const first: ExportClipState = {
+      clipId: 'clip-first',
+      webCodecsPlayer: null,
+      lastSampleIndex: 0,
+      isSequential: false,
+      runtimeOwnerId: 'export:clip-first',
+      runtimeSource,
+      preciseVideoElement: video,
+    };
+    const second: ExportClipState = {
+      clipId: 'clip-second',
+      webCodecsPlayer: null,
+      lastSampleIndex: 0,
+      isSequential: false,
+      runtimeSource,
+      preciseVideoElement: video,
+    };
+
+    reportExportClipStates('run-export', new Map([
+      [first.clipId, first],
+      [second.clipId, second],
+    ]));
+
+    const stats = timelineRuntimeCoordinator.getBridgeStats().policies.export;
+    expect(stats.budgetReport.usage).toMatchObject({
+      resources: 2,
+      sessions: 1,
+      htmlMediaElements: 1,
+    });
+  });
+
   it('reports prepared export image resources', () => {
     const image = document.createElement('img');
     image.src = 'blob:export-image';
@@ -276,7 +316,7 @@ describe('exportRuntimeReporting', () => {
     });
   });
 
-  it('reports export audio buffers as audio source resources and releases the run owner', () => {
+  it('reports export audio buffers as offline PCM resources and releases the run owner', () => {
     reportExportAudioBuffer({
       runId: 'run-export',
       stage: 'master-buffer',
@@ -289,11 +329,12 @@ describe('exportRuntimeReporting', () => {
     const stats = timelineRuntimeCoordinator.getBridgeStats().policies.export;
     expect(stats.budgetReport.usage).toMatchObject({
       resources: 1,
-      audioSources: 1,
+      audioSources: 0,
       heapBytes: 48_000 * 2 * 4,
     });
     expect(stats.resources[0]).toMatchObject({
-      kind: 'audio-source-clock',
+      kind: 'audio-buffer',
+      audioBufferId: 'export:run-export:audio:output-buffer:timeline',
       dimensions: {
         sampleRate: 48_000,
         channelCount: 2,
@@ -317,6 +358,31 @@ describe('exportRuntimeReporting', () => {
 
     releaseExportRunResources('run-export');
     expect(timelineRuntimeCoordinator.getBridgeStats().policies.export.resources).toHaveLength(0);
+  });
+
+  it('replaces the mix buffer with the master buffer in one offline output slot', () => {
+    reportExportAudioBuffer({
+      runId: 'run-audio-output',
+      stage: 'mix-buffer',
+      buffer: createAudioBufferLike(48_000, 2, 48_000),
+    });
+    reportExportAudioBuffer({
+      runId: 'run-audio-output',
+      stage: 'master-buffer',
+      buffer: createAudioBufferLike(96_000, 2, 48_000),
+    });
+
+    const stats = timelineRuntimeCoordinator.getBridgeStats().policies.export;
+    expect(stats.budgetReport.usage).toMatchObject({
+      resources: 1,
+      audioSources: 0,
+      heapBytes: 96_000 * 2 * 4,
+    });
+    expect(stats.resources[0]).toMatchObject({
+      kind: 'audio-buffer',
+      audioBufferId: 'export:run-audio-output:audio:output-buffer:timeline',
+      tags: expect.arrayContaining(['audio', 'master-buffer']),
+    });
   });
 
   it('checks export admissions without retaining denied resources', () => {

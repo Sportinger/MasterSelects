@@ -181,6 +181,21 @@ const sampleResources: readonly RenderResourceDescriptor[] = [
     payloadKind: 'motion-layer',
   },
   {
+    id: 'resource-audio-buffer',
+    kind: 'audio-buffer',
+    policyId: 'export',
+    owner,
+    audioBufferId: 'audio-buffer-1',
+    dimensions: {
+      sampleRate: 48_000,
+      channelCount: 2,
+      durationSeconds: 1,
+    },
+    memoryCost: {
+      heapBytes: 48_000 * 2 * 4,
+    },
+  },
+  {
     id: 'resource-audio-clock',
     kind: 'audio-source-clock',
     policyId: 'ram-preview',

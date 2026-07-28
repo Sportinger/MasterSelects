@@ -5,6 +5,9 @@ import {
   captureMutationEntitySnapshot,
   describeMutationEntities,
 } from '../mutationEntityResults';
+import {
+  MIN_CLIP_DURATION,
+} from '../../../../stores/timeline/editOperations/trimOperations';
 
 /**
  * Add a clip segment from the media pool with specific in/out points.
@@ -25,6 +28,14 @@ export async function handleAddClipSegment(
   if (isNaN(startTime) || isNaN(inPoint) || isNaN(outPoint)) {
     return { success: false, error: 'startTime, inPoint, and outPoint must be valid numbers' };
   }
+  const duration = outPoint - inPoint;
+  if (duration < MIN_CLIP_DURATION) {
+    return {
+      success: false,
+      error:
+        `Clip segment duration must be at least ${MIN_CLIP_DURATION}s`,
+    };
+  }
 
   const mediaStore = useMediaStore.getState();
   const timelineStore = useTimelineStore.getState();
@@ -43,8 +54,6 @@ export async function handleAddClipSegment(
   if (!track) {
     return { success: false, error: `Track not found: ${trackId}` };
   }
-
-  const duration = outPoint - inPoint;
 
   const mutationSnapshot = captureMutationEntitySnapshot('clip', timelineStore.clips);
 

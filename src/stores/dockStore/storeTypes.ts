@@ -1,4 +1,5 @@
 import type {
+  DockLayoutTransitionStaggerMode,
   DockLayout,
   DockPanel,
   DockDragState,
@@ -64,7 +65,13 @@ export interface PanelVisibilityActions {
 export interface SavedLayoutActions {
   saveNamedLayout: (name: string) => SavedDockLayout | null;
   saveCurrentNamedLayout: () => SavedDockLayout | null;
-  loadSavedLayout: (layoutId: string) => void;
+  loadSavedLayout: (
+    layoutId: string,
+    options?: {
+      transitionDurationMs?: number;
+      transitionStaggerMode?: DockLayoutTransitionStaggerMode;
+    },
+  ) => void;
   setDefaultSavedLayout: (layoutId: string | null) => void;
   toggleFavoriteSavedLayout: (layoutId: string) => void;
   resetLayout: () => void;

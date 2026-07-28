@@ -65,6 +65,11 @@ export function useEngineRenderWakeSubscriptions(isEngineReady: boolean): void {
       }
     );
 
+    const unsubLayerTransformPreview = useTimelineStore.subscribe(
+      (state) => state.layerTransformPreview,
+      () => renderHostPort.requestRender()
+    );
+
     const unsubSettings = useSettingsStore.subscribe(
       (state) => state.previewQuality,
       () => renderHostPort.requestRender()
@@ -96,6 +101,7 @@ export function useEngineRenderWakeSubscriptions(isEngineReady: boolean): void {
       unsubTracks();
       unsubLayers();
       unsubClipDragPreview();
+      unsubLayerTransformPreview();
       unsubSettings();
       unsubActiveComp();
       unsubLayerSlots();

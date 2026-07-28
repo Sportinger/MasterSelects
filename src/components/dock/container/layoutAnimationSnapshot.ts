@@ -3,6 +3,10 @@ import type {
   DockLayoutAnimationSnapshot,
   DockLayoutChildAnimationItem,
 } from './layoutAnimationTypes';
+import type {
+  DockLayoutStartTransitionDirection,
+  DockLayoutTransitionStaggerMode,
+} from '../../../types/dock';
 import {
   DOCK_LAYOUT_ANIMATION_CLEANUP_BUFFER_MS,
   DOCK_LAYOUT_ANIMATION_SELECTOR,
@@ -34,11 +38,17 @@ function captureDockLayoutChildAnimationItems(element: HTMLElement): Map<string,
 export function captureDockLayoutAnimationSnapshot(
   container: HTMLElement,
   durationMs: number,
+  staggerMode: DockLayoutTransitionStaggerMode = 'puzzle',
+  startTransitionDirection?: DockLayoutStartTransitionDirection,
 ): DockLayoutAnimationSnapshot {
   const items = new Map<string, DockLayoutAnimationItem>();
   const elements = container.querySelectorAll<HTMLElement>(DOCK_LAYOUT_ANIMATION_SELECTOR);
 
   elements.forEach((element) => {
+    if (staggerMode === 'sequence' && !element.classList.contains('dock-tab-pane')) {
+      return;
+    }
+
     const id = element.dataset.dockLayoutAnimId;
     if (!id || items.has(id)) return;
 
@@ -58,7 +68,12 @@ export function captureDockLayoutAnimationSnapshot(
     });
   });
 
-  return { durationMs, items };
+  return {
+    durationMs,
+    staggerMode,
+    startTransitionDirection,
+    items,
+  };
 }
 
 export function getDockLayoutAnimationTimeoutMs(snapshot: DockLayoutAnimationSnapshot): number {

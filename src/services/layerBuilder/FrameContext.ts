@@ -89,6 +89,7 @@ export function createFrameContext(): FrameContext {
     playbackSpeed,
     masterAudioState,
     clipDragPreview,
+    layerTransformPreview,
     getInterpolatedTransform,
     getInterpolatedEffects,
     getInterpolatedNodeGraphParams,
@@ -105,6 +106,21 @@ export function createFrameContext(): FrameContext {
   const playheadPosition = getPlayheadPosition(storePlayheadPosition);
   const clips = applyClipDragPreview(storeClips, clipDragPreview);
   const hasClipDragPreview = clipDragPreview != null;
+  const getPreviewedInterpolatedTransform = (clipId: string, localTime: number) => {
+    const transform = getInterpolatedTransform(clipId, localTime);
+    if (layerTransformPreview?.clipId !== clipId) return transform;
+
+    const preview = layerTransformPreview.transform;
+    return {
+      ...transform,
+      position: preview.position
+        ? { ...transform.position, ...preview.position }
+        : transform.position,
+      scale: preview.scale
+        ? { ...transform.scale, ...preview.scale }
+        : transform.scale,
+    };
+  };
   const activeCompId = mediaState.activeCompositionId || 'default';
   const activeComposition = mediaState.compositions.find((composition) => composition.id === activeCompId);
   const contextFrameRate =
@@ -139,6 +155,7 @@ export function createFrameContext(): FrameContext {
     isPlaying,
     isDraggingPlayhead,
     hasClipDragPreview,
+    layerTransformPreview,
     playheadPosition,
     playbackSpeed,
     masterAudioState,
@@ -146,7 +163,7 @@ export function createFrameContext(): FrameContext {
     proxyEnabled,
 
     // Store functions
-    getInterpolatedTransform,
+    getInterpolatedTransform: getPreviewedInterpolatedTransform,
     getInterpolatedEffects,
     getInterpolatedNodeGraphParams,
     getInterpolatedColorCorrection,

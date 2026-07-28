@@ -16,7 +16,7 @@ import {
 import { createHistoryTimelineEditState } from '../../../src/stores/timeline/historyTimelineEditState';
 import { createHistoryTimelineRestoreState } from '../../../src/stores/timeline/historyTimelineRestoreState';
 import { normalizeTempoMap } from '../../../src/timeline/tempo/tempoEdits';
-import type { TempoMap } from '../../../src/types';
+import type { TempoMap } from '../../../src/types/timeline';
 
 type HistoryStoreRefs = Parameters<typeof initHistoryStoreRefs>[0];
 type TimelineMockState = ReturnType<HistoryStoreRefs['timeline']['getState']>;

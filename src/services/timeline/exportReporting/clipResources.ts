@@ -290,10 +290,32 @@ export function reportExportClipStates(
   runId: string,
   clipStates: ReadonlyMap<string, ExportClipState>
 ): void {
+  const reportedRuntimeBindings = new Set<string>();
+  const reportedFrameProviders = new Set<object>();
+  const reportedPreciseVideos = new Set<HTMLVideoElement>();
+  const reportedImages = new Set<HTMLImageElement>();
+
   for (const state of clipStates.values()) {
-    reportExportRuntimeBinding(runId, state);
-    reportExportFrameProvider(runId, state);
-    reportExportPreciseVideo(runId, state);
-    reportExportImage(runId, state);
+    const runtimeSource = state.runtimeSource;
+    const runtimeBindingKey = runtimeSource?.runtimeSourceId && runtimeSource.runtimeSessionKey
+      ? `${runtimeSource.runtimeSourceId}:${runtimeSource.runtimeSessionKey}`
+      : null;
+    if (runtimeBindingKey && !reportedRuntimeBindings.has(runtimeBindingKey)) {
+      reportedRuntimeBindings.add(runtimeBindingKey);
+      reportExportRuntimeBinding(runId, state);
+    }
+
+    if (state.webCodecsPlayer && !reportedFrameProviders.has(state.webCodecsPlayer)) {
+      reportedFrameProviders.add(state.webCodecsPlayer);
+      reportExportFrameProvider(runId, state);
+    }
+    if (state.preciseVideoElement && !reportedPreciseVideos.has(state.preciseVideoElement)) {
+      reportedPreciseVideos.add(state.preciseVideoElement);
+      reportExportPreciseVideo(runId, state);
+    }
+    if (state.exportImageElement && !reportedImages.has(state.exportImageElement)) {
+      reportedImages.add(state.exportImageElement);
+      reportExportImage(runId, state);
+    }
   }
 }

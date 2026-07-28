@@ -692,7 +692,6 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
     { id: `lift-range:${Date.now()}`, type: 'lift-range', includeLinked: true },
     { source: 'ui', historyLabel: 'Lift range' },
   ),
-
   extractTimelineRange: () => get().applyTimelineEditOperation(
     { id: `extract-range:${Date.now()}`, type: 'extract-range', includeLinked: true },
     { source: 'ui', historyLabel: 'Extract range' },

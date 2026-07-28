@@ -1,51 +1,21 @@
 // Edge segment dragging (move two adjacent vertices together)
 
-import { useRef, useCallback } from 'react';
+import { useCallback, useId, useRef } from 'react';
+import { startBatch } from '../../stores/historyStore';
 import { useTimelineStore } from '../../stores/timeline';
-import { createMaskPathProperty } from '../../types/animationProperties';
-import type { ClipMask, MaskPathKeyframeValue, MaskVertex } from '../../types/masks';
+import type { ClipMask, MaskVertex } from '../../types/masks';
 import type { TimelineClip } from '../../types/timeline';
-import { startBatch, endBatch } from '../../stores/historyStore';
 import { createMaskEdgeId } from '../../utils/maskEdgeFeathers';
+import {
+  applyMaskVertexUpdates,
+  clearMaskPathDragPreview,
+  commitMaskPathDrag,
+  publishMaskPathDragPreview,
+  type MaskPathDragBatch,
+  type MaskVertexUpdate,
+} from './maskPathDragPreview';
 
 type EdgeDragVertex = { id: string; x: number; y: number };
-
-function buildPathValueWithVertexUpdates(
-  mask: ClipMask,
-  vertexUpdates: Array<{ id: string; updates: Partial<MaskVertex> }>,
-): MaskPathKeyframeValue {
-  const updatesById = new Map(vertexUpdates.map(({ id, updates }) => [id, updates]));
-  return {
-    closed: mask.closed,
-    vertices: mask.vertices.map(vertex => {
-      const updates = updatesById.get(vertex.id);
-      const nextVertex = updates ? { ...vertex, ...updates } : vertex;
-      return {
-        ...nextVertex,
-        handleIn: updates?.handleIn ? { ...updates.handleIn } : { ...vertex.handleIn },
-        handleOut: updates?.handleOut ? { ...updates.handleOut } : { ...vertex.handleOut },
-      };
-    }),
-  };
-}
-
-function recordPathIfAnimated(clipId: string, mask: ClipMask, vertexUpdates: Array<{ id: string; updates: Partial<MaskVertex> }>): void {
-  const store = useTimelineStore.getState();
-  const property = createMaskPathProperty(mask.id);
-  if (!store.isRecording(clipId, property) && !store.hasKeyframes(clipId, property)) return;
-  store.addMaskPathKeyframe(
-    clipId,
-    mask.id,
-    buildPathValueWithVertexUpdates(mask, vertexUpdates),
-    undefined,
-    'linear',
-    {
-      phase: 'update',
-      source: 'ui',
-      historyLabel: 'Move mask edge',
-    },
-  );
-}
 
 function copyVertex(vertex: MaskVertex): EdgeDragVertex {
   return { id: vertex.id, x: vertex.x, y: vertex.y };
@@ -60,6 +30,7 @@ export function useMaskEdgeDrag(
   clientToLocalPoint?: (clientX: number, clientY: number) => { x: number; y: number } | null,
 ) {
   const { selectMaskEdge, setMaskDragging } = useTimelineStore();
+  const previewOwnerId = useId();
 
   const edgeDragState = useRef<{
     isDragging: boolean;
@@ -99,6 +70,7 @@ export function useMaskEdgeDrag(
     if (!vA || !vB) return;
 
     selectMaskEdge(createMaskEdgeId(vertexIdA, vertexIdB));
+    clearMaskPathDragPreview(previewOwnerId);
 
     const previousA = activeMask.closed || indexA > 0
       ? activeMask.vertices[(indexA - 1 + activeMask.vertices.length) % activeMask.vertices.length]
@@ -124,6 +96,10 @@ export function useMaskEdgeDrag(
     let lastUpdate = 0;
     let lastClientX = e.clientX;
     let lastClientY = e.clientY;
+    let lastShiftKey = false;
+    let lastAlignAdjacentEdges = false;
+    let dragBatch: MaskPathDragBatch | null = null;
+    let latestVertexUpdates: MaskVertexUpdate[] = [];
 
     const buildEdgeUpdates = (dx: number, dy: number, snapToAxis: boolean, alignAdjacentEdges: boolean) => {
       const state = edgeDragState.current;
@@ -166,6 +142,7 @@ export function useMaskEdgeDrag(
       const svg = svgRef.current;
       if (!svg) return;
       const rect = svg.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
       const scaleX = canvasWidth / rect.width;
       const scaleY = canvasHeight / rect.height;
 
@@ -178,19 +155,25 @@ export function useMaskEdgeDrag(
         : (clientY - edgeDragState.current.startY) * scaleY / canvasHeight;
 
       const vertexUpdates = buildEdgeUpdates(dx, dy, shiftKey, alignAdjacentEdges);
-      useTimelineStore.getState().updateVertices(selectedClip.id, activeMask.id, vertexUpdates, true);
-      recordPathIfAnimated(selectedClip.id, activeMask, vertexUpdates);
+      latestVertexUpdates = vertexUpdates;
+      publishMaskPathDragPreview(
+        previewOwnerId,
+        selectedClip.id,
+        applyMaskVertexUpdates(activeMask, vertexUpdates),
+      );
     };
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       lastClientX = moveEvent.clientX;
       lastClientY = moveEvent.clientY;
+      lastShiftKey = moveEvent.shiftKey;
+      lastAlignAdjacentEdges = moveEvent.ctrlKey || moveEvent.metaKey;
 
       if (!edgeDragState.current.didStartDrag) {
         const moved = Math.hypot(moveEvent.clientX - edgeDragState.current.startX, moveEvent.clientY - edgeDragState.current.startY);
         if (moved <= 2) return;
         edgeDragState.current.didStartDrag = true;
-        startBatch('Move mask edge');
+        dragBatch = startBatch('Move mask edge');
         setMaskDragging(true);
       }
 
@@ -202,17 +185,32 @@ export function useMaskEdgeDrag(
 
     const handleKeyChange = (keyEvent: KeyboardEvent) => {
       if (keyEvent.key !== 'Shift' && keyEvent.key !== 'Control' && keyEvent.key !== 'Meta') return;
-      applyEdgeDrag(lastClientX, lastClientY, keyEvent.shiftKey, keyEvent.ctrlKey || keyEvent.metaKey);
+      lastShiftKey = keyEvent.shiftKey;
+      lastAlignAdjacentEdges = keyEvent.ctrlKey || keyEvent.metaKey;
+      applyEdgeDrag(lastClientX, lastClientY, lastShiftKey, lastAlignAdjacentEdges);
     };
 
-    const handleMouseUp = (upEvent: MouseEvent) => {
+    const handleMouseUp = (upEvent?: MouseEvent) => {
       if (edgeDragState.current.didStartDrag) {
-        applyEdgeDrag(upEvent.clientX, upEvent.clientY, upEvent.shiftKey, upEvent.ctrlKey || upEvent.metaKey);
-        const store = useTimelineStore.getState();
-        store.invalidateCache();
-        store.setMaskDragging(false);
-        endBatch();
+        applyEdgeDrag(
+          upEvent?.clientX ?? lastClientX,
+          upEvent?.clientY ?? lastClientY,
+          upEvent?.shiftKey ?? lastShiftKey,
+          upEvent ? upEvent.ctrlKey || upEvent.metaKey : lastAlignAdjacentEdges,
+        );
+        if (dragBatch) {
+          commitMaskPathDrag(
+            useTimelineStore.getState(),
+            selectedClip.id,
+            activeMask,
+            latestVertexUpdates,
+            'Move mask edge',
+            dragBatch,
+          );
+        }
       }
+      clearMaskPathDragPreview(previewOwnerId);
+      setMaskDragging(false);
       edgeDragState.current = {
         isDragging: false,
         didStartDrag: false,
@@ -229,13 +227,26 @@ export function useMaskEdgeDrag(
       window.removeEventListener('mouseup', handleMouseUp);
       window.removeEventListener('keydown', handleKeyChange);
       window.removeEventListener('keyup', handleKeyChange);
+      window.removeEventListener('blur', handleBlur);
     };
+    const handleBlur = () => handleMouseUp();
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
     window.addEventListener('keydown', handleKeyChange);
     window.addEventListener('keyup', handleKeyChange);
-  }, [activeMask, selectedClip, canvasWidth, canvasHeight, selectMaskEdge, setMaskDragging, svgRef, clientToLocalPoint]);
+    window.addEventListener('blur', handleBlur);
+  }, [
+    activeMask,
+    canvasHeight,
+    canvasWidth,
+    clientToLocalPoint,
+    previewOwnerId,
+    selectedClip,
+    selectMaskEdge,
+    setMaskDragging,
+    svgRef,
+  ]);
 
   return { handleEdgeMouseDown };
 }

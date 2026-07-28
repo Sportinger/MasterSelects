@@ -36,6 +36,7 @@ import { useMaskVertexDrag } from './useMaskVertexDrag';
 import { useMaskDrag } from './useMaskDrag';
 import { useMaskEdgeDrag } from './useMaskEdgeDrag';
 import { useMaskShapeDraw } from './useMaskShapeDraw';
+import { applyMaskEditPreview } from '../../stores/timeline/maskEditPreview';
 
 interface MaskOverlayProps {
   canvasWidth: number;
@@ -88,6 +89,7 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
     selectedVertexIds,
     selectedMaskEdgeId,
     maskFeatherPreview,
+    maskEditPreview,
     setMaskEditMode,
     deselectAllVertices,
     selectVertex,
@@ -126,7 +128,11 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
   const selectedClipId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
   const selectedClip = clips.find(c => c.id === selectedClipId);
   const selectedClipMasks = selectedClip
-    ? getInterpolatedMasks(selectedClip.id, playheadPosition - selectedClip.startTime) ?? selectedClip.masks
+    ? applyMaskEditPreview(
+        selectedClip.id,
+        getInterpolatedMasks(selectedClip.id, playheadPosition - selectedClip.startTime) ?? selectedClip.masks,
+        maskEditPreview,
+      )
     : undefined;
   const activeMask = selectedClipMasks?.find(m => m.id === activeMaskId) ?? selectedClipMasks?.[0];
   const activeLayer = useMemo(() => {

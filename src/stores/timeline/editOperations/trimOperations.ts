@@ -11,7 +11,7 @@ import type {
   TrimEdgeToTimeOperation,
 } from './types';
 
-const MIN_CLIP_DURATION = 0.1;
+export const MIN_CLIP_DURATION = 0.04;
 const EPSILON = 0.0001;
 
 type ClipTrimUpdate = {

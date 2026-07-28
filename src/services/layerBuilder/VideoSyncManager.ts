@@ -1,6 +1,5 @@
 ﻿// VideoSyncManager - Handles video element synchronization with playhead
 // Extracted from LayerBuilderService for separation of concerns
-
 import type { TimelineClip } from '../../types';
 import type { FrameContext } from './types';
 import { createFrameContext } from './FrameContext';
@@ -15,7 +14,7 @@ import {
 } from '../mediaRuntime/runtimePlayback';
 import { scrubSettleState } from '../scrubSettleState';
 import { resolveVideoSyncMedia } from './videoSyncMediaResolver';
-import { hydrateTimelineMediaWindow } from '../timeline/lazyMediaElements';
+import { hydrateTimelineMediaWindow, keepLazyTimelineVideoElementAlive } from '../timeline/lazyMediaElements';
 import { VideoSyncForceDecodeManager } from './videoSyncForceDecodeManager';
 import { VideoSyncFullWebCodecsCoordinator } from './videoSyncFullWebCodecsCoordinator';
 import { VideoSyncHandoffManager } from './videoSyncHandoffs';
@@ -440,6 +439,7 @@ export class VideoSyncManager {
    */
   syncVideoElements(): void {
     const ctx = createFrameContext();
+    this.handoffs.getRetainedVideoElements(ctx.now).forEach((video) => keepLazyTimelineVideoElementAlive(video, ctx.now));
     hydrateTimelineMediaWindow(ctx);
     const isInteractivePreview = ctx.isDraggingPlayhead || ctx.hasClipDragPreview;
 

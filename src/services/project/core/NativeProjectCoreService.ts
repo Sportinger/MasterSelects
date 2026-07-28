@@ -24,7 +24,6 @@ export class NativeProjectCoreService {
   private isDirty = false;
   private dirtyRevision = 0;
   private saveQueue: Promise<void> = Promise.resolve();
-  private autoSaveInterval: number | null = null;
   private client = NativeHelperClient;
 
   // ============================================
@@ -190,7 +189,6 @@ export class NativeProjectCoreService {
 
       this.storeLastProject(projectPath);
       await addRecentNativeProject(projectPath, initialProject);
-      this.startAutoSave();
 
       // Save any existing API keys
       await this.saveKeysFile();
@@ -229,7 +227,6 @@ export class NativeProjectCoreService {
 
       this.storeLastProject(projectPath);
       await addRecentNativeProject(projectPath, projectData);
-      this.startAutoSave();
 
       // Try to restore API keys from file if IndexedDB keys are empty
       try {
@@ -299,7 +296,6 @@ export class NativeProjectCoreService {
   }
 
   closeProject(): void {
-    this.stopAutoSave();
     this.projectPath = null;
     this.projectData = null;
     this.isDirty = false;
@@ -495,26 +491,6 @@ export class NativeProjectCoreService {
     if (!this.projectData) return;
     this.projectData.folders = folders;
     this.markDirty();
-  }
-
-  // ============================================
-  // AUTO-SAVE
-  // ============================================
-
-  startAutoSave(): void {
-    this.stopAutoSave();
-    this.autoSaveInterval = window.setInterval(() => {
-      if (this.isDirty) {
-        this.saveProject();
-      }
-    }, 30000);
-  }
-
-  stopAutoSave(): void {
-    if (this.autoSaveInterval !== null) {
-      clearInterval(this.autoSaveInterval);
-      this.autoSaveInterval = null;
-    }
   }
 
   // ============================================

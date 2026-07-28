@@ -30,6 +30,17 @@ describe('transcript moments', () => {
     const executor = vi.fn(async (
       calls: AIToolCallExecution[],
     ): Promise<AIToolCallExecutionResult[]> => {
+      const tool = calls[0]?.tool;
+      if (tool === 'getSpeechMarkers') {
+        return [{
+          id: calls[0]?.id,
+          tool,
+          result: {
+            success: true,
+            data: { hasMarkers: false, hasMore: false, markers: [] },
+          },
+        }];
+      }
       const offset = calls[0]?.args.offset;
       return [{
         id: calls[0]?.id,
@@ -61,8 +72,23 @@ describe('transcript moments', () => {
         schemaVersion: 1,
         handle: '$m1',
         source: { mediaId: 'media-1' },
-        sourceRange: { startSeconds: 10, endSeconds: 10.4 },
-        evidence: { transcript: 'Ein' },
+        sourceRange: { startSeconds: 10, endSeconds: 10.9 },
+        evidence: {
+          transcript: 'Ein guter Moment.',
+          words: [
+            { text: 'Ein', startSeconds: 10, endSeconds: 10.4 },
+            {
+              text: 'guter',
+              startSeconds: 10.4,
+              endSeconds: 10.4 + (0.5 * 5) / 11,
+            },
+            {
+              text: 'Moment.',
+              startSeconds: 10.4 + (0.5 * 5) / 11,
+              endSeconds: 10.9,
+            },
+          ],
+        },
         confidence: 1,
         indexVersion: TRANSCRIPT_MOMENT_INDEX_VERSION,
         analysisSources: ['transcript'],
@@ -71,18 +97,11 @@ describe('transcript moments', () => {
         schemaVersion: 1,
         handle: '$m2',
         source: { mediaId: 'media-1' },
-        sourceRange: { startSeconds: 10.4, endSeconds: 10.9 },
-        evidence: { transcript: 'guter Moment.' },
-        confidence: 1,
-        indexVersion: TRANSCRIPT_MOMENT_INDEX_VERSION,
-        analysisSources: ['transcript'],
-      },
-      {
-        schemaVersion: 1,
-        handle: '$m3',
-        source: { mediaId: 'media-1' },
         sourceRange: { startSeconds: 12, endSeconds: 12.5 },
-        evidence: { transcript: 'Weiter.' },
+        evidence: {
+          transcript: 'Weiter.',
+          words: [{ text: 'Weiter.', startSeconds: 12, endSeconds: 12.5 }],
+        },
         confidence: 1,
         indexVersion: TRANSCRIPT_MOMENT_INDEX_VERSION,
         analysisSources: ['transcript'],
@@ -116,6 +135,17 @@ describe('transcript moments', () => {
     const executor = vi.fn(async (
       calls: AIToolCallExecution[],
     ): Promise<AIToolCallExecutionResult[]> => {
+      const tool = calls[0]?.tool;
+      if (tool === 'getSpeechMarkers') {
+        return [{
+          id: calls[0]?.id,
+          tool,
+          result: {
+            success: true,
+            data: { hasMarkers: false, hasMore: false, markers: [] },
+          },
+        }];
+      }
       const offset = calls[0]?.args.offset as number;
       const limit = calls[0]?.args.limit as number;
       const segments = words.slice(offset, offset + limit);
@@ -136,17 +166,37 @@ describe('transcript moments', () => {
     });
 
     const moments = await buildTranscriptMoments(transcriptSnapshot(), executor);
+    const indexedWords = moments.flatMap(moment => moment.evidence.words ?? []);
 
-    expect(moments).toHaveLength(TRANSCRIPT_MOMENT_WORD_CAP);
+    expect(moments).toHaveLength(50);
+    expect(indexedWords).toHaveLength(TRANSCRIPT_MOMENT_WORD_CAP);
     expect(moments.at(-1)).toMatchObject({
-      handle: '$m400',
-      evidence: { transcript: 'word-400' },
+      handle: '$m50',
+      sourceRange: { startSeconds: 392, endSeconds: 399.5 },
+      evidence: {
+        transcript: [
+          'word-393',
+          'word-394',
+          'word-395',
+          'word-396',
+          'word-397',
+          'word-398',
+          'word-399',
+          'word-400',
+        ].join(' '),
+      },
+    });
+    expect(indexedWords.at(-1)).toEqual({
+      text: 'word-400',
+      startSeconds: 399,
+      endSeconds: 399.5,
     });
     // Four transcript pages plus the trailing speech-marker read (v2).
     expect(executor).toHaveBeenCalledTimes(5);
-    // The last call is the speech-marker read; the final transcript page
-    // sits directly before it.
-    expect(executor.mock.calls.at(-2)?.[0]?.[0]?.args).toMatchObject({
+    const transcriptCalls = executor.mock.calls.filter(
+      call => call[0]?.[0]?.tool === 'getClipTranscript',
+    );
+    expect(transcriptCalls.at(-1)?.[0]?.[0]?.args).toMatchObject({
       offset: 360,
       limit: 40,
     });

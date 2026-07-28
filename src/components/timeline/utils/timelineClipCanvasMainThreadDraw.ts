@@ -4,6 +4,7 @@ import type { TimelinePaintSourceClip } from '../../../timeline';
 import { drawTimelineSpectrogram, resolveTimelineSpectrogramSourceRange } from './spectrogramCanvas';
 import { isTimelineClipCanvasAudioClip } from './timelineClipCanvasAudio';
 import { drawTimelineClipCanvasCompositionDecorations } from './timelineClipCanvasCompositionPainter';
+import { drawTimelineClipCanvasEdgeBrackets } from './timelineClipCanvasEdgeBrackets';
 import { drawTimelineClipCanvasFadeCurve } from './timelineClipCanvasFadeCurvePainter';
 import { drawTimelineClipCanvasMidiPreviewResource } from './timelineClipCanvasMidiPreviewPainter';
 import { createTimelineClipCanvasWorkerMidiPreviewResource } from './timelineClipCanvasMidiResource';
@@ -331,6 +332,7 @@ export function drawTimelineClipCanvasMainThread(
     ctx.strokeStyle = selected ? selectedBorder : hovered ? 'rgba(255,255,255,0.58)' : border;
     ctx.stroke();
 
+    if (!selected) drawTimelineClipCanvasEdgeBrackets(ctx, x, top, w, h);
   }
 
   return diagnostics;

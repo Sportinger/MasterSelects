@@ -15,7 +15,10 @@ packs, or evaluation criteria.
 
 Story-path compile requests can include bounded browser-built transcript
 moments. Index version `app-transcript-v2` keeps the transcript text and source
-range from v1 and can add three optional evidence groups:
+range from v1, groups adjacent transcript spans into short natural phrases,
+and includes the original source timings in `words`. Collection stops at a
+request-wide maximum of 400 accepted transcript words. Moments can also add
+three optional evidence groups:
 
 - `pauses`: source-time start/end ranges from voice activity or speech markers
 - `emphasis`: text, source start, and score from prosody evidence
@@ -26,8 +29,7 @@ Each moment declares its honest `analysisSources`. The allowed values are
 added only when that source contributed evidence to that moment. Transcript is
 always present for emitted moments. Marker pages are read through the existing
 semantic `getSpeechMarkers` execution path after transcript paging, without
-adding an app/store import to the isolated transport types. Per moment, marker
-evidence is capped at 20 entries, pauses at 10, and emphasis at 10.
+adding an app/store import to the isolated transport types.
 
 ---
 

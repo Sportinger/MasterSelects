@@ -19,6 +19,7 @@ export function useDockLayoutTransition({
   layout,
 }: UseDockLayoutTransitionArgs): void {
   const layoutAnimationTimeoutRef = useRef<number | null>(null);
+  const dividerFadeTimeoutRef = useRef<number | null>(null);
   const layoutAnimationsRef = useRef<Animation[]>([]);
   const pendingLayoutAnimationRef = useRef<DockLayoutAnimationSnapshot | null>(null);
   const hasWarmedLayoutAnimationRef = useRef(false);
@@ -106,11 +107,35 @@ export function useDockLayoutTransition({
       const container = containerRef.current;
       if (!container) return;
 
+      if (dividerFadeTimeoutRef.current) {
+        window.clearTimeout(dividerFadeTimeoutRef.current);
+        dividerFadeTimeoutRef.current = null;
+      }
+      container.classList.remove('layout-switch-divider-fade-in');
+
       const durationMs = event instanceof CustomEvent && typeof event.detail?.durationMs === 'number'
         ? event.detail.durationMs
         : 500;
-      pendingLayoutAnimationRef.current = captureDockLayoutAnimationSnapshot(container, durationMs);
+      const staggerMode = event instanceof CustomEvent && event.detail?.staggerMode === 'sequence'
+        ? 'sequence'
+        : 'puzzle';
+      const startTransitionDirection = event instanceof CustomEvent
+        && (
+          event.detail?.startTransitionDirection === 'to-start'
+          || event.detail?.startTransitionDirection === 'from-start'
+        )
+        ? event.detail.startTransitionDirection
+        : undefined;
+      pendingLayoutAnimationRef.current = captureDockLayoutAnimationSnapshot(
+        container,
+        durationMs,
+        staggerMode,
+        startTransitionDirection,
+      );
       container.classList.add('layout-switch-animating');
+      container.classList.toggle('layout-switch-start-surface', staggerMode === 'sequence');
+      container.classList.toggle('layout-switch-to-start', startTransitionDirection === 'to-start');
+      container.classList.toggle('layout-switch-from-start', startTransitionDirection === 'from-start');
     };
 
     window.addEventListener(DOCK_LAYOUT_TRANSITION_EVENT, handleLayoutTransition);
@@ -142,6 +167,16 @@ export function useDockLayoutTransition({
         window.clearTimeout(layoutAnimationTimeoutRef.current);
       }
       container.classList.remove('layout-switch-animating');
+      if (snapshot.startTransitionDirection === 'from-start') {
+        container.classList.add('layout-switch-divider-fade-in');
+        dividerFadeTimeoutRef.current = window.setTimeout(() => {
+          container.classList.remove('layout-switch-divider-fade-in');
+          dividerFadeTimeoutRef.current = null;
+        }, 660);
+      }
+      container.classList.remove('layout-switch-start-surface');
+      container.classList.remove('layout-switch-to-start');
+      container.classList.remove('layout-switch-from-start');
       layoutAnimationTimeoutRef.current = null;
       layoutAnimationsRef.current = [];
     };
@@ -167,8 +202,16 @@ export function useDockLayoutTransition({
       window.clearTimeout(layoutAnimationTimeoutRef.current);
       layoutAnimationTimeoutRef.current = null;
     }
+    if (dividerFadeTimeoutRef.current) {
+      window.clearTimeout(dividerFadeTimeoutRef.current);
+      dividerFadeTimeoutRef.current = null;
+    }
     layoutAnimationsRef.current.forEach((animation) => animation.cancel());
     layoutAnimationsRef.current = [];
     containerRef.current?.classList.remove('layout-switch-animating');
+    containerRef.current?.classList.remove('layout-switch-start-surface');
+    containerRef.current?.classList.remove('layout-switch-to-start');
+    containerRef.current?.classList.remove('layout-switch-from-start');
+    containerRef.current?.classList.remove('layout-switch-divider-fade-in');
   }, [containerRef]);
 }

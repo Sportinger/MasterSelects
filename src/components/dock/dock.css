@@ -29,6 +29,17 @@
   transition: opacity 180ms ease-in-out;
 }
 
+.dock-container.layout-switch-start-surface {
+  background:
+    radial-gradient(circle at 15% 12%, rgba(239, 86, 47, 0.2), transparent 31rem),
+    radial-gradient(circle at 88% 23%, rgba(14, 124, 134, 0.16), transparent 28rem),
+    linear-gradient(155deg, #fbf7ef 0%, #f4ecdc 56%, #efe0bf 100%);
+}
+
+.dock-container.layout-switch-start-surface.layout-switch-from-start {
+  background: transparent;
+}
+
 .dock-container.layout-switch-animating .dock-tab-pane,
 .dock-container.layout-switch-animating .floating-panel {
   transform-origin: top left;
@@ -152,7 +163,27 @@
   content: '';
   position: absolute;
   background: var(--border-color);
-  transition: background 0.15s;
+  opacity: 1;
+  transition: background 0.15s, opacity 660ms ease;
+}
+
+.dock-container.layout-switch-start-surface .dock-resize-handle::after {
+  opacity: 0;
+  transition: opacity 1000ms ease;
+}
+
+.dock-container.layout-switch-divider-fade-in .dock-resize-handle::after {
+  animation: dockDividerFadeIn 660ms ease both;
+}
+
+@keyframes dockDividerFadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .dock-resize-handle.horizontal {
@@ -181,6 +212,12 @@
   height: 2px;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .dock-container.layout-switch-divider-fade-in .dock-resize-handle::after {
+    animation: none;
+  }
+}
+
 .dock-resize-handle:hover::after,
 .dock-resize-handle.active::after {
   background: var(--accent);
@@ -203,6 +240,14 @@
 
 .dock-tab-pane.is-maximized-pane {
   box-shadow: inset 0 0 0 1px rgba(45, 140, 235, 0.18);
+}
+
+.dock-tab-pane[data-active-panel-type='start'] {
+  background: transparent;
+}
+
+.dock-tab-pane[data-active-panel-type='start'] > .dock-tab-bar {
+  display: none;
 }
 
 /* Tab bar */
@@ -600,7 +645,8 @@
 }
 
 .dock-panel-content-inner--media,
-.dock-panel-content-inner--timeline {
+.dock-panel-content-inner--timeline,
+.dock-panel-content-inner--start {
   overflow: hidden;
 }
 

@@ -2553,6 +2553,63 @@ describe('timeline edit operations kernel', () => {
     ]);
   });
 
+  it('accepts word-sized 80ms trims and rejects ranges below the 40ms floor', () => {
+    const video = createMockClip({
+      id: 'video-1',
+      trackId: 'video-1',
+      startTime: 0,
+      duration: 8,
+      inPoint: 0,
+      outPoint: 8,
+      linkedClipId: 'audio-1',
+    });
+    const audio = createMockClip({
+      id: 'audio-1',
+      trackId: 'audio-1',
+      startTime: 0,
+      duration: 8,
+      inPoint: 0,
+      outPoint: 8,
+      linkedClipId: 'video-1',
+      source: { type: 'audio' },
+    });
+    useTimelineStore.setState({
+      tracks: [
+        createMockTrack({ id: 'video-1', type: 'video' }),
+        createMockTrack({ id: 'audio-1', type: 'audio' }),
+      ],
+      clips: [video, audio],
+    });
+
+    const wordTrim = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'trim-word-range',
+      type: 'trim-clip',
+      clipId: 'video-1',
+      inPoint: 1,
+      outPoint: 1.08,
+      includeLinked: true,
+    }, { source: 'ai-tool', historyLabel: 'AI: trim word' });
+
+    expect(wordTrim.success).toBe(true);
+    expect(useTimelineStore.getState().clips.every(
+      (clip) => Math.abs(clip.duration - 0.08) < 1e-9,
+    )).toBe(true);
+
+    const tooShort = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'trim-sub-frame-range',
+      type: 'trim-clip',
+      clipId: 'video-1',
+      inPoint: 2,
+      outPoint: 2.02,
+      includeLinked: true,
+    }, { source: 'ai-tool', historyLabel: 'AI: reject sub-frame trim' });
+
+    expect(tooShort.success).toBe(false);
+    expect(tooShort.warnings).toContainEqual(expect.objectContaining({
+      code: 'invalid-range',
+    }));
+  });
+
   it('keeps an explicitly selected linked clip clamped during multi-trim', () => {
     const video = createMockClip({
       id: 'video-1',

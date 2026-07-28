@@ -14,9 +14,16 @@ import {
 import type { ExportAudioBufferReport, ExportPreviewFrameReport } from './types';
 
 function createExportAudioBufferResource(report: ExportAudioBufferReport): RenderResourceDescriptor {
+  // Mix and master are consecutive states of the same output slot. Replacing
+  // the descriptor avoids counting the same PCM allocation twice when the
+  // master bus processes the mix in place, while still updating its stage and
+  // memory diagnostics when master effects produce a fresh buffer.
+  const resourceKey = report.stage === 'mix-buffer' || report.stage === 'master-buffer'
+    ? 'audio:output-buffer:timeline'
+    : `audio:${report.stage}:${report.clipId ?? report.trackId ?? 'timeline'}`;
   const audioSourceId = getRunResourceId(
     report.runId,
-    `audio:${report.stage}:${report.clipId ?? report.trackId ?? 'timeline'}`
+    resourceKey
   );
   const heapBytes = Math.max(
     0,
@@ -25,7 +32,7 @@ function createExportAudioBufferResource(report: ExportAudioBufferReport): Rende
 
   return createRenderResourceDescriptorFromDemand(createExportDemand({
     id: audioSourceId,
-    resourceKind: 'audio-source-clock',
+    resourceKind: 'audio-buffer',
     owner: getRunOwner(report.runId, report.clipId, report.mediaFileId),
     source: removeUndefinedValues({
       mediaFileId: report.mediaFileId,
@@ -39,21 +46,14 @@ function createExportAudioBufferResource(report: ExportAudioBufferReport): Rende
     },
     tags: ['export', 'audio', report.stage],
   }), {
-    resourceKind: 'audio-source-clock',
-    audioSourceId,
-    clockId: audioSourceId,
+    resourceKind: 'audio-buffer',
+    audioBufferId: audioSourceId,
     memoryCost: {
       heapBytes,
       decodedFrameBytes: heapBytes,
     },
     diagnostics: {
       status: 'ok',
-      audioClock: {
-        clockId: audioSourceId,
-        status: 'ok',
-        sampleRate: report.buffer.sampleRate,
-        channelCount: report.buffer.numberOfChannels,
-      },
     },
     label: `Export audio ${report.stage}`,
   });

@@ -189,16 +189,23 @@ export function Preview({ panelId, source, showTransparencyGrid, initialEdit }: 
   const [isGaussianOrbiting, setIsGaussianOrbiting] = useState(false);
   const [isGaussianPanning, setIsGaussianPanning] = useState(false);
   const [isGaussianFpsLooking, setIsGaussianFpsLooking] = useState(false);
-  const renderResolution = editMode && containerSize.width > 0 && containerSize.height > 0
+  const activeCameraClipAtPlayhead = useActiveCameraClipAtPlayhead(clips, tracks, playheadPosition);
+  const editCameraModeActive = Boolean(
+    isEditableSource && editMode && !maskPanelActive
+    && (initialEdit?.initialEditMode || activeCameraClipAtPlayhead),
+  );
+  const usesPanelSizedEditViewport = !maskPanelActive
+    && (editCameraModeActive || previewCameraOverride !== null);
+  const renderResolution = usesPanelSizedEditViewport && containerSize.width > 0 && containerSize.height > 0
     ? containerSize
     : effectiveResolution;
-  const viewportOverride = useMemo(() => editMode && containerSize.width > 0 && containerSize.height > 0
+  const viewportOverride = useMemo(() => usesPanelSizedEditViewport && containerSize.width > 0 && containerSize.height > 0
     ? {
         width: containerSize.width,
         height: containerSize.height,
         cameraOverride: previewCameraOverride,
       }
-    : null, [containerSize.height, containerSize.width, editMode, previewCameraOverride]);
+    : null, [containerSize.height, containerSize.width, previewCameraOverride, usesPanelSizedEditViewport]);
 
   usePreviewRenderTargetRegistration({
     canvasRef,
@@ -245,9 +252,7 @@ export function Preview({ panelId, source, showTransparencyGrid, initialEdit }: 
   const gaussianKeyboardLastTimeRef = useRef<number | null>(null);
   const gaussianKeyboardBatchActiveRef = useRef(false);
   const sceneNavHistoryBatchActiveRef = useRef(false);
-  const activeCameraClipAtPlayhead = useActiveCameraClipAtPlayhead(clips, tracks, playheadPosition);
   const editCameraClip = useMemo(() => createPreviewEditorCameraClip(panelId), [panelId]);
-  const editCameraModeActive = Boolean(isEditableSource && editMode && (initialEdit?.initialEditMode || activeCameraClipAtPlayhead));
 
   const getSceneNavPointerLockTarget = useCallback(() => {
     return canvasWrapperRef.current ?? containerRef.current;
@@ -475,7 +480,7 @@ export function Preview({ panelId, source, showTransparencyGrid, initialEdit }: 
     effectiveResolution,
     exportPreviewCanvasRef,
     exportPreviewFrame,
-    fillContainer: editMode,
+    fillContainer: usesPanelSizedEditViewport,
     isExporting,
     setCanvasSize,
     setContainerSize,
@@ -599,7 +604,7 @@ export function Preview({ panelId, source, showTransparencyGrid, initialEdit }: 
     useLayerDrag({
       editMode: layerTransformMode, overlayRef, canvasSize, canvasInContainer, viewZoom,
       layers, clips, tracks, selectedLayerId, selectedClipId,
-      selectClip, selectLayer, updateClipTransform, updateLayer,
+      selectClip, selectLayer, hasKeyframes, setPropertyValue, updateClipTransform, updateLayer,
       calculateLayerBounds, findLayerAtPosition, findHandleAtPosition,
     });
 
@@ -630,7 +635,7 @@ export function Preview({ panelId, source, showTransparencyGrid, initialEdit }: 
 
   return (
     <div
-      className="preview-container"
+      className={`preview-container ${maskNavigationMode ? 'mask-navigation-mode' : ''}`}
       ref={containerRef}
       data-preview-panel-id={panelId}
       data-preview-editable={isEditableSource ? 'true' : 'false'}

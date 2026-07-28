@@ -47,7 +47,6 @@ export class ProjectCoreService {
   private isDirty = false;
   private dirtyRevision = 0;
   private saveQueue: Promise<void> = Promise.resolve();
-  private autoSaveInterval: number | null = null;
   private pendingHandle: FileSystemDirectoryHandle | null = null;
   private permissionNeeded = false;
   private fileStorage: FileStorageService;
@@ -208,7 +207,6 @@ export class ProjectCoreService {
 
       await this.storeLastProject(projectFolder);
       await addRecentFsaProject(projectFolder, initialProject);
-      this.startAutoSave();
 
       // Save any existing API keys to the new project
       await this.saveKeysFile();
@@ -258,7 +256,6 @@ export class ProjectCoreService {
 
       await this.storeLastProject(handle);
       await addRecentFsaProject(handle, projectData);
-      this.startAutoSave();
 
       // Try to restore API keys from file if IndexedDB keys are empty
       try {
@@ -324,7 +321,6 @@ export class ProjectCoreService {
   }
 
   closeProject(): void {
-    this.stopAutoSave();
     this.projectHandle = null;
     this.projectData = null;
     this.isDirty = false;
@@ -636,26 +632,6 @@ export class ProjectCoreService {
     if (!this.projectData) return;
     this.projectData.folders = folders;
     this.markDirty();
-  }
-
-  // ============================================
-  // AUTO-SAVE
-  // ============================================
-
-  startAutoSave(): void {
-    this.stopAutoSave();
-    this.autoSaveInterval = window.setInterval(() => {
-      if (this.isDirty) {
-        this.saveProject();
-      }
-    }, 30000);
-  }
-
-  stopAutoSave(): void {
-    if (this.autoSaveInterval !== null) {
-      clearInterval(this.autoSaveInterval);
-      this.autoSaveInterval = null;
-    }
   }
 
   // ============================================

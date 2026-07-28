@@ -5,7 +5,7 @@ import {
   isInfiniteTimelineSourceType,
 } from './clipSourceTiming';
 
-const MIN_CLIP_DURATION = 0.1;
+const MIN_CLIP_DURATION = 0.04;
 const EPSILON = 0.001;
 
 export type TrimHandleEdge = 'left' | 'right';

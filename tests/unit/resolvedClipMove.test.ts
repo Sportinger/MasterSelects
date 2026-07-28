@@ -90,6 +90,133 @@ describe('resolved clip move', () => {
     expect(JSON.parse(JSON.stringify(result.resolvedMoves[0]))).toEqual(result.resolvedMoves[0]);
   });
 
+  it('moves selected visual clips across tracks while preserving relative layer offsets', () => {
+    const selectionTracks = [
+      createMockTrack({ id: 'video-3', type: 'video' }),
+      createMockTrack({ id: 'video-2', type: 'video' }),
+      createMockTrack({ id: 'video-1', type: 'video' }),
+      createMockTrack({ id: 'audio-1', type: 'audio' }),
+    ];
+    const lead = createMockClip({
+      id: 'lead',
+      trackId: 'video-1',
+      startTime: 1,
+      duration: 2,
+      source: { type: 'video' },
+    });
+    const follower = createMockClip({
+      id: 'follower',
+      trackId: 'video-2',
+      startTime: 4,
+      duration: 2,
+      source: { type: 'video' },
+    });
+
+    const result = resolveClipMoveRequest({
+      id: 'move-selection-across-tracks',
+      clips: [lead, follower],
+      tracks: selectionTracks,
+      clipId: lead.id,
+      requestedStartTime: 3,
+      requestedTrackId: 'video-2',
+      selectedClipIds: [lead.id, follower.id],
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect(result.operation.moves).toEqual([
+      { clipId: 'lead', startTime: 3, trackId: 'video-2' },
+      { clipId: 'follower', startTime: 6, trackId: 'video-3' },
+    ]);
+  });
+
+  it('blocks a vertical group move when a selected follower has no relative target track', () => {
+    const selectionTracks = [
+      createMockTrack({ id: 'video-3', type: 'video' }),
+      createMockTrack({ id: 'video-2', type: 'video' }),
+      createMockTrack({ id: 'video-1', type: 'video' }),
+    ];
+    const lead = createMockClip({
+      id: 'lead',
+      trackId: 'video-2',
+      startTime: 1,
+      source: { type: 'video' },
+    });
+    const follower = createMockClip({
+      id: 'follower',
+      trackId: 'video-3',
+      startTime: 4,
+      source: { type: 'video' },
+    });
+
+    const result = resolveClipMoveRequest({
+      id: 'blocked-selection-track-move',
+      clips: [lead, follower],
+      tracks: selectionTracks,
+      clipId: lead.id,
+      requestedStartTime: 3,
+      requestedTrackId: 'video-3',
+      selectedClipIds: [lead.id, follower.id],
+    });
+
+    expect(result.resolvedMoves).toEqual([]);
+    expect(result.operation.moves).toEqual([]);
+    expect(result.warnings).toEqual([
+      expect.objectContaining({
+        code: 'unsupported',
+        clipId: 'follower',
+        trackId: 'video-3',
+      }),
+    ]);
+  });
+
+  it('recomputes selected track targets when lead resistance chooses an alternative track', () => {
+    const selectionTracks = [
+      createMockTrack({ id: 'video-4', type: 'video' }),
+      createMockTrack({ id: 'video-3', type: 'video' }),
+      createMockTrack({ id: 'video-2', type: 'video' }),
+      createMockTrack({ id: 'video-1', type: 'video' }),
+    ];
+    const lead = createMockClip({
+      id: 'lead',
+      trackId: 'video-2',
+      startTime: 1,
+      duration: 2,
+      source: { type: 'video' },
+    });
+    const follower = createMockClip({
+      id: 'follower',
+      trackId: 'video-1',
+      startTime: 4,
+      duration: 2,
+      source: { type: 'video' },
+    });
+
+    const result = resolveClipMoveRequest({
+      id: 'move-selection-to-alternative-track',
+      clips: [lead, follower],
+      tracks: selectionTracks,
+      clipId: lead.id,
+      requestedStartTime: 3,
+      requestedTrackId: 'video-3',
+      selectedClipIds: [lead.id, follower.id],
+      getPositionWithResistance: vi.fn((
+        clipId: string,
+        startTime: number,
+        trackId: string,
+      ) => ({
+        startTime,
+        forcingOverlap: false,
+        noFreeSpace: clipId === lead.id && trackId === 'video-3',
+      })),
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect(result.operation.moves).toEqual([
+      { clipId: 'lead', startTime: 3, trackId: 'video-4' },
+      { clipId: 'follower', startTime: 6, trackId: 'video-3' },
+    ]);
+  });
+
   it('materializes linked clips unless includeLinked is false', () => {
     const video = createMockClip({
       id: 'video-1',
@@ -168,11 +295,12 @@ describe('resolved clip move', () => {
       tracks,
       clipId: 'video-1',
       requestedStartTime: 8,
+      requestedTrackId: 'video-2',
       selectedClipIds: ['video-1', 'audio-1'],
     });
 
     expect(result.operation.moves).toEqual([
-      { clipId: 'video-1', startTime: 8, trackId: 'video-1' },
+      { clipId: 'video-1', startTime: 8, trackId: 'video-2' },
       { clipId: 'audio-1', startTime: 8.5, trackId: 'audio-1' },
     ]);
     expect(result.resolvedMoves.find(move => move.clipId === 'video-1')?.linked).toEqual({

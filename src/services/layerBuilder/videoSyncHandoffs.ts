@@ -80,6 +80,15 @@ export class VideoSyncHandoffManager {
     return this.handoffElements.has(video);
   }
 
+  getRetainedVideoElements(now: number = performance.now()): ReadonlySet<HTMLVideoElement> {
+    this.clearExpiredPreviewContinuations(now);
+    const retained = new Set(this.handoffElements);
+    for (const entry of this.previewContinuationElements.values()) {
+      retained.add(entry.videoElement);
+    }
+    return retained;
+  }
+
   getHandoffVideoElement(clipId: string): HTMLVideoElement | null {
     return this.activeHandoffs.get(clipId) ?? null;
   }

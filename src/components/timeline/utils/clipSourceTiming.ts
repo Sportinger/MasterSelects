@@ -4,7 +4,7 @@ import {
   type VectorAnimationClipSettings,
 } from '../../../types/vectorAnimation';
 
-const MIN_SOURCE_DURATION = 0.1;
+const MIN_SOURCE_DURATION = 0.04;
 
 export interface TimelineClipSourceTimingLike {
   duration: number;

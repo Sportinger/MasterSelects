@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { createTestTimelineStore } from '../../helpers/storeFactory';
 import { normalizeTempoMap } from '../../../src/timeline/tempo/tempoEdits';
 import { rulerLaneIdForFormat } from '../../../src/timeline/tempo/rulerDefaults';
-import type { TimelineClip } from '../../../src/types';
+import type { TimelineClip } from '../../../src/types/timeline';
 
 function clip(overrides: Partial<TimelineClip> = {}): TimelineClip {
   return {

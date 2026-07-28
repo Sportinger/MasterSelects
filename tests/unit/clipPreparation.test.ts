@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   cleanupExportMode,
   prepareClipsForExport,
+  shouldAutoFallbackToPrecise,
+  shouldUsePreciseForFastExportClipTopology,
   shouldUsePreciseForFastExportFileSizes,
 } from '../../src/engine/export/ClipPreparation';
 import type { ExportSettings } from '../../src/engine/export/types';
@@ -386,5 +388,133 @@ describe('ClipPreparation image export state', () => {
       largestClipName: 'Part.mp4',
       uniqueSourceCount: 3,
     })).toBe(true);
+  });
+
+  it('counts shareable sources instead of raw clip count for FAST topology', () => {
+    const source: NonNullable<TimelineClip['source']> = {
+      type: 'video',
+      mediaFileId: 'media-video',
+      naturalDuration: 5,
+    };
+    const clips = Array.from({ length: 9 }, (_, index) => ({
+      ...makeVideoClip(source),
+      id: `clip-video-${index}`,
+      startTime: index * 0.4,
+      duration: 0.4,
+      inPoint: index * 0.4,
+      outPoint: (index + 1) * 0.4,
+    }));
+
+    expect(shouldUsePreciseForFastExportClipTopology(clips.slice(0, 8))).toBe(false);
+    expect(shouldUsePreciseForFastExportClipTopology(clips)).toBe(false);
+
+    const distinctSourceClips = clips.map((clip, index) => ({
+      ...clip,
+      mediaFileId: `media-video-${index}`,
+      source: {
+        ...clip.source!,
+        mediaFileId: `media-video-${index}`,
+      },
+    }));
+    expect(shouldUsePreciseForFastExportClipTopology(distinctSourceClips)).toBe(true);
+
+    const overlappingSameSourceClips = clips.map(clip => ({
+      ...clip,
+      startTime: 0,
+    }));
+    expect(shouldUsePreciseForFastExportClipTopology(overlappingSameSourceClips)).toBe(true);
+  });
+
+  it('prepares dense same-source FAST cut-ups with one shared decoder', async () => {
+    const originalCreateElement = document.createElement.bind(document);
+    const sharedVideo = originalCreateElement('video');
+    const fastPlayer = {
+      loadArrayBuffer: vi.fn(async () => undefined),
+      prepareForSequentialExport: vi.fn(async () => undefined),
+      getCurrentSampleIndex: vi.fn(() => 0),
+      endSequentialExport: vi.fn(),
+      destroy: vi.fn(),
+      width: 1920,
+      height: 1080,
+    };
+    vi.mocked(WebCodecsPlayer).mockImplementation(function WebCodecsPlayerMock() {
+      return fastPlayer as unknown as WebCodecsPlayer;
+    });
+
+    const file = new File(['video'], 'Video.mp4', { type: 'video/mp4' });
+    const arrayBuffer = vi.fn(async () => new ArrayBuffer(16));
+    Object.defineProperty(file, 'arrayBuffer', {
+      configurable: true,
+      value: arrayBuffer,
+    });
+    const mediaFile = {
+      id: 'media-video',
+      name: 'Video.mp4',
+      type: 'video',
+      file,
+      fileSize: file.size,
+      width: 1920,
+      height: 1080,
+      duration: 5,
+    } as MediaFile;
+    const source: NonNullable<TimelineClip['source']> = {
+      type: 'video',
+      mediaFileId: mediaFile.id,
+      naturalDuration: 5,
+      videoElement: sharedVideo,
+    };
+    const clips = Array.from({ length: 49 }, (_, index) => ({
+      ...makeVideoClip(source, file),
+      id: `clip-video-${index}`,
+      startTime: index * 0.1,
+      duration: 0.1,
+      inPoint: index * 0.1,
+      outPoint: (index + 1) * 0.1,
+    }));
+    useTimelineStore.setState({
+      tracks: [makeTrack()],
+      clips,
+    });
+    vi.mocked(useMediaStore.getState).mockReturnValue({
+      ...initialMediaState,
+      files: [mediaFile],
+    });
+
+    const result = await prepareClipsForExport(exportSettings, 'fast', 'dense-cut-up-run');
+
+    expect(result.exportMode).toBe('fast');
+    expect(result.clipStates.size).toBe(49);
+    expect(Array.from(result.clipStates.values()).every(state =>
+      state.webCodecsPlayer === fastPlayer &&
+      state.isSequential === true
+    )).toBe(true);
+    expect(new Set(Array.from(result.clipStates.values()).map(
+      state => state.webCodecsPlayer
+    )).size).toBe(1);
+    expect(WebCodecsPlayer).toHaveBeenCalledTimes(1);
+    expect(arrayBuffer).toHaveBeenCalledTimes(1);
+    expect(fastPlayer.loadArrayBuffer).toHaveBeenCalledTimes(1);
+    expect(fastPlayer.prepareForSequentialExport).toHaveBeenCalledTimes(1);
+
+    cleanupExportMode(result.clipStates, result.parallelDecoder);
+
+    expect(fastPlayer.endSequentialExport).toHaveBeenCalledTimes(1);
+    expect(fastPlayer.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back from closed or failed WebCodecs decoder states', () => {
+    expect(shouldAutoFallbackToPrecise(
+      new DOMException(
+        "Failed to execute 'decode' on 'VideoDecoder': Cannot call 'decode' on a closed codec.",
+        'InvalidStateError'
+      )
+    )).toBe(true);
+    expect(shouldAutoFallbackToPrecise(
+      new DOMException('Decoding error.', 'EncodingError')
+    )).toBe(true);
+    expect(shouldAutoFallbackToPrecise(
+      new Error('FAST export decoder closed during decodeSampleWindow')
+    )).toBe(true);
+    expect(shouldAutoFallbackToPrecise(new Error('Unrelated export failure'))).toBe(false);
   });
 });

@@ -1,5 +1,10 @@
 import type { DockDragState, DockLayout, PreviewPanelData, SavedDockLayout, SavedDockTimelineLayout } from '../../types/dock';
-import { FACTORY_3D_EDIT_LAYOUT_ID, FACTORY_AUDIO_EDIT_LAYOUT_ID, FACTORY_VIDEO_EDIT_LAYOUT_ID } from './panelRegistry';
+import {
+  FACTORY_3D_EDIT_LAYOUT_ID,
+  FACTORY_AUDIO_EDIT_LAYOUT_ID,
+  FACTORY_START_LAYOUT_ID,
+  FACTORY_VIDEO_EDIT_LAYOUT_ID,
+} from './panelRegistry';
 
 export const FACTORY_3D_EDIT_PREVIEW_DEFAULTS: Record<string, Pick<PreviewPanelData, 'initialEditMode' | 'initialEditCameraView'>> = {
   '3d-preview-front': { initialEditMode: true, initialEditCameraView: 'front' },
@@ -242,6 +247,19 @@ const THREE_D_EDIT_LAYOUT: DockLayout = {
   },
 };
 
+const START_LAYOUT: DockLayout = {
+  root: {
+    kind: 'tab-group',
+    id: 'start-group',
+    panels: [{ id: 'start', type: 'start', title: 'Start' }],
+    activeIndex: 0,
+  },
+  floatingPanels: [],
+  panelZoom: {
+    start: 1,
+  },
+};
+
 const VIDEO_EDIT_TIMELINE_LAYOUT: SavedDockTimelineLayout = {
   audioDisplayMode: 'detailed',
   audioLayerAdvancedMode: true,
@@ -330,6 +348,15 @@ export const FACTORY_SAVED_DOCK_LAYOUTS: SavedDockLayout[] = [
     timeline: VIDEO_EDIT_TIMELINE_LAYOUT,
     createdAt: 0,
     updatedAt: 2,
+    favorite: true,
+    factory: true,
+  },
+  {
+    id: FACTORY_START_LAYOUT_ID,
+    name: 'START',
+    layout: START_LAYOUT,
+    createdAt: 0,
+    updatedAt: 1,
     favorite: true,
     factory: true,
   },

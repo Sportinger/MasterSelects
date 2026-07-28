@@ -1,5 +1,4 @@
 import {
-  AI_PANEL_TYPES,
   SCOPE_PANEL_TYPES,
   WIP_PANEL_TYPES,
   type PanelType,
@@ -8,6 +7,7 @@ import {
 import type { ToolbarMenuController } from './menuTypes';
 import {
   getViewPanelConfig,
+  VIEW_AI_PANEL_TYPES,
   VIEW_CORE_PANEL_TYPES,
   VIEW_WIP_ONLY_PANEL_TYPES,
 } from './viewPanelConfig';
@@ -123,7 +123,7 @@ export function ViewMenu({
 
               <div className="menu-separator" />
               <span className="menu-sublabel">AI</span>
-              {AI_PANEL_TYPES.map((type) => {
+              {VIEW_AI_PANEL_TYPES.map((type) => {
                 const isWip = WIP_PANEL_TYPES.includes(type);
                 return (
                   <PanelOption

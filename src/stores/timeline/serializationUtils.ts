@@ -12,9 +12,7 @@ import { thumbnailCacheService } from '../../services/thumbnailCacheService';
 import { clearAINodeRuntimeCache } from '../../services/nodeGraph';
 import { runtimeAudioMeterBus } from '../../services/audio/runtimeAudioMeterBus';
 import { withProjectStoreSyncGuard } from '../../services/project/projectStoreSyncGuard';
-import {
-  resetVolatileVideoBakeRegionStatuses,
-} from './videoBakeSlice';
+import { resetVolatileVideoBakeRegionStatuses } from './videoBakeSlice';
 import { releaseAllLazyTimelineMediaElements } from '../../services/timeline/lazyMediaElements';
 import { releaseAllLazyTimelineImageElements } from '../../services/timeline/lazyImageElements';
 import { releaseLegacyTimelineClipSourceRuntimes } from '../../services/timeline/timelineClipSourceRuntimeCleanup';
@@ -25,6 +23,7 @@ import { createLoadStateGeneratedClip } from './serialization/loadStateGenerated
 import { restoreLoadStateCompositionClip } from './serialization/loadStateCompositionClipRestore';
 import { restoreLoadStateMediaClip } from './serialization/loadStateMediaClipRestore';
 import { createDefaultRulerLaneState, normalizeRulerLaneState } from '../../timeline/tempo/rulerDefaults';
+import { CLEARED_TIMELINE_EDIT_PREVIEWS } from './serialization/transientTimelineState';
 
 function getDefaultExpandedTrackIds(tracks: readonly TimelineTrack[]): string[] {
   return tracks.map(track => track.id);
@@ -85,7 +84,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         selectedClipIds: new Set(),
         primarySelectedClipId: null,
         propertiesSelection: null,
-        transitionEditPreview: null,
+        ...CLEARED_TIMELINE_EDIT_PREVIEWS,
         targetTrackIdByType: {},
         markers: [],
         ...createDefaultRulerLaneState(),
@@ -120,7 +119,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       selectedClipIds: new Set(),
       primarySelectedClipId: null,
       propertiesSelection: null,
-      transitionEditPreview: null,
+      ...CLEARED_TIMELINE_EDIT_PREVIEWS,
       targetTrackIdByType: {},
       // Clear keyframe state
       clipKeyframes: new Map<string, Keyframe[]>(),
@@ -284,7 +283,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       selectedClipIds: new Set(),
       primarySelectedClipId: null,
       propertiesSelection: null,
-      transitionEditPreview: null,
+      ...CLEARED_TIMELINE_EDIT_PREVIEWS,
       targetTrackIdByType: {},
       cachedFrameTimes: new Set(),
       ramPreviewProgress: null,

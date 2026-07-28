@@ -66,13 +66,17 @@ export function resolveClipGeometry(
   );
 
   if (isPrimaryDragClip) {
-    visible = clipDrag.currentTrackId === trackId;
+    visible = (dragPreviewPatch?.trackId ?? clipDrag.currentTrackId) === trackId;
     const previewStartTime = dragPreviewPatch ? Math.max(0, dragPreviewPatch.startTime) : startTime;
     startTime = clipDrag.snappedTime !== null ? clipDrag.snappedTime : previewStartTime;
   } else if (movesWithDirectDrag) {
-    startTime = Math.max(0, clip.startTime + (clipDrag?.multiSelectClipIds?.includes(clip.id)
+    const directPreviewStart = clip.startTime + (clipDrag?.multiSelectClipIds?.includes(clip.id)
       ? clipDrag.multiSelectTimeDelta ?? dragTimelineDelta ?? 0
-      : dragTimelineDelta ?? 0));
+      : dragTimelineDelta ?? 0);
+    startTime = Math.max(0, dragPreviewPatch?.startTime ?? directPreviewStart);
+    if (dragPreviewPatch) {
+      visible = (dragPreviewPatch.trackId ?? clip.trackId) === trackId;
+    }
   } else if (dragPreviewPatch) {
     startTime = Math.max(0, dragPreviewPatch.startTime);
     visible = (dragPreviewPatch.trackId ?? clip.trackId) === trackId;

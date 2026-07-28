@@ -7,6 +7,7 @@ import { useMediaStore } from '../../stores/mediaStore';
 import { useSAM2Store, maskToImageData } from '../../stores/sam2Store';
 import { useTimelineStore } from '../../stores/timeline';
 import { applyClipDragPreview } from '../../stores/timeline/clipDragPreview';
+import { applyMaskEditPreview } from '../../stores/timeline/maskEditPreview';
 import {
   DEFAULT_TRANSITION_PLACEMENT,
   findActiveTransitionPlanForTrack,
@@ -15,8 +16,8 @@ import type { ClipMask, MaskVertex } from '../../types/masks';
 import { generateMaskTexture } from '../../utils/maskRenderer';
 
 const log = Logger.create('Engine');
-const MASK_TEXTURE_DRAG_THROTTLE_MS = 80;
-const MASK_TEXTURE_DRAG_MAX_EDGE = 640;
+const MASK_TEXTURE_DRAG_THROTTLE_MS = 33;
+const MASK_TEXTURE_DRAG_MAX_EDGE = 384;
 
 function getMaskShapeHash(masks: ClipMask[]): string {
   return masks.map(m =>
@@ -111,7 +112,15 @@ export function useEngineMaskTextureSync(isEngineReady: boolean): (
   const lastMaskTextureUpdate = useRef(0);
 
   const updateMaskTextures = useCallback((force = false, timelineTime?: number) => {
-    const { clips: storeClips, tracks, playheadPosition, maskDragging, clipDragPreview, getInterpolatedMasks } = useTimelineStore.getState();
+    const {
+      clips: storeClips,
+      tracks,
+      playheadPosition,
+      maskDragging,
+      maskEditPreview,
+      clipDragPreview,
+      getInterpolatedMasks,
+    } = useTimelineStore.getState();
     const clips = applyClipDragPreview(storeClips, clipDragPreview);
     const effectivePlayheadPosition = timelineTime ?? playheadPosition;
 
@@ -148,7 +157,11 @@ export function useEngineMaskTextureSync(isEngineReady: boolean): (
     let changed = false;
     for (const clip of clipsAtTime) {
       const clipLocalTime = effectivePlayheadPosition - clip.startTime;
-      const masks = getInterpolatedMasks(clip.id, clipLocalTime);
+      const masks = applyMaskEditPreview(
+        clip.id,
+        getInterpolatedMasks(clip.id, clipLocalTime),
+        maskEditPreview,
+      );
       changed = processClipMask({ id: clip.id, masks }, maskDimensions, renderOptions) || changed;
 
       if (clip.nestedClips && clip.nestedClips.length > 0) {
@@ -156,7 +169,11 @@ export function useEngineMaskTextureSync(isEngineReady: boolean): (
         for (const nestedClip of clip.nestedClips) {
           if (clipTime >= nestedClip.startTime && clipTime < nestedClip.startTime + nestedClip.duration) {
             const nestedClipLocalTime = clipTime - nestedClip.startTime;
-            const nestedMasks = getInterpolatedMasks(nestedClip.id, nestedClipLocalTime);
+            const nestedMasks = applyMaskEditPreview(
+              nestedClip.id,
+              getInterpolatedMasks(nestedClip.id, nestedClipLocalTime),
+              maskEditPreview,
+            );
             changed = processClipMask({ id: nestedClip.id, masks: nestedMasks }, maskDimensions, renderOptions) || changed;
           }
         }
@@ -225,6 +242,11 @@ export function useEngineMaskTextureSync(isEngineReady: boolean): (
       () => updateMaskTextures()
     );
 
+    const unsubscribeMaskEditPreview = useTimelineStore.subscribe(
+      (state) => state.maskEditPreview,
+      () => updateMaskTextures()
+    );
+
     const unsubscribeComp = useMediaStore.subscribe(
       (state) => state.activeCompositionId,
       () => {
@@ -264,6 +286,7 @@ export function useEngineMaskTextureSync(isEngineReady: boolean): (
       unsubscribeClips();
       unsubscribeTracks();
       unsubscribeKeyframes();
+      unsubscribeMaskEditPreview();
       unsubscribeComp();
       unsubscribeDragging();
       unsubscribeSAM2();

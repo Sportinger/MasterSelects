@@ -547,7 +547,7 @@
   color: rgba(255, 255, 255, 0.7);
 }
 
-/* Browser warning for non-Chromium browsers */
+/* Friendly Chrome recommendation for non-Chrome browsers */
 .welcome-browser-warning {
   display: flex;
   flex-direction: column;
@@ -556,22 +556,22 @@
   gap: 8px;
   margin: 8px 0 20px 0;
   padding: 20px 24px;
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(185, 28, 28, 0.1) 100%);
-  border: 1px solid rgba(239, 68, 68, 0.35);
+  background: linear-gradient(135deg, rgba(66, 133, 244, 0.14) 0%, rgba(26, 115, 232, 0.08) 100%);
+  border: 1px solid rgba(66, 133, 244, 0.32);
   border-radius: 16px;
   max-width: 340px;
-  box-shadow: 0 0 30px rgba(239, 68, 68, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow: 0 0 30px rgba(66, 133, 244, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .welcome-browser-warning-icon {
-  color: var(--danger);
-  filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.5));
+  color: #7eb0ff;
+  filter: drop-shadow(0 0 8px rgba(66, 133, 244, 0.4));
 }
 
 .welcome-browser-warning-label {
   font-size: 11px;
   font-weight: 600;
-  color: var(--danger);
+  color: #7eb0ff;
   text-transform: uppercase;
   letter-spacing: 1px;
 }

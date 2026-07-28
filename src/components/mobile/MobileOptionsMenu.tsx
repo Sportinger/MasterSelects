@@ -19,6 +19,8 @@ interface MobileOptionsMenuProps {
 
 export function MobileOptionsMenu({ isOpen, onClose }: MobileOptionsMenuProps) {
   const setForceDesktopMode = useSettingsStore((s) => s.setForceDesktopMode);
+  const newMediaProject = useMediaStore((s) => s.newProject);
+  const setMediaProjectName = useMediaStore((s) => s.setProjectName);
 
   // Project name state
   const [projectName, setProjectName] = useState('Untitled');
@@ -42,8 +44,8 @@ export function MobileOptionsMenu({ isOpen, onClose }: MobileOptionsMenuProps) {
       return 'No project folder was selected, or the folder could not be created.';
     }
 
-    useMediaStore.getState().newProject();
-    useMediaStore.getState().setProjectName(name);
+    newMediaProject();
+    setMediaProjectName(name);
     await syncStoresToProject();
     const saved = await projectFileService.saveProject();
     if (!saved) {
@@ -53,7 +55,7 @@ export function MobileOptionsMenu({ isOpen, onClose }: MobileOptionsMenuProps) {
     setProjectName(name);
     onClose();
     return null;
-  }, [onClose]);
+  }, [newMediaProject, onClose, setMediaProjectName]);
 
   const handleOpen = useCallback(async () => {
     await openExistingProject();

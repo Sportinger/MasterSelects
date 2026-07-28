@@ -8,6 +8,8 @@ import {
   getLazyTimelineMediaElementCount,
   getLazyTimelineVideoElementForClip,
   hydrateTimelineMediaWindow,
+  keepLazyTimelineAudioElementAlive,
+  keepLazyTimelineVideoElementAlive,
   releaseAllLazyTimelineMediaElements,
 } from '../../src/services/timeline/lazyMediaElements';
 import {
@@ -602,6 +604,70 @@ describe('lazy timeline media elements', () => {
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:generated-video');
     expect(mediaObjectUrlManager.get('media-v1', lazyUrlKey)).toBeUndefined();
     expect(videoClip.source?.videoElement).toBeUndefined();
+  });
+
+  it('keeps a same-source handoff element alive under its original clip owner', () => {
+    const videoTrack = makeTrack('video', 'track-v1');
+    const videoClip = makeClip('clip-v1', videoTrack, 'video', 'media-v1');
+    const ctx = makeContext({
+      clips: [videoClip],
+      tracks: [videoTrack],
+      mediaFiles: [
+        { id: 'media-v1', name: videoClip.name, type: 'video', url: 'blob:video', duration: 4 },
+      ],
+      now: 1000,
+      playheadPosition: 0.25,
+    });
+
+    hydrateTimelineMediaWindow(ctx);
+    const handoffVideo = getLazyTimelineVideoElementForClip(videoClip);
+    expect(handoffVideo).toBeInstanceOf(HTMLVideoElement);
+
+    ctx.playheadPosition = 10;
+    ctx.now = 3001;
+    expect(keepLazyTimelineVideoElementAlive(handoffVideo!, ctx.now)).toBe(true);
+    hydrateTimelineMediaWindow(ctx);
+
+    expect(getLazyTimelineMediaElementCount()).toBe(1);
+    expect(getLazyTimelineVideoElementForClip(videoClip)).toBe(handoffVideo);
+
+    ctx.now = 4802;
+    hydrateTimelineMediaWindow(ctx);
+
+    expect(getLazyTimelineMediaElementCount()).toBe(0);
+    expect(getLazyTimelineVideoElementForClip(videoClip)).toBeNull();
+  });
+
+  it('keeps a same-source audio handoff element alive under its original clip owner', () => {
+    const audioTrack = makeTrack('audio', 'track-a1');
+    const audioClip = makeClip('clip-a1', audioTrack, 'audio', 'media-a1');
+    const ctx = makeContext({
+      clips: [audioClip],
+      tracks: [audioTrack],
+      mediaFiles: [
+        { id: 'media-a1', name: audioClip.name, type: 'audio', url: 'blob:audio', duration: 4 },
+      ],
+      now: 1000,
+      playheadPosition: 0.25,
+    });
+
+    hydrateTimelineMediaWindow(ctx);
+    const handoffAudio = getLazyTimelineAudioElementForClip(audioClip);
+    expect(handoffAudio).toBeInstanceOf(HTMLAudioElement);
+
+    ctx.playheadPosition = 10;
+    ctx.now = 3001;
+    expect(keepLazyTimelineAudioElementAlive(handoffAudio!, ctx.now)).toBe(true);
+    hydrateTimelineMediaWindow(ctx);
+
+    expect(getLazyTimelineMediaElementCount()).toBe(1);
+    expect(getLazyTimelineAudioElementForClip(audioClip)).toBe(handoffAudio);
+
+    ctx.now = 4802;
+    hydrateTimelineMediaWindow(ctx);
+
+    expect(getLazyTimelineMediaElementCount()).toBe(0);
+    expect(getLazyTimelineAudioElementForClip(audioClip)).toBeNull();
   });
 
   it('hydrates and releases data-only video sources inside active nested compositions', () => {

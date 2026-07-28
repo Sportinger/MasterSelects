@@ -14,6 +14,7 @@ import type {
   MaskEditMode,
   TimelineAudioDisplayMode,
   TimelineClipDragPreview,
+  TimelineLayerTransformPreview,
   TimelinePropertiesSelection,
   TimelineRangeSelection,
   TimelineToolGroupId,
@@ -35,6 +36,7 @@ import type {
   PlaybackWarmupState,
 } from './feedbackTypes';
 import type { ClipStemSeparationJobState } from './stemJobTypes';
+import type { TimelineMaskEditPreview } from '../maskEditPreview';
 
 export interface TimelineState {
   tracks: TimelineTrack[];
@@ -114,6 +116,7 @@ export interface TimelineState {
   maskFeatherPreview: { maskId: string; edgeId: string | null; changedAt: number } | null;
   maskDrawStart: { x: number; y: number } | null;
   maskDragging: boolean;
+  maskEditPreview: TimelineMaskEditPreview | null;
   toolMode: TimelineToolMode;
   activeTimelineToolId: TimelineToolId;
   previousTimelineToolId: TimelineToolId | null;
@@ -124,6 +127,7 @@ export interface TimelineState {
   timelineToolPreview: TimelineToolPreview | null;
   transitionEditPreview: TimelineTransitionEditPreview | null;
   clipDragPreview: TimelineClipDragPreview | null;
+  layerTransformPreview: TimelineLayerTransformPreview | null;
   markers: import('./feedbackTypes').TimelineMarker[];
   // Multi-ruler infrastructure (issue #257). View state — always defaulted at
   // init/load, so required (not optional) in the runtime store.

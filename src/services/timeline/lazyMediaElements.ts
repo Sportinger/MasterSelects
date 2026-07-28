@@ -530,6 +530,39 @@ function markDesired(desired: Set<string>, kind: LazyMediaKind, clip: TimelineCl
   }
 }
 
+function keepLazyTimelineMediaElementAlive(
+  kind: LazyMediaKind,
+  element: HTMLMediaElement,
+  now: number = performance.now(),
+): boolean {
+  for (const record of lazyMediaRecords.values()) {
+    if (record.kind !== kind || record.element !== element) continue;
+    record.lastDesiredAt = now;
+    reportLazyMediaRecord(record);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Keep an element that is temporarily owned by a same-source cut handoff from
+ * being torn down under its original clip id. The handoff manager refreshes
+ * this lease every playback frame; normal idle pruning resumes when it stops.
+ */
+export function keepLazyTimelineVideoElementAlive(
+  video: HTMLVideoElement,
+  now: number = performance.now(),
+): boolean {
+  return keepLazyTimelineMediaElementAlive('video', video, now);
+}
+
+export function keepLazyTimelineAudioElementAlive(
+  audio: HTMLAudioElement,
+  now: number = performance.now(),
+): boolean {
+  return keepLazyTimelineMediaElementAlive('audio', audio, now);
+}
+
 function pruneLazyRecords(ctx: FrameContext, desired: Set<string>): void {
   const now = ctx.now;
 

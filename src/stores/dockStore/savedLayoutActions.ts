@@ -9,14 +9,20 @@ import {
   getMatchingEditableSavedLayout,
   isProtectedFactoryDockLayout,
 } from './layoutPersistence';
-import { FACTORY_3D_EDIT_LAYOUT_ID, FACTORY_VIDEO_EDIT_LAYOUT_ID } from './panelRegistry';
+import {
+  FACTORY_3D_EDIT_LAYOUT_ID,
+  FACTORY_START_LAYOUT_ID,
+  FACTORY_VIDEO_EDIT_LAYOUT_ID,
+  START_LAYOUT_OUTRO_DURATION_MS,
+  START_LAYOUT_REVEAL_DURATION_MS,
+} from './panelRegistry';
 import { requestDockLayoutTransition } from './layoutTransition';
 import {
   applySavedTimelineLayout,
   activate3DEditSceneCamera,
   captureTimelineLayout,
 } from './timelineLayoutAdapter';
-import { findGroupIdByPanelId } from './layoutTree';
+import { findGroupIdByPanelId, nodeContainsPanelType } from './layoutTree';
 import { collapseSingleChildSplits, removePanel } from '../../utils/dockLayout';
 import type { DockSliceCreator, SavedLayoutActions } from './storeTypes';
 
@@ -126,11 +132,26 @@ export const createSavedLayoutActions: DockSliceCreator<SavedLayoutActions> = (s
     return nextSavedLayout;
   },
 
-  loadSavedLayout: (layoutId) => {
+  loadSavedLayout: (layoutId, options) => {
     const savedLayout = get().savedLayouts.find((candidate) => candidate.id === layoutId);
     if (!savedLayout) {
       return;
     }
+    const activeSavedLayoutId = get().activeSavedLayoutId;
+    const currentRoot = get().layout.root;
+    const currentLayoutIsStart = (
+      activeSavedLayoutId === FACTORY_START_LAYOUT_ID
+      || nodeContainsPanelType(currentRoot, 'start')
+    );
+    const isStartTransition = (
+      currentLayoutIsStart
+      || savedLayout.id === FACTORY_START_LAYOUT_ID
+    );
+    const startTransitionDirection = savedLayout.id === FACTORY_START_LAYOUT_ID
+      ? 'to-start'
+      : currentLayoutIsStart
+        ? 'from-start'
+        : undefined;
 
     const savedDockLayout = savedLayout.id === FACTORY_VIDEO_EDIT_LAYOUT_ID
       ? DEFAULT_LAYOUT
@@ -138,7 +159,19 @@ export const createSavedLayoutActions: DockSliceCreator<SavedLayoutActions> = (s
         ? applyFactory3DEditPreviewDefaults(savedLayout.layout)
         : savedLayout.layout;
     const nextLayout = cleanupPersistedLayout(cloneDockLayout(savedDockLayout));
-    requestDockLayoutTransition();
+    requestDockLayoutTransition(
+      options?.transitionDurationMs
+        ?? (
+          startTransitionDirection === 'to-start'
+            ? START_LAYOUT_OUTRO_DURATION_MS
+            : isStartTransition
+              ? START_LAYOUT_REVEAL_DURATION_MS
+              : undefined
+        ),
+      options?.transitionStaggerMode
+        ?? (isStartTransition ? 'sequence' : undefined),
+      startTransitionDirection,
+    );
     set({
       layout: nextLayout,
       browserWindowPanels: [],
@@ -263,8 +296,9 @@ export const createSavedLayoutActions: DockSliceCreator<SavedLayoutActions> = (s
 
   setLayoutFromProject: (layout: DockLayout) => {
     const browserWindowPanels = get().browserWindowPanels;
+    const projectLayoutIsStart = nodeContainsPanelType(layout.root, 'start');
     const cleanedLayout = removeBrowserWindowPanelsFromLayout(
-      cleanupPersistedLayout(layout),
+      cleanupPersistedLayout(projectLayoutIsStart ? cloneDockLayout(DEFAULT_LAYOUT) : layout),
       browserWindowPanels,
     );
     set({
@@ -273,7 +307,7 @@ export const createSavedLayoutActions: DockSliceCreator<SavedLayoutActions> = (s
       maxZIndex: getLayoutMaxZIndex(cleanedLayout),
       hoveredTabTarget: null,
       maximizedPanelId: null,
-      activeSavedLayoutId: null,
+      activeSavedLayoutId: projectLayoutIsStart ? FACTORY_VIDEO_EDIT_LAYOUT_ID : null,
     });
   },
 });

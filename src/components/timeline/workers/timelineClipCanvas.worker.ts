@@ -24,6 +24,7 @@ import {
   TIMELINE_CLIP_CANVAS_LOD_BAR_PX,
 } from '../timelineRenderConstants';
 import { writeTimelineSpectralColor } from '../utils/spectralColor';
+import { drawTimelineClipCanvasEdgeBrackets } from '../utils/timelineClipCanvasEdgeBrackets';
 import { drawWorkerPassiveDecorations } from './timelineClipCanvasWorkerPassivePainter';
 import { estimateWorkerPayloadResourceBytes } from './timelineClipCanvasWorkerPayloadMetrics';
 import {
@@ -617,6 +618,9 @@ function draw(msg: DrawMessage): DrawnMessage {
     ctx.lineWidth = isSel ? 2 : 1;
     ctx.strokeStyle = isSel ? '#ffffff' : isHovered ? '#9dc8ff' : border;
     ctx.stroke();
+    if (!isSel) {
+      drawTimelineClipCanvasEdgeBrackets(ctx, x, top, w, h);
+    }
   }
 
   return {

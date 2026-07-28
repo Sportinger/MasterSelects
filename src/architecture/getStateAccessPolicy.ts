@@ -292,9 +292,7 @@ export const classCHardTargets = [
 
 export const getStateAccessPolicyBaselines = {
   allowedAdapterPathCount: 26,
-  // Redistribution log: 178(172), 182(183), 187(186), 189(189+190: ExportPanel/MediaPanel hits moved into runner/board-hook entries). Totals conserved per redistribution; max-hits ratchets DOWN.
-  // fileCount log (totals conserved per split redistribution): 192 ->193(218) ->196(227) ->199(231) ->203(239) ->205(246) ->206(253/254)
-  // ->207(259) ->208(267) ->212(279) ->216(287) ->230(audio mixer) ->231(2.3.3) ->236(transition nested comps) ->237(#298 motorized-fader rAF hook) ->240(audio-intelligence).
+  // Historical redistributions conserved totals; both baselines remain downward-only ratchets.
   classCHardTargetFileCount: 242, // +2 merge union: repairTranscriptDuplicates, metronomeScheduler (BPM)
   // 669 ->665(188) ->664(209) ->659(231) ->658(237) ->657(291) ->664(nested comps) ->673(#249 piano-roll) ->674(#298 rAF hook) ->679(audio-intelligence: +4 files, +1 warmup seam).
   classCHardTargetMaxHits: 689, // merge union +6 (repairTranscriptDuplicates 2, metronomeScheduler 4) +4 final-work growth (preview source config, external drop, aligned timings)

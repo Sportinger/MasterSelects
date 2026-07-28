@@ -27,6 +27,7 @@ const VectorscopePanel = lazy(() => import('../panels/scopes/VectorscopePanel').
 const MultiPreviewPanel = lazy(() => import('../preview/MultiPreviewPanel').then(m => ({ default: m.MultiPreviewPanel })));
 const HistoryPanel = lazy(() => import('../panels/HistoryPanel').then(m => ({ default: m.HistoryPanel })));
 const CapturePanel = lazy(() => import('../panels/capture/CapturePanel').then(m => ({ default: m.CapturePanel })));
+const LandingPanel = lazy(() => import('../../marketing/LandingPanel').then(m => ({ default: m.LandingPanel })));
 
 const DEFAULT_MULTI_PREVIEW_DATA: MultiPreviewPanelData = {
   sourceCompositionId: null,
@@ -44,6 +45,8 @@ interface DockPanelContentProps {
 
 export function DockPanelContent({ panel }: DockPanelContentProps) {
   switch (panel.type) {
+    case 'start':
+      return <Suspense fallback={<PanelLoading />}><LandingPanel /></Suspense>;
     case 'preview': {
       const previewData = panel.data as PreviewPanelData | undefined;
       return (

@@ -105,7 +105,14 @@ export function useEngine() {
         // through occasional rAF/store update gaps.
         const currentPlayhead = getPlayheadPosition(timelineState.playheadPosition);
         const hasClipDragPreview = timelineState.clipDragPreview != null;
+        const hasLayerTransformPreview = timelineState.layerTransformPreview != null;
+        const hasMaskEditPreview = timelineState.maskEditPreview != null;
         const isInteractiveScrub = timelineState.isDraggingPlayhead || hasClipDragPreview;
+        const hasInteractiveVisualPreview =
+          isInteractiveScrub ||
+          hasLayerTransformPreview ||
+          timelineState.maskDragging ||
+          hasMaskEditPreview;
         const hasPlaybackWarmup = timelineState.playbackWarmup !== null;
         const timelineClips = hasClipDragPreview
           ? applyClipDragPreview(timelineState.clips, timelineState.clipDragPreview)
@@ -171,7 +178,14 @@ export function useEngine() {
 
         // Try cached RAM Preview frame first (instant scrubbing over pre-rendered frames).
         // Wall-clock driven effects must render live even when the playhead is parked.
-        if (!hasClipDragPreview && !hasActiveTemporalClip && renderHostPort.renderCachedFrame(currentPlayhead)) {
+        if (
+          !hasClipDragPreview &&
+          !hasLayerTransformPreview &&
+          !timelineState.maskDragging &&
+          !hasMaskEditPreview &&
+          !hasActiveTemporalClip &&
+          renderHostPort.renderCachedFrame(currentPlayhead)
+        ) {
           const syncAudioStart = performance.now();
           layerBuilder.syncAudioElements();
           syncAudioMs += performance.now() - syncAudioStart;
@@ -232,7 +246,12 @@ export function useEngine() {
         // scrubbing or dedicated RAM preview generation pass via isRamPreviewing).
         const cacheStart = performance.now();
         const { ramPreviewEnabled, addCachedFrame } = useTimelineStore.getState();
-        if (ramPreviewEnabled && !timelineState.isPlaying && !isInteractiveScrub && !needsContinuousRender) {
+        if (
+          ramPreviewEnabled &&
+          !timelineState.isPlaying &&
+          !hasInteractiveVisualPreview &&
+          !needsContinuousRender
+        ) {
           renderHostPort.cacheCompositeFrame(currentPlayhead).then(() => {
             addCachedFrame(currentPlayhead);
           });
@@ -241,7 +260,12 @@ export function useEngine() {
         // Cache active comp output for parent preview texture sharing
         // This allows parent compositions to show the active comp without video conflicts
         const activeCompId = useMediaStore.getState().activeCompositionId;
-        if (activeCompId && !timelineState.isPlaying && !isInteractiveScrub && !needsContinuousRender) {
+        if (
+          activeCompId &&
+          !timelineState.isPlaying &&
+          !hasInteractiveVisualPreview &&
+          !needsContinuousRender
+        ) {
           renderHostPort.cacheActiveCompOutput(activeCompId);
         }
         cacheMs += performance.now() - cacheStart;

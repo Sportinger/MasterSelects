@@ -23,6 +23,72 @@
   width: 100%;
 }
 
+.landing-open-editor {
+  align-items: center;
+  backdrop-filter: blur(18px) saturate(135%);
+  background: rgba(255, 252, 245, 0.72);
+  border: 1px solid rgba(22, 22, 22, 0.12);
+  border-radius: 999px;
+  box-shadow:
+    0 16px 36px rgba(84, 46, 19, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  color: rgba(22, 22, 22, 0.78);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 650;
+  gap: 0.45rem;
+  height: 2.45rem;
+  letter-spacing: 0.01em;
+  padding: 0 0.68rem 0 0.92rem;
+  position: absolute;
+  right: max(1.25rem, env(safe-area-inset-right));
+  top: max(1.25rem, env(safe-area-inset-top));
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+  z-index: 2;
+}
+
+.landing-open-editor svg {
+  height: 1rem;
+  stroke-width: 1.9;
+  transition: transform 180ms ease;
+  width: 1rem;
+}
+
+.landing-open-editor:hover:not(:disabled) {
+  background: rgba(255, 252, 245, 0.94);
+  border-color: rgba(239, 86, 47, 0.34);
+  box-shadow:
+    0 19px 44px rgba(84, 46, 19, 0.16),
+    0 0 0 4px rgba(239, 86, 47, 0.07);
+  color: var(--landing-accent);
+  transform: translateY(-1px);
+}
+
+.landing-open-editor:hover:not(:disabled) svg {
+  transform: translateX(2px);
+}
+
+.landing-open-editor:active:not(:disabled) {
+  transform: translateY(1px) scale(0.98);
+}
+
+.landing-open-editor:focus-visible {
+  outline: 3px solid rgba(14, 124, 134, 0.3);
+  outline-offset: 3px;
+}
+
+.landing-open-editor:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
 .landing-page::before,
 .landing-page::after {
   border-radius: 999px;
@@ -84,6 +150,32 @@
     transform 180ms ease;
   width: min(100%, 48rem);
   z-index: 1;
+}
+
+.landing-page.is-opening-editor .landing-chat-pill {
+  animation: landingChatPillCollapseX 480ms cubic-bezier(0.76, 0, 0.24, 1) both;
+  pointer-events: none;
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
+.landing-page.is-opening-editor .landing-chat-pill > * {
+  animation: landingChatPillContentsExit 180ms ease-out both;
+}
+
+.dock-container.layout-switch-to-start .landing-chat-pill {
+  animation: landingChatPillRevealX 1050ms cubic-bezier(0.22, 1, 0.36, 1) 1500ms both;
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
+.dock-container.layout-switch-to-start .landing-chat-pill > * {
+  animation: landingChatPillContentsEnter 420ms ease-out 2180ms both;
+}
+
+.landing-page.is-opening-editor .landing-open-editor {
+  animation: landingChatPillContentsExit 180ms ease-out both;
+  pointer-events: none;
 }
 
 .landing-chat-pill:hover {
@@ -237,12 +329,91 @@
   .landing-chat-input {
     font-size: 1rem;
   }
+
+  .landing-open-editor {
+    height: 2.35rem;
+    right: max(1rem, env(safe-area-inset-right));
+    top: max(1rem, env(safe-area-inset-top));
+  }
+}
+
+@keyframes landingChatPillCollapseX {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scaleX(1);
+  }
+
+  58% {
+    opacity: 1;
+    transform: translateY(1px) scaleX(0.56);
+  }
+
+  82% {
+    opacity: 0.72;
+    transform: translateY(1px) scaleX(0.16);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(1px) scaleX(0.015);
+  }
+}
+
+@keyframes landingChatPillContentsExit {
+  to {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+
+@keyframes landingChatPillRevealX {
+  0% {
+    opacity: 0;
+    transform: translateY(1px) scaleX(0.015);
+  }
+
+  35% {
+    opacity: 0.72;
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scaleX(1);
+  }
+}
+
+@keyframes landingChatPillContentsEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .landing-chat-pill,
+  .landing-open-editor,
+  .landing-open-editor svg,
   .landing-chat-send {
     transition: none;
+  }
+
+  .landing-page.is-opening-editor .landing-chat-pill,
+  .landing-page.is-opening-editor .landing-chat-pill > *,
+  .landing-page.is-opening-editor .landing-open-editor,
+  .dock-container.layout-switch-to-start .landing-chat-pill,
+  .dock-container.layout-switch-to-start .landing-chat-pill > * {
+    animation: none;
+  }
+
+  .landing-page.is-opening-editor .landing-chat-pill,
+  .landing-page.is-opening-editor .landing-chat-pill > *,
+  .landing-page.is-opening-editor .landing-open-editor {
+    opacity: 0;
   }
 
   .landing-chat-spinner {

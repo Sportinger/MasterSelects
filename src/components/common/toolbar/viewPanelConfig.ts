@@ -1,6 +1,7 @@
 import {
   AI_PANEL_TYPES,
   PANEL_CONFIGS,
+  PANEL_PICKER_HIDDEN_TYPES,
   SCOPE_PANEL_TYPES,
   WIP_PANEL_TYPES,
   type PanelConfig,
@@ -29,7 +30,12 @@ export const VIEW_CORE_PANEL_TYPES = VIEW_CORE_PANEL_TYPE_ORDER.filter((type) =>
 
 export const VIEW_WIP_ONLY_PANEL_TYPES = WIP_PANEL_TYPES.filter((type) => (
   !AI_PANEL_TYPES.includes(type)
+  && !PANEL_PICKER_HIDDEN_TYPES.includes(type)
 ));
+
+export const VIEW_AI_PANEL_TYPES = AI_PANEL_TYPES.filter(
+  type => !PANEL_PICKER_HIDDEN_TYPES.includes(type),
+);
 
 const PANEL_CONFIG_LOOKUP = PANEL_CONFIGS as Partial<Record<PanelType, PanelConfig>>;
 
