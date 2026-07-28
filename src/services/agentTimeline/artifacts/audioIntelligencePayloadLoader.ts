@@ -116,6 +116,17 @@ function sourceFor(artifact: AudioAnalysisArtifact): AudioIntelligenceArtifactSo
   };
 }
 
+// jsdom Blobs may lack arrayBuffer(); fall back to FileReader there.
+async function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
+  if (typeof blob.arrayBuffer === 'function') return blob.arrayBuffer();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as ArrayBuffer);
+    reader.onerror = () => reject(reader.error ?? new Error('Blob read failed'));
+    reader.readAsArrayBuffer(blob);
+  });
+}
+
 async function readPayload(store: AudioArtifactStore, artifactId: string, hash: string): Promise<ArrayBuffer> {
   const blob = await store.getPayload(artifactId);
   if (!blob) throw new Error(`Audio intelligence payload is missing: ${artifactId}`);
@@ -124,7 +135,7 @@ async function readPayload(store: AudioArtifactStore, artifactId: string, hash: 
       `Audio intelligence payload exceeds ${DEFAULT_AGENT_TIMELINE_MAX_READ_BYTES} bytes: ${artifactId}`,
     );
   }
-  const bytes = await blob.arrayBuffer();
+  const bytes = await blobToArrayBuffer(blob);
   if (bytes.byteLength > DEFAULT_AGENT_TIMELINE_MAX_READ_BYTES) {
     throw new RangeError(
       `Audio intelligence payload exceeds ${DEFAULT_AGENT_TIMELINE_MAX_READ_BYTES} bytes: ${artifactId}`,
