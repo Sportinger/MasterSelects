@@ -287,9 +287,19 @@ export function useFlashBoardChatController({
 
     try {
       const executedToolCalls: FlashBoardExecutedToolCall[] = [];
+      const setPendingText = (text: string) => {
+        setChatMessages((current) => current.map((message) => (
+          message.id === assistantMessageId && message.isPending
+            ? { ...message, text }
+            : message
+        )));
+      };
       const response = await sendFlashBoardChatMessage({
         ...chatSendPlan.request,
         onExecutedToolCalls: (toolCalls) => executedToolCalls.push(...toolCalls),
+        onPhase: (phase) => {
+          setPendingText(phase === 'kernel' ? 'MS thinking…' : 'AI thinking…');
+        },
         playbookPrompt: effectiveChatPrompt,
         signal: abortController.signal,
         systemPromptIncludeContext: chatSystemPromptSendContext,

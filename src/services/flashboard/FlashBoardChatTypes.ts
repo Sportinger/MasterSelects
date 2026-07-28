@@ -31,6 +31,9 @@ export interface FlashBoardChatRequest {
   lemonadeEndpoint?: string;
   model: string;
   onExecutedToolCalls?: (toolCalls: FlashBoardExecutedToolCall[]) => void;
+  /** Reports which engine is working on the turn: kernel-first, then the
+   * community provider when the kernel does not handle it. */
+  onPhase?: (phase: 'kernel' | 'provider') => void;
   onRunCompleted?: (run: import('./FlashBoardChatRunAudit').FlashBoardChatRunRecord) => void;
   openAiReasoningEffort?: FlashBoardOpenAiReasoningEffort;
   playbookPrompt?: string;
