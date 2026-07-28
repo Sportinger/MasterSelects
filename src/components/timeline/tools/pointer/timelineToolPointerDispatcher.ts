@@ -1,6 +1,10 @@
-import type { TimelineClip, TimelineTrack } from '../../../../types';
+import type { TempoMap, TimelineClip, TimelineTrack } from '../../../../types/timeline';
 import type { TimelineToolId, TimelineToolPreview } from '../../../../stores/timeline/types';
 import type { TimelineEditOperation } from '../../../../stores/timeline/editOperations/types';
+import {
+  collectBarsGridSnapTimes,
+  type TimelineGridSubdivision,
+} from '../../../../timeline/tempo/barsGrid';
 
 export const TIMELINE_TOOL_SNAP_THRESHOLD_PX = 10;
 
@@ -17,6 +21,13 @@ export interface TimelineClipPointerContext {
   clientX: number;
   rectLeft: number;
   altKey: boolean;
+  // Tempo grid (issue #299, §3.5). Optional so call sites that predate the
+  // feature keep today's clip-edge/playhead snapping unchanged; supplying a
+  // tempoMap with barsLaneEnabled adds the same bar/beat candidates the clip
+  // drag path uses, so both paths snap to what the grid draws.
+  tempoMap?: TempoMap;
+  barsLaneEnabled?: boolean;
+  gridSubdivision?: TimelineGridSubdivision;
 }
 
 export interface TimelineClipPointerDispatchResult {
@@ -311,7 +322,18 @@ export function resolveTimelineClipPointerTime(context: TimelineClipPointerConte
   let nearestTarget = rawTime;
   let nearestDistance = Infinity;
 
-  for (const target of getSnapTargets(context.clips, context.playheadPosition)) {
+  const targets = getSnapTargets(context.clips, context.playheadPosition);
+  if (context.barsLaneEnabled && context.tempoMap) {
+    targets.push(...collectBarsGridSnapTimes({
+      tempoMap: context.tempoMap,
+      zoom: width / displayDuration,
+      centerTime: rawTime,
+      radiusSeconds: snapThresholdTime,
+      subdivision: context.gridSubdivision,
+    }));
+  }
+
+  for (const target of targets) {
     const distance = Math.abs(target - rawTime);
     if (distance <= snapThresholdTime && distance < nearestDistance) {
       nearestTarget = target;

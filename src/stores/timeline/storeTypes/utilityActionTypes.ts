@@ -170,6 +170,34 @@ export interface RulerLaneActions {
   reorderRulerLanes: (orderedLaneIds: string[]) => void;
 }
 
+// Tempo-map editing (issue #299, Packet 1). The counterpart to RulerLaneActions:
+// lanes are view state, the tempo map is CONTENT, so every action here captures
+// a history snapshot.
+export interface TempoActions {
+  // Change the pinned first event — the tempo the project starts at.
+  setProjectTempo: (bpm: number) => void;
+  // Add a tempo change; meter defaults to the tempo in effect at `time`.
+  // Writing onto an occupied position edits that event and returns its id.
+  addTempoChange: (
+    time: number,
+    bpm: number,
+    meter?: { numerator?: number; denominator?: number },
+  ) => string | null;
+  updateTempoChange: (
+    eventId: string,
+    patch: {
+      time?: number;
+      bpm?: number;
+      numerator?: number;
+      denominator?: number;
+      // 'ramp' reaches this tempo by interpolating from the previous one (#299).
+      curve?: import('../../../types/timeline').TempoCurve;
+    },
+  ) => void;
+  // No-op for the project tempo, which is not deletable.
+  removeTempoChange: (eventId: string) => void;
+}
+
 export interface TransitionActions {
   applyTransition: (
     clipAId: string,

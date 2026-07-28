@@ -105,3 +105,36 @@ describe('rulerSlice', () => {
     expect(ids).toContain(TIME_RULER_LANE_ID);
   });
 });
+
+// Issue #299, Packet 3: the tempo lane is an EDITOR, not a timebase.
+describe('rulerSlice — tempo lane', () => {
+  let store: ReturnType<typeof createTestTimelineStore>;
+
+  beforeEach(() => {
+    store = createTestTimelineStore();
+  });
+
+  it('stacks the tempo lane last, directly under the bars ruler', () => {
+    store.getState().addRulerLane('tempo');
+    store.getState().addRulerLane('bars');
+    store.getState().addRulerLane('frames');
+    expect(store.getState().rulerLanes.map(lane => lane.format)).toEqual([
+      'time', 'frames', 'bars', 'tempo',
+    ]);
+  });
+
+  it('is never selectable as the active lane', () => {
+    const tempoLaneId = store.getState().addRulerLane('tempo');
+    const before = store.getState().activeRulerLaneId;
+
+    store.getState().setActiveRulerLane(tempoLaneId);
+    expect(store.getState().activeRulerLaneId).toBe(before);
+  });
+
+  it('still lets other lanes become active while it exists', () => {
+    store.getState().addRulerLane('tempo');
+    const barsLaneId = store.getState().addRulerLane('bars');
+    store.getState().setActiveRulerLane(barsLaneId);
+    expect(store.getState().activeRulerLaneId).toBe(barsLaneId);
+  });
+});

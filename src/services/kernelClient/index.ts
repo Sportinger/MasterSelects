@@ -110,7 +110,7 @@ export class KernelServiceClient {
   }
 
   health(options?: KernelRequestOptions): Promise<KernelServiceResult<KernelHealthResponse>> {
-    return this.request('/health', false, { method: 'GET' }, options);
+    return this.request('/kernel/health', false, { method: 'GET' }, options);
   }
 
   run(

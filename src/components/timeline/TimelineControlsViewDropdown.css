@@ -59,4 +59,102 @@
 .view-check.checked {
   color: var(--accent-color, #4a9eff);
 }
+
+/* Ruler lanes menu: a lane row can own sub-settings (Bars + Beats owns the grid
+   resolution). The row stays a pure enable/disable toggle and the expander is a
+   separate control, so a single click never means two different things. */
+/* Label takes the slack so the expander sits flush right, without pulling the
+   label away from its checkmark (which `justify-content: space-between` would). */
+.ruler-lanes-menu .ruler-lane-label {
+  margin-right: auto;
+}
+
+.ruler-lane-expander {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  margin-left: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-secondary, var(--text-primary));
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.ruler-lane-expander:hover {
+  background: var(--bg-secondary);
+  color: var(--accent-color, #4a9eff);
+  border-color: var(--accent-color, #4a9eff);
+}
+
+/* Metronome: the button toggles, the caret opens settings — two targets, so a
+   single click never means both (issue #299). */
+.metronome-menu {
+  display: flex;
+  align-items: center;
+}
+
+.metronome-menu .btn {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.metronome-settings-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 0 3px;
+  border: 1px solid var(--border-color);
+  border-left: none;
+  border-top-right-radius: 4px;
+  border-bottom-right-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary, var(--text-primary));
+  cursor: pointer;
+}
+
+.metronome-settings-toggle:hover {
+  background: var(--bg-tertiary);
+  color: var(--accent-color, #4a9eff);
+}
+
+.metronome-popover {
+  right: 0;
+  left: auto;
+  min-width: 190px;
+}
+
+.metronome-volume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.metronome-volume input[type='range'] {
+  flex: 1;
+  min-width: 70px;
+}
+
+.metronome-volume-value {
+  min-width: 32px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary, var(--text-primary));
+}
+
+/* Owned by the lane above it — indented past the checkmark column. */
+.ruler-lanes-menu .view-dropdown-item.ruler-lane-subitem {
+  padding-left: 30px;
+  font-size: 11px;
+}
 }

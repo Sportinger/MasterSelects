@@ -25,6 +25,13 @@ Model-powered editing with the shared editor tool catalog, Kie.ai Cloud or local
 
 ## FlashBoard Chat
 
+> **Kernel-first routing:** when an agent-kernel service is configured
+> (`ms.kernel.url` + `ms.kernel.token`), mechanical editing requests are
+> compiled, simulated, and verified by the kernel and executed locally in
+> one undo group before any provider call happens; everything else falls
+> back to the chat loop described below. See
+> `docs/Features/Kernel-Client.md` for the full flow and fallback matrix.
+
 ### Location
 - Floating FlashBoard composer chat mode
 
@@ -298,7 +305,14 @@ See [MuScriptor Music-to-MIDI](./MuScriptor.md) for the complete runtime, mappin
 
 ## AI Editor Tools
 
-### 86 Tools across 16 Exported Definition Groups
+### Tool Registry (parity-gated)
+
+The registry currently holds 133 tool definitions, of which 97 are exposed
+to the chat model (policy-gated; the dev bridge additionally sees
+diagnostics-only tools). Exact counts are locked by
+`tests/unit/aiToolRegistryParity.test.ts` and mirrored 1:1 by the agent
+kernel's manifest registry — a tool that is only partially registered
+(definition, policy, or handler missing) fails the build.
 
 > **Note:** Kie.ai requests are capped at 128 model-exposed tools. Bridge-only diagnostics can exist as handler/policy entries without being exposed to the chat model. Gaussian Splat tool definitions also exist in `src/services/aiTools/definitions/gaussian.ts`, but that file is not currently exported through `AI_TOOLS`.
 

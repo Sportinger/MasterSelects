@@ -3,11 +3,25 @@
 # Multi-Ruler Infrastructure (Integration Plan)
 
 **Status:** Implemented (Packets 1–7). The single timeline ruler is now a stack of
-coexisting ruler lanes (Time / Timecode / Frames / Bars+Beats), chosen from the
-**Rulers** checklist (left of the View dropdown) and persisted per composition.
-Bars+Beats is driven by a TempoMap (constant 4/4 @ 60 BPM today, list-of-events
-ready). Clicking a lane sets the active lane (highlighted) — the seam a future grid
-will snap to. This phase ships **no grid/snap behavior** yet. Issue: #257.
+coexisting ruler lanes (Time / Timecode / Frames / Bars+Beats / Tempo), chosen from
+the **Rulers** checklist (left of the View dropdown) and persisted per composition.
+Bars+Beats is driven by a TempoMap. Issue: #257.
+
+> **Superseded in part by issue #299** — see
+> [Tempo And Metronome](./Tempo-And-Metronome.md). That work made the TempoMap
+> **editable** (a Tempo lane with draggable BPM/meter flags and tempo ramps), gave
+> the body grid and snapping real bar/beat behaviour, and added a metronome. Two
+> statements below are no longer true:
+>
+> - *"ships no grid/snap behavior"* — an enabled **Bars + Beats** lane now drives
+>   the grid behind the clips and clip snapping.
+> - *"clicking a lane sets the active lane — the seam a future grid will snap to"*
+>   — that seam was **retired**. The grid keys off the bars lane being *enabled*,
+>   not off `activeRulerLaneId`, which now means only the lane highlight. Requiring
+>   a second, invisible selection to get a matching grid was the wrong UX.
+>
+> The lane stack, the TempoMap type, the pure tick generators and the
+> per-composition persistence described below are unchanged and still current.
 
 Each `### Packet N` section below is annotated with a ✅ "Implemented" summary of
 what actually shipped, followed by the original spec for reference.
@@ -38,9 +52,11 @@ per-composition. Bars+Beats is driven by a **TempoMap** that is a constant
 4/4 @ 60 BPM today but list-of-events-ready for future tempo / time-signature
 changes at arbitrary points.
 
-This phase ships **no grid/snap behavior** — it only stores an
-`activeRulerLaneId` so a future grid knows which lane is authoritative ("snap to
-the one clicked").
+This phase shipped **no grid/snap behavior** — it only stored an
+`activeRulerLaneId` so a future grid would know which lane was authoritative
+("snap to the one clicked"). Issue #299 delivered the grid and snapping but
+**dropped that seam**: an enabled Bars+Beats lane wins the grid, with no separate
+active-lane selection. See [Tempo And Metronome](./Tempo-And-Metronome.md).
 
 ## Background: how professional DAWs do it
 

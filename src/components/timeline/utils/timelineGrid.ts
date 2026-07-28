@@ -1,5 +1,25 @@
-import type { RulerLaneFormat, TempoMap } from '../../../types';
+﻿import type { RulerLaneFormat, TempoMap } from '../../../types/timeline';
 import { iterateBarBeatLines } from '../../../timeline/tempo/TempoMap';
+import {
+  MIN_BAR_LABEL_PX,
+  MIN_BAR_TICK_PX,
+  MIN_BEAT_TICK_PX,
+} from '../../../timeline/tempo/barsGrid';
+
+// The tempo-driven body grid lives with the tempo math (both stores and
+// components consume it); re-exported here so ruler and grid callers share one
+// import path.
+export {
+  createBarsGridPlan,
+  collectBarsGridSnapTimes,
+  TIMELINE_GRID_SUBDIVISIONS,
+  TIMELINE_GRID_SUBDIVISION_LABELS,
+} from '../../../timeline/tempo/barsGrid';
+export type {
+  BarsGridPlan,
+  BarsGridPlanInput,
+  TimelineGridSubdivision,
+} from '../../../timeline/tempo/barsGrid';
 
 export type TimelineGridMode = 'frame' | 'time';
 
@@ -169,7 +189,7 @@ export function formatTimelineFrameNumber(seconds: number, frameRate: number): s
 // MM:SS.cc clock label (cc = centiseconds). The single source of truth for the
 // timeline's plain time labels: both the timeline helpers hook and the piano-roll
 // Time lane import this so their labels are byte-identical by construction
-// (issue #249, §6 of the rulers plan).
+// (issue #249, Â§6 of the rulers plan).
 export function formatTimelineClock(seconds: number): string {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
@@ -177,10 +197,10 @@ export function formatTimelineClock(seconds: number): string {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
 }
 
-// ─── Per-lane ruler ticks (issue #257, Packet 4) ─────────────────────────────
+// â”€â”€â”€ Per-lane ruler ticks (issue #257, Packet 4) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //
 // Unlike createTimelineGridPlan (which couples format selection with tick density
-// and crossfades frame<->time by zoom — the old single-row behavior), these
+// and crossfades frame<->time by zoom â€” the old single-row behavior), these
 // generators take a FIXED lane format and compute only density at the current
 // zoom. A `frames` lane always shows frames, a `time` lane always shows time:
 // the format never changes, only how many ticks are drawn. Pure (time-domain
@@ -195,7 +215,7 @@ export interface RulerTick {
 }
 
 export interface LinearLaneTicksInput {
-  format: Exclude<RulerLaneFormat, 'bars'>;
+  format: Exclude<RulerLaneFormat, 'bars' | 'tempo'>;
   zoom: number;
   frameRate?: number | null;
   startTime: number;
@@ -236,7 +256,7 @@ function createFrameLaneTicks(
   const frameDurationSeconds = 1 / safeFrameRate;
   const frameWidthPixels = safeZoom * frameDurationSeconds;
   // When single frames resolve we tick every frame; otherwise step up to a "nice"
-  // frame count. Density adapts — the format (frame number / timecode) does not.
+  // frame count. Density adapts â€” the format (frame number / timecode) does not.
   const minorStepFrames = frameWidthPixels >= MIN_FRAME_LINE_PX
     ? 1
     : getNiceFrameStepAtLeast(MIN_FRAME_LINE_PX / frameWidthPixels);
@@ -267,7 +287,7 @@ function createFrameLaneTicks(
 
 // Linear lanes: `time` (seconds), `timecode` (HH:MM:SS:FF), `frames` (frame #).
 // timecode shares the frame-driven density of frames but labels as a timecode
-// string — it is a standalone lane here (today it only exists as a label style
+// string â€” it is a standalone lane here (today it only exists as a label style
 // inside frame mode).
 export function createLinearLaneTicks(input: LinearLaneTicksInput): RulerTick[] {
   const safeZoom = sanitizePositiveNumber(input.zoom, 1);
@@ -289,10 +309,6 @@ export interface BarsLaneTicksInput {
   endTime: number;
   duration: number;
 }
-
-const MIN_BEAT_TICK_PX = 14;
-const MIN_BAR_TICK_PX = 4;
-const MIN_BAR_LABEL_PX = 36;
 
 // Bars lane: time projected through the TempoMap (variable spacing ready; constant
 // for the single 4/4@60 map). Thins by pixel spacing so beats/bars never merge.

@@ -6,6 +6,7 @@ import { useSettingsStore } from './stores/settingsStore';
 import { installRuntimeDiagnostics } from './services/runtimeDiagnostics';
 import { getStemSeparationService } from './services/audio/stemSeparation';
 import { startEditorAgentTimelinePersistence } from './services/agentTimeline/runtime/persistence/editorPersistenceBootstrap';
+import { ensureMetronomeScheduler } from './services/audio/metronomeScheduler';
 
 installRuntimeDiagnostics();
 startEditorAgentTimelinePersistence();
@@ -38,6 +39,11 @@ function warmNativeHelperForProjectBackend(): void {
 warmNativeHelperForProjectBackend();
 
 setClipStemSeparationRunner((request) => getStemSeparationService().separateClip(request));
+
+// The metronome subscribes to the transport globally; this just guarantees the
+// one-time init. It lives here rather than in a timeline hook because it is an
+// app-wide audio service, not part of layer sync (#299).
+ensureMetronomeScheduler();
 
 // Expose AI tools API for browser console, Claude skills, and external agents
 // Only available in development mode to prevent production exposure

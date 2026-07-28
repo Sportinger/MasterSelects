@@ -611,6 +611,151 @@
   box-shadow: inset 2px 0 0 var(--accent, var(--border-strong));
 }
 
+/* Tempo editor lane (issue #299): flags instead of ticks. Plain DOM positioned
+   with dpr-aligned pixels — no canvas, so nothing here can blank on Mesa. */
+.ruler-lane.tempo {
+  background: color-mix(in srgb, var(--bg-tertiary, #1e2530) 55%, transparent);
+  cursor: default;
+}
+
+.tempo-lane-surface {
+  position: absolute;
+  inset: 0;
+}
+
+.tempo-flag {
+  position: absolute;
+  top: 3px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  padding: 0 6px 0 7px;
+  border-radius: 0 3px 3px 0;
+  /* The left border IS the event's position: the flag hangs to its right. */
+  border-left: 2px solid var(--accent, #2997e5);
+  background: color-mix(in srgb, var(--accent, #2997e5) 22%, var(--bg-secondary, #1a1f28));
+  color: var(--text-primary, #e6edf3);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: grab;
+  user-select: none;
+}
+
+.tempo-flag:hover {
+  background: color-mix(in srgb, var(--accent, #2997e5) 34%, var(--bg-secondary, #1a1f28));
+}
+
+.tempo-flag.is-dragging {
+  cursor: grabbing;
+  z-index: 3;
+}
+
+/* The project tempo is pinned at 0 and not draggable — flat edge, muted fill. */
+.tempo-flag.is-project-tempo {
+  cursor: default;
+  border-left-color: var(--text-secondary, #8b97a8);
+  background: color-mix(in srgb, var(--bg-tertiary, #1e2530) 90%, var(--text-secondary, #8b97a8));
+}
+
+.tempo-flag-meter,
+.tempo-flag-bpm,
+.tempo-flag-separator {
+  white-space: pre;
+}
+
+/* Editing swaps ONE value for a field of the same size, so the flag keeps its
+   shape and the rest of the label stays readable. */
+.tempo-flag-input {
+  padding: 0 2px;
+  border: 1px solid var(--accent, #2997e5);
+  border-radius: 2px;
+  background: var(--bg-primary, #0f1319);
+  color: var(--text-primary, #e6edf3);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.tempo-flag-input.bpm {
+  width: 42px;
+}
+
+.tempo-flag-input.meter {
+  width: 34px;
+}
+
+/* Ramp indicator: a sloped line across the interval the tempo glides over.
+   SVG, not canvas — plain DOM keeps it safe on Mesa. */
+.tempo-ramp-indicator {
+  position: absolute;
+  top: 4px;
+  height: 22px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.tempo-ramp-indicator line {
+  stroke: var(--accent, #2997e5);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 2;
+  opacity: 0.75;
+}
+
+.tempo-flag.is-ramp {
+  border-left-style: dashed;
+}
+
+.tempo-flag-ramp {
+  margin-right: 3px;
+  opacity: 0.9;
+}
+
+.tempo-menu-check {
+  display: inline-block;
+  width: 12px;
+  margin-right: 4px;
+  color: transparent;
+}
+
+.tempo-menu-check.checked {
+  color: var(--accent-color, #2997e5);
+}
+
+.tempo-flag-menu {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  min-width: 148px;
+  padding: 4px 0;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.tempo-flag-menu button {
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tempo-flag-menu button:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+}
+
+.tempo-flag-menu button:disabled {
+  color: var(--text-secondary, #8b97a8);
+  cursor: default;
+  opacity: 0.6;
+}
+
 .time-marker {
   position: absolute;
   top: 0;

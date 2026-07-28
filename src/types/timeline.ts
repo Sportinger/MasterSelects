@@ -325,7 +325,9 @@ export interface SerializableMarker {
 // ---- Multi-ruler infrastructure (issue #257) ----
 // The format a ruler lane renders. Linear formats (`time` / `timecode` /
 // `frames`) are pure functions of time; `bars` is projected through the TempoMap.
-export type RulerLaneFormat = 'time' | 'timecode' | 'frames' | 'bars';
+// `tempo` is the odd one out: an EDITOR lane showing draggable tempo/meter flags
+// rather than ticks, so it is never selectable as the active lane (issue #299).
+export type RulerLaneFormat = 'time' | 'timecode' | 'frames' | 'bars' | 'tempo';
 
 // One stacked ruler lane. Lanes are an ordered, format-unique set
 // (no two lanes share a format — duplicate rulers are pointless).
@@ -335,13 +337,23 @@ export interface RulerLane {
 }
 
 // One tempo / time-signature segment, effective from `time` onward until the
-// next event. A single 4/4 @ 60 BPM event today; a sorted list of N later.
+// next event. Invariants (sort, uniqueness, pinned first event, clamps) live in
+// `src/timeline/tempo/tempoEdits.ts`.
 export interface TempoEvent {
+  id: string;   // stable identity for editing, dragging and React keys (#299)
   time: number; // seconds, sorted ascending; first event is at 0
   bpm: number;
   numerator: number;
   denominator: number;
+  // How this event's tempo is REACHED from the previous one (#299):
+  //   'jump' (default) — instant step at `time`
+  //   'ramp'           — tempo interpolates linearly from the previous event's
+  //                      BPM to this one across the preceding interval
+  // Optional so every project saved before ramps stays valid and reads as jump.
+  curve?: TempoCurve;
 }
+
+export type TempoCurve = 'jump' | 'ramp';
 
 // The conductor track that makes Bars+Beats possible. Always >= 1 event.
 export interface TempoMap {

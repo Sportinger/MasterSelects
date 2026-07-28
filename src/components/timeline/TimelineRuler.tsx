@@ -18,6 +18,7 @@ import {
   type RulerTick,
 } from './utils/timelineGrid';
 import { createDefaultRulerLanes, createDefaultTempoMap } from '../../timeline/tempo/rulerDefaults';
+import { TempoRulerLane } from './components/TempoRulerLane';
 
 const RULER_VIEWPORT_FALLBACK_PX = 1600;
 const RULER_VIEWPORT_MIN_PX = 1600;
@@ -133,6 +134,8 @@ function TimelineRulerComponent({
   const effectiveTempoMap = tempoMap ?? createDefaultTempoMap();
 
   const renderLaneTicks = (lane: RulerLane): RulerTick[] => {
+    // The tempo lane is an editor, not a tick lane — it renders its own flags.
+    if (lane.format === 'tempo') return [];
     if (lane.format === 'bars') {
       return createBarsLaneTicks({
         tempoMap: effectiveTempoMap,
@@ -172,7 +175,9 @@ function TimelineRulerComponent({
         const handleLaneMouseUp = (event: ReactMouseEvent) => {
           const startX = laneClickStartXRef.current;
           laneClickStartXRef.current = null;
-          if (startX === null || !onSelectLane) return;
+          // The tempo lane is an editor, so clicking it never changes which lane
+          // is the active timebase.
+          if (startX === null || !onSelectLane || lane.format === 'tempo') return;
           // A click (no meaningful drag) selects the lane; a scrub drag does not.
           if (Math.abs(event.clientX - startX) <= LANE_CLICK_SELECT_THRESHOLD_PX) {
             onSelectLane(lane.id);
@@ -187,6 +192,16 @@ function TimelineRulerComponent({
             onMouseDown={handleLaneMouseDown}
             onMouseUp={handleLaneMouseUp}
           >
+            {lane.format === 'tempo' && (
+              <TempoRulerLane
+                tempoMap={effectiveTempoMap}
+                zoom={zoom}
+                duration={duration}
+                visibleStartTime={visibleStartTime}
+                visibleEndTime={visibleEndTime}
+                devicePixelRatio={devicePixelRatio}
+              />
+            )}
             {ticks.map((tick, tickIndex) => {
               const x = alignTimelineGridPixel(timeToPixel(tick.time), devicePixelRatio);
               return (
