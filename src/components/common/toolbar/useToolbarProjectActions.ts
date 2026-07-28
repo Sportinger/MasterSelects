@@ -13,6 +13,10 @@ import {
   setProjectLoadProgress,
   syncStoresToProject,
 } from '../../../services/projectSync';
+import type {
+  ProjectNameDialogMode,
+  ProjectNameDialogRequest,
+} from '../ProjectNameDialog';
 
 const log = Logger.create('Toolbar');
 
@@ -20,6 +24,7 @@ interface UseToolbarProjectActionsArgs {
   closeMenu: () => void;
   editName: string;
   isRenamingRef: MutableRefObject<boolean>;
+  openProjectNameDialog: (request: ProjectNameDialogRequest) => void;
   projectName: string;
   resetMediaProject: (name: string) => void;
   setEditName: Dispatch<SetStateAction<string>>;
@@ -38,6 +43,7 @@ export function useToolbarProjectActions({
   closeMenu,
   editName,
   isRenamingRef,
+  openProjectNameDialog,
   projectName,
   resetMediaProject,
   setEditName,
@@ -53,45 +59,29 @@ export function useToolbarProjectActions({
 }: UseToolbarProjectActionsArgs) {
   const handleSave = useCallback(async (showToast = true) => {
     if (!projectFileService.isProjectOpen()) {
-      const name = prompt('Enter project name:', 'New Project');
-      if (!name) return;
-      setIsLoading(true);
-      const success = await createNewProject(name);
-      if (success) {
-        setProjectName(name);
-        setIsProjectOpen(true);
-        if (showToast) setShowSavedToast(true);
-      }
-      setIsLoading(false);
+      closeMenu();
+      openProjectNameDialog({
+        mode: 'save',
+        initialName: 'New Project',
+      });
+      return;
     } else {
       await saveCurrentProject({ source: 'manual', label: 'Manual save' });
       if (showToast) setShowSavedToast(true);
     }
     closeMenu();
-  }, [closeMenu, setIsLoading, setIsProjectOpen, setProjectName, setShowSavedToast]);
+  }, [closeMenu, openProjectNameDialog, setShowSavedToast]);
 
-  const handleSaveAs = useCallback(async () => {
-    const name = prompt('Save project as:', projectName || 'New Project');
-    if (!name) return;
-
-    setIsLoading(true);
-    const success = await createNewProject(name);
-    if (success) {
-      setProjectName(name);
-      setIsProjectOpen(true);
-      setNeedsPermission(false);
-      setShowSavedToast(true);
-    }
-    setIsLoading(false);
+  const handleSaveAs = useCallback(() => {
     closeMenu();
+    openProjectNameDialog({
+      mode: 'saveAs',
+      initialName: projectName || 'New Project',
+    });
   }, [
     closeMenu,
+    openProjectNameDialog,
     projectName,
-    setIsLoading,
-    setIsProjectOpen,
-    setNeedsPermission,
-    setProjectName,
-    setShowSavedToast,
   ]);
 
   const handleOpen = useCallback(async () => {
@@ -215,35 +205,61 @@ export function useToolbarProjectActions({
     setShowSavedToast,
   ]);
 
-  const handleNew = useCallback(async () => {
-    if (projectFileService.hasUnsavedChanges()) {
-      if (!confirm('You have unsaved changes. Create a new project?')) {
-        return;
-      }
-    }
-    const name = prompt('Enter project name:', 'New Project');
-    if (!name) return;
-
+  const handleProjectNameSubmit = useCallback(async (
+    mode: ProjectNameDialogMode,
+    name: string,
+  ): Promise<string | null> => {
     setIsLoading(true);
-    const folderCreated = await projectFileService.createProject(name);
-    if (folderCreated) {
-      resetMediaProject(name);
-      await syncStoresToProject();
-      await projectFileService.saveProject();
+    try {
+      if (mode === 'new') {
+        const folderCreated = await projectFileService.createProject(name);
+        if (!folderCreated) {
+          return 'No project folder was selected, or the folder could not be created.';
+        }
+
+        resetMediaProject(name);
+        await syncStoresToProject();
+        const saved = await projectFileService.saveProject();
+        if (!saved) {
+          return 'The project folder was created, but project.json could not be saved.';
+        }
+      } else {
+        const created = await createNewProject(name);
+        if (!created) {
+          return 'No project folder was selected, or the project could not be saved.';
+        }
+        setShowSavedToast(true);
+      }
 
       setProjectName(name);
       setIsProjectOpen(true);
       setNeedsPermission(false);
+      return null;
+    } catch (error) {
+      log.error('Project creation failed', error);
+      return 'The project could not be created. Please check the selected folder and try again.';
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
-    closeMenu();
   }, [
-    closeMenu,
     resetMediaProject,
     setIsLoading,
     setIsProjectOpen,
     setNeedsPermission,
     setProjectName,
+    setShowSavedToast,
+  ]);
+
+  const handleNew = useCallback(() => {
+    closeMenu();
+    openProjectNameDialog({
+      mode: 'new',
+      initialName: 'New Project',
+      hasUnsavedChanges: projectFileService.hasUnsavedChanges(),
+    });
+  }, [
+    closeMenu,
+    openProjectNameDialog,
   ]);
 
   const handleRestorePermission = useCallback(async () => {
@@ -282,6 +298,7 @@ export function useToolbarProjectActions({
     handleNew,
     handleOpen,
     handleOpenRecent,
+    handleProjectNameSubmit,
     handleRestorePermission,
     handleSave,
     handleSaveAs,

@@ -38,6 +38,7 @@ const baseContext = {
   clientX: 298,
   rectLeft: 100,
   altKey: false,
+  shiftKey: false,
 };
 
 describe('timeline tool pointer dispatcher', () => {
@@ -68,7 +69,7 @@ describe('timeline tool pointer dispatcher', () => {
     expect(result.snapped).toBe(true);
   });
 
-  it('lets Alt invert snapping for blade pointer time', () => {
+  it('lets Alt bypass snapping for blade pointer time', () => {
     const result = resolveTimelineClipPointerTime({
       ...baseContext,
       altKey: true,
@@ -76,6 +77,17 @@ describe('timeline tool pointer dispatcher', () => {
 
     expect(result.time).toBeCloseTo(11.98);
     expect(result.snapped).toBe(false);
+  });
+
+  it('temporarily enables blade snapping with Shift when the toggle is off', () => {
+    const result = resolveTimelineClipPointerTime({
+      ...baseContext,
+      snappingEnabled: false,
+      shiftKey: true,
+    });
+
+    expect(result.time).toBe(12);
+    expect(result.snapped).toBe(true);
   });
 
   it('creates a shared preview for blade hover', () => {

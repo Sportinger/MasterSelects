@@ -18,6 +18,7 @@ import {
   isAgentTransactionOpen,
 } from '../../src/services/aiTools/agentTransaction';
 import type { TimelineClip } from '../../src/types';
+import { createMockTrack } from '../helpers/mockData';
 
 const initialTimelineState = useTimelineStore.getState();
 
@@ -118,6 +119,31 @@ describe('agent mutation transactions', () => {
     commitAgentTransaction(transaction);
 
     expect(isAgentTransactionOpen()).toBe(false);
+    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    expect(useHistoryStore.getState().undo()).toMatchObject({ operation: 'undo' });
+    expect(useTimelineStore.getState().clips.map((clip) => clip.id)).toEqual(['base']);
+  });
+
+  it('keeps its history batch while a timeline operation uses nested history', () => {
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'track-1', type: 'video' })],
+    });
+    const transaction = beginAgentTransaction('AI task: nested timeline edit');
+
+    const split = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'agent-nested-split',
+      type: 'split-at-time',
+      clipIds: ['base'],
+      time: 0.5,
+      includeLinked: true,
+    }, {
+      source: 'ai-tool',
+      historyLabel: 'AI: nested split',
+    });
+
+    expect(split.success).toBe(true);
+    expect(useHistoryStore.getState().batchId).toBe(transaction.historyBatchId);
+    commitAgentTransaction(transaction);
     expect(useHistoryStore.getState().undoStack).toHaveLength(1);
     expect(useHistoryStore.getState().undo()).toMatchObject({ operation: 'undo' });
     expect(useTimelineStore.getState().clips.map((clip) => clip.id)).toEqual(['base']);

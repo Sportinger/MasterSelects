@@ -242,9 +242,7 @@ export async function createNewProject(name: string): Promise<boolean> {
   // Now sync current store state into the newly created project
   // This overwrites the empty initial project data with actual user edits
   await syncStoresToProject();
-  await projectFileService.saveProject();
-
-  return true;
+  return projectFileService.saveProject();
 }
 
 /**

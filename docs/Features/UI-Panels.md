@@ -52,7 +52,8 @@ Dockable desktop panel system with an After Effects-style menu bar, unified clip
 
 ### File Menu Details
 
-- **New Project** prompts for a project name and folder
+- **New Project** opens the in-app project setup dialog, where spaces are explicitly supported, invalid filesystem characters are validated inline, and unsaved work is called out before the folder picker opens
+- **First Save** (when no project is open) and **Save As** reuse the same keyboard-accessible project-name dialog instead of browser-native prompts
 - **Open Project** opens an existing project folder
 - **Open Recent** shows browser-remembered projects and can clear that recent list
 - **Save / Save As** follow the folder-based project model
@@ -379,17 +380,22 @@ segment list. Visual scene boundaries remain unchanged in the graph, while the
 list independently divides long dialogue into readable speech segments. Speaker
 changes and long pauses are hard natural boundaries; sentence endings nearest
 the 10-second target are preferred, and unpunctuated speech is split at a word
-boundary before 15 seconds. This keeps talking-head footage navigable even when
+boundary before 15 seconds. Within those semantic boundaries, the measured
+dialogue-column width supplies a bounded character budget: narrow panels create
+shorter bubbles and wide panels keep more words together without hiding them
+behind a fixed-size split. This keeps talking-head footage navigable even when
 cut detection returns one long scene. The list consumes all remaining panel
 height and owns its scroll. Each virtualized segment keeps visible face crops on
 the left with a separate transcript-speaker abbreviation beside them, larger
-word-synchronized dialogue in the center, and range/duration on the right.
+word-synchronized dialogue across the remaining width. The former right-side
+range/duration column is intentionally omitted; the compact scene/speech label
+keeps the segment-start seek action and exposes timing details as a tooltip.
 Speaker labels are not silently equated with anonymous face identities. Segments
 remain compact and never expand. Clicking a word seeks to that exact word;
-clicking the time seeks to the speech-segment start (or the scene start when no
-speech exists). Redundant playhead and clip-summary statistics are omitted. Face
-crops remain lazy because only the bounded virtualized window resolves
-thumbnails.
+clicking the scene/speech label seeks to the speech-segment start (or the scene
+start when no speech exists). Redundant playhead and clip-summary statistics are
+omitted. Face crops remain lazy because only the bounded virtualized window
+resolves thumbnails.
 
 The source-wide people/review correction strip lives in Analysis settings so
 the normal scene list stays focused. It deliberately reuses the same person
@@ -416,7 +422,8 @@ Words are grouped into timestamped speaker turns and readable timed segments;
 clicking a word seeks the playhead to that source position. During playback, the
 currently spoken word and active speech segment are highlighted and the list
 follows them when that segment is visible under the current search filter.
-Scrubbing updates the same highlight without animated lag.
+Follow mode centers each active segment vertically instead of pinning it to a
+viewport edge. Scrubbing updates the same highlight without animated lag.
 
 For audio-bearing clips, the overview also renders an **Audio** sparkline lane
 from loaded loudness and VAD spans plus a **Markers** needle lane for persisted

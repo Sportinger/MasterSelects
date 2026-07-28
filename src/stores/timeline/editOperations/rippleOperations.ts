@@ -3,6 +3,14 @@ import type { DeleteAllGapsOperation, DeleteGapAtTimeOperation, RippleDeleteSele
 
 const EPSILON = 0.0001;
 
+export interface RippleDeleteSelectionApplyResult {
+  clips: TimelineClip[];
+  deletedClips: TimelineClip[];
+  selectedClipIds: Set<string>;
+  changedClipIds: string[];
+  warnings: TimelineEditWarning[];
+}
+
 function isTrackLocked(tracks: TimelineTrack[], trackId: string): boolean {
   return tracks.find((track) => track.id === trackId)?.locked === true;
 }
@@ -69,7 +77,7 @@ export function applyRippleDeleteSelectionOperation(
   clips: TimelineClip[],
   tracks: TimelineTrack[],
   selectedClipIds: Set<string>,
-): { clips: TimelineClip[]; selectedClipIds: Set<string>; changedClipIds: string[]; warnings: TimelineEditWarning[] } {
+): RippleDeleteSelectionApplyResult {
   const requestedIds = operation.clipIds && operation.clipIds.length > 0
     ? new Set(operation.clipIds)
     : new Set(selectedClipIds);
@@ -80,6 +88,7 @@ export function applyRippleDeleteSelectionOperation(
   if (deletedClips.length === 0) {
     return {
       clips,
+      deletedClips: [],
       selectedClipIds,
       changedClipIds: [],
       warnings: [{ code: 'no-op', message: 'No selected clips to ripple delete.' }],
@@ -90,6 +99,7 @@ export function applyRippleDeleteSelectionOperation(
   if (lockedClip) {
     return {
       clips,
+      deletedClips: [],
       selectedClipIds,
       changedClipIds: [],
       warnings: [{
@@ -115,6 +125,7 @@ export function applyRippleDeleteSelectionOperation(
 
   return {
     clips: nextClips,
+    deletedClips,
     selectedClipIds: new Set(),
     changedClipIds: [...changedClipIds],
     warnings,

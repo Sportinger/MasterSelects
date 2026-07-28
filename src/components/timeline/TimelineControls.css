@@ -209,7 +209,6 @@
     transform 80ms ease;
 }
 
-.timeline-tool-button:focus,
 .timeline-tool-button:focus-visible {
   outline: none;
   box-shadow: 0 0 0 1px rgba(45, 140, 235, 0.65);

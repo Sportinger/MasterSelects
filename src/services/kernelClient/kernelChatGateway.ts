@@ -7,9 +7,11 @@ import {
   abortAgentTransaction,
   beginAgentTransaction,
   commitAgentTransaction,
+  hasAgentTransactionOwnership,
   type AgentTransaction,
 } from '../aiTools/agentTransaction';
 import { Logger } from '../logger';
+import { createExecutionIdBinding } from './executionIdBinding';
 import { KernelServiceClient } from './index';
 import {
   formatAssumptionNote,
@@ -19,12 +21,14 @@ import {
   buildTranscriptMoments,
   TRANSCRIPT_MOMENT_INDEX_VERSION,
 } from './transcriptMoments';
+import { buildSilenceRanges } from './silenceEvidence';
 import type {
   KernelCompileAbortReason,
   KernelCompileCompiledResponse,
   KernelCompileResponse,
   KernelResolvedCall,
   KernelRunCompleteResponse,
+  KernelSilenceRange,
 } from './types';
 
 const KERNEL_ENABLED_KEY = 'ms.kernel.enabled';
@@ -44,12 +48,14 @@ interface KernelTransactionAdapter {
   abort: (transaction: AgentTransaction) => void;
   begin: (label: string) => AgentTransaction;
   commit: (transaction: AgentTransaction) => unknown;
+  hasOwnership: (transaction: AgentTransaction) => boolean;
 }
 
 export interface KernelChatGatewayDependencies {
   client?: KernelServiceClient;
   executeToolCalls?: ExecuteToolCalls;
   fetchImpl?: typeof fetch;
+  getSilenceRanges?: (snapshot: unknown) => Promise<KernelSilenceRange[]>;
   getSnapshot?: () => Promise<unknown> | unknown;
   seed?: string;
   storage?: Storage;
@@ -434,6 +440,7 @@ function transactionAdapter(
     abort: overrides?.abort ?? abortAgentTransaction,
     begin: overrides?.begin ?? beginAgentTransaction,
     commit: overrides?.commit ?? commitAgentTransaction,
+    hasOwnership: overrides?.hasOwnership ?? hasAgentTransactionOwnership,
   };
 }
 
@@ -493,12 +500,18 @@ export async function tryKernelFirst(
   const getSnapshot = deps.getSnapshot ?? (() => buildTimelineSnapshot(executeToolCalls));
 
   let compiled: KernelCompileResponse;
+  let compileSnapshot: unknown;
   try {
     const snapshot = await getSnapshot();
+    compileSnapshot = snapshot;
     const moments = await buildTranscriptMoments(snapshot, executeToolCalls);
+    const silenceRanges = await (deps.getSilenceRanges
+      ? deps.getSilenceRanges(snapshot)
+      : buildSilenceRanges(snapshot, executeToolCalls));
     log.info('kernel compile request', {
       momentCount: moments.length,
       requestLength: request.length,
+      silenceRangeCount: silenceRanges.length,
     });
     const compileResult = await client.compile({
       request,
@@ -507,6 +520,7 @@ export async function tryKernelFirst(
       ...(moments.length === 0
         ? {}
         : { moments, indexVersion: TRANSCRIPT_MOMENT_INDEX_VERSION }),
+      ...(silenceRanges.length === 0 ? {} : { silentRanges: silenceRanges }),
     });
     if (!compileResult.ok) {
       log.warn('kernel compile transport failed; falling back', {
@@ -554,12 +568,18 @@ export async function tryKernelFirst(
   const compiledPlan: KernelCompileCompiledResponse = compiled;
   const transaction = transactionAdapter(deps.transaction);
   let agentTransaction: AgentTransaction | undefined;
+  let setupCompositionId: string | undefined;
+  const previousCompositionId = isRecord(compileSnapshot)
+    ? readString(compileSnapshot.activeCompositionId)
+    : undefined;
 
-  const failureResult = (detail: unknown): KernelChatGatewayResult => {
+  type RollbackOutcome = 'rolled-back' | 'deferred' | 'ownership-lost' | 'unavailable';
+
+  const failureResult = (detail: unknown, rollback: RollbackOutcome): KernelChatGatewayResult => {
     // A deferred rollback means our mutations are still applied; falling
     // back to the legacy loop would double-edit the timeline. Report the
     // failure honestly instead.
-    if (agentTransaction?.abortNoop) {
+    if (rollback === 'deferred' || rollback === 'ownership-lost') {
       return {
         handled: true,
         message: failedMessage(detail),
@@ -568,6 +588,64 @@ export async function tryKernelFirst(
     }
     console.warn('Kernel tool execution failed; rolled back and falling back to community chat.', detail);
     return declineResult(`Tool-Ausführung fehlgeschlagen (zurückgerollt): ${String(detail)}`);
+  };
+
+  // Setup rollback: the history-batch abort restores store contents but not
+  // the composition tab state (openCompositionIds/activeCompositionId), so a
+  // setup-created composition would linger as an open ghost tab. Remove it
+  // before the abort. The history snapshot application is the final store
+  // update, so nothing may mutate composition state after it.
+  const runSetupRollbackCall = async (
+    id: string,
+    tool: string,
+    args: Record<string, unknown>,
+  ): Promise<void> => {
+    try {
+      const [execution] = await executeToolCalls([{ id, tool, args }], 'chat', {
+        guidedReplay: false,
+        suppressHistory: true,
+      });
+      if (execution?.result.success !== true) {
+        log.warn('kernel setup rollback call failed', {
+          tool,
+          error: execution?.result.error ?? 'Tool did not return success.',
+        });
+      }
+    } catch (error) {
+      log.warn('kernel setup rollback call failed', {
+        tool,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+  const rollbackExecution = async (): Promise<RollbackOutcome> => {
+    if (!agentTransaction) {
+      return 'unavailable';
+    }
+    if (!transaction.hasOwnership(agentTransaction)) {
+      log.warn('kernel execution rollback skipped because transaction ownership was lost', {
+        transactionId: agentTransaction.transactionId,
+        historyBatchId: agentTransaction.historyBatchId,
+      });
+      return 'ownership-lost';
+    }
+    const cleanupSetup = setupCompositionId !== undefined && !agentTransaction.abortNoop;
+    if (cleanupSetup && previousCompositionId) {
+      await runSetupRollbackCall(
+        'kernel-setup-rollback-reopen',
+        'openComposition',
+        { compositionId: previousCompositionId },
+      );
+    }
+    if (cleanupSetup) {
+      await runSetupRollbackCall(
+        'kernel-setup-rollback-delete',
+        'deleteMediaItem',
+        { itemId: setupCompositionId },
+      );
+    }
+    transaction.abort(agentTransaction);
+    return agentTransaction.abortNoop ? 'deferred' : 'rolled-back';
   };
 
   try {
@@ -594,37 +672,34 @@ export async function tryKernelFirst(
       });
       const setupFailure = toolExecutionFailure([setupCall], setupResults);
       if (setupFailure) {
-        transaction.abort(agentTransaction);
-        return failureResult(setupFailure);
+        return failureResult(setupFailure, await rollbackExecution());
+      }
+      const setupData = setupResults[0]?.result.data;
+      if (isRecord(setupData) && typeof setupData.compositionId === 'string') {
+        setupCompositionId = setupData.compositionId;
+      } else {
+        return failureResult(
+          'createComposition did not return a compositionId.',
+          await rollbackExecution(),
+        );
       }
     }
 
-    // Runtime id binding: reorder calls reference simulated segment ids.
-    // After the split executes, map them positionally onto the real ids
-    // from the split result's segments payload (plan Â§7.1).
-    const simulatedIds = compiledPlan.segments?.simulatedVideoClipIds;
-    let simulatedToReal: Map<string, string> | undefined;
-    const mapId = (id: string): string => simulatedToReal?.get(id) ?? id;
-    const mapArgs = (args: Record<string, unknown>): Record<string, unknown> => {
-      if (!simulatedToReal) {
-        return args;
-      }
-      const mapped: Record<string, unknown> = { ...args };
-      for (const [key, value] of Object.entries(mapped)) {
-        if (typeof value === 'string') {
-          mapped[key] = mapId(value);
-        } else if (Array.isArray(value) && value.every((entry) => typeof entry === 'string')) {
-          mapped[key] = value.map(mapId);
-        }
-      }
-      return mapped;
-    };
+    // Runtime id binding (plan §7.1): simulated segment ids and
+    // source-timeline track ids are bound to live store ids per call.
+    const binding = createExecutionIdBinding({
+      executeToolCalls,
+      sourceSnapshot: compileSnapshot,
+      ...(compiledPlan.segments === undefined
+        ? {}
+        : { simulatedVideoClipIds: compiledPlan.segments.simulatedVideoClipIds }),
+    });
 
     for (const call of compiledPlan.resolvedCalls) {
       const execution: AIToolCallExecution = {
         id: call.stepId,
         tool: call.tool,
-        args: mapArgs(call.args),
+        args: await binding.bindArgs(call.tool, call.args),
       };
       const results = await executeToolCalls([execution], 'chat', {
         guidedReplay: false,
@@ -632,34 +707,14 @@ export async function tryKernelFirst(
       });
       const failure = toolExecutionFailure([call], results);
       if (failure) {
-        transaction.abort(agentTransaction);
-        return failureResult(failure);
+        return failureResult(failure, await rollbackExecution());
       }
 
-      const data = results[0]?.result.data;
-      if (simulatedIds
-        && !simulatedToReal
-        && isRecord(data)
-        && isRecord(data.segments)
-        && Array.isArray(data.segments.videoClipIds)) {
-        const realIds = data.segments.videoClipIds
-          .filter((id): id is string => typeof id === 'string');
-        if (realIds.length === simulatedIds.length) {
-          simulatedToReal = new Map(
-            simulatedIds.map((simulatedId, index) => [
-              simulatedId,
-              realIds[index] as string,
-            ]),
-          );
-        }
-      }
+      binding.observeResult(call.tool, results[0]?.result.data);
     }
     transaction.commit(agentTransaction);
   } catch (error) {
-    if (agentTransaction) {
-      transaction.abort(agentTransaction);
-    }
-    return failureResult(error);
+    return failureResult(error, await rollbackExecution());
   }
 
   let completion: KernelRunCompleteResponse;

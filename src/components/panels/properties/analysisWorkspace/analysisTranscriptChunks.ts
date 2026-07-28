@@ -11,6 +11,9 @@ export const ANALYSIS_TRANSCRIPT_CHUNK_MIN_SECONDS = 3;
 export const ANALYSIS_TRANSCRIPT_CHUNK_MAX_SECONDS = 15;
 export const ANALYSIS_TRANSCRIPT_CHUNK_SILENCE_SECONDS = 1.5;
 const ANALYSIS_TRANSCRIPT_CHUNK_MAX_WORDS = 28;
+const ANALYSIS_TRANSCRIPT_CHARACTER_WIDTH_PX = 6.5;
+const ANALYSIS_TRANSCRIPT_MIN_CHARACTER_CAPACITY = 24;
+const ANALYSIS_TRANSCRIPT_MAX_CHARACTER_CAPACITY = 180;
 const SENTENCE_END = /[.!?…](?:["'’”»)\]}]+)?$/u;
 
 export interface AnalysisTranscriptChunkPause {
@@ -20,6 +23,7 @@ export interface AnalysisTranscriptChunkPause {
 
 export interface AnalysisTranscriptChunkOptions {
   pauses?: readonly AnalysisTranscriptChunkPause[];
+  maxTextCharacters?: number;
 }
 
 interface ResolvedTranscriptWord {
@@ -120,6 +124,33 @@ function remainingDuration(words: readonly ResolvedTranscriptWord[], afterIndex:
   return next ? Math.max(0, words.at(-1)!.word.end - next.word.start) : 0;
 }
 
+function rangeTextCharacters(
+  words: readonly ResolvedTranscriptWord[],
+  startIndex: number,
+  endIndex: number,
+): number {
+  let characters = 0;
+  for (let index = startIndex; index <= endIndex; index += 1) {
+    // Each word is an individual button. One extra character-equivalent per
+    // word accounts for its horizontal padding in addition to the word gap.
+    characters += words[index].word.text.trim().length + (index === startIndex ? 1 : 2);
+  }
+  return characters;
+}
+
+export function getAnalysisTranscriptCharacterCapacity(
+  textWidth: number,
+): number | undefined {
+  if (!Number.isFinite(textWidth) || textWidth <= 0) return undefined;
+  return Math.max(
+    ANALYSIS_TRANSCRIPT_MIN_CHARACTER_CAPACITY,
+    Math.min(
+      ANALYSIS_TRANSCRIPT_MAX_CHARACTER_CAPACITY,
+      Math.floor(textWidth / ANALYSIS_TRANSCRIPT_CHARACTER_WIDTH_PX),
+    ),
+  );
+}
+
 function closestToTarget(
   words: readonly ResolvedTranscriptWord[],
   startIndex: number,
@@ -137,16 +168,25 @@ function closestToTarget(
   }, undefined);
 }
 
-function chooseChunkEnd(words: readonly ResolvedTranscriptWord[], startIndex: number): number {
+function chooseChunkEnd(
+  words: readonly ResolvedTranscriptWord[],
+  startIndex: number,
+  maxTextCharacters?: number,
+): number {
   const finalIndex = words.length - 1;
+  const characterLimit = Number.isFinite(maxTextCharacters)
+    ? Math.max(1, Math.floor(maxTextCharacters as number))
+    : Number.POSITIVE_INFINITY;
   let limitIndex = startIndex;
   while (limitIndex < finalIndex) {
     const nextIndex = limitIndex + 1;
     const nextDuration = rangeDuration(words, startIndex, nextIndex);
     const nextWordCount = nextIndex - startIndex + 1;
+    const nextCharacterCount = rangeTextCharacters(words, startIndex, nextIndex);
     if (
       nextDuration > ANALYSIS_TRANSCRIPT_CHUNK_MAX_SECONDS
       || nextWordCount > ANALYSIS_TRANSCRIPT_CHUNK_MAX_WORDS
+      || nextCharacterCount > characterLimit
     ) break;
     limitIndex = nextIndex;
   }
@@ -180,11 +220,14 @@ function chooseChunkEnd(words: readonly ResolvedTranscriptWord[], startIndex: nu
   return closestToTarget(words, startIndex, wordBoundaryCandidates) ?? limitIndex;
 }
 
-function chunkSpeechRun(words: readonly ResolvedTranscriptWord[]): readonly ResolvedTranscriptWord[][] {
+function chunkSpeechRun(
+  words: readonly ResolvedTranscriptWord[],
+  maxTextCharacters?: number,
+): readonly ResolvedTranscriptWord[][] {
   const chunks: ResolvedTranscriptWord[][] = [];
   let startIndex = 0;
   while (startIndex < words.length) {
-    const endIndex = chooseChunkEnd(words, startIndex);
+    const endIndex = chooseChunkEnd(words, startIndex, maxTextCharacters);
     chunks.push(words.slice(startIndex, endIndex + 1));
     startIndex = endIndex + 1;
   }
@@ -230,7 +273,8 @@ export function buildAnalysisTranscriptChunks(
     }];
   }
 
-  const wordChunks = splitIntoSpeechRuns(resolvedWords, options?.pauses).flatMap(chunkSpeechRun);
+  const wordChunks = splitIntoSpeechRuns(resolvedWords, options?.pauses)
+    .flatMap(words => chunkSpeechRun(words, options?.maxTextCharacters));
   const partCount = wordChunks.length;
   return wordChunks.map((words, index) => ({
     id: chunkId(scene.id, words, index + 1),

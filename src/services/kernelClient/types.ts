@@ -42,12 +42,21 @@ export interface KernelTranscriptMoment {
   analysisSources: KernelAnalysisSource[];
 }
 
+export interface KernelSilenceRange {
+  mediaId: string;
+  startSeconds: number; // SOURCE seconds
+  endSeconds: number; // SOURCE seconds
+  confidence?: number; // meanProbability when available
+  detectionSource?: string; // e.g. 'voice-activity' | 'rms' | 'transcript-gaps'
+}
+
 export interface KernelCompileRequest {
   request: string;
   snapshot: unknown;
   seed?: string;
   moments?: KernelTranscriptMoment[];
   indexVersion?: string;
+  silentRanges?: KernelSilenceRange[];
 }
 
 export interface KernelCompileSetup {

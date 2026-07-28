@@ -19,6 +19,10 @@ import { LegalDialog } from './LegalDialog';
 import type { LegalPage } from './LegalDialog';
 import { NativeHelperStatus } from './NativeHelperStatus';
 import {
+  ProjectNameDialog,
+  type ProjectNameDialogRequest,
+} from './ProjectNameDialog';
+import {
   RECENT_PROJECTS_CHANGED_EVENT,
   projectFileService,
   type RecentProjectEntry,
@@ -125,6 +129,9 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
   const [showInfoDialog, setShowInfoDialog] = useState(false);
   const [showLegalDialog, setShowLegalDialog] = useState<LegalPage | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
+  const [projectNameDialog, setProjectNameDialog] = useState<
+    (ProjectNameDialogRequest & { restoreFocusTo: HTMLElement | null }) | null
+  >(null);
   const [recentProjects, setRecentProjects] = useState<RecentProjectEntry[]>([]);
   const [capturePhase, setCapturePhase] = useState(() => screenCaptureService.getSnapshot().phase);
   const menuBarRef = useRef<HTMLDivElement>(null);
@@ -252,10 +259,20 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
     useMediaStore.getState().setProjectName(name);
   }, []);
 
+  const openProjectNameDialog = useCallback((request: ProjectNameDialogRequest) => {
+    const activeElement = document.activeElement as HTMLElement | null;
+    const containingMenu = activeElement?.closest<HTMLElement>('.menu-item');
+    const restoreFocusTo =
+      containingMenu?.querySelector<HTMLElement>(':scope > .menu-trigger')
+      ?? activeElement;
+    setProjectNameDialog({ ...request, restoreFocusTo });
+  }, []);
+
   const projectActions = useToolbarProjectActions({
     closeMenu,
     editName,
     isRenamingRef,
+    openProjectNameDialog,
     projectName,
     resetMediaProject,
     setEditName,
@@ -273,10 +290,8 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
   useToolbarProjectShortcuts({
     handleNew: projectActions.handleNew,
     handleOpen: projectActions.handleOpen,
-    projectName,
-    setIsProjectOpen,
-    setProjectName,
-    setShowSavedToast,
+    handleSave: projectActions.handleSave,
+    handleSaveAs: projectActions.handleSaveAs,
   });
 
   const editActions = useToolbarEditActions(openSettings, closeMenu);
@@ -487,6 +502,13 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
       </div>
 
       {isSettingsOpen && <SettingsDialog onClose={closeSettings} />}
+      {projectNameDialog && (
+        <ProjectNameDialog
+          {...projectNameDialog}
+          onClose={() => setProjectNameDialog(null)}
+          onSubmit={(name) => projectActions.handleProjectNameSubmit(projectNameDialog.mode, name)}
+        />
+      )}
       <SavedToast visible={showSavedToast} onHide={() => setShowSavedToast(false)} />
 
       {renameError && (

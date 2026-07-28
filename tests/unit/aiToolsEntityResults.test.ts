@@ -70,6 +70,42 @@ describe('AI tool clip entity results', () => {
     expect(data.entities.deleted).toHaveLength(2);
     expect(data.stateRevisionAfter).toBeGreaterThan(data.stateRevisionBefore);
   });
+
+  it('ripples linked clips after cutting an interior range when requested', async () => {
+    const result = await handleCutRangesFromClip(
+      {
+        clipId: 'video-1',
+        ranges: [
+          { timelineStart: 2, timelineEnd: 3 },
+          { timelineStart: 6, timelineEnd: 8 },
+        ],
+        ripple: true,
+      },
+      useTimelineStore.getState(),
+    );
+
+    expect(result.success).toBe(true);
+    expect(
+      useTimelineStore.getState().clips
+        .filter((clip) => clip.trackId === 'video-1')
+        .toSorted((a, b) => a.startTime - b.startTime)
+        .map((clip) => [clip.startTime, clip.duration, clip.inPoint]),
+    ).toEqual([
+      [0, 2, 0],
+      [2, 3, 3],
+      [5, 2, 8],
+    ]);
+    expect(
+      useTimelineStore.getState().clips
+        .filter((clip) => clip.trackId === 'audio-1')
+        .toSorted((a, b) => a.startTime - b.startTime)
+        .map((clip) => [clip.startTime, clip.duration, clip.inPoint]),
+    ).toEqual([
+      [0, 2, 0],
+      [2, 3, 3],
+      [5, 2, 8],
+    ]);
+  });
 });
 
 function seedLinkedClips(): void {

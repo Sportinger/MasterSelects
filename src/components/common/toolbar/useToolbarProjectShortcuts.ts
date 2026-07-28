@@ -1,32 +1,22 @@
 import { useEffect } from 'react';
-import type { Dispatch, SetStateAction } from 'react';
-import { projectFileService } from '../../../services/projectFileService';
 import { getShortcutRegistry } from '../../../services/shortcutRegistry';
 import {
   claimShortcut,
   isTextEntryTarget,
 } from '../../../services/shortcutFocusPolicy';
-import {
-  createNewProject,
-  saveCurrentProject,
-} from '../../../services/projectSync';
 
 interface UseToolbarProjectShortcutsArgs {
   handleNew: () => void;
   handleOpen: () => void;
-  projectName: string;
-  setIsProjectOpen: Dispatch<SetStateAction<boolean>>;
-  setProjectName: Dispatch<SetStateAction<string>>;
-  setShowSavedToast: Dispatch<SetStateAction<boolean>>;
+  handleSave: () => void;
+  handleSaveAs: () => void;
 }
 
 export function useToolbarProjectShortcuts({
   handleNew,
   handleOpen,
-  projectName,
-  setIsProjectOpen,
-  setProjectName,
-  setShowSavedToast,
+  handleSave,
+  handleSaveAs,
 }: UseToolbarProjectShortcutsArgs): void {
   useEffect(() => {
     const registry = getShortcutRegistry();
@@ -48,33 +38,8 @@ export function useToolbarProjectShortcuts({
         }
         if (!claimShortcut(event, saveAction, { stopPropagation: true })) return;
 
-        if (saveAction === 'project.saveAs') {
-          const name = prompt('Save project as:', projectName || 'New Project');
-          if (name) {
-            createNewProject(name).then((success) => {
-              if (success) {
-                setProjectName(name);
-                setIsProjectOpen(true);
-                setShowSavedToast(true);
-              }
-            });
-          }
-        } else if (!projectFileService.isProjectOpen()) {
-          const name = prompt('Enter project name:', 'New Project');
-          if (name) {
-            createNewProject(name).then((success) => {
-              if (success) {
-                setProjectName(name);
-                setIsProjectOpen(true);
-                setShowSavedToast(true);
-              }
-            });
-          }
-        } else {
-          saveCurrentProject({ source: 'manual', label: 'Ctrl+S save' }).then(() => {
-            setShowSavedToast(true);
-          });
-        }
+        if (saveAction === 'project.saveAs') handleSaveAs();
+        else handleSave();
         return;
       }
 
@@ -95,9 +60,7 @@ export function useToolbarProjectShortcuts({
   }, [
     handleNew,
     handleOpen,
-    projectName,
-    setIsProjectOpen,
-    setProjectName,
-    setShowSavedToast,
+    handleSave,
+    handleSaveAs,
   ]);
 }

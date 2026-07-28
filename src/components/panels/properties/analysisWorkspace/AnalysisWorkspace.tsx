@@ -1,4 +1,11 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { AnalysisOverviewTimeline } from './AnalysisOverviewTimeline';
 import { AnalysisSceneList } from './AnalysisSceneList';
 import {
@@ -10,7 +17,10 @@ import {
   type AnalysisSceneSpeechMarker,
   type AnalysisSceneView,
 } from './analysisSceneViewModel';
-import type { AnalysisTranscriptChunkPause } from './analysisTranscriptChunks';
+import {
+  getAnalysisTranscriptCharacterCapacity,
+  type AnalysisTranscriptChunkPause,
+} from './analysisTranscriptChunks';
 import type { AnalysisSceneSparklineCurve } from './AnalysisSceneSparkline';
 import type { AnalysisWorkspaceViewModel } from './analysisWorkspaceAdapter';
 import './AnalysisWorkspace.css';
@@ -55,11 +65,22 @@ export function AnalysisWorkspace({
     [model, sourceTime],
   );
   const [localSceneQuery, setLocalSceneQuery] = useState('');
+  const sceneHostRef = useRef<HTMLDivElement>(null);
+  const [transcriptTextWidth, setTranscriptTextWidth] = useState(0);
   const sceneQuery = transcriptSearchQuery ?? localSceneQuery;
   const setSceneQuery = onTranscriptSearchChange ?? setLocalSceneQuery;
+  const transcriptCharacterCapacity = useMemo(
+    () => getAnalysisTranscriptCharacterCapacity(transcriptTextWidth),
+    [transcriptTextWidth],
+  );
   const sceneListItems = useMemo(
-    () => buildAnalysisSceneListItems(model.scenes, { markers, pauses, energyCurve }),
-    [energyCurve, markers, model.scenes, pauses],
+    () => buildAnalysisSceneListItems(model.scenes, {
+      markers,
+      pauses,
+      energyCurve,
+      maxTextCharacters: transcriptCharacterCapacity,
+    }),
+    [energyCurve, markers, model.scenes, pauses, transcriptCharacterCapacity],
   );
   const matchingSegmentCount = useMemo(
     () => filterAnalysisSceneListItems(sceneListItems, sceneQuery).length,
@@ -68,6 +89,24 @@ export function AnalysisWorkspace({
   const selectedScene = activeSceneIndex >= 0
     ? model.scenes[activeSceneIndex]
     : model.scenes[0];
+
+  useEffect(() => {
+    const host = sceneHostRef.current;
+    if (!host) return undefined;
+    const updateTextWidth = () => {
+      const speech = host.querySelector<HTMLElement>('.AnalysisSceneBlob__speech');
+      const nextWidth = Math.round(speech?.getBoundingClientRect().width ?? 0);
+      if (nextWidth <= 0) return;
+      setTranscriptTextWidth(current => (
+        Math.abs(current - nextWidth) < 4 ? current : nextWidth
+      ));
+    };
+    updateTextWidth();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(updateTextWidth);
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, [sceneListItems.length]);
 
   const selectScene = useCallback((sceneId: string) => {
     const scene = model.scenes.find((candidate) => candidate.id === sceneId);
@@ -85,7 +124,7 @@ export function AnalysisWorkspace({
       />
 
       {selectedScene ? (
-        <div className="AnalysisWorkspace__scene">
+        <div className="AnalysisWorkspace__scene" ref={sceneHostRef}>
           <div className="AnalysisWorkspace__sceneSearch">
             <label htmlFor="analysis-scene-search">Segments</label>
             <input

@@ -89,6 +89,45 @@ describe('usePlayheadSnap', () => {
     expect(setPlayheadPosition).toHaveBeenLastCalledWith(lastFrameTime);
   });
 
+  it('temporarily enables playhead snapping while Shift is held', () => {
+    const timeline = document.createElement('div');
+    vi.spyOn(timeline, 'getBoundingClientRect').mockReturnValue({
+      left: 0, right: 1000, width: 1000,
+    } as DOMRect);
+    const setPlayheadPosition = vi.fn();
+
+    renderHook(() => usePlayheadSnap({
+      isDraggingPlayhead: true,
+      timelineRef: { current: timeline },
+      scrollX: 0,
+      duration: 10,
+      snappingEnabled: false,
+      pixelToTime: (pixel) => pixel / 100,
+      getSnapTargetTimes: () => [5],
+      setPlayheadPosition,
+      setScrollX: vi.fn(),
+      setDraggingPlayhead: vi.fn(),
+      zoom: 100,
+    }));
+
+    act(() => {
+      document.dispatchEvent(new MouseEvent('mousemove', {
+        buttons: 1,
+        clientX: 499,
+        shiftKey: true,
+      }));
+    });
+    expect(setPlayheadPosition).toHaveBeenLastCalledWith(5);
+
+    act(() => {
+      document.dispatchEvent(new MouseEvent('mousemove', {
+        buttons: 1,
+        clientX: 499,
+      }));
+    });
+    expect(setPlayheadPosition).toHaveBeenLastCalledWith(4.99);
+  });
+
   it('keeps edit-edge snap targets exact while resolving playhead ends from composition fps', () => {
     const clip = createMockClip({ id: 'clip-1', startTime: 1, duration: 4 });
     const shortClip = createMockClip({ id: 'clip-short', startTime: 6, duration: 0.01 });

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import {
   AnalysisSceneList,
@@ -9,6 +9,7 @@ import {
   filterAnalysisSceneListItems,
   filterAnalysisScenes,
   findActiveAnalysisSceneListItem,
+  getAnalysisSceneCenteredScrollTop,
   getAnalysisSceneWindow,
 } from '../../src/components/panels/properties/analysisWorkspace/analysisSceneListModel';
 import type { AnalysisSceneView } from '../../src/components/panels/properties/analysisWorkspace/analysisSceneViewModel';
@@ -67,6 +68,39 @@ describe('AnalysisSceneList', () => {
     expect(firstWindow.end).toBeLessThan(10);
     expect(laterWindow.start).toBeGreaterThan(0);
     expect(laterWindow.end - laterWindow.start).toBeLessThan(15);
+  });
+
+  it('centers followed rows while clamping at the list edges', () => {
+    const layout = buildAnalysisSceneLayout(items);
+
+    expect(getAnalysisSceneCenteredScrollTop(layout, 50, 430)).toBe(4024);
+    expect(getAnalysisSceneCenteredScrollTop(layout, 0, 430)).toBe(0);
+    expect(getAnalysisSceneCenteredScrollTop(layout, 99, 430))
+      .toBe(layout.totalHeight - 430);
+  });
+
+  it('scrolls the followed active segment to the viewport center', async () => {
+    const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockReturnValue(430);
+    try {
+      render(
+        <AnalysisSceneList
+          items={items}
+          sourceTime={50.5}
+          followPlayback
+          onItemSelect={vi.fn()}
+        />,
+      );
+
+      const list = screen.getByRole('list', { name: 'Scene and transcript segments' });
+      expect(list.scrollTop).toBe(4024);
+      await waitFor(() => {
+        expect(screen.getByRole('article', { name: 'Scene 51' }).closest('[role="listitem"]'))
+          .toHaveAttribute('aria-current', 'true');
+      });
+    } finally {
+      clientHeight.mockRestore();
+    }
   });
 
   it('renders only the visible scene rows and selects by source scene', () => {

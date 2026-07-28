@@ -17,6 +17,7 @@ import {
 } from '../utils/clipDragOperations';
 import { createClipDragMouseMoveScheduler } from '../utils/clipDragMouseMoveScheduler';
 import { setClipDragPreviewFromDrag } from '../utils/clipDragPreview';
+import { hasClipDragIntent } from '../utils/clipDragSelectionIntent';
 import {
   findNearestCompatibleClipDragTrackId,
   getClipDragNewTrackId,
@@ -26,6 +27,7 @@ import {
   resolveCompatibleClipDragTrackId,
 } from '../utils/clipDragTrackTargeting';
 import { findSweptClipSnap } from '../utils/clipDragSnapping';
+import { isTimelineSnappingActive } from '../utils/timelineSnappingModifiers';
 import { useClipDoubleClick } from './useClipDoubleClick';
 import { useClipDragStatePublisher } from './useClipDragStatePublisher';
 import type { UseClipDragProps, UseClipDragReturn } from './useClipDragTypes';
@@ -96,21 +98,20 @@ export function useClipDrag({
       };
       if (isClipLocked(clipId)) return;
 
-      // Shift+Click: Toggle selection (add/remove from multi-selection)
-      if (e.shiftKey) {
-        selectClip(clipId, true); // addToSelection = true
-        return; // Don't start drag on shift+click
-      }
-
       // Use ref for current selection to avoid stale closure
       const currentSelectedIds = selectedClipIdsRef.current;
+      const shiftSelectionClickCandidate = e.shiftKey;
+      const pointerDownX = e.clientX;
+      const pointerDownY = e.clientY;
 
       // If clip is not selected, select it (+ linked clip)
       // If already selected, keep selection but update primary for Properties panel
-      if (!currentSelectedIds.has(clipId)) {
-        selectClip(clipId);
-      } else {
-        selectClip(clipId, false, true); // setPrimaryOnly: keep existing selection, just update primary
+      if (!shiftSelectionClickCandidate) {
+        if (!currentSelectedIds.has(clipId)) {
+          selectClip(clipId);
+        } else {
+          selectClip(clipId, false, true); // setPrimaryOnly: keep existing selection, just update primary
+        }
       }
 
       // Capture other selected clip IDs for multi-select drag (re-read after potential selection change)
@@ -159,10 +160,29 @@ export function useClipDrag({
         multiSelectClipIds: otherSelectedIds.length > 0 ? otherSelectedIds : undefined,
         multiSelectTimeDelta: 0,
       };
-      setClipDragStateForInteraction(initialDrag);
-      setClipDragPreviewFromDrag(initialDrag, currentClipMap);
+      let dragStarted = !shiftSelectionClickCandidate;
+      if (dragStarted) {
+        setClipDragStateForInteraction(initialDrag);
+        setClipDragPreviewFromDrag(initialDrag, currentClipMap);
+      }
 
       const processMouseMove = (moveEvent: MouseEvent) => {
+        if (!dragStarted) {
+          if (!hasClipDragIntent(
+            pointerDownX,
+            pointerDownY,
+            moveEvent.clientX,
+            moveEvent.clientY,
+          )) return;
+          dragStarted = true;
+          if (!selectedClipIdsRef.current.has(clipId)) {
+            selectClip(clipId);
+            selectedClipIdsRef.current = new Set(useTimelineStore.getState().selectedClipIds);
+          } else {
+            selectClip(clipId, false, true);
+          }
+          setClipDragStateForInteraction(initialDrag);
+        }
         const drag = clipDragRef.current;
         if (!drag || !trackLanesRef.current || !timelineRef.current) return;
 
@@ -285,10 +305,7 @@ export function useClipDrag({
         const x = moveEvent.clientX - rect.left + scrollX - drag.grabOffsetX;
         const rawTime = Math.max(0, pixelToTime(x));
 
-        // Snapping with Alt-key toggle:
-        // - When snapping enabled: snap by default, Alt temporarily disables
-        // - When snapping disabled: don't snap, Alt temporarily enables
-        const shouldSnap = snappingEnabled !== moveEvent.altKey;
+        const shouldSnap = isTimelineSnappingActive(snappingEnabled, moveEvent);
 
         // First check for edge snapping (only if snapping should be active)
         // Snap hysteresis: once snapped, user must drag SNAP_BREAKOUT_PX pixels to break free
@@ -525,6 +542,13 @@ export function useClipDrag({
       const handleMouseUp = (upEvent: MouseEvent) => {
         mouseMoveScheduler.flushPendingMouseMove();
         processMouseMove(upEvent);
+        if (shiftSelectionClickCandidate && !dragStarted) {
+          selectClip(clipId, true);
+          setClipDragStateForInteraction(null);
+          setClipDragPreviewFromDrag(null, clipMapRef.current);
+          cleanupDragListeners();
+          return;
+        }
         const drag = clipDragRef.current;
         if (drag && timelineRef.current) {
           if (drag.toolGesture === 'slip' || drag.toolGesture === 'slide') {

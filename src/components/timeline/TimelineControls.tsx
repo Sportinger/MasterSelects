@@ -5,7 +5,6 @@ import {
   IconArrowsMaximize,
   IconLayoutGrid,
   IconList,
-  IconMagnet,
   IconMinus,
   IconPlayerPauseFilled,
   IconPlayerPlayFilled,
@@ -22,6 +21,7 @@ import { AudioLevelMeter } from './components/AudioLevelMeter';
 import { RulerLanesMenu } from './RulerLanesMenu';
 import { MetronomeButton } from './MetronomeButton';
 import { TimelineToolPalette } from './tools/TimelineToolPalette';
+import { TimelineSnappingButton } from './components/TimelineSnappingButton';
 import { AudioExportPipeline } from '../../engine/audio/AudioExportPipeline';
 import { audioRecordingService } from '../../services/audio/AudioRecordingService';
 import {
@@ -286,24 +286,10 @@ function TimelineControlsComponent({
       <div className="timeline-edit-tools">
         <div className="timeline-edit-tools-items">
           <TimelineToolPalette />
-          <button
-            type="button"
-            className={`timeline-tool-button timeline-snapping-button ${snappingEnabled ? 'active' : ''}`}
-            aria-label="Snapping"
-            aria-pressed={snappingEnabled}
-            onPointerUp={(event) => {
-              if (event.button !== 0) return;
-              onToggleSnapping();
-            }}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter' && event.key !== ' ') return;
-              event.preventDefault();
-              onToggleSnapping();
-            }}
-            title={snappingEnabled ? 'Snapping enabled - clips snap to edges' : 'Snapping disabled - free positioning'}
-          >
-            <IconMagnet className="timeline-tool-button-icon" size={18} stroke={2.2} aria-hidden="true" />
-          </button>
+          <TimelineSnappingButton
+            snappingEnabled={snappingEnabled}
+            onToggleSnapping={onToggleSnapping}
+          />
         </div>
       </div>
         </>

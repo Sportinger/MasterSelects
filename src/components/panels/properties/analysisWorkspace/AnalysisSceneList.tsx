@@ -11,6 +11,7 @@ import {
   buildAnalysisSceneLayout,
   filterAnalysisSceneListItems,
   findActiveAnalysisSceneListItem,
+  getAnalysisSceneCenteredScrollTop,
   getAnalysisSceneWindow,
 } from './analysisSceneListModel';
 
@@ -77,14 +78,21 @@ export function AnalysisSceneList({
     const viewport = viewportRef.current;
     const selectedRow = layout.rows[selectedIndex];
     if (!viewport || !selectedRow) return;
-    const rowTop = selectedRow.offset;
-    const rowBottom = rowTop + selectedRow.height;
-    if (rowTop < viewport.scrollTop) {
-      viewport.scrollTop = rowTop;
-    } else if (rowBottom > viewport.scrollTop + viewport.clientHeight) {
-      viewport.scrollTop = Math.max(0, rowBottom - viewport.clientHeight);
-    }
-  }, [activeItem?.id, filteredItems, followPlayback, layout.rows]);
+    const visibleHeight = viewport.clientHeight || viewportHeight;
+    const nextScrollTop = getAnalysisSceneCenteredScrollTop(
+      layout,
+      selectedIndex,
+      visibleHeight,
+    );
+    if (Math.abs(viewport.scrollTop - nextScrollTop) < 0.5) return;
+    viewport.scrollTop = nextScrollTop;
+    const syncTimer = setTimeout(() => {
+      setScrollTop(current => (
+        Math.abs(current - nextScrollTop) < 0.5 ? current : nextScrollTop
+      ));
+    }, 0);
+    return () => clearTimeout(syncTimer);
+  }, [activeItem?.id, filteredItems, followPlayback, layout, viewportHeight]);
 
   if (filteredItems.length === 0) {
     return <p className="AnalysisSceneList__empty">No segments match this search.</p>;

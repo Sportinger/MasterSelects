@@ -83,7 +83,7 @@
 
 .AnalysisSceneBlob__summary {
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr) minmax(72px, auto);
+  grid-template-columns: 112px minmax(0, 1fr);
   align-items: center;
   gap: var(--sp-2);
   width: 100%;
@@ -171,13 +171,26 @@
   -webkit-line-clamp: 3;
 }
 
-.AnalysisSceneBlob__speech > small {
+.AnalysisSceneBlob__segmentSeek {
   display: block;
+  width: fit-content;
   margin-bottom: 2px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--text-muted);
+  padding: 0;
+  font-family: inherit;
   font-size: var(--font-2xs);
   letter-spacing: var(--tracking-wide);
+  line-height: inherit;
+  text-align: left;
   text-transform: uppercase;
+  cursor: pointer;
+}
+
+.AnalysisSceneBlob__segmentSeek:hover {
+  color: var(--text-secondary);
 }
 
 .AnalysisSceneBlob__turn {
@@ -237,40 +250,10 @@
   font-style: italic;
 }
 
-.AnalysisSceneBlob__time {
-  display: grid;
-  justify-items: end;
-  align-self: stretch;
-  align-content: center;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.AnalysisSceneBlob__summarySeek {
-  border: 0;
-  background: transparent;
-  border-radius: var(--radius-sm);
-  font: inherit;
-  cursor: pointer;
-}
-
-.AnalysisSceneBlob__summarySeek:hover {
-  background: var(--bg-hover);
-}
-
-.AnalysisSceneBlob__summarySeek:focus-visible,
+.AnalysisSceneBlob__segmentSeek:focus-visible,
 .AnalysisSceneBlob__word:focus-visible {
   outline: 1px solid var(--accent);
   outline-offset: 1px;
-}
-
-.AnalysisSceneBlob__time strong {
-  font: var(--font-semibold) var(--font-xs)/1.35 var(--font-mono);
-}
-
-.AnalysisSceneBlob__time small {
-  color: var(--accent);
-  font-size: var(--font-xs);
 }
 
 .AnalysisSceneList__empty {
@@ -295,7 +278,7 @@
 
 @media (max-width: 360px) {
   .AnalysisSceneBlob__summary {
-    grid-template-columns: 76px minmax(0, 1fr) 62px;
+    grid-template-columns: 76px minmax(0, 1fr);
     gap: 6px;
     padding-inline: 7px;
   }

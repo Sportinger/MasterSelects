@@ -44,6 +44,7 @@ export function useTimelineTrackPointerTools({
     clientX: number,
     rowEl: ClipPointerRow,
     altKey: boolean,
+    shiftKey: boolean,
   ) => {
     const clip = allTrackClips.find((candidate) => candidate.id === clipId);
     if (!clip) return null;
@@ -65,6 +66,7 @@ export function useTimelineTrackPointerTools({
       clientX,
       rectLeft: clipLeft,
       altKey,
+      shiftKey,
       // Tempo grid (issue #299, §3.5) — an enabled Bars+Beats ruler makes tool
       // drags snap to the same lines the grid draws, matching the clip drag path.
       tempoMap: timelineState.tempoMap,
@@ -89,7 +91,13 @@ export function useTimelineTrackPointerTools({
       return false;
     }
 
-    const context = buildClipPointerContext(clipId, event.clientX, event.currentTarget, event.altKey);
+    const context = buildClipPointerContext(
+      clipId,
+      event.clientX,
+      event.currentTarget,
+      event.altKey,
+      event.shiftKey,
+    );
     if (!context) return false;
 
     const result = dispatchTimelineClipPointerMove(context);
@@ -104,7 +112,13 @@ export function useTimelineTrackPointerTools({
     clipId: string,
   ): boolean => {
     if (!isTimelinePointerTool(activeTimelineToolId)) return false;
-    const context = buildClipPointerContext(clipId, event.clientX, event.currentTarget, event.altKey);
+    const context = buildClipPointerContext(
+      clipId,
+      event.clientX,
+      event.currentTarget,
+      event.altKey,
+      event.shiftKey,
+    );
     if (!context) return false;
 
     const result = dispatchTimelineClipPointerClick(context);

@@ -245,6 +245,9 @@ describe('parameter schemas for key tools', () => {
     expect(tool.function.parameters.required).toEqual(['clipId', 'ranges']);
     const rangesProp = tool.function.parameters.properties['ranges'] as Record<string, unknown>;
     expect(rangesProp.type).toBe('array');
+    expect(tool.function.parameters.properties['ripple']).toMatchObject({
+      type: 'boolean',
+    });
   });
 
   it('createComposition requires only name, has optional width/height/frameRate/duration', () => {

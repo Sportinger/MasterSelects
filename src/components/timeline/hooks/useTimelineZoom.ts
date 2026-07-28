@@ -5,6 +5,8 @@ import { useEffect, useCallback, useRef } from 'react';
 import { MIN_ZOOM, MAX_ZOOM } from '../../../stores/timeline/constants';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { animateSlotGrid } from '../slotGridAnimation';
+import { TIMELINE_END_PADDING_PX } from '../utils/timelineHostConstants';
+import { calculateTimelineZoomScrollX } from '../utils/timelineZoomAnchor';
 
 const ZOOM_WHEEL_BASE_MULTIPLIER = 1.08;
 const ZOOM_WHEEL_REFERENCE_DELTA_PX = 100;
@@ -104,16 +106,13 @@ export function useTimelineZoom({
     setScrollX(0); // Reset scroll to start
   }, [timelineBodyRef, duration, setZoom, setScrollX]);
 
-  // Padding in pixels to show beyond the end of the composition
-  const END_PADDING = 100;
-
   // Calculate dynamic minimum zoom to prevent zooming out too far beyond duration
   const getDynamicMinZoom = useCallback(() => {
     const trackLanes = timelineBodyRef.current?.querySelector<HTMLElement>('.timeline-lane-reference, .track-lanes');
     const viewportWidth = trackLanes?.clientWidth ?? 800;
     // Allow some padding at the end to see the end marker
-    // Min zoom ensures duration * zoom >= viewportWidth - END_PADDING
-    return Math.max(MIN_ZOOM, (viewportWidth - END_PADDING) / duration);
+    // Min zoom ensures duration * zoom >= viewportWidth - end padding
+    return Math.max(MIN_ZOOM, (viewportWidth - TIMELINE_END_PADDING_PX) / duration);
   }, [timelineBodyRef, duration]);
 
   // Wrapper for setZoom that enforces dynamic min zoom
@@ -126,7 +125,10 @@ export function useTimelineZoom({
   useEffect(() => {
     const trackLanes = timelineBodyRef.current?.querySelector<HTMLElement>('.timeline-lane-reference, .track-lanes');
     const viewportWidth = trackLanes?.clientWidth ?? 800;
-    const dynamicMinZoom = Math.max(MIN_ZOOM, (viewportWidth - END_PADDING) / duration);
+    const dynamicMinZoom = Math.max(
+      MIN_ZOOM,
+      (viewportWidth - TIMELINE_END_PADDING_PX) / duration,
+    );
 
     // Clamp zoom to dynamic minimum
     if (zoom < dynamicMinZoom) {
@@ -134,7 +136,10 @@ export function useTimelineZoom({
     }
 
     // Clamp scrollX to max (allow scrolling up to END_PADDING past duration)
-    const maxScrollX = Math.max(0, duration * zoom - viewportWidth + END_PADDING);
+    const maxScrollX = Math.max(
+      0,
+      duration * zoom - viewportWidth + TIMELINE_END_PADDING_PX,
+    );
     if (scrollX > maxScrollX) {
       setScrollX(maxScrollX);
     }
@@ -180,7 +185,10 @@ export function useTimelineZoom({
         const viewportLeft = trackLanes?.getBoundingClientRect().left ?? el.getBoundingClientRect().left + 210;
 
         // Calculate dynamic minimum zoom with padding to see end marker
-        const dynamicMinZoom = Math.max(MIN_ZOOM, (viewportWidth - END_PADDING) / duration);
+        const dynamicMinZoom = Math.max(
+          MIN_ZOOM,
+          (viewportWidth - TIMELINE_END_PADDING_PX) / duration,
+        );
 
         const now = performance.now();
         const elapsedMs = lastZoomWheelTimeRef.current === null
@@ -194,13 +202,22 @@ export function useTimelineZoom({
         ));
 
         // Calculate max scroll with padding
-        const maxScrollX = Math.max(0, duration * newZoom - viewportWidth + END_PADDING);
+        const maxScrollX = Math.max(
+          0,
+          duration * newZoom - viewportWidth + TIMELINE_END_PADDING_PX,
+        );
 
         let newScrollX: number;
         if (timelineZoomAnchor === 'mouse') {
           const mouseX = Math.max(0, Math.min(viewportWidth, e.clientX - viewportLeft));
-          const anchorTime = (scrollX + mouseX) / Math.max(MIN_ZOOM, zoom);
-          newScrollX = Math.max(0, Math.min(maxScrollX, anchorTime * newZoom - mouseX));
+          newScrollX = calculateTimelineZoomScrollX({
+            scrollX,
+            zoom,
+            nextZoom: newZoom,
+            pointerX: mouseX,
+            viewportWidth,
+            maxScrollX,
+          });
         } else {
           // Calculate playhead position in pixels with new zoom
           const playheadPixel = playheadPosition * newZoom;
@@ -216,14 +233,20 @@ export function useTimelineZoom({
         e.preventDefault();
         const trackLanes = el.querySelector<HTMLElement>('.timeline-lane-reference, .track-lanes');
         const viewportWidth = trackLanes?.clientWidth ?? el.clientWidth - 210;
-        const maxScrollX = Math.max(0, duration * zoom - viewportWidth + END_PADDING);
+        const maxScrollX = Math.max(
+          0,
+          duration * zoom - viewportWidth + TIMELINE_END_PADDING_PX,
+        );
         setScrollX(Math.max(0, Math.min(maxScrollX, scrollX + e.deltaY)));
       } else {
         // Handle horizontal scroll (e.g., trackpad horizontal gesture)
         if (e.deltaX !== 0) {
           const trackLanes = el.querySelector<HTMLElement>('.timeline-lane-reference, .track-lanes');
           const viewportWidth = trackLanes?.clientWidth ?? el.clientWidth - 210;
-          const maxScrollX = Math.max(0, duration * zoom - viewportWidth + END_PADDING);
+          const maxScrollX = Math.max(
+            0,
+            duration * zoom - viewportWidth + TIMELINE_END_PADDING_PX,
+          );
           setScrollX(Math.max(0, Math.min(maxScrollX, scrollX + e.deltaX)));
         }
         // Handle vertical scroll — snap to track boundaries (1 track per step)

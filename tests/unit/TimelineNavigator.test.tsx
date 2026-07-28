@@ -12,6 +12,25 @@ beforeAll(() => {
 afterAll(() => vi.unstubAllGlobals());
 
 describe('TimelineNavigator', () => {
+  it('includes end padding in thumb size and right-edge scroll position', () => {
+    const { container } = render(
+      <TimelineNavigator
+        duration={10}
+        scrollX={100}
+        zoom={100}
+        viewportWidth={1000}
+        minZoom={1}
+        maxZoom={1000}
+        onScrollChange={vi.fn()}
+        onZoomChange={vi.fn()}
+      />,
+    );
+
+    const thumb = container.querySelector<HTMLElement>('.timeline-navigator-thumb')!;
+    expect(Number.parseFloat(thumb.style.width)).toBeCloseTo(181.82, 2);
+    expect(Number.parseFloat(thumb.style.left)).toBeCloseTo(18.18, 2);
+  });
+
   it('does not turn a zoom-handle release into a track jump', () => {
     const onScrollChange = vi.fn();
     const { container } = render(

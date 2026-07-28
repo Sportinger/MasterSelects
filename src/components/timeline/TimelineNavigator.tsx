@@ -3,9 +3,7 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import './TimelineNavigator.css';
-
-// Padding in pixels to show beyond the end of the composition (must match useTimelineZoom)
-const END_PADDING = 100;
+import { TIMELINE_END_PADDING_PX } from './utils/timelineHostConstants';
 
 interface TimelineNavigatorProps {
   duration: number;
@@ -52,7 +50,7 @@ export function TimelineNavigator({
   }, []);
 
   // Calculate thumb position and size
-  const totalContentWidth = duration * zoom;
+  const totalContentWidth = duration * zoom + TIMELINE_END_PADDING_PX;
 
   // Thumb width represents the viewport as a fraction of total content
   const thumbWidthRatio = Math.min(1, viewportWidth / Math.max(1, totalContentWidth));
@@ -60,7 +58,9 @@ export function TimelineNavigator({
 
   // Thumb position represents scrollX as a fraction of scrollable area
   const maxScrollX = Math.max(0, totalContentWidth - viewportWidth);
-  const scrollRatio = maxScrollX > 0 ? scrollX / maxScrollX : 0;
+  const scrollRatio = maxScrollX > 0
+    ? Math.max(0, Math.min(1, scrollX / maxScrollX))
+    : 0;
   const thumbLeft = scrollRatio * (trackWidth - thumbWidth);
 
   const handleMouseDown = useCallback((e: React.MouseEvent, type: 'thumb' | 'left' | 'right') => {
@@ -111,13 +111,20 @@ export function TimelineNavigator({
         // Calculate zoom from thumb width: thumbWidth = (viewportWidth / (duration * zoom)) * trackWidth
         // Rearranged: zoom = viewportWidth * trackWidth / (duration * thumbWidth)
         // Use padding to allow seeing end marker
-        const dynamicMinZoom = (viewportWidth - END_PADDING) / duration;
-        const newZoom = Math.max(dynamicMinZoom, Math.min(maxZoom, (viewportWidth * trackWidth) / (duration * newThumbWidth)));
+        const dynamicMinZoom = (viewportWidth - TIMELINE_END_PADDING_PX) / duration;
+        const visibleContentWidth = (viewportWidth * trackWidth) / newThumbWidth;
+        const newZoom = Math.max(
+          dynamicMinZoom,
+          Math.min(maxZoom, (visibleContentWidth - TIMELINE_END_PADDING_PX) / duration),
+        );
         onZoomChange(newZoom);
 
         // Adjust scroll to keep right edge stable (with padding)
         const newTotalWidth = duration * newZoom;
-        const newMaxScrollX = Math.max(0, newTotalWidth - viewportWidth + END_PADDING);
+        const newMaxScrollX = Math.max(
+          0,
+          newTotalWidth - viewportWidth + TIMELINE_END_PADDING_PX,
+        );
         const rightEdge = dragStartScrollX + viewportWidth;
         const newScrollX = Math.max(0, Math.min(newMaxScrollX, rightEdge * (newZoom / dragStartZoom) - viewportWidth));
         onScrollChange(newScrollX);
@@ -128,13 +135,20 @@ export function TimelineNavigator({
         const newThumbWidth = Math.max(40, Math.min(trackWidth, dragStartThumbWidth + deltaX));
 
         // Calculate zoom from thumb width (with padding)
-        const dynamicMinZoom = (viewportWidth - END_PADDING) / duration;
-        const newZoom = Math.max(dynamicMinZoom, Math.min(maxZoom, (viewportWidth * trackWidth) / (duration * newThumbWidth)));
+        const dynamicMinZoom = (viewportWidth - TIMELINE_END_PADDING_PX) / duration;
+        const visibleContentWidth = (viewportWidth * trackWidth) / newThumbWidth;
+        const newZoom = Math.max(
+          dynamicMinZoom,
+          Math.min(maxZoom, (visibleContentWidth - TIMELINE_END_PADDING_PX) / duration),
+        );
         onZoomChange(newZoom);
 
         // Keep left edge stable (with padding)
         const newTotalWidth = duration * newZoom;
-        const newMaxScrollX = Math.max(0, newTotalWidth - viewportWidth + END_PADDING);
+        const newMaxScrollX = Math.max(
+          0,
+          newTotalWidth - viewportWidth + TIMELINE_END_PADDING_PX,
+        );
         const newScrollX = Math.min(newMaxScrollX, dragStartScrollX * (newZoom / dragStartZoom));
         onScrollChange(Math.max(0, newScrollX));
       }

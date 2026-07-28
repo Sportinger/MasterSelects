@@ -1,9 +1,10 @@
-﻿import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   AIToolCallExecution,
   AIToolCallExecutionResult,
 } from '../../src/services/aiTools';
 import type { AgentTransaction } from '../../src/services/aiTools/agentTransaction';
+import { Logger } from '../../src/services/logger';
 import { tryKernelFirst } from '../../src/services/kernelClient/kernelChatGateway';
 
 function createStorage(values: Record<string, string> = {}): Storage {
@@ -119,6 +120,7 @@ function createTransactionMocks() {
     agentTransaction,
     begin: vi.fn(() => agentTransaction),
     commit: vi.fn(),
+    hasOwnership: vi.fn(() => true),
   };
 }
 
@@ -219,7 +221,9 @@ describe('kernel chat gateway WP11 cutover', () => {
               segments: [{ start: 2.5, end: 3.25, text: 'Ein guter Moment.' }],
             },
           }
-        : { success: true },
+        : call.tool === 'createComposition'
+          ? { success: true, data: { compositionId: 'comp-story' } }
+          : { success: true },
     })));
     const transaction = createTransactionMocks();
 
@@ -240,11 +244,12 @@ describe('kernel chat gateway WP11 cutover', () => {
     expect(executeToolCalls.mock.calls.map((call) => call[0]?.[0]?.tool)).toEqual([
       'getClipTranscript',
       'getSpeechMarkers',
+      'findSilentSections',
       'createComposition',
       'splitClip',
       'moveClip',
     ]);
-    expect(executeToolCalls).toHaveBeenNthCalledWith(3, [{
+    expect(executeToolCalls).toHaveBeenNthCalledWith(4, [{
       id: 'kernel-setup-new-composition',
       tool: 'createComposition',
       args: {
@@ -334,6 +339,196 @@ describe('kernel chat gateway WP11 cutover', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it('binds null and stale track ids to live timeline tracks at execution time', async () => {
+    const trackedSnapshot = {
+      ...initialSnapshot,
+      activeCompositionId: 'comp-prev',
+      videoTracks: [{ id: 'video-src', clips: [] }],
+      audioTracks: [{ id: 'audio-src', clips: [] }],
+    };
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        ...storyCompiledResponse(true, false),
+        resolvedCalls: [
+          {
+            stepId: 'seg-1',
+            tool: 'addClipSegment',
+            args: { mediaFileId: 'media-1', trackId: null, startTime: 0, inPoint: 2.8, outPoint: 3.28 },
+          },
+          {
+            stepId: 'seg-2',
+            tool: 'addClipSegment',
+            args: { mediaFileId: 'media-1', trackId: 'audio-src', startTime: 0.48, inPoint: 5, outPoint: 6 },
+          },
+        ],
+      }))
+      .mockResolvedValueOnce(jsonResponse(completedResponse()));
+    const executeToolCalls = vi.fn(async (
+      calls: AIToolCallExecution[],
+    ): Promise<AIToolCallExecutionResult[]> => calls.map((call) => ({
+      ...(call.id === undefined ? {} : { id: call.id }),
+      tool: call.tool,
+      result: call.tool === 'getTimelineState'
+        ? {
+            success: true,
+            data: {
+              videoTracks: [{ id: 'video-new' }],
+              audioTracks: [{ id: 'audio-new' }],
+            },
+          }
+        : call.tool === 'createComposition'
+          ? { success: true, data: { compositionId: 'comp-new' } }
+          : { success: true },
+    })));
+    const transaction = createTransactionMocks();
+
+    const result = await tryKernelFirst('Baue daraus eine kurze Story', {
+      executeToolCalls,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      getSnapshot: vi.fn()
+        .mockResolvedValueOnce(trackedSnapshot)
+        .mockResolvedValueOnce(finalSnapshot),
+      storage: configuredStorage(),
+      transaction,
+    });
+
+    expect(result).toMatchObject({ handled: true, runId: 'run-1' });
+    expect(executeToolCalls.mock.calls.map((call) => call[0]?.[0]?.tool)).toEqual([
+      'createComposition',
+      'getTimelineState',
+      'addClipSegment',
+      'getTimelineState',
+      'addClipSegment',
+    ]);
+    expect(executeToolCalls.mock.calls[2]?.[0]?.[0]?.args).toEqual({
+      mediaFileId: 'media-1',
+      trackId: 'video-new',
+      startTime: 0,
+      inPoint: 2.8,
+      outPoint: 3.28,
+    });
+    expect(executeToolCalls.mock.calls[4]?.[0]?.[0]?.args).toEqual({
+      mediaFileId: 'media-1',
+      trackId: 'audio-new',
+      startTime: 0.48,
+      inPoint: 5,
+      outPoint: 6,
+    });
+    expect(transaction.commit).toHaveBeenCalledWith(transaction.agentTransaction);
+  });
+
+  it('removes the setup composition and reopens the previous one when a later call fails', async () => {
+    const trackedSnapshot = {
+      ...initialSnapshot,
+      activeCompositionId: 'comp-prev',
+      videoTracks: [{ id: 'video-src', clips: [] }],
+      audioTracks: [],
+    };
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({
+      ...storyCompiledResponse(true, false),
+      resolvedCalls: [{
+        stepId: 'seg-1',
+        tool: 'addClipSegment',
+        args: { mediaFileId: 'media-1', trackId: null, startTime: 0, inPoint: 2.8, outPoint: 3.28 },
+      }],
+    }));
+    const executeToolCalls = vi.fn(async (
+      calls: AIToolCallExecution[],
+    ): Promise<AIToolCallExecutionResult[]> => calls.map((call) => ({
+      ...(call.id === undefined ? {} : { id: call.id }),
+      tool: call.tool,
+      result: call.tool === 'getTimelineState'
+        ? { success: true, data: { videoTracks: [{ id: 'video-new' }], audioTracks: [] } }
+        : call.tool === 'createComposition'
+          ? { success: true, data: { compositionId: 'comp-new' } }
+          : call.tool === 'addClipSegment'
+            ? { success: false, error: 'media unavailable' }
+            : { success: true },
+    })));
+    const transaction = createTransactionMocks();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await expect(tryKernelFirst('Baue daraus eine kurze Story', {
+      executeToolCalls,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      getSnapshot: vi.fn().mockResolvedValueOnce(trackedSnapshot),
+      storage: configuredStorage(),
+      transaction,
+    })).resolves.toEqual({ handled: false });
+
+    const toolSequence = executeToolCalls.mock.calls.map((call) => call[0]?.[0]?.tool);
+    expect(toolSequence).toEqual([
+      'createComposition',
+      'getTimelineState',
+      'addClipSegment',
+      'openComposition',
+      'deleteMediaItem',
+    ]);
+    expect(executeToolCalls.mock.calls[3]?.[0]?.[0]?.args).toEqual({ compositionId: 'comp-prev' });
+    expect(executeToolCalls.mock.calls[4]?.[0]?.[0]?.args).toEqual({ itemId: 'comp-new' });
+    expect(transaction.abort).toHaveBeenCalledWith(transaction.agentTransaction);
+    expect(transaction.commit).not.toHaveBeenCalled();
+    const abortOrder = transaction.abort.mock.invocationCallOrder[0] as number;
+    const reopenOrder = executeToolCalls.mock.invocationCallOrder[3] as number;
+    const deleteOrder = executeToolCalls.mock.invocationCallOrder[4] as number;
+    expect(reopenOrder).toBeLessThan(deleteOrder);
+    expect(deleteOrder).toBeLessThan(abortOrder);
+    expect(Math.max(...executeToolCalls.mock.invocationCallOrder)).toBeLessThan(abortOrder);
+  });
+
+  it('keeps the setup composition when the rollback is deferred to an outer owner', async () => {
+    const trackedSnapshot = {
+      ...initialSnapshot,
+      activeCompositionId: 'comp-prev',
+      videoTracks: [{ id: 'video-src', clips: [] }],
+      audioTracks: [],
+    };
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({
+      ...storyCompiledResponse(true, false),
+      resolvedCalls: [{
+        stepId: 'seg-1',
+        tool: 'addClipSegment',
+        args: { mediaFileId: 'media-1', trackId: null, startTime: 0, inPoint: 2.8, outPoint: 3.28 },
+      }],
+    }));
+    const executeToolCalls = vi.fn(async (
+      calls: AIToolCallExecution[],
+    ): Promise<AIToolCallExecutionResult[]> => calls.map((call) => ({
+      ...(call.id === undefined ? {} : { id: call.id }),
+      tool: call.tool,
+      result: call.tool === 'getTimelineState'
+        ? { success: true, data: { videoTracks: [{ id: 'video-new' }], audioTracks: [] } }
+        : call.tool === 'createComposition'
+          ? { success: true, data: { compositionId: 'comp-new' } }
+          : call.tool === 'addClipSegment'
+            ? { success: false, error: 'media unavailable' }
+            : { success: true },
+    })));
+    const transaction = createTransactionMocks();
+    transaction.agentTransaction.abortNoop = true;
+
+    const result = await tryKernelFirst('Baue daraus eine kurze Story', {
+      executeToolCalls,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      getSnapshot: vi.fn().mockResolvedValueOnce(trackedSnapshot),
+      storage: configuredStorage(),
+      transaction,
+    });
+
+    expect(result).toMatchObject({
+      handled: true,
+      message: expect.stringContaining('Kernel-Ausführung fehlgeschlagen'),
+      runId: 'run-1',
+    });
+    const toolSequence = executeToolCalls.mock.calls.map((call) => call[0]?.[0]?.tool);
+    expect(toolSequence).toEqual([
+      'createComposition',
+      'getTimelineState',
+      'addClipSegment',
+    ]);
+    expect(transaction.abort).toHaveBeenCalledWith(transaction.agentTransaction);
+  });
+
   it('rolls back and falls back when any semantic tool fails', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(compiledResponse()));
     const executeToolCalls = vi.fn()
@@ -387,6 +582,170 @@ describe('kernel chat gateway WP11 cutover', () => {
     expect(transaction.commit).toHaveBeenCalledWith(transaction.agentTransaction);
     expect(transaction.abort).not.toHaveBeenCalled();
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('passes stale track ids through non-placement tools without reading timeline state', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        ...compiledResponse(),
+        resolvedCalls: [{
+          stepId: 'mute-1',
+          tool: 'setTrackMuted',
+          args: { trackId: 'stale-track', muted: true },
+        }],
+      }))
+      .mockResolvedValueOnce(jsonResponse(completedResponse()));
+    const executeToolCalls = perCallSuccess();
+    const transaction = createTransactionMocks();
+
+    await expect(tryKernelFirst('Stummschalten', {
+      executeToolCalls,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      getSnapshot: vi.fn()
+        .mockResolvedValueOnce({ ...initialSnapshot, videoTracks: [{ id: 'stale-track' }] })
+        .mockResolvedValueOnce(finalSnapshot),
+      storage: configuredStorage(),
+      transaction,
+    })).resolves.toMatchObject({ handled: true, runId: 'run-1' });
+
+    expect(executeToolCalls).toHaveBeenCalledTimes(1);
+    expect(executeToolCalls.mock.calls[0]?.[0]?.[0]).toEqual({
+      id: 'mute-1',
+      tool: 'setTrackMuted',
+      args: { trackId: 'stale-track', muted: true },
+    });
+  });
+
+  it('leaves addClipSegment args untouched when no live video track exists', async () => {
+    const args = { mediaFileId: 'media-1', trackId: null, startTime: 0, inPoint: 1, outPoint: 2 };
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        ...compiledResponse(),
+        resolvedCalls: [{ stepId: 'segment-1', tool: 'addClipSegment', args }],
+      }))
+      .mockResolvedValueOnce(jsonResponse(completedResponse()));
+    const executeToolCalls = vi.fn(async (calls: AIToolCallExecution[]) => calls.map((call) => ({
+      ...(call.id === undefined ? {} : { id: call.id }),
+      tool: call.tool,
+      result: call.tool === 'getTimelineState'
+        ? { success: true, data: { videoTracks: [], audioTracks: [{ id: 'audio-live' }] } }
+        : { success: true },
+    })));
+    const transaction = createTransactionMocks();
+
+    await expect(tryKernelFirst('Clip einsetzen', {
+      executeToolCalls,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      getSnapshot: vi.fn()
+        .mockResolvedValueOnce({ ...initialSnapshot, videoTracks: [{ id: 'video-source' }], audioTracks: [] })
+        .mockResolvedValueOnce(finalSnapshot),
+      storage: configuredStorage(),
+      transaction,
+    })).resolves.toMatchObject({ handled: true, runId: 'run-1' });
+
+    expect(executeToolCalls.mock.calls.map((call) => call[0]?.[0]?.tool)).toEqual([
+      'getTimelineState',
+      'addClipSegment',
+    ]);
+    expect(executeToolCalls.mock.calls[1]?.[0]?.[0]?.args).toEqual(args);
+  });
+
+  it('rolls back and declines when setup succeeds without a composition id', async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({
+      ...storyCompiledResponse(true, false),
+      resolvedCalls: [{ stepId: 'step-1', tool: 'splitClip', args: { clipId: 'clip-1', splitTime: 4 } }],
+    }));
+    const executeToolCalls = perCallSuccess();
+    const transaction = createTransactionMocks();
+
+    await expect(tryKernelFirst('Baue eine Story', {
+      executeToolCalls,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      getSnapshot: vi.fn().mockResolvedValue(initialSnapshot),
+      storage: configuredStorage(),
+      transaction,
+    })).resolves.toEqual({ handled: false });
+
+    expect(executeToolCalls.mock.calls.map((call) => call[0]?.[0]?.tool)).toEqual(['createComposition']);
+    expect(transaction.abort).toHaveBeenCalledWith(transaction.agentTransaction);
+    expect(transaction.commit).not.toHaveBeenCalled();
+  });
+
+  it('continues rollback when setup cleanup reports success false', async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({
+      ...storyCompiledResponse(true, false),
+      resolvedCalls: [{ stepId: 'step-1', tool: 'splitClip', args: { clipId: 'clip-1', splitTime: 4 } }],
+    }));
+    const executeToolCalls = vi.fn(async (calls: AIToolCallExecution[]) => calls.map((call) => ({
+      ...(call.id === undefined ? {} : { id: call.id }),
+      tool: call.tool,
+      result: call.tool === 'createComposition'
+        ? { success: true, data: { compositionId: 'comp-new' } }
+        : call.tool === 'splitClip'
+          ? { success: false, error: 'clip missing' }
+          : call.tool === 'deleteMediaItem'
+            ? { success: false, error: 'cleanup failed' }
+            : { success: true },
+    })));
+    const transaction = createTransactionMocks();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await expect(tryKernelFirst('Baue eine Story', {
+      executeToolCalls,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      getSnapshot: vi.fn().mockResolvedValue({ ...initialSnapshot, activeCompositionId: 'comp-prev' }),
+      storage: configuredStorage(),
+      transaction,
+    })).resolves.toEqual({ handled: false });
+
+    expect(executeToolCalls.mock.calls.map((call) => call[0]?.[0]?.tool)).toEqual([
+      'createComposition',
+      'splitClip',
+      'openComposition',
+      'deleteMediaItem',
+    ]);
+    expect(transaction.abort).toHaveBeenCalledWith(transaction.agentTransaction);
+    expect(Logger.search('kernel setup rollback call failed')).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        data: expect.objectContaining({ error: 'cleanup failed', tool: 'deleteMediaItem' }),
+      }),
+    ]));
+  });
+
+  it('returns an honest failure without cleanup when transaction ownership is lost', async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({
+      ...storyCompiledResponse(true, false),
+      resolvedCalls: [{ stepId: 'step-1', tool: 'splitClip', args: { clipId: 'clip-1', splitTime: 4 } }],
+    }));
+    const executeToolCalls = vi.fn(async (calls: AIToolCallExecution[]) => calls.map((call) => ({
+      ...(call.id === undefined ? {} : { id: call.id }),
+      tool: call.tool,
+      result: call.tool === 'createComposition'
+        ? { success: true, data: { compositionId: 'comp-new' } }
+        : { success: false, error: 'clip missing' },
+    })));
+    const transaction = createTransactionMocks();
+    transaction.hasOwnership.mockReturnValue(false);
+
+    const result = await tryKernelFirst('Baue eine Story', {
+      executeToolCalls,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      getSnapshot: vi.fn().mockResolvedValue(initialSnapshot),
+      storage: configuredStorage(),
+      transaction,
+    });
+
+    expect(result).toMatchObject({
+      handled: true,
+      message: expect.stringContaining('Kernel-Ausführung fehlgeschlagen'),
+      runId: 'run-1',
+    });
+    expect(executeToolCalls.mock.calls.map((call) => call[0]?.[0]?.tool)).toEqual([
+      'createComposition',
+      'splitClip',
+    ]);
+    expect(transaction.abort).not.toHaveBeenCalled();
+    expect(transaction.commit).not.toHaveBeenCalled();
   });
 
   it('bypasses kernel-first when the flag is explicitly false', async () => {
