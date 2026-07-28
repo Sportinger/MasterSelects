@@ -23,6 +23,7 @@ function fullLanes() {
     focus: [{ id: 'focus', start: 0, end: 10, score: 0.9 }],
     quality: [{ id: 'quality', start: 0, end: 10, score: 0.4 }],
     audio: [{ id: 'audio', start: 2, end: 8, score: 0.7 }],
+    markers: [{ id: 'marker', start: 3, score: 0.8 }],
     text: [{ id: 'text', start: 4, end: 6 }],
   };
 }
@@ -194,11 +195,11 @@ describe('buildAnalysisOverviewLayout', () => {
     expect(layout.cuts).toEqual({ top: 20, height: 11 });
     expect(layout.metrics).toMatchObject({ top: 38, height: 62 });
     expect(layout.metrics?.lanes).toEqual(['motion', 'focus', 'quality']);
-    expect(layout.presence.map((row) => row.lane)).toEqual(['speech', 'people', 'audio', 'text']);
+    expect(layout.presence.map((row) => row.lane)).toEqual(['speech', 'people', 'audio', 'markers', 'text']);
     const tops = layout.presence.map((row) => row.top);
     expect(tops).toEqual([...tops].sort((left, right) => left - right));
-    expect(layout.height).toBe(176);
-    expect(layout.present).toHaveLength(9);
+    expect(layout.height).toBe(193);
+    expect(layout.present).toHaveLength(10);
     expect(layout.missing).toEqual([]);
   });
 
@@ -206,7 +207,7 @@ describe('buildAnalysisOverviewLayout', () => {
     const layout = buildAnalysisOverviewLayout(fullLanes(), { graphHeight: 180 });
 
     expect(layout.height).toBe(180);
-    expect(layout.metrics?.height).toBe(66);
+    expect(layout.metrics?.height).toBe(49);
     expect(layout.presence.at(-1)!.top + layout.presence.at(-1)!.height).toBe(180);
   });
 
@@ -215,7 +216,7 @@ describe('buildAnalysisOverviewLayout', () => {
     const layout = buildAnalysisOverviewLayout(lanes);
 
     expect(layout.metrics?.lanes).toEqual(['focus', 'quality']);
-    expect(layout.presence.map((row) => row.lane)).toEqual(['speech', 'people']);
+    expect(layout.presence.map((row) => row.lane)).toEqual(['speech', 'people', 'markers']);
     expect(layout.missing).toEqual(['motion', 'audio', 'text']);
   });
 
@@ -230,7 +231,7 @@ describe('buildAnalysisOverviewLayout', () => {
     expect(structureOnly.metrics).toBeUndefined();
     expect(empty.height).toBe(24);
     expect(empty.present).toEqual([]);
-    expect(empty.missing).toHaveLength(9);
+    expect(empty.missing).toHaveLength(10);
   });
 
   it('compacts row heights for narrow panels', () => {
@@ -238,7 +239,7 @@ describe('buildAnalysisOverviewLayout', () => {
 
     expect(layout.compact).toBe(true);
     expect(layout.scenes).toEqual({ top: 0, height: 16 });
-    expect(layout.height).toBe(138);
+    expect(layout.height).toBe(153);
   });
 });
 
@@ -252,6 +253,7 @@ describe('buildAnalysisOverviewRenderModel', () => {
     expect(model.width).toBe(8192);
     expect(model.envelopes.get('motion')).toHaveLength(8192);
     expect(model.audio).toHaveLength(8192);
+    expect(model.markers).toHaveLength(8192);
     expect(model.cuts).toHaveLength(8192);
   });
 
@@ -268,8 +270,20 @@ describe('buildAnalysisOverviewRenderModel', () => {
     expect(model.cuts).toEqual([]);
     expect(model.envelopes.size).toBe(0);
     expect(model.audio).toBeNull();
+    expect(model.markers).toEqual([]);
     expect([...model.bands.keys()]).toEqual(['speech']);
     expect(model.bands.get('speech')?.[0]).toMatchObject({ startPixel: 40, endPixel: 79 });
     expect(model.ticks.map((tick) => tick.time)).toEqual([2, 4, 6, 8]);
+  });
+
+  it('bins marker point events as confidence-scaled needles', () => {
+    const model = buildAnalysisOverviewRenderModel({
+      duration: 10,
+      lanes: { markers: [{ id: 'breath', start: 2, label: 'breath', score: 0.75 }] },
+    }, 10);
+
+    expect(model.layout.presence.map(row => row.lane)).toEqual(['markers']);
+    expect(model.markers[2]).toMatchObject({ eventCount: 1, averageScore: 0.75 });
+    expect(model.bands.has('markers')).toBe(false);
   });
 });

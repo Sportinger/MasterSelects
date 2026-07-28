@@ -11,6 +11,7 @@ export const ANALYSIS_OVERVIEW_LANE_KINDS = [
   'focus',
   'quality',
   'audio',
+  'markers',
   'text',
 ] as const;
 

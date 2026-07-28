@@ -52,6 +52,14 @@ export interface AnalysisSceneTranscriptWord extends AnalysisSceneRange {
   speakerLabel?: string;
   confidence?: number;
   needsReview?: boolean;
+  emphasis?: number;
+}
+
+export interface AnalysisSceneSpeechMarker extends AnalysisSceneRange {
+  id: string;
+  kind: string;
+  confidence?: number;
+  wordIds?: readonly string[];
 }
 
 export interface AnalysisSceneLabelledSummary {

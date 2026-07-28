@@ -179,6 +179,7 @@ export const classCHardTargets = [
   { path: 'src/hooks/engine/useEngineResolutionSync.ts', maxCurrentHits: 3 },
   { path: 'src/hooks/engine/useEngineTimelineStateSync.ts', maxCurrentHits: 2 },
   { path: 'src/hooks/useGlobalHistory.ts', maxCurrentHits: 3 },
+  { path: 'src/services/agentTimeline/jobs/currentClipAnalysisExecution.ts', maxCurrentHits: 1 },
   { path: 'src/services/audio/audioDiagnostics.ts', maxCurrentHits: 1 },
   { path: 'src/services/audio/ClipAudioAnalysisOrchestrator.ts', maxCurrentHits: 1 },
   // hit moved into the spectral mask provider (cluster total conserved).
@@ -190,6 +191,8 @@ export const classCHardTargets = [
   // Packet 267: 4 -> 2+2; 2.3.3 adds hosted transcription account/balance bridge.
   { path: 'src/services/clipTranscriber.ts', maxCurrentHits: 3 },
   { path: 'src/services/transcription/artifactPersistence.ts', maxCurrentHits: 2 },
+  { path: 'src/services/transcription/applyAlignedTimings.ts', maxCurrentHits: 2 },
+  { path: 'src/services/transcription/clipTranscriptResolver.ts', maxCurrentHits: 1 },
   { path: 'src/services/transcription/cloudProviders.ts', maxCurrentHits: 1 },
   { path: 'src/services/cloudAiService.ts', maxCurrentHits: 2 },
   { path: 'src/services/compositionAudioMixer.ts', maxCurrentHits: 2 },
@@ -223,7 +226,7 @@ export const classCHardTargets = [
   { path: 'src/services/slotDeckManager.ts', maxCurrentHits: 6 },
   { path: 'src/services/thumbnailRender/sampling.ts', maxCurrentHits: 1 },
   { path: 'src/services/timeline/renderTargetRuntimeReporting.ts', maxCurrentHits: 3 },
-  { path: 'src/services/timeline/timelineAudioArtifactGenerationWarmup.ts', maxCurrentHits: 3 },
+  { path: 'src/services/timeline/timelineAudioArtifactGenerationWarmup.ts', maxCurrentHits: 4 },
   { path: 'src/services/timeline/timelineExternalDropCommandExecutor.ts', maxCurrentHits: 2 },
   { path: 'src/services/timeline/timelineExternalDropMediaResolver.ts', maxCurrentHits: 2 },
   { path: 'src/services/timeline/timelineSourceWaveformWarmup.ts', maxCurrentHits: 2 },
@@ -287,13 +290,10 @@ export const classCHardTargets = [
 
 export const getStateAccessPolicyBaselines = {
   allowedAdapterPathCount: 26,
-  // Running redistribution log: 178 (packet 172), 182 (183), 187 (186),
-  // 189 (189+190: ExportPanel/MediaPanel hits moved into runner/board-hook
-  // entries). Totals conserved per redistribution; max-hits ratchets DOWN
-  // fileCount log (totals conserved per split redistribution):
-  // 192 ->193(218) ->196(227) ->199(231) ->203(239) ->205(246) ->206(253/254)
-  // ->207(259) ->208(267) ->212(279) ->216(287) ->230(audio mixer) ->231(2.3.3) ->236(transition nested comps) ->237(#298 motorized-fader rAF hook).
-  classCHardTargetFileCount: 237,
-  // 669 ->665(188) ->664(209) ->659(231) ->658(237) ->657(291) ->664(nested comps) ->673(#249 piano-roll) ->674(#298 rAF hook).
-  classCHardTargetMaxHits: 674,
+  // Redistribution log: 178(172), 182(183), 187(186), 189(189+190: ExportPanel/MediaPanel hits moved into runner/board-hook entries). Totals conserved per redistribution; max-hits ratchets DOWN.
+  // fileCount log (totals conserved per split redistribution): 192 ->193(218) ->196(227) ->199(231) ->203(239) ->205(246) ->206(253/254)
+  // ->207(259) ->208(267) ->212(279) ->216(287) ->230(audio mixer) ->231(2.3.3) ->236(transition nested comps) ->237(#298 motorized-fader rAF hook) ->240(audio-intelligence).
+  classCHardTargetFileCount: 240,
+  // 669 ->665(188) ->664(209) ->659(231) ->658(237) ->657(291) ->664(nested comps) ->673(#249 piano-roll) ->674(#298 rAF hook) ->679(audio-intelligence: +4 files, +1 warmup seam).
+  classCHardTargetMaxHits: 679,
 } as const;

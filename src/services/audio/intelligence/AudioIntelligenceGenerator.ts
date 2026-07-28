@@ -148,7 +148,7 @@ export interface AudioIntelligenceResult {
   deferred: AudioIntelligenceFeature[];
 }
 
-export interface AudioIntelligenceGenerateOptions extends RuntimeOptions {}
+export type AudioIntelligenceGenerateOptions = RuntimeOptions;
 
 function defaultNow(): string {
   return new Date().toISOString();

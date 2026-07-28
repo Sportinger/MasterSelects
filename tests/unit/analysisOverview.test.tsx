@@ -172,7 +172,7 @@ describe('AnalysisOverviewTimeline', () => {
       <AnalysisOverviewTimeline analysis={analysis} playheadTime={102} width={400} />,
     );
 
-    expect(screen.getByText('6/9 signals')).toBeInTheDocument();
+    expect(screen.getByText('6/10 signals')).toBeInTheDocument();
     expect(screen.getByText('Scenes')).toBeInTheDocument();
     expect(screen.getByText('Cuts')).toBeInTheDocument();
     expect(screen.getByText('Speech')).toBeInTheDocument();
@@ -185,7 +185,7 @@ describe('AnalysisOverviewTimeline', () => {
     expect(screen.getByText('1:40')).toBeInTheDocument();
     expect(screen.getByText('1:50')).toBeInTheDocument();
 
-    expect(screen.getByText('No data yet: Quality · Audio · Text')).toBeInTheDocument();
+    expect(screen.getByText('No data yet: Quality · Audio · Markers · Text')).toBeInTheDocument();
     expect(container.querySelector('.AnalysisOverview__srOnly'))
       .toHaveTextContent('Signals with data: Scenes (2)');
   });
@@ -212,7 +212,7 @@ describe('AnalysisOverviewTimeline', () => {
       />,
     );
 
-    expect(screen.getByText('0/9 signals')).toBeInTheDocument();
+    expect(screen.getByText('0/10 signals')).toBeInTheDocument();
     expect(screen.getByText('No signals analysed yet')).toBeInTheDocument();
     expect(screen.queryByText(/No data yet:/)).toBeNull();
   });

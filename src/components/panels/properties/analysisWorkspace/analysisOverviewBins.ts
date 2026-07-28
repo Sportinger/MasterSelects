@@ -22,10 +22,10 @@ export {
 /** Continuous 0..1 metrics drawn as overlaid envelopes in one shared plot. */
 export type AnalysisOverviewEnvelopeLane = 'motion' | 'focus' | 'quality';
 /** Interval signals drawn as labelled coverage rows under the envelope plot. */
-export type AnalysisOverviewPresenceLane = 'speech' | 'people' | 'audio' | 'text';
+export type AnalysisOverviewPresenceLane = 'speech' | 'people' | 'audio' | 'markers' | 'text';
 
 const ENVELOPE_LANES: readonly AnalysisOverviewEnvelopeLane[] = ['motion', 'focus', 'quality'];
-const PRESENCE_LANES: readonly AnalysisOverviewPresenceLane[] = ['speech', 'people', 'audio', 'text'];
+const PRESENCE_LANES: readonly AnalysisOverviewPresenceLane[] = ['speech', 'people', 'audio', 'markers', 'text'];
 
 /** Score levels for the min/max sweep; sub-pixel precision at every plot height. */
 const SCORE_LEVELS = 255;
@@ -311,6 +311,7 @@ export interface AnalysisOverviewRenderModel {
   envelopes: ReadonlyMap<AnalysisOverviewEnvelopeLane, readonly AnalysisOverviewSeriesBin[]>;
   bands: ReadonlyMap<AnalysisOverviewPresenceLane, readonly AnalysisOverviewBandRun[]>;
   audio: readonly AnalysisOverviewSeriesBin[] | null;
+  markers: readonly AnalysisOverviewPixelBin[];
 }
 
 /** One derived, viewport-width-bounded model shared by canvas and DOM overlays. */
@@ -333,9 +334,14 @@ export function buildAnalysisOverviewRenderModel(
   }
   const bands = new Map<AnalysisOverviewPresenceLane, readonly AnalysisOverviewBandRun[]>();
   let audio: readonly AnalysisOverviewSeriesBin[] | null = null;
+  let markers: readonly AnalysisOverviewPixelBin[] = [];
   for (const row of layout.presence) {
     if (row.lane === 'audio') {
       audio = binAnalysisOverviewSeries(laneEvents('audio'), duration, width, startTime);
+      continue;
+    }
+    if (row.lane === 'markers') {
+      markers = binAnalysisOverviewEvents(laneEvents('markers'), duration, width, startTime);
       continue;
     }
     bands.set(row.lane, buildAnalysisOverviewBandRuns(
@@ -356,5 +362,6 @@ export function buildAnalysisOverviewRenderModel(
     envelopes,
     bands,
     audio,
+    markers,
   };
 }

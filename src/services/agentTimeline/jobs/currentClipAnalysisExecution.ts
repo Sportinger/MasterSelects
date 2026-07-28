@@ -13,6 +13,9 @@ import {
   runAgentTimelineAnalysis,
   type AgentTimelineAnalysisOperation,
 } from './analysisExecutionCoordinator';
+import { createCurrentAudioArtifactStore } from '../../audio/timelineWaveformPyramidCache';
+import { clipAudioAnalysisJobService } from '../../audio/ClipAudioAnalysisJobService';
+import { useTimelineStore } from '../../../stores/timeline';
 
 export interface RunCurrentClipAnalysisOptions {
   clipId: string;
@@ -154,6 +157,38 @@ function transcriptOperation(clipId: string, sourceKey: string): AgentTimelineAn
   };
 }
 
+function audioIntelligenceOperation(clipId: string, sourceKey: string): AgentTimelineAnalysisOperation {
+  const artifactsAreFresh = async () => {
+    const refs = currentClip(clipId)?.audioState?.sourceAnalysisRefs;
+    const expected = [
+      [refs?.voiceActivityId, 'voice-activity'],
+      [refs?.transcriptTimingId, 'transcript-timing'],
+      [refs?.speechMarkersId, 'speech-markers'],
+      [refs?.prosodyContourId, 'prosody-contour'],
+      [refs?.roomToneProfileId, 'room-tone-profile'],
+    ] as const;
+    if (expected.some(([id]) => !id)) return false;
+    const store = createCurrentAudioArtifactStore();
+    const artifacts = await Promise.all(expected.map(([id]) => store.getAnalysisArtifact(id!)));
+    return artifacts.every((artifact, index) => (
+      artifact?.kind === expected[index][1] && !artifact.stale
+    ));
+  };
+  return {
+    id: 'audio',
+    channel: 'audio',
+    resourceLocks: [`source-audio:${sourceKey}`],
+    isCached: artifactsAreFresh,
+    async run() {
+      await useTimelineStore.getState().generateAudioIntelligenceForClip(clipId);
+      if (!await artifactsAreFresh()) throw failure('Audio intelligence analysis failed.');
+    },
+    cancel() {
+      clipAudioAnalysisJobService.cancelJob(clipId, 'audio-intelligence');
+    },
+  };
+}
+
 function descriptionOperation(clipId: string, sourceKey: string): AgentTimelineAnalysisOperation {
   return {
     id: 'descriptions',
@@ -220,6 +255,7 @@ export function runCurrentClipAnalysis(
   if (options.includeTranscript !== false) {
     operations.push(transcriptOperation(options.clipId, sourceKey));
   }
+  operations.push(audioIntelligenceOperation(options.clipId, sourceKey));
   return runAgentTimelineAnalysis({
     runKey: clipRunKey(options.clipId, localVisual),
     operations,

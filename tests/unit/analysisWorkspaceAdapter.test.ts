@@ -76,12 +76,38 @@ describe('analysis workspace adapter', () => {
       transcript: [{ id: 'word', text: 'Walk', start: .5, end: .7 }],
     });
 
-    expect(Object.keys(result.overview.lanes).sort()).toEqual(['audio', 'cuts', 'focus', 'motion', 'people', 'quality', 'scenes', 'speech', 'text']);
+    expect(Object.keys(result.overview.lanes).sort()).toEqual(['audio', 'cuts', 'focus', 'markers', 'motion', 'people', 'quality', 'scenes', 'speech', 'text']);
     expect(result.overview.lanes.motion).toHaveLength(1);
     expect(result.overview.lanes.focus).toHaveLength(1);
     expect(result.overview.lanes.quality).toHaveLength(1);
     expect(result.overview.lanes.audio).toEqual([]);
+    expect(result.overview.lanes.markers).toEqual([]);
     expect(result.scenes[0].coverage.audio).toMatchObject({ state: 'unavailable' });
+  });
+
+  it('populates source-time audio and marker lanes with real coverage', () => {
+    const result = buildAnalysisWorkspaceViewModel({
+      range: { inPoint: 10, outPoint: 20 },
+      audio: {
+        levels: [
+          { start: 10, end: 11, loudnessDb: -60 },
+          { start: 11, end: 12, loudnessDb: 0 },
+        ],
+        vadSegments: [{ start: 13, end: 15, probability: 0.8 }],
+        markers: [{ id: 'breath-1', kind: 'breath', time: 14, confidence: 0.9 }],
+      },
+      channels: { audio: { status: 'ready' } },
+    });
+
+    expect(result.overview.lanes.audio).toMatchObject([
+      { start: 10, end: 11, label: 'Loudness', score: 0 },
+      { start: 11, end: 12, label: 'Loudness', score: 1 },
+      { start: 13, end: 15, label: 'Speech activity', score: 0.8 },
+    ]);
+    expect(result.overview.lanes.markers).toEqual([
+      { id: 'breath-1', start: 14, label: 'breath', score: 0.9 },
+    ]);
+    expect(result.scenes[0].coverage.audio).toMatchObject({ state: 'complete' });
   });
 
   it('distinguishes a completed no-cut scan from missing cut analysis', () => {
