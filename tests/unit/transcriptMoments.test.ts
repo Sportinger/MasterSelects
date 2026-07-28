@@ -58,28 +58,34 @@ describe('transcript moments', () => {
 
     await expect(buildTranscriptMoments(transcriptSnapshot(), executor)).resolves.toEqual([
       {
+        schemaVersion: 1,
         handle: '$m1',
-        source: 'media-1',
-        sourceRange: [10, 10.4],
+        source: { mediaId: 'media-1' },
+        sourceRange: { startSeconds: 10, endSeconds: 10.4 },
         evidence: { transcript: 'Ein' },
         confidence: 1,
         indexVersion: TRANSCRIPT_MOMENT_INDEX_VERSION,
+        analysisSources: ['transcript'],
       },
       {
+        schemaVersion: 1,
         handle: '$m2',
-        source: 'media-1',
-        sourceRange: [10.4, 10.9],
+        source: { mediaId: 'media-1' },
+        sourceRange: { startSeconds: 10.4, endSeconds: 10.9 },
         evidence: { transcript: 'guter Moment.' },
         confidence: 1,
         indexVersion: TRANSCRIPT_MOMENT_INDEX_VERSION,
+        analysisSources: ['transcript'],
       },
       {
+        schemaVersion: 1,
         handle: '$m3',
-        source: 'media-1',
-        sourceRange: [12, 12.5],
+        source: { mediaId: 'media-1' },
+        sourceRange: { startSeconds: 12, endSeconds: 12.5 },
         evidence: { transcript: 'Weiter.' },
         confidence: 1,
         indexVersion: TRANSCRIPT_MOMENT_INDEX_VERSION,
+        analysisSources: ['transcript'],
       },
     ]);
     expect(executor).toHaveBeenCalledTimes(2);
