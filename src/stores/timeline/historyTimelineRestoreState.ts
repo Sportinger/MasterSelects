@@ -14,6 +14,7 @@ import type {
   HistoryTimelineTrackEditState,
 } from './historyTimelineEditState';
 import { getClipAnalysisSourceId } from '../../services/clipAnalysis/sourceAnalysisSharing';
+import { resolveClipTranscriptWords } from '../../services/transcription/clipTranscriptResolver';
 
 export interface HistoryTimelineRestoreCurrentState {
   clips?: readonly TimelineClip[];
@@ -179,6 +180,13 @@ function createRestoredClip(
       nodeGraph: clonePlain(clip.nodeGraph),
       masks: clonePlain(clip.masks),
       transcriptStatus: clip.transcriptStatus,
+      // History states don't carry transcript words (media file is the anchor);
+      // reuse the live clip's words or re-derive them from the media store.
+      transcript: currentClip?.transcript ?? resolveClipTranscriptWords({
+        transcript: undefined,
+        mediaFileId: clip.mediaFileId ?? clip.runtimeRef.mediaFileId,
+        source: null,
+      }),
       analysis: clip.analysisStatus && clip.analysisStatus !== 'none'
         ? currentAnalysisSource?.analysis
         : undefined,
