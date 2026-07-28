@@ -16,7 +16,11 @@ type AudioAnalysisArtifactKind =
   | 'beat-grid'
   | 'onset-map'
   | 'phase-correlation'
-  | 'frequency-summary';
+  | 'frequency-summary'
+  | 'voice-activity'
+  | 'speech-markers'
+  | 'prosody-contour'
+  | 'room-tone-profile';
 
 const IMPLEMENTED_AUDIO_ANALYSIS_KINDS = new Set<string>([
   'waveform-pyramid',

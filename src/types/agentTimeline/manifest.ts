@@ -1,6 +1,10 @@
 import type { SourceIdentity } from './sourceIdentity';
 
 export const AGENT_TIMELINE_MANIFEST_SCHEMA_VERSION = 'agent-timeline-manifest/v1' as const;
+// Versioning policy: adding a new event-type union member or optional data
+// fields is additive and stays on v1 (persisted v1 shards remain valid; app
+// and storage readers ship as one unit). Bump only for breaking changes to
+// existing event shapes or time semantics.
 export const AGENT_TIMELINE_EVENT_SCHEMA_VERSION = 'agent-timeline-event/v1' as const;
 
 export type AgentTimelineProfile = 'quick' | 'balanced' | 'deep' | 'custom';
@@ -91,6 +95,17 @@ export interface SpeechEventData {
   text?: string;
   language?: string;
   wordCount?: number;
+  // Prosody-derived per-word scalars; optional and additive within schema v1.
+  emphasis?: number;
+  f0MeanHz?: number;
+}
+
+export interface SpeechMarkerEventData {
+  marker: 'breath' | 'filler' | 'disfluency' | 'pause';
+  text?: string;
+  speakerId?: string;
+  wordId?: string;
+  intensity?: number;
 }
 
 export interface PersonVisibleEventData {
@@ -160,6 +175,7 @@ export type AgentTimelineEvent =
   | AgentTimelineEventBase<'shot', ShotEventData>
   | AgentTimelineEventBase<'scene-block', SceneBlockEventData>
   | AgentTimelineEventBase<'speech', SpeechEventData>
+  | AgentTimelineEventBase<'speech-marker', SpeechMarkerEventData>
   | AgentTimelineEventBase<'person-visible', PersonVisibleEventData>
   | AgentTimelineEventBase<'active-speaker', ActiveSpeakerEventData>
   | AgentTimelineEventBase<'camera-motion', CameraMotionEventData>

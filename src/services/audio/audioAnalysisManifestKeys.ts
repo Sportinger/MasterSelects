@@ -17,6 +17,10 @@ export const AUDIO_ANALYSIS_REF_KINDS = [
   'phase-correlation',
   'transcript-timing',
   'frequency-summary',
+  'voice-activity',
+  'speech-markers',
+  'prosody-contour',
+  'room-tone-profile',
 ] as const satisfies readonly AudioAnalysisArtifactKind[];
 
 export type AudioAnalysisRefKind = typeof AUDIO_ANALYSIS_REF_KINDS[number];
@@ -55,6 +59,10 @@ export interface AudioAnalysisRefsManifest {
   phaseCorrelation?: AudioAnalysisManifestRef;
   transcriptTiming?: AudioAnalysisManifestRef;
   frequencySummary?: AudioAnalysisManifestRef;
+  voiceActivity?: AudioAnalysisManifestRef;
+  speechMarkers?: AudioAnalysisManifestRef;
+  prosodyContour?: AudioAnalysisManifestRef;
+  roomToneProfile?: AudioAnalysisManifestRef;
 }
 
 export interface LegacyAudioAnalysisRefs {
@@ -67,6 +75,10 @@ export interface LegacyAudioAnalysisRefs {
   phaseCorrelationId?: string;
   transcriptTimingId?: string;
   frequencySummaryId?: string;
+  voiceActivityId?: string;
+  speechMarkersId?: string;
+  prosodyContourId?: string;
+  roomToneProfileId?: string;
 }
 
 export type AudioAnalysisRefsLike = AudioAnalysisRefsManifest | LegacyAudioAnalysisRefs | null | undefined;
@@ -100,6 +112,10 @@ type RefFieldName = keyof Pick<
   | 'phaseCorrelation'
   | 'transcriptTiming'
   | 'frequencySummary'
+  | 'voiceActivity'
+  | 'speechMarkers'
+  | 'prosodyContour'
+  | 'roomToneProfile'
 >;
 
 type LegacyRefFieldName = keyof LegacyAudioAnalysisRefs;
@@ -114,6 +130,10 @@ const KIND_TO_REF_FIELD: Record<AudioAnalysisRefKind, RefFieldName> = {
   'phase-correlation': 'phaseCorrelation',
   'transcript-timing': 'transcriptTiming',
   'frequency-summary': 'frequencySummary',
+  'voice-activity': 'voiceActivity',
+  'speech-markers': 'speechMarkers',
+  'prosody-contour': 'prosodyContour',
+  'room-tone-profile': 'roomToneProfile',
 };
 
 const KIND_TO_LEGACY_REF_FIELD: Record<AudioAnalysisRefKind, LegacyRefFieldName> = {
@@ -126,6 +146,10 @@ const KIND_TO_LEGACY_REF_FIELD: Record<AudioAnalysisRefKind, LegacyRefFieldName>
   'phase-correlation': 'phaseCorrelationId',
   'transcript-timing': 'transcriptTimingId',
   'frequency-summary': 'frequencySummaryId',
+  'voice-activity': 'voiceActivityId',
+  'speech-markers': 'speechMarkersId',
+  'prosody-contour': 'prosodyContourId',
+  'room-tone-profile': 'roomToneProfileId',
 };
 
 export function isAudioAnalysisRefKind(value: unknown): value is AudioAnalysisRefKind {
@@ -321,6 +345,14 @@ export function addAudioAnalysisManifestRef(
       return { ...manifest, transcriptTiming: ref };
     case 'frequency-summary':
       return { ...manifest, frequencySummary: ref };
+    case 'voice-activity':
+      return { ...manifest, voiceActivity: ref };
+    case 'speech-markers':
+      return { ...manifest, speechMarkers: ref };
+    case 'prosody-contour':
+      return { ...manifest, prosodyContour: ref };
+    case 'room-tone-profile':
+      return { ...manifest, roomToneProfile: ref };
   }
 }
 

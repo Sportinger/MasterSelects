@@ -17,7 +17,7 @@ import {
 const DEBOUNCE_MS = 350;
 const EVENT_TYPES: Record<ArtifactShardDescriptor['channel'], readonly AgentTimelineEvent['type'][]> = {
   cuts: ['cut'], shots: ['shot'], 'scene-blocks': ['scene-block'], focus: ['quality-issue'],
-  motion: ['camera-motion'], faces: ['person-visible'], transcript: ['speech'],
+  motion: ['camera-motion'], faces: ['person-visible'], transcript: ['speech', 'speech-marker'],
   audio: ['audio-activity'], 'active-speaker': ['active-speaker'],
   'camera-motion': ['camera-motion'], quality: ['quality-issue'], ocr: ['onscreen-text'],
   redundancy: ['duplicate-group'],

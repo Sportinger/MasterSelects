@@ -32,7 +32,7 @@ const CHANNEL_ARTIFACT: Partial<Record<AgentTimelineChannel, AgentTimelineArtifa
 const CHANNEL_EVENTS: Partial<Record<AgentTimelineChannel, AgentTimelineEvent['type'][]>> = {
   cuts: ['cut'],
   scenes: ['scene-block'],
-  speech: ['speech'],
+  speech: ['speech', 'speech-marker'],
   people: ['person-visible'],
   'camera-motion': ['camera-motion'],
   audio: ['audio-activity'],

@@ -100,6 +100,7 @@ function channelForEvent(event: AgentTimelineEvent): AgentTimelineChannel {
     case 'shot': return 'shots';
     case 'scene-block': return 'scenes';
     case 'speech': return 'speech';
+    case 'speech-marker': return 'speech';
     case 'person-visible': return 'people';
     case 'active-speaker': return 'active-speaker';
     case 'camera-motion': return 'camera-motion';
@@ -124,6 +125,7 @@ export function agentTimelineEventToOverviewEvent(event: AgentTimelineEvent): Ag
     case 'shot': return { ...base, label: event.data.shotId, category: event.data.shotSize ?? event.data.layout };
     case 'scene-block': return { ...base, label: event.data.label ?? event.data.sceneId, category: event.data.boundarySource };
     case 'speech': return { ...base, numericValue: event.data.wordCount, label: event.data.speakerId, category: event.data.language };
+    case 'speech-marker': return { ...base, numericValue: event.data.intensity, label: event.data.speakerId, category: event.data.marker };
     case 'person-visible': return { ...base, label: event.data.personId, category: event.data.position };
     case 'active-speaker': return { ...base, label: event.data.personId ?? event.data.speakerId, category: event.data.status };
     case 'camera-motion': return { ...base, numericValue: event.data.magnitude, label: event.data.motion, category: event.data.direction };

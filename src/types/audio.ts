@@ -28,7 +28,11 @@ export type AudioAnalysisArtifactKind =
   | 'phase-correlation'
   | 'transcript-timing'
   | 'frequency-summary'
-  | 'stem-separation';
+  | 'stem-separation'
+  | 'voice-activity'
+  | 'speech-markers'
+  | 'prosody-contour'
+  | 'room-tone-profile';
 
 export type AudioStemKind =
   | 'mix'
@@ -125,12 +129,17 @@ export interface MediaFileAudioAnalysisRefs {
   phaseCorrelationId?: string;
   transcriptTimingId?: string;
   frequencySummaryId?: string;
+  voiceActivityId?: string;
+  speechMarkersId?: string;
+  prosodyContourId?: string;
+  roomToneProfileId?: string;
 }
 
 export type ClipAudioAnalysisJobKind =
   | AudioAnalysisArtifactKind
   | 'beat-onset-analysis'
-  | 'frequency-phase-analysis';
+  | 'frequency-phase-analysis'
+  | 'audio-intelligence';
 
 export type ClipAudioAnalysisJobPhase =
   | 'queued'
