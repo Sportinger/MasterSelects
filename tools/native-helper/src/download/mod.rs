@@ -3,6 +3,6 @@
 mod ytdlp;
 
 pub use ytdlp::{
-    find_ytdlp, find_deno, get_ytdlp_command, get_deno_args,
-    handle_list_formats, handle_download, WsSender,
+    find_deno, find_ytdlp, get_deno_args, get_ytdlp_command, handle_download, handle_list_formats,
+    WsSender,
 };

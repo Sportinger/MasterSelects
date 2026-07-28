@@ -14,8 +14,16 @@ import {
   destroyOpticalFlowAnalyzer,
   type MotionResult,
 } from '../engine/analysis/OpticalFlowAnalyzer';
-import { analyzeMotion, analyzeSharpness, detectFaceCount } from './clipAnalysis/frameMetrics';
-import type { ClipAnalysis, FrameAnalysisData, AnalysisStatus } from '../types';
+import { analyzeMotion, analyzeSharpness } from './clipAnalysis/frameMetrics';
+import { getFaceAnalysisRuntime } from './faceAnalysis/FaceAnalysisRuntime';
+import {
+  FaceIdentityTracker,
+  createFaceIdentityPrefix,
+  summarizeCachedFaces,
+} from './faceAnalysis/faceIdentityTracker';
+import { FACE_ANALYSIS_MODEL_VERSION } from './faceAnalysis/modelCatalog';
+import type { ClipAnalysis, FrameAnalysisData, AnalysisStatus } from '../types/clipMetadata';
+import type { TimelineClip } from '../types/timeline';
 
 const log = Logger.create('ClipAnalyzer');
 
@@ -26,6 +34,7 @@ const SAMPLE_INTERVAL_MS = 500;
 let isAnalyzing = false;
 let shouldCancel = false;
 let currentClipId: string | null = null;
+let analysisAbortController: AbortController | null = null;
 
 // GPU optical flow analyzer instance
 let flowAnalyzer: OpticalFlowAnalyzer | null = null;
@@ -89,45 +98,46 @@ async function extractFrame(
   canvas: HTMLCanvasElement,
   ctx: CanvasRenderingContext2D
 ): Promise<ImageData> {
-  return new Promise((resolve) => {
-    const onSeeked = () => {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const cleanup = () => {
       video.removeEventListener('seeked', onSeeked);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       resolve(ctx.getImageData(0, 0, canvas.width, canvas.height));
     };
+    const onSeeked = () => finish();
 
     video.addEventListener('seeked', onSeeked);
     video.currentTime = timestampSec;
 
-    // Timeout fallback
-    setTimeout(() => {
-      video.removeEventListener('seeked', onSeeked);
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      resolve(ctx.getImageData(0, 0, canvas.width, canvas.height));
-    }, 1000);
+    timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(`Video seek timed out at ${timestampSec.toFixed(3)}s.`));
+    }, 3000);
   });
 }
 
-/**
- * Check if analysis is currently running
- */
 export function isAnalysisRunning(): boolean {
   return isAnalyzing;
 }
 
-/**
- * Get the clip ID currently being analyzed
- */
 export function getCurrentAnalyzingClipId(): string | null {
   return currentClipId;
 }
 
-/**
- * Cancel ongoing analysis
- */
 export function cancelAnalysis(): void {
   if (isAnalyzing) {
     shouldCancel = true;
+    analysisAbortController?.abort();
     log.info('Cancel requested');
   }
 }
@@ -178,7 +188,7 @@ export async function analyzeClip(clipId: string, options?: { continueMode?: boo
   // Prevent concurrent analysis
   if (isAnalyzing) {
     log.warn('Already analyzing');
-    return;
+    throw new Error(`Another clip analysis is already running (${currentClipId ?? 'unknown clip'}).`);
   }
 
   const store = useTimelineStore.getState();
@@ -186,7 +196,7 @@ export async function analyzeClip(clipId: string, options?: { continueMode?: boo
 
   if (!clip || !clip.file) {
     log.warn('Clip not found or has no file', { clipId });
-    return;
+    throw new Error(`Clip not found or source file is unavailable: ${clipId}.`);
   }
 
   // Only analyze video files - check MIME type or file extension as fallback
@@ -194,22 +204,35 @@ export async function analyzeClip(clipId: string, options?: { continueMode?: boo
     /\.(mp4|webm|mov|avi|mkv|m4v|mxf)$/i.test(clip.file.name);
   if (!isVideo) {
     log.warn('Not a video file', { type: clip.file.type, name: clip.file.name });
-    return;
+    throw new Error(`YuNet + SFace only support video clips (${clip.file.name}).`);
   }
 
   // Set analyzing state
   isAnalyzing = true;
   shouldCancel = false;
   currentClipId = clipId;
+  const abortController = new AbortController();
+  analysisAbortController = abortController;
 
   // Update status to analyzing
-  updateClipAnalysis(clipId, { status: 'analyzing', progress: 0 });
+  updateClipAnalysis(clipId, {
+    status: 'analyzing',
+    progress: 0,
+    faceStatus: 'analyzing',
+    faceProgress: 0,
+    faceMessage: 'Preparing YuNet + SFace.',
+  });
 
   // Check for cached analysis first (from project folder, not browser cache)
   const mediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
   const inPoint = clip.inPoint ?? 0;
   const outPoint = clip.outPoint ?? clip.duration;
-  const continueMode = options?.continueMode ?? false;
+  // Face embeddings are intentionally not persisted. A full pass keeps anonymous
+  // person IDs coherent instead of creating colliding identities across cache gaps.
+  const continueMode = false;
+  if (options?.continueMode) {
+    log.info('Continue requested; running a full pass to keep SFace identities coherent');
+  }
 
   // In continue mode, find gaps in existing coverage
   let analysisGaps: [number, number][] | null = null;
@@ -237,24 +260,35 @@ export async function analyzeClip(clipId: string, options?: { continueMode?: boo
   if (!continueMode && mediaFileId && projectFileService.isProjectOpen()) {
     try {
       const cachedAnalysis = await projectFileService.getAnalysis(mediaFileId, inPoint, outPoint);
-      if (cachedAnalysis) {
+      const cachedFrames = cachedAnalysis?.frames as FrameAnalysisData[] | undefined;
+      const hasCompatibleFaces = cachedFrames?.length
+        && cachedFrames.every(frame => frame.faceModelVersion === FACE_ANALYSIS_MODEL_VERSION);
+      if (cachedAnalysis && hasCompatibleFaces) {
         log.info('Found cached analysis in project folder, loading...');
 
         const analysis: ClipAnalysis = {
-          frames: cachedAnalysis.frames as FrameAnalysisData[],
+          frames: cachedFrames,
           sampleInterval: cachedAnalysis.sampleInterval,
+          faceAnalysis: summarizeCachedFaces(cachedFrames),
         };
 
         updateClipAnalysis(clipId, {
           status: 'ready',
           progress: 100,
+          faceStatus: 'ready',
+          faceProgress: 100,
+          faceMessage: null,
           analysis,
         });
 
         triggerTimelineSave();
         isAnalyzing = false;
         currentClipId = null;
+        analysisAbortController = null;
         return;
+      }
+      if (cachedAnalysis) {
+        log.info('Ignoring legacy clip analysis cache without compatible YuNet + SFace data');
       }
     } catch (err) {
       log.warn('Failed to check analysis cache', err);
@@ -278,6 +312,20 @@ export async function analyzeClip(clipId: string, options?: { continueMode?: boo
       setTimeout(() => reject(new Error('Video load timeout')), 30000);
     });
 
+    const faceRuntime = getFaceAnalysisRuntime();
+    const backend = await faceRuntime.prepare({
+      signal: abortController.signal,
+      onProgress: ({ progress, message }) => {
+        updateClipAnalysis(clipId, {
+          faceStatus: 'analyzing',
+          faceProgress: Math.round(progress * 10),
+          faceMessage: message,
+        });
+      },
+    });
+    const identityScope = `${mediaFileId ?? clip.id}:${inPoint.toFixed(3)}:${outPoint.toFixed(3)}`;
+    const identityTracker = new FaceIdentityTracker(createFaceIdentityPrefix(identityScope));
+
     // Try to initialize GPU optical flow analyzer
     // Force recreate analyzer to ensure fresh state (avoids stale GPU errors)
     const gpuAvailable = useGPUAnalysis && await initGPUAnalyzer(true);
@@ -297,6 +345,19 @@ export async function analyzeClip(clipId: string, options?: { continueMode?: boo
 
     if (!ctx) {
       throw new Error('Could not get canvas context');
+    }
+
+    // Face inference uses its own aspect-preserving resolution. The motion
+    // canvas can be as small as 160x90, which misses small faces.
+    const sourceWidth = video.videoWidth || 640;
+    const sourceHeight = video.videoHeight || 360;
+    const faceScale = Math.min(1, 640 / Math.max(sourceWidth, sourceHeight));
+    const faceCanvas = document.createElement('canvas');
+    faceCanvas.width = Math.max(32, Math.round(sourceWidth * faceScale));
+    faceCanvas.height = Math.max(32, Math.round(sourceHeight * faceScale));
+    const faceContext = faceCanvas.getContext('2d', { willReadFrequently: true });
+    if (!faceContext) {
+      throw new Error('Could not create the YuNet frame canvas.');
     }
 
     // Determine ranges to analyze
@@ -330,7 +391,13 @@ export async function analyzeClip(clipId: string, options?: { continueMode?: boo
       for (let i = 0; i < rangeSamples; i++) {
         if (shouldCancel) {
           log.info('Analysis cancelled');
-          updateClipAnalysis(clipId, { status: continueMode ? 'ready' : 'none', progress: 0 });
+          updateClipAnalysis(clipId, {
+            status: continueMode ? 'ready' : 'none',
+            progress: 0,
+            faceStatus: continueMode ? 'ready' : 'none',
+            faceProgress: 0,
+            faceMessage: 'Face analysis cancelled.',
+          });
           return;
         }
 
@@ -338,6 +405,8 @@ export async function analyzeClip(clipId: string, options?: { continueMode?: boo
         const absoluteTime = rangeStart + relativeTime;
 
         const frame = await extractFrame(video, absoluteTime, canvas, ctx);
+        faceContext.drawImage(video, 0, 0, faceCanvas.width, faceCanvas.height);
+        const faceFrame = faceContext.getImageData(0, 0, faceCanvas.width, faceCanvas.height);
 
         let motionResult: MotionResult;
         const analysisStart = performance.now();
@@ -356,7 +425,11 @@ export async function analyzeClip(clipId: string, options?: { continueMode?: boo
         }
 
         const focus = analyzeSharpness(frame);
-        const faceCount = detectFaceCount(frame);
+        const runtimeDetections = await faceRuntime.analyzeFrame(
+          faceFrame,
+          abortController.signal,
+        );
+        const faces = identityTracker.track(absoluteTime, runtimeDetections);
 
         rangeFrames.push({
           timestamp: absoluteTime,
@@ -365,7 +438,9 @@ export async function analyzeClip(clipId: string, options?: { continueMode?: boo
           localMotion: motionResult.local,
           focus,
           brightness: 0.5,
-          faceCount,
+          faceCount: faces.length,
+          faces,
+          faceModelVersion: FACE_ANALYSIS_MODEL_VERSION,
           isSceneCut: motionResult.isSceneCut,
         });
 
@@ -374,12 +449,22 @@ export async function analyzeClip(clipId: string, options?: { continueMode?: boo
 
         const progress = Math.round((processedSamples / totalSamples) * 100);
 
-        // In continue mode, show merged frames (existing + new) for real-time graph
-        const existingFrames = continueMode ? (clip.analysis?.frames || []) : [];
-        const allSoFar = [...existingFrames, ...newFrames, ...rangeFrames];
-        allSoFar.sort((a, b) => a.timestamp - b.timestamp);
-        const partialAnalysis: ClipAnalysis = { frames: allSoFar, sampleInterval: SAMPLE_INTERVAL_MS };
-        updateClipAnalysis(clipId, { progress, analysis: partialAnalysis });
+        if (processedSamples % 4 === 0 || processedSamples === totalSamples) {
+          const existingFrames = continueMode ? (clip.analysis?.frames || []) : [];
+          const allSoFar = [...existingFrames, ...newFrames, ...rangeFrames]
+            .toSorted((a, b) => a.timestamp - b.timestamp);
+          const partialAnalysis: ClipAnalysis = {
+            frames: allSoFar,
+            sampleInterval: SAMPLE_INTERVAL_MS,
+            faceAnalysis: identityTracker.summarize(backend),
+          };
+          updateClipAnalysis(clipId, {
+            progress,
+            faceProgress: 10 + Math.round(progress * 0.9),
+            faceMessage: `Analyzing faces: ${processedSamples} / ${totalSamples} frames.`,
+            analysis: partialAnalysis,
+          });
+        }
 
         if (processedSamples % 5 === 0) {
           await new Promise(r => setTimeout(r, 0));
@@ -401,7 +486,13 @@ export async function analyzeClip(clipId: string, options?: { continueMode?: boo
 
     if (shouldCancel) {
       log.info('Analysis cancelled');
-      updateClipAnalysis(clipId, { status: continueMode ? 'ready' : 'none', progress: 0 });
+      updateClipAnalysis(clipId, {
+        status: continueMode ? 'ready' : 'none',
+        progress: 0,
+        faceStatus: continueMode ? 'ready' : 'none',
+        faceProgress: 0,
+        faceMessage: 'Face analysis cancelled.',
+      });
       return;
     }
 
@@ -420,11 +511,18 @@ export async function analyzeClip(clipId: string, options?: { continueMode?: boo
       });
     }
 
-    const analysis: ClipAnalysis = { frames: finalFrames, sampleInterval: SAMPLE_INTERVAL_MS };
+    const analysis: ClipAnalysis = {
+      frames: finalFrames,
+      sampleInterval: SAMPLE_INTERVAL_MS,
+      faceAnalysis: identityTracker.summarize(backend),
+    };
 
     updateClipAnalysis(clipId, {
       status: 'ready',
       progress: 100,
+      faceStatus: 'ready',
+      faceProgress: 100,
+      faceMessage: null,
       analysis,
     });
 
@@ -434,12 +532,29 @@ export async function analyzeClip(clipId: string, options?: { continueMode?: boo
     }
 
     triggerTimelineSave();
-    log.info(`Done: ${frames.length} frames analyzed`);
+    log.info(`Done: ${finalFrames.length} frames analyzed`);
 
   } catch (error) {
     log.error('Analysis failed', error);
-    if (!shouldCancel) {
-      updateClipAnalysis(clipId, { status: 'error', progress: 0 });
+    if (shouldCancel) {
+      updateClipAnalysis(clipId, {
+        status: 'none',
+        progress: 0,
+        faceStatus: 'none',
+        faceProgress: 0,
+        faceMessage: 'Face analysis cancelled.',
+      });
+      triggerTimelineSave();
+    } else {
+      const message = error instanceof Error ? error.message : String(error);
+      updateClipAnalysis(clipId, {
+        status: 'error',
+        progress: 0,
+        faceStatus: 'error',
+        faceProgress: 0,
+        faceMessage: message,
+      });
+      triggerTimelineSave();
     }
   } finally {
     // Clean up
@@ -449,6 +564,7 @@ export async function analyzeClip(clipId: string, options?: { continueMode?: boo
     isAnalyzing = false;
     shouldCancel = false;
     currentClipId = null;
+    analysisAbortController = null;
   }
 }
 
@@ -520,39 +636,62 @@ function calcCoverage(ranges: [number, number][], totalDuration: number): number
   return Math.min(1, covered / totalDuration);
 }
 
-/**
- * Update clip analysis data in timeline store
- */
 function updateClipAnalysis(
   clipId: string,
   data: {
     status?: AnalysisStatus;
     progress?: number;
-    analysis?: ClipAnalysis;
+    analysis?: ClipAnalysis | null;
+    faceStatus?: AnalysisStatus;
+    faceProgress?: number;
+    faceMessage?: string | null;
   }
-): void {
+): TimelineClip | undefined {
   const store = useTimelineStore.getState();
+  let originalClip: TimelineClip | undefined;
   const clips = store.clips.map(clip => {
     if (clip.id !== clipId) return clip;
+    originalClip = clip;
 
-    return {
+    const next = {
       ...clip,
       analysisStatus: data.status ?? clip.analysisStatus,
       analysisProgress: data.progress ?? clip.analysisProgress,
-      analysis: data.analysis ?? clip.analysis,
+      faceAnalysisStatus: data.faceStatus ?? clip.faceAnalysisStatus,
+      faceAnalysisProgress: data.faceProgress ?? clip.faceAnalysisProgress,
+      faceAnalysisMessage: data.faceMessage === null
+        ? undefined
+        : data.faceMessage ?? clip.faceAnalysisMessage,
     };
+    if ('analysis' in data) next.analysis = data.analysis ?? undefined;
+    return next;
   });
 
   useTimelineStore.setState({ clips });
+  return originalClip;
 }
 
-/**
- * Clear analysis from a clip
- */
-export function clearClipAnalysis(clipId: string): void {
-  updateClipAnalysis(clipId, {
+export async function clearClipAnalysis(clipId: string): Promise<void> {
+  const clip = updateClipAnalysis(clipId, {
     status: 'none',
     progress: 0,
-    analysis: undefined,
+    faceStatus: 'none',
+    faceProgress: 0,
+    faceMessage: null,
+    analysis: null,
   });
+  const mediaFileId = clip?.source?.mediaFileId || clip?.mediaFileId;
+  if (clip && mediaFileId && projectFileService.isProjectOpen()) {
+    try {
+      const deleted = await projectFileService.deleteAnalysisRange(
+        mediaFileId,
+        clip.inPoint ?? 0,
+        clip.outPoint ?? clip.duration,
+      );
+      if (!deleted) log.warn('Could not delete persisted clip analysis range', { clipId, mediaFileId });
+    } catch (error) {
+      log.warn('Failed to delete persisted clip analysis range', error);
+    }
+  }
+  triggerTimelineSave();
 }

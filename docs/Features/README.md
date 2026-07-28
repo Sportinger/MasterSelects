@@ -25,7 +25,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 | **Media Generator Tray** | FlashBoard video/image/audio generation embedded in the Media Panel with queue previews and media import |
 | **3D Layers** | Shared-scene 3D layers, camera clips, Gaussian splats, and splat effectors |
 | **Vector Animation** | Lottie and Rive clips with canvas playback, bounce modes, render resolution overrides, keyframed state/data inputs, and export |
-| **Audio** | Timeline-native workstation audio with artifact-backed analysis, spectral editing, mixer, recording, and export parity |
+| **Audio** | Timeline-native workstation audio with artifact-backed analysis, spectral editing, local music-to-MIDI, mixer, recording, and export parity |
 | **Screen Capture** | Browser-picker screen/window/tab recording with audio mixing, durable recovery, and optional timeline placement |
 | **Live Inputs** | Parallel screen, camera/capture-device, and composition-feedback sources as timeline clips |
 | **Project Storage** | `project.json` source of truth, RAW-copy-first media flow, autosave, relink, backups |
@@ -83,6 +83,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 |---|---|
 | [Landing Page](./Landing-Page.md) | Dev-only front page concept, separate URL strategy, and current landing/editor split |
 | [AI Integration](./AI-Integration.md) | OpenAI/Cloud and Lemonade chat, 86 exported model tools, segmentation, transcription, and bridge behavior |
+| [MuScriptor Music-to-MIDI](./MuScriptor.md) | Local Native Helper audio-to-MIDI transcription, model setup, instrument mapping, and atomic timeline commit |
 | [Credit Claims](./Credit-Claims.md) | Cloudflare-backed reward links for manually granted hosted credits |
 | [Guided Action Runtime Plan](./Guided-Action-Runtime-Plan.md) | Target architecture for AI action replay, interactive tutorials, guided workflows, and parallel implementation workstreams |
 | [FlashBoard](./FlashBoard.md) | Media Panel generation tray for video, image, speech, and music generation |
@@ -104,7 +105,7 @@ State             Zustand with modular timeline and media slices
 Rendering         WebGPU + WGSL + shared-scene 3D runtime
 Media             MediaBunny, WebCodecs, HTML media fallback paths
 Audio             Web Audio API, artifact-backed analysis, spectral display, clip/track/master FX, recording
-AI                OpenAI/Cloud chat, local Lemonade chat, Kie.ai, hosted ElevenLabs/Suno, EvoLink, PiAPI-compatible catalog paths, SAM2, MatAnyone2
+AI                OpenAI/Cloud chat, local Lemonade chat, Kie.ai, hosted ElevenLabs/Suno, EvoLink, PiAPI-compatible catalog paths, SAM2, MatAnyone2, MuScriptor
 Persistence       File System Access API, project-local RAW copies, IndexedDB handle/cache storage
 Native Helper     Rust service with HTTP/WebSocket bridge, yt-dlp, helper-backed jobs
 ```

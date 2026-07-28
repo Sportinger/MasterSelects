@@ -634,6 +634,10 @@ class ProjectFileService {
     return artifactStorageDelegates.deleteAnalysis(this.artifactStorageContext, mediaId);
   }
 
+  async deleteAnalysisRange(mediaId: string, inPoint: number, outPoint: number): Promise<boolean> {
+    return artifactStorageDelegates.deleteAnalysisRange(this.artifactStorageContext, mediaId, inPoint, outPoint);
+  }
+
   // ============================================
   // TRANSCRIPT SERVICE DELEGATION
   // ============================================

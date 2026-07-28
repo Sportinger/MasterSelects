@@ -27,6 +27,8 @@ export function AnalysisPanel() {
   const analysis = selectedClip?.analysis;
   const analysisStatus = selectedClip?.analysisStatus ?? 'none';
   const analysisProgress = selectedClip?.analysisProgress ?? 0;
+  const faceAnalysisStatus = selectedClip?.faceAnalysisStatus ?? 'none';
+  const faceAnalysisMessage = selectedClip?.faceAnalysisMessage;
 
   // Calculate summary stats
   const stats = useMemo(() => {
@@ -55,6 +57,7 @@ export function AnalysisPanel() {
       maxFocus: Math.round(maxFocus * 100),
       maxMotion: Math.round(maxMotion * 100),
       totalFaces,
+      uniquePeople: analysis.faceAnalysis?.people.length ?? 0,
       bestFocusTime: bestFocusStart,
       frameCount: frames.length,
     };
@@ -110,7 +113,7 @@ export function AnalysisPanel() {
     if (!selectedClipId) return;
 
     const { clearClipAnalysis } = await import('../../services/clipAnalyzer');
-    clearClipAnalysis(selectedClipId);
+    await clearClipAnalysis(selectedClipId);
   }, [selectedClipId]);
 
   // Render empty state
@@ -167,7 +170,7 @@ export function AnalysisPanel() {
         )}
         {analysisStatus === 'error' && (
           <span className="analysis-status error">
-            Error
+            Error: {faceAnalysisMessage || 'Analysis failed'}
           </span>
         )}
       </div>
@@ -309,10 +312,18 @@ export function AnalysisPanel() {
           </div>
 
           <div className="stat-section">
-            <h3>Faces</h3>
+            <h3>Faces · YuNet + SFace</h3>
             <div className="stat-row">
-              <span className="stat-label">Detected</span>
-              <span className="stat-value">{stats.totalFaces} total</span>
+              <span className="stat-label">Anonymous people</span>
+              <span className="stat-value">{stats.uniquePeople}</span>
+            </div>
+            <div className="stat-row">
+              <span className="stat-label">Sample observations</span>
+              <span className="stat-value">{stats.totalFaces}</span>
+            </div>
+            <div className="stat-row">
+              <span className="stat-label">Module</span>
+              <span className="stat-value">{faceAnalysisStatus}</span>
             </div>
           </div>
         </div>

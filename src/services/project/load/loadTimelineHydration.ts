@@ -12,6 +12,7 @@ import type { ProjectComposition, ProjectFile } from '../../projectFileService';
 import type { LabelColor } from '../../../stores/mediaStore/types';
 import type {
   AnalysisStatus,
+  ClipAnalysis,
   ClipMask,
   CompositionTimelineData,
   Effect,
@@ -20,6 +21,10 @@ import type {
   TranscriptStatus,
 } from '../../../types';
 import { calcRangeCoverage } from './loadMediaCacheHydration';
+import {
+  normalizePersistedFaceStatus,
+  sanitizePersistedFaceAnalysis,
+} from '../../faceAnalysis/faceAnalysisPersistence';
 
 const log = Logger.create('ProjectSync');
 
@@ -179,7 +184,13 @@ export function convertProjectCompositionToStore(
         audioState: t.audioState ? structuredClone(t.audioState) : undefined,
         midiInstrument: t.midiInstrument ? structuredClone(t.midiInstrument) : undefined,
       })),
-      clips: pc.clips.map((c) => ({
+      clips: pc.clips.map((c) => {
+        const analysis = sanitizePersistedFaceAnalysis(c.analysis as ClipAnalysis | undefined);
+        const faceAnalysisStatus = normalizePersistedFaceStatus(
+          c.faceAnalysisStatus as AnalysisStatus | undefined,
+          analysis,
+        );
+        return {
         id: c.id,
         trackId: c.trackId,
         name: c.name || '',
@@ -300,11 +311,14 @@ export function convertProjectCompositionToStore(
         is3D: c.is3D,
         transcript: c.transcript,
         transcriptStatus: c.transcriptStatus as TranscriptStatus | undefined,
-        analysis: c.analysis,
+        analysis,
         analysisStatus: c.analysisStatus as AnalysisStatus | undefined,
+        faceAnalysisStatus,
+        faceAnalysisMessage: faceAnalysisStatus === 'error' ? c.faceAnalysisMessage : undefined,
         sceneDescriptions: c.sceneDescriptions,
         sceneDescriptionStatus: c.sceneDescriptionStatus as SceneDescriptionStatus | undefined,
-      })),
+        };
+      }),
       playheadPosition: viewState?.playheadPosition ?? 0,
       duration: pc.duration,
       zoom: viewState?.zoom ?? 1,

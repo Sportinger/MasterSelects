@@ -3,24 +3,17 @@
 use serde::{Deserialize, Serialize};
 
 /// Incoming commands from browser
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(tag = "cmd", rename_all = "snake_case")]
 pub enum Command {
     /// Authenticate with token
-    Auth {
-        id: String,
-        token: String,
-    },
+    Auth { id: String, token: String },
 
     /// Get system info
-    Info {
-        id: String,
-    },
+    Info { id: String },
 
     /// Ping for connection keepalive
-    Ping {
-        id: String,
-    },
+    Ping { id: String },
 
     /// Register a connected browser client with the helper
     RegisterClient {
@@ -62,16 +55,10 @@ pub enum Command {
     },
 
     /// List available formats for a video URL
-    ListFormats {
-        id: String,
-        url: String,
-    },
+    ListFormats { id: String, url: String },
 
     /// Get a file from local filesystem (for serving downloads)
-    GetFile {
-        id: String,
-        path: String,
-    },
+    GetFile { id: String, path: String },
 
     /// Locate a file by name in common directories
     Locate {
@@ -83,7 +70,6 @@ pub enum Command {
     },
 
     // ── File System Commands (for project persistence in Firefox) ──
-
     /// Write data to a file (text or base64-encoded binary)
     WriteFile {
         id: String,
@@ -104,10 +90,7 @@ pub enum Command {
     },
 
     /// List directory contents
-    ListDir {
-        id: String,
-        path: String,
-    },
+    ListDir { id: String, path: String },
 
     /// Delete a file or directory
     Delete {
@@ -119,10 +102,7 @@ pub enum Command {
     },
 
     /// Check if a path exists
-    Exists {
-        id: String,
-        path: String,
-    },
+    Exists { id: String, path: String },
 
     /// Rename or move a file/directory
     Rename {
@@ -132,10 +112,7 @@ pub enum Command {
     },
 
     /// Grant access to a path the browser already persisted from a user-picked project
-    GrantPath {
-        id: String,
-        path: String,
-    },
+    GrantPath { id: String, path: String },
 
     /// Open a native OS folder picker dialog
     PickFolder {
@@ -149,7 +126,6 @@ pub enum Command {
     },
 
     // ── MatAnyone2 AI Video Matting Commands ──
-
     /// Check MatAnyone2 environment and setup status
     MatAnyoneStatus { id: String },
 
@@ -186,6 +162,53 @@ pub enum Command {
 
     /// Uninstall MatAnyone2 (remove venv, models, uv)
     MatAnyoneUninstall { id: String },
+
+    // ── MuScriptor local music transcription commands ──
+    /// Check the isolated MuScriptor environment, model cache, and sidecar.
+    MuscriptorStatus { id: String },
+
+    /// Install the pinned MuScriptor source into its provider-specific venv.
+    MuscriptorSetup { id: String },
+
+    /// Download one gated HuggingFace model variant into the local cache.
+    MuscriptorDownloadModel {
+        id: String,
+        #[serde(default = "default_muscriptor_variant")]
+        variant: String,
+        /// Transient credential. It is passed only to the download subprocess.
+        #[serde(default)]
+        hf_token: Option<String>,
+    },
+
+    /// Start the persistent Python sidecar and load a cached model.
+    MuscriptorStart {
+        id: String,
+        #[serde(default = "default_muscriptor_variant")]
+        variant: String,
+        #[serde(default)]
+        device: Option<String>,
+    },
+
+    /// Stop the persistent MuScriptor sidecar.
+    MuscriptorStop { id: String },
+
+    /// Transcribe an audio file and stream progress before the terminal result.
+    MuscriptorTranscribe {
+        id: String,
+        audio_path: String,
+        #[serde(default)]
+        instruments: Option<Vec<String>>,
+    },
+
+    /// Cancel one running transcription job.
+    MuscriptorCancel { id: String, job_id: String },
+
+    /// Stop MuScriptor and remove only its provider-specific data directory.
+    MuscriptorUninstall { id: String },
+}
+
+fn default_muscriptor_variant() -> String {
+    "small".to_string()
 }
 
 /// Response types
@@ -258,20 +281,32 @@ impl Response {
 
     /// Progress response for setup/process steps with step name, percent, and message
     pub fn setup_progress(id: impl Into<String>, step: &str, percent: f32, message: &str) -> Self {
+        // Setup implementations use either fractions or percentages. Normalize
+        // both forms at the protocol edge and never emit values outside 0..100.
+        let normalized = if percent <= 1.0 {
+            percent * 100.0
+        } else {
+            percent
+        };
         Response::Ok(OkResponse {
             id: id.into(),
             ok: true,
             data: serde_json::json!({
                 "type": "progress",
                 "step": step,
-                "percent": percent,
+                "percent": normalized.clamp(0.0, 100.0),
                 "message": message
             }),
         })
     }
 
     /// Progress response for download percent with speed and eta
-    pub fn download_progress(id: impl Into<String>, percent: u8, speed: Option<&str>, eta: Option<&str>) -> Self {
+    pub fn download_progress(
+        id: impl Into<String>,
+        percent: u8,
+        speed: Option<&str>,
+        eta: Option<&str>,
+    ) -> Self {
         let mut data = serde_json::json!({ "type": "progress", "percent": percent });
         if let Some(s) = speed {
             data["speed"] = serde_json::json!(s);
@@ -303,7 +338,83 @@ pub mod error_codes {
     pub const ALREADY_EXISTS: &str = "ALREADY_EXISTS";
     pub const MATANYONE_NOT_INSTALLED: &str = "MATANYONE_NOT_INSTALLED";
     pub const MATANYONE_SETUP_FAILED: &str = "MATANYONE_SETUP_FAILED";
+    pub const MATANYONE_GPU_REQUIRED: &str = "MATANYONE_GPU_REQUIRED";
     pub const MATANYONE_NOT_RUNNING: &str = "MATANYONE_NOT_RUNNING";
     pub const MATANYONE_INFERENCE_FAILED: &str = "MATANYONE_INFERENCE_FAILED";
     pub const PYTHON_NOT_FOUND: &str = "PYTHON_NOT_FOUND";
+    pub const MUSCRIPTOR_NOT_INSTALLED: &str = "MUSCRIPTOR_NOT_INSTALLED";
+    pub const MUSCRIPTOR_SETUP_FAILED: &str = "MUSCRIPTOR_SETUP_FAILED";
+    pub const MUSCRIPTOR_MODEL_DOWNLOAD_FAILED: &str = "MUSCRIPTOR_MODEL_DOWNLOAD_FAILED";
+    pub const MUSCRIPTOR_NOT_RUNNING: &str = "MUSCRIPTOR_NOT_RUNNING";
+    pub const MUSCRIPTOR_TRANSCRIPTION_FAILED: &str = "MUSCRIPTOR_TRANSCRIPTION_FAILED";
+}
+
+impl Command {
+    /// Stable log-safe command name. Payloads are deliberately omitted because
+    /// auth and model-download commands can carry credentials.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Auth { .. } => "auth",
+            Self::Info { .. } => "info",
+            Self::Ping { .. } => "ping",
+            Self::RegisterClient { .. } => "register_client",
+            Self::AiToolResult { .. } => "ai_tool_result",
+            Self::DownloadYoutube { .. } => "download_youtube",
+            Self::Download { .. } => "download",
+            Self::ListFormats { .. } => "list_formats",
+            Self::GetFile { .. } => "get_file",
+            Self::Locate { .. } => "locate",
+            Self::WriteFile { .. } => "write_file",
+            Self::CreateDir { .. } => "create_dir",
+            Self::ListDir { .. } => "list_dir",
+            Self::Delete { .. } => "delete",
+            Self::Exists { .. } => "exists",
+            Self::Rename { .. } => "rename",
+            Self::GrantPath { .. } => "grant_path",
+            Self::PickFolder { .. } => "pick_folder",
+            Self::MatAnyoneStatus { .. } => "matanyone_status",
+            Self::MatAnyoneSetup { .. } => "matanyone_setup",
+            Self::MatAnyoneDownloadModel { .. } => "matanyone_download_model",
+            Self::MatAnyoneStart { .. } => "matanyone_start",
+            Self::MatAnyoneStop { .. } => "matanyone_stop",
+            Self::MatAnyoneMatte { .. } => "matanyone_matte",
+            Self::MatAnyoneCancel { .. } => "matanyone_cancel",
+            Self::MatAnyoneUninstall { .. } => "matanyone_uninstall",
+            Self::MuscriptorStatus { .. } => "muscriptor_status",
+            Self::MuscriptorSetup { .. } => "muscriptor_setup",
+            Self::MuscriptorDownloadModel { .. } => "muscriptor_download_model",
+            Self::MuscriptorStart { .. } => "muscriptor_start",
+            Self::MuscriptorStop { .. } => "muscriptor_stop",
+            Self::MuscriptorTranscribe { .. } => "muscriptor_transcribe",
+            Self::MuscriptorCancel { .. } => "muscriptor_cancel",
+            Self::MuscriptorUninstall { .. } => "muscriptor_uninstall",
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn setup_progress_normalizes_fraction_to_percent() {
+        let value =
+            serde_json::to_value(Response::setup_progress("x", "setup", 0.42, "ok")).unwrap();
+        assert_eq!(value["percent"], 42.0);
+    }
+
+    #[test]
+    fn muscriptor_token_is_deserialized_without_being_required() {
+        let cmd: Command =
+            serde_json::from_str(r#"{"cmd":"muscriptor_download_model","id":"x"}"#).unwrap();
+        match cmd {
+            Command::MuscriptorDownloadModel {
+                variant, hf_token, ..
+            } => {
+                assert_eq!(variant, "small");
+                assert!(hf_token.is_none());
+            }
+            _ => panic!("unexpected command"),
+        }
+    }
 }

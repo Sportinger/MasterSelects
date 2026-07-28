@@ -20,6 +20,8 @@ import json
 import logging
 import os
 import re
+import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -28,9 +30,6 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any, Optional
 
-# ---------------------------------------------------------------------------
-# Logging — write to stderr so the Rust parent process can capture it.
-# ---------------------------------------------------------------------------
 logging.basicConfig(
     stream=sys.stderr,
     level=logging.INFO,
@@ -39,23 +38,57 @@ logging.basicConfig(
 )
 log = logging.getLogger("matanyone2_server")
 
-# ---------------------------------------------------------------------------
-# Global state
-# ---------------------------------------------------------------------------
 model: Any = None
-model_device: str = "cpu"
+model_device: str = "cuda"
 gpu_name: str = "N/A"
 cuda_version: str = "N/A"
 models_dir: str = ""
 
-# Job registry: job_id -> JobInfo dict
-# Each job contains: status, current_frame, total_frames, foreground_path,
-# alpha_path, message, cancel_event, thread
 jobs: dict[str, dict[str, Any]] = {}
 jobs_lock = threading.Lock()
 
-# Serialize GPU access — only one inference job at a time.
+TERMINAL_JOB_STATUSES = frozenset({"complete", "error", "cancelled"})
+TERMINAL_JOB_TTL_SECONDS = 30 * 60
+MAX_TERMINAL_JOBS = 32
+
 inference_lock = threading.Lock()
+
+
+def _mark_job_terminal_locked(
+    job: dict[str, Any], status: str, message: Optional[str] = None
+) -> None:
+    """Mark a job terminal while `jobs_lock` is held."""
+    job["status"] = status
+    job["finished_at"] = time.monotonic()
+    job["thread"] = None
+    if message is not None:
+        job["message"] = message
+
+
+def _prune_terminal_jobs_locked(now: Optional[float] = None) -> int:
+    """Bound retained terminal jobs by age and count while `jobs_lock` is held."""
+    current_time = time.monotonic() if now is None else now
+    terminal = [
+        (job_id, float(job.get("finished_at") or current_time))
+        for job_id, job in jobs.items()
+        if job.get("status") in TERMINAL_JOB_STATUSES
+    ]
+
+    remove_ids = {
+        job_id
+        for job_id, finished_at in terminal
+        if current_time - finished_at >= TERMINAL_JOB_TTL_SECONDS
+    }
+    retained = sorted(
+        (item for item in terminal if item[0] not in remove_ids),
+        key=lambda item: item[1],
+        reverse=True,
+    )
+    remove_ids.update(job_id for job_id, _ in retained[MAX_TERMINAL_JOBS:])
+
+    for job_id in remove_ids:
+        jobs.pop(job_id, None)
+    return len(remove_ids)
 
 
 def _safe_filename_component(value: str, fallback: str) -> str:
@@ -114,7 +147,7 @@ def _read_grayscale_image(path: str) -> Any:
 # Model loading
 # ---------------------------------------------------------------------------
 def load_model(models_directory: str) -> bool:
-    """Load the MatAnyone2 model into GPU (or CPU fallback).
+    """Load the MatAnyone2 model into an NVIDIA CUDA GPU.
 
     Returns True on success, False on failure.
     """
@@ -123,16 +156,17 @@ def load_model(models_directory: str) -> bool:
     try:
         import torch
 
-        if torch.cuda.is_available():
-            model_device = "cuda"
-            gpu_name = torch.cuda.get_device_name(0)
-            cuda_version = torch.version.cuda or "unknown"
-            log.info("CUDA available: %s (CUDA %s)", gpu_name, cuda_version)
-        else:
-            model_device = "cpu"
-            gpu_name = "N/A (CPU mode)"
-            cuda_version = "N/A"
-            log.warning("CUDA not available — running on CPU (will be slow)")
+        if not torch.cuda.is_available():
+            log.error(
+                "MatAnyone2 requires an accessible NVIDIA CUDA GPU; "
+                "CPU execution is disabled in MasterSelects."
+            )
+            return False
+
+        model_device = "cuda"
+        gpu_name = torch.cuda.get_device_name(0)
+        cuda_version = torch.version.cuda or "unknown"
+        log.info("CUDA available: %s (CUDA %s)", gpu_name, cuda_version)
 
     except ImportError:
         log.error("PyTorch is not installed. Cannot proceed.")
@@ -140,18 +174,31 @@ def load_model(models_directory: str) -> bool:
 
     try:
         from matanyone2 import MatAnyone2
+        from omegaconf import OmegaConf
 
         model_path = Path(models_directory)
         log.info("Loading MatAnyone2 model from %s ...", model_path)
 
-        if model_path.exists():
-            model = MatAnyone2.from_pretrained(str(model_path))
-        else:
-            log.warning(
-                "Models directory %s does not exist yet, falling back to HuggingFace repo",
-                model_path,
+        config_path = model_path / "config.json"
+        weights_path = model_path / "model.safetensors"
+        if not config_path.is_file() or not weights_path.is_file():
+            raise FileNotFoundError(
+                "Local MatAnyone2 config.json/model.safetensors are missing; "
+                "download the model through MasterSelects first"
             )
-            model = MatAnyone2.from_pretrained("PeiqingYang/MatAnyone2")
+
+        # The final safetensors checkpoint already contains both encoders.
+        # Upstream defaults to downloading ResNet18+50 from torch hub before
+        # immediately overwriting them, which breaks offline startup.
+        config_data = json.loads(config_path.read_text(encoding="utf-8"))
+        cfg = OmegaConf.create(config_data["cfg"])
+        cfg.model.pretrained_resnet = False
+        model = MatAnyone2.from_pretrained(
+            str(model_path),
+            cfg=cfg,
+            single_object=bool(config_data.get("single_object", True)),
+            local_files_only=True,
+        )
         model = model.to(model_device)
         log.info("Model loaded successfully on %s", model_device)
         return True
@@ -181,8 +228,9 @@ def _run_inference(job_id: str, video_path: str, mask_path: str,
     cancel_event: threading.Event = job["cancel_event"]
 
     video_name = _safe_filename_component(Path(video_path).stem, f"matte_{job_id}")
-    fg_output = os.path.join(output_dir, f"{video_name}_foreground.mp4")
-    alpha_output = os.path.join(output_dir, f"{video_name}_alpha.mp4")
+    # VP9 WebM preserves an actual alpha plane; MP4/mp4v silently discarded it.
+    fg_output = os.path.join(output_dir, f"{video_name}_foreground.webm")
+    alpha_output = os.path.join(output_dir, f"{video_name}_alpha.webm")
 
     try:
         os.makedirs(output_dir, exist_ok=True)
@@ -190,12 +238,11 @@ def _run_inference(job_id: str, video_path: str, mask_path: str,
         # ---- Acquire the GPU lock (one job at a time) ----
         log.info("[%s] Waiting for GPU lock ...", job_id)
         inference_lock.acquire()
-        if cancel_event.is_set():
-            _set_job_cancelled(job_id)
-            return
-        log.info("[%s] GPU lock acquired. Starting inference.", job_id)
-
         try:
+            if cancel_event.is_set():
+                _set_job_cancelled(job_id)
+                return
+            log.info("[%s] GPU lock acquired. Starting inference.", job_id)
             _do_inference(
                 job_id, video_path, mask_path, output_dir,
                 fg_output, alpha_output,
@@ -207,8 +254,8 @@ def _run_inference(job_id: str, video_path: str, mask_path: str,
     except Exception as exc:
         log.error("[%s] Inference failed: %s", job_id, exc, exc_info=True)
         with jobs_lock:
-            job["status"] = "error"
-            job["message"] = _exception_message(exc)
+            _mark_job_terminal_locked(job, "error", _exception_message(exc))
+            _prune_terminal_jobs_locked()
 
 
 def _exception_message(exc: BaseException) -> str:
@@ -222,68 +269,12 @@ def _do_inference(job_id: str, video_path: str, mask_path: str,
                   output_dir: str, fg_output: str, alpha_output: str,
                   start_frame: Optional[int], end_frame: Optional[int],
                   cancel_event: threading.Event) -> None:
-    """Core inference logic. Tries the high-level API first, then falls back
-    to manual frame-by-frame processing."""
+    """Run the official InferenceCore state machine frame by frame.
 
-    job = jobs[job_id]
-
-    # ------------------------------------------------------------------
-    # Attempt 1: High-level API, if this package version exposes one.
-    # ------------------------------------------------------------------
-    try:
-        log.info("[%s] Trying high-level MatAnyone2 API ...", job_id)
-
-        with jobs_lock:
-            job["status"] = "processing"
-
-        # Different versions of the library may expose different names.
-        process_fn = (
-            getattr(model, "process", None)
-            or getattr(model, "run", None)
-        )
-        if process_fn is None:
-            raise AttributeError("No high-level API found on model object")
-
-        kwargs: dict[str, Any] = {
-            "video_path": video_path,
-            "mask_path": mask_path,
-            "output_dir": output_dir,
-        }
-        # Only pass frame range if explicitly specified.
-        if start_frame is not None:
-            kwargs["start_frame"] = start_frame
-        if end_frame is not None:
-            kwargs["end_frame"] = end_frame
-
-        result = process_fn(**kwargs)
-
-        # Determine output paths from result or use defaults.
-        if isinstance(result, dict):
-            fg_output = result.get("foreground_path", fg_output)
-            alpha_output = result.get("alpha_path", alpha_output)
-
-        if not os.path.isfile(fg_output) or not os.path.isfile(alpha_output):
-            raise FileNotFoundError(
-                f"Expected outputs not found: {fg_output}, {alpha_output}"
-            )
-
-        with jobs_lock:
-            job["status"] = "complete"
-            job["foreground_path"] = fg_output
-            job["alpha_path"] = alpha_output
-        log.info("[%s] High-level API completed successfully.", job_id)
-        return
-
-    except Exception as api_exc:
-        log.warning(
-            "[%s] High-level API failed (%s). Falling back to manual "
-            "frame-by-frame processing.",
-            job_id, api_exc,
-        )
-
-    # ------------------------------------------------------------------
-    # Attempt 2: Manual frame-by-frame processing with InferenceCore.
-    # ------------------------------------------------------------------
+    The upstream convenience method buffers the complete video and cannot
+    expose cancellation/progress. This mirrors its warm-up/step semantics but
+    streams frames into VP9 encoders instead.
+    """
     _manual_frame_processing(
         job_id, video_path, mask_path, fg_output, alpha_output,
         start_frame, end_frame, cancel_event,
@@ -335,19 +326,9 @@ def _manual_frame_processing_core(
     _, mask_binary = cv2.threshold(mask_img, 128, 255, cv2.THRESH_BINARY)
     mask_tensor = torch.from_numpy(mask_binary.astype(np.float32)).to(model_device)
 
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    fg_writer = cv2.VideoWriter(_opencv_path(fg_output), fourcc, fps, (width, height))
-    alpha_writer = cv2.VideoWriter(
-        _opencv_path(alpha_output),
-        fourcc,
-        fps,
-        (width, height),
-        False,
+    fg_writer, alpha_writer = _open_vp9_writers(
+        fg_output, alpha_output, fps, width, height
     )
-
-    if not fg_writer.isOpened() or not alpha_writer.isOpened():
-        cap.release()
-        raise RuntimeError("Failed to open output video writers")
 
     if actual_start > 0:
         cap.set(cv2.CAP_PROP_POS_FRAMES, actual_start)
@@ -355,16 +336,13 @@ def _manual_frame_processing_core(
     ret, first_frame = cap.read()
     if not ret:
         cap.release()
-        fg_writer.release()
-        alpha_writer.release()
+        _close_encoder(fg_writer, "foreground")
+        _close_encoder(alpha_writer, "alpha")
         raise RuntimeError(f"Cannot read first video frame: {video_path}")
 
     processor = InferenceCore(model, cfg=model.cfg, device=model_device)
     objects = [1]
     n_warmup = 10
-    background_rgb = (
-        np.array([120, 255, 155], dtype=np.float32) / 255.0
-    ).reshape((1, 1, 3))
     frame_index = 0
 
     def prepare_frame(frame_bgr: np.ndarray) -> tuple[np.ndarray, torch.Tensor]:
@@ -381,15 +359,11 @@ def _manual_frame_processing_core(
         pha = mask.unsqueeze(2).float().cpu().numpy()
         pha = np.clip(pha, 0.0, 1.0)
 
-        foreground_rgb = (
-            frame_rgb.astype(np.float32) / 255.0 * pha
-            + background_rgb * (1.0 - pha)
-        )
-        foreground_u8 = np.round(np.clip(foreground_rgb * 255.0, 0, 255)).astype(np.uint8)
+        # Store straight (unpremultiplied) RGB plus an actual alpha plane.
+        rgba_u8 = np.dstack((frame_rgb, np.round(pha[:, :, 0] * 255.0).astype(np.uint8)))
         alpha_u8 = np.round(np.clip(pha[:, :, 0] * 255.0, 0, 255)).astype(np.uint8)
-
-        fg_writer.write(cv2.cvtColor(foreground_u8, cv2.COLOR_RGB2BGR))
-        alpha_writer.write(alpha_u8)
+        fg_writer.stdin.write(rgba_u8.tobytes())
+        alpha_writer.stdin.write(alpha_u8.tobytes())
 
     try:
         first_rgb, first_image = prepare_frame(first_frame)
@@ -433,18 +407,85 @@ def _manual_frame_processing_core(
                 )
     finally:
         cap.release()
-        fg_writer.release()
-        alpha_writer.release()
+        _close_encoder(fg_writer, "foreground")
+        _close_encoder(alpha_writer, "alpha")
 
     if cancel_event.is_set():
         return
 
     with jobs_lock:
-        job["status"] = "complete"
+        _mark_job_terminal_locked(job, "complete")
         job["foreground_path"] = fg_output
         job["alpha_path"] = alpha_output
+        _prune_terminal_jobs_locked()
 
     log.info("[%s] Inference complete. %d frames processed.", job_id, frame_index)
+
+
+def _ffmpeg_executable() -> str:
+    """Use imageio's bundled ffmpeg when available, then fall back to PATH."""
+    try:
+        import imageio_ffmpeg
+
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        executable = shutil.which("ffmpeg")
+        if executable:
+            return executable
+    raise RuntimeError("FFmpeg is required for transparent VP9 WebM output")
+
+
+def _open_vp9_writers(
+    foreground_path: str,
+    alpha_path: str,
+    fps: float,
+    width: int,
+    height: int,
+) -> tuple[subprocess.Popen, subprocess.Popen]:
+    ffmpeg = _ffmpeg_executable()
+    common = [
+        ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+        "-f", "rawvideo", "-video_size", f"{width}x{height}",
+        "-framerate", str(fps),
+    ]
+    foreground = subprocess.Popen(
+        common
+        + [
+            "-pixel_format", "rgba", "-i", "-", "-an",
+            "-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p",
+            "-auto-alt-ref", "0", "-crf", "18", "-b:v", "0",
+            foreground_path,
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+    alpha = subprocess.Popen(
+        common
+        + [
+            "-pixel_format", "gray", "-i", "-", "-an",
+            "-c:v", "libvpx-vp9", "-pix_fmt", "yuv420p",
+            "-crf", "18", "-b:v", "0", alpha_path,
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+    return foreground, alpha
+
+
+def _close_encoder(process: subprocess.Popen, label: str) -> None:
+    if process.stdin and not process.stdin.closed:
+        process.stdin.close()
+    try:
+        return_code = process.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+        raise RuntimeError(f"Timed out finalizing {label} VP9 output")
+    if return_code != 0:
+        stderr = process.stderr.read().decode("utf-8", errors="replace") if process.stderr else ""
+        raise RuntimeError(f"{label} VP9 encoder failed: {stderr.strip()}")
 
 
 def _manual_frame_processing(
@@ -462,8 +503,10 @@ def _manual_frame_processing(
 
 def _set_job_cancelled(job_id: str) -> None:
     with jobs_lock:
-        jobs[job_id]["status"] = "cancelled"
-        jobs[job_id]["message"] = "Job cancelled by user"
+        _mark_job_terminal_locked(
+            jobs[job_id], "cancelled", "Job cancelled by user"
+        )
+        _prune_terminal_jobs_locked()
     log.info("[%s] Job cancelled.", job_id)
 
 
@@ -500,15 +543,19 @@ class MattingHandler(BaseHTTPRequestHandler):
     # ----- Endpoint implementations -----
 
     def _handle_health(self) -> None:
+        with jobs_lock:
+            _prune_terminal_jobs_locked()
+            active_jobs = sum(
+                1 for job in jobs.values()
+                if job["status"] in ("queued", "processing")
+            )
         self._send_json(200, {
             "status": "ready" if model is not None else "model_not_loaded",
             "model_loaded": model is not None,
             "gpu": gpu_name,
             "cuda": cuda_version,
             "device": model_device,
-            "active_jobs": sum(
-                1 for j in jobs.values() if j["status"] == "processing"
-            ),
+            "active_jobs": active_jobs,
         })
 
     def _handle_matte(self) -> None:
@@ -545,6 +592,7 @@ class MattingHandler(BaseHTTPRequestHandler):
         cancel_event = threading.Event()
 
         with jobs_lock:
+            _prune_terminal_jobs_locked()
             jobs[job_id] = {
                 "status": "queued",
                 "current_frame": 0,
@@ -554,6 +602,8 @@ class MattingHandler(BaseHTTPRequestHandler):
                 "message": None,
                 "cancel_event": cancel_event,
                 "thread": None,
+                "created_at": time.monotonic(),
+                "finished_at": None,
             }
 
         worker = threading.Thread(
@@ -575,6 +625,7 @@ class MattingHandler(BaseHTTPRequestHandler):
 
     def _handle_progress(self, job_id: str) -> None:
         with jobs_lock:
+            _prune_terminal_jobs_locked()
             job = jobs.get(job_id)
             if job is None:
                 self._send_json(404, {"error": f"Unknown job: {job_id}"})
@@ -648,13 +699,11 @@ def run_server(port: int, model_dir: str) -> None:
     log.info("  Port:       %d", port)
     log.info("  Models dir: %s", model_dir)
 
-    # Load the model (non-fatal: server starts even if model fails to load,
-    # so the /health endpoint can report the problem).
+    # A model-less process cannot serve requests. Exit so the Rust supervisor
+    # reports startup failure immediately instead of timing out on /health.
     success = load_model(model_dir)
     if not success:
-        log.warning(
-            "Model failed to load. Server will start but /matte will return 503."
-        )
+        raise SystemExit(2)
 
     server = HTTPServer(("127.0.0.1", port), MattingHandler)
     log.info("Listening on http://127.0.0.1:%d", port)

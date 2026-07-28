@@ -164,6 +164,10 @@ export type ClipContextMenuCommandDescriptor =
       canExecute: boolean;
     }
   | {
+      kind: 'music-to-midi';
+      canExecute: boolean;
+    }
+  | {
       kind: 'transcription';
       transcriptStatus?: string | null;
       canExecute: boolean;
@@ -237,6 +241,7 @@ export interface ClipContextMenuCommandExecutionContext {
   generateWaveformForClip: ClipContextMenuAudioAnalysisGenerator;
   generateSpectrogramForClip: ClipContextMenuAudioAnalysisGenerator;
   startClipStemSeparation: ClipContextMenuStemSeparationStarter;
+  openMusicToMidi: (clipId: string) => void;
   toggleThumbnailsEnabled: () => void;
   toggleWaveformsEnabled: () => void;
   setAudioDisplayMode: (mode: ClipContextMenuAudioDisplayMode) => void;

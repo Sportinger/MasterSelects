@@ -170,6 +170,12 @@ export function formatClipInfo(clip: TimelineClip, track: TimelineTrack | undefi
     transitionIn: clip.transitionIn ? { ...clip.transitionIn } : undefined,
     transitionOut: clip.transitionOut ? { ...clip.transitionOut } : undefined,
     hasAnalysis: clip.analysisStatus === 'ready',
+    analysisStatus: clip.analysisStatus ?? 'none',
+    faceAnalysisStatus: clip.faceAnalysisStatus ?? 'none',
+    faceAnalysisProgress: clip.faceAnalysisProgress ?? 0,
+    faceAnalysisError: clip.faceAnalysisStatus === 'error' ? clip.faceAnalysisMessage : undefined,
+    uniquePeople: clip.analysis?.faceAnalysis?.people.length ?? 0,
+    faceObservationCount: clip.analysis?.faceAnalysis?.observationCount ?? 0,
     hasTranscript: clip.transcriptStatus === 'ready' || !!clip.transcript?.length,
     // Transform info
     transform: clip.transform,
@@ -224,6 +230,13 @@ export function getQuickTimelineSummary(): string {
     if (selectedClip) {
       const track = tracks.find(t => t.id === selectedClip.trackId);
       selectedInfo = ` Selected: "${selectedClip.name}" on ${track?.name || 'unknown track'}.`;
+      selectedInfo += ` Face analysis: ${selectedClip.faceAnalysisStatus ?? 'none'}`
+        + (selectedClip.analysis?.faceAnalysis
+          ? ` (${selectedClip.analysis.faceAnalysis.people.length} anonymous people).`
+          : '.');
+      if (selectedClip.faceAnalysisStatus === 'error' && selectedClip.faceAnalysisMessage) {
+        selectedInfo += ` Error: ${selectedClip.faceAnalysisMessage}`;
+      }
       if (selectedCount > 1) {
         selectedInfo = ` ${selectedCount} clips selected, first: "${selectedClip.name}" on ${track?.name || 'unknown track'}.`;
       }

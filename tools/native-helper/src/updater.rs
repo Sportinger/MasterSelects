@@ -9,8 +9,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-const GITHUB_API_RELEASES: &str =
-    "https://api.github.com/repos/Sportinger/MasterSelects/releases";
+const GITHUB_API_RELEASES: &str = "https://api.github.com/repos/Sportinger/MasterSelects/releases";
 const USER_AGENT: &str = "MasterSelects-Helper";
 const TAG_PREFIX: &str = "native-helper-v";
 
@@ -74,9 +73,7 @@ pub fn check_for_update() -> Result<Option<UpdateInfo>> {
 pub fn download_update(url: &str) -> Result<PathBuf> {
     let temp_path = std::env::temp_dir().join("MasterSelects-Helper-update.msi");
 
-    let resp = ureq::get(url)
-        .set("User-Agent", USER_AGENT)
-        .call()?;
+    let resp = ureq::get(url).set("User-Agent", USER_AGENT).call()?;
 
     let mut file = std::fs::File::create(&temp_path)?;
     std::io::copy(&mut resp.into_reader(), &mut file)?;

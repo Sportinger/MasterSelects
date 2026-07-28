@@ -7,7 +7,7 @@ export const analysisToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'getClipAnalysis',
-      description: 'Get the analysis data for a clip (motion, faces, colors, etc.). Returns null if not analyzed.',
+      description: 'Get clip analysis status and summary for motion, focus, brightness, and browser-local YuNet + SFace faces.',
       parameters: {
         type: 'object',
         properties: {
@@ -15,6 +15,25 @@ export const analysisToolDefinitions: ToolDefinition[] = [
             type: 'string',
             description: 'The ID of the clip to get analysis for',
           },
+        },
+        required: ['clipId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getClipFaceAnalysis',
+      description: 'Get anonymous people, appearance time ranges, and optionally normalized YuNet face boxes for a clip. Returns the exact YuNet/SFace module error when analysis failed. Raw SFace embeddings are never exposed.',
+      parameters: {
+        type: 'object',
+        properties: {
+          clipId: { type: 'string', description: 'The video clip ID' },
+          sourceStart: { type: 'number', description: 'Optional source-time range start in seconds' },
+          sourceEnd: { type: 'number', description: 'Optional source-time range end in seconds' },
+          personId: { type: 'string', description: 'Optional anonymous person ID filter returned by this analysis' },
+          includeObservations: { type: 'boolean', description: 'Include sampled boxes and landmarks (default false)' },
+          limit: { type: 'number', description: 'Maximum observations, 1-30 (default 20)' },
         },
         required: ['clipId'],
       },
@@ -92,7 +111,7 @@ export const analysisToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'startClipAnalysis',
-      description: 'Start video analysis (motion, focus, brightness) for a clip. Analysis runs in the background. Check clip details later to see results.',
+      description: 'Start video analysis for motion, focus, brightness, and browser-local YuNet + SFace faces. Poll getClipAnalysis for progress or exact errors.',
       parameters: {
         type: 'object',
         properties: {
@@ -100,6 +119,20 @@ export const analysisToolDefinitions: ToolDefinition[] = [
             type: 'string',
             description: 'The ID of the clip to analyze',
           },
+        },
+        required: ['clipId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'startClipFaceAnalysis',
+      description: 'Start browser-local YuNet face detection plus SFace anonymous identity grouping for a video clip. No native helper or cloud upload is used. Poll getClipFaceAnalysis for progress, results, or exact errors.',
+      parameters: {
+        type: 'object',
+        properties: {
+          clipId: { type: 'string', description: 'The video clip ID to analyze' },
         },
         required: ['clipId'],
       },

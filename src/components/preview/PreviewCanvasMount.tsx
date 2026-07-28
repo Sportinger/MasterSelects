@@ -10,6 +10,7 @@ import type { MediaFile } from '../../stores/mediaStore';
 import type { PreviewQuality } from '../../stores/settingsStore';
 import type { SceneCameraConfig, SceneViewport } from '../../engine/scene/types';
 import { MaskOverlay } from './MaskOverlay';
+import { FaceAnalysisOverlay } from './FaceAnalysisOverlay';
 import { PreviewBottomControls } from './PreviewBottomControls';
 import { SAM2Overlay } from './SAM2Overlay';
 import { SceneObjectOverlay } from './SceneObjectOverlay';
@@ -280,6 +281,12 @@ export function PreviewCanvasMount({
               )}
               {isEditableSource && sam2Active && (
                 <SAM2Overlay
+                  canvasWidth={effectiveResolution.width}
+                  canvasHeight={effectiveResolution.height}
+                />
+              )}
+              {isEditableSource && selectedClip?.analysis?.faceAnalysis && (
+                <FaceAnalysisOverlay
                   canvasWidth={effectiveResolution.width}
                   canvasHeight={effectiveResolution.height}
                 />

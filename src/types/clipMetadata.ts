@@ -24,6 +24,54 @@ export type TranscriptStatus = 'none' | 'transcribing' | 'ready' | 'error';
 // Analysis types for focus/motion/face detection
 export type AnalysisStatus = 'none' | 'analyzing' | 'ready' | 'error';
 
+export type FaceAnalysisStatus = AnalysisStatus;
+export type FaceAnalysisBackend = 'webgpu' | 'wasm' | 'cached';
+
+export interface FaceAnalysisPoint {
+  x: number; // Normalized source coordinate (0-1)
+  y: number; // Normalized source coordinate (0-1)
+}
+
+export interface FaceAnalysisBox extends FaceAnalysisPoint {
+  width: number;  // Normalized source width (0-1)
+  height: number; // Normalized source height (0-1)
+}
+
+export interface FaceFrameDetection {
+  id: string;
+  personId: string;
+  label: string;
+  confidence: number;
+  box: FaceAnalysisBox;
+  landmarks: FaceAnalysisPoint[];
+}
+
+export interface FaceAppearanceRange {
+  start: number; // Source time in seconds
+  end: number;   // Source time in seconds
+}
+
+export interface FacePersonSummary {
+  id: string;
+  label: string;
+  firstSeen: number;
+  lastSeen: number;
+  sampleCount: number;
+  averageConfidence: number;
+  maxConfidence: number;
+  appearances: FaceAppearanceRange[];
+}
+
+export interface FaceAnalysisResult {
+  schemaVersion: 1;
+  modelVersion: string;
+  detector: 'YuNet';
+  recognizer: 'SFace';
+  backend: FaceAnalysisBackend;
+  observationCount: number;
+  people: FacePersonSummary[];
+}
+
 export interface FrameAnalysisData {
   timestamp: number;      // Time in seconds (relative to clip source)
   motion: number;         // 0-1 overall motion score (legacy, kept for compatibility)
@@ -32,12 +80,15 @@ export interface FrameAnalysisData {
   focus: number;          // 0-1 focus/sharpness score
   brightness: number;     // 0-1 brightness/luminance score
   faceCount: number;      // Number of faces detected
+  faces?: FaceFrameDetection[]; // YuNet boxes + anonymous SFace identity groups
+  faceModelVersion?: string; // Cache compatibility marker
   isSceneCut?: boolean;   // True if this frame is likely a scene cut
 }
 
 export interface ClipAnalysis {
   frames: FrameAnalysisData[];
   sampleInterval: number; // Milliseconds between samples
+  faceAnalysis?: FaceAnalysisResult;
 }
 
 /** Segment-based thumbnails for nested composition clips */

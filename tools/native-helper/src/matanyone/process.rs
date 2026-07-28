@@ -16,16 +16,14 @@ const PORT_RANGE_START: u16 = 9878;
 const PORT_RANGE_END: u16 = 9899;
 
 /// Default timeout when waiting for the server to become ready (seconds).
-const DEFAULT_READY_TIMEOUT_SECS: u64 = 60;
+const DEFAULT_READY_TIMEOUT_SECS: u64 = 300;
 
 /// Interval between health-check polls while waiting for readiness (milliseconds).
 const HEALTH_POLL_INTERVAL_MS: u64 = 500;
 
 /// Grace period before forcefully killing the child process (seconds).
+#[cfg(unix)]
 const GRACEFUL_STOP_TIMEOUT_SECS: u64 = 5;
-
-/// Maximum number of stderr lines to collect for diagnostics.
-const MAX_STDERR_LINES: usize = 40;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -75,8 +73,15 @@ impl MatAnyoneProcess {
         server_script: &Path,
         models_dir: &Path,
     ) -> Result<u16, String> {
-        // Prevent double-start.
-        if self.status == ProcessStatus::Starting || self.status == ProcessStatus::Ready {
+        // A cached Ready state is only trustworthy while both the owned child
+        // and its HTTP health endpoint are alive. Reconcile before taking the
+        // double-start fast path so a crashed sidecar can be restarted.
+        if self.status == ProcessStatus::Ready {
+            if self.reconcile_status().await == ProcessStatus::Ready {
+                return Ok(self.port);
+            }
+            warn!("Discarding stale MatAnyone2 Ready state before restart");
+        } else if self.status == ProcessStatus::Starting {
             return Ok(self.port);
         }
 
@@ -109,13 +114,21 @@ impl MatAnyoneProcess {
             .kill_on_drop(true);
         hide_console_window(&mut command);
 
-        let child = command.spawn().map_err(|e| {
+        let mut child = command.spawn().map_err(|e| {
             let msg = format!("Failed to spawn Python process: {e}");
             error!("{}", msg);
             self.status = ProcessStatus::Error(msg.clone());
             msg
         })?;
 
+        // Drain both pipes immediately. Model imports can be verbose enough to
+        // fill an OS pipe and otherwise deadlock startup before `/health`.
+        if let Some(stderr) = child.stderr.take() {
+            tokio::spawn(drain_sidecar_output(stderr, true));
+        }
+        if let Some(stdout) = child.stdout.take() {
+            tokio::spawn(drain_sidecar_output(stdout, false));
+        }
         self.child = Some(child);
         self.port = port;
 
@@ -130,8 +143,6 @@ impl MatAnyoneProcess {
             }
             Err(e) => {
                 error!("MatAnyone2 server failed to become ready: {}", e);
-                // Collect stderr for diagnostics before tearing down.
-                self.collect_stderr_diagnostic().await;
                 let _ = self.stop().await;
                 self.status = ProcessStatus::Error(e.clone());
                 Err(e)
@@ -182,12 +193,52 @@ impl MatAnyoneProcess {
         self.port
     }
 
+    /// Reconcile the cached lifecycle status with the owned child and `/health`.
+    ///
+    /// Status callers use this before reporting `Ready`, and `start` uses it
+    /// before returning an existing port. An exited or unhealthy child is
+    /// reaped and converted to an actionable error state so the next start can
+    /// recover instead of returning a dead port indefinitely.
+    pub async fn reconcile_status(&mut self) -> ProcessStatus {
+        if !matches!(self.status, ProcessStatus::Ready | ProcessStatus::Starting) {
+            return self.status.clone();
+        }
+
+        if self.has_crashed().await {
+            return self.status.clone();
+        }
+
+        if self.status == ProcessStatus::Ready && !self.health_check().await {
+            let port = self.port;
+            let _ = self.stop().await;
+            self.status = ProcessStatus::Error(format!(
+                "MatAnyone2 sidecar on port {port} stopped responding to health checks"
+            ));
+        }
+
+        self.status.clone()
+    }
+
     /// Poll `/health` every 500 ms until the server reports ready or
     /// `timeout_secs` elapses.
-    pub async fn wait_ready(&self, timeout_secs: u64) -> Result<(), String> {
+    pub async fn wait_ready(&mut self, timeout_secs: u64) -> Result<(), String> {
         let deadline = Instant::now() + Duration::from_secs(timeout_secs);
 
         while Instant::now() < deadline {
+            if let Some(child) = self.child.as_mut() {
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        self.child = None;
+                        return Err(format!(
+                            "MatAnyone2 sidecar exited during startup: {status}"
+                        ));
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        return Err(format!("Failed to inspect MatAnyone2 sidecar: {error}"));
+                    }
+                }
+            }
             // If the port is not open yet the server may still be loading models.
             if !is_port_open(self.port) {
                 tokio::time::sleep(Duration::from_millis(HEALTH_POLL_INTERVAL_MS)).await;
@@ -211,7 +262,16 @@ impl MatAnyoneProcess {
     pub async fn has_crashed(&mut self) -> bool {
         let child = match self.child.as_mut() {
             Some(c) => c,
-            None => return self.status != ProcessStatus::Stopped,
+            None => {
+                if matches!(self.status, ProcessStatus::Ready | ProcessStatus::Starting) {
+                    self.port = 0;
+                    self.status = ProcessStatus::Error(
+                        "MatAnyone2 sidecar process handle is missing".to_string(),
+                    );
+                    return true;
+                }
+                return false;
+            }
         };
 
         match child.try_wait() {
@@ -220,6 +280,7 @@ impl MatAnyoneProcess {
                 warn!("{}", msg);
                 self.status = ProcessStatus::Error(msg);
                 self.child = None;
+                self.port = 0;
                 true
             }
             Ok(None) => false, // still running
@@ -227,65 +288,32 @@ impl MatAnyoneProcess {
                 let msg = format!("Failed to check MatAnyone2 process status: {e}");
                 warn!("{}", msg);
                 self.status = ProcessStatus::Error(msg);
+                self.port = 0;
                 true
             }
         }
     }
+}
 
-    /// Read available stderr output from the child for diagnostic logging.
-    ///
-    /// Collects up to [`MAX_STDERR_LINES`] lines using a short timeout so the
-    /// caller is never blocked for long.
-    async fn collect_stderr_diagnostic(&mut self) {
-        let child = match self.child.as_mut() {
-            Some(c) => c,
-            None => return,
-        };
-
-        let stderr = match child.stderr.take() {
-            Some(s) => s,
-            None => return,
-        };
-
-        let mut reader = BufReader::new(stderr);
-        let mut lines_collected: usize = 0;
-
-        // Read lines with a timeout so we don't block forever if the process
-        // is still running and producing output.
-        let collect_future = async {
-            let mut line = String::new();
-            while lines_collected < MAX_STDERR_LINES {
-                line.clear();
-                match reader.read_line(&mut line).await {
-                    Ok(0) => break, // EOF
-                    Ok(_) => {
-                        let trimmed = line.trim_end();
-                        if !trimmed.is_empty() {
-                            warn!(target: "matanyone_stderr", "{}", trimmed);
-                            lines_collected += 1;
-                        }
-                    }
-                    Err(_) => break,
-                }
-            }
-        };
-
-        // Allow at most 2 seconds for stderr collection.
-        let _ = tokio::time::timeout(Duration::from_secs(2), collect_future).await;
-
-        if lines_collected > 0 {
-            debug!(
-                "Collected {} lines of stderr from MatAnyone2 process",
-                lines_collected
-            );
+async fn drain_sidecar_output<R>(reader: R, is_stderr: bool)
+where
+    R: tokio::io::AsyncRead + Unpin,
+{
+    let mut lines = BufReader::new(reader).lines();
+    while let Ok(Some(line)) = lines.next_line().await {
+        if line.trim().is_empty() {
+            continue;
+        }
+        if is_stderr {
+            warn!(target: "matanyone_sidecar", "{}", line);
+        } else {
+            debug!(target: "matanyone_sidecar", "{}", line);
         }
     }
 }
 
 #[cfg(windows)]
 fn hide_console_window(command: &mut Command) -> &mut Command {
-    use std::os::windows::process::CommandExt;
-
     command.creation_flags(0x08000000)
 }
 
@@ -548,5 +576,32 @@ mod tests {
         let status = ProcessStatus::Error("boom".into());
         let json = serde_json::to_string(&status).unwrap();
         assert!(json.contains("boom"));
+    }
+
+    #[tokio::test]
+    async fn reconcile_rejects_ready_state_without_owned_child() {
+        let mut process = MatAnyoneProcess {
+            child: None,
+            port: 9888,
+            status: ProcessStatus::Ready,
+        };
+
+        let status = process.reconcile_status().await;
+        assert!(matches!(status, ProcessStatus::Error(_)));
+        assert_eq!(process.port(), 0);
+    }
+
+    #[tokio::test]
+    async fn start_does_not_return_stale_ready_port() {
+        let mut process = MatAnyoneProcess {
+            child: None,
+            port: 9888,
+            status: ProcessStatus::Ready,
+        };
+        let missing = Path::new("definitely-missing-matanyone-python");
+
+        let result = process.start(missing, missing, missing).await;
+        assert!(result.is_err());
+        assert_ne!(result, Ok(9888));
     }
 }

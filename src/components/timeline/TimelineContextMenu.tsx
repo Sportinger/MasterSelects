@@ -2,8 +2,6 @@ import { useEffect, useCallback, useRef, useState } from 'react';
 import { handleSubmenuHover, handleSubmenuLeave } from '../panels/media/submenuPosition';
 import type { TimelineClip } from '../../types';
 import type { MediaFile } from '../../stores/mediaStore';
-import type { ClipStemSeparationJobState, GenerateClipAudioAnalysisOptions, TimelineAudioDisplayMode } from '../../stores/timeline/types';
-import type { ContextMenuState } from './types';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
@@ -33,6 +31,12 @@ import {
   getPrimaryMediaObjectUrlKey,
   mediaObjectUrlManager,
 } from '../../services/project/mediaObjectUrlManager';
+import {
+  ClipAudioAIContextMenuItems,
+  ClipRegenerateContextMenuItems,
+} from './ClipAudioAIContextMenuItems';
+import { openMuscriptorDialog } from '../common/muscriptorSetup/dialogController';
+import type { TimelineContextMenuProps } from './timelineContextMenuTypes';
 
 const log = Logger.create('TimelineContextMenu');
 const COPY_PROMPT_TOAST_MS = 900;
@@ -68,51 +72,6 @@ async function copyTextToClipboard(text: string): Promise<void> {
       document.body.removeChild(textarea);
     }
   }
-}
-
-interface TimelineContextMenuProps {
-  contextMenu: ContextMenuState | null;
-  setContextMenu: (menu: ContextMenuState | null) => void;
-
-  // Clip data
-  clipMap: Map<string, TimelineClip>;
-  selectedClipIds: Set<string>;
-  isClipLocked: (clipId: string) => boolean;
-  thumbnailsEnabled: boolean;
-  waveformsEnabled: boolean;
-  audioDisplayMode: TimelineAudioDisplayMode;
-  clipStemSeparationJobs: Record<string, ClipStemSeparationJobState>;
-
-  // Actions
-  selectClip: (clipId: string) => void;
-  removeClip: (clipId: string) => void;
-  splitClipAtPlayhead: () => void;
-  rippleDeleteSelection: (clipIds?: string[]) => void;
-  deleteClipSelection: (clipIds?: string[]) => void;
-  deleteGapAtTime: (time: number) => void;
-  toggleClipReverse: (clipId: string) => void;
-  unlinkGroup: (clipId: string) => void;
-  linkClips: (clipIds: string[]) => void;
-  unlinkClips: (clipIds: string[]) => void;
-  syncClipsViaAudio: (clipIds: string[], masterClipId?: string) => Promise<unknown>;
-  generateWaveformForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => void;
-  generateSpectrogramForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => void;
-  startClipStemSeparation: (clipId: string, options?: { force?: boolean }) => Promise<string | null>;
-  toggleThumbnailsEnabled: () => void;
-  toggleWaveformsEnabled: () => void;
-  setAudioDisplayMode: (mode: TimelineAudioDisplayMode) => void;
-  convertSolidToMotionShape: (clipId: string) => string | null;
-  createSubcompositionFromSelection: (clipId: string) => void;
-  copyClipEffects: (clipId: string) => void;
-  pasteClipEffects: (targetClipIds?: string[]) => void;
-  hasClipboardEffects: () => boolean;
-  copyClipColor: (clipId: string) => void;
-  pasteClipColor: (targetClipIds?: string[]) => void;
-  hasClipboardColor: () => boolean;
-  setMulticamDialogOpen: (open: boolean) => void;
-
-  // File explorer
-  showInExplorer: (type: 'raw' | 'proxy', fileId: string) => Promise<{ success: boolean; message: string }>;
 }
 
 export function TimelineContextMenu({
@@ -332,6 +291,7 @@ export function TimelineContextMenu({
     generateWaveformForClip,
     generateSpectrogramForClip,
     startClipStemSeparation,
+    openMusicToMidi: openMuscriptorDialog,
     toggleThumbnailsEnabled,
     toggleWaveformsEnabled,
     setAudioDisplayMode,
@@ -417,99 +377,22 @@ export function TimelineContextMenu({
         </div>
       )}
 
-      {(isVideoMedia || hasSourceAudio || audibleAudioClip) && (
-        <>
-          <div className="context-menu-separator" />
-          <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
-            <span>Regenerate</span>
-            <span className="submenu-arrow">{'\u25B6'}</span>
-            <div className="context-submenu">
-              {isVideoMedia && (
-                <div
-                  className={`context-menu-item ${!mediaFile || (!isGenerating && !mediaFile.file) ? 'disabled' : ''}`}
-                  onClick={() => runCommand({
-                    kind: 'proxy-generation',
-                    action: isGenerating ? 'stop' : 'start',
-                    options: { force: hasProxy },
-                    canExecute: Boolean(mediaFile && (isGenerating || mediaFile.file)),
-                  })}
-                >
-                  {isGenerating
-                    ? `Stop Proxy Generation (${mediaFile?.proxyProgress || 0}%)`
-                    : `Proxy${hasProxy ? ' (ready)' : ''}`}
-                </div>
-              )}
-              {isVideoMedia && (
-                <div
-                  className={`context-menu-item ${thumbnailStatus === 'generating' || !hasThumbnailRegenerationSource ? 'disabled' : ''}`}
-                  onClick={() => runCommand({
-                    kind: 'regenerate-thumbnails',
-                    canExecute: thumbnailStatus !== 'generating' && hasThumbnailRegenerationSource,
-                  })}
-                >
-                  Thumbnails
-                  {thumbnailStatus === 'ready'
-                    ? ' (ready)'
-                    : thumbnailStatus === 'generating'
-                    ? ' (generating)'
-                    : ''}
-                </div>
-              )}
-              {hasSourceAudio && (
-                <div
-                  className={`context-menu-item ${!mediaFile || isAudioProxyGenerating ? 'disabled' : ''}`}
-                  onClick={() => runCommand({
-                    kind: 'audio-proxy-regeneration',
-                    force: hasAudioProxy,
-                    canExecute: Boolean(mediaFile && !isAudioProxyGenerating),
-                  })}
-                >
-                  WAV Audio Proxy
-                  {isAudioProxyGenerating
-                    ? ` (${mediaFile?.audioProxyProgress || 0}%)`
-                    : hasAudioProxy
-                    ? ' (ready)'
-                    : ''}
-                </div>
-              )}
-              {audibleAudioClip && (
-                <div
-                  className={`context-menu-item ${isAudioAnalysisGenerating ? 'disabled' : ''}`}
-                  onClick={() => runCommand({
-                    kind: 'audio-analysis-regeneration',
-                    analysisKind: 'waveform',
-                    canExecute: !isAudioAnalysisGenerating,
-                  })}
-                >
-                  Waveform
-                  {isAudioAnalysisGenerating
-                    ? ` (${audioAnalysisProgress}%)`
-                    : audibleAudioClip.waveform?.length
-                    ? ' (ready)'
-                    : ''}
-                </div>
-              )}
-              {audibleAudioClip && (
-                <div
-                  className={`context-menu-item ${isAudioAnalysisGenerating ? 'disabled' : ''}`}
-                  onClick={() => runCommand({
-                    kind: 'audio-analysis-regeneration',
-                    analysisKind: 'spectral',
-                    canExecute: !isAudioAnalysisGenerating,
-                  })}
-                >
-                  Spectral
-                  {isAudioAnalysisGenerating
-                    ? ` (${audioAnalysisProgress}%)`
-                    : hasSpectrogram
-                    ? ' (ready)'
-                    : ''}
-                </div>
-              )}
-            </div>
-          </div>
-        </>
-      )}
+      <ClipRegenerateContextMenuItems
+        runCommand={runCommand}
+        isVideoMedia={isVideoMedia}
+        hasSourceAudio={hasSourceAudio}
+        mediaFile={mediaFile}
+        isGenerating={isGenerating}
+        hasProxy={hasProxy}
+        thumbnailStatus={thumbnailStatus}
+        hasThumbnailRegenerationSource={hasThumbnailRegenerationSource}
+        isAudioProxyGenerating={isAudioProxyGenerating}
+        hasAudioProxy={hasAudioProxy}
+        audibleAudioClip={audibleAudioClip}
+        isAudioAnalysisGenerating={isAudioAnalysisGenerating}
+        audioAnalysisProgress={audioAnalysisProgress}
+        hasSpectrogram={hasSpectrogram}
+      />
 
       {(isVideo || isAudio) && (
         <>
@@ -718,54 +601,22 @@ export function TimelineContextMenu({
         Create Subcomposition
       </div>
 
-      {audibleAudioClip && (
-        <>
-          <div className="context-menu-separator" />
-          <div
-            className={`context-menu-item ${isStemSeparationActive || !canModifyTargets ? 'disabled' : ''}`}
-            onClick={() => runCommand({
-              kind: 'stem-separation',
-              force: hasStemSeparation,
-              canExecute: canModifyTargets && !isStemSeparationActive,
-            })}
-          >
-            {isStemSeparationActive
-              ? `Separating Stems... ${stemProgressPercent}%`
-              : hasStemSeparation
-              ? 'Regenerate Stems...'
-              : 'Stem Separation...'}
-          </div>
-        </>
-      )}
-
-      {(isVideo || isAudio) && (
-        <>
-          <div className="context-menu-separator" />
-          <div
-            className={`context-menu-item ${clip?.transcriptStatus === 'transcribing' ? 'disabled' : ''}`}
-            onClick={() => runCommand({
-              kind: 'transcription',
-              transcriptStatus: clip?.transcriptStatus,
-              canExecute: clip?.transcriptStatus !== 'transcribing',
-            })}
-          >
-            {clip?.transcriptStatus === 'transcribing'
-              ? `Transcribing... ${clip?.transcriptProgress || 0}%`
-              : clip?.transcriptStatus === 'ready'
-              ? `Re-transcribe (${activeTranscriptionProviderLabel})`
-              : `Transcribe (${activeTranscriptionProviderLabel})`}
-          </div>
-          <div
-            className="context-menu-item"
-            onClick={() => {
-              openSettings('transcription');
-              setContextMenu(null);
-            }}
-          >
-            Transcription Settings...
-          </div>
-        </>
-      )}
+      <ClipAudioAIContextMenuItems
+        runCommand={runCommand}
+        audibleAudioClip={audibleAudioClip}
+        canModifyTargets={canModifyTargets}
+        isStemSeparationActive={isStemSeparationActive}
+        stemProgressPercent={stemProgressPercent}
+        hasStemSeparation={hasStemSeparation}
+        showTranscription={isVideo || isAudio}
+        transcriptStatus={clip?.transcriptStatus}
+        transcriptProgress={clip?.transcriptProgress}
+        transcriptionProviderLabel={activeTranscriptionProviderLabel}
+        openTranscriptionSettings={() => {
+          openSettings('transcription');
+          setContextMenu(null);
+        }}
+      />
 
       {/* Clip color picker — sets the media item's label color (synced between timeline and media panel) */}
       <div className="context-menu-separator" />

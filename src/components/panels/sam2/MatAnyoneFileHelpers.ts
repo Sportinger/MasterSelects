@@ -7,7 +7,8 @@ type MatAnyoneClipSourceLike = {
   file?: File;
   filePath?: string;
   mediaFileId?: string;
-  nativeDecoder?: { fps?: number };
+  nativeDecoder?: { fps?: number; width?: number; height?: number };
+  videoElement?: { videoWidth?: number; videoHeight?: number };
   naturalDuration?: number;
 };
 
@@ -17,14 +18,33 @@ export type MatAnyoneClipLike = {
   mediaFileId?: string;
   file?: File;
   source?: MatAnyoneClipSourceLike | null;
+  startTime: number;
+  duration: number;
   inPoint: number;
   outPoint: number;
+  speed?: number;
+  reversed?: boolean;
 };
 
 export type MatAnyoneResultLike = {
   foregroundPath: string;
   alphaPath: string;
   sourceClipId: string;
+  sourceStartTime?: number;
+  sourceDuration?: number;
+  timelineStartTime?: number;
+  timelineDuration?: number;
+  sourceSpeed?: number;
+};
+
+export type MatAnyoneFramePlan = {
+  startFrame: number;
+  endFrame: number;
+  sourceStartTime: number;
+  sourceDuration: number;
+  timelineStartTime: number;
+  timelineDuration: number;
+  sourceSpeed: number;
 };
 
 export type MatAnyoneFileClient = {
@@ -140,9 +160,9 @@ export async function readNativeFileAsFile(nativeHelper: MatAnyoneImportFileClie
   });
 }
 
-export function getMatAnyoneFrameRange(clip: MatAnyoneClipLike): { startFrame?: number; endFrame?: number } {
+function getMatAnyoneClipMedia(clip: MatAnyoneClipLike) {
   const source = clip.source;
-  if (!source || source.type !== 'video') return {};
+  if (!source || source.type !== 'video') return { source, mediaFile: undefined, fps: 30 };
 
   const mediaFileId = source.mediaFileId ?? clip.mediaFileId;
   const mediaFile = mediaFileId
@@ -152,22 +172,62 @@ export function getMatAnyoneFrameRange(clip: MatAnyoneClipLike): { startFrame?: 
     source.nativeDecoder?.fps ??
     mediaFile?.fps ??
     30;
-  const safeFps = Number.isFinite(fps) && fps > 0 ? fps : 30;
-  const naturalDuration = source.naturalDuration ?? mediaFile?.duration ?? clip.outPoint;
-  const frameToleranceSeconds = 0.5 / safeFps;
+  return {
+    source,
+    mediaFile,
+    fps: Number.isFinite(fps) && fps > 0 ? fps : 30,
+  };
+}
 
-  const hasTrimIn = clip.inPoint > frameToleranceSeconds;
-  const hasTrimOut = Number.isFinite(naturalDuration)
-    && naturalDuration > 0
-    && clip.outPoint < naturalDuration - frameToleranceSeconds;
+export function getMatAnyoneSourceDimensions(
+  clip: MatAnyoneClipLike,
+): { width: number; height: number } | null {
+  const { source, mediaFile } = getMatAnyoneClipMedia(clip);
+  const width = source?.nativeDecoder?.width ?? source?.videoElement?.videoWidth ?? mediaFile?.width;
+  const height = source?.nativeDecoder?.height ?? source?.videoElement?.videoHeight ?? mediaFile?.height;
+  if (!width || !height || width <= 0 || height <= 0) return null;
+  return { width: Math.round(width), height: Math.round(height) };
+}
 
-  if (!hasTrimIn && !hasTrimOut) {
-    return {};
+export function getMatAnyoneFramePlan(
+  clip: MatAnyoneClipLike,
+  maskTimelineTime: number,
+): MatAnyoneFramePlan {
+  if (!clip.source || clip.source.type !== 'video') {
+    throw new Error('Selected clip is not a video.');
+  }
+  const speed = clip.speed ?? 1;
+  if (!Number.isFinite(speed) || speed <= 0 || clip.reversed) {
+    throw new Error('MatAnyone2 currently requires forward playback. Bake or un-reverse this clip first.');
+  }
+  const clipEnd = clip.startTime + clip.duration;
+  const tolerance = 1e-4;
+  if (maskTimelineTime < clip.startTime - tolerance || maskTimelineTime >= clipEnd + tolerance) {
+    throw new Error('The mask was created outside the selected clip. Create it again on a visible clip frame.');
   }
 
-  const startFrame = Math.max(0, Math.floor(clip.inPoint * safeFps));
-  const endFrame = Math.max(startFrame + 1, Math.ceil(clip.outPoint * safeFps));
-  return { startFrame, endFrame };
+  const { fps } = getMatAnyoneClipMedia(clip);
+  const localTime = Math.max(0, Math.min(clip.duration, maskTimelineTime - clip.startTime));
+  const requestedSourceStart = Math.min(clip.outPoint, clip.inPoint + localTime * speed);
+  const startFrame = Math.max(0, Math.floor(requestedSourceStart * fps));
+  const endFrame = Math.max(startFrame + 1, Math.ceil(clip.outPoint * fps));
+  const sourceStartTime = startFrame / fps;
+  const sourceDuration = Math.max(1 / fps, (endFrame - startFrame) / fps);
+  const adjustedTimelineStart = Math.max(
+    clip.startTime,
+    clip.startTime + (sourceStartTime - clip.inPoint) / speed,
+  );
+  const availableTimelineDuration = Math.max(1 / fps / speed, clipEnd - adjustedTimelineStart);
+
+  return {
+    startFrame,
+    endFrame,
+    sourceStartTime,
+    sourceDuration,
+    timelineStartTime: adjustedTimelineStart,
+    timelineDuration: Math.min(sourceDuration / speed, availableTimelineDuration),
+    sourceSpeed: speed,
+  };
 }
 
 export async function resolveMatAnyoneVideoPath(selectedClip: MatAnyoneClipLike): Promise<string | null> {
@@ -200,6 +260,24 @@ export async function resolveMatAnyoneVideoPath(selectedClip: MatAnyoneClipLike)
     if (isAbsolutePath(candidate)) return candidate;
   }
 
+  // A browser File is authoritative. Stage it before any basename search so a
+  // duplicate file elsewhere on disk cannot silently become the input.
+  const fileForUpload = sourceFile ?? clipFile ?? mediaStoreFile;
+  if (fileForUpload) {
+    const projectRoot = await NativeHelperClient.getProjectRoot().catch(() => null);
+    if (projectRoot) {
+      const tempDir = joinNativePath(projectRoot, 'matanyone-temp');
+      const tempDirReady = await NativeHelperClient.createDir(tempDir, true).catch(() => false);
+      if (tempDirReady) {
+        const safeClipId = sanitizeNativeFileName(selectedClip.id || 'clip');
+        const safeFileName = sanitizeNativeFileName(fileForUpload.name || selectedClip.name || 'video.mp4');
+        const stagedPath = joinNativePath(tempDir, `${safeClipId}-${safeFileName}`);
+        const uploaded = await NativeHelperClient.writeFileBinary(stagedPath, fileForUpload).catch(() => false);
+        if (uploaded) return stagedPath;
+      }
+    }
+  }
+
   const locateCandidates = new Set<string>();
   const addLocateCandidate = (value: string | null | undefined) => {
     const name = getBaseName(value);
@@ -227,21 +305,7 @@ export async function resolveMatAnyoneVideoPath(selectedClip: MatAnyoneClipLike)
     if (located) return located;
   }
 
-  const fileForUpload = sourceFile ?? clipFile ?? mediaStoreFile;
-  if (!fileForUpload) return null;
-
-  const projectRoot = await NativeHelperClient.getProjectRoot().catch(() => null);
-  if (!projectRoot) return null;
-
-  const tempDir = joinNativePath(projectRoot, 'matanyone-temp');
-  const tempDirReady = await NativeHelperClient.createDir(tempDir, true).catch(() => false);
-  if (!tempDirReady) return null;
-
-  const safeClipId = sanitizeNativeFileName(selectedClip.id || 'clip');
-  const safeFileName = sanitizeNativeFileName(fileForUpload.name || selectedClip.name || 'video.mp4');
-  const stagedPath = joinNativePath(tempDir, `${safeClipId}-${safeFileName}`);
-  const uploaded = await NativeHelperClient.writeFileBinary(stagedPath, fileForUpload).catch(() => false);
-  return uploaded ? stagedPath : null;
+  return null;
 }
 
 export async function createMatAnyoneJobDir(

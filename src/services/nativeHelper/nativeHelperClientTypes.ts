@@ -50,6 +50,9 @@ export type ProgressLikeResponse = Response & {
   message?: string;
   current_frame?: number;
   total_frames?: number;
+  completed?: number;
+  total?: number;
+  note_count?: number;
 };
 
 export interface NativeHelperCommandHost {

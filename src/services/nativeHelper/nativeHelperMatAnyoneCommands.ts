@@ -11,9 +11,14 @@ import { getErrorMessage, okField } from './nativeHelperResponseUtils';
 
 type ActiveMatAnyoneMatte = {
   id: string;
-  timeout: ReturnType<typeof setTimeout>;
+  cancelTimeout: () => void;
   reject: (error: Error) => void;
 };
+
+const SETUP_ACTIVITY_TIMEOUT_MS = 10 * 60_000;
+const DOWNLOAD_ACTIVITY_TIMEOUT_MS = 10 * 60_000;
+const START_ACTIVITY_TIMEOUT_MS = 6 * 60_000;
+const MATTE_ACTIVITY_TIMEOUT_MS = 10 * 60_000;
 
 export function createMatAnyoneCommands(host: NativeHelperCommandHost) {
   let activeMatAnyoneMatte: ActiveMatAnyoneMatte | null = null;
@@ -98,20 +103,25 @@ async function matanyoneSetup(
   const id = host.nextId();
 
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      host.deletePendingRequest(id);
-      reject(new Error('MatAnyone2 setup timeout'));
-    }, 600000);
+    let timeout: ReturnType<typeof setTimeout>;
+    const armTimeout = () => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        host.deletePendingRequest(id);
+        reject(new Error('MatAnyone2 setup timed out while waiting for activity'));
+      }, SETUP_ACTIVITY_TIMEOUT_MS);
+    };
+    armTimeout();
 
     host.registerPendingRequest(id, (response: ProgressLikeResponse) => {
       if (response.type === 'progress') {
-        if (onProgress) {
-          onProgress(response.step ?? '', response.percent ?? 0, response.message ?? '');
-        }
+        armTimeout();
+        onProgress?.(response.step ?? '', response.percent ?? 0, response.message ?? '');
         return;
       }
 
       clearTimeout(timeout);
+      host.deletePendingRequest(id);
       if (response.ok) {
         resolve({ success: true });
       } else {
@@ -142,20 +152,25 @@ async function matanyoneDownloadModel(
   const id = host.nextId();
 
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      host.deletePendingRequest(id);
-      reject(new Error('Model download timeout'));
-    }, 600000);
+    let timeout: ReturnType<typeof setTimeout>;
+    const armTimeout = () => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        host.deletePendingRequest(id);
+        reject(new Error('MatAnyone2 model download timed out while waiting for activity'));
+      }, DOWNLOAD_ACTIVITY_TIMEOUT_MS);
+    };
+    armTimeout();
 
     host.registerPendingRequest(id, (response: ProgressLikeResponse) => {
       if (response.type === 'progress') {
-        if (onProgress) {
-          onProgress(response.percent ?? 0, response.speed, response.eta);
-        }
+        armTimeout();
+        onProgress?.(response.percent ?? 0, response.speed, response.eta);
         return;
       }
 
       clearTimeout(timeout);
+      host.deletePendingRequest(id);
       if (response.ok) {
         resolve({ success: true });
       } else {
@@ -174,21 +189,52 @@ async function matanyoneDownloadModel(
   });
 }
 
-async function matanyoneStart(host: NativeHelperCommandHost): Promise<{ success: boolean; port?: number }> {
+async function matanyoneStart(
+  host: NativeHelperCommandHost,
+): Promise<{ success: boolean; port?: number; error?: string }> {
   const id = host.nextId();
-  const response = await host.send({ cmd: 'mat_anyone_start', id });
+  return new Promise((resolve, reject) => {
+    let timeout: ReturnType<typeof setTimeout>;
+    const armTimeout = () => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        host.deletePendingRequest(id);
+        reject(new Error('MatAnyone2 server start timed out while waiting for activity'));
+      }, START_ACTIVITY_TIMEOUT_MS);
+    };
+    armTimeout();
 
-  if (!response.ok) {
-    return { success: false };
-  }
+    host.registerPendingRequest(id, (response: ProgressLikeResponse) => {
+      if (response.type === 'progress') {
+        armTimeout();
+        return;
+      }
+      clearTimeout(timeout);
+      host.deletePendingRequest(id);
+      if (!response.ok) {
+        resolve({
+          success: false,
+          error: getErrorMessage(response, 'Failed to start MatAnyone2 server'),
+        });
+        return;
+      }
+      resolve({ success: true, port: okField<number>(response, 'port') });
+    });
 
-  return { success: true, port: okField<number>(response, 'port') };
+    host.sendRaw(JSON.stringify({ cmd: 'mat_anyone_start', id })).catch((error) => {
+      clearTimeout(timeout);
+      host.deletePendingRequest(id);
+      reject(error);
+    });
+  });
 }
 
-async function matanyoneStop(host: NativeHelperCommandHost): Promise<{ success: boolean }> {
+async function matanyoneStop(host: NativeHelperCommandHost): Promise<{ success: boolean; error?: string }> {
   const id = host.nextId();
   const response = await host.send({ cmd: 'mat_anyone_stop', id });
-  return { success: response.ok === true };
+  return response.ok
+    ? { success: true }
+    : { success: false, error: getErrorMessage(response, 'Failed to stop MatAnyone2 server') };
 }
 
 async function matanyoneMatte(
@@ -203,18 +249,25 @@ async function matanyoneMatte(
   const id = host.nextId();
 
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      host.deletePendingRequest(id);
-      if (state.active?.id === id) {
-        state.active = null;
-      }
-      reject(new Error('Matting timeout'));
-    }, 600000);
+    let timeout: ReturnType<typeof setTimeout>;
+    const armTimeout = () => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        host.deletePendingRequest(id);
+        if (state.active?.id === id) {
+          state.active = null;
+        }
+        reject(new Error('MatAnyone2 matting timed out while waiting for activity'));
+      }, MATTE_ACTIVITY_TIMEOUT_MS);
+    };
+    const cancelTimeout = () => clearTimeout(timeout);
+    armTimeout();
 
-    state.active = { id, timeout, reject };
+    state.active = { id, cancelTimeout, reject };
 
     host.registerPendingRequest(id, (response: ProgressLikeResponse) => {
       if (response.type === 'progress') {
+        armTimeout();
         if (onProgress) {
           onProgress(
             response.current_frame ?? 0,
@@ -226,7 +279,8 @@ async function matanyoneMatte(
         return;
       }
 
-      clearTimeout(timeout);
+      cancelTimeout();
+      host.deletePendingRequest(id);
       if (state.active?.id === id) {
         state.active = null;
       }
@@ -257,7 +311,7 @@ async function matanyoneMatte(
     }
 
     host.sendRaw(JSON.stringify(cmd)).catch((err) => {
-      clearTimeout(timeout);
+      cancelTimeout();
       host.deletePendingRequest(id);
       if (state.active?.id === id) {
         state.active = null;
@@ -280,15 +334,19 @@ async function matanyoneCancel(
 
   const active = state.active;
   if (active) {
-    clearTimeout(active.timeout);
+    active.cancelTimeout();
     host.deletePendingRequest(active.id);
     state.active = null;
     active.reject(new Error('Matte job cancelled'));
   }
 }
 
-async function matanyoneUninstall(host: NativeHelperCommandHost): Promise<{ success: boolean }> {
+async function matanyoneUninstall(
+  host: NativeHelperCommandHost,
+): Promise<{ success: boolean; error?: string }> {
   const id = host.nextId();
   const response = await host.send({ cmd: 'mat_anyone_uninstall', id });
-  return { success: response.ok === true };
+  return response.ok
+    ? { success: true }
+    : { success: false, error: getErrorMessage(response, 'Failed to uninstall MatAnyone2') };
 }

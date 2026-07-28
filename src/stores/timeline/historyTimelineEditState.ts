@@ -93,6 +93,8 @@ export interface HistoryTimelineClipEditState {
   masks?: ClipMask[];
   transcriptStatus?: TimelineClip['transcriptStatus'];
   analysisStatus?: TimelineClip['analysisStatus'];
+  faceAnalysisStatus?: TimelineClip['faceAnalysisStatus'];
+  faceAnalysisMessage?: string;
   sceneDescriptionStatus?: TimelineClip['sceneDescriptionStatus'];
   reversed?: boolean;
   speed?: number;
@@ -496,6 +498,8 @@ export function toHistoryTimelineClipEditState(
     masks: clip.masks && clip.masks.length > 0 ? clip.masks : undefined,
     transcriptStatus: clip.transcriptStatus,
     analysisStatus: clip.analysisStatus,
+    faceAnalysisStatus: clip.faceAnalysisStatus,
+    faceAnalysisMessage: clip.faceAnalysisMessage,
     sceneDescriptionStatus: clip.sceneDescriptionStatus,
     reversed: clip.reversed,
     speed: clip.speed,

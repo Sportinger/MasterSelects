@@ -14,7 +14,9 @@
 )]
 
 mod download;
+mod http_server;
 mod matanyone;
+mod muscriptor;
 mod protocol;
 mod server;
 mod session;
@@ -23,6 +25,7 @@ mod tray;
 #[cfg(windows)]
 mod updater;
 mod utils;
+mod websocket_server;
 
 use clap::Parser;
 use tracing::{error, info, warn, Level};
@@ -137,7 +140,9 @@ fn build_config(args: &Args) -> server::ServerConfig {
         });
 
     let auth_token = if args.no_auth {
-        warn!("Authentication disabled via --no-auth flag. This is NOT recommended for production.");
+        warn!(
+            "Authentication disabled via --no-auth flag. This is NOT recommended for production."
+        );
         None
     } else {
         let token = session::generate_auth_token();
@@ -161,7 +166,8 @@ fn write_token_file(token: &str) {
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
-                let _ = std::fs::set_permissions(&token_path, std::fs::Permissions::from_mode(0o600));
+                let _ =
+                    std::fs::set_permissions(&token_path, std::fs::Permissions::from_mode(0o600));
             }
             info!("Auth token written to: {}", token_path.display());
         }
