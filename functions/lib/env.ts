@@ -54,6 +54,8 @@ export interface Env {
   ELEVENLABS_API_KEY?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  KERNEL_AUTH_TOKEN?: string;
+  KERNEL_ORIGIN?: string;
   KIEAI_API_KEY?: string;
   KIEAI_GENERATION_RATE_LIMITER?: AppDurableObjectNamespace;
   KV: AppKVNamespace;

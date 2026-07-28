@@ -37,53 +37,51 @@ Select an analyzed video clip to see its boxes, landmarks, and anonymous person
 labels over the Preview. Existing yellow face markers remain available on the
 timeline. The timeline assigns every anonymous person a stable colour: their
 sample dots and source-time range bands share that colour. The Analysis tab
-combines source-time facts in one workspace. Its compact map aligns scenes,
+combines source-time facts in one workspace. Its collapsible compact map aligns scenes,
 cuts, speech, people, motion, focus, quality, audio, and text with the
-playhead. Below it, one virtualized scene list shows larger speaker face crops,
-word-synchronized dialogue, and scene time in compact scene blobs. Clicking a
-blob expands the scene-scoped identity tools, facts, descriptions, quality
-notices, and transcript in place.
+playhead. Below it, one virtualized scene list fills the remaining panel height
+and shows visible face crops with separate diarized-speaker abbreviations,
+word-synchronized dialogue, and scene time in compact scene blobs. Face IDs and
+speaker labels remain distinct until an explicit mapping exists. Scene blobs
+stay compact and never expand; clicking a word or scene time seeks directly to
+that source position.
 
-Expanded scenes keep contextual People and Needs Review controls. Clicking a
-person filters the virtualized scene list; **Next appearance** advances through
-that identity's source-time appearances. Person identities and individual
-appearance crops remain draggable correction sources. Dropping one onto another
-person merges a false split or moves that appearance. Small yellow detections
-that are unsafe to identify are consolidated into short visual tracks without
-claiming an identity; their scene-scoped review crops can be clicked to seek or
-dragged onto a confirmed person to assign the track manually. These previews
-are resolved only for the bounded virtualized window and open scene, stay in a
-bounded browser-memory cache, and are also persisted as versioned JPEGs under
+Person identities and individual appearance crops remain draggable correction
+sources inside Analysis settings. Dropping one onto another person merges a
+false split or moves that appearance. Small yellow detections that are unsafe
+to identify are consolidated into short visual tracks without claiming an
+identity; their review crops can be clicked to seek or dragged onto a confirmed
+person to assign the track manually. These previews stay in a bounded
+browser-memory cache and are also persisted as versioned JPEGs under
 `Cache/face-thumbnails` so they load without video seeks after a refresh or
 project reopen.
 
-Below the virtualized scene list, the complete detected-person strip restores
-the correction surface for source-wide work: representative found-frame crops,
-all appearances, person-to-person merge, appearance reassign, and review-track
-assignment by drag and drop. It uses the same durable face correction services
-as scene cards; no second people state is stored. Face crops are requested only
-once their tile is near the viewport. Equal crop requests share the existing
-pending/blob cache, so scrolling does not enqueue a fresh video seek for every
-rendered card.
+Analysis settings contain the complete detected-person strip for source-wide
+correction work: representative found-frame crops, all appearances,
+person-to-person merge, appearance reassign, and review-track assignment by
+drag and drop. It uses the same durable face correction services as scene
+cards; no second people state is stored. Face crops are requested only once
+their tile is near the viewport. Equal crop requests share the existing
+pending/blob cache.
 
-The top of the Analysis tab exposes separate action rows for **Focus & Motion**,
-**Faces**, **Scene Cuts**, **Transcript**, and **AI Scenes**. Every row can be analyzed,
-reanalyzed, retried, or cancelled without clearing the other results. A
+The top of the Analysis tab exposes compact status pills for **Focus & Motion**,
+**Faces**, **Cuts**, **Transcript**, and **AI Scenes**. Every pill can analyze,
+reanalyze, retry, continue, or cancel without clearing the other results. A
 metrics-only pass preserves compatible face observations. A face-only pass
 reuses existing focus and motion samples; when no metrics exist yet, it creates
 the inexpensive metrics baseline during the same source decode. At normal
-Properties widths the actions form one compact three-column grid (with
-responsive two- and one-column fallbacks). **Analyze All** creates a coalesced
+Properties widths the pills wrap naturally beside **Analyze all** and a compact
+settings disclosure. **Analyze All** creates a coalesced
 job graph: repeated clicks observe the same run, compatible completed channels
 are reused, Focus/Faces and the cut scan serialize on the shared source decoder,
 and independent transcript work may proceed in parallel. AI scene descriptions
 remain a separate opt-in action because they can incur provider cost and share
 visual content externally.
 
-Above those rows, compact **Scope** (`Source`, `Used Ranges`, `Selection`,
-`In-Out`) and **Profile** (`Quick`, `Balanced`, `Deep`, `Custom`) controls show
-uncached duration, cache reuse, known frame/sample work, relative cost, and a
-benchmark-derived time range when one exists. **Quick** (1 fps) and
+The settings disclosure separates shared visual-analysis controls from
+transcript controls. Compact **Scope** (`Source`, `Used Ranges`, `Selection`,
+`In-Out`) and **Profile** (`Quick`, `Balanced`, `Deep`, `Custom`) choices stay
+visible without estimate or explanatory rows. **Quick** (1 fps) and
 **Balanced** (2 fps) are execution settings for local Focus/Motion and Faces:
 the runner receives the selected clipped source range and explicit sample
 cadence. Used Ranges, Selection, and overlapping In/Out therefore analyze only
@@ -216,9 +214,9 @@ to use WebGPU for rendering.
 
 Faces smaller than 36 pixels in the 640-pixel analysis frame are intentionally
 excluded from automatic identity grouping. They remain visible as yellow
-Preview overlays and as scene-scoped **Needs review** crops in the Analysis
-workspace, because title-card grids and background footage are too small for
-dependable anonymous matching.
+Preview overlays and as **Needs review** crops in Analysis settings, because
+title-card grids and background footage are too small for dependable anonymous
+matching.
 
 ## Models and licenses
 

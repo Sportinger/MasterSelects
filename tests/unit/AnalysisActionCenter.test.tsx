@@ -1,9 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { AnalysisActionCenter } from '../../src/components/panels/properties/AnalysisActionCenter';
 
 describe('AnalysisActionCenter', () => {
-  it('keeps global actions compact and channel actions inside three-column cards', () => {
+  it('keeps global actions compact and channel actions as pills', () => {
     render(
       <AnalysisActionCenter
         actions={[
@@ -16,10 +16,13 @@ describe('AnalysisActionCenter', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: 'Analyze All' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Clear Analysis' })).toBeInTheDocument();
-    const cards = document.querySelectorAll('.analysis-action-row');
-    expect(cards).toHaveLength(3);
-    expect(cards[0]?.querySelector('.analysis-action-buttons .btn')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Analyze all' })).toBeInTheDocument();
+    const pills = document.querySelectorAll('.analysis-action-pill');
+    expect(pills).toHaveLength(3);
+
+    // Clear analysis lives behind the settings toggle, not in the main bar.
+    expect(screen.queryByRole('button', { name: 'Clear analysis' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Analysis settings' }));
+    expect(screen.getByRole('button', { name: 'Clear analysis' })).toBeInTheDocument();
   });
 });

@@ -34,6 +34,7 @@ interface TranscriptWorkspaceHeaderProps {
   onTranscribe: () => void;
   run: TranscriptRunView | null;
   searchQuery: string;
+  settingsMode?: boolean;
   summary: TranscriptSummaryView | null;
   transcriptProgress: number;
   transcriptStatus: 'none' | 'transcribing' | 'ready' | 'error';
@@ -205,6 +206,7 @@ export function TranscriptWorkspaceHeader({
   onTranscribe,
   run,
   searchQuery,
+  settingsMode = false,
   summary,
   transcriptProgress,
   transcriptStatus,
@@ -266,7 +268,7 @@ export function TranscriptWorkspaceHeader({
         </div>
       </div>
 
-      {isBusy ? (
+      {!settingsMode && (isBusy ? (
         <TranscriptRunStatus
           activeProvider={activeProvider}
           run={run}
@@ -274,9 +276,9 @@ export function TranscriptWorkspaceHeader({
         />
       ) : summary && transcriptStatus === 'ready' ? (
         <TranscriptResultStatus />
-      ) : null}
+      ) : null)}
 
-      {transcriptStatus === 'ready' && clipCoverage > 0 && (
+      {!settingsMode && transcriptStatus === 'ready' && clipCoverage > 0 && (
         <div className="transcript-coverage-row">
           <div className="transcript-coverage-rail">
             <span style={{ width: `${Math.round(clipCoverage * 100)}%` }} />
@@ -285,7 +287,7 @@ export function TranscriptWorkspaceHeader({
         </div>
       )}
 
-      {hasTranscript && (
+      {!settingsMode && hasTranscript && (
         <div className="transcript-find-row">
           <input
             aria-label="Search transcript"

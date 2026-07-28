@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode, type UIEvent } from 'react';
-import type { FaceReviewCandidate } from '../../../../services/faceAnalysis/faceReviewCandidates';
 import { AnalysisSceneBlob } from './AnalysisSceneBlob';
 import type {
   AnalysisScenePerson,
@@ -7,75 +6,74 @@ import type {
   AnalysisSceneView,
 } from './analysisSceneViewModel';
 import {
+  ANALYSIS_SCENE_LIST_VIEWPORT_HEIGHT,
+  type AnalysisSceneListItem,
   buildAnalysisSceneLayout,
-  filterAnalysisScenes,
+  filterAnalysisSceneListItems,
+  findActiveAnalysisSceneListItem,
   getAnalysisSceneWindow,
 } from './analysisSceneListModel';
 
 export interface AnalysisSceneListProps {
-  scenes: readonly AnalysisSceneView[];
+  items: readonly AnalysisSceneListItem[];
   selectedSceneId?: string;
-  selectedPersonId?: string;
   query?: string;
   sourceTime: number;
   /** Playback follows the active scene only when the host says follow is active. */
   followPlayback?: boolean;
-  reviewCandidates?: readonly FaceReviewCandidate[];
   renderPersonThumbnail?: (
     person: AnalysisScenePerson,
     scene: AnalysisSceneView,
     sourceTime?: number,
   ) => ReactNode;
-  renderReviewThumbnail?: (candidate: FaceReviewCandidate, scene: AnalysisSceneView) => ReactNode;
-  onSceneSelect: (scene: AnalysisSceneView) => void;
-  onPersonSelect?: (person: AnalysisScenePerson) => void;
-  onPersonAppearanceSelect?: (sourceTime: number) => void;
-  onMergePeople?: (sourcePersonId: string, targetPersonId: string) => void;
-  onMoveAppearance?: (sourcePersonId: string, targetPersonId: string, sourceTime: number) => void;
-  onAssignReviewFaces?: (candidateId: string, faceIds: string[], targetPersonId: string) => void;
-  onReanalyzeDescription?: (scene: AnalysisSceneView) => void;
+  onItemSelect: (item: AnalysisSceneListItem) => void;
   onWordClick?: (word: AnalysisSceneTranscriptWord) => void;
 }
 
 export function AnalysisSceneList({
-  scenes,
+  items,
   selectedSceneId,
-  selectedPersonId,
   query = '',
   sourceTime,
   followPlayback = false,
-  reviewCandidates = [],
   renderPersonThumbnail,
-  renderReviewThumbnail,
-  onSceneSelect,
-  onPersonSelect,
-  onPersonAppearanceSelect,
-  onMergePeople,
-  onMoveAppearance,
-  onAssignReviewFaces,
-  onReanalyzeDescription,
+  onItemSelect,
   onWordClick,
 }: AnalysisSceneListProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
-  const [expandedSceneId, setExpandedSceneId] = useState<string>();
-  const filteredScenes = useMemo(
-    () => filterAnalysisScenes(scenes, query),
-    [query, scenes],
+  const [viewportHeight, setViewportHeight] = useState(ANALYSIS_SCENE_LIST_VIEWPORT_HEIGHT);
+  const filteredItems = useMemo(
+    () => filterAnalysisSceneListItems(items, query),
+    [items, query],
   );
   const layout = useMemo(
-    () => buildAnalysisSceneLayout(filteredScenes, expandedSceneId),
-    [expandedSceneId, filteredScenes],
+    () => buildAnalysisSceneLayout(filteredItems),
+    [filteredItems],
   );
-  const window = getAnalysisSceneWindow(layout, scrollTop);
+  const window = getAnalysisSceneWindow(layout, scrollTop, viewportHeight);
+  const activeItem = useMemo(
+    () => findActiveAnalysisSceneListItem(items, sourceTime, selectedSceneId),
+    [items, selectedSceneId, sourceTime],
+  );
 
   useEffect(() => {
-    if (followPlayback && selectedSceneId) setExpandedSceneId(selectedSceneId);
-  }, [followPlayback, selectedSceneId]);
+    const viewport = viewportRef.current;
+    if (!viewport) return undefined;
+    const updateHeight = () => {
+      const next = Math.max(1, Math.round(viewport.clientHeight));
+      setViewportHeight((current) => current === next ? current : next);
+    };
+    updateHeight();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, [filteredItems.length]);
 
   useEffect(() => {
     if (!followPlayback) return;
-    const selectedIndex = filteredScenes.findIndex((scene) => scene.id === selectedSceneId);
+    const selectedIndex = filteredItems.findIndex(item => item.id === activeItem?.id);
     const viewport = viewportRef.current;
     const selectedRow = layout.rows[selectedIndex];
     if (!viewport || !selectedRow) return;
@@ -86,10 +84,10 @@ export function AnalysisSceneList({
     } else if (rowBottom > viewport.scrollTop + viewport.clientHeight) {
       viewport.scrollTop = Math.max(0, rowBottom - viewport.clientHeight);
     }
-  }, [filteredScenes, followPlayback, layout.rows, selectedSceneId]);
+  }, [activeItem?.id, filteredItems, followPlayback, layout.rows]);
 
-  if (filteredScenes.length === 0) {
-    return <p className="AnalysisSceneList__empty">No scenes match this search.</p>;
+  if (filteredItems.length === 0) {
+    return <p className="AnalysisSceneList__empty">No segments match this search.</p>;
   }
 
   return (
@@ -97,46 +95,29 @@ export function AnalysisSceneList({
       ref={viewportRef}
       className="AnalysisSceneList"
       role="list"
-      aria-label="Scenes"
+      aria-label="Scene and transcript segments"
       onScroll={(event: UIEvent<HTMLDivElement>) => setScrollTop(event.currentTarget.scrollTop)}
     >
       <div className="AnalysisSceneList__spacer" style={{ height: layout.totalHeight }}>
-        {filteredScenes.slice(window.start, window.end).map((scene, offset) => {
+        {filteredItems.slice(window.start, window.end).map((item, offset) => {
           const index = window.start + offset;
           const row = layout.rows[index];
           if (!row) return null;
           return (
             <div
               role="listitem"
-              aria-current={scene.id === selectedSceneId ? 'true' : undefined}
+              aria-current={item.id === activeItem?.id ? 'true' : undefined}
               className="AnalysisSceneList__row"
-              key={scene.id}
+              key={item.id}
               style={{ height: row.height, transform: `translateY(${row.offset}px)` }}
             >
               <AnalysisSceneBlob
-                scene={scene}
-                active={scene.id === selectedSceneId}
-                expanded={scene.id === expandedSceneId}
+                scene={item.scene}
+                transcriptChunk={item.transcriptChunk}
+                active={item.id === activeItem?.id}
                 sourceTime={sourceTime}
-                followPlayback={followPlayback}
-                selectedPersonId={selectedPersonId}
-                reviewCandidates={reviewCandidates.filter(
-                  (candidate) => candidate.sample.timestamp >= scene.range.start
-                    && candidate.sample.timestamp < scene.range.end,
-                )}
                 renderPersonThumbnail={renderPersonThumbnail}
-                renderReviewThumbnail={renderReviewThumbnail}
-                onToggle={() => {
-                  const opening = expandedSceneId !== scene.id;
-                  setExpandedSceneId(opening ? scene.id : undefined);
-                  if (opening) onSceneSelect(scene);
-                }}
-                onPersonSelect={onPersonSelect}
-                onPersonAppearanceSelect={onPersonAppearanceSelect}
-                onMergePeople={onMergePeople}
-                onMoveAppearance={onMoveAppearance}
-                onAssignReviewFaces={onAssignReviewFaces}
-                onReanalyzeDescription={onReanalyzeDescription}
+                onChunkSelect={() => onItemSelect(item)}
                 onWordClick={onWordClick}
               />
             </div>

@@ -91,11 +91,18 @@ function readConfig(storage: Storage): KernelConfig | undefined {
 
     const token = storage.getItem(KERNEL_TOKEN_KEY)?.trim();
     const baseUrl = storage.getItem(KERNEL_URL_KEY)?.trim();
-    if (!token || !baseUrl) {
-      return undefined;
+    if (token && baseUrl) {
+      return { baseUrl, token };
     }
 
-    return { baseUrl, token };
+    // Production default: route through the same-origin Pages proxy, which
+    // injects the kernel bearer token server-side. localStorage keys remain
+    // the explicit override; 'ms.kernel.enabled' = 'false' still disables.
+    if (import.meta.env.PROD) {
+      return { baseUrl: '/api', token: '' };
+    }
+
+    return undefined;
   } catch {
     return undefined;
   }
