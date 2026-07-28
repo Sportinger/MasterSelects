@@ -4,6 +4,10 @@ import './MaskOverlay.css';
 import { memo, useRef, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
 import { getShortcutRegistry } from '../../services/shortcutRegistry';
+import {
+  claimKeyboardEvent,
+  claimShortcut,
+} from '../../services/shortcutFocusPolicy';
 import { startBatch, endBatch } from '../../stores/historyStore';
 import { projectLayerUvToCanvas, unprojectCanvasToLayerUv } from './editModeOverlayMath';
 import {
@@ -454,27 +458,27 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
       const registry = getShortcutRegistry();
 
       if (selectedClip && registry.matches('mask.pen', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'mask.pen')) return;
         setMaskEditMode('drawingPen');
         return;
       }
       if (selectedClip && registry.matches('mask.rectangle', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'mask.rectangle')) return;
         setMaskEditMode('drawingRect');
         return;
       }
       if (selectedClip && registry.matches('mask.ellipse', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'mask.ellipse')) return;
         setMaskEditMode('drawingEllipse');
         return;
       }
       if (activeMask && registry.matches('mask.edit', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'mask.edit')) return;
         setMaskEditMode('editing');
         return;
       }
       if (activeMask && registry.matches('mask.closePath', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'mask.closePath')) return;
         if (!activeMask.closed && activeMask.vertices.length >= 3 && selectedClip) {
           closeMask(selectedClip.id, activeMask.id);
           setMaskEditMode('editing');
@@ -482,22 +486,22 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
         return;
       }
       if (activeMask && selectedClip && registry.matches('mask.invert', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'mask.invert')) return;
         updateMask(selectedClip.id, activeMask.id, { inverted: !activeMask.inverted });
         return;
       }
       if (activeMask && selectedClip && registry.matches('mask.toggleOutline', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'mask.toggleOutline')) return;
         updateMask(selectedClip.id, activeMask.id, { visible: !activeMask.visible });
         return;
       }
       if (activeMask && registry.matches('mask.selectAllVertices', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'mask.selectAllVertices')) return;
         selectVertices(activeMask.vertices.map(v => v.id));
         return;
       }
       if (activeMask && selectedClip && selectedVertexIds.size > 0 && registry.matches('mask.toggleVertexHandles', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'mask.toggleVertexHandles')) return;
         cycleSelectedVertexHandleMode();
         return;
       }
@@ -507,8 +511,7 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
         const dx = e.key === 'ArrowLeft' ? -amount : e.key === 'ArrowRight' ? amount : 0;
         const dy = e.key === 'ArrowUp' ? -amount : e.key === 'ArrowDown' ? amount : 0;
         if (dx !== 0 || dy !== 0) {
-          e.preventDefault();
-          e.stopPropagation();
+          if (!claimKeyboardEvent(e, { stopPropagation: true })) return;
           nudgeSelectedVertices(dx, dy);
           return;
         }
@@ -526,7 +529,7 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
       }
       if (registry.matches('edit.delete', e) && maskEditMode === 'editing') {
         if (selectedVertexIds.size > 0 && selectedClip && activeMask) {
-          e.preventDefault();
+          if (!claimShortcut(e, 'edit.delete')) return;
           const { removeVertex } = useTimelineStore.getState();
           Array.from(selectedVertexIds).forEach(vertexId => {
             removeVertex(selectedClip.id, activeMask.id, vertexId);

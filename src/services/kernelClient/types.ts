@@ -1,4 +1,4 @@
-export interface KernelHealthResponse {
+﻿export interface KernelHealthResponse {
   [key: string]: unknown;
 }
 
@@ -17,28 +17,71 @@ export interface KernelResolvedCall {
   args: Record<string, unknown>;
 }
 
+export type KernelAnalysisSource =
+  | 'transcript'
+  | 'voice-activity'
+  | 'speech-markers'
+  | 'prosody';
+
+export interface KernelTranscriptMoment {
+  schemaVersion: 1;
+  handle: string;
+  source: { mediaId: string; fileName?: string };
+  sourceRange: { startSeconds: number; endSeconds: number };
+  evidence: {
+    transcript?: string;
+    pauses?: { startSeconds: number; endSeconds: number }[];
+    emphasis?: { text: string; startSeconds: number; score: number }[];
+    markers?: {
+      kind: 'breath' | 'filler' | 'disfluency';
+      timeSeconds: number;
+    }[];
+  };
+  confidence: number;
+  indexVersion: string;
+  analysisSources: KernelAnalysisSource[];
+}
+
 export interface KernelCompileRequest {
   request: string;
   snapshot: unknown;
   seed?: string;
+  moments?: KernelTranscriptMoment[];
+  indexVersion?: string;
+}
+
+export interface KernelCompileSetup {
+  newComposition: {
+    name: string;
+    durationSeconds: number;
+  };
 }
 
 export interface KernelCompileCompiledResponse {
   runId: string;
   status: 'compiled';
+  mode?: 'mechanical' | 'story';
   taskContract: unknown;
-  plan: unknown;
+  plan?: unknown;
+  storySummary?: unknown;
   resolvedCalls: KernelResolvedCall[];
+  setup?: KernelCompileSetup;
   /** Source-ordered simulated segment ids for runtime id mapping. */
   segments?: { simulatedVideoClipIds: string[] };
   expectedFingerprint: unknown;
   summary: unknown;
 }
 
+export type KernelCompileAbortReason =
+  | 'notMechanicalTask'
+  | 'storyPathNeedsProvider'
+  | 'storyPathNeedsMoments';
+
 export interface KernelCompileStoppedResponse {
   runId: string;
   status: 'aborted' | 'failed';
   failures: unknown;
+  reason?: KernelCompileAbortReason;
 }
 
 export type KernelCompileResponse =

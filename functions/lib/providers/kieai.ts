@@ -229,22 +229,19 @@ export function normalizeHostedSunoParams(value: unknown): HostedSunoParams | nu
     return null;
   }
 
-  if (!prompt) {
-    return null;
-  }
-
   const customMode = value.customMode === true || value.custom_mode === true;
   const instrumental = value.instrumental === false ? false : true;
   const style = asString(value.style ?? value.sunoStyle);
   const title = asString(value.title ?? value.sunoTitle);
 
-  if (customMode && (!style || !title)) {
+  if ((!prompt && (!customMode || !instrumental)) || (customMode && (!style || !title))) {
     return null;
   }
 
   return {
     audioWeight: clampOptionalNumber(value.audioWeight ?? value.audio_weight ?? value.sunoAudioWeight, 0, 1),
     customMode,
+    duration: clampOptionalNumber(value.duration, 10, 360),
     instrumental,
     model: asString(value.model ?? value.version) ?? 'V5_5',
     negativeTags: asString(value.negativeTags ?? value.negative_tags ?? value.sunoNegativeTags),

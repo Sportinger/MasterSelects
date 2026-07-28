@@ -334,6 +334,23 @@ export const analysisToolDefinitions: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'repairClipTranscript',
+      description: 'Safely remove duplicated complete transcription runs from a clip source while preserving canonical word IDs, timings, and annotations. Isolated repeated speech is retained.',
+      parameters: {
+        type: 'object',
+        properties: {
+          clipId: {
+            type: 'string',
+            description: 'The ID of a clip whose source transcript should be repaired',
+          },
+        },
+        required: ['clipId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'startClipTranscription',
       description: 'Start speech-to-text transcription for a clip. Transcription runs in the background. Check clip details later to see results.',
       parameters: {

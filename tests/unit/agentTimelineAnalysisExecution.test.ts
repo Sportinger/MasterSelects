@@ -48,6 +48,19 @@ describe('agent timeline analysis execution coordinator', () => {
     expect(result.jobs[0]).toMatchObject({ status: 'cached', progress: 1 });
   });
 
+  it('awaits an asynchronous coverage cache probe before running', async () => {
+    const run = vi.fn();
+    const isCached = vi.fn().mockResolvedValue(true);
+    const result = await runAgentTimelineAnalysis({
+      runKey: `async-cached:${crypto.randomUUID()}`,
+      operations: [{ id: 'transcript', channel: 'speech', isCached, run }],
+    });
+
+    expect(isCached).toHaveBeenCalledTimes(1);
+    expect(run).not.toHaveBeenCalled();
+    expect(result.jobs[0]).toMatchObject({ status: 'cached', progress: 1 });
+  });
+
   it('cancels the active runner and reports a cancelled graph', async () => {
     const started = deferred<void>();
     const cancelled = deferred<void>();

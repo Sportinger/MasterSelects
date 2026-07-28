@@ -136,10 +136,12 @@ export async function applyAlignedTimingsFromArtifact(
       : file),
   }));
 
+  const transcribedRanges = mediaFile.transcribedRanges
+    ?? await projectFileService.getTranscribedRanges(input.mediaFileId).catch(() => undefined);
   await projectFileService.saveTranscript(input.mediaFileId, {
     words: mergedWords,
     artifact: transcriptArtifact,
-  }, mediaFile.transcribedRanges).catch(() => false);
+  }, transcribedRanges).catch(() => false);
 
   for (const clip of useTimelineStore.getState().clips) {
     const clipMediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;

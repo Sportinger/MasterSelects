@@ -21,8 +21,6 @@ describe('FlashBoardSunoOptionsPlanner', () => {
   it('keeps tuning inactive for rounded default slider values', () => {
     const state = buildFlashBoardSunoOptionsState({
       audioWeight: DEFAULT_SUNO_AUDIO_WEIGHT + 0.004,
-      customMode: false,
-      instrumental: true,
       modelId: 'V5',
       styleWeight: DEFAULT_SUNO_STYLE_WEIGHT + 0.004,
       vocalGender: '',

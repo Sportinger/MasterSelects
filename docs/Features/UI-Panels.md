@@ -374,31 +374,35 @@ same source-handle edges.
 | **Masks** | Mask shapes with mode and feather controls |
 | **Analysis** | Shared analysis map, transcript controls, and compact scene blobs with faces, synchronized dialogue, cuts, metrics, quality, and descriptions |
 
-The Analysis workspace uses one source-time model for its graph and scene
-list. Each virtualized scene blob keeps speaker face crops on the left, larger
+The Analysis workspace uses one source-time model for its collapsible graph and
+segment list. Visual scene boundaries remain unchanged in the graph, while the
+list independently divides long dialogue into readable speech segments. Speaker
+changes and long pauses are hard natural boundaries; sentence endings nearest
+the 10-second target are preferred, and unpunctuated speech is split at a word
+boundary before 15 seconds. This keeps talking-head footage navigable even when
+cut detection returns one long scene. The list consumes all remaining panel
+height and owns its scroll. Each virtualized segment keeps visible face crops on
+the left with a separate transcript-speaker abbreviation beside them, larger
 word-synchronized dialogue in the center, and range/duration on the right.
-The flat inspector directly beneath the graph replaces the former Current
-Frame and Summary boxes with playhead metrics and clip-wide counters. Clicking
-a blob expands its scene-scoped people, appearances, identity correction drop
-targets, review detections, camera/focus/motion facts, description provenance,
-coverage, quality notices, OCR, and transcript in place. Person chips filter
-the scene list, while **Next appearance** advances in source time. Face crops
-remain lazy because only the bounded virtualized window and the open scene
-resolve thumbnails. Contextual People and Needs Review controls stay in their
-expanded scene; the source-wide correction strip follows the list.
+Speaker labels are not silently equated with anonymous face identities. Segments
+remain compact and never expand. Clicking a word seeks to that exact word;
+clicking the time seeks to the speech-segment start (or the scene start when no
+speech exists). Redundant playhead and clip-summary statistics are omitted. Face
+crops remain lazy because only the bounded virtualized window resolves
+thumbnails.
 
-The scene list is followed by a compact source-wide people/review strip for
-the complete correction workflow. It deliberately reuses the same person and
-review identities as scene cards: drag a person to merge, an appearance to
-move it, or a review track to assign it. Crop loading is viewport-lazy while
-the virtualized scene window and crop cache keep scrolling bounded.
+The source-wide people/review correction strip lives in Analysis settings so
+the normal scene list stays focused. It deliberately reuses the same person
+and review identities as scene cards: drag a person to merge, an appearance to
+move it, or a review track to assign it. Crop loading remains viewport-lazy.
 
-The Action Center above the map uses the same flat 2px control treatment as
-the rest of Properties. Its analysis actions use three compact equal-height
-cards per row at normal panel widths, with integrated status and action
-controls instead of full-width button bars. Scope and profile selectors update
-a read-only estimate before any work starts, including cached reuse and known
-frame/sample counts. A matching real-device benchmark adds a time range.
+The Action Center above the map is a single compact row of status pills using
+the same flat control treatment as Export. Each pill exposes its channel state
+and triggers analyze, reanalyze, continue, retry, or cancel as appropriate.
+**Analyze all** and a settings button complete the row. The settings disclosure
+uses separate compact areas for shared visual-analysis controls and transcript
+controls. It keeps only control titles, scope/profile choices, language/mode,
+and actions visible; estimates and explanatory copy do not push the map down.
 Quick/Balanced Focus/Motion and Faces execute with the selected source interval
 and sampling cadence; frame-accurate cuts remain source-wide. Deep/Custom stay
 blocked without qualifying evidence. **Analyze All** deliberately excludes AI
@@ -407,11 +411,21 @@ provider cost and share visual content externally.
 
 Analysis contains the transcript workspace header for provider and language
 selection, start/continue/cancel/clear, fusion progress, coverage, and shared
-search. The same search filters the virtualized scene list. Words are grouped
-into timestamped speaker turns; clicking a compact or expanded word seeks the
-playhead to that source position. During playback, the currently spoken word
-and speaker turn are highlighted and the active scene transcript follows them.
+search. The same search filters individual rows in the virtualized segment list.
+Words are grouped into timestamped speaker turns and readable timed segments;
+clicking a word seeks the playhead to that source position. During playback, the
+currently spoken word and active speech segment are highlighted and the list
+follows them when that segment is visible under the current search filter.
 Scrubbing updates the same highlight without animated lag.
+
+For audio-bearing clips, the overview also renders an **Audio** sparkline lane
+from loaded loudness and VAD spans plus a **Markers** needle lane for persisted
+speech markers. The Audio Intelligence Action Center card reports analysis
+state, progress, and marker count and supports run/re-run or cancel. Inside the
+Analysis settings disclosure, `AnalysisAudioSettings` lists the persisted age
+of VAD, alignment, markers, prosody, and room-tone artifacts and provides the
+same run/re-run or cancel control. These surfaces reflect the artifact state
+implemented by WP13; opening the panel does not start analysis implicitly.
 
 Best Quality uses a fixed provider split: Deepgram supplies every displayed word
 and timestamp, while OpenAI supplies the speaker turns. The completed summary

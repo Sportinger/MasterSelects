@@ -485,6 +485,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['moveClipFaceAppearance', mutatingLow()],
   ['assignClipFaceReviewCandidate', mutatingLow()],
   ['startClipTranscription', mutatingLow()],
+  ['repairClipTranscript', mutatingLow()],
   ['startClipAudioIntelligence', mutatingLow()],
   ['searchYouTube', mutatingLow()],
   // searchVideos is the definition name for the same handler as searchYouTube

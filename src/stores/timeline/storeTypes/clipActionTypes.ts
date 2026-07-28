@@ -224,6 +224,7 @@ export type ClipTransformUpdate = Omit<Partial<ClipTransform>, 'position' | 'sca
 
 export interface AddClipOptions {
   name?: string;
+  linkedAudioTrackId?: string;
   signalAssetId?: string;
   signalRefId?: string;
   signalRenderAdapterId?: string;

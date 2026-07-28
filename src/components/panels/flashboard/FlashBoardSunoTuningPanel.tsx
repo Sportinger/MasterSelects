@@ -1,6 +1,7 @@
 interface FlashBoardSunoTuningPanelProps {
   audioReferenceActive: boolean;
   audioWeight: number;
+  disabled?: boolean;
   styleWeight: number;
   weirdnessConstraint: number;
   onAudioWeightChange: (value: number) => void;
@@ -12,6 +13,7 @@ interface FlashBoardSunoTuningPanelProps {
 export function FlashBoardSunoTuningPanel({
   audioReferenceActive,
   audioWeight,
+  disabled = false,
   styleWeight,
   weirdnessConstraint,
   onAudioWeightChange,
@@ -28,7 +30,7 @@ export function FlashBoardSunoTuningPanel({
   ];
 
   return (
-    <div className="fb-suno-tuning-panel fb-suno-inline-tuning">
+    <div className={`fb-suno-tuning-panel fb-suno-inline-tuning ${disabled ? 'is-disabled' : ''}`}>
       {controls.map((control) => (
         <label className="fb-suno-tuning-row" key={control.key}>
           <span>
@@ -42,12 +44,13 @@ export function FlashBoardSunoTuningPanel({
             max="1"
             step="0.01"
             value={control.value}
+            disabled={disabled}
             onChange={(event) => control.onChange(Number(event.target.value))}
           />
         </label>
       ))}
       <div className="fb-suno-tuning-footer">
-        <button className="fb-popover-pill fb-suno-reset-pill" type="button" onClick={onResetTuning}>
+        <button className="fb-popover-pill fb-suno-reset-pill" type="button" onClick={onResetTuning} disabled={disabled}>
           <span className="fb-popover-pill-label">Reset</span>
         </button>
       </div>

@@ -16,6 +16,8 @@ import {
 import { createCurrentAudioArtifactStore } from '../../audio/timelineWaveformPyramidCache';
 import { clipAudioAnalysisJobService } from '../../audio/ClipAudioAnalysisJobService';
 import { useTimelineStore } from '../../../stores/timeline';
+import { projectFileService } from '../../project/ProjectFileService';
+import { findGaps } from '../../transcription/resultMapping';
 
 export interface RunCurrentClipAnalysisOptions {
   clipId: string;
@@ -137,10 +139,29 @@ function transcriptOperation(clipId: string, sourceKey: string): AgentTimelineAn
     id: 'transcript',
     channel: 'speech',
     resourceLocks: [`source-audio:${sourceKey}`, 'transcription-provider'],
-    // Transcript status does not retain provider/model/range provenance at this
-    // call boundary. Re-run so the provider can apply its own compatible cache
-    // policy instead of falsely claiming this graph has a matching result.
-    isCached: () => false,
+    async isCached() {
+      const clip = currentClip(clipId);
+      const mediaFileId = mediaFileIdFor(clipId);
+      if (!clip || !mediaFileId) return false;
+      const rangeStart = clip.inPoint ?? 0;
+      const rangeEnd = clip.outPoint ?? clip.duration;
+      if (!Number.isFinite(rangeStart) || !Number.isFinite(rangeEnd) || rangeEnd <= rangeStart) {
+        return false;
+      }
+
+      const mediaRanges = findTimelineAnalysisMediaFile(mediaFileId)?.transcribedRanges ?? [];
+      let storedRanges: [number, number][] = [];
+      if (projectFileService.isProjectOpen()) {
+        try {
+          storedRanges = await projectFileService.getTranscribedRanges(mediaFileId);
+        } catch {
+          // In-memory coverage is still usable when project persistence is unavailable.
+        }
+      }
+      const gaps = findGaps([...mediaRanges, ...storedRanges], rangeStart, rangeEnd);
+      const uncovered = gaps.reduce((total, [start, end]) => total + end - start, 0);
+      return 1 - uncovered / (rangeEnd - rangeStart) >= 0.98;
+    },
     async run() {
       const { transcribeClip } = await import('../../clipTranscriber');
       await transcribeClip(clipId, 'auto');

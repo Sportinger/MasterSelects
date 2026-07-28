@@ -4,6 +4,7 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { computeTimelineOccupancy } from '../../timeline/timelineOccupancy';
 import type { ToolResult } from '../types';
 import { formatTrackInfo } from '../utils';
+import { clipHasTranscript } from '../../transcription/clipTranscriptResolver';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
@@ -48,7 +49,7 @@ export async function handleGetTimelineState(
       outPoint: clip.outPoint,
       linkedClipId: clip.linkedClipId,
       hasAnalysis: clip.analysisStatus === 'ready',
-      hasTranscript: clip.transcriptStatus === 'ready' || !!clip.transcript?.length,
+      hasTranscript: clipHasTranscript(clip),
     };
   }).filter(Boolean);
 

@@ -86,7 +86,6 @@ export function buildFlashBoardGenerationRequest({
   sunoNegativeTags,
   sunoStyle,
   sunoStyleWeight,
-  sunoTitle,
   sunoVocalGender,
   sunoWeirdnessConstraint,
   version,
@@ -111,8 +110,10 @@ export function buildFlashBoardGenerationRequest({
     outputType: selectedEntry.outputType ?? 'video',
     mode: isAudioRequest && !modeSupportedForAudio ? undefined : mode,
     originalPrompt: requestOriginalPrompt,
-    prompt: effectivePrompt,
-    duration: isAudioRequest ? undefined : duration,
+    prompt: isSunoRequest && sunoInstrumental ? '' : effectivePrompt,
+    duration: isSunoRequest && sunoCustomMode && version === 'V5_5'
+      ? duration
+      : isAudioRequest ? undefined : duration,
     aspectRatio: isAudioRequest ? undefined : aspectRatio,
     imageSize: !isAudioRequest && selectedEntry.supportsTextToImage ? imageSize : undefined,
     generateAudio: isAudioRequest ? false : effectiveGenerateAudio,
@@ -126,13 +127,17 @@ export function buildFlashBoardGenerationRequest({
     voiceSettings: requestIsElevenLabs ? { ...voiceSettings } : undefined,
     sunoCustomMode: isSunoRequest ? sunoCustomMode : undefined,
     sunoInstrumental: isSunoRequest ? sunoInstrumental : undefined,
-    sunoStyle: isSunoRequest ? sunoStyle.trim() : undefined,
-    sunoTitle: isSunoRequest ? sunoTitle.trim() || deriveSunoTitle(effectivePrompt) : undefined,
-    sunoNegativeTags: isSunoRequest ? sunoNegativeTags.trim() || undefined : undefined,
-    sunoVocalGender: isSunoRequest ? sunoVocalGender || undefined : undefined,
-    sunoStyleWeight: isSunoRequest ? sunoStyleWeight : undefined,
-    sunoWeirdnessConstraint: isSunoRequest ? sunoWeirdnessConstraint : undefined,
-    sunoAudioWeight: isSunoRequest ? sunoAudioWeight : undefined,
+    sunoStyle: isSunoRequest && sunoCustomMode ? sunoStyle.trim() : undefined,
+    sunoTitle: isSunoRequest && sunoCustomMode
+      ? deriveSunoTitle(sunoInstrumental ? sunoStyle : effectivePrompt || sunoStyle)
+      : undefined,
+    sunoNegativeTags: isSunoRequest && sunoCustomMode ? sunoNegativeTags.trim() || undefined : undefined,
+    sunoVocalGender: isSunoRequest && sunoCustomMode && !sunoInstrumental
+      ? sunoVocalGender || undefined
+      : undefined,
+    sunoStyleWeight: isSunoRequest && sunoCustomMode ? sunoStyleWeight : undefined,
+    sunoWeirdnessConstraint: isSunoRequest && sunoCustomMode ? sunoWeirdnessConstraint : undefined,
+    sunoAudioWeight: isSunoRequest && sunoCustomMode ? sunoAudioWeight : undefined,
     startMediaFileId: !isAudioRequest && selectedEntry.supportsImageToVideo ? startMediaFileId : undefined,
     endMediaFileId: !isAudioRequest && selectedEntry.supportsImageToVideo && !multiShots ? endMediaFileId : undefined,
     referenceMediaFileIds: isAudioRequest && !isSunoRequest ? [] : effectiveReferenceMediaFileIds,

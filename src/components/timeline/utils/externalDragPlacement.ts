@@ -1,7 +1,7 @@
 import type { TimelineClip, TimelineTrack } from '../../../types';
 
 type PlacementClip = Pick<TimelineClip, 'trackId' | 'startTime' | 'duration'>;
-type PlacementTrack = Pick<TimelineTrack, 'id' | 'type'>;
+type PlacementTrack = Pick<TimelineTrack, 'id' | 'type' | 'locked'>;
 
 function hasOverlap(
   trackId: string,
@@ -85,7 +85,32 @@ export function findFirstTrackWithoutOverlap(
   clips: PlacementClip[]
 ): string | null {
   for (const track of tracks) {
-    if (track.type !== trackType) continue;
+    if (track.type !== trackType || track.locked) continue;
+    if (canPlaceOnTrack(track.id, startTime, duration, clips)) {
+      return track.id;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Finds the lowest compatible track in visual timeline order.
+ *
+ * Video tracks are stored top-to-bottom (Video 2 before Video 1), so linked
+ * video created from an audio-lane drop must search from the end to prefer the
+ * base video lane rather than an upper compositing layer.
+ */
+export function findBottommostTrackWithoutOverlap(
+  trackType: PlacementTrack['type'],
+  startTime: number,
+  duration: number,
+  tracks: PlacementTrack[],
+  clips: PlacementClip[]
+): string | null {
+  for (let index = tracks.length - 1; index >= 0; index--) {
+    const track = tracks[index];
+    if (track.type !== trackType || track.locked) continue;
     if (canPlaceOnTrack(track.id, startTime, duration, clips)) {
       return track.id;
     }

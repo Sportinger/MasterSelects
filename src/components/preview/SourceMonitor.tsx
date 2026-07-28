@@ -18,8 +18,11 @@ import {
   IconPlayerStopFilled,
   IconX,
 } from '@tabler/icons-react';
-import { getShortcutRegistry } from '../../services/shortcutRegistry';
-import { getAudioWaveformStatus, getSourceWaveformChannels, drawSourceAudioWaveformCanvas } from './sourceAudioWaveform';
+import {
+  getAudioWaveformStatus,
+  getSourceWaveformChannels,
+  drawSourceAudioWaveformCanvas,
+} from './sourceAudioWaveform';
 import {
   clearTimelinePlacementCommandPreview,
   runTimelinePlacementCommand,
@@ -30,6 +33,7 @@ import type { TimelinePlacementMode } from '../../stores/timeline/editOperations
 import { SourceMonitorImageCrop } from './sourceMonitor/SourceMonitorImageCrop';
 import { SourceMonitorPlacementCommands } from './sourceMonitor/SourceMonitorPlacementCommands';
 import { useSourceMonitorImageCrop } from './sourceMonitor/useSourceMonitorImageCrop';
+import { useSourceMonitorKeyboard } from './sourceMonitor/useSourceMonitorKeyboard';
 import {
   clampTime,
   createTimelineTicks,
@@ -377,6 +381,16 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
     }
   }, [isPlayable, pauseSource, playSource]);
 
+  const {
+    handlePointerEnter,
+    handlePointerLeave,
+    rootRef,
+  } = useSourceMonitorKeyboard({
+    isPlayable,
+    onClose,
+    togglePlayback,
+  });
+
   useEffect(() => {
     if (!isPlayable) return undefined;
     const media = mediaRef.current;
@@ -401,29 +415,6 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
       media.removeEventListener('canplay', playWhenReady);
     };
   }, [autoplayRequestId, file.id, isPlayable]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const active = document.activeElement;
-      const isInput = active instanceof HTMLInputElement ||
-        active instanceof HTMLTextAreaElement ||
-        active?.getAttribute('contenteditable') === 'true';
-      if (isInput) return;
-
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        onClose();
-      } else if (getShortcutRegistry().matches('playback.playPause', e) && isPlayable) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        togglePlayback();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [isPlayable, onClose, togglePlayback]);
 
   const getTimeFromElementClientX = useCallback((element: HTMLElement | null, clientX: number) => {
     if (!element || timelineDuration <= 0) return 0;
@@ -558,7 +549,12 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
   }, [file.id, imageCrop.cropMode, isImage, isVideo, sourceViewport.panX, sourceViewport.panY, sourceViewport.zoom]);
 
   return (
-    <div className="source-monitor">
+    <div
+      ref={rootRef}
+      className="source-monitor"
+      onPointerEnter={handlePointerEnter}
+      onPointerLeave={handlePointerLeave}
+    >
       <div
         className="source-monitor-media"
         onWheel={handleSourceWheel}

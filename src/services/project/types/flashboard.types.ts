@@ -158,9 +158,22 @@ export interface ProjectFlashBoardJobState {
 export interface ProjectFlashBoardResult {
   mediaFileId: string;
   mediaType: ProjectFlashBoardMediaType;
+  outputId?: string;
   duration?: number;
   width?: number;
   height?: number;
+}
+
+export interface ProjectFlashBoardGenerationOutput {
+  id: string;
+  mediaType: ProjectFlashBoardMediaType;
+  availability: 'preview' | 'completed';
+  artworkUrl?: string;
+  downloadUrl?: string;
+  duration?: number;
+  mediaFileId?: string;
+  previewUrl?: string;
+  title?: string;
 }
 
 export interface ProjectFlashBoardGenerationMetadata {
@@ -207,7 +220,9 @@ export interface ProjectFlashBoardGenerationRecord {
   updatedAt: string;
   request?: ProjectFlashBoardGenerationRequest;
   job?: ProjectFlashBoardJobState;
+  outputs?: ProjectFlashBoardGenerationOutput[];
   result?: ProjectFlashBoardResult;
+  results?: ProjectFlashBoardResult[];
 }
 
 export interface ProjectFlashBoardState {

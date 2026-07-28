@@ -4,6 +4,7 @@
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { getShortcutRegistry } from '../../services/shortcutRegistry';
+import { isTextEntryTarget } from '../../services/shortcutFocusPolicy';
 import { useEngineStore } from '../../stores/engineStore';
 import { useMediaStore } from '../../stores/mediaStore';
 import { isUserVisibleComposition } from '../../stores/mediaStore/compositionVisibility';
@@ -68,7 +69,7 @@ export function MultiPreviewPanel({ panelId, data }: MultiPreviewPanelProps) {
       'preview.slot4' as const,
     ];
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (isTextEntryTarget(e.target) || isTextEntryTarget(document.activeElement)) return;
       for (let i = 0; i < slotActions.length; i++) {
         if (registry.matches(slotActions[i], e)) {
           setHighlightedSlot(i);

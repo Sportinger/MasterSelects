@@ -1,5 +1,4 @@
-import { useTimelineStore } from '../../stores/timeline';
-import {
+﻿import {
   executeAIToolCalls,
   type AIToolCallExecution,
   type AIToolCallExecutionResult,
@@ -10,9 +9,18 @@ import {
   commitAgentTransaction,
   type AgentTransaction,
 } from '../aiTools/agentTransaction';
-import { handleGetTimelineState } from '../aiTools/handlers/timeline';
+import { Logger } from '../logger';
 import { KernelServiceClient } from './index';
+import {
+  formatAssumptionNote,
+  formatStoryVerificationDetails,
+} from './storyVerification';
+import {
+  buildTranscriptMoments,
+  TRANSCRIPT_MOMENT_INDEX_VERSION,
+} from './transcriptMoments';
 import type {
+  KernelCompileAbortReason,
   KernelCompileCompiledResponse,
   KernelCompileResponse,
   KernelResolvedCall,
@@ -23,6 +31,8 @@ const KERNEL_ENABLED_KEY = 'ms.kernel.enabled';
 const KERNEL_TOKEN_KEY = 'ms.kernel.token';
 const KERNEL_URL_KEY = 'ms.kernel.url';
 const FINGERPRINT_SHORT_LENGTH = 8;
+
+const log = Logger.create('KernelGateway');
 
 export type KernelChatGatewayResult =
   | { handled: false }
@@ -105,6 +115,15 @@ function parseResolvedCall(value: unknown): KernelResolvedCall | undefined {
   return { stepId, tool, args: value.args };
 }
 
+function parseAbortReason(value: unknown): KernelCompileAbortReason | undefined {
+  const reason = readString(value);
+  return reason === 'notMechanicalTask'
+    || reason === 'storyPathNeedsProvider'
+    || reason === 'storyPathNeedsMoments'
+    ? reason
+    : undefined;
+}
+
 function parseCompileResponse(value: unknown): KernelCompileResponse | undefined {
   if (!isRecord(value)) {
     return undefined;
@@ -117,10 +136,12 @@ function parseCompileResponse(value: unknown): KernelCompileResponse | undefined
   }
 
   if (status === 'aborted' || status === 'failed') {
+    const reason = parseAbortReason(value.reason);
     return {
       runId,
       status,
       failures: value.failures,
+      ...(reason === undefined ? {} : { reason }),
     };
   }
 
@@ -142,13 +163,39 @@ function parseCompileResponse(value: unknown): KernelCompileResponse | undefined
     )
     ? { simulatedVideoClipIds: [...value.segments.simulatedVideoClipIds] }
     : undefined;
+  const modeValue = readString(value.mode)?.toLowerCase();
+  const mode = modeValue === 'story' || modeValue === 'mechanical'
+    ? modeValue
+    : undefined;
+  if (modeValue !== undefined && mode === undefined) {
+    return undefined;
+  }
+
+  let setup: KernelCompileCompiledResponse['setup'];
+  if (value.setup !== undefined) {
+    if (!isRecord(value.setup) || !isRecord(value.setup.newComposition)) {
+      return undefined;
+    }
+    const name = readString(value.setup.newComposition.name);
+    const durationSeconds = value.setup.newComposition.durationSeconds;
+    if (!name
+      || typeof durationSeconds !== 'number'
+      || !Number.isFinite(durationSeconds)
+      || durationSeconds <= 0) {
+      return undefined;
+    }
+    setup = { newComposition: { name, durationSeconds } };
+  }
 
   return {
     runId,
     status,
+    ...(mode === undefined ? {} : { mode }),
     taskContract: value.taskContract,
     plan: value.plan,
+    storySummary: value.storySummary,
     resolvedCalls: resolvedCalls as KernelResolvedCall[],
+    ...(setup === undefined ? {} : { setup }),
     ...(segments === undefined ? {} : { segments }),
     expectedFingerprint: value.expectedFingerprint,
     summary: value.summary,
@@ -176,10 +223,17 @@ function parseCompleteResponse(value: unknown): KernelRunCompleteResponse | unde
   };
 }
 
-async function buildTimelineSnapshot(): Promise<unknown> {
-  const result = await handleGetTimelineState({}, useTimelineStore.getState());
-  if (!result.success || result.data === undefined) {
-    throw new Error(result.error ?? 'getTimelineState did not return a snapshot.');
+// Snapshots go through the semantic tool gateway like every other kernel
+// interaction (plan Â§8.3) â€” the gateway never reads stores directly.
+async function buildTimelineSnapshot(executor: ExecuteToolCalls): Promise<unknown> {
+  const [execution] = await executor(
+    [{ id: 'kernel-snapshot', tool: 'getTimelineState', args: {} }],
+    'chat',
+    { guidedReplay: false, suppressHistory: true },
+  );
+  const result = execution?.result;
+  if (!result?.success || result.data === undefined) {
+    throw new Error(result?.error ?? 'getTimelineState did not return a snapshot.');
   }
   return result.data;
 }
@@ -406,48 +460,73 @@ export async function tryKernelFirst(
     return { handled: false };
   }
 
-  const getSnapshot = deps.getSnapshot ?? buildTimelineSnapshot;
   const client = deps.client ?? new KernelServiceClient({
     authToken: config.token,
     baseUrl: config.baseUrl,
     fetchImpl: deps.fetchImpl,
   });
+  const executeToolCalls = deps.executeToolCalls ?? executeAIToolCalls;
+  const getSnapshot = deps.getSnapshot ?? (() => buildTimelineSnapshot(executeToolCalls));
 
   let compiled: KernelCompileResponse;
   try {
     const snapshot = await getSnapshot();
+    const moments = await buildTranscriptMoments(snapshot, executeToolCalls);
+    log.info('kernel compile request', {
+      momentCount: moments.length,
+      requestLength: request.length,
+    });
     const compileResult = await client.compile({
       request,
       snapshot,
       ...(deps.seed === undefined ? {} : { seed: deps.seed }),
+      ...(moments.length === 0
+        ? {}
+        : { moments, indexVersion: TRANSCRIPT_MOMENT_INDEX_VERSION }),
     });
     if (!compileResult.ok) {
+      log.warn('kernel compile transport failed; falling back', {
+        status: compileResult.status,
+        error: compileResult.error,
+      });
       return { handled: false };
     }
 
     const parsed = parseCompileResponse(compileResult.data);
     if (!parsed) {
+      log.warn('kernel compile response unparseable; falling back', {
+        data: compileResult.data,
+      });
       return { handled: false };
     }
     compiled = parsed;
-  } catch {
+  } catch (error) {
+    log.warn('kernel gateway threw before execution; falling back', {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return { handled: false };
   }
 
   if (compiled.status !== 'compiled') {
     if (compiled.status === 'aborted') {
+      log.info('kernel declined the task; falling back to community chat', {
+        reason: compiled.reason,
+        failures: compiled.failures,
+      });
       return { handled: false };
     }
-    return {
-      handled: true,
-      message: failedMessage(compiled.failures),
+    // Compile failures happen before any local mutation, so the legacy
+    // loop can still serve the request. Honest failures are reserved for
+    // post-execution states (deferred rollback, fingerprint mismatch).
+    log.warn('kernel compile failed; falling back', {
       runId: compiled.runId,
-    };
+      failures: compiled.failures,
+    });
+    return { handled: false };
   }
 
   const compiledPlan: KernelCompileCompiledResponse = compiled;
   const transaction = transactionAdapter(deps.transaction);
-  const executeToolCalls = deps.executeToolCalls ?? executeAIToolCalls;
   let agentTransaction: AgentTransaction | undefined;
 
   const failureResult = (detail: unknown): KernelChatGatewayResult => {
@@ -468,9 +547,35 @@ export async function tryKernelFirst(
   try {
     agentTransaction = transaction.begin(`Kernel task: ${compiledPlan.runId}`);
 
+    if (compiledPlan.setup?.newComposition) {
+      const setupCall: KernelResolvedCall = {
+        stepId: 'kernel-setup-new-composition',
+        tool: 'createComposition',
+        args: {
+          name: compiledPlan.setup.newComposition.name,
+          duration: compiledPlan.setup.newComposition.durationSeconds,
+          openAfterCreate: true,
+        },
+      };
+      const setupExecution: AIToolCallExecution = {
+        id: setupCall.stepId,
+        tool: setupCall.tool,
+        args: setupCall.args,
+      };
+      const setupResults = await executeToolCalls([setupExecution], 'chat', {
+        guidedReplay: false,
+        suppressHistory: true,
+      });
+      const setupFailure = toolExecutionFailure([setupCall], setupResults);
+      if (setupFailure) {
+        transaction.abort(agentTransaction);
+        return failureResult(setupFailure);
+      }
+    }
+
     // Runtime id binding: reorder calls reference simulated segment ids.
     // After the split executes, map them positionally onto the real ids
-    // from the split result's segments payload (plan §7.1).
+    // from the split result's segments payload (plan Â§7.1).
     const simulatedIds = compiledPlan.segments?.simulatedVideoClipIds;
     let simulatedToReal: Map<string, string> | undefined;
     const mapId = (id: string): string => simulatedToReal?.get(id) ?? id;
@@ -532,8 +637,9 @@ export async function tryKernelFirst(
   }
 
   let completion: KernelRunCompleteResponse;
+  let finalSnapshot: unknown;
   try {
-    const finalSnapshot = await getSnapshot();
+    finalSnapshot = await getSnapshot();
     const completeResult = await client.completeRun(compiledPlan.runId, { finalSnapshot });
     if (!completeResult.ok) {
       return verificationFailure(compiledPlan.runId, completeResult.error);
@@ -567,6 +673,22 @@ export async function tryKernelFirst(
   }
 
   const fingerprintShort = shortFingerprint(fingerprint);
+  if (compiledPlan.mode === 'story') {
+    const details = formatStoryVerificationDetails(
+      finalSnapshot,
+      completion.verificationReport,
+      compiledPlan.summary,
+      compiledPlan.storySummary,
+    );
+    const assumptionNote = formatAssumptionNote(compiledPlan.storySummary);
+    return {
+      handled: true,
+      message: `Kernel-verifiziert (${fingerprintShort}): ${details}`
+        + (assumptionNote ? `\n${assumptionNote}` : ''),
+      runId: compiledPlan.runId,
+    };
+  }
+
   const details = formatVerificationDetails(
     completion.verificationReport,
     compiledPlan.summary,

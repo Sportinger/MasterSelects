@@ -3,13 +3,9 @@ import { useMemo, useCallback, useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
-import { countSceneCutsInSourceRange } from '../../../services/sceneCutDetection/sceneCutRange';
 import { estimateAgentTimelineAnalysis } from '../../../services/agentTimeline/profiles/analysisEstimate';
 import { getAgentTimelineProfileSettings } from '../../../services/agentTimeline/profiles/analysisProfiles';
-import type {
-  AgentTimelineAnalysisEstimate,
-  AgentTimelineAnalysisScopeKind,
-} from '../../../types/agentTimeline/analysisEstimate';
+import type { AgentTimelineAnalysisEstimate, AgentTimelineAnalysisScopeKind } from '../../../types/agentTimeline/analysisEstimate';
 import type { AgentTimelineJobGraphSnapshot } from '../../../types/agentTimeline/jobGraph';
 import type { AgentTimelineProfile, AgentTimelineRange } from '../../../types/agentTimeline/manifest';
 import type {
@@ -21,9 +17,7 @@ import type {
   TranscriptStatus,
   TranscriptWord,
 } from '../../../types/clipMetadata';
-import {
-  AnalysisActionCenter,
-} from './AnalysisActionCenter';
+import { AnalysisActionCenter } from './AnalysisActionCenter';
 import { FaceCropThumbnail } from './FaceCropThumbnail';
 import { collectFaceReviewCandidates } from '../../../services/faceAnalysis/faceReviewCandidates';
 import { collectFacePersonSamples, representativeFacePersonSample } from './facePersonSamples';
@@ -33,16 +27,13 @@ import {
 } from '../../../services/agentTimeline/jobs/currentClipAnalysisExecution';
 import { AnalysisWorkspace } from './analysisWorkspace/AnalysisWorkspace';
 import { buildAnalysisWorkspaceViewModel } from './analysisWorkspace/analysisWorkspaceAdapter';
-import {
-  buildAnalysisWorkspaceTimelineMapping, sourceTimeForAnalysisWorkspacePlayhead, timelineTimeForAnalysisWorkspaceSource,
-} from './analysisWorkspace/analysisWorkspaceOccurrenceMapping';
-import {
-  createAnalysisActionConfiguration,
-  resolveLocalVisualExecution,
-} from './analysisScopeProfileExecution';
-import { TranscriptWorkspaceHeader } from './TranscriptWorkspaceHeader';
+import { buildAnalysisWorkspaceTimelineMapping, sourceTimeForAnalysisWorkspacePlayhead, timelineTimeForAnalysisWorkspaceSource } from './analysisWorkspace/analysisWorkspaceOccurrenceMapping';
+import { createAnalysisActionConfiguration, resolveLocalVisualExecution } from './analysisScopeProfileExecution';
+import { AnalysisTranscriptSettings } from './AnalysisTranscriptSettings';
+import { AnalysisPeopleSettings } from './AnalysisPeopleSettings';
 import { useTranscriptWorkspaceController } from './useTranscriptWorkspaceController';
-
+import { AnalysisAudioSettings } from './AnalysisAudioSettings';
+import { useAnalysisAudioIntelligence } from './useAnalysisAudioIntelligence';
 interface AnalysisTabProps {
   clipId: string;
   analysis: ClipAnalysis | undefined;
@@ -101,6 +92,7 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
     transcriptProgress,
     transcriptStatus,
   });
+  const audioIntelligence = useAnalysisAudioIntelligence(clipId);
 
   // Reactive data - subscribe to specific value only
   const playheadPosition = useTimelineStore(state => state.playheadPosition);
@@ -174,26 +166,20 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
     cuts: sceneCutAnalysis?.cuts,
     sceneSegments: segments,
     transcript,
+    audio: audioIntelligence.lanes,
     channels: {
       cuts: { status: sceneCutStatus, measuredRanges: sceneCutStatus === 'ready' && sceneCutAnalysis ? [{ start: 0, end: sceneCutAnalysis.duration }] : undefined },
       metrics: { status: analysisStatus },
       faces: { status: faceStatus },
       transcript: { status: transcriptStatus, measuredRanges: transcribedRanges?.map(([start, end]) => ({ start, end })) },
       descriptions: { status: descStatus, measuredRanges: descStatus === 'ready' ? [{ start: inPoint, end: outPoint }] : undefined },
-      ...(isAudioSource ? {
-        audio: { status: transcriptStatus, measuredRanges: transcribedRanges?.map(([start, end]) => ({ start, end })) },
+      ...(audioIntelligence.hasAudio ? {
+        audio: { status: audioIntelligence.status },
       } : {}),
     },
-  }), [analysis, analysisStatus, descStatus, faceStatus, inPoint, isAudioSource, outPoint, sceneCutAnalysis, sceneCutStatus, segments, transcript, transcriptStatus, transcribedRanges]);
-  const cutCount = useMemo(
-    () => countSceneCutsInSourceRange(sceneCutAnalysis?.cuts, inPoint, outPoint),
-    [inPoint, outPoint, sceneCutAnalysis],
-  );
-  const cutCounterText = sceneCutStatus === 'analyzing'
-    ? `Analyzing ${Math.round(sceneCutProgress)}%`
-    : sceneCutAnalysis
-      ? String(cutCount)
-      : '—';
+  }), [analysis, analysisStatus, audioIntelligence.hasAudio, audioIntelligence.lanes, audioIntelligence.status,
+    descStatus, faceStatus, inPoint, outPoint, sceneCutAnalysis, sceneCutStatus, segments, transcript,
+    transcriptStatus, transcribedRanges]);
   const usedRange = useMemo(() => range(inPoint, outPoint), [inPoint, outPoint]);
   const fullSourceRange = useMemo(() => range(
     0,
@@ -290,40 +276,6 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
       disposed = true;
     };
   }, [analysisStatus, clipId, faceStatus]);
-
-  // Calculate current values at playhead
-  const currentValues = useMemo((): FrameAnalysisData | null => {
-    if (!analysis?.frames.length) return null;
-
-    if (sourceTimeAtPlayhead === undefined) return null;
-    const sourceTime = sourceTimeAtPlayhead;
-
-    let closestFrame = analysis.frames[0];
-    let closestDistance = Math.abs(closestFrame.timestamp - sourceTime);
-
-    for (const frame of analysis.frames) {
-      const distance = Math.abs(frame.timestamp - sourceTime);
-      if (distance < closestDistance) {
-        closestDistance = distance;
-        closestFrame = frame;
-      }
-    }
-    return closestFrame;
-  }, [analysis, sourceTimeAtPlayhead]);
-
-  // Stats summary
-  const stats = useMemo(() => {
-    if (!analysis?.frames.length) return null;
-    const frames = analysis.frames;
-    return {
-      avgFocus: Math.round(frames.reduce((s, f) => s + f.focus, 0) / frames.length * 100),
-      avgMotion: Math.round(frames.reduce((s, f) => s + f.motion, 0) / frames.length * 100),
-      maxFocus: Math.round(Math.max(...frames.map(f => f.focus)) * 100),
-      maxMotion: Math.round(Math.max(...frames.map(f => f.motion)) * 100),
-      totalFaces: frames.reduce((s, f) => s + f.faceCount, 0),
-      frameCount: frames.length,
-    };
-  }, [analysis]);
 
   // Calculate coverage of clip's range from analysis frames
   const clipCoverage = useMemo(() => {
@@ -432,12 +384,13 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
   const visualGraphText = graphJobText(analysisGraph, 'visual');
   const cutsGraphText = graphJobText(analysisGraph, 'cuts');
   const transcriptGraphText = graphJobText(analysisGraph, 'transcript');
+  const audioGraphText = graphJobText(analysisGraph, 'audio');
   const descriptionsGraphText = graphJobText(analysisGraph, 'descriptions');
 
   const analysisActions = useMemo(() => [
     {
       id: 'metrics',
-      title: 'Focus & Motion',
+      title: 'Focus & motion',
       detail: 'Sharpness and optical-flow samples',
       state: analysisStatus,
       statusText: analysisStatus === 'analyzing'
@@ -483,7 +436,7 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
     },
     {
       id: 'cuts',
-      title: 'Scene Cuts',
+      title: 'Cuts',
       detail: 'Frame-accurate 160×90 source scan',
       state: sceneCutStatus,
       statusText: sceneCutStatus === 'analyzing'
@@ -518,6 +471,26 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
       disabled: analyzeAllRunning,
     },
     {
+      id: 'audio',
+      title: 'Audio intelligence',
+      detail: 'Voice activity, speech markers, prosody, and room tone',
+      state: audioIntelligence.running
+        ? 'analyzing' as const
+        : audioIntelligence.status === 'ready' ? 'ready' as const : 'none' as const,
+      statusText: audioIntelligence.running
+        ? (audioIntelligence.message || `${Math.round(audioIntelligence.progress)}%`)
+        : analyzeAllRunning && audioGraphText
+          ? audioGraphText
+          : audioIntelligence.status === 'ready'
+            ? `${audioIntelligence.markers.length} markers`
+            : audioIntelligence.status === 'partial'
+              ? 'Partially analyzed'
+              : 'Not analyzed',
+      onRun: audioIntelligence.run,
+      onCancel: audioIntelligence.cancel,
+      disabled: analyzeAllRunning || !audioIntelligence.hasAudio,
+    },
+    {
       id: 'descriptions',
       title: 'AI Scenes',
       detail: 'Timestamped visual scene descriptions',
@@ -539,6 +512,15 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
     analysisProgress,
     analysisStatus,
     analyzeAllRunning,
+    audioGraphText,
+    audioIntelligence.cancel,
+    audioIntelligence.hasAudio,
+    audioIntelligence.markers.length,
+    audioIntelligence.message,
+    audioIntelligence.progress,
+    audioIntelligence.run,
+    audioIntelligence.running,
+    audioIntelligence.status,
     clipCoverage,
     cutsGraphText,
     descProgress,
@@ -575,7 +557,7 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
   ]);
   const visibleAnalysisActions = isVideoSource
     ? analysisActions
-    : analysisActions.filter((action) => action.id === 'transcript');
+    : analysisActions.filter((action) => action.id === 'transcript' || action.id === 'audio');
 
   const handleSeekToSourceTime = useCallback((sourceTime: number) => {
     const timelineTime = timelineTimeForAnalysisWorkspaceSource(workspaceTimelineMapping, sourceTime);
@@ -605,6 +587,18 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
       {(isVideoSource || isAudioSource) && (
         <AnalysisActionCenter
           actions={visibleAnalysisActions}
+          advancedControls={<>
+            <AnalysisAudioSettings hasAudio={audioIntelligence.hasAudio} status={audioIntelligence.status}
+              features={audioIntelligence.features} running={audioIntelligence.running}
+              progress={audioIntelligence.progress} onRun={() => { void audioIntelligence.run(); }}
+              onCancel={audioIntelligence.cancel} />
+            <AnalysisTranscriptSettings controller={transcriptController} transcriptCount={transcript.length}
+              transcriptProgress={transcriptProgress} transcriptStatus={transcriptStatus} />
+            <AnalysisPeopleSettings candidates={faceReviewCandidates} frames={analysis?.frames ?? []} people={facePeople}
+              sourceFile={analysisStatus === 'ready' && faceStatus === 'ready' ? sourceFile : undefined}
+              onAssignReviewFaces={handleAssignReviewFaces} onMergePeople={handleMergePeople}
+              onMoveAppearance={handleMoveAppearance} onSelectSourceTime={handleSeekToSourceTime} />
+          </>}
           configuration={analysisConfiguration}
           analyzeAllDisabled={analyzeAllRunning
             || Boolean(localVisualBlockedReason)
@@ -612,7 +606,8 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
             || faceStatus === 'analyzing'
             || sceneCutStatus === 'analyzing'
             || descStatus === 'describing'
-            || transcriptStatus === 'transcribing'}
+            || transcriptStatus === 'transcribing'
+            || audioIntelligence.running}
           analyzeAllRunning={analyzeAllRunning}
           clearDisabled={analyzeAllRunning
             || analysisStatus === 'analyzing'
@@ -629,71 +624,14 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
         model={workspaceModel}
         sourceTime={workspaceSourceTime}
         isFollowingPlayback={isPlaying || isDraggingPlayhead}
+        markers={audioIntelligence.markers}
+        pauses={audioIntelligence.pauses}
+        energyCurve={audioIntelligence.energyCurve}
         transcriptSearchQuery={transcriptController.searchQuery}
         onTranscriptSearchChange={transcriptController.onSearchChange}
-        transcriptControls={(
-          <TranscriptWorkspaceHeader
-            activeProvider={transcriptController.activeProvider}
-            clipCoverage={transcriptController.clipCoverage}
-            hasTranscript={transcript.length > 0}
-            isPartial={transcriptController.isPartial}
-            isSignedIn={transcriptController.isSignedIn}
-            language={transcriptController.language}
-            onCancel={transcriptController.onCancel}
-            onContinue={transcriptController.onContinue}
-            onDelete={transcriptController.onClear}
-            onLanguageChange={transcriptController.onLanguageChange}
-            onProviderChange={transcriptController.onProviderChange}
-            onSearchChange={transcriptController.onSearchChange}
-            onTranscribe={transcriptController.onTranscribe}
-            run={transcriptController.run}
-            searchQuery={transcriptController.searchQuery}
-            summary={transcriptController.summary}
-            transcriptProgress={transcriptProgress}
-            transcriptStatus={transcriptStatus}
-          />
-        )}
-        currentFrame={currentValues ? {
-          sourceTime: workspaceSourceTime,
-          focus: currentValues.focus,
-          motion: currentValues.motion,
-          faceCount: currentValues.faceCount,
-        } : undefined}
-        summary={{
-          ...(stats ? {
-            frameCount: stats.frameCount,
-            averageFocus: stats.avgFocus,
-            peakFocus: stats.maxFocus,
-            averageMotion: stats.avgMotion,
-            peakMotion: stats.maxMotion,
-            totalFaces: stats.totalFaces,
-          } : {}),
-          groupedPeople: facePeople.length,
-          ...(isVideoSource ? {
-            cutCount,
-            totalSourceCuts: sceneCutAnalysis?.cuts.length,
-            cutStatusText: cutCounterText,
-          } : {}),
-          transcriptWords: transcript.length,
-          describedScenes: segments.length,
-        }}
-        reviewCandidates={faceReviewCandidates}
-        facePeople={facePeople}
-        faceFrames={analysis?.frames ?? []}
-        faceSourceFile={analysisStatus === 'ready' && faceStatus === 'ready' ? sourceFile : undefined}
         onSeekSourceTime={handleSeekToSourceTime}
-        onMergePeople={handleMergePeople}
-        onMoveAppearance={handleMoveAppearance}
-        onAssignReviewFaces={handleAssignReviewFaces}
-        onReanalyzeDescription={() => {
-          void handleDescribe();
-        }}
         renderPersonThumbnail={(person, _scene, requestedTime) => {
           const personSamples = scenePersonSamples.get(person.id) ?? [];
-          // List avatars deliberately reuse one representative crop per
-          // identity. Scene-specific crops are only needed for an explicit
-          // appearance click, otherwise a long list would enqueue a new video
-          // seek for the same speaker in every scene.
           const sample = requestedTime === undefined
             ? representativeFacePersonSample(personSamples)
             : personSamples.reduce<(typeof personSamples)[number] | undefined>((closest, candidate) => (
@@ -701,23 +639,17 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
                 ? candidate
                 : closest
             ), undefined);
+          const thumbnailFile = analysisStatus === 'ready' && faceStatus === 'ready' ? sourceFile : undefined;
+          if (!sample || !thumbnailFile) return undefined;
           return (
             <FaceCropThumbnail
-              file={analysisStatus === 'ready' && faceStatus === 'ready' ? sourceFile : undefined}
+              file={thumbnailFile}
               sample={sample}
               size={42}
               alt={`${person.label} face`}
             />
           );
         }}
-        renderReviewThumbnail={(candidate) => (
-          <FaceCropThumbnail
-            file={analysisStatus === 'ready' && faceStatus === 'ready' ? sourceFile : undefined}
-            sample={candidate.sample}
-            size={42}
-            alt={`Face needing review at ${candidate.sample.timestamp.toFixed(1)} seconds`}
-          />
-        )}
       />
 
     </div>

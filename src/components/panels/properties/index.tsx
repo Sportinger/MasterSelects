@@ -18,6 +18,7 @@ import { MidiInstrumentTab } from './MidiInstrumentTab';
 import { DEFAULT_MASTER_AUDIO_STATE } from './audioBusDefaults';
 import { PropertiesTabStrip } from './PropertiesTabStrip';
 import { liveInputRuntime } from '../../../services/mediaRuntime/liveInputRuntime';
+import { resolveClipTranscriptWords } from '../../../services/transcription/clipTranscriptResolver';
 import './PropertiesPanel.css';
 import './EffectsTab.css';
 import './AnalysisTranscriptTabs.css';
@@ -484,8 +485,15 @@ export function PropertiesPanel() {
   const transcriptSourceClip = selectedClipHasTranscriptState
     ? selectedClip
     : linkedTranscriptClip;
-  const transcriptWords = transcriptSourceClip?.transcript || [];
-  const transcriptStatus = transcriptSourceClip?.transcriptStatus || 'none';
+  // Transcripts anchor to the media file; the clip-level copy can be missing
+  // after moves, undo/redo, or re-adds, so fall back to the media store words.
+  const transcriptWords = transcriptSourceClip?.transcript?.length
+    ? transcriptSourceClip.transcript
+    : resolveClipTranscriptWords(selectedClip) ?? [];
+  const clipLevelTranscriptStatus = transcriptSourceClip?.transcriptStatus;
+  const transcriptStatus = clipLevelTranscriptStatus && clipLevelTranscriptStatus !== 'none'
+    ? clipLevelTranscriptStatus
+    : transcriptWords.length > 0 ? 'ready' : 'none';
   const transcriptProgress = transcriptSourceClip?.transcriptProgress || 0;
 
   return (
@@ -632,7 +640,7 @@ export function PropertiesPanel() {
         )}
       </PropertiesTabStrip>
 
-      <div className={`properties-content ${activeTab === 'transcript' ? 'properties-content--transcript' : ''}`}>
+      <div className={`properties-content ${activeTab === 'transcript' ? 'properties-content--transcript' : activeTab === 'analysis' ? 'properties-content--analysis' : ''}`}>
         <Suspense fallback={<TabLoading />}>
           {activeTab === 'live' && isLiveInputClip && <LiveInputTab clipId={selectedClip.id} />}
           {activeTab === 'text' && isTextClip && selectedClip.textProperties && (

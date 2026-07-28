@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   canPlaceOnTrack,
+  findBottommostTrackWithoutOverlap,
   findClosestNonOverlappingStartTime,
   findFirstTrackWithoutOverlap,
 } from '../../src/components/timeline/utils/externalDragPlacement';
@@ -39,5 +40,29 @@ describe('externalDragPlacement', () => {
 
     expect(findFirstTrackWithoutOverlap('audio', 4, 3, tracks, clips)).toBe('audio-2');
     expect(findFirstTrackWithoutOverlap('video', 4, 3, tracks, clips)).toBe('video-1');
+  });
+
+  it('prefers the base video lane when linking from an audio-lane drop', () => {
+    const tracks = [
+      createMockTrack({ id: 'video-2', type: 'video' }),
+      createMockTrack({ id: 'video-1', type: 'video' }),
+      createMockTrack({ id: 'audio-1', type: 'audio' }),
+    ];
+
+    expect(findBottommostTrackWithoutOverlap('video', 4, 3, tracks, [])).toBe('video-1');
+  });
+
+  it('skips occupied and locked base lanes when finding linked video placement', () => {
+    const tracks = [
+      createMockTrack({ id: 'video-3', type: 'video' }),
+      createMockTrack({ id: 'video-2', type: 'video' }),
+      createMockTrack({ id: 'video-1', type: 'video', locked: true }),
+      createMockTrack({ id: 'audio-1', type: 'audio' }),
+    ];
+    const clips = [
+      createMockClip({ trackId: 'video-2', startTime: 3, duration: 5 }),
+    ];
+
+    expect(findBottommostTrackWithoutOverlap('video', 4, 3, tracks, clips)).toBe('video-3');
   });
 });

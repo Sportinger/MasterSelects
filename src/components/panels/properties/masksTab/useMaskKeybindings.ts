@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 
+import { claimShortcut } from '../../../../services/shortcutFocusPolicy';
 import type { ShortcutActionId } from '../../../../services/shortcutTypes';
 import type { ClipMask } from "../../../../types/masks";
 import { isTypingTarget } from './maskTabTypes';
@@ -46,12 +47,12 @@ export function useMaskKeybindings({
       if (isTypingTarget(event.target)) return;
 
       if (activeMask && registry.matches('edit.copy', event)) {
-        event.preventDefault();
+        if (!claimShortcut(event, 'edit.copy')) return;
         copyClipMask(clipId, activeMask.id);
         return;
       }
       if (canPasteMask && registry.matches('edit.paste', event)) {
-        event.preventDefault();
+        if (!claimShortcut(event, 'edit.paste')) return;
         pasteClipMask([clipId]);
         return;
       }
@@ -59,28 +60,28 @@ export function useMaskKeybindings({
       if (maskEditMode !== 'none') return;
 
       if (registry.matches('mask.pen', event)) {
-        event.preventDefault();
+        if (!claimShortcut(event, 'mask.pen')) return;
         setMaskEditMode('drawingPen');
         return;
       }
       if (registry.matches('mask.rectangle', event)) {
-        event.preventDefault();
+        if (!claimShortcut(event, 'mask.rectangle')) return;
         setMaskEditMode('drawingRect');
         return;
       }
       if (registry.matches('mask.ellipse', event)) {
-        event.preventDefault();
+        if (!claimShortcut(event, 'mask.ellipse')) return;
         setMaskEditMode('drawingEllipse');
         return;
       }
       if (activeMask && registry.matches('mask.edit', event)) {
-        event.preventDefault();
+        if (!claimShortcut(event, 'mask.edit')) return;
         setActiveMask(clipId, activeMask.id);
         setMaskEditMode('editing');
         return;
       }
       if (activeMask && registry.matches('mask.closePath', event)) {
-        event.preventDefault();
+        if (!claimShortcut(event, 'mask.closePath')) return;
         if (!activeMask.closed && activeMask.vertices.length >= 3) {
           closeMask(clipId, activeMask.id);
           setMaskEditMode('editing');
@@ -88,23 +89,23 @@ export function useMaskKeybindings({
         return;
       }
       if (activeMask && registry.matches('mask.invert', event)) {
-        event.preventDefault();
+        if (!claimShortcut(event, 'mask.invert')) return;
         updateMask(clipId, activeMask.id, { inverted: !activeMask.inverted });
         return;
       }
       if (activeMask && registry.matches('mask.toggleOutline', event)) {
-        event.preventDefault();
+        if (!claimShortcut(event, 'mask.toggleOutline')) return;
         updateMask(clipId, activeMask.id, { visible: !activeMask.visible });
         return;
       }
       if (activeMask && registry.matches('mask.selectAllVertices', event)) {
-        event.preventDefault();
+        if (!claimShortcut(event, 'mask.selectAllVertices')) return;
         setActiveMask(clipId, activeMask.id);
         selectVertices(activeMask.vertices.map(vertex => vertex.id));
         return;
       }
       if (activeMask && selectedVertexCount > 0 && registry.matches('mask.toggleVertexHandles', event)) {
-        event.preventDefault();
+        if (!claimShortcut(event, 'mask.toggleVertexHandles')) return;
         cycleSelectedHandles();
       }
     };

@@ -13,10 +13,18 @@ interface DurationPopoverOption extends ParameterPopoverOption {
   value: number;
 }
 
+interface DurationRange {
+  max: number;
+  min: number;
+  step: number;
+  value: number;
+}
+
 interface FlashBoardParameterPopoversProps {
   activePopover: string | null;
   aspectOptions: ParameterPopoverOption[];
   durationOptions: DurationPopoverOption[];
+  durationRange?: DurationRange;
   imageSizeOptions: ParameterPopoverOption[];
   modeOptions: ParameterPopoverOption[];
   modeTitle?: string;
@@ -85,6 +93,7 @@ export function FlashBoardParameterPopovers({
   activePopover,
   aspectOptions,
   durationOptions,
+  durationRange,
   imageSizeOptions,
   modeOptions,
   modeTitle = 'Mode',
@@ -108,15 +117,31 @@ export function FlashBoardParameterPopovers({
         </div>
       )}
 
-      {activePopover === 'duration' && durationOptions.length > 0 && (
+      {activePopover === 'duration' && (durationOptions.length > 0 || durationRange) && (
         <div className="fb-popover">
           <div className="fb-popover-title">Duration</div>
-          <div className="fb-popover-pills">
-            {durationOptions.map((option) => renderPopoverOption(option, () => {
-              onDurationChange(option.value);
-              onClosePopover('duration');
-            }))}
-          </div>
+          {durationRange ? (
+            <label className="fb-duration-range">
+              <span>{durationRange.value}s</span>
+              <input
+                aria-label="Track duration"
+                type="range"
+                min={durationRange.min}
+                max={durationRange.max}
+                step={durationRange.step}
+                value={durationRange.value}
+                onChange={(event) => onDurationChange(Number(event.target.value))}
+              />
+              <em>{durationRange.min}s–{durationRange.max}s</em>
+            </label>
+          ) : (
+            <div className="fb-popover-pills">
+              {durationOptions.map((option) => renderPopoverOption(option, () => {
+                onDurationChange(option.value);
+                onClosePopover('duration');
+              }))}
+            </div>
+          )}
         </div>
       )}
 

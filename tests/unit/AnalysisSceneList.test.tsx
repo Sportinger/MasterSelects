@@ -4,8 +4,11 @@ import {
   AnalysisSceneList,
 } from '../../src/components/panels/properties/analysisWorkspace/AnalysisSceneList';
 import {
+  buildAnalysisSceneListItems,
   buildAnalysisSceneLayout,
+  filterAnalysisSceneListItems,
   filterAnalysisScenes,
+  findActiveAnalysisSceneListItem,
   getAnalysisSceneWindow,
 } from '../../src/components/panels/properties/analysisWorkspace/analysisSceneListModel';
 import type { AnalysisSceneView } from '../../src/components/panels/properties/analysisWorkspace/analysisSceneViewModel';
@@ -29,6 +32,7 @@ function scene(index: number): AnalysisSceneView {
 
 describe('AnalysisSceneList', () => {
   const scenes = Array.from({ length: 100 }, (_, index) => scene(index));
+  const items = buildAnalysisSceneListItems(scenes);
 
   it('filters scene facts without mutating the complete scene list', () => {
     expect(filterAnalysisScenes(scenes, 'needle').map((item) => item.id)).toEqual(['scene-8']);
@@ -36,8 +40,26 @@ describe('AnalysisSceneList', () => {
     expect(scenes).toHaveLength(100);
   });
 
+  it('filters individual transcript segments without changing semantic scenes', () => {
+    const longScene: AnalysisSceneView = {
+      ...scene(0),
+      range: { start: 0, end: 24 },
+      transcript: Array.from({ length: 24 }, (_, index) => ({
+        id: `long-${index}`,
+        text: index === 9 ? 'Needle.' : index === 19 ? 'Second.' : `word${index}`,
+        start: index,
+        end: index + 0.4,
+      })),
+    };
+    const longItems = buildAnalysisSceneListItems([longScene]);
+
+    expect(longItems.length).toBeGreaterThan(1);
+    expect(filterAnalysisSceneListItems(longItems, 'needle')).toHaveLength(1);
+    expect(longScene.range).toEqual({ start: 0, end: 24 });
+  });
+
   it('keeps the rendered window bounded for long sources', () => {
-    const layout = buildAnalysisSceneLayout(scenes);
+    const layout = buildAnalysisSceneLayout(items);
     const firstWindow = getAnalysisSceneWindow(layout, 0);
     const laterWindow = getAnalysisSceneWindow(layout, 460);
 
@@ -48,19 +70,70 @@ describe('AnalysisSceneList', () => {
   });
 
   it('renders only the visible scene rows and selects by source scene', () => {
-    const onSceneSelect = vi.fn();
+    const onItemSelect = vi.fn();
     render(
       <AnalysisSceneList
-        scenes={scenes}
+        items={items}
         selectedSceneId="scene-0"
         sourceTime={0}
-        onSceneSelect={onSceneSelect}
+        onItemSelect={onItemSelect}
       />,
     );
 
     const items = screen.getAllByRole('listitem');
     expect(items.length).toBeLessThan(10);
-    fireEvent.click(screen.getAllByRole('button', { expanded: false })[1]);
-    expect(onSceneSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'scene-1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Seek to scene 2' }));
+    expect(onItemSelect).toHaveBeenCalledWith(expect.objectContaining({
+      scene: expect.objectContaining({ id: 'scene-1' }),
+    }));
+  });
+
+  it('selects exactly one transcript row through speech gaps', () => {
+    const longScene: AnalysisSceneView = {
+      ...scene(0),
+      range: { start: 0, end: 20 },
+      transcript: [
+        { id: 'first', text: 'First.', start: 1, end: 2 },
+        { id: 'second', text: 'Second.', start: 10, end: 11 },
+      ],
+    };
+    const longItems = buildAnalysisSceneListItems([longScene]);
+
+    expect(findActiveAnalysisSceneListItem(longItems, 1.5)?.transcriptChunk.words[0].id).toBe('first');
+    expect(findActiveAnalysisSceneListItem(longItems, 6)?.transcriptChunk.words[0].id).toBe('first');
+    expect(findActiveAnalysisSceneListItem(longItems, 10.5)?.transcriptChunk.words[0].id).toBe('second');
+  });
+
+  it('renders a breath marker in its word gap and styles its linked filler word', () => {
+    const markerScene: AnalysisSceneView = {
+      ...scene(0),
+      range: { start: 0, end: 2 },
+      transcript: [
+        { id: 'first', text: 'Well', start: 0, end: 0.4 },
+        { id: 'filler', text: 'um', start: 1, end: 1.4, emphasis: 0.8 },
+      ],
+    };
+    const markerItems = buildAnalysisSceneListItems([markerScene], {
+      markers: [
+        { id: 'breath', kind: 'breath', start: 0.5, end: 0.8, confidence: 0.91 },
+        { id: 'filler-marker', kind: 'filler', start: 1, end: 1.4, confidence: 0.88, wordIds: ['filler'] },
+      ],
+    });
+
+    render(
+      <AnalysisSceneList
+        items={markerItems}
+        sourceTime={0}
+        onItemSelect={vi.fn()}
+      />,
+    );
+
+    const breath = screen.getByLabelText('Breath marker');
+    expect(breath).toHaveClass('analysis-scene-blob__marker--breath');
+    expect(breath).toHaveAttribute('title', 'Breath (91% confidence)');
+    expect(screen.getByRole('button', { name: 'Seek word um' })).toHaveClass(
+      'AnalysisSceneBlob__word--filler',
+      'AnalysisSceneBlob__word--emphasis',
+    );
   });
 });

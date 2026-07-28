@@ -17,9 +17,11 @@ import type {
 } from './types';
 
 export type {
+  KernelCompileAbortReason,
   KernelCompileCompiledResponse,
   KernelCompileRequest,
   KernelCompileResponse,
+  KernelCompileSetup,
   KernelCompileStoppedResponse,
   KernelFingerprintAssert,
   KernelHealthResponse,
@@ -35,12 +37,15 @@ export type {
   KernelServiceFailure,
   KernelServiceResult,
   KernelServiceSuccess,
+  KernelTranscriptMoment,
   KernelValidateRequest,
   KernelValidateResponse,
 } from './types';
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8787';
 const DEFAULT_TIMEOUT_MS = 30_000;
+// Story compiles include provider planning rounds plus the director run.
+const COMPILE_TIMEOUT_MS = 180_000;
 const AVAILABILITY_TIMEOUT_MS = 2_000;
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -125,7 +130,7 @@ export class KernelServiceClient {
     return this.request('/kernel/compile', true, {
       method: 'POST',
       body: JSON.stringify(input),
-    }, options);
+    }, { timeoutMs: COMPILE_TIMEOUT_MS, ...options });
   }
 
   completeRun(

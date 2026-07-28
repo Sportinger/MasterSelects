@@ -46,6 +46,7 @@ interface BuildFlashBoardGenerationActionStateInput {
   seedanceReferenceValidationError: string | null;
   service: FlashBoardService;
   sunoCustomMode: boolean;
+  sunoInstrumental: boolean;
   sunoStyle: string;
   supportsMultiShot: boolean;
   usePiApiKeyByDefault: boolean;
@@ -294,7 +295,9 @@ export function buildFlashBoardGenerationActionState(input: BuildFlashBoardGener
   const generateButtonTitle = currentPrice
     ? `${currentPrice.fullLabel} (Ctrl+Enter)`
     : `${generateActionLabel} (Ctrl+Enter)`;
-  const promptReady = input.selectedEntry?.requiresPrompt === false || input.effectivePrompt.trim().length > 0;
+  const promptReady = input.selectedEntry?.requiresPrompt === false
+    || input.effectivePrompt.trim().length > 0
+    || (input.isSunoMode && input.sunoCustomMode && input.sunoInstrumental);
   const canGenerate = Boolean(input.hasGenerationBoard && input.selectedEntry && promptReady)
     && !multiShotValidationError
     && !audioValidationError

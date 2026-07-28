@@ -1,7 +1,12 @@
-import type { AnalysisSceneView } from './analysisSceneViewModel';
+import type { AnalysisSceneSpeechMarker, AnalysisSceneView } from './analysisSceneViewModel';
+import type { AnalysisSceneSparklineCurve } from './AnalysisSceneSparkline';
+import {
+  buildAnalysisTranscriptChunks,
+  type AnalysisTranscriptChunkPause,
+  type AnalysisTranscriptChunk,
+} from './analysisTranscriptChunks';
 
 export const ANALYSIS_SCENE_COLLAPSED_HEIGHT = 78;
-export const ANALYSIS_SCENE_EXPANDED_HEIGHT = 350;
 export const ANALYSIS_SCENE_ROW_GAP = 6;
 export const ANALYSIS_SCENE_LIST_VIEWPORT_HEIGHT = 430;
 const OVERSCAN_PIXELS = 180;
@@ -14,6 +19,14 @@ export interface AnalysisSceneLayoutRow {
 export interface AnalysisSceneLayout {
   rows: readonly AnalysisSceneLayoutRow[];
   totalHeight: number;
+}
+
+export interface AnalysisSceneListItem {
+  id: string;
+  scene: AnalysisSceneView;
+  transcriptChunk: AnalysisTranscriptChunk;
+  markers: readonly AnalysisSceneSpeechMarker[];
+  energyCurve?: AnalysisSceneSparklineCurve;
 }
 
 function searchableSceneText(scene: AnalysisSceneView): string {
@@ -34,6 +47,69 @@ export function filterAnalysisScenes(
   return scenes.filter((scene) => searchableSceneText(scene).includes(normalizedQuery));
 }
 
+export function buildAnalysisSceneListItems(
+  scenes: readonly AnalysisSceneView[],
+  options?: {
+    pauses?: readonly AnalysisTranscriptChunkPause[];
+    markers?: readonly AnalysisSceneSpeechMarker[];
+    energyCurve?: AnalysisSceneSparklineCurve;
+  },
+): readonly AnalysisSceneListItem[] {
+  return scenes.flatMap(scene => buildAnalysisTranscriptChunks(scene, {
+    pauses: options?.pauses,
+  }).map(transcriptChunk => ({
+    id: transcriptChunk.id,
+    scene,
+    transcriptChunk,
+    markers: (options?.markers ?? []).filter(marker => (
+      marker.start < transcriptChunk.end && transcriptChunk.start < marker.end
+    )),
+    energyCurve: options?.energyCurve,
+  })));
+}
+
+function searchableListItemText(item: AnalysisSceneListItem): string {
+  return [
+    item.scene.description?.text,
+    ...item.scene.people.map(person => person.label),
+    item.transcriptChunk.speakerLabel,
+    ...item.transcriptChunk.words.map(word => word.text),
+  ].filter(Boolean).join(' ').toLocaleLowerCase();
+}
+
+export function filterAnalysisSceneListItems(
+  items: readonly AnalysisSceneListItem[],
+  query: string,
+): readonly AnalysisSceneListItem[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (!normalizedQuery) return items;
+  return items.filter(item => searchableListItemText(item).includes(normalizedQuery));
+}
+
+export function findActiveAnalysisSceneListItem(
+  items: readonly AnalysisSceneListItem[],
+  sourceTime: number,
+  selectedSceneId?: string,
+): AnalysisSceneListItem | undefined {
+  const sourceScene = Number.isFinite(sourceTime)
+    ? items.find(item => sourceTime >= item.scene.range.start && sourceTime < item.scene.range.end)?.scene
+    : undefined;
+  const sceneId = sourceScene?.id ?? selectedSceneId;
+  const sceneItems = items
+    .filter(item => item.scene.id === sceneId)
+    .toSorted((left, right) => (
+      left.transcriptChunk.start - right.transcriptChunk.start
+      || left.transcriptChunk.end - right.transcriptChunk.end
+      || left.id.localeCompare(right.id)
+    ));
+  if (sceneItems.length === 0) return undefined;
+  const containing = sceneItems.find(item => (
+    sourceTime >= item.transcriptChunk.start && sourceTime < item.transcriptChunk.end
+  ));
+  if (containing) return containing;
+  return sceneItems.findLast(item => item.transcriptChunk.start <= sourceTime) ?? sceneItems[0];
+}
+
 export function getAnalysisSceneWindow(
   layout: AnalysisSceneLayout,
   scrollTop: number,
@@ -50,14 +126,11 @@ export function getAnalysisSceneWindow(
 }
 
 export function buildAnalysisSceneLayout(
-  scenes: readonly AnalysisSceneView[],
-  expandedSceneId?: string,
+  items: readonly unknown[],
 ): AnalysisSceneLayout {
   let offset = 0;
-  const rows = scenes.map((scene) => {
-    const height = scene.id === expandedSceneId
-      ? ANALYSIS_SCENE_EXPANDED_HEIGHT
-      : ANALYSIS_SCENE_COLLAPSED_HEIGHT;
+  const rows = items.map(() => {
+    const height = ANALYSIS_SCENE_COLLAPSED_HEIGHT;
     const row = { offset, height };
     offset += height + ANALYSIS_SCENE_ROW_GAP;
     return row;

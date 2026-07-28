@@ -81,8 +81,8 @@ export function updateTranscriptFusionPreview(
 
 /**
  * Propagate transcript to MediaFile for badge display and carry-over to new clips.
- * Merges with existing transcript if the MediaFile already has words from a different region.
- * Also tracks transcribed ranges for continue mode and project transcript artifacts.
+ * When source ranges are supplied, the incoming words are authoritative for
+ * those ranges; words outside them remain intact.
  */
 export function propagateTranscriptToMediaFile(
   mediaFileId: string,
@@ -95,9 +95,17 @@ export function propagateTranscriptToMediaFile(
     const file = mediaState.files.find((f: MediaFile) => f.id === mediaFileId);
     if (!file) return;
 
-    const mergedWords = file.transcript?.length
-      ? mergeTranscriptWords(file.transcript, words)
-      : words;
+    const existingWords = file.transcript ?? [];
+    const retainedWords = newRanges?.length
+      ? existingWords.filter(word => !newRanges.some(
+          ([rangeStart, rangeEnd]) => word.start < rangeEnd && rangeStart < word.end,
+        ))
+      : existingWords;
+    const mergedWords = (
+      newRanges?.length
+        ? [...retainedWords, ...words]
+        : mergeTranscriptWords(retainedWords, words)
+    ).toSorted((left, right) => left.start - right.start);
 
     let transcriptCoverage = 0;
     if (file.duration && file.duration > 0) {

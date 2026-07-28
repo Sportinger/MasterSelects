@@ -11,7 +11,6 @@ export type FlashBoardComposerPopover =
   | 'audioOutput'
   | 'voiceSettings'
   | 'sunoModel'
-  | 'sunoMode'
   | 'chatProvider'
   | 'chatModel'
   | 'chatContext'
@@ -28,7 +27,6 @@ const INLINE_SUBMENU_POPOVERS = new Set<FlashBoardComposerActivePopover>([
   'imageSize',
   'mode',
   'sunoModel',
-  'sunoMode',
   'chatProvider',
   'chatModel',
   'chatContext',

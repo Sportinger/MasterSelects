@@ -16,6 +16,7 @@ import type { Composition, MediaFile } from '../stores/mediaStore/types';
 import type { TimelineClip } from '../types';
 import type { DockLayout, DockNode, DockPanel, FloatingPanel } from '../types/dock';
 import { getShortcutRegistry } from '../services/shortcutRegistry';
+import { claimShortcut } from '../services/shortcutFocusPolicy';
 import { isAIExecutionRunning } from '../services/aiTools/executionState';
 import { layerBuilder } from '../services/layerBuilder';
 import { renderHostPort } from '../services/render/renderHostPort';
@@ -599,17 +600,8 @@ export function useGlobalHistory() {
     const registry = getShortcutRegistry();
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if typing in an input
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement ||
-        (e.target as HTMLElement)?.isContentEditable
-      ) {
-        return;
-      }
-
       if (registry.matches('history.undo', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'history.undo')) return;
         const result = undo();
         if (result) {
           showHistoryNotice(result);
@@ -618,7 +610,7 @@ export function useGlobalHistory() {
       }
 
       if (registry.matches('history.redo', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'history.redo')) return;
         const result = redo();
         if (result) {
           showHistoryNotice(result);

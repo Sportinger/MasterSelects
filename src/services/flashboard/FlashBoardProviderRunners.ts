@@ -2,7 +2,12 @@ import { piApiService } from '../piApiService';
 import { kieAiService } from '../kieAiService';
 import { cloudAiService } from '../cloudAiService';
 import type { TextToVideoParams, ImageToVideoParams, GenerationReferenceMedia } from '../piApiService';
-import type { FlashBoardGenerationRequest, FlashBoardJobRefund, FlashBoardMediaType } from '../../stores/flashboardStore/types';
+import type {
+  FlashBoardGenerationOutput,
+  FlashBoardGenerationRequest,
+  FlashBoardJobRefund,
+  FlashBoardMediaType,
+} from '../../stores/flashboardStore/types';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useMediaStore } from '../../stores/mediaStore';
 import { getCatalogEntry } from './FlashBoardModelCatalog';
@@ -20,7 +25,16 @@ type FlashBoardProviderProcessingUpdate = {
   status: 'processing';
   remoteTaskId?: string;
   progress?: number;
+  outputs?: FlashBoardGenerationOutput[];
 };
+
+export interface FlashBoardProviderAsset {
+  file?: File;
+  mediaType: FlashBoardMediaType;
+  outputId?: string;
+  title?: string;
+  url?: string;
+}
 
 export type FlashBoardProviderRunnerResult = {
   status: 'completed' | 'failed';
@@ -30,6 +44,8 @@ export type FlashBoardProviderRunnerResult = {
   assetUrl?: string;
   assetFile?: File;
   mediaType?: FlashBoardMediaType;
+  assets?: FlashBoardProviderAsset[];
+  outputs?: FlashBoardGenerationOutput[];
   refund?: FlashBoardJobRefund;
 } | null;
 
@@ -60,6 +76,44 @@ function sanitizeForFilename(value: string, maxLen = 32): string {
     .slice(0, maxLen)
     .replace(/_$/, '')
     .toLowerCase() || 'untitled';
+}
+
+interface SunoTaskResult {
+  audioUrl?: string;
+  duration?: number;
+  id?: string;
+  imageUrl?: string;
+  streamAudioUrl?: string;
+  title?: string;
+}
+
+function buildSunoOutputs(
+  results: SunoTaskResult[] | undefined,
+  completed: boolean,
+): FlashBoardGenerationOutput[] {
+  return (results ?? [])
+    .filter((result) => Boolean(result.audioUrl || result.streamAudioUrl))
+    .map((result, index) => ({
+      id: result.id ?? `track-${index + 1}`,
+      mediaType: 'audio' as const,
+      availability: completed ? 'completed' as const : 'preview' as const,
+      artworkUrl: result.imageUrl,
+      downloadUrl: result.audioUrl,
+      duration: result.duration,
+      previewUrl: result.streamAudioUrl ?? result.audioUrl,
+      title: result.title ?? `Track ${index + 1}`,
+    }));
+}
+
+function buildSunoAssets(results: SunoTaskResult[] | undefined): FlashBoardProviderAsset[] {
+  return (results ?? [])
+    .filter((result): result is SunoTaskResult & { audioUrl: string } => Boolean(result.audioUrl))
+    .map((result, index) => ({
+      mediaType: 'audio',
+      outputId: result.id ?? `track-${index + 1}`,
+      title: result.title,
+      url: result.audioUrl,
+    }));
 }
 
 function applyFlashBoardProviderApiKeys(request: FlashBoardGenerationRequest): void {
@@ -122,7 +176,12 @@ export async function resumeFlashBoardProviderJob({
         remoteTaskId,
         (currentTask) => {
           if (abortController.signal.aborted) throw new Error('Canceled');
-          onProcessing({ status: 'processing', progress: currentTask.progress, remoteTaskId });
+          onProcessing({
+            status: 'processing',
+            progress: currentTask.progress,
+            remoteTaskId,
+            outputs: buildSunoOutputs(currentTask.results, false),
+          });
         },
         pollInterval,
         900000,
@@ -132,15 +191,28 @@ export async function resumeFlashBoardProviderJob({
         remoteTaskId,
         (currentTask) => {
           if (abortController.signal.aborted) throw new Error('Canceled');
-          onProcessing({ status: 'processing', progress: currentTask.progress, remoteTaskId });
+          onProcessing({
+            status: 'processing',
+            progress: currentTask.progress,
+            remoteTaskId,
+            outputs: buildSunoOutputs(currentTask.results, false),
+          });
         },
         pollInterval,
         900000,
         abortController.signal,
       );
-    const audioUrl = task.results?.[0]?.audioUrl;
-    if (task.status === 'completed' && audioUrl) {
-      return { status: 'completed', progress: 1, remoteTaskId, assetUrl: audioUrl, mediaType: 'audio' };
+    const assets = buildSunoAssets(task.results);
+    if (task.status === 'completed' && assets.length > 0) {
+      return {
+        status: 'completed',
+        progress: 1,
+        remoteTaskId,
+        assetUrl: assets[0].url,
+        assets,
+        mediaType: 'audio',
+        outputs: buildSunoOutputs(task.results, true),
+      };
     }
     return {
       status: 'failed',
@@ -205,7 +277,7 @@ async function runSunoMusicJob({
   registerRunningJob,
   onProcessing,
 }: FlashBoardProviderRunnerContext): Promise<FlashBoardProviderRunnerResult> {
-  if (!request.prompt.trim()) {
+  if (!request.prompt.trim() && !(request.sunoCustomMode && request.sunoInstrumental)) {
     throw new Error('Describe the music before generating with Suno.');
   }
 
@@ -213,6 +285,7 @@ async function runSunoMusicJob({
     ? await cloudAiService.createSunoMusic({
         audioWeight: request.sunoAudioWeight,
         customMode: request.sunoCustomMode,
+        duration: request.duration,
         instrumental: request.sunoInstrumental,
         model: request.version,
         negativeTags: request.sunoNegativeTags,
@@ -226,6 +299,7 @@ async function runSunoMusicJob({
     : await sunoService.createMusic({
         audioWeight: request.sunoAudioWeight,
         customMode: request.sunoCustomMode,
+        duration: request.duration,
         instrumental: request.sunoInstrumental,
         model: request.version,
         negativeTags: request.sunoNegativeTags,
@@ -249,6 +323,7 @@ async function runSunoMusicJob({
           status: 'processing',
           progress: currentTask.progress,
           remoteTaskId,
+          outputs: buildSunoOutputs(currentTask.results, false),
         });
       },
       10000,
@@ -263,6 +338,7 @@ async function runSunoMusicJob({
             status: 'processing',
             progress: currentTask.progress,
             remoteTaskId,
+            outputs: buildSunoOutputs(currentTask.results, false),
           });
         },
         10000,
@@ -270,14 +346,16 @@ async function runSunoMusicJob({
         abortController.signal,
       );
 
-  const audioUrl = task.results?.[0]?.audioUrl;
-  if (task.status === 'completed' && audioUrl) {
+  const assets = buildSunoAssets(task.results);
+  if (task.status === 'completed' && assets.length > 0) {
     return {
       status: 'completed',
       progress: 1,
       remoteTaskId,
-      assetUrl: audioUrl,
+      assetUrl: assets[0].url,
+      assets,
       mediaType: 'audio',
+      outputs: buildSunoOutputs(task.results, true),
     };
   }
 

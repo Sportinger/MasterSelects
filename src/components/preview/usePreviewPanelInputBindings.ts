@@ -37,12 +37,14 @@ export function usePreviewPanelInputBindings({
   }, [containerRef, handleWheel]);
 
   const toggleEditModeFromShortcut = useCallback(() => {
-    if (!isPreviewShortcutTarget()) return;
     containerRef.current?.focus({ preventScroll: true });
     setEditMode(prev => !prev);
-  }, [containerRef, isPreviewShortcutTarget, setEditMode]);
+  }, [containerRef, setEditMode]);
 
-  useShortcut('preview.editMode', toggleEditModeFromShortcut, { enabled: isEditableSource });
+  useShortcut('preview.editMode', toggleEditModeFromShortcut, {
+    enabled: isEditableSource,
+    shouldHandle: isPreviewShortcutTarget,
+  });
 
   const { handleContextMenu, handleAuxClick } = usePreviewContextMenu({
     editCameraOrthoViewActive,

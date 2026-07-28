@@ -160,7 +160,21 @@ export interface FlashBoardActiveGenerationRecord {
   updatedAt: number;
   request?: FlashBoardGenerationRequest;
   job?: FlashBoardJobState;
+  outputs?: FlashBoardGenerationOutput[];
   result?: FlashBoardResult;
+  results?: FlashBoardResult[];
+}
+
+export interface FlashBoardGenerationOutput {
+  id: string;
+  mediaType: FlashBoardMediaType;
+  availability: 'preview' | 'completed';
+  artworkUrl?: string;
+  downloadUrl?: string;
+  duration?: number;
+  mediaFileId?: string;
+  previewUrl?: string;
+  title?: string;
 }
 
 export interface FlashBoardGenerationRequest {
@@ -217,6 +231,7 @@ export interface FlashBoardJobRefund {
 export interface FlashBoardResult {
   mediaFileId: string;
   mediaType: FlashBoardMediaType;
+  outputId?: string;
   duration?: number;
   width?: number;
   height?: number;

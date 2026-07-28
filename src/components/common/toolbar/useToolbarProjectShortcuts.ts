@@ -3,6 +3,10 @@ import type { Dispatch, SetStateAction } from 'react';
 import { projectFileService } from '../../../services/projectFileService';
 import { getShortcutRegistry } from '../../../services/shortcutRegistry';
 import {
+  claimShortcut,
+  isTextEntryTarget,
+} from '../../../services/shortcutFocusPolicy';
+import {
   createNewProject,
   saveCurrentProject,
 } from '../../../services/projectSync';
@@ -28,13 +32,23 @@ export function useToolbarProjectShortcuts({
     const registry = getShortcutRegistry();
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (registry.matches('project.save', event) || registry.matches('project.saveAs', event)) {
-        event.preventDefault();
-        event.stopPropagation();
+      const saveAction = registry.matches('project.saveAs', event)
+        ? 'project.saveAs'
+        : registry.matches('project.save', event)
+          ? 'project.save'
+          : null;
+      if (saveAction) {
+        if (
+          isTextEntryTarget(event.target) ||
+          isTextEntryTarget(document.activeElement)
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        if (!claimShortcut(event, saveAction, { stopPropagation: true })) return;
 
-        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
-
-        if (registry.matches('project.saveAs', event)) {
+        if (saveAction === 'project.saveAs') {
           const name = prompt('Save project as:', projectName || 'New Project');
           if (name) {
             createNewProject(name).then((success) => {
@@ -64,15 +78,14 @@ export function useToolbarProjectShortcuts({
         return;
       }
 
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
-
       if (registry.matches('project.new', event)) {
-        event.preventDefault();
+        if (!claimShortcut(event, 'project.new')) return;
         handleNew();
+        return;
       }
 
       if (registry.matches('project.open', event)) {
-        event.preventDefault();
+        if (!claimShortcut(event, 'project.open')) return;
         handleOpen();
       }
     };

@@ -1,11 +1,20 @@
 import { Logger } from '../logger';
 import type { GenerationReferenceMedia } from '../piApiService';
-import type { FlashBoardGenerationRequest, FlashBoardJobRefund, FlashBoardMediaType } from '../../stores/flashboardStore/types';
+import type {
+  FlashBoardGenerationOutput,
+  FlashBoardGenerationRequest,
+  FlashBoardJobRefund,
+  FlashBoardMediaType,
+} from '../../stores/flashboardStore/types';
 import type { SubmitGenerationJobInput, SubmitGenerationJobResult } from './types';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useMediaStore } from '../../stores/mediaStore';
 import { createThumbnail } from '../../stores/mediaStore/helpers/thumbnailHelpers';
-import { resumeFlashBoardProviderJob, runFlashBoardProviderJob } from './FlashBoardProviderRunners';
+import {
+  resumeFlashBoardProviderJob,
+  runFlashBoardProviderJob,
+  type FlashBoardProviderAsset,
+} from './FlashBoardProviderRunners';
 
 const log = Logger.create('FlashBoardJob');
 
@@ -103,6 +112,8 @@ type JobUpdateCallback = (recordId: string, update: {
   assetUrl?: string;
   assetFile?: File;
   mediaType?: FlashBoardMediaType;
+  assets?: FlashBoardProviderAsset[];
+  outputs?: FlashBoardGenerationOutput[];
   refund?: FlashBoardJobRefund;
 }) => void;
 

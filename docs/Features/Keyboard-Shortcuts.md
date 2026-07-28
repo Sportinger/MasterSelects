@@ -131,7 +131,13 @@ On Mac, `Ctrl` maps to `Cmd` and `Alt` maps to `Option`.
 
 ### Inputs
 
-- Most handlers ignore text inputs and content-editable fields.
+- Text inputs, textareas, content-editable regions, and ARIA textboxes retain keyboard ownership.
+- A primary pointer press outside the currently focused control releases that old focus before editor surfaces handle the gesture. This prevents controls whose pointer handlers cancel the browser default from retaining stale focus.
+- Global shortcut actions claim each key event at most once. `Space` controls the hovered playable Source Monitor; everywhere else it controls timeline playback. Text entry and target handlers that already consumed the event still take precedence.
+- Timeline or Source Monitor transport claims release stale focused controls before handling `Space`, preventing native button activation from the same key press. `Enter` remains with deliberately focused controls.
+- Directional keys remain with deliberately focused native or ARIA controls such as sliders, selects, and tab lists, independent of user shortcut remapping.
+- Non-conflicting global shortcuts keep the current keyboard focus, preserving the user's place in the Tab order.
+- Visible focus rings remain enabled for genuine keyboard navigation; the focus policy does not hide outlines with CSS.
 - Save / Save As still prevent the browser default save dialog even when focus is inside an input.
 
 ---

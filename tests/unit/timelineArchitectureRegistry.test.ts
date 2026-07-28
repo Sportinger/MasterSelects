@@ -1324,8 +1324,9 @@ describe('timeline architecture registry', () => {
     expect(trackSource).not.toContain('externalDrag.audioTrackId === track.id');
     expect(trackSource).not.toContain('externalDrag.videoTrackId === track.id');
     expect(previewsSource).toContain('timeline-clip-preview-thumbnail');
-    expect(previewsSource).toContain('Audio (linked)');
-    expect(previewsSource).toContain('externalDrag.audioTrackId === trackId');
+    expect(previewsSource).toContain('primaryTrackType');
+    expect(previewsSource).not.toContain('Audio (linked)');
+    expect(previewsSource).not.toContain('externalDrag.audioTrackId === trackId');
     expect(previewsSource).toContain('externalDrag.videoTrackId === trackId');
     expect(lineCount(trackSource)).toBeLessThanOrEqual(775);
     expect(lineCount(previewsSource)).toBeLessThanOrEqual(120);
@@ -3014,7 +3015,7 @@ describe('timeline architecture registry', () => {
     expect(trackDragEnterSource).toContain('hasTrackPreviewDropType(dataTransferTypes)');
     expect(trackDragEnterSource).toContain('hasGeneratedVisualDropType(dataTransferTypes)');
     expect(trackDragEnterSource).toContain('resolveImmediateDragPreview(event)');
-    expect(trackDragEnterSource).toContain('applyVideoNewTrackOffer');
+    expect(trackDragEnterSource).toContain('setExternalDrag(null)');
     expect(trackDragEnterSource).toContain('buildTrackPreviewState');
     expect(trackDragOverSource).toContain('useExternalDropTrackDragOver');
     expect(trackDragOverSource).toContain("from './externalDropPreviewDragTypes'");

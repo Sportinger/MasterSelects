@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
-import { render, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { useFlashBoardStore } from '../../src/stores/flashboardStore';
+import { useMediaStore } from '../../src/stores/mediaStore';
 import {
   appendFlashBoardPromptHistoryEntry,
   ensureFlashBoardActiveGenerationBoard,
@@ -16,11 +17,14 @@ import {
   selectFlashBoardActiveGenerationRecords,
   selectHasFlashBoardActiveGenerationBoard,
   submitFlashBoardActiveGenerationRequest,
+  recordFlashBoardImportedGenerationResult,
   updateFlashBoardActiveGenerationJob,
+  updateFlashBoardActiveGenerationOutputs,
 } from '../../src/stores/flashboardStore/activeGenerationRecords';
 import { createDefaultFlashBoardComposer } from '../../src/stores/flashboardStore/defaults';
 import { flashBoardJobService } from '../../src/services/flashboard/FlashBoardJobService';
 import { useFlashBoardRuntime } from '../../src/components/panels/flashboard/useFlashBoardRuntime';
+import { MediaAIGenerationQueue } from '../../src/components/panels/media/MediaAIGenerationQueue';
 
 const generationRecord = {
   id: 'generation-video',
@@ -94,6 +98,82 @@ describe('FlashBoard active generation record adapter', () => {
       width: 1280,
       height: 720,
     });
+  });
+
+  it('maps multiple imported outputs by stable provider id', () => {
+    updateFlashBoardActiveGenerationOutputs('generation-video', [{
+      id: 'track-1',
+      availability: 'preview',
+      mediaType: 'audio',
+      previewUrl: 'https://cdn.example/track-1.mp3',
+    }, {
+      id: 'track-2',
+      availability: 'preview',
+      mediaType: 'audio',
+      previewUrl: 'https://cdn.example/track-2.mp3',
+    }]);
+    recordFlashBoardImportedGenerationResult('generation-video', {
+      mediaFileId: 'media-track-2',
+      mediaType: 'audio',
+      outputId: 'track-2',
+    });
+    completeFlashBoardActiveGenerationRecord('generation-video', [{
+      mediaFileId: 'media-track-2',
+      mediaType: 'audio',
+      outputId: 'track-2',
+    }, {
+      mediaFileId: 'media-track-1',
+      mediaType: 'audio',
+      outputId: 'track-1',
+    }]);
+
+    const record = getFlashBoardActiveGenerationRecord('generation-video');
+    expect(record?.results).toHaveLength(2);
+    expect(record?.outputs).toMatchObject([
+      { id: 'track-1', availability: 'completed', mediaFileId: 'media-track-1' },
+      { id: 'track-2', availability: 'completed', mediaFileId: 'media-track-2' },
+    ]);
+  });
+
+  it('renders streamable Suno outputs as players inside the generation card', () => {
+    vi.mocked(useMediaStore).mockImplementation((selector) => selector({
+      files: [],
+    } as ReturnType<typeof useMediaStore.getState>));
+    useFlashBoardStore.setState({
+      activeGenerationRecords: [{
+        id: 'suno-generation',
+        kind: 'generation',
+        createdAt: 10,
+        updatedAt: 11,
+        job: { status: 'processing', progress: 0.75 },
+        outputs: [{
+          id: 'track-1',
+          availability: 'preview',
+          artworkUrl: 'https://cdn.example/cover.jpg',
+          mediaType: 'audio',
+          previewUrl: 'https://cdn.example/preview.mp3',
+          title: 'Early Track',
+        }],
+        request: {
+          service: 'cloud',
+          providerId: 'suno-music',
+          version: 'V5_5',
+          outputType: 'audio',
+          prompt: 'Ambient piano',
+          referenceMediaFileIds: [],
+        },
+      }],
+    });
+
+    const { container } = render(createElement(MediaAIGenerationQueue));
+
+    expect(screen.getByLabelText('Generated tracks')).toBeInTheDocument();
+    expect(screen.getByText('Early Track')).toBeInTheDocument();
+    expect(container.querySelector('audio')).toHaveAttribute('src', 'https://cdn.example/preview.mp3');
+    expect(container.querySelector('.media-ai-generation-track-art img')).toHaveAttribute(
+      'src',
+      'https://cdn.example/cover.jpg',
+    );
   });
 
   it('selects active generation records directly from store state', () => {

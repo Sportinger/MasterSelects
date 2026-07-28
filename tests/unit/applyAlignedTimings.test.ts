@@ -21,8 +21,12 @@ import type { TranscriptWord } from '../../src/types/clipMetadata';
 import { createMockClip } from '../helpers/mockData';
 
 const saveTranscriptMock = vi.hoisted(() => vi.fn());
+const getTranscribedRangesMock = vi.hoisted(() => vi.fn());
 vi.mock('../../src/services/project/ProjectFileService', () => ({
-  projectFileService: { saveTranscript: saveTranscriptMock },
+  projectFileService: {
+    getTranscribedRanges: getTranscribedRangesMock,
+    saveTranscript: saveTranscriptMock,
+  },
 }));
 
 // tests/setup.ts replaces the media store with a stateless stub; this suite
@@ -131,6 +135,7 @@ describe('applyAlignedTimingsFromArtifact', () => {
     mediaStoreHarness.state.files = [];
     useTimelineStore.setState(initialTimelineState);
     saveTranscriptMock.mockReset().mockResolvedValue(true);
+    getTranscribedRangesMock.mockReset().mockResolvedValue([[0, 2]]);
   });
 
   it('merges aligned fields, persists them, and propagates every clip copy', async () => {
@@ -191,6 +196,25 @@ describe('applyAlignedTimingsFromArtifact', () => {
       .resolves.toEqual({ applied: 0, skipped: 'stale-transcript' });
     expect(useMediaStore.getState().files[0].transcript).toBe(changed);
     expect(saveTranscriptMock).not.toHaveBeenCalled();
+  });
+
+  it('loads stored coverage ranges when the media copy omits them', async () => {
+    const words = [word('w1', 'hello', 0, 0.4)];
+    const file = mediaFile(words);
+    file.transcribedRanges = undefined;
+    useMediaStore.setState({ files: [file] });
+    const harness = await timingHarness(await computeTranscriptWordsHash(words), [
+      { wordId: 'w1', alignedStart: 0.04, alignedEnd: 0.43, confidence: 0.92 },
+    ]);
+
+    await applyAlignedTimingsFromArtifact({ mediaFileId: 'media-1', ...harness });
+
+    expect(getTranscribedRangesMock).toHaveBeenCalledWith('media-1');
+    expect(saveTranscriptMock).toHaveBeenCalledWith(
+      'media-1',
+      expect.any(Object),
+      [[0, 2]],
+    );
   });
 
   it('is idempotent on a second application', async () => {

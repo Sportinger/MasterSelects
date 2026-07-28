@@ -57,6 +57,7 @@ export interface TimelineExternalDropCommandExecutionParams {
   isAudioOnlyMediaFile: (mediaFile: MediaFile, file?: File) => boolean;
   isVideoTrack: boolean;
   mediaFilePolicy: TimelineExternalDropMediaFilePolicy;
+  resolveLinkedVideoTrackId?: (startTime: number, duration?: number) => string | undefined;
   resolveStartTime: (duration?: number) => number;
   trackId: string;
 }
@@ -108,6 +109,17 @@ async function executeMediaFileDropCommand(
     return rejected('visual-media-on-audio-track');
   }
 
+  const routesLinkedVideoFromAudioTrack =
+    params.mediaFilePolicy === 'allow-video-on-audio' &&
+    !params.isVideoTrack &&
+    !fileIsAudio;
+  if (routesLinkedVideoFromAudioTrack) {
+    if (mediaFile.type !== 'video' || mediaFile.hasAudio !== true) {
+      log.debug('Only video media with linked audio can be dropped on audio tracks');
+      return rejected('media-without-linked-audio-on-audio-track');
+    }
+  }
+
   const file = await resolveMediaFileForTimelineDrop(mediaFile);
   if (!file) {
     log.warn('Could not add media panel item to timeline because the file is not resolved', {
@@ -117,14 +129,36 @@ async function executeMediaFileDropCommand(
     return rejected('unresolved-media-file');
   }
 
-  params.actions.addClip(
-    params.trackId,
-    file,
-    params.resolveStartTime(mediaFile.duration),
-    mediaFile.duration,
-    mediaFileId,
-    getTimelineDropMediaTypeOverride(mediaFile),
-  );
+  const startTime = params.resolveStartTime(mediaFile.duration);
+  const linkedVideoTrackId = routesLinkedVideoFromAudioTrack
+    ? params.resolveLinkedVideoTrackId?.(startTime, mediaFile.duration)
+    : undefined;
+  if (routesLinkedVideoFromAudioTrack && !linkedVideoTrackId) {
+    log.debug('No compatible video track is available for the linked video clip');
+    return rejected('missing-linked-video-track');
+  }
+  const placementTrackId = linkedVideoTrackId ?? params.trackId;
+  const mediaTypeOverride = getTimelineDropMediaTypeOverride(mediaFile);
+  if (routesLinkedVideoFromAudioTrack) {
+    params.actions.addClip(
+      placementTrackId,
+      file,
+      startTime,
+      mediaFile.duration,
+      mediaFileId,
+      mediaTypeOverride,
+      { linkedAudioTrackId: params.trackId },
+    );
+  } else {
+    params.actions.addClip(
+      placementTrackId,
+      file,
+      startTime,
+      mediaFile.duration,
+      mediaFileId,
+      mediaTypeOverride,
+    );
+  }
   return handled();
 }
 

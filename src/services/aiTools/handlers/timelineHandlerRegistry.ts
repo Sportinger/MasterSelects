@@ -41,6 +41,7 @@ import {
   handleStartClipTranscription,
 } from './analysisStarters';
 import { handleGetSpeechMarkers } from './speechMarkers';
+import { handleRepairClipTranscript } from './repairTranscript';
 import {
   handleAssignClipFaceReviewCandidate,
   handleMergeClipFacePeople,
@@ -135,6 +136,7 @@ export const timelineHandlers: Readonly<Record<string, TimelineHandler>> = {
   startClipAudioIntelligence: handleStartClipAudioIntelligence,
   startClipFaceAnalysis: handleStartClipFaceAnalysis,
   startClipTranscription: handleStartClipTranscription,
+  repairClipTranscript: handleRepairClipTranscript,
   captureFrame: handleCaptureFrame,
   getCutPreviewQuad: handleGetCutPreviewQuad,
   getFramesAtTimes: handleGetFramesAtTimes,

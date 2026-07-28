@@ -35,6 +35,8 @@ interface FlashBoardPromptEditorProps {
   promptRefineTitle: string;
   referenceMediaCount: number;
   sunoNegativeTags: string;
+  sunoCustomMode: boolean;
+  sunoInstrumental: boolean;
   sunoStyle: string;
   sunoStyleLimit: number;
   sunoAudioReferenceActive: boolean;
@@ -52,6 +54,8 @@ interface FlashBoardPromptEditorProps {
   onRestorePromptBeforeAiRewrite: () => void;
   onSunoNegativeTagsChange: (value: string) => void;
   onSunoAudioWeightChange: (value: number) => void;
+  onSunoCustomModeChange: (value: boolean) => void;
+  onSunoInstrumentalChange: (value: boolean) => void;
   onSunoResetTuning: () => void;
   onSunoStyleChange: (value: string) => void;
   onSunoStyleWeightChange: (value: number) => void;
@@ -76,6 +80,8 @@ export function FlashBoardPromptEditor({
   promptRefineTitle,
   referenceMediaCount,
   sunoNegativeTags,
+  sunoCustomMode,
+  sunoInstrumental,
   sunoStyle,
   sunoStyleLimit,
   sunoAudioReferenceActive,
@@ -93,6 +99,8 @@ export function FlashBoardPromptEditor({
   onRestorePromptBeforeAiRewrite,
   onSunoNegativeTagsChange,
   onSunoAudioWeightChange,
+  onSunoCustomModeChange,
+  onSunoInstrumentalChange,
   onSunoResetTuning,
   onSunoStyleChange,
   onSunoStyleWeightChange,
@@ -107,6 +115,37 @@ export function FlashBoardPromptEditor({
   const resizePromptOnFocusChange = (textarea: HTMLTextAreaElement) => {
     requestAnimationFrame(() => onAutosizeInput(textarea));
   };
+  const toggleSunoLyrics = () => {
+    const nextInstrumental = !sunoInstrumental;
+    onSunoInstrumentalChange(nextInstrumental);
+    if (nextInstrumental) {
+      onSunoCustomModeChange(true);
+    }
+  };
+  const toggleSunoCustomControls = () => {
+    const nextCustomMode = !sunoCustomMode;
+    onSunoCustomModeChange(nextCustomMode);
+    if (!nextCustomMode && sunoInstrumental) {
+      onSunoInstrumentalChange(false);
+    }
+  };
+  const sunoWandButton = (
+    <button
+      className={`fb-suno-field-wand ${isRefiningPrompt ? 'is-loading' : ''}`}
+      type="button"
+      onClick={onRefinePrompt}
+      disabled={isRefiningPrompt}
+      title={isRefiningPrompt ? 'Refining prompt...' : promptRefineTitle}
+      aria-label="Refine Suno prompt"
+    >
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.45" aria-hidden="true">
+        <path d="M5.5 12.5 13 5" />
+        <path d="m10.8 3.2 2 2" />
+        <path d="M2.8 1.6 3.3 3l1.5.5-1.5.5-.5 1.4L2.3 4 1 3.5 2.3 3l.5-1.4Z" />
+        <path d="m11.8 9.7.4 1.1 1.1.4-1.1.4-.4 1.1-.4-1.1-1.1-.4 1.1-.4-1.1Z" />
+      </svg>
+    </button>
+  );
 
   if (chatPanelOpen) {
     return (
@@ -172,52 +211,85 @@ export function FlashBoardPromptEditor({
       <div className={`fb-bubble-row ${isSunoMode ? 'fb-bubble-row-suno' : ''} ${isElevenLabsMode ? 'fb-bubble-row-elevenlabs' : ''}`}>
         {isSunoMode ? (
           <div className="fb-suno-prompt-grid">
-            <FlashBoardSunoTuningPanel
-              audioReferenceActive={sunoAudioReferenceActive}
-              audioWeight={sunoAudioWeight}
-              styleWeight={sunoStyleWeight}
-              weirdnessConstraint={sunoWeirdnessConstraint}
-              onAudioWeightChange={onSunoAudioWeightChange}
-              onResetTuning={onSunoResetTuning}
-              onStyleWeightChange={onSunoStyleWeightChange}
-              onWeirdnessConstraintChange={onSunoWeirdnessConstraintChange}
-            />
-            <label className="fb-suno-prompt-field fb-suno-prompt-field-lyrics">
-              <span>Lyrics</span>
-              <textarea
-                ref={promptInputRef}
-                className={`${promptInputClassName} fb-suno-input fb-suno-lyrics-input`}
-                value={prompt}
-                onFocus={(event) => resizePromptOnFocusChange(event.currentTarget)}
-                onBlur={(event) => resizePromptOnFocusChange(event.currentTarget)}
-                onInput={(event) => onAutosizeInput(event.currentTarget)}
-                onChange={(event) => onPromptChange(event.target.value)}
-                placeholder="Lyrics, song idea, mood, or background music..."
-                rows={3}
-              />
-            </label>
-            <label className="fb-suno-prompt-field">
-              <span>Style</span>
-              <textarea
-                className="fb-bubble-input fb-suno-input"
-                value={sunoStyle}
-                onChange={(event) => onSunoStyleChange(event.target.value)}
-                placeholder="cinematic synthwave, ambient piano..."
-                maxLength={sunoStyleLimit}
-                rows={2}
-              />
-            </label>
-            <label className="fb-suno-prompt-field">
-              <span>Negative</span>
-              <textarea
-                className="fb-bubble-input fb-suno-input"
-                value={sunoNegativeTags}
-                onChange={(event) => onSunoNegativeTagsChange(event.target.value)}
-                placeholder="distorted vocals, harsh noise..."
-                maxLength={500}
-                rows={2}
-              />
-            </label>
+            <button
+              className="fb-suno-section-toggle"
+              type="button"
+              aria-expanded={!sunoInstrumental}
+              onClick={toggleSunoLyrics}
+            >
+              <span>{sunoCustomMode ? 'Lyrics' : 'Song description'}</span>
+              <em>{sunoInstrumental ? 'Off · instrumental' : 'On'}</em>
+              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                <path d={sunoInstrumental ? 'm4 6 4 4 4-4' : 'm4 10 4-4 4 4'} />
+              </svg>
+            </button>
+            {!sunoInstrumental && (
+              <label className="fb-suno-prompt-field fb-suno-prompt-field-lyrics">
+                <textarea
+                  ref={promptInputRef}
+                  className={`${promptInputClassName} fb-suno-input fb-suno-lyrics-input`}
+                  value={prompt}
+                  onFocus={(event) => resizePromptOnFocusChange(event.currentTarget)}
+                  onBlur={(event) => resizePromptOnFocusChange(event.currentTarget)}
+                  onInput={(event) => onAutosizeInput(event.currentTarget)}
+                  onChange={(event) => onPromptChange(event.target.value)}
+                  placeholder={sunoCustomMode
+                    ? 'Write or paste the lyrics...'
+                    : 'Describe the song, mood, genre, and sound...'}
+                  rows={3}
+                />
+                {sunoWandButton}
+              </label>
+            )}
+            <button
+              className="fb-suno-section-toggle"
+              type="button"
+              aria-expanded={sunoCustomMode}
+              onClick={toggleSunoCustomControls}
+            >
+              <span>Custom controls</span>
+              <em>{sunoCustomMode ? 'On' : 'Off · simple mode'}</em>
+              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                <path d={sunoCustomMode ? 'm4 10 4-4 4 4' : 'm4 6 4 4 4-4'} />
+              </svg>
+            </button>
+            {sunoCustomMode && (
+              <>
+                <FlashBoardSunoTuningPanel
+                  audioReferenceActive={sunoAudioReferenceActive}
+                  audioWeight={sunoAudioWeight}
+                  styleWeight={sunoStyleWeight}
+                  weirdnessConstraint={sunoWeirdnessConstraint}
+                  onAudioWeightChange={onSunoAudioWeightChange}
+                  onResetTuning={onSunoResetTuning}
+                  onStyleWeightChange={onSunoStyleWeightChange}
+                  onWeirdnessConstraintChange={onSunoWeirdnessConstraintChange}
+                />
+                <label className="fb-suno-prompt-field">
+                  <span>Style</span>
+                  <textarea
+                    className={`fb-bubble-input fb-suno-input${sunoInstrumental ? ' fb-suno-input-with-wand' : ''}`}
+                    value={sunoStyle}
+                    onChange={(event) => onSunoStyleChange(event.target.value)}
+                    placeholder="cinematic synthwave, ambient piano..."
+                    maxLength={sunoStyleLimit}
+                    rows={2}
+                  />
+                  {sunoInstrumental ? sunoWandButton : null}
+                </label>
+                <label className="fb-suno-prompt-field">
+                  <span>Negative</span>
+                  <textarea
+                    className="fb-bubble-input fb-suno-input"
+                    value={sunoNegativeTags}
+                    onChange={(event) => onSunoNegativeTagsChange(event.target.value)}
+                    placeholder="distorted vocals, harsh noise..."
+                    maxLength={500}
+                    rows={2}
+                  />
+                </label>
+              </>
+            )}
           </div>
         ) : (
           <div className={`fb-standard-prompt-stack ${isElevenLabsMode ? 'is-elevenlabs' : ''}`}>
@@ -264,7 +336,7 @@ export function FlashBoardPromptEditor({
         >
           &times;
         </button>
-        {!isElevenLabsMode && (
+        {!isElevenLabsMode && !isSunoMode && (
           <button
             className={`fb-bubble-wand ${isRefiningPrompt ? 'is-loading' : ''}`}
             type="button"

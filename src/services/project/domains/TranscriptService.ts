@@ -29,10 +29,17 @@ export class TranscriptService {
     transcript: unknown,
     transcribedRanges?: [number, number][]
   ): Promise<boolean> {
-    // If transcript is already in new format (object with words), use it directly
-    const data: StoredTranscript = Array.isArray(transcript)
-      ? { words: transcript, transcribedRanges }
-      : { ...(transcript as StoredTranscript), transcribedRanges: transcribedRanges ?? (transcript as StoredTranscript).transcribedRanges };
+    const incoming: StoredTranscript = Array.isArray(transcript)
+      ? { words: transcript }
+      : { ...(transcript as StoredTranscript) };
+    let resolvedRanges = transcribedRanges;
+    if (resolvedRanges === undefined) {
+      const stored = await this.getTranscript(projectHandle, mediaId);
+      resolvedRanges = stored?.transcribedRanges ?? incoming.transcribedRanges;
+    }
+    const data: StoredTranscript = resolvedRanges === undefined
+      ? incoming
+      : { ...incoming, transcribedRanges: resolvedRanges };
 
     const json = JSON.stringify(data, null, 2);
     return this.fileStorage.writeFile(projectHandle, 'TRANSCRIPTS', `${mediaId}.json`, json);

@@ -4,6 +4,7 @@ import {
   ensureFlashBoardActiveGenerationBoard,
   failFlashBoardActiveGenerationRecord,
   updateFlashBoardActiveGenerationJob,
+  updateFlashBoardActiveGenerationOutputs,
   useFlashBoardActiveGenerationRecords,
   useHasFlashBoardActiveGenerationBoard,
   useRemoveFlashBoardActiveGenerationRecord,
@@ -44,6 +45,18 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
   useEffect(() => {
     flashBoardJobService.setUpdateCallback((recordId, update) => {
       if (update.status === 'completed') {
+        if (update.outputs?.length) {
+          updateFlashBoardActiveGenerationOutputs(recordId, update.outputs);
+        }
+
+        if (update.assets?.length) {
+          void flashBoardMediaBridge.importGeneratedAssets(recordId, update.assets).catch((error) => {
+            const message = error instanceof Error ? error.message : 'Failed to import generated media';
+            failFlashBoardActiveGenerationRecord(recordId, message);
+          });
+          return;
+        }
+
         if (!update.mediaType || (!update.assetUrl && !update.assetFile)) {
           failFlashBoardActiveGenerationRecord(recordId, 'Generation finished without importable media.');
           return;
@@ -76,6 +89,9 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
         return;
       }
 
+      if (update.outputs?.length) {
+        updateFlashBoardActiveGenerationOutputs(recordId, update.outputs);
+      }
       updateFlashBoardActiveGenerationJob(recordId, {
         status: update.status,
         remoteTaskId: update.remoteTaskId,
