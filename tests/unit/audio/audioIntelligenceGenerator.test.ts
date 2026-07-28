@@ -92,8 +92,10 @@ describe('AudioIntelligenceGenerator', () => {
       channelLayout: { kind: 'mono', channelCount: 1, labels: ['Mix'] },
       stale: false,
     });
-    expect(artifact!.analyzerVersion).toContain('masterselects.audio-intelligence.vad@1.0.0');
-    expect(artifact!.analyzerVersion).toContain('model=silero-vad@v5');
+    expect(artifact!.analyzerVersion).toContain(
+      'masterselects.audio-intelligence.vad@1.0.0+silero-v5.1.2',
+    );
+    expect(artifact!.analyzerVersion).toContain('model=silero-vad@v5.1.2');
     expect(result.refs.voiceActivity).toMatchObject({
       kind: 'voice-activity',
       artifactId: artifact!.id,
@@ -105,7 +107,7 @@ describe('AudioIntelligenceGenerator', () => {
       mediaFileId: 'media-a',
       sampleRate: 48_000,
       analysisSampleRate: 16_000,
-      model: { id: 'silero-vad', version: 'v5' },
+      model: { id: 'silero-vad', version: 'v5.1.2' },
       segmentCount: 2,
       summary: {
         segmentCount: 2,
@@ -203,6 +205,50 @@ describe('AudioIntelligenceGenerator', () => {
     });
 
     expect(await store.listAnalysisArtifacts('media-d', 'voice-activity')).toEqual([]);
+  });
+
+  it('rejects when cancellation is signalled while listing cached artifacts', async () => {
+    const store = createStore();
+    const controller = new AbortController();
+    const { runtime, runVad } = createStubRuntime();
+    const listArtifacts = vi.spyOn(store, 'listAnalysisArtifacts').mockImplementation(async () => {
+      controller.abort('between stages');
+      return [];
+    });
+    const generator = new AudioIntelligenceGenerator({ artifactStore: store, runtime });
+
+    await expect(generator.generate({
+      mediaFileId: 'media-cancel-between-stages',
+      sourceFingerprint: 'sha256:source-cancel-between-stages',
+      buffer: createMockAudioBuffer(new Float32Array(48_000)),
+      features: features('vad'),
+    }, { signal: controller.signal })).rejects.toMatchObject({
+      name: 'AudioIntelligenceCancelledError',
+      code: 'cancelled',
+      message: expect.stringContaining('between stages'),
+    });
+
+    expect(listArtifacts).toHaveBeenCalledTimes(1);
+    expect(runVad).not.toHaveBeenCalled();
+  });
+
+  it('rejects a VAD frame size that Silero inference does not support', async () => {
+    const store = createStore();
+    const { runtime, runVad } = createStubRuntime();
+    const generator = new AudioIntelligenceGenerator({ artifactStore: store, runtime });
+
+    await expect(generator.generate({
+      mediaFileId: 'media-invalid-frame-size',
+      sourceFingerprint: 'sha256:source-invalid-frame-size',
+      buffer: createMockAudioBuffer(new Float32Array(48_000)),
+      features: features('vad'),
+      vadConfig: { frameSamples: 256 },
+    })).rejects.toMatchObject({
+      code: 'invalid-input',
+      message: expect.stringContaining('frameSamples=512'),
+    });
+
+    expect(runVad).not.toHaveBeenCalled();
   });
 
   it('lists unimplemented features as deferred', async () => {

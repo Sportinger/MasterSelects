@@ -93,6 +93,11 @@ export function createAudioIntelligenceWorkerHandlers(
       if (!(input.pcm instanceof Float32Array)) {
         throw new Error('Audio intelligence VAD requires Float32Array PCM input.');
       }
+      if (input.config.frameSamples !== 512) {
+        throw new Error(
+          `Audio intelligence VAD requires frameSamples=512 for Silero inference, got ${input.config.frameSamples}.`,
+        );
+      }
 
       context.log('debug', 'Running Silero VAD', {
         samples: input.pcm.length,
@@ -121,6 +126,7 @@ export function createAudioIntelligenceWorkerHandlers(
         probabilities,
         frameDurationSeconds,
         input.config,
+        input.pcm.length / input.sampleRate,
         input.offsetSeconds,
       );
       context.progress({ value: 1, stage: 'vad-segmentation' });

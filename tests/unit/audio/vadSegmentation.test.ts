@@ -16,7 +16,9 @@ describe('segmentSpeechProbabilities', () => {
   it('enters at threshold and exits below negThreshold (hysteresis)', () => {
     const probabilities = Float32Array.from([0.1, 0.6, 0.4, 0.4, 0.3, 0.1]);
 
-    const spans = segmentSpeechProbabilities(probabilities, FRAME_DURATION, BASE_CONFIG);
+    const spans = segmentSpeechProbabilities(
+      probabilities, FRAME_DURATION, BASE_CONFIG, probabilities.length * FRAME_DURATION,
+    );
 
     expect(spans).toHaveLength(1);
     expect(spans[0].start).toBeCloseTo(0.01, 9);
@@ -26,13 +28,17 @@ describe('segmentSpeechProbabilities', () => {
   it('does not enter on probabilities between negThreshold and threshold', () => {
     const probabilities = Float32Array.from([0.4, 0.45, 0.49, 0.4]);
 
-    expect(segmentSpeechProbabilities(probabilities, FRAME_DURATION, BASE_CONFIG)).toEqual([]);
+    expect(segmentSpeechProbabilities(
+      probabilities, FRAME_DURATION, BASE_CONFIG, probabilities.length * FRAME_DURATION,
+    )).toEqual([]);
   });
 
   it('closes an open span at the end of the probability curve', () => {
     const probabilities = Float32Array.from([0.1, 0.8, 0.9]);
 
-    const spans = segmentSpeechProbabilities(probabilities, FRAME_DURATION, BASE_CONFIG);
+    const spans = segmentSpeechProbabilities(
+      probabilities, FRAME_DURATION, BASE_CONFIG, probabilities.length * FRAME_DURATION,
+    );
 
     expect(spans).toHaveLength(1);
     expect(spans[0].start).toBeCloseTo(0.01, 9);
@@ -48,7 +54,7 @@ describe('segmentSpeechProbabilities', () => {
     const spans = segmentSpeechProbabilities(probabilities, FRAME_DURATION, {
       ...BASE_CONFIG,
       minSpeechMs: 25,
-    });
+    }, probabilities.length * FRAME_DURATION);
 
     expect(spans).toHaveLength(1);
     expect(spans[0].start).toBeCloseTo(0.04, 9);
@@ -65,7 +71,7 @@ describe('segmentSpeechProbabilities', () => {
     const spans = segmentSpeechProbabilities(probabilities, FRAME_DURATION, {
       ...BASE_CONFIG,
       minSilenceMs: 25,
-    });
+    }, probabilities.length * FRAME_DURATION);
 
     expect(spans).toHaveLength(1);
     expect(spans[0].start).toBeCloseTo(0, 9);
@@ -84,7 +90,7 @@ describe('segmentSpeechProbabilities', () => {
     const spans = segmentSpeechProbabilities(probabilities, FRAME_DURATION, {
       ...BASE_CONFIG,
       minSilenceMs: 25,
-    });
+    }, probabilities.length * FRAME_DURATION);
 
     expect(spans).toHaveLength(2);
   });
@@ -95,7 +101,7 @@ describe('segmentSpeechProbabilities', () => {
     const spans = segmentSpeechProbabilities(probabilities, FRAME_DURATION, {
       ...BASE_CONFIG,
       padMs: 30,
-    });
+    }, probabilities.length * FRAME_DURATION);
 
     expect(spans).toHaveLength(1);
     expect(spans[0].start).toBe(0);
@@ -112,7 +118,7 @@ describe('segmentSpeechProbabilities', () => {
     const spans = segmentSpeechProbabilities(probabilities, FRAME_DURATION, {
       ...BASE_CONFIG,
       padMs: 30,
-    });
+    }, probabilities.length * FRAME_DURATION);
 
     expect(spans).toHaveLength(2);
     expect(spans[0].end).toBeCloseTo(0.04, 9);
@@ -130,7 +136,7 @@ describe('segmentSpeechProbabilities', () => {
     const spans = segmentSpeechProbabilities(probabilities, FRAME_DURATION, {
       ...BASE_CONFIG,
       padMs: 30,
-    });
+    }, probabilities.length * FRAME_DURATION);
 
     expect(spans).toHaveLength(2);
     expect(spans[0].end).toBeCloseTo(0.05, 9);
@@ -140,7 +146,9 @@ describe('segmentSpeechProbabilities', () => {
   it('reports the mean probability of speech frames as confidence', () => {
     const probabilities = Float32Array.from([0.1, 0.6, 0.5, 0.4, 0.1]);
 
-    const spans = segmentSpeechProbabilities(probabilities, FRAME_DURATION, BASE_CONFIG);
+    const spans = segmentSpeechProbabilities(
+      probabilities, FRAME_DURATION, BASE_CONFIG, probabilities.length * FRAME_DURATION,
+    );
 
     expect(spans).toHaveLength(1);
     expect(spans[0].confidence).toBeCloseTo((0.6 + 0.5 + 0.4) / 3, 5);
@@ -149,8 +157,9 @@ describe('segmentSpeechProbabilities', () => {
   it('shifts spans by offsetSeconds without changing confidence', () => {
     const probabilities = Float32Array.from([0.1, 0.9, 0.9, 0.1]);
 
-    const unshifted = segmentSpeechProbabilities(probabilities, FRAME_DURATION, BASE_CONFIG, 0);
-    const shifted = segmentSpeechProbabilities(probabilities, FRAME_DURATION, BASE_CONFIG, 5);
+    const duration = probabilities.length * FRAME_DURATION;
+    const unshifted = segmentSpeechProbabilities(probabilities, FRAME_DURATION, BASE_CONFIG, duration, 0);
+    const shifted = segmentSpeechProbabilities(probabilities, FRAME_DURATION, BASE_CONFIG, duration, 5);
 
     expect(shifted).toHaveLength(1);
     expect(shifted[0].start).toBeCloseTo(unshifted[0].start + 5, 9);
@@ -159,6 +168,21 @@ describe('segmentSpeechProbabilities', () => {
   });
 
   it('rejects a non-positive frame duration', () => {
-    expect(() => segmentSpeechProbabilities(new Float32Array(0), 0, BASE_CONFIG)).toThrow();
+    expect(() => segmentSpeechProbabilities(new Float32Array(0), 0, BASE_CONFIG, 0)).toThrow();
+  });
+
+  it('clamps a speech-classified final partial frame to the exact PCM duration', () => {
+    const probabilities = Float32Array.from([0.1, 0.9]);
+    const exactDuration = 0.015;
+
+    const spans = segmentSpeechProbabilities(
+      probabilities,
+      FRAME_DURATION,
+      { ...BASE_CONFIG, padMs: 30 },
+      exactDuration,
+    );
+
+    expect(spans).toHaveLength(1);
+    expect(spans[0].end).toBe(exactDuration);
   });
 });

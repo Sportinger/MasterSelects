@@ -32,7 +32,8 @@ import {
 } from './audioIntelligenceTypes';
 import { requireAudioIntelligenceModel } from './audioIntelligenceModelCatalog';
 
-export const AUDIO_INTELLIGENCE_VAD_ANALYZER_VERSION = 'masterselects.audio-intelligence.vad@1.0.0';
+export const AUDIO_INTELLIGENCE_VAD_ANALYZER_VERSION =
+  'masterselects.audio-intelligence.vad@1.0.0+silero-v5.1.2';
 export const AUDIO_SPAN_LIST_PAYLOAD_MIME_TYPE = 'application/vnd.masterselects.audio-span-list';
 
 const DEFAULT_DECODER_ID = 'audio-buffer';
@@ -260,6 +261,13 @@ export class AudioIntelligenceGenerator {
   ): Promise<void> {
     const generatedAt = this.now();
     const config: VoiceActivityConfig = { ...DEFAULT_VOICE_ACTIVITY_CONFIG, ...request.vadConfig };
+    if (config.frameSamples !== DEFAULT_VOICE_ACTIVITY_CONFIG.frameSamples) {
+      throw new AudioIntelligenceError(
+        `Audio intelligence VAD requires frameSamples=${DEFAULT_VOICE_ACTIVITY_CONFIG.frameSamples} `
+        + `for Silero inference, got ${config.frameSamples}.`,
+        { code: 'invalid-input', recoverable: false },
+      );
+    }
     const analyzerVersion = createAudioIntelligenceVadAnalyzerVersion(config, this.baseAnalyzerVersion);
     const channelLayout = describeAnalysisChannelLayout();
     const model = requireAudioIntelligenceModel('silero-vad');
@@ -277,6 +285,7 @@ export class AudioIntelligenceGenerator {
 
     throwIfCancelled(options.signal, jobId);
     const existing = await this.artifactStore.listAnalysisArtifacts(request.mediaFileId, 'voice-activity');
+    throwIfCancelled(options.signal, jobId);
     const fresh = existing.find((artifact) => !isAudioAnalysisArtifactStaleForInput(artifact, cacheKeyInput));
     if (fresh) {
       result.artifacts.voiceActivity = fresh;
@@ -329,6 +338,8 @@ export class AudioIntelligenceGenerator {
       createdAt: generatedAt,
       metadata: { cacheKey },
     });
+    // Cancellation may leave this content-addressed payload orphaned; deduplication
+    // makes that safe and avoids deleting a payload shared by another artifact.
     throwIfCancelled(options.signal, jobId);
 
     const manifest = createVoiceActivityManifest({
@@ -370,6 +381,7 @@ export class AudioIntelligenceGenerator {
         voiceActivityManifest: manifest as unknown as JsonValue,
       },
     });
+    throwIfCancelled(options.signal, jobId);
 
     result.artifacts.voiceActivity = artifactResult.artifact;
     result.refs.voiceActivity = createAudioAnalysisManifestRefFromArtifact(artifactResult.artifact);

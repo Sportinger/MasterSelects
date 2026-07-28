@@ -36,6 +36,13 @@ interface PrepareOptions {
   onProgress?: (progress: AudioIntelligenceStageProgress) => void;
 }
 
+interface PrepareFlight {
+  promise: Promise<void>;
+  controller: AbortController;
+  waiterCount: number;
+  progressListeners: Set<NonNullable<PrepareOptions['onProgress']>>;
+}
+
 function abortError(message = 'Audio intelligence was cancelled.'): AudioIntelligenceError {
   return new AudioIntelligenceError(message, { code: 'cancelled' });
 }
@@ -151,17 +158,35 @@ export interface RunVadOptions {
 export class AudioIntelligenceRuntime {
   private worker: Worker | null = null;
   private client: RuntimeJobClient | null = null;
-  private preparePromise: Promise<void> | null = null;
+  private prepareFlight: PrepareFlight | null = null;
+  private generation = 0;
   private ready = false;
 
   async prepare(options: PrepareOptions = {}): Promise<void> {
+    throwIfAborted(options.signal);
     if (this.ready && this.client) return;
-    if (this.preparePromise) return this.preparePromise;
-
-    this.preparePromise = this.prepareInternal(options).finally(() => {
-      if (!this.ready) this.preparePromise = null;
-    });
-    return this.preparePromise;
+    let flight = this.prepareFlight;
+    if (!flight) {
+      const generation = this.generation;
+      const controller = new AbortController();
+      flight = {
+        promise: Promise.resolve(),
+        controller,
+        waiterCount: 0,
+        progressListeners: new Set(),
+      };
+      const currentFlight = flight;
+      flight.promise = this.prepareInternal({
+        signal: controller.signal,
+        onProgress: (progress) => {
+          for (const listener of currentFlight.progressListeners) listener(progress);
+        },
+      }, generation).finally(() => {
+        if (this.prepareFlight === currentFlight) this.prepareFlight = null;
+      });
+      this.prepareFlight = flight;
+    }
+    return this.waitForPrepare(flight, options);
   }
 
   // Consumes (transfers) the pcm buffer; callers must pass a Float32Array they
@@ -218,19 +243,67 @@ export class AudioIntelligenceRuntime {
   }
 
   dispose(): void {
+    this.generation += 1;
+    this.prepareFlight?.controller.abort();
+    this.prepareFlight = null;
     this.client?.dispose();
     this.client = null;
     this.worker?.terminate();
     this.worker = null;
     this.ready = false;
-    this.preparePromise = null;
   }
 
-  private async prepareInternal(options: PrepareOptions): Promise<void> {
+  private waitForPrepare(flight: PrepareFlight, options: PrepareOptions): Promise<void> {
+    flight.waiterCount += 1;
+    const progressListener = options.onProgress
+      ? (progress: AudioIntelligenceStageProgress) => options.onProgress?.(progress)
+      : null;
+    if (progressListener) flight.progressListeners.add(progressListener);
+
+    return new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const finish = (): boolean => {
+        if (settled) return false;
+        settled = true;
+        options.signal?.removeEventListener('abort', onAbort);
+        if (progressListener) flight.progressListeners.delete(progressListener);
+        flight.waiterCount -= 1;
+        return true;
+      };
+      const onAbort = () => {
+        if (!finish()) return;
+        if (flight.waiterCount === 0) flight.controller.abort();
+        try {
+          throwIfAborted(options.signal);
+        } catch (error) {
+          reject(error);
+        }
+      };
+
+      options.signal?.addEventListener('abort', onAbort, { once: true });
+      if (options.signal?.aborted) {
+        onAbort();
+        return;
+      }
+      flight.promise.then(
+        () => {
+          if (finish()) resolve();
+        },
+        (error) => {
+          if (finish()) reject(error);
+        },
+      );
+    });
+  }
+
+  private async prepareInternal(options: PrepareOptions, generation: number): Promise<void> {
     const model = requireAudioIntelligenceModel('silero-vad');
     options.onProgress?.({ stage: 'model', progress: 0, message: `Preparing ${model.displayName}.` });
     const buffer = await loadModelBuffer(model, options);
     throwIfAborted(options.signal);
+    if (generation !== this.generation) {
+      throw abortError('Audio intelligence prepare was superseded by disposal.');
+    }
 
     options.onProgress?.({ stage: 'worker', progress: 0.8, message: 'Opening Silero VAD in ONNX Runtime.' });
     const client = this.ensureClient();
@@ -261,7 +334,11 @@ export class AudioIntelligenceRuntime {
         }),
       ]);
     } catch (error) {
-      this.dispose();
+      if (generation === this.generation) {
+        this.dispose();
+      } else {
+        this.disposeClientIfCurrent(client);
+      }
       if (error instanceof RuntimeJobClientError && error.status === 'cancelled') {
         throw abortError(error.message);
       }
@@ -270,8 +347,21 @@ export class AudioIntelligenceRuntime {
       clearTimeout(timeout);
     }
 
+    if (generation !== this.generation) {
+      this.disposeClientIfCurrent(client);
+      throw abortError('Audio intelligence prepare was superseded by disposal.');
+    }
     this.ready = true;
     options.onProgress?.({ stage: 'worker', progress: 1, message: 'Silero VAD ready.' });
+  }
+
+  private disposeClientIfCurrent(client: RuntimeJobClient): void {
+    if (this.client !== client) return;
+    client.dispose();
+    this.client = null;
+    this.worker?.terminate();
+    this.worker = null;
+    this.ready = false;
   }
 
   private ensureClient(): RuntimeJobClient {
@@ -289,9 +379,11 @@ let instance: AudioIntelligenceRuntime | null = null;
 
 if (import.meta.hot) {
   import.meta.hot.accept();
-  instance = import.meta.hot.data.audioIntelligenceRuntime as AudioIntelligenceRuntime | undefined ?? null;
+  if (import.meta.hot.data?.audioIntelligenceRuntime) {
+    instance = import.meta.hot.data.audioIntelligenceRuntime as AudioIntelligenceRuntime;
+  }
   import.meta.hot.dispose((data) => {
-    data.audioIntelligenceRuntime = instance;
+    if (data) data.audioIntelligenceRuntime = instance;
   });
 }
 

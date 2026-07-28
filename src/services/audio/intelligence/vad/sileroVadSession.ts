@@ -11,7 +11,7 @@ export const SILERO_CONTEXT_SAMPLES = 64;
 export const SILERO_SAMPLE_RATE = 16_000;
 const SILERO_STATE_SHAPE = [2, 1, 128] as const;
 const SILERO_STATE_SIZE = 2 * 1 * 128;
-const ABORT_CHECK_FRAME_INTERVAL = 2_000;
+const PROGRESS_FRAME_INTERVAL = 200;
 
 export interface SileroVadProcessOptions {
   checkAborted?: () => void;
@@ -62,7 +62,12 @@ export class SileroVadSession {
       enableCpuMemArena: false,
       enableMemPattern: false,
     });
-    return new SileroVadSession(session, resolveIoNames(session));
+    try {
+      return new SileroVadSession(session, resolveIoNames(session));
+    } catch (error) {
+      await session.release().catch(() => undefined);
+      throw error;
+    }
   }
 
   // Returns one speech probability per 512-sample frame (the last frame is
@@ -81,12 +86,8 @@ export class SileroVadSession {
     const frameWithContext = new Float32Array(SILERO_CONTEXT_SAMPLES + SILERO_FRAME_SAMPLES);
     const srTensor = new ort.Tensor('int64', BigInt64Array.from([BigInt(SILERO_SAMPLE_RATE)]), [1]);
 
+    options.checkAborted?.();
     for (let frame = 0; frame < frameCount; frame += 1) {
-      if (frame > 0 && frame % ABORT_CHECK_FRAME_INTERVAL === 0) {
-        options.checkAborted?.();
-        options.onProgress?.(frame, frameCount);
-      }
-
       frameWithContext.set(context, 0);
       frameWithContext.fill(0, SILERO_CONTEXT_SAMPLES);
       const start = frame * SILERO_FRAME_SAMPLES;
@@ -98,6 +99,7 @@ export class SileroVadSession {
         [this.io.state]: new ort.Tensor('float32', state.slice(), [...SILERO_STATE_SHAPE]),
         [this.io.sr]: srTensor,
       });
+      options.checkAborted?.();
 
       const probabilityData = outputs[this.io.output]?.data;
       const stateData = outputs[this.io.stateOut]?.data;
@@ -111,9 +113,12 @@ export class SileroVadSession {
       probabilities[frame] = probabilityData[0] ?? 0;
       state.set(stateData);
       context.set(frameWithContext.subarray(frameWithContext.length - SILERO_CONTEXT_SAMPLES));
+      const processedFrames = frame + 1;
+      if (processedFrames < frameCount && processedFrames % PROGRESS_FRAME_INTERVAL === 0) {
+        options.onProgress?.(processedFrames, frameCount);
+      }
     }
 
-    options.checkAborted?.();
     options.onProgress?.(frameCount, frameCount);
     return probabilities;
   }

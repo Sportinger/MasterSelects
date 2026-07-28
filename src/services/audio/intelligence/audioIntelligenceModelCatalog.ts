@@ -21,7 +21,7 @@ export const AUDIO_INTELLIGENCE_MODEL_CATALOG: readonly AudioIntelligenceModelCa
   {
     id: 'silero-vad',
     displayName: 'Silero VAD v5',
-    version: 'v5',
+    version: 'v5.1.2',
     fileName: 'silero_vad.onnx',
     url: 'https://raw.githubusercontent.com/snakers4/silero-vad/v5.1.2/src/silero_vad/data/silero_vad.onnx',
     sizeBytes: 2_327_524,

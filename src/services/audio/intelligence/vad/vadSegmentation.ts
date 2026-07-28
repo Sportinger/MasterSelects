@@ -74,16 +74,20 @@ export function segmentSpeechProbabilities(
   probabilities: Float32Array,
   frameDurationSeconds: number,
   config: Pick<VoiceActivityConfig, 'threshold' | 'negThreshold' | 'minSpeechMs' | 'minSilenceMs' | 'padMs'>,
+  exactDurationSeconds: number,
   offsetSeconds = 0,
 ): AudioSpan[] {
   if (!Number.isFinite(frameDurationSeconds) || frameDurationSeconds <= 0) {
     throw new Error('frameDurationSeconds must be a positive finite number.');
   }
+  if (!Number.isFinite(exactDurationSeconds) || exactDurationSeconds < 0) {
+    throw new Error('exactDurationSeconds must be a non-negative finite number.');
+  }
 
   const minSilenceFrames = (config.minSilenceMs / 1000) / frameDurationSeconds;
   const minSpeechSeconds = config.minSpeechMs / 1000;
   const padSeconds = config.padMs / 1000;
-  const totalDuration = probabilities.length * frameDurationSeconds;
+  const totalDuration = exactDurationSeconds;
 
   const spans = mergeShortSilences(
     collectRawSpans(probabilities, config.threshold, config.negThreshold),

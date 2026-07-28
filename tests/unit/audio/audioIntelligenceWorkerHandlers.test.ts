@@ -114,7 +114,7 @@ function createHarness(sessionOptions: FakeSessionOptions = {}) {
   const init = async (jobId = 'job-init') => {
     startJob(jobId, 'audio-intel.init', {
       modelId: 'silero-vad',
-      modelVersion: 'v5',
+      modelVersion: 'v5.1.2',
       modelBytes: new Uint8Array([1, 2, 3, 4]).buffer,
     });
     return waitForTerminal(events, jobId);
@@ -139,7 +139,7 @@ describe('audio intelligence worker handlers', () => {
 
     expect(terminal).toMatchObject({
       type: 'runtime.job.completed',
-      output: { backend: 'wasm', modelId: 'silero-vad', modelVersion: 'v5' },
+      output: { backend: 'wasm', modelId: 'silero-vad', modelVersion: 'v5.1.2' },
     });
     expect(harness.createSession).toHaveBeenCalledTimes(1);
   });
@@ -194,6 +194,21 @@ describe('audio intelligence worker handlers', () => {
     expect(terminal).toMatchObject({
       type: 'runtime.job.failed',
       error: { message: expect.stringContaining('16000') },
+    });
+  });
+
+  it('fails a VAD job when frameSamples does not match Silero inference', async () => {
+    const harness = createHarness();
+    await harness.init();
+
+    harness.startJob('job-vad-frame-size', 'audio-intel.vad', harness.vadInput({
+      config: { ...CONFIG, frameSamples: 256 },
+    }));
+    const terminal = await waitForTerminal(harness.events, 'job-vad-frame-size');
+
+    expect(terminal).toMatchObject({
+      type: 'runtime.job.failed',
+      error: { message: expect.stringContaining('frameSamples=512') },
     });
   });
 
