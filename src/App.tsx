@@ -40,6 +40,7 @@ import { useClipPanelSync } from './hooks/useClipPanelSync';
 import { useIsMobile, useForceMobile } from './hooks/useIsMobile';
 import { useMIDIRuntime } from './hooks/useMIDIRuntime';
 import { useLiveInputFeedbackCoordinator } from './hooks/useLiveInputFeedbackCoordinator';
+import { usePointerFocusHandoff } from './hooks/usePointerFocusHandoff';
 import { useAccountStore } from './stores/accountStore';
 import { useSettingsStore } from './stores/settingsStore';
 import { useUiSettingsStore } from './stores/uiSettingsStore';
@@ -86,6 +87,9 @@ function App() {
 
   // Overall UI zoom slider + block browser Ctrl+wheel page zoom (#209)
   usePageZoom();
+
+  // Release stale control focus when pointer interaction moves back to an editor surface.
+  usePointerFocusHandoff();
 
   // Initialize global undo/redo system
   const { historyNotice, clearHistoryNotice } = useGlobalHistory();

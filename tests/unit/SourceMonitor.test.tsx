@@ -170,6 +170,92 @@ describe('SourceMonitor edit commands', () => {
     expect(downstream).toHaveBeenCalled();
   });
 
+  it('lets Space leave the source monitor when it is not hovered', async () => {
+    render(<SourceMonitor file={createVideoFile()} onClose={vi.fn()} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const focusedControl = screen.getByTitle('Set source In');
+    focusedControl.focus();
+    const downstream = vi.fn();
+    window.addEventListener('keydown', downstream, true);
+    const event = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      code: 'Space',
+      key: ' ',
+    });
+
+    focusedControl.dispatchEvent(event);
+    window.removeEventListener('keydown', downstream, true);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(focusedControl);
+    expect(downstream).toHaveBeenCalled();
+  });
+
+  it('claims Space for playable source media only while the source monitor is hovered', async () => {
+    const { container } = render(<SourceMonitor file={createVideoFile()} onClose={vi.fn()} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const sourceMonitor = container.querySelector('.source-monitor') as HTMLElement;
+    fireEvent.pointerEnter(sourceMonitor);
+    const downstream = vi.fn();
+    window.addEventListener('keydown', downstream, true);
+    const hoveredEvent = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      code: 'Space',
+      key: ' ',
+    });
+
+    window.dispatchEvent(hoveredEvent);
+
+    expect(hoveredEvent.defaultPrevented).toBe(true);
+    expect(downstream).not.toHaveBeenCalled();
+
+    fireEvent.pointerLeave(sourceMonitor);
+    downstream.mockClear();
+    const outsideEvent = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      code: 'Space',
+      key: ' ',
+    });
+    window.dispatchEvent(outsideEvent);
+    window.removeEventListener('keydown', downstream, true);
+
+    expect(outsideEvent.defaultPrevented).toBe(false);
+    expect(downstream).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not claim hovered source Space while the user is typing', async () => {
+    const { container } = render(<SourceMonitor file={createVideoFile()} onClose={vi.fn()} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    fireEvent.pointerEnter(container.querySelector('.source-monitor') as HTMLElement);
+    const input = document.createElement('input');
+    document.body.append(input);
+    input.focus();
+    const event = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      code: 'Space',
+      key: ' ',
+    });
+
+    input.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(input);
+    input.remove();
+  });
+
   it('zooms still source preview with the mouse wheel', async () => {
     const { container } = render(<SourceMonitor file={createImageFile()} onClose={vi.fn()} />);
     await act(async () => {

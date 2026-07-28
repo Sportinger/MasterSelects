@@ -254,6 +254,7 @@ export interface CloudAiAudioMusicRequest {
   params: {
     audioWeight?: number;
     customMode?: boolean;
+    duration?: number;
     instrumental?: boolean;
     model?: string;
     negativeTags?: string;

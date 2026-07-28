@@ -21,8 +21,7 @@ interface UseExternalDropTrackDragEnterParams {
   rejectDropDuringExport: (event: DragEvent) => boolean;
   getDesiredStartTime: (clientX: number) => number;
   resolveImmediateDragPreview: (event: DragEvent) => ExternalDropImmediatePreview;
-  applyVideoNewTrackOffer: (state: ExternalDragState) => ExternalDragState;
-  buildTrackPreviewState: (params: TrackPreviewStateParams) => ExternalDragState;
+  buildTrackPreviewState: (params: TrackPreviewStateParams) => ExternalDragState | null;
   setExternalDrag: Dispatch<SetStateAction<ExternalDragState | null>>;
 }
 
@@ -32,7 +31,6 @@ export function useExternalDropTrackDragEnter({
   rejectDropDuringExport,
   getDesiredStartTime,
   resolveImmediateDragPreview,
-  applyVideoNewTrackOffer,
   buildTrackPreviewState,
   setExternalDrag,
 }: UseExternalDropTrackDragEnterParams) {
@@ -43,10 +41,16 @@ export function useExternalDropTrackDragEnter({
 
     const dataTransferTypes = event.dataTransfer.types;
     if (!hasTrackPreviewDropType(dataTransferTypes)) {
+      setExternalDrag(null);
       return;
     }
 
     const targetTrack = tracks.find((track) => track.id === trackId);
+    if (!targetTrack || targetTrack.locked || targetTrack.type === 'midi') {
+      event.dataTransfer.dropEffect = 'none';
+      setExternalDrag(null);
+      return;
+    }
     const isVideoTrack = targetTrack?.type === 'video';
     const isAudioTrack = targetTrack?.type === 'audio';
     const startTime = getDesiredStartTime(event.clientX);
@@ -54,18 +58,11 @@ export function useExternalDropTrackDragEnter({
 
     if (
       (preview.isAudio && isVideoTrack) ||
-      (isAudioTrack && hasGeneratedVisualDropType(dataTransferTypes))
+      (isAudioTrack && hasGeneratedVisualDropType(dataTransferTypes)) ||
+      (isAudioTrack && preview.isVideo && preview.hasAudio !== true)
     ) {
-      setExternalDrag(applyVideoNewTrackOffer({
-        trackId: '',
-        startTime,
-        x: event.clientX,
-        y: event.clientY,
-        duration: preview.duration,
-        hasAudio: preview.hasAudio,
-        isVideo: preview.isVideo,
-        isAudio: preview.isAudio,
-      }));
+      event.dataTransfer.dropEffect = 'none';
+      setExternalDrag(null);
       return;
     }
 
@@ -85,7 +82,6 @@ export function useExternalDropTrackDragEnter({
     rejectDropDuringExport,
     getDesiredStartTime,
     resolveImmediateDragPreview,
-    applyVideoNewTrackOffer,
     buildTrackPreviewState,
     setExternalDrag,
   ]);

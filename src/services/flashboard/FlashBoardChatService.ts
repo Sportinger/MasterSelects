@@ -48,6 +48,7 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
     throw new Error('Write a prompt before starting chat.');
   }
 
+  request.onPhase?.('kernel');
   const kernelResult = await tryKernelFirst(request.playbookPrompt ?? prompt);
   if (kernelResult.handled) {
     // Kernel-handled turns still record a durable chat run so bridge and
@@ -66,6 +67,7 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
     return kernelResult.message;
   }
 
+  request.onPhase?.('provider');
   const systemPrompt = buildFlashBoardChatSystemPrompt(request.systemPromptOverride, {
     includeContext: request.systemPromptIncludeContext !== false,
     includePlaybook: request.systemPromptIncludePlaybook,

@@ -21,6 +21,7 @@ import {
   paginateAgentTimelineEvents,
 } from '../../src/services/agentTimeline/manifest/pagination';
 import {
+  isEventTypeAllowedForChannel,
   serializeAgentTimelineManifest,
   validateAgentTimelineEvent,
   validateAgentTimelineManifest,
@@ -167,5 +168,56 @@ describe('Agent Timeline manifest contract', () => {
     const bytePage = paginateAgentTimelineEvents(manyEvents, { queryKey: 'bytes', maxBytes: 1_000 });
     expect(bytePage.truncation.reason).toBe('byte-limit');
     expect(bytePage.truncation.estimatedBytes).toBeLessThanOrEqual(1_000);
+  });
+
+  it('accepts speech-marker events in the speech channel and validates their data', () => {
+    const marker: AgentTimelineEvent = {
+      schemaVersion: AGENT_TIMELINE_EVENT_SCHEMA_VERSION,
+      id: 'marker-1',
+      type: 'speech-marker',
+      time: { temporalKind: 'interval', timeDomain: 'source', start: 1.2, end: 1.55 },
+      confidence: 0.72,
+      provenance: [{ kind: 'analyzer', analyzerId: 'speech-markers', analyzerVersion: '1.0.0' }],
+      data: { marker: 'breath', intensity: 0.4 },
+    };
+    expect(validateAgentTimelineEvent(marker)).toEqual([]);
+    expect(isEventTypeAllowedForChannel('speech', 'speech-marker')).toBe(true);
+    expect(isEventTypeAllowedForChannel('audio', 'speech-marker')).toBe(false);
+
+    const filler: AgentTimelineEvent = {
+      ...marker,
+      id: 'marker-2',
+      data: { marker: 'filler', text: 'ähm', wordId: 'word-9', speakerId: 'speaker-1' },
+    };
+    expect(validateAgentTimelineEvent(filler)).toEqual([]);
+
+    const invalidKind = { ...marker, data: { marker: 'cough' } } as unknown as AgentTimelineEvent;
+    expect(validateAgentTimelineEvent(invalidKind)).toContain('speech-marker marker is invalid');
+    const invalidIntensity = { ...marker, data: { marker: 'pause', intensity: 1.5 } } as AgentTimelineEvent;
+    expect(validateAgentTimelineEvent(invalidIntensity)).toContain('speech-marker intensity must be within [0, 1]');
+  });
+
+  it('validates prosody fields on speech events', () => {
+    const speech: AgentTimelineEvent = {
+      schemaVersion: AGENT_TIMELINE_EVENT_SCHEMA_VERSION,
+      id: 'speech-1',
+      type: 'speech',
+      time: { temporalKind: 'interval', timeDomain: 'source', start: 0, end: 0.4 },
+      confidence: 0.9,
+      provenance: [{ kind: 'analyzer', analyzerId: 'transcript', analyzerVersion: '1.0.0' }],
+      data: { speakerId: 'speaker-1', text: 'hallo', emphasis: 0.8, f0MeanHz: 121.5 },
+    };
+    expect(validateAgentTimelineEvent(speech)).toEqual([]);
+
+    const badEmphasis = {
+      ...speech,
+      data: { speakerId: 'speaker-1', emphasis: 1.2 },
+    } as AgentTimelineEvent;
+    expect(validateAgentTimelineEvent(badEmphasis)).toContain('speech emphasis must be within [0, 1]');
+    const badF0 = {
+      ...speech,
+      data: { speakerId: 'speaker-1', f0MeanHz: 0 },
+    } as AgentTimelineEvent;
+    expect(validateAgentTimelineEvent(badF0)).toContain('speech f0MeanHz must be positive');
   });
 });

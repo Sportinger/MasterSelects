@@ -16,7 +16,6 @@ export interface FlashBoardSunoOption {
 export interface FlashBoardSunoOptionsState {
   currentModelId: SunoModelId;
   modelButtonLabel: string;
-  modeButtonLabel: string;
   modelOptions: FlashBoardSunoOption[];
   tuningChanged: boolean;
   vocalGenderOptions: FlashBoardSunoOption[];
@@ -31,8 +30,6 @@ export interface FlashBoardSunoTuningResetState {
 
 interface BuildFlashBoardSunoOptionsStateInput {
   audioWeight: number;
-  customMode: boolean;
-  instrumental: boolean;
   modelId: string | undefined;
   styleWeight: number;
   vocalGender: SunoVocalGender | '';
@@ -69,8 +66,6 @@ export function normalizeFlashBoardSunoModel(value: string | undefined): SunoMod
 
 export function buildFlashBoardSunoOptionsState({
   audioWeight,
-  customMode,
-  instrumental,
   modelId,
   styleWeight,
   vocalGender,
@@ -83,14 +78,9 @@ export function buildFlashBoardSunoOptionsState({
     weirdnessConstraint,
     DEFAULT_SUNO_WEIRDNESS_CONSTRAINT,
   );
-  const modeButtonLabel = customMode
-    ? instrumental ? 'Custom inst.' : 'Custom song'
-    : instrumental ? 'Simple inst.' : 'Simple song';
-
   return {
     currentModelId,
     modelButtonLabel: SUNO_MODEL_LABELS[currentModelId] ?? currentModelId,
-    modeButtonLabel,
     modelOptions: SUNO_MODEL_IDS.map((model) => ({
       id: model,
       label: SUNO_MODEL_LABELS[model] ?? model,

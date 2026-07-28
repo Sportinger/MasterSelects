@@ -49,6 +49,7 @@ export interface PlaceTimelineExternalDropFilesParams {
   importResults?: FileImportResult[];
   arrangement?: TimelineExternalDropArrangement;
   records: TimelineExternalDropFileRecord[];
+  resolveLinkedVideoTrackId?: (startTime: number, duration?: number) => string | undefined;
   resolveStartTime?: (desiredStartTime: number, duration?: number) => number;
   trackId: string;
   trackIsVideo: boolean;
@@ -85,6 +86,8 @@ async function addTimelineExternalDropMediaClip(params: {
   file: File;
   filePath?: string;
   handle?: FileSystemFileHandle;
+  linkedAudioTrackId?: string;
+  requireLinkedAudio?: boolean;
   startTime: number;
   trackId: string;
   typeOverride?: string;
@@ -95,6 +98,8 @@ async function addTimelineExternalDropMediaClip(params: {
     file,
     filePath,
     handle,
+    linkedAudioTrackId,
+    requireLinkedAudio,
     startTime,
     trackId,
     typeOverride,
@@ -114,18 +119,37 @@ async function addTimelineExternalDropMediaClip(params: {
     return null;
   }
 
+  if (requireLinkedAudio && (mediaFile.type !== 'video' || mediaFile.hasAudio !== true)) {
+    log.debug('Skipping media without linked audio dropped on an audio track', {
+      mediaFileId: mediaFile.id,
+      name: mediaFile.name,
+    });
+    return null;
+  }
+
   const timelineFile = mediaFile.file ?? file;
   setTimelineDroppedFilePath(timelineFile, mediaFile.absolutePath ?? filePath);
   const resolvedDuration = mediaFile.duration ?? duration;
 
-  const clipId = await actions.addClip(
-    trackId,
-    timelineFile,
-    startTime,
-    resolvedDuration,
-    mediaFile.id,
-    getTimelineDropMediaTypeOverride(mediaFile) ?? typeOverride,
-  );
+  const mediaTypeOverride = getTimelineDropMediaTypeOverride(mediaFile) ?? typeOverride;
+  const clipId = linkedAudioTrackId
+    ? await actions.addClip(
+      trackId,
+      timelineFile,
+      startTime,
+      resolvedDuration,
+      mediaFile.id,
+      mediaTypeOverride,
+      { linkedAudioTrackId },
+    )
+    : await actions.addClip(
+      trackId,
+      timelineFile,
+      startTime,
+      resolvedDuration,
+      mediaFile.id,
+      mediaTypeOverride,
+    );
   if (!clipId) {
     log.warn('Could not place timeline drop media clip', {
       mediaFileId: mediaFile.id,
@@ -224,6 +248,7 @@ async function addTimelineExternalDropSignalClip(params: {
 async function addTimelineExternalDropImportedMediaClip(params: {
   actions: TimelineExternalDropFilePlacementActions;
   fallbackDuration?: number;
+  linkedAudioTrackId?: string;
   mediaFile: MediaFile;
   startTime: number;
   trackId: string;
@@ -231,6 +256,7 @@ async function addTimelineExternalDropImportedMediaClip(params: {
   const {
     actions,
     fallbackDuration,
+    linkedAudioTrackId,
     mediaFile,
     startTime,
     trackId,
@@ -247,14 +273,25 @@ async function addTimelineExternalDropImportedMediaClip(params: {
 
   setTimelineDroppedFilePath(file, mediaFile.absolutePath ?? mediaFile.filePath);
   const resolvedDuration = mediaFile.duration ?? fallbackDuration ?? 5;
-  const clipId = await actions.addClip(
-    trackId,
-    file,
-    startTime,
-    resolvedDuration,
-    mediaFile.id,
-    getTimelineDropMediaTypeOverride(mediaFile),
-  );
+  const mediaTypeOverride = getTimelineDropMediaTypeOverride(mediaFile);
+  const clipId = linkedAudioTrackId
+    ? await actions.addClip(
+      trackId,
+      file,
+      startTime,
+      resolvedDuration,
+      mediaFile.id,
+      mediaTypeOverride,
+      { linkedAudioTrackId },
+    )
+    : await actions.addClip(
+      trackId,
+      file,
+      startTime,
+      resolvedDuration,
+      mediaFile.id,
+      mediaTypeOverride,
+    );
   if (!clipId) {
     log.warn('Could not place imported timeline drop media clip', {
       mediaFileId: mediaFile.id,
@@ -305,6 +342,7 @@ export async function placeTimelineExternalDropFiles(
     filePath,
     importResults,
     records,
+    resolveLinkedVideoTrackId,
     resolveStartTime,
     trackId,
     trackIsVideo,
@@ -321,13 +359,19 @@ export async function placeTimelineExternalDropFiles(
 
     for (const importResult of importResults) {
       const resultTrackType = getImportedResultTrackType(importResult);
+      const routesLinkedVideoFromAudioTrack =
+        !trackIsVideo &&
+        isMediaFileImportResult(importResult) &&
+        importResult.type === 'video' &&
+        importResult.hasAudio === true &&
+        Boolean(resolveLinkedVideoTrackId);
       if (resultTrackType === 'audio' && trackIsVideo) {
         log.debug('Skipping imported audio file dropped on a video track', {
           name: getImportedResultName(importResult),
         });
         continue;
       }
-      if (resultTrackType === 'video' && !trackIsVideo) {
+      if (resultTrackType === 'video' && !trackIsVideo && !routesLinkedVideoFromAudioTrack) {
         log.debug('Skipping imported non-audio file dropped on an audio track', {
           name: getImportedResultName(importResult),
         });
@@ -342,7 +386,22 @@ export async function placeTimelineExternalDropFiles(
         : resolveStartTime
           ? resolveStartTime(cursorTime, duration)
           : cursorTime;
-      let placementTrackId = trackId;
+      if (routesLinkedVideoFromAudioTrack && arrangement === 'stack' && placedCount > 0) {
+        log.debug('Skipping stacked linked video because the explicit audio lane is occupied', {
+          name: getImportedResultName(importResult),
+        });
+        continue;
+      }
+
+      let placementTrackId = routesLinkedVideoFromAudioTrack
+        ? resolveLinkedVideoTrackId!(startTime, duration)
+        : trackId;
+      if (!placementTrackId) {
+        log.debug('Skipping linked video because no compatible video lane is available', {
+          name: getImportedResultName(importResult),
+        });
+        continue;
+      }
 
       if (arrangement === 'stack' && placedCount > 0) {
         const nextTrackId = actions.addTrack?.(resultTrackType);
@@ -363,6 +422,7 @@ export async function placeTimelineExternalDropFiles(
           mediaFile: importResult,
           startTime,
           fallbackDuration,
+          linkedAudioTrackId: routesLinkedVideoFromAudioTrack ? trackId : undefined,
         })
         : await addTimelineExternalDropImportedSignalClip({
           actions,
@@ -411,11 +471,15 @@ export async function placeTimelineExternalDropFiles(
     }
 
     const fileIsAudio = typeOverride === 'audio';
+    const routesLinkedVideoFromAudioTrack =
+      !trackIsVideo &&
+      typeOverride === 'video' &&
+      Boolean(resolveLinkedVideoTrackId);
     if (fileIsAudio && trackIsVideo) {
       log.debug('Skipping audio file dropped on a video track', { name: file.name });
       continue;
     }
-    if (!fileIsAudio && !trackIsVideo) {
+    if (!fileIsAudio && !trackIsVideo && !routesLinkedVideoFromAudioTrack) {
       log.debug('Skipping non-audio file dropped on an audio track', { name: file.name });
       continue;
     }
@@ -423,15 +487,26 @@ export async function placeTimelineExternalDropFiles(
     const startTime = resolveStartTime
       ? resolveStartTime(cursorTime, fallbackDuration)
       : cursorTime;
+    const placementTrackId = routesLinkedVideoFromAudioTrack
+      ? resolveLinkedVideoTrackId!(startTime, fallbackDuration)
+      : trackId;
+    if (!placementTrackId) {
+      log.debug('Skipping linked video because no compatible video lane is available', {
+        name: file.name,
+      });
+      continue;
+    }
 
     const placement = await addTimelineExternalDropMediaClip({
       actions,
-      trackId,
+      trackId: placementTrackId,
       file,
       startTime,
       duration: fallbackDuration,
       filePath: absolutePath ?? filePath,
       handle,
+      linkedAudioTrackId: routesLinkedVideoFromAudioTrack ? trackId : undefined,
+      requireLinkedAudio: routesLinkedVideoFromAudioTrack,
       typeOverride,
     });
 

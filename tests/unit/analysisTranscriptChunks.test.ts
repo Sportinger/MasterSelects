@@ -112,6 +112,40 @@ describe('analysis transcript chunks', () => {
     expect(words.map(item => item.id)).toEqual(originalOrder);
   });
 
+  it('splits at the existing word boundary when a qualifying VAD pause overlaps the gap', () => {
+    const words = [
+      word(0, 'Ava', 'First', 0),
+      word(1, 'Ava', 'Second', 1.2),
+    ];
+
+    const chunks = buildAnalysisTranscriptChunks(scene(words, 2), {
+      pauses: [{ start: 0.5, end: 1.05 }],
+    });
+
+    expect(chunks.map(chunk => chunk.words.map(item => item.id))).toEqual([
+      ['word-0'],
+      ['word-1'],
+    ]);
+    expect(chunks.map(chunk => ({ start: chunk.start, end: chunk.end }))).toEqual([
+      { start: 0, end: 0.4 },
+      { start: 1.2, end: 1.6 },
+    ]);
+  });
+
+  it('does not split for an overlapping VAD pause shorter than half a second', () => {
+    const words = [
+      word(0, 'Ava', 'First', 0),
+      word(1, 'Ava', 'Second', 1.2),
+    ];
+
+    const chunks = buildAnalysisTranscriptChunks(scene(words, 2), {
+      pauses: [{ start: 0.55, end: 0.95 }],
+    });
+
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].words.map(item => item.id)).toEqual(['word-0', 'word-1']);
+  });
+
   it('keeps a no-speech scene as one fallback row', () => {
     expect(buildAnalysisTranscriptChunks(scene([], 20))).toEqual([
       expect.objectContaining({

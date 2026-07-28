@@ -26,7 +26,7 @@ interface UseExternalDropTrackDragOverParams {
   getDesiredStartTime: (clientX: number) => number;
   resolveImmediateDragPreview: (event: DragEvent) => ExternalDropImmediatePreview;
   updateVideoNewTrackGesture: (clientY: number, isAudio: boolean) => boolean;
-  buildTrackPreviewState: (params: TrackPreviewStateParams) => ExternalDragState;
+  buildTrackPreviewState: (params: TrackPreviewStateParams) => ExternalDragState | null;
   getPreviewMetadataFallback: () => PreviewMetadataFallback;
   setExternalDrag: Dispatch<SetStateAction<ExternalDragState | null>>;
 }
@@ -48,50 +48,42 @@ export function useExternalDropTrackDragOver({
 
     const dataTransferTypes = event.dataTransfer.types;
     if (!hasTrackPreviewDropType(dataTransferTypes)) {
+      event.dataTransfer.dropEffect = 'none';
+      setExternalDrag(null);
       return;
     }
 
     const desiredStartTime = getDesiredStartTime(event.clientX);
     const preview = resolveImmediateDragPreview(event);
     const targetTrack = tracks.find((track) => track.id === trackId);
+    if (!targetTrack || targetTrack.locked || targetTrack.type === 'midi') {
+      event.dataTransfer.dropEffect = 'none';
+      setExternalDrag(null);
+      return;
+    }
     const isVideoTrack = targetTrack?.type === 'video';
     const isAudioTrack = targetTrack?.type === 'audio';
 
-    if (preview.isAudio && isVideoTrack) {
+    if (
+      (preview.isAudio && isVideoTrack) ||
+      (isAudioTrack && preview.isVideo && preview.hasAudio !== true)
+    ) {
       event.dataTransfer.dropEffect = 'none';
-      setExternalDrag((prev) => prev ? {
-        ...prev,
-        trackId: '',
-        startTime: desiredStartTime,
-        x: event.clientX,
-        y: event.clientY,
-        audioTrackId: undefined,
-        videoTrackId: undefined,
-        newTrackType: null,
-        showVideoNewTrackZone: updateVideoNewTrackGesture(event.clientY, true),
-      } : null);
+      updateVideoNewTrackGesture(event.clientY, preview.isAudio);
+      setExternalDrag(null);
       return;
     }
 
     if (isAudioTrack && hasGeneratedVisualDropType(dataTransferTypes)) {
       event.dataTransfer.dropEffect = 'none';
-      setExternalDrag((prev) => prev ? {
-        ...prev,
-        trackId: '',
-        startTime: desiredStartTime,
-        x: event.clientX,
-        y: event.clientY,
-        audioTrackId: undefined,
-        videoTrackId: undefined,
-        newTrackType: null,
-        showVideoNewTrackZone: updateVideoNewTrackGesture(event.clientY, false),
-      } : null);
+      updateVideoNewTrackGesture(event.clientY, false);
+      setExternalDrag(null);
       return;
     }
 
     setExternalDrag((prev) => {
       const fallback = getPreviewMetadataFallback();
-      return buildTrackPreviewState({
+      const next = buildTrackPreviewState({
         trackId,
         desiredStartTime,
         x: event.clientX,
@@ -101,6 +93,10 @@ export function useExternalDropTrackDragOver({
         isVideo: preview.isVideo,
         isAudio: preview.isAudio,
       });
+      if (!next) {
+        event.dataTransfer.dropEffect = 'none';
+      }
+      return next;
     });
   }, [
     tracks,

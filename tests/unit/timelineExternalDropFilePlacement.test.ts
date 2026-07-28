@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../src/services/timeline/timelineExternalDropMediaResolver', () => ({
   getTimelineDropMediaTypeOverride: vi.fn(),
+  resolveMediaFileForTimelineDrop: vi.fn(),
   resolveTimelineDropImportResult: vi.fn(),
   resolveTimelineDropMediaFile: vi.fn(),
   setTimelineDroppedFilePath: vi.fn(),
@@ -13,6 +14,7 @@ vi.mock('../../src/runtime/renderers/signalTimelineRendererAdapter', () => ({
 
 import {
   getTimelineDropMediaTypeOverride,
+  resolveMediaFileForTimelineDrop,
   resolveTimelineDropImportResult,
   resolveTimelineDropMediaFile,
   setTimelineDroppedFilePath,
@@ -22,6 +24,7 @@ import { placeTimelineExternalDropFiles } from '../../src/services/timeline/time
 import type { MediaFile, SignalAssetItem } from '../../src/stores/mediaStore';
 
 const getTimelineDropMediaTypeOverrideMock = vi.mocked(getTimelineDropMediaTypeOverride);
+const resolveMediaFileForTimelineDropMock = vi.mocked(resolveMediaFileForTimelineDrop);
 const resolveTimelineDropImportResultMock = vi.mocked(resolveTimelineDropImportResult);
 const resolveTimelineDropMediaFileMock = vi.mocked(resolveTimelineDropMediaFile);
 const setTimelineDroppedFilePathMock = vi.mocked(setTimelineDroppedFilePath);
@@ -56,6 +59,7 @@ describe('timeline external drop file placement', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getTimelineDropMediaTypeOverrideMock.mockReturnValue(undefined);
+    resolveMediaFileForTimelineDropMock.mockImplementation(async (item) => item.file ?? null);
     resolveTimelineDropImportResultMock.mockResolvedValue(null);
     resolveTimelineDropMediaFileMock.mockImplementation(async ({ file }) =>
       mediaFile({
@@ -235,5 +239,154 @@ describe('timeline external drop file placement', () => {
     expect(resolveTimelineDropImportResultMock).not.toHaveBeenCalled();
     expect(addClip).not.toHaveBeenCalled();
     expect(addSignalAssetClip).not.toHaveBeenCalled();
+  });
+
+  it('places a dropped video with audio on the linked base video and hovered audio lanes', async () => {
+    const addClip = vi.fn().mockResolvedValue('clip-video');
+    const addSignalAssetClip = vi.fn();
+    const videoFile = new File(['video'], 'dialog.mp4', { type: 'video/mp4' });
+    resolveTimelineDropMediaFileMock.mockResolvedValue(mediaFile({
+      id: 'video-dialog',
+      name: 'dialog.mp4',
+      type: 'video',
+      file: videoFile,
+      duration: 9,
+      hasAudio: true,
+    }));
+
+    const placed = await placeTimelineExternalDropFiles({
+      actions: { addClip, addSignalAssetClip },
+      records: [{ file: videoFile }],
+      trackId: 'audio-2',
+      trackIsVideo: false,
+      resolveLinkedVideoTrackId: () => 'video-1',
+      baseStartTime: 3,
+    });
+
+    expect(placed).toBe(true);
+    expect(addClip).toHaveBeenCalledWith(
+      'video-1',
+      videoFile,
+      3,
+      9,
+      'video-dialog',
+      'video',
+      { linkedAudioTrackId: 'audio-2' },
+    );
+  });
+
+  it('does not place a silent video through an audio-lane drop', async () => {
+    const addClip = vi.fn();
+    const addSignalAssetClip = vi.fn();
+    const videoFile = new File(['video'], 'silent.mp4', { type: 'video/mp4' });
+    resolveTimelineDropMediaFileMock.mockResolvedValue(mediaFile({
+      id: 'video-silent',
+      name: 'silent.mp4',
+      type: 'video',
+      file: videoFile,
+      duration: 9,
+      hasAudio: false,
+    }));
+
+    const placed = await placeTimelineExternalDropFiles({
+      actions: { addClip, addSignalAssetClip },
+      records: [{ file: videoFile }],
+      trackId: 'audio-1',
+      trackIsVideo: false,
+      resolveLinkedVideoTrackId: () => 'video-1',
+      baseStartTime: 0,
+    });
+
+    expect(placed).toBe(false);
+    expect(addClip).not.toHaveBeenCalled();
+  });
+
+  it('uses each imported video duration and start time to resolve its linked video lane', async () => {
+    const addClip = vi.fn().mockResolvedValue('clip-video');
+    const addSignalAssetClip = vi.fn();
+    const firstFile = new File(['video'], 'first.mp4', { type: 'video/mp4' });
+    const secondFile = new File(['video'], 'second.mp4', { type: 'video/mp4' });
+    const first = mediaFile({
+      id: 'first',
+      name: 'first.mp4',
+      type: 'video',
+      file: firstFile,
+      duration: 12,
+      hasAudio: true,
+    });
+    const second = mediaFile({
+      id: 'second',
+      name: 'second.mp4',
+      type: 'video',
+      file: secondFile,
+      duration: 3,
+      hasAudio: true,
+    });
+    const resolveLinkedVideoTrackId = vi.fn()
+      .mockReturnValueOnce('video-2')
+      .mockReturnValueOnce('video-1');
+
+    const placed = await placeTimelineExternalDropFiles({
+      actions: { addClip, addSignalAssetClip },
+      records: [],
+      importResults: [first, second],
+      trackId: 'audio-1',
+      trackIsVideo: false,
+      resolveLinkedVideoTrackId,
+      baseStartTime: 2,
+    });
+
+    expect(placed).toBe(true);
+    expect(resolveLinkedVideoTrackId).toHaveBeenNthCalledWith(1, 2, 12);
+    expect(resolveLinkedVideoTrackId).toHaveBeenNthCalledWith(2, 14, 3);
+    expect(addClip).toHaveBeenNthCalledWith(
+      1,
+      'video-2',
+      firstFile,
+      2,
+      12,
+      'first',
+      undefined,
+      { linkedAudioTrackId: 'audio-1' },
+    );
+    expect(addClip).toHaveBeenNthCalledWith(
+      2,
+      'video-1',
+      secondFile,
+      14,
+      3,
+      'second',
+      undefined,
+      { linkedAudioTrackId: 'audio-1' },
+    );
+  });
+
+  it('does not create a partial video track for a second stacked audio-lane video', async () => {
+    const addClip = vi.fn().mockResolvedValue('clip-video');
+    const addTrack = vi.fn();
+    const addSignalAssetClip = vi.fn();
+    const imports = ['first', 'second'].map((id) => mediaFile({
+      id,
+      name: `${id}.mp4`,
+      type: 'video',
+      file: new File(['video'], `${id}.mp4`, { type: 'video/mp4' }),
+      duration: 4,
+      hasAudio: true,
+    }));
+
+    const placed = await placeTimelineExternalDropFiles({
+      actions: { addClip, addTrack, addSignalAssetClip },
+      records: [],
+      importResults: imports,
+      arrangement: 'stack',
+      trackId: 'audio-1',
+      trackIsVideo: false,
+      resolveLinkedVideoTrackId: () => 'video-1',
+      baseStartTime: 0,
+    });
+
+    expect(placed).toBe(true);
+    expect(addClip).toHaveBeenCalledTimes(1);
+    expect(addTrack).not.toHaveBeenCalled();
   });
 });

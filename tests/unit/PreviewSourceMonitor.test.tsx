@@ -224,6 +224,7 @@ describe('Preview source monitor lifecycle', () => {
       disconnect = vi.fn();
     }
     globalThis.ResizeObserver = TestResizeObserver as unknown as typeof ResizeObserver;
+    timelineState.isPlaying = false;
 
     mediaState = {
       files: [createVideoFile()],
@@ -265,5 +266,17 @@ describe('Preview source monitor lifecycle', () => {
     rerender(<Preview panelId="preview" source={{ type: 'activeComp' }} showTransparencyGrid={false} />);
 
     expect(mediaState.setSourceMonitorFile).toHaveBeenCalledWith(null);
+  });
+
+  it('closes any active source monitor when timeline playback becomes active', () => {
+    const { rerender } = render(
+      <Preview panelId="preview" source={{ type: 'activeComp' }} showTransparencyGrid={false} />,
+    );
+
+    timelineState.isPlaying = true;
+    rerender(<Preview panelId="preview" source={{ type: 'activeComp' }} showTransparencyGrid={false} />);
+
+    expect(mediaState.setSourceMonitorFile).toHaveBeenCalledWith(null);
+    expect(screen.queryByTestId('source-monitor')).not.toBeInTheDocument();
   });
 });

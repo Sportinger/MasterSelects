@@ -13,6 +13,15 @@ export const ANALYSIS_TRANSCRIPT_CHUNK_SILENCE_SECONDS = 1.5;
 const ANALYSIS_TRANSCRIPT_CHUNK_MAX_WORDS = 28;
 const SENTENCE_END = /[.!?…](?:["'’”»)\]}]+)?$/u;
 
+export interface AnalysisTranscriptChunkPause {
+  start: number;
+  end: number;
+}
+
+export interface AnalysisTranscriptChunkOptions {
+  pauses?: readonly AnalysisTranscriptChunkPause[];
+}
+
 interface ResolvedTranscriptWord {
   word: AnalysisSceneTranscriptWord;
   speakerKey: string;
@@ -65,7 +74,25 @@ function resolveWords(scene: AnalysisSceneView): readonly ResolvedTranscriptWord
     });
 }
 
-function splitIntoSpeechRuns(words: readonly ResolvedTranscriptWord[]): readonly ResolvedTranscriptWord[][] {
+function gapOverlapsVadPause(
+  previous: AnalysisSceneTranscriptWord,
+  next: AnalysisSceneTranscriptWord,
+  pauses: readonly AnalysisTranscriptChunkPause[],
+): boolean {
+  if (next.start <= previous.end) return false;
+  return pauses.some(pause => (
+    Number.isFinite(pause.start)
+    && Number.isFinite(pause.end)
+    && pause.end - pause.start >= 0.5
+    && pause.start < next.start
+    && previous.end < pause.end
+  ));
+}
+
+function splitIntoSpeechRuns(
+  words: readonly ResolvedTranscriptWord[],
+  pauses: readonly AnalysisTranscriptChunkPause[] = [],
+): readonly ResolvedTranscriptWord[][] {
   const runs: ResolvedTranscriptWord[][] = [];
   for (const resolved of words) {
     const run = runs.at(-1);
@@ -73,7 +100,9 @@ function splitIntoSpeechRuns(words: readonly ResolvedTranscriptWord[]): readonly
     const speakerChanged = previous && previous.speakerKey !== resolved.speakerKey;
     const longSilence = previous
       && resolved.word.start - previous.word.end >= ANALYSIS_TRANSCRIPT_CHUNK_SILENCE_SECONDS;
-    if (!run || speakerChanged || longSilence) {
+    const vadPause = previous
+      && gapOverlapsVadPause(previous.word, resolved.word, pauses);
+    if (!run || speakerChanged || longSilence || vadPause) {
       runs.push([resolved]);
     } else {
       run.push(resolved);
@@ -186,6 +215,7 @@ function chunkId(
  */
 export function buildAnalysisTranscriptChunks(
   scene: AnalysisSceneView,
+  options?: AnalysisTranscriptChunkOptions,
 ): readonly AnalysisTranscriptChunk[] {
   const resolvedWords = resolveWords(scene);
   if (resolvedWords.length === 0) {
@@ -200,7 +230,7 @@ export function buildAnalysisTranscriptChunks(
     }];
   }
 
-  const wordChunks = splitIntoSpeechRuns(resolvedWords).flatMap(chunkSpeechRun);
+  const wordChunks = splitIntoSpeechRuns(resolvedWords, options?.pauses).flatMap(chunkSpeechRun);
   const partCount = wordChunks.length;
   return wordChunks.map((words, index) => ({
     id: chunkId(scene.id, words, index + 1),

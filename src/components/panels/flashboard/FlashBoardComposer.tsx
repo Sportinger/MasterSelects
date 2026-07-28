@@ -3,7 +3,12 @@ import { useFlashBoardStore } from '../../../stores/flashboardStore';
 import { useHasFlashBoardActiveGenerationBoard } from '../../../stores/flashboardStore/activeGenerationRecords';
 import { DEFAULT_FLASHBOARD_MODEL_VERSION } from '../../../stores/flashboardStore/defaults';
 import { useMediaStore } from '../../../stores/mediaStore';
-import { SUNO_PROVIDER_ID } from '../../../services/sunoService';
+import {
+  DEFAULT_SUNO_DURATION,
+  MAX_SUNO_DURATION,
+  MIN_SUNO_DURATION,
+  SUNO_PROVIDER_ID,
+} from '../../../services/sunoService';
 import { RUNWAY_VIDEO_PROVIDER_ID } from '../../../services/kieAi/config';
 import { isProjectPromptStorageAvailable } from '../../../services/aiPromptLibrary';
 import { FLASHBOARD_CHAT_SYSTEM_PROMPT } from '../../../services/flashboard/FlashBoardChatService';
@@ -319,7 +324,7 @@ export function FlashBoardComposer({
     prompt, resetSunoTuning, setPrompt, setSunoAudioWeight, setSunoCustomMode,
     setSunoInstrumental, setSunoNegativeTags, setSunoStyle, setSunoStyleWeight,
     setSunoWeirdnessConstraint, sunoAudioWeight, sunoCustomMode, sunoInstrumental,
-    sunoModelButtonLabel, sunoModeButtonLabel, sunoModelOptions, sunoNegativeTags,
+    sunoModelButtonLabel, sunoModelOptions, sunoNegativeTags,
     sunoStyle, sunoStyleLimit, sunoStyleWeight, sunoTitle,
     sunoVocalGender, sunoVocalGenderOptions, sunoWeirdnessConstraint,
   } = useFlashBoardPromptSunoController({
@@ -330,6 +335,21 @@ export function FlashBoardComposer({
     promptRefineCallbacksRef,
     version,
   });
+  const sunoDurationSupported = isSunoMode && sunoCustomMode && currentSunoModelId === 'V5_5';
+  useEffect(() => {
+    const needsSunoDurationDefault =
+      sunoDurationSupported
+      && (duration < MIN_SUNO_DURATION || duration > MAX_SUNO_DURATION);
+    if (!needsSunoDurationDefault) return undefined;
+
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setDuration(DEFAULT_SUNO_DURATION);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [duration, sunoDurationSupported]);
   const {
     chatInputRef,
     promptInputRef,
@@ -374,7 +394,7 @@ export function FlashBoardComposer({
     accountAuthenticated: accountSession?.authenticated === true,
     duration,
     effectiveGenerateAudio,
-    effectivePrompt,
+    effectivePrompt: isSunoMode && sunoInstrumental ? '' : effectivePrompt,
     hasElevenLabsKey,
     hasEvolinkKey,
     hasGenerationBoard,
@@ -402,6 +422,7 @@ export function FlashBoardComposer({
     seedanceReferenceValidationError,
     service,
     sunoCustomMode,
+    sunoInstrumental,
     sunoStyle,
     supportsMultiShot,
     usePiApiKeyByDefault,
@@ -438,6 +459,7 @@ export function FlashBoardComposer({
     seedanceReferenceValidationError,
     service,
     sunoCustomMode,
+    sunoInstrumental,
     sunoStyle,
     supportsMultiShot,
     usePiApiKeyByDefault,
@@ -511,7 +533,7 @@ export function FlashBoardComposer({
     openAuthDialog,
     openPricingDialog,
     openSettings,
-    prompt,
+    prompt: isSunoMode && sunoInstrumental ? '' : prompt,
     providerId,
     referenceBadges: composerReferenceBadges,
     selectedEntry,
@@ -626,7 +648,7 @@ export function FlashBoardComposer({
 
   return (
     <div
-      className={`fb-bubble ${showComposerReferences ? 'has-references' : ''} ${chatPanelOpen ? 'has-chat-panel' : ''} ${isReferenceDragOver ? 'reference-drop-active' : ''} ${isRefiningPrompt ? 'is-refining-prompt' : ''}`}
+      className={`fb-bubble ${isSunoMode ? 'is-suno-composer' : ''} ${showComposerReferences ? 'has-references' : ''} ${chatPanelOpen ? 'has-chat-panel' : ''} ${isReferenceDragOver ? 'reference-drop-active' : ''} ${isRefiningPrompt ? 'is-refining-prompt' : ''}`}
       style={composerStyle}
       onKeyDown={handleKeyDown}
       onMouseDown={(e) => e.stopPropagation()}
@@ -678,7 +700,7 @@ export function FlashBoardComposer({
           isRefiningPrompt, isSunoMode, maxReferenceMedia, multiShots, prompt, promptBeforeAiRewrite,
           promptInputRef, promptRefineTitle, referenceMediaCount: effectiveReferenceMediaFileIds.length,
           sunoAudioReferenceActive: hasAudioReferenceInput, sunoAudioWeight,
-          sunoNegativeTags, sunoStyle, sunoStyleLimit, sunoStyleWeight,
+          sunoCustomMode, sunoInstrumental, sunoNegativeTags, sunoStyle, sunoStyleLimit, sunoStyleWeight,
           sunoWeirdnessConstraint,
           onAutosizeInput: resizePromptInput,
           onChatInputKeyDown: handleChatInputKeyDown, onChatPromptChange: handleChatPromptChange,
@@ -688,6 +710,8 @@ export function FlashBoardComposer({
           onRestorePromptBeforeAiRewrite: handleRestorePromptBeforeAiRewrite,
           onSunoAudioWeightChange: setSunoAudioWeight, onSunoNegativeTagsChange: handleSunoNegativeTagsChange,
           onSunoResetTuning: resetSunoTuning, onSunoStyleChange: handleSunoStyleChange,
+          onSunoCustomModeChange: setSunoCustomMode,
+          onSunoInstrumentalChange: setSunoInstrumental,
           onSunoStyleWeightChange: setSunoStyleWeight, onSunoWeirdnessConstraintChange: setSunoWeirdnessConstraint,
         }}
         multishotPanel={{
@@ -720,11 +744,12 @@ export function FlashBoardComposer({
           isSunoMode, modeLabel, modelButtonLabel, multiShots,
           popoverHostClassName, popoverRef,
           selectedEntryHasAspectRatios: Boolean(selectedEntry && selectedEntry.aspectRatios.length > 0),
-          selectedEntryHasDurations: Boolean(selectedEntry && selectedEntry.durations.length > 0),
+          selectedEntryHasDurations: sunoDurationSupported
+            || Boolean(selectedEntry && selectedEntry.durations.length > 0),
           selectedEntryHasImageSizes: Boolean(selectedEntry?.supportsTextToImage && selectedEntry.imageSizes?.length),
           selectedEntryHasMultipleModes: Boolean(selectedEntry && selectedEntry.modes.length > 1),
-          sunoModelButtonLabel, sunoModeButtonLabel, sunoVocalGender,
-          sunoVocalGenderOptions, supportsAudio,
+          sunoModelButtonLabel, sunoVocalGender,
+          sunoVocalGenderOptions, sunoVoiceControlsDisabled: !sunoCustomMode || sunoInstrumental, supportsAudio,
           supportsMultiShot, voiceSettingsChanged, onAudioToggle: handleAudioToggle,
           onMultiShotToggle: handleMultiShotToggle, onOpenPopover: togglePopover,
           onOpenPromptBook: () => openPromptBook('generation'),
@@ -742,13 +767,9 @@ export function FlashBoardComposer({
           },
         }}
         sunoPopovers={{
-          activePopover: renderedPopover, currentModelId: currentSunoModelId, customMode: sunoCustomMode,
-          instrumental: sunoInstrumental, isSunoMode, modelOptions: sunoModelOptions,
+          activePopover: renderedPopover, currentModelId: currentSunoModelId,
+          isSunoMode, modelOptions: sunoModelOptions,
           onClosePopover: closePopover,
-          onModeChange: (nextCustomMode, nextInstrumental) => {
-            setSunoCustomMode(nextCustomMode);
-            setSunoInstrumental(nextInstrumental);
-          },
           onModelChange: setVersion,
         }}
         elevenLabsSettingsPopovers={{
@@ -775,6 +796,9 @@ export function FlashBoardComposer({
         parameterPopovers={{
           activePopover: renderedPopover, aspectOptions: parameterOptions.aspectOptions,
           durationOptions: parameterOptions.durationOptions, imageSizeOptions: parameterOptions.imageSizeOptions,
+          durationRange: sunoDurationSupported
+            ? { min: MIN_SUNO_DURATION, max: MAX_SUNO_DURATION, step: 1, value: duration }
+            : undefined,
           modeOptions: parameterOptions.modeOptions, modeTitle: selectedEntry?.modeControlLabel,
           onAspectRatioChange: setAspectRatio,
           onClosePopover: closePopover, onDurationChange: setDuration,

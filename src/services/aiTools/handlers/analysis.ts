@@ -13,7 +13,7 @@ import { resolveFacePersonReference } from './facePersonReference';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
-function sourceTimeToTimeline(
+export function sourceTimeToTimeline(
   clip: TimelineClip,
   sourceTime: number,
   timelineStore: TimelineStore,
@@ -391,6 +391,11 @@ export async function handleGetClipTranscript(
         : page.map(word => ({
             start: word.start,
             end: word.end,
+            ...(word.alignedStart !== undefined ? { alignedStart: word.alignedStart } : {}),
+            ...(word.alignedEnd !== undefined ? { alignedEnd: word.alignedEnd } : {}),
+            ...(word.alignmentConfidence !== undefined
+              ? { alignmentConfidence: word.alignmentConfidence }
+              : {}),
             text: word.text,
             speaker: word.speaker,
             speakerConfidence: word.speakerConfidence,
@@ -416,110 +421,6 @@ export async function handleGetClipTranscript(
             recentPatches: fusionArtifact?.patches.slice(-8),
           }
         : null,
-    },
-  };
-}
-
-export async function handleFindSilentSections(
-  args: Record<string, unknown>,
-  timelineStore: TimelineStore
-): Promise<ToolResult> {
-  const clipId = args.clipId as string;
-  const minDuration = (args.minDuration as number) || 0.5;
-
-  const clip = timelineStore.clips.find(c => c.id === clipId);
-  if (!clip) {
-    return { success: false, error: `Clip not found: ${clipId}` };
-  }
-
-  const silenceWords = resolveClipTranscriptWords(clip);
-  if (!silenceWords?.length) {
-    return {
-      success: false,
-      error: 'No transcript available to analyze for silence.',
-    };
-  }
-
-  // Only consider the visible range of the clip
-  const sourceStart = clip.inPoint;
-  const sourceEnd = clip.outPoint;
-
-  // Filter segments to those within the visible range
-  const allSegments = silenceWords;
-  const segments = allSegments.filter(seg => seg.end > sourceStart && seg.start < sourceEnd);
-
-  const silentSections: Array<{ sourceStart: number; sourceEnd: number; duration: number }> = [];
-
-  // Check for silence at the beginning (from inPoint to first segment)
-  const firstSegStart = segments.length > 0 ? Math.max(segments[0].start, sourceStart) : sourceEnd;
-  if (firstSegStart - sourceStart >= minDuration) {
-    silentSections.push({
-      sourceStart: sourceStart,
-      sourceEnd: firstSegStart,
-      duration: firstSegStart - sourceStart,
-    });
-  }
-
-  // Check gaps between segments
-  for (let i = 0; i < segments.length - 1; i++) {
-    const gapStart = Math.max(segments[i].end, sourceStart);
-    const gapEnd = Math.min(segments[i + 1].start, sourceEnd);
-    const gapDuration = gapEnd - gapStart;
-
-    if (gapDuration >= minDuration) {
-      silentSections.push({
-        sourceStart: gapStart,
-        sourceEnd: gapEnd,
-        duration: gapDuration,
-      });
-    }
-  }
-
-  // Check for silence at the end (from last segment to outPoint)
-  if (segments.length > 0) {
-    const lastSegEnd = Math.min(segments[segments.length - 1].end, sourceEnd);
-    if (sourceEnd - lastSegEnd >= minDuration) {
-      silentSections.push({
-        sourceStart: lastSegEnd,
-        sourceEnd: sourceEnd,
-        duration: sourceEnd - lastSegEnd,
-      });
-    }
-  }
-
-  // Convert source time to timeline time
-  // Source time t maps to timeline time: clip.startTime + (t - clip.inPoint)
-  const timelineSilentSections = silentSections.map(s => ({
-    sourceStart: s.sourceStart,
-    sourceEnd: s.sourceEnd,
-    duration: s.duration,
-    timelineStart: clip.startTime + (s.sourceStart - clip.inPoint),
-    timelineEnd: clip.startTime + (s.sourceEnd - clip.inPoint),
-  }));
-
-  // Visual feedback: add timeline markers for silent sections
-  if (isAIExecutionActive() && timelineSilentSections.length > 0) {
-    const store = (await import('../../../stores/timeline')).useTimelineStore.getState();
-    for (const section of timelineSilentSections) {
-      store.addAIOverlay({
-        type: 'silent-zone',
-        trackId: clip.trackId,
-        timePosition: section.timelineStart,
-        width: section.duration,
-        duration: 2000,
-      });
-    }
-  }
-
-  return {
-    success: true,
-    data: {
-      clipId,
-      minDuration,
-      clipTimelineRange: { start: clip.startTime, end: clip.startTime + clip.duration },
-      silentSections: timelineSilentSections,
-      totalSilentTime: silentSections.reduce((sum, s) => sum + s.duration, 0),
-      count: silentSections.length,
     },
   };
 }
@@ -658,112 +559,9 @@ export async function handleFindLowQualitySections(
   };
 }
 
-export async function handleStartClipAnalysis(
-  args: Record<string, unknown>,
-  timelineStore: TimelineStore
-): Promise<ToolResult> {
-  const clipId = args.clipId as string;
-  const clip = timelineStore.clips.find(c => c.id === clipId);
-  if (!clip) {
-    return { success: false, error: `Clip not found: ${clipId}` };
-  }
-  if (!clip.file) {
-    return { success: false, error: `Source file is unavailable for clip: ${clipId}` };
-  }
-  const isVideo = clip.file.type.startsWith('video/')
-    || /\.(mp4|webm|mov|avi|mkv|m4v|mxf)$/i.test(clip.file.name);
-  if (!isVideo) {
-    return { success: false, error: 'Clip analysis requires a video clip.' };
-  }
-
-  if (clip.analysisStatus === 'analyzing') {
-    return { success: false, error: 'Analysis already in progress for this clip' };
-  }
-
-  // Visual feedback: select clip and open analysis tab
-  selectClipAndOpenTab(clipId, 'analysis');
-
-  // Import and start analysis (runs in background)
-  const { analyzeClip, isAnalysisRunning, getCurrentAnalyzingClipId } = await import('../../clipAnalyzer');
-  if (isAnalysisRunning()) {
-    return {
-      success: false,
-      error: `Another clip analysis is already running (${getCurrentAnalyzingClipId() ?? 'unknown clip'}).`,
-    };
-  }
-  void analyzeClip(clipId).catch(() => {
-    // The analyzer persists its exact runtime error for getClipAnalysis.
-  });
-
-  return {
-    success: true,
-    data: {
-      clipId,
-      clipName: clip.name,
-      message: 'Analysis started, including browser-local YuNet + SFace. Poll getClipAnalysis for progress, results, or errors.',
-    },
-  };
-}
-
-export async function handleStartClipFaceAnalysis(
-  args: Record<string, unknown>,
-  timelineStore: TimelineStore,
-): Promise<ToolResult> {
-  const clipId = args.clipId as string;
-  const clip = timelineStore.clips.find(candidate => candidate.id === clipId);
-  if (!clip) return { success: false, error: `Clip not found: ${clipId}` };
-  if (!clip.file) return { success: false, error: `Source file is unavailable for clip: ${clipId}` };
-  const isVideo = clip.file.type.startsWith('video/')
-    || /\.(mp4|webm|mov|avi|mkv|m4v|mxf)$/i.test(clip.file.name);
-  if (!isVideo) return { success: false, error: 'YuNet + SFace analysis requires a video clip.' };
-
-  const { analyzeClip, isAnalysisRunning, getCurrentAnalyzingClipId } = await import('../../clipAnalyzer');
-  if (isAnalysisRunning()) {
-    return {
-      success: false,
-      error: `Another clip analysis is already running (${getCurrentAnalyzingClipId() ?? 'unknown clip'}).`,
-    };
-  }
-
-  selectClipAndOpenTab(clipId, 'analysis');
-  void analyzeClip(clipId).catch(() => {
-    // analyzeClip persists runtime errors on the clip for getClipFaceAnalysis.
-  });
-
-  return {
-    success: true,
-    data: {
-      clipId,
-      clipName: clip.name,
-      status: 'analyzing',
-      message: 'YuNet + SFace analysis started in the browser. Poll getClipFaceAnalysis for progress, results, or an exact module error.',
-    },
-  };
-}
-
-export async function handleStartClipTranscription(
-  args: Record<string, unknown>,
-  timelineStore: TimelineStore
-): Promise<ToolResult> {
-  const clipId = args.clipId as string;
-  const clip = timelineStore.clips.find(c => c.id === clipId);
-  if (!clip) {
-    return { success: false, error: `Clip not found: ${clipId}` };
-  }
-
-  // Visual feedback: select clip and open transcript tab
-  selectClipAndOpenTab(clipId, 'transcript');
-
-  // Import and start transcription (runs in background)
-  const { transcribeClip } = await import('../../clipTranscriber');
-  transcribeClip(clipId, 'auto'); // Don't await - runs in background
-
-  return {
-    success: true,
-    data: {
-      clipId,
-      clipName: clip.name,
-      message: 'Transcription started. Check clip details later for results.',
-    },
-  };
-}
+export { handleFindSilentSections } from './clipSilence';
+export {
+  handleStartClipAnalysis,
+  handleStartClipFaceAnalysis,
+  handleStartClipTranscription,
+} from './analysisStarters';

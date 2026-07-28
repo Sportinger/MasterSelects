@@ -343,6 +343,23 @@ The chat and bridge code call the shared dispatcher, so the same registry is use
 - `addMaskPathKeyframe` stores full `mask.{maskId}.path` snapshots, preserving vertex IDs so individual mask vertices can animate between keyframed shapes.
 - Local filesystem tools such as `importLocalFiles` and `listLocalDirectory` run through the dev bridge in development or the Native Helper in production, and they still respect the file-access policy/allowed-root checks.
 
+### Audio Intelligence Tools
+
+- `startClipAudioIntelligence` starts background VAD, transcript alignment,
+  speech-marker, prosody, and room-tone analysis. Its optional `features` list
+  runs a subset; otherwise all five stages run.
+- `getSpeechMarkers` returns bounded, pageable breaths, fillers, repetitions,
+  false starts, and long pauses with source/timeline mappings and confidence.
+- `findSilentSections` now uses persisted voice activity first, live RMS second,
+  and transcript gaps last. Every successful response includes
+  `detectionSource` so an agent does not confuse model evidence with a fallback.
+- Speech-marker text exposed through `getTimelineAnalysis` follows the existing
+  `includeText` redaction and explicit external-data consent. Marker kind,
+  timing, confidence, and counts remain available without text.
+
+See [Audio Intelligence](./Audio-Intelligence.md) for artifacts, UI lanes,
+kernel evidence, and editing behavior.
+
 ---
 
 ## AI Visual Feedback System

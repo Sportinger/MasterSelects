@@ -7,7 +7,6 @@ type GenerationControlPopover =
   | 'audioOutput'
   | 'voiceSettings'
   | 'sunoModel'
-  | 'sunoMode'
   | 'aspect'
   | 'duration'
   | 'imageSize'
@@ -35,9 +34,9 @@ interface FlashBoardGenerationControlsProps {
   selectedEntryHasImageSizes: boolean;
   selectedEntryHasMultipleModes: boolean;
   sunoModelButtonLabel: string;
-  sunoModeButtonLabel: string;
   sunoVocalGender: string;
   sunoVocalGenderOptions: Array<{ id: string; label: string }>;
+  sunoVoiceControlsDisabled: boolean;
   supportsAudio: boolean;
   supportsMultiShot: boolean;
   voiceSettingsChanged: boolean;
@@ -70,9 +69,9 @@ export function FlashBoardGenerationControls({
   selectedEntryHasImageSizes,
   selectedEntryHasMultipleModes,
   sunoModelButtonLabel,
-  sunoModeButtonLabel,
   sunoVocalGender,
   sunoVocalGenderOptions,
+  sunoVoiceControlsDisabled,
   supportsAudio,
   supportsMultiShot,
   voiceSettingsChanged,
@@ -137,6 +136,7 @@ export function FlashBoardGenerationControls({
             <button
               className={`fb-pill fb-suno-vocal-pill ${sunoVocalGender === '' ? 'active' : ''}`}
               type="button"
+              disabled={sunoVoiceControlsDisabled}
               onClick={() => onSunoVocalGenderChange('')}
               title="Automatic vocal gender"
             >
@@ -147,19 +147,13 @@ export function FlashBoardGenerationControls({
                 key={option.id}
                 className={`fb-pill fb-suno-vocal-pill ${sunoVocalGender === option.id ? 'active' : ''}`}
                 type="button"
+                disabled={sunoVoiceControlsDisabled}
                 onClick={() => onSunoVocalGenderChange(option.id)}
                 title={`Vocal gender: ${option.label}`}
               >
                 {option.label}
               </button>
             ))}
-            <button
-              className={`fb-pill ${activePopover === 'sunoMode' ? 'active' : ''}`}
-              onClick={() => onOpenPopover('sunoMode')}
-              title="Suno generation mode"
-            >
-              {sunoModeButtonLabel}
-            </button>
           </>
         )}
         {!isAudioMode && selectedEntryHasAspectRatios && (
@@ -167,7 +161,7 @@ export function FlashBoardGenerationControls({
             {aspectRatioLabel}
           </button>
         )}
-        {!isAudioMode && selectedEntryHasDurations && (
+        {selectedEntryHasDurations && (!isAudioMode || isSunoMode) && (
           <button className={`fb-pill ${activePopover === 'duration' ? 'active' : ''}`} onClick={() => onOpenPopover('duration')}>
             {durationLabel}
           </button>

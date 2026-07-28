@@ -3,6 +3,10 @@ import {
   isKernelServiceAvailable,
   KernelServiceClient,
 } from '../../src/services/kernelClient';
+import {
+  buildTranscriptMoments,
+  type TranscriptMomentExecutor,
+} from '../../src/services/kernelClient/transcriptMoments';
 
 function jsonResponse(data: unknown, status = 200): Response {
   return {
@@ -153,5 +157,96 @@ describe('KernelServiceClient', () => {
     await expect(isKernelServiceAvailable(client)).resolves.toBe(true);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(fetchImpl.mock.calls[0]?.[0]).toBe('http://127.0.0.1:8787/kernel/health');
+  });
+});
+
+describe('buildTranscriptMoments v2 evidence', () => {
+  const snapshot = {
+    videoTracks: [{
+      clips: [{
+        id: 'clip-1',
+        mediaId: 'media-1',
+        hasTranscript: true,
+        inPoint: 0,
+        outPoint: 3,
+      }],
+    }],
+    audioTracks: [],
+  };
+
+  function executorWithMarkerData(data: Record<string, unknown>): TranscriptMomentExecutor {
+    return vi.fn(async (calls) => {
+      const tool = calls[0]?.tool ?? '';
+      return [{
+        tool,
+        result: tool === 'getClipTranscript'
+          ? {
+              success: true,
+              data: {
+                hasTranscript: true,
+                hasMore: false,
+                segments: [
+                  { start: 0, end: 1, text: 'First thought' },
+                  { start: 2, end: 3, text: 'second thought' },
+                ],
+              },
+            }
+          : { success: true, data },
+      }];
+    }) as unknown as TranscriptMomentExecutor;
+  }
+
+  it('attaches bounded marker, pause, and emphasis evidence with honest sources', async () => {
+    const executor = executorWithMarkerData({
+      hasMarkers: true,
+      markers: [
+        { type: 'filler', start: 0.4, end: 0.5, confidence: 0.9 },
+        { type: 'long-pause', start: 1.1, end: 1.9, confidence: 0.9 },
+        { type: 'repetition', start: 2.2, end: 2.4, confidence: 0.7 },
+      ],
+      pauses: [{ startSeconds: 1.2, endSeconds: 1.8 }],
+      emphasis: [{ text: 'second', startSeconds: 2.2, score: 0.86 }],
+    });
+
+    const moments = await buildTranscriptMoments(snapshot, executor);
+
+    expect(moments).toHaveLength(2);
+    expect(moments[0]).toMatchObject({
+      indexVersion: 'app-transcript-v2',
+      evidence: {
+        transcript: 'First thought',
+        markers: [{ kind: 'filler', timeSeconds: 0.4 }],
+        pauses: [
+          { startSeconds: 1.1, endSeconds: 1.9 },
+          { startSeconds: 1.2, endSeconds: 1.8 },
+        ],
+      },
+      analysisSources: ['transcript', 'speech-markers', 'voice-activity'],
+    });
+    expect(moments[1]).toMatchObject({
+      evidence: {
+        transcript: 'second thought',
+        markers: [{ kind: 'disfluency', timeSeconds: 2.2 }],
+        emphasis: [{ text: 'second', startSeconds: 2.2, score: 0.86 }],
+      },
+      analysisSources: ['transcript', 'speech-markers', 'prosody'],
+    });
+    expect(executor).toHaveBeenLastCalledWith(
+      [expect.objectContaining({ tool: 'getSpeechMarkers' })],
+      'chat',
+      { guidedReplay: false, suppressHistory: true },
+    );
+  });
+
+  it('keeps transcript-only sources when marker data is absent', async () => {
+    const moments = await buildTranscriptMoments(snapshot, executorWithMarkerData({
+      hasMarkers: false,
+      markers: [],
+    }));
+
+    expect(moments.every(moment => moment.indexVersion === 'app-transcript-v2')).toBe(true);
+    expect(moments.every(moment => moment.analysisSources.length === 1
+      && moment.analysisSources[0] === 'transcript')).toBe(true);
+    expect(moments.every(moment => Object.keys(moment.evidence).join(',') === 'transcript')).toBe(true);
   });
 });

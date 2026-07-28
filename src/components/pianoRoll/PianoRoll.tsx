@@ -11,6 +11,10 @@ import { type Icon, IconEraser, IconMarquee2, IconPointer } from '@tabler/icons-
 import { useTimelineStore } from '../../stores/timeline';
 import { selectTempoMap } from '../../stores/timeline/selectors';
 import { previewMidiNote } from '../../services/audio/midiPlaybackScheduler';
+import {
+  claimShortcut,
+  handoffPointerFocus,
+} from '../../services/shortcutFocusPolicy';
 import type { MidiNote } from '../../types/midiClip';
 import { computeGhostNotes } from './ghostNotes';
 import { PianoRollScrollbars, PIANO_ROLL_SCROLLBAR } from './PianoRollScrollbars';
@@ -820,7 +824,10 @@ export function PianoRoll({ clipId }: PianoRollProps) {
       // drive the same playback engine; play() starts from the current playhead —
       // i.e. the live cursor in the roll (#249).
       if (e.code === 'Space' || e.key === ' ') {
-        e.preventDefault();
+        if (!claimShortcut(e, 'playback.playPause', {
+          blurFocusedControl: true,
+          deferToFocusedControl: false,
+        })) return;
         const transport = useTimelineStore.getState();
         if (transport.isPlaying) transport.pause();
         else void transport.play();
@@ -859,7 +866,11 @@ export function PianoRoll({ clipId }: PianoRollProps) {
       }
     };
     doc.addEventListener('keydown', onKey);
-    return () => doc.removeEventListener('keydown', onKey);
+    doc.addEventListener('pointerdown', handoffPointerFocus, true);
+    return () => {
+      doc.removeEventListener('keydown', onKey);
+      doc.removeEventListener('pointerdown', handoffPointerFocus, true);
+    };
   }, [clipId, removeMidiNotes, copySelection, cutSelection, pasteClipboard, duplicateSelection, runHistory, selectTool]);
 
   if (!clip || clip.source?.type !== 'midi') {

@@ -31,6 +31,7 @@ export const ANALYSIS_OVERVIEW_LANE_STYLES: Record<
   focus: { label: 'Focus', colour: '#3987e5', form: 'envelope' },
   quality: { label: 'Quality', colour: '#199e70', form: 'envelope' },
   audio: { label: 'Audio', colour: '#c98500', form: 'sparkline' },
+  markers: { label: 'Markers', colour: '#f0e442', form: 'needles' },
   text: { label: 'Text', colour: '#008300', form: 'band' },
 };
 
@@ -229,6 +230,22 @@ function paintSparkline(
   context.globalAlpha = 1;
 }
 
+function paintMarkers(
+  context: CanvasRenderingContext2D,
+  row: AnalysisOverviewLayoutRow,
+  model: AnalysisOverviewRenderModel,
+): void {
+  context.fillStyle = ANALYSIS_OVERVIEW_LANE_STYLES.markers.colour;
+  for (const bin of model.markers) {
+    if (bin.eventCount === 0) continue;
+    const confidence = bin.averageScore ?? 0.5;
+    const needle = Math.max(3, Math.round((row.height - 2) * (0.45 + confidence * 0.55)));
+    context.globalAlpha = Math.min(1, 0.6 + Math.log2(bin.eventCount + 1) * 0.18);
+    context.fillRect(bin.index, row.top + row.height - needle - 1, 1, needle);
+  }
+  context.globalAlpha = 1;
+}
+
 function paintBand(
   context: CanvasRenderingContext2D,
   row: AnalysisOverviewLayoutRow,
@@ -274,6 +291,10 @@ export function paintAnalysisOverview({ context, model }: PaintAnalysisOverviewO
       if (model.audio) {
         paintSparkline(context, row, model.audio, ANALYSIS_OVERVIEW_LANE_STYLES.audio.colour);
       }
+      continue;
+    }
+    if (row.lane === 'markers') {
+      paintMarkers(context, row, model);
       continue;
     }
     paintBand(

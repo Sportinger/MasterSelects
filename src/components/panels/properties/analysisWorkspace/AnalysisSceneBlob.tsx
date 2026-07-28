@@ -1,16 +1,23 @@
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import {
   findActiveAnalysisSceneWord,
   formatAnalysisSceneTime,
   type AnalysisScenePerson,
+  type AnalysisSceneSpeechMarker,
   type AnalysisSceneTranscriptWord,
   type AnalysisSceneView,
 } from './analysisSceneViewModel';
 import type { AnalysisTranscriptChunk } from './analysisTranscriptChunks';
+import {
+  AnalysisSceneSparkline,
+  type AnalysisSceneSparklineCurve,
+} from './AnalysisSceneSparkline';
 
 export interface AnalysisSceneBlobProps {
   scene: AnalysisSceneView;
   transcriptChunk: AnalysisTranscriptChunk;
+  markers?: readonly AnalysisSceneSpeechMarker[];
+  energyCurve?: AnalysisSceneSparklineCurve;
   active: boolean;
   sourceTime: number;
   renderPersonThumbnail?: (
@@ -25,27 +32,57 @@ export interface AnalysisSceneBlobProps {
 function compactTranscript(
   transcriptChunk: AnalysisTranscriptChunk,
   sourceTime: number,
+  markers: readonly AnalysisSceneSpeechMarker[],
   onWordClick?: (word: AnalysisSceneTranscriptWord) => void,
 ): ReactNode {
   if (transcriptChunk.words.length === 0) {
     return <span className="AnalysisSceneBlob__noSpeech">No speech in this scene</span>;
   }
   const activeWord = findActiveAnalysisSceneWord(transcriptChunk.words, sourceTime);
+  const fillerWordIds = new Set(markers
+    .filter(marker => marker.kind === 'filler')
+    .flatMap(marker => marker.wordIds ?? []));
   return (
     <span className="AnalysisSceneBlob__turn">
-      {transcriptChunk.words.map((word, index) => (
-        <button
-          aria-current={word === activeWord ? 'true' : undefined}
-          aria-label={`Seek word ${word.text}`}
-          className={word === activeWord ? 'AnalysisSceneBlob__word AnalysisSceneBlob__word--active' : 'AnalysisSceneBlob__word'}
-          key={`${word.id}:${word.start}:${word.end}:${index}`}
-          onClick={() => onWordClick?.(word)}
-          title={formatAnalysisSceneTime(word.start)}
-          type="button"
-        >
-          {word.text}
-        </button>
-      ))}
+      {transcriptChunk.words.map((word, index) => {
+        const previous = transcriptChunk.words[index - 1];
+        const breath = previous && markers.find(marker => (
+          marker.kind === 'breath'
+          && marker.start < word.start
+          && previous.end < marker.end
+        ));
+        const classNames = ['AnalysisSceneBlob__word'];
+        if (word === activeWord) classNames.push('AnalysisSceneBlob__word--active');
+        if (fillerWordIds.has(word.id)) classNames.push('AnalysisSceneBlob__word--filler');
+        if (Number.isFinite(word.emphasis) && (word.emphasis as number) >= 0.7) {
+          classNames.push('AnalysisSceneBlob__word--emphasis');
+        }
+        const confidence = breath?.confidence;
+        const breathTitle = confidence === undefined
+          ? 'Breath'
+          : `Breath (${Math.round(confidence * 100)}% confidence)`;
+        return (
+          <Fragment key={`${word.id}:${word.start}:${word.end}:${index}`}>
+            {breath && (
+              <span
+                aria-label="Breath marker"
+                className="analysis-scene-blob__marker--breath"
+                title={breathTitle}
+              >~</span>
+            )}
+            <button
+              aria-current={word === activeWord ? 'true' : undefined}
+              aria-label={`Seek word ${word.text}`}
+              className={classNames.join(' ')}
+              onClick={() => onWordClick?.(word)}
+              title={formatAnalysisSceneTime(word.start)}
+              type="button"
+            >
+              {word.text}
+            </button>
+          </Fragment>
+        );
+      })}
     </span>
   );
 }
@@ -94,6 +131,8 @@ function identitySummary(
 export function AnalysisSceneBlob({
   scene,
   transcriptChunk,
+  markers = [],
+  energyCurve,
   active,
   sourceTime,
   renderPersonThumbnail,
@@ -116,12 +155,19 @@ export function AnalysisSceneBlob({
     >
       <div className="AnalysisSceneBlob__summary">
         {identitySummary(scene, transcriptChunk, renderPersonThumbnail)}
-        <span className="AnalysisSceneBlob__speech">
+        <span className={`AnalysisSceneBlob__speech${energyCurve ? ' AnalysisSceneBlob__speech--withSparkline' : ''}`}>
           <small>
             Scene {scene.index ?? '–'} · {scene.boundarySource === 'scene-block' ? 'described scene' : 'shot'}
             {hasMultipleParts ? ` · speech ${transcriptChunk.partIndex}/${transcriptChunk.partCount}` : ''}
           </small>
-          {compactTranscript(transcriptChunk, sourceTime, onWordClick)}
+          {compactTranscript(transcriptChunk, sourceTime, markers, onWordClick)}
+          {energyCurve && (
+            <AnalysisSceneSparkline
+              curve={energyCurve}
+              start={transcriptChunk.start}
+              end={transcriptChunk.end}
+            />
+          )}
         </span>
         <button
           type="button"

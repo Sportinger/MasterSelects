@@ -41,9 +41,19 @@ export function useDroppedTimelineMediaFiles(actions: DropActions) {
     baseStartTime: number;
     fallbackDuration?: number;
     filePath?: string;
+    resolveLinkedVideoTrackId?: (startTime: number, duration?: number) => string | undefined;
     resolveStartTime?: (desiredStartTime: number, duration?: number) => number;
   }): Promise<boolean> => {
-    const { dataTransfer, trackId, trackIsVideo, baseStartTime, fallbackDuration, filePath, resolveStartTime } = params;
+    const {
+      dataTransfer,
+      trackId,
+      trackIsVideo,
+      baseStartTime,
+      fallbackDuration,
+      filePath,
+      resolveLinkedVideoTrackId,
+      resolveStartTime,
+    } = params;
     const records = await collectDroppedMediaFiles(dataTransfer);
     const arrangement = chooseTimelineExternalDropArrangement(records.length);
     if (!arrangement) return false;
@@ -68,6 +78,7 @@ export function useDroppedTimelineMediaFiles(actions: DropActions) {
       baseStartTime,
       fallbackDuration,
       filePath,
+      resolveLinkedVideoTrackId,
       resolveStartTime,
     });
   }, [actions, createFolder, folders, importFiles, importFilesWithHandles]);

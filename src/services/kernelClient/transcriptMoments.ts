@@ -4,9 +4,12 @@ import {
 } from '../aiTools';
 import type { KernelTranscriptMoment } from './types';
 
-export const TRANSCRIPT_MOMENT_INDEX_VERSION = 'app-transcript-v1';
+export const TRANSCRIPT_MOMENT_INDEX_VERSION = 'app-transcript-v2';
 export const TRANSCRIPT_MOMENT_WORD_CAP = 400;
 const TRANSCRIPT_PAGE_SIZE = 120;
+const MAX_MARKERS_PER_MOMENT = 20;
+const MAX_PAUSES_PER_MOMENT = 10;
+const MAX_EMPHASIS_PER_MOMENT = 10;
 
 export type TranscriptMomentExecutor = typeof executeAIToolCalls;
 
@@ -76,6 +79,135 @@ function countWords(text: string): number {
   return text.split(/\s+/u).filter(Boolean).length;
 }
 
+function nearestMomentIndex(
+  moments: readonly KernelTranscriptMoment[],
+  firstIndex: number,
+  time: number,
+): number | undefined {
+  let nearest: number | undefined;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (let index = firstIndex; index < moments.length; index += 1) {
+    const range = moments[index]?.sourceRange;
+    if (!range) continue;
+    const distance = time < range.startSeconds
+      ? range.startSeconds - time
+      : time > range.endSeconds
+        ? time - range.endSeconds
+        : 0;
+    if (distance < nearestDistance) {
+      nearest = index;
+      nearestDistance = distance;
+    }
+  }
+  return nearest;
+}
+
+function addAnalysisSource(
+  moment: KernelTranscriptMoment,
+  source: KernelTranscriptMoment['analysisSources'][number],
+): void {
+  if (!moment.analysisSources.includes(source)) {
+    moment.analysisSources.push(source);
+  }
+}
+
+function attachSpeechMarkerEvidence(
+  moments: KernelTranscriptMoment[],
+  firstIndex: number,
+  data: Record<string, unknown>,
+): void {
+  if (!Array.isArray(data.markers)) return;
+
+  for (const rawMarker of data.markers) {
+    if (!isRecord(rawMarker)) continue;
+    const type = readString(rawMarker.type);
+    const start = readFiniteNumber(rawMarker.start);
+    const end = readFiniteNumber(rawMarker.end) ?? start;
+    if (!type || start === undefined || end === undefined || end < start) continue;
+
+    const momentIndex = nearestMomentIndex(moments, firstIndex, start);
+    const moment = momentIndex === undefined ? undefined : moments[momentIndex];
+    if (!moment) continue;
+
+    if (type === 'long-pause') {
+      const pauses = moment.evidence.pauses ?? [];
+      if (pauses.length < MAX_PAUSES_PER_MOMENT) {
+        pauses.push({ startSeconds: start, endSeconds: end });
+        moment.evidence.pauses = pauses;
+        addAnalysisSource(moment, 'speech-markers');
+      }
+      continue;
+    }
+
+    if (type === 'emphasis') {
+      const text = readString(rawMarker.text);
+      const score = readFiniteNumber(rawMarker.confidence);
+      const emphasis = moment.evidence.emphasis ?? [];
+      if (text && score !== undefined && emphasis.length < MAX_EMPHASIS_PER_MOMENT) {
+        emphasis.push({ text, startSeconds: start, score });
+        moment.evidence.emphasis = emphasis;
+        addAnalysisSource(moment, 'prosody');
+      }
+      continue;
+    }
+
+    const kind = type === 'breath'
+      ? 'breath'
+      : type === 'filler'
+        ? 'filler'
+        : type === 'repetition' || type === 'false-start'
+          ? 'disfluency'
+          : undefined;
+    const markers = moment.evidence.markers ?? [];
+    if (kind && markers.length < MAX_MARKERS_PER_MOMENT) {
+      markers.push({ kind, timeSeconds: start });
+      moment.evidence.markers = markers;
+      addAnalysisSource(moment, 'speech-markers');
+    }
+  }
+}
+
+function attachStructuredEvidence(
+  moments: KernelTranscriptMoment[],
+  firstIndex: number,
+  data: Record<string, unknown>,
+): void {
+  if (Array.isArray(data.pauses)) {
+    for (const rawPause of data.pauses) {
+      if (!isRecord(rawPause)) continue;
+      const start = readFiniteNumber(rawPause.startSeconds) ?? readFiniteNumber(rawPause.start);
+      const end = readFiniteNumber(rawPause.endSeconds) ?? readFiniteNumber(rawPause.end);
+      if (start === undefined || end === undefined || end < start) continue;
+      const momentIndex = nearestMomentIndex(moments, firstIndex, start);
+      const moment = momentIndex === undefined ? undefined : moments[momentIndex];
+      if (!moment) continue;
+      const pauses = moment.evidence.pauses ?? [];
+      if (pauses.length >= MAX_PAUSES_PER_MOMENT) continue;
+      pauses.push({ startSeconds: start, endSeconds: end });
+      moment.evidence.pauses = pauses;
+      addAnalysisSource(moment, 'voice-activity');
+    }
+  }
+
+  if (Array.isArray(data.emphasis)) {
+    for (const rawEmphasis of data.emphasis) {
+      if (!isRecord(rawEmphasis)) continue;
+      const text = readString(rawEmphasis.text);
+      const start = readFiniteNumber(rawEmphasis.startSeconds) ?? readFiniteNumber(rawEmphasis.start);
+      const score = readFiniteNumber(rawEmphasis.score) ?? readFiniteNumber(rawEmphasis.confidence);
+      if (!text || start === undefined || score === undefined) continue;
+      const momentIndex = nearestMomentIndex(moments, firstIndex, start);
+      const moment = momentIndex === undefined ? undefined : moments[momentIndex];
+      if (!moment) continue;
+      const emphasis = moment.evidence.emphasis ?? [];
+      if (emphasis.length >= MAX_EMPHASIS_PER_MOMENT) continue;
+      emphasis.push({ text, startSeconds: start, score });
+      moment.evidence.emphasis = emphasis;
+      addAnalysisSource(moment, 'prosody');
+    }
+  }
+}
+
 export async function buildTranscriptMoments(
   snapshot: unknown,
   executor: TranscriptMomentExecutor = executeAIToolCalls,
@@ -84,6 +216,7 @@ export async function buildTranscriptMoments(
   let wordCount = 0;
 
   for (const clip of transcriptClips(snapshot)) {
+    const firstClipMomentIndex = moments.length;
     let offset = 0;
     const visitedOffsets = new Set<number>();
 
@@ -149,6 +282,28 @@ export async function buildTranscriptMoments(
         break;
       }
       offset = nextOffset;
+    }
+
+    if (moments.length > firstClipMomentIndex) {
+      const markerExecution: AIToolCallExecution = {
+        id: `kernel-speech-markers-${clip.clipId}`,
+        tool: 'getSpeechMarkers',
+        args: {
+          clipId: clip.clipId,
+          ...(clip.sourceStart === undefined ? {} : { sourceStart: clip.sourceStart }),
+          ...(clip.sourceEnd === undefined ? {} : { sourceEnd: clip.sourceEnd }),
+          offset: 0,
+          limit: 250,
+        },
+      };
+      const [markerResult] = await executor([markerExecution], 'chat', {
+        guidedReplay: false,
+        suppressHistory: true,
+      });
+      if (markerResult?.result.success && isRecord(markerResult.result.data)) {
+        attachSpeechMarkerEvidence(moments, firstClipMomentIndex, markerResult.result.data);
+        attachStructuredEvidence(moments, firstClipMomentIndex, markerResult.result.data);
+      }
     }
 
     if (wordCount >= TRANSCRIPT_MOMENT_WORD_CAP) {

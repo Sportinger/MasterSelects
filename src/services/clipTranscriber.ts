@@ -580,9 +580,9 @@ export async function transcribeClip(
     });
     triggerTimelineSave();
 
-    if (isActiveTranscriptionRun(run) && mediaFileId && finalWords.length > 0) {
+    if (isActiveTranscriptionRun(run) && mediaFileId) {
       const newRanges: [number, number][] = ranges.map(([s, e]) => [s, e]);
-      propagateTranscriptToMediaFile(mediaFileId, finalWords, newRanges, fusionArtifact);
+      propagateTranscriptToMediaFile(mediaFileId, allNewWords, newRanges, fusionArtifact);
     }
 
     log.info(`Complete: ${finalWords.length} words for ${clip.name}`);

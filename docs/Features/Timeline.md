@@ -77,6 +77,7 @@ getTrackChildren()  // Query child tracks
 
 ### Video / Image
 - Imported from the media panel or by dropping files on the timeline.
+- External drag previews are shown only for valid destinations. Video ghosts are always blue and audio ghosts are always green. A normal video-lane drop previews only the video, without an extra linked-audio ghost lane. Dropping a video that contains audio directly on an audio lane instead previews and places the linked audio on that exact lane plus the video on the lowest free video lane (normally `Video 1`); silent video, images, generated visuals, and other incompatible sources show no clip ghost on audio lanes.
 - Thumbnails and proxies are supported.
 - In Video Focus, holding Ctrl/Strg while dragging inside a visual clip marks a clip-scoped video bake region. Double-click marks the full visible clip. Clip-scoped regions currently use the transient preview cache path and can be unbaked or removed from the clip overlay.
 - Holding Ctrl/Strg while dragging on the ruler marks a composition-scoped video bake region. Baking a ruler region renders the visible composition into a compressed WebCodecs proxy and substitutes that single proxy layer during preview playback, so the generic RAM cache indicator is not the durable bake source.

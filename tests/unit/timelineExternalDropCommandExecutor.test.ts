@@ -30,6 +30,7 @@ function createActions() {
     addSolidClip: vi.fn(),
     addMeshClip: vi.fn(),
     addCameraClip: vi.fn(),
+    addLightClip: vi.fn(),
     addSplatEffectorClip: vi.fn(),
     addMathSceneClip: vi.fn(),
     addMotionShapeClip: vi.fn(),
@@ -141,5 +142,136 @@ describe('timeline external drop command executor', () => {
       reason: 'visual-media-on-audio-track',
     });
     expect(actions.addClip).not.toHaveBeenCalled();
+  });
+
+  it('routes video with audio from the hovered audio lane to the base video lane', async () => {
+    const actions = createActions();
+    const file = new File(['video'], 'clip.mp4', { type: 'video/mp4' });
+    setMediaState({
+      files: [mediaFile({
+        id: 'media-video',
+        type: 'video',
+        file,
+        duration: 8,
+        hasAudio: true,
+      })],
+    });
+
+    const result = await executeTimelineExternalDropCommand({
+      actions,
+      command: { kind: 'media-file', itemId: 'media-video' },
+      isAudioOnlyMediaFile: () => false,
+      isVideoTrack: false,
+      mediaFilePolicy: 'allow-video-on-audio',
+      resolveLinkedVideoTrackId: () => 'video-1',
+      resolveStartTime: () => 4,
+      trackId: 'audio-2',
+    });
+
+    expect(result).toEqual({ handled: true });
+    expect(actions.addClip).toHaveBeenCalledWith(
+      'video-1',
+      file,
+      4,
+      8,
+      'media-video',
+      undefined,
+      { linkedAudioTrackId: 'audio-2' },
+    );
+  });
+
+  it('rejects visual media without linked audio on an audio lane', async () => {
+    const actions = createActions();
+    setMediaState({
+      files: [mediaFile({
+        id: 'silent-video',
+        type: 'video',
+        file: new File(['video'], 'silent.mp4', { type: 'video/mp4' }),
+        hasAudio: false,
+      })],
+    });
+
+    const result = await executeTimelineExternalDropCommand({
+      actions,
+      command: { kind: 'media-file', itemId: 'silent-video' },
+      isAudioOnlyMediaFile: () => false,
+      isVideoTrack: false,
+      mediaFilePolicy: 'allow-video-on-audio',
+      resolveLinkedVideoTrackId: () => 'video-1',
+      resolveStartTime: () => 0,
+      trackId: 'audio-1',
+    });
+
+    expect(result).toEqual({
+      handled: true,
+      reason: 'media-without-linked-audio-on-audio-track',
+    });
+    expect(actions.addClip).not.toHaveBeenCalled();
+  });
+
+  it('rejects video with unknown audio metadata on an audio lane', async () => {
+    const actions = createActions();
+    setMediaState({
+      files: [mediaFile({
+        id: 'unknown-audio-video',
+        type: 'video',
+        file: new File(['video'], 'pending.mp4', { type: 'video/mp4' }),
+        hasAudio: undefined,
+      })],
+    });
+
+    const result = await executeTimelineExternalDropCommand({
+      actions,
+      command: { kind: 'media-file', itemId: 'unknown-audio-video' },
+      isAudioOnlyMediaFile: () => false,
+      isVideoTrack: false,
+      mediaFilePolicy: 'allow-video-on-audio',
+      resolveLinkedVideoTrackId: () => 'video-1',
+      resolveStartTime: () => 0,
+      trackId: 'audio-1',
+    });
+
+    expect(result).toEqual({
+      handled: true,
+      reason: 'media-without-linked-audio-on-audio-track',
+    });
+    expect(actions.addClip).not.toHaveBeenCalled();
+  });
+
+  it('resolves the linked video lane using the authoritative media duration', async () => {
+    const actions = createActions();
+    const file = new File(['video'], 'long.mp4', { type: 'video/mp4' });
+    const resolveLinkedVideoTrackId = vi.fn(() => 'video-2');
+    setMediaState({
+      files: [mediaFile({
+        id: 'long-video',
+        type: 'video',
+        file,
+        duration: 60,
+        hasAudio: true,
+      })],
+    });
+
+    await executeTimelineExternalDropCommand({
+      actions,
+      command: { kind: 'media-file', itemId: 'long-video' },
+      isAudioOnlyMediaFile: () => false,
+      isVideoTrack: false,
+      mediaFilePolicy: 'allow-video-on-audio',
+      resolveLinkedVideoTrackId,
+      resolveStartTime: () => 7,
+      trackId: 'audio-1',
+    });
+
+    expect(resolveLinkedVideoTrackId).toHaveBeenCalledWith(7, 60);
+    expect(actions.addClip).toHaveBeenCalledWith(
+      'video-2',
+      file,
+      7,
+      60,
+      'long-video',
+      undefined,
+      { linkedAudioTrackId: 'audio-1' },
+    );
   });
 });

@@ -250,7 +250,12 @@ function normalizeFlashBoardGenerationRecord(
     updatedAt: new Date(record.updatedAt).getTime(),
     request: normalizeFlashBoardRequest(record.request),
     job: normalizeFlashBoardJob(record.job),
+    outputs: record.outputs?.map((output) => ({
+      ...output,
+      mediaType: normalizeFlashBoardMediaType(output.mediaType),
+    })),
     result: normalizeFlashBoardResult(record.result),
+    results: record.results?.map((result) => normalizeFlashBoardResult(result) as FlashBoardResult),
   };
 }
 

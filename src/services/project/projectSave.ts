@@ -320,7 +320,9 @@ function serializeFlashBoardGenerationRecord(
     updatedAt: new Date(record.updatedAt).toISOString(),
     request: record.request,
     job: record.job,
+    outputs: record.outputs,
     result: record.result,
+    results: record.results,
   };
 }
 
@@ -397,14 +399,15 @@ function serializeFlashBoardState(
   };
 
   for (const record of records) {
-    if (record.result?.mediaFileId && record.request) {
-      generationMetadataByMediaId[record.result.mediaFileId] = {
-        mediaFileId: record.result.mediaFileId,
+    for (const result of record.results ?? (record.result ? [record.result] : [])) {
+      if (!result.mediaFileId || !record.request) continue;
+      generationMetadataByMediaId[result.mediaFileId] = {
+        mediaFileId: result.mediaFileId,
         service: record.request.service,
         providerId: record.request.providerId,
         version: record.request.version,
         outputType: record.request.outputType,
-        mediaType: record.result.mediaType,
+        mediaType: result.mediaType,
         mode: record.request.mode,
         originalPrompt: record.request.originalPrompt,
         prompt: record.request.prompt,

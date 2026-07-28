@@ -65,7 +65,7 @@ Generation nodes can include:
 - optional multi-shot prompt sequence
 - optional generated-video audio
 - ElevenLabs voice id/name, language override, output format, and voice settings for audio nodes
-- Suno custom/simple mode, instrumental/vocal mode, title, style, negative tags, vocal gender, and tuning weights for music nodes
+- Suno simple/custom and instrumental/vocal state inferred from the expanded composer sections, plus internally derived title, style, negative tags, vocal gender, tuning weights, and optional V5.5 duration for music nodes
 
 ---
 
@@ -99,12 +99,22 @@ The compact composer exposes the richer FlashBoard catalog.
 5. Jobs run with a concurrency cap of 3 overall, but only 1 Kie.ai job at a time.
 6. The selected media service submits the remote task and polls until completion when the provider is asynchronous.
 7. ElevenLabs audio jobs create speech through `/api/ai/audio` and return an audio `File` without remote polling.
-8. Suno music and Suno Sounds jobs use Cloudflare `/api/ai/audio`, where the server calls Kie.ai with `KIEAI_API_KEY`, spends hosted credits, polls the task until a generated audio URL is available, then imports the downloaded audio. Suno Sounds uses the same audio import path after polling and does not expose the Suno Music lyrics/style/tuning controls.
-9. On success, `FlashBoardMediaBridge` imports the asset into the Media Pool and marks the node complete.
+8. Suno music and Suno Sounds jobs use Cloudflare `/api/ai/audio`, where the server calls Kie.ai with `KIEAI_API_KEY`, spends hosted credits, and polls the task. At Kie.ai `FIRST_SUCCESS`, every currently available Suno result is exposed in the running generation card with cover art and an inline player using `streamAudioUrl`. Polling continues until the full job completes.
+9. On success, `FlashBoardMediaBridge` downloads and imports every returned Suno track into the Media Pool, records each result by stable provider output ID, and marks the generation complete only after all returned audio assets are mapped. Partial import retries skip tracks that were already imported. Other providers retain their single-asset path.
 
 Kie.ai Market video/image tasks are asynchronous. A successful create call only returns a `taskId`; FlashBoard polls `GET /api/v1/jobs/recordInfo?taskId=...` and maps Kie states such as `waiting`, `queuing`, `generating`, `success`, and `fail` into local job states. Running remote task IDs are persisted with the project; after reload, FlashBoard resumes polling resumable image/video/Suno jobs and imports the result if the provider finished while the app was closed. Flux Kontext, Veo, and Runway use dedicated Kie create/status endpoints because their result schemas differ from Market jobs. The local `canceled` state only means MasterSelects stopped tracking the node; Kie.ai does not currently expose a documented Market task cancel endpoint, so the Kie logs page and provider record responses remain the server-side source of truth.
 
-Polling tolerates brief browser/network `Failed to fetch` interruptions before failing the job. Completed hosted Kie.ai results are downloaded through the authenticated `/api/ai/video?taskId=...&download=1` route instead of exposing temporary provider URLs directly to the browser. The media bridge also deduplicates repeated completion/import updates for the same generation record, so a slow download/import cannot create duplicate Media Pool items for one completed remote task.
+Polling tolerates brief browser/network `Failed to fetch` interruptions before failing the job. Completed hosted Kie.ai results are downloaded through authenticated application routes or the provider result URL appropriate to that model instead of remaining dependent on temporary preview URLs. The media bridge deduplicates repeated completion/import updates per generation output, so a slow or retried multi-track import does not create duplicate Media Pool items.
+
+Kie.ai requires a reachable Suno callback URL in addition to polling. `/api/ai/suno/callback` is a stateless acknowledgement endpoint that prevents provider `CALLBACK_EXCEPTION` failures; polling remains the authoritative state path. The callback deliberately performs no project or billing mutation. If callback data becomes authoritative in the future, Kie.ai's webhook signature and replay window must be verified before accepting it.
+
+Suno controls follow the provider request matrix. The composer shows the available sections directly instead of a separate four-way mode selector: collapsing a section disables it and removes its values from the provider request. The panel itself has no inner scrollbar, so every enabled field remains visible.
+
+- simple mode keeps the song-description section expanded and the custom-controls section collapsed; it sends only the description
+- custom instrumental mode expands custom controls, collapses lyrics, derives the provider-required title internally from the style, and disables vocal controls
+- custom vocal mode expands both sections, derives the provider-required title internally, and enables lyrics, style, negative tags, vocal gender, and tuning weights
+- the duration slider is available only for custom `V5_5` music and clamps whole seconds to Kie.ai's documented 10–360 second range
+- the small Magic Wand lives inside the active dark input: inside lyrics/song description for vocal modes and inside style for instrumental mode
 
 Image generation is handled alongside video generation. The code path resolves previewable reference images from media files, including thumbnails for video sources or a captured frame when needed. The compact composer also accepts media-panel image, video, and audio references through right-click or drag-and-drop; Kie.ai and Cloud Seedance jobs upload local files through Kie.ai file hosting and map them to provider-specific inputs such as Nano Banana `image_input`, Kling `kling_elements`, or Seedance multimodal reference URL arrays. Seedance 2.0 standard exposes 480p, 720p, and 1080p; Seedance 2.0 Fast exposes 480p and 720p. Both use `reference_audio_urls` for audio-driven sync. Because Kie.ai treats Seedance first/last-frame mode and multimodal reference mode as mutually exclusive, any Seedance request with generic references sends IN/OUT images as image references with prompt guidance instead of `first_frame_url` / `last_frame_url`.
 
@@ -150,7 +160,8 @@ Hosted Suno music uses the Cloudflare `KIEAI_API_KEY` secret and is charged as M
 - The composer does not add a new backend provider. It delegates to the existing AI services.
 - Generated URLs are temporary, so imports force a local project copy.
 - ElevenLabs text-to-speech returns an MP3 `File` directly and is copied into project storage during import.
-- Suno music depends on Kie.ai's polling API and imports the first returned audio result.
+- Suno music depends on Kie.ai's polling API. Kie.ai commonly returns multiple variations but does not contractually guarantee an exact count, so FlashBoard accepts and imports an arbitrary number of returned tracks.
+- Suno covers and streaming URLs are treated as optional provider data. Completed playback prefers the imported project-local audio before falling back to provider URLs.
 - The composer is still bound by provider-specific feature support in the catalog.
 - Some Kie.ai reference behaviors are model-specific: Nano Banana consumes image inputs, Kling consumes element references, and Seedance consumes separate image/video/audio reference arrays.
 

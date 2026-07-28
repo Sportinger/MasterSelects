@@ -114,6 +114,8 @@ export function AnalysisSceneList({
               <AnalysisSceneBlob
                 scene={item.scene}
                 transcriptChunk={item.transcriptChunk}
+                markers={item.markers}
+                energyCurve={item.energyCurve}
                 active={item.id === activeItem?.id}
                 sourceTime={sourceTime}
                 renderPersonThumbnail={renderPersonThumbnail}

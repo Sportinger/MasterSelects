@@ -7,8 +7,11 @@ import {
 } from './analysisSceneListModel';
 import {
   type AnalysisScenePerson,
+  type AnalysisSceneSpeechMarker,
   type AnalysisSceneView,
 } from './analysisSceneViewModel';
+import type { AnalysisTranscriptChunkPause } from './analysisTranscriptChunks';
+import type { AnalysisSceneSparklineCurve } from './AnalysisSceneSparkline';
 import type { AnalysisWorkspaceViewModel } from './analysisWorkspaceAdapter';
 import './AnalysisWorkspace.css';
 
@@ -18,6 +21,9 @@ export interface AnalysisWorkspaceProps {
   transcriptSearchQuery?: string;
   onTranscriptSearchChange?: (query: string) => void;
   isFollowingPlayback?: boolean;
+  markers?: readonly AnalysisSceneSpeechMarker[];
+  pauses?: readonly AnalysisTranscriptChunkPause[];
+  energyCurve?: AnalysisSceneSparklineCurve;
   onSeekSourceTime: (sourceTime: number) => void;
   renderPersonThumbnail?: (
     person: AnalysisScenePerson,
@@ -38,6 +44,9 @@ export function AnalysisWorkspace({
   transcriptSearchQuery,
   onTranscriptSearchChange,
   isFollowingPlayback = false,
+  markers,
+  pauses,
+  energyCurve,
   onSeekSourceTime,
   renderPersonThumbnail,
 }: AnalysisWorkspaceProps) {
@@ -49,8 +58,8 @@ export function AnalysisWorkspace({
   const sceneQuery = transcriptSearchQuery ?? localSceneQuery;
   const setSceneQuery = onTranscriptSearchChange ?? setLocalSceneQuery;
   const sceneListItems = useMemo(
-    () => buildAnalysisSceneListItems(model.scenes),
-    [model.scenes],
+    () => buildAnalysisSceneListItems(model.scenes, { markers, pauses, energyCurve }),
+    [energyCurve, markers, model.scenes, pauses],
   );
   const matchingSegmentCount = useMemo(
     () => filterAnalysisSceneListItems(sceneListItems, sceneQuery).length,

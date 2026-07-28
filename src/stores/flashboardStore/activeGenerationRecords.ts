@@ -6,6 +6,7 @@ import type {
   FlashBoardChatMessage,
   FlashBoardComposerState,
   FlashBoardGenerationRequest,
+  FlashBoardGenerationOutput,
   FlashBoardJobRefund,
   FlashBoardJobState,
   FlashBoardPromptHistoryEntry,
@@ -32,7 +33,9 @@ function areActiveGenerationRecordsEqual(
       && leftRecord.updatedAt === rightRecord.updatedAt
       && leftRecord.request === rightRecord.request
       && leftRecord.job === rightRecord.job
-      && leftRecord.result === rightRecord.result;
+      && leftRecord.outputs === rightRecord.outputs
+      && leftRecord.result === rightRecord.result
+      && leftRecord.results === rightRecord.results;
   });
 }
 
@@ -173,15 +176,70 @@ export function appendFlashBoardPromptHistoryEntry(input: {
 
 export function completeFlashBoardActiveGenerationRecord(
   recordId: string,
-  result: FlashBoardResult,
+  results: FlashBoardResult | FlashBoardResult[],
 ): void {
   const now = Date.now();
+  const normalizedResults = Array.isArray(results) ? results : [results];
   updateFlashBoardActiveGenerationRecord(recordId, (record) => ({
     ...record,
     job: { ...record.job, status: 'completed', completedAt: now },
-    result,
+    outputs: record.outputs?.map((output) => {
+      const matchingResult = normalizedResults.find((result) => result.outputId === output.id);
+      return {
+        ...output,
+        availability: matchingResult ? 'completed' : output.availability,
+        mediaFileId: matchingResult?.mediaFileId ?? output.mediaFileId,
+      };
+    }),
+    result: normalizedResults[0],
+    results: normalizedResults,
     updatedAt: now,
   }));
+}
+
+export function recordFlashBoardImportedGenerationResult(
+  recordId: string,
+  result: FlashBoardResult,
+): void {
+  const now = Date.now();
+  updateFlashBoardActiveGenerationRecord(recordId, (record) => {
+    const previousResults = record.results ?? [];
+    const matchingIndex = previousResults.findIndex((previous) => (
+      (result.outputId && previous.outputId === result.outputId)
+      || previous.mediaFileId === result.mediaFileId
+    ));
+    const nextResults = matchingIndex >= 0
+      ? previousResults.map((previous, index) => index === matchingIndex ? result : previous)
+      : [...previousResults, result];
+
+    return {
+      ...record,
+      outputs: record.outputs?.map((output) => (
+        output.id === result.outputId ? { ...output, mediaFileId: result.mediaFileId } : output
+      )),
+      results: nextResults,
+      updatedAt: now,
+    };
+  });
+}
+
+export function updateFlashBoardActiveGenerationOutputs(
+  recordId: string,
+  outputs: FlashBoardGenerationOutput[],
+): void {
+  const now = Date.now();
+  updateFlashBoardActiveGenerationRecord(recordId, (record) => {
+    const existingById = new Map(record.outputs?.map((output) => [output.id, output]) ?? []);
+    return {
+      ...record,
+      outputs: outputs.map((output) => ({
+        ...existingById.get(output.id),
+        ...output,
+        mediaFileId: existingById.get(output.id)?.mediaFileId ?? output.mediaFileId,
+      })),
+      updatedAt: now,
+    };
+  });
 }
 
 export function updateFlashBoardActiveGenerationJob(

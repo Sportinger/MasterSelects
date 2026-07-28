@@ -103,4 +103,37 @@ describe('AnalysisSceneList', () => {
     expect(findActiveAnalysisSceneListItem(longItems, 6)?.transcriptChunk.words[0].id).toBe('first');
     expect(findActiveAnalysisSceneListItem(longItems, 10.5)?.transcriptChunk.words[0].id).toBe('second');
   });
+
+  it('renders a breath marker in its word gap and styles its linked filler word', () => {
+    const markerScene: AnalysisSceneView = {
+      ...scene(0),
+      range: { start: 0, end: 2 },
+      transcript: [
+        { id: 'first', text: 'Well', start: 0, end: 0.4 },
+        { id: 'filler', text: 'um', start: 1, end: 1.4, emphasis: 0.8 },
+      ],
+    };
+    const markerItems = buildAnalysisSceneListItems([markerScene], {
+      markers: [
+        { id: 'breath', kind: 'breath', start: 0.5, end: 0.8, confidence: 0.91 },
+        { id: 'filler-marker', kind: 'filler', start: 1, end: 1.4, confidence: 0.88, wordIds: ['filler'] },
+      ],
+    });
+
+    render(
+      <AnalysisSceneList
+        items={markerItems}
+        sourceTime={0}
+        onItemSelect={vi.fn()}
+      />,
+    );
+
+    const breath = screen.getByLabelText('Breath marker');
+    expect(breath).toHaveClass('analysis-scene-blob__marker--breath');
+    expect(breath).toHaveAttribute('title', 'Breath (91% confidence)');
+    expect(screen.getByRole('button', { name: 'Seek word um' })).toHaveClass(
+      'AnalysisSceneBlob__word--filler',
+      'AnalysisSceneBlob__word--emphasis',
+    );
+  });
 });

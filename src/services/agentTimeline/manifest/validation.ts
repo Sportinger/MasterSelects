@@ -16,14 +16,14 @@ const REQUIRED_CHANNELS = [
 ] as const;
 
 const CHANNEL_EVENT_TYPES = {
-  cuts: ['cut'], shots: ['shot'], scenes: ['scene-block'], speech: ['speech'],
+  cuts: ['cut'], shots: ['shot'], scenes: ['scene-block'], speech: ['speech', 'speech-marker'],
   people: ['person-visible'], 'active-speaker': ['active-speaker'],
   'camera-motion': ['camera-motion'], audio: ['audio-activity'], quality: ['quality-issue'],
   text: ['onscreen-text'], duplicates: ['duplicate-group'],
 } as const satisfies Record<string, readonly AgentTimelineEvent['type'][]>;
 
 const EVENT_TYPES = new Set<AgentTimelineEvent['type']>([
-  'cut', 'shot', 'scene-block', 'speech', 'person-visible', 'active-speaker',
+  'cut', 'shot', 'scene-block', 'speech', 'speech-marker', 'person-visible', 'active-speaker',
   'camera-motion', 'audio-activity', 'quality-issue', 'onscreen-text', 'duplicate-group',
 ]);
 const TIME_DOMAINS = new Set(['source', 'clip-rendered', 'composition-rendered']);
@@ -215,6 +215,15 @@ function validateEventData(type: unknown, data: unknown, errors: string[]): void
       if (data.text !== undefined && (typeof data.text !== 'string' || data.text.length > MAX_EVENT_TEXT_LENGTH)) errors.push('speech text is invalid');
       if (data.language !== undefined && !nonEmpty(data.language)) errors.push('speech language must be non-empty');
       if (data.wordCount !== undefined && (!finite(data.wordCount) || !Number.isSafeInteger(data.wordCount) || data.wordCount < 0)) errors.push('speech wordCount must be non-negative');
+      if (data.emphasis !== undefined && (!finite(data.emphasis) || data.emphasis < 0 || data.emphasis > 1)) errors.push('speech emphasis must be within [0, 1]');
+      if (data.f0MeanHz !== undefined && (!finite(data.f0MeanHz) || data.f0MeanHz <= 0)) errors.push('speech f0MeanHz must be positive');
+      break;
+    case 'speech-marker':
+      if (!oneOf(data.marker, ['breath', 'filler', 'disfluency', 'pause'])) errors.push('speech-marker marker is invalid');
+      if (data.text !== undefined && (typeof data.text !== 'string' || data.text.length > MAX_EVENT_TEXT_LENGTH)) errors.push('speech-marker text is invalid');
+      if (data.speakerId !== undefined && !nonEmpty(data.speakerId)) errors.push('speech-marker speakerId must be non-empty');
+      if (data.wordId !== undefined && !nonEmpty(data.wordId)) errors.push('speech-marker wordId must be non-empty');
+      if (data.intensity !== undefined && (!finite(data.intensity) || data.intensity < 0 || data.intensity > 1)) errors.push('speech-marker intensity must be within [0, 1]');
       break;
     case 'person-visible':
       if (!nonEmpty(data.personId)) errors.push('person-visible data requires personId');

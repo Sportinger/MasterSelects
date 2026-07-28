@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 
 import { getShortcutRegistry } from '../../../services/shortcutRegistry';
+import { claimShortcut } from '../../../services/shortcutFocusPolicy';
 import type { DockDragState, DropTarget } from '../../../types/dock';
 
 interface UseDockContainerGlobalDragArgs {
@@ -39,16 +40,10 @@ export function useDockContainerGlobalDrag({
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const isTextInput =
-        event.target instanceof HTMLInputElement ||
-        event.target instanceof HTMLTextAreaElement ||
-        event.target instanceof HTMLSelectElement ||
-        !!target?.isContentEditable;
-
-      if (!isTextInput && registry.matches('panel.toggleHoveredFullscreen', event)) {
-        event.preventDefault();
-        event.stopPropagation();
+      if (
+        registry.matches('panel.toggleHoveredFullscreen', event) &&
+        claimShortcut(event, 'panel.toggleHoveredFullscreen', { stopPropagation: true })
+      ) {
         toggleHoveredTabMaximized();
         return;
       }

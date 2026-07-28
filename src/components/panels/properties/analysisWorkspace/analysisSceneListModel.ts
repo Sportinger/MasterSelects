@@ -1,6 +1,8 @@
-import type { AnalysisSceneView } from './analysisSceneViewModel';
+import type { AnalysisSceneSpeechMarker, AnalysisSceneView } from './analysisSceneViewModel';
+import type { AnalysisSceneSparklineCurve } from './AnalysisSceneSparkline';
 import {
   buildAnalysisTranscriptChunks,
+  type AnalysisTranscriptChunkPause,
   type AnalysisTranscriptChunk,
 } from './analysisTranscriptChunks';
 
@@ -23,6 +25,8 @@ export interface AnalysisSceneListItem {
   id: string;
   scene: AnalysisSceneView;
   transcriptChunk: AnalysisTranscriptChunk;
+  markers: readonly AnalysisSceneSpeechMarker[];
+  energyCurve?: AnalysisSceneSparklineCurve;
 }
 
 function searchableSceneText(scene: AnalysisSceneView): string {
@@ -45,11 +49,22 @@ export function filterAnalysisScenes(
 
 export function buildAnalysisSceneListItems(
   scenes: readonly AnalysisSceneView[],
+  options?: {
+    pauses?: readonly AnalysisTranscriptChunkPause[];
+    markers?: readonly AnalysisSceneSpeechMarker[];
+    energyCurve?: AnalysisSceneSparklineCurve;
+  },
 ): readonly AnalysisSceneListItem[] {
-  return scenes.flatMap(scene => buildAnalysisTranscriptChunks(scene).map(transcriptChunk => ({
+  return scenes.flatMap(scene => buildAnalysisTranscriptChunks(scene, {
+    pauses: options?.pauses,
+  }).map(transcriptChunk => ({
     id: transcriptChunk.id,
     scene,
     transcriptChunk,
+    markers: (options?.markers ?? []).filter(marker => (
+      marker.start < transcriptChunk.end && transcriptChunk.start < marker.end
+    )),
+    energyCurve: options?.energyCurve,
   })));
 }
 

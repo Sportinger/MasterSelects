@@ -32,6 +32,8 @@ import { createAnalysisActionConfiguration, resolveLocalVisualExecution } from '
 import { AnalysisTranscriptSettings } from './AnalysisTranscriptSettings';
 import { AnalysisPeopleSettings } from './AnalysisPeopleSettings';
 import { useTranscriptWorkspaceController } from './useTranscriptWorkspaceController';
+import { AnalysisAudioSettings } from './AnalysisAudioSettings';
+import { useAnalysisAudioIntelligence } from './useAnalysisAudioIntelligence';
 interface AnalysisTabProps {
   clipId: string;
   analysis: ClipAnalysis | undefined;
@@ -90,6 +92,7 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
     transcriptProgress,
     transcriptStatus,
   });
+  const audioIntelligence = useAnalysisAudioIntelligence(clipId);
 
   // Reactive data - subscribe to specific value only
   const playheadPosition = useTimelineStore(state => state.playheadPosition);
@@ -163,17 +166,20 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
     cuts: sceneCutAnalysis?.cuts,
     sceneSegments: segments,
     transcript,
+    audio: audioIntelligence.lanes,
     channels: {
       cuts: { status: sceneCutStatus, measuredRanges: sceneCutStatus === 'ready' && sceneCutAnalysis ? [{ start: 0, end: sceneCutAnalysis.duration }] : undefined },
       metrics: { status: analysisStatus },
       faces: { status: faceStatus },
       transcript: { status: transcriptStatus, measuredRanges: transcribedRanges?.map(([start, end]) => ({ start, end })) },
       descriptions: { status: descStatus, measuredRanges: descStatus === 'ready' ? [{ start: inPoint, end: outPoint }] : undefined },
-      ...(isAudioSource ? {
-        audio: { status: transcriptStatus, measuredRanges: transcribedRanges?.map(([start, end]) => ({ start, end })) },
+      ...(audioIntelligence.hasAudio ? {
+        audio: { status: audioIntelligence.status },
       } : {}),
     },
-  }), [analysis, analysisStatus, descStatus, faceStatus, inPoint, isAudioSource, outPoint, sceneCutAnalysis, sceneCutStatus, segments, transcript, transcriptStatus, transcribedRanges]);
+  }), [analysis, analysisStatus, audioIntelligence.hasAudio, audioIntelligence.lanes, audioIntelligence.status,
+    descStatus, faceStatus, inPoint, outPoint, sceneCutAnalysis, sceneCutStatus, segments, transcript,
+    transcriptStatus, transcribedRanges]);
   const usedRange = useMemo(() => range(inPoint, outPoint), [inPoint, outPoint]);
   const fullSourceRange = useMemo(() => range(
     0,
@@ -378,6 +384,7 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
   const visualGraphText = graphJobText(analysisGraph, 'visual');
   const cutsGraphText = graphJobText(analysisGraph, 'cuts');
   const transcriptGraphText = graphJobText(analysisGraph, 'transcript');
+  const audioGraphText = graphJobText(analysisGraph, 'audio');
   const descriptionsGraphText = graphJobText(analysisGraph, 'descriptions');
 
   const analysisActions = useMemo(() => [
@@ -464,6 +471,26 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
       disabled: analyzeAllRunning,
     },
     {
+      id: 'audio',
+      title: 'Audio intelligence',
+      detail: 'Voice activity, speech markers, prosody, and room tone',
+      state: audioIntelligence.running
+        ? 'analyzing' as const
+        : audioIntelligence.status === 'ready' ? 'ready' as const : 'none' as const,
+      statusText: audioIntelligence.running
+        ? (audioIntelligence.message || `${Math.round(audioIntelligence.progress)}%`)
+        : analyzeAllRunning && audioGraphText
+          ? audioGraphText
+          : audioIntelligence.status === 'ready'
+            ? `${audioIntelligence.markers.length} markers`
+            : audioIntelligence.status === 'partial'
+              ? 'Partially analyzed'
+              : 'Not analyzed',
+      onRun: audioIntelligence.run,
+      onCancel: audioIntelligence.cancel,
+      disabled: analyzeAllRunning || !audioIntelligence.hasAudio,
+    },
+    {
       id: 'descriptions',
       title: 'AI Scenes',
       detail: 'Timestamped visual scene descriptions',
@@ -485,6 +512,15 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
     analysisProgress,
     analysisStatus,
     analyzeAllRunning,
+    audioGraphText,
+    audioIntelligence.cancel,
+    audioIntelligence.hasAudio,
+    audioIntelligence.markers.length,
+    audioIntelligence.message,
+    audioIntelligence.progress,
+    audioIntelligence.run,
+    audioIntelligence.running,
+    audioIntelligence.status,
     clipCoverage,
     cutsGraphText,
     descProgress,
@@ -521,7 +557,7 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
   ]);
   const visibleAnalysisActions = isVideoSource
     ? analysisActions
-    : analysisActions.filter((action) => action.id === 'transcript');
+    : analysisActions.filter((action) => action.id === 'transcript' || action.id === 'audio');
 
   const handleSeekToSourceTime = useCallback((sourceTime: number) => {
     const timelineTime = timelineTimeForAnalysisWorkspaceSource(workspaceTimelineMapping, sourceTime);
@@ -552,6 +588,10 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
         <AnalysisActionCenter
           actions={visibleAnalysisActions}
           advancedControls={<>
+            <AnalysisAudioSettings hasAudio={audioIntelligence.hasAudio} status={audioIntelligence.status}
+              features={audioIntelligence.features} running={audioIntelligence.running}
+              progress={audioIntelligence.progress} onRun={() => { void audioIntelligence.run(); }}
+              onCancel={audioIntelligence.cancel} />
             <AnalysisTranscriptSettings controller={transcriptController} transcriptCount={transcript.length}
               transcriptProgress={transcriptProgress} transcriptStatus={transcriptStatus} />
             <AnalysisPeopleSettings candidates={faceReviewCandidates} frames={analysis?.frames ?? []} people={facePeople}
@@ -566,7 +606,8 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
             || faceStatus === 'analyzing'
             || sceneCutStatus === 'analyzing'
             || descStatus === 'describing'
-            || transcriptStatus === 'transcribing'}
+            || transcriptStatus === 'transcribing'
+            || audioIntelligence.running}
           analyzeAllRunning={analyzeAllRunning}
           clearDisabled={analyzeAllRunning
             || analysisStatus === 'analyzing'
@@ -583,6 +624,9 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
         model={workspaceModel}
         sourceTime={workspaceSourceTime}
         isFollowingPlayback={isPlaying || isDraggingPlayhead}
+        markers={audioIntelligence.markers}
+        pauses={audioIntelligence.pauses}
+        energyCurve={audioIntelligence.energyCurve}
         transcriptSearchQuery={transcriptController.searchQuery}
         onTranscriptSearchChange={transcriptController.onSearchChange}
         onSeekSourceTime={handleSeekToSourceTime}

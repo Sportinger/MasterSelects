@@ -21,6 +21,8 @@ import {
   adaptLegacySceneDescriptions,
 } from '../../adapters/sceneLegacyAdapters';
 import { adaptLegacyAudioArtifacts } from '../../adapters/audioArtifactLegacyAdapter';
+import { adaptAudioIntelligenceArtifacts } from '../../adapters/audioIntelligenceLegacyAdapter';
+import type { AudioIntelligencePayloads } from '../../artifacts/audioIntelligencePayloadLoader';
 import { createArtifactShardIntervalIndex } from '../../artifacts/artifactShardIndex';
 import { InMemoryLegacyShardReader } from './inMemoryLegacyShardReader';
 import {
@@ -47,6 +49,7 @@ export interface LegacyReadSourceMaterializerInput {
   sceneCuts?: LegacyReadSourceArtifactInput<SceneCutAnalysis>;
   sceneDescriptions?: LegacyReadSourceArtifactInput<readonly SceneSegment[]>;
   audioArtifacts?: LegacyReadSourceArtifactInput<readonly AudioAnalysisArtifact[]>;
+  audioIntelligence?: LegacyReadSourceArtifactInput<AudioIntelligencePayloads>;
   occurrenceMapping?: OccurrenceMappingIndex;
   mappingSourceId?: string;
 }
@@ -112,6 +115,7 @@ function assertArtifactInputs(input: LegacyReadSourceMaterializerInput): void {
     ['sceneCuts', input.sceneCuts],
     ['sceneDescriptions', input.sceneDescriptions],
     ['audioArtifacts', input.audioArtifacts],
+    ['audioIntelligence', input.audioIntelligence],
   ];
   for (const [name, artifact] of artifacts) {
     if (artifact === undefined) continue;
@@ -213,6 +217,31 @@ export function materializeLegacyAgentTimelineReadSource(
       name: `audio-${view.timeDomain}-${view.stateHash ?? 'source'}`,
       view,
     })));
+  }
+  if (input.audioIntelligence?.value) {
+    const views = adaptAudioIntelligenceArtifacts(
+      input.audioIntelligence.value,
+      adapterRequest(input, input.audioIntelligence, 'audio-intelligence'),
+    );
+    if (views.audioView) {
+      namedViews.push({
+        name: 'audio-intelligence',
+        view: {
+          ...views.audioView,
+          events: views.audioView.events.filter((event) => event.type === 'audio-activity'),
+        },
+      });
+      const qualityEvents = views.audioView.events.filter((event) => event.type === 'quality-issue');
+      if (qualityEvents.length > 0) {
+        namedViews.push({
+          name: 'audio-intelligence-quality',
+          view: { ...views.audioView, channel: 'quality', events: qualityEvents },
+        });
+      }
+    }
+    if (views.speechMarkerView) {
+      namedViews.push({ name: 'audio-intelligence-speech-markers', view: views.speechMarkerView });
+    }
   }
 
   const materialized = materializeLegacyViews(

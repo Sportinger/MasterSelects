@@ -1,6 +1,6 @@
 import { useMediaStore } from '../../stores/mediaStore';
 import type { TranscriptWord } from '../../types/clipMetadata';
-import type { TimelineClip } from '../../types';
+import type { TimelineClip } from '../../types/timeline';
 
 /**
  * Transcripts are anchored to the media file (propagateTranscriptToMediaFile);

@@ -18,6 +18,10 @@ export const AUDIO_ANALYSIS_ARTIFACT_KINDS = [
   'transcript-timing',
   'frequency-summary',
   'stem-separation',
+  'voice-activity',
+  'speech-markers',
+  'prosody-contour',
+  'room-tone-profile',
 ] as const;
 
 export type AudioAnalysisArtifactKind = typeof AUDIO_ANALYSIS_ARTIFACT_KINDS[number];

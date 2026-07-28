@@ -148,7 +148,7 @@ function getMetaLabel(request: FlashBoardGenerationRequest): string {
   if (modeLabel) {
     parts.push(modeLabel);
   }
-  if (request.duration && getOutputLabel(request) !== 'Audio') {
+  if (request.duration && (getOutputLabel(request) !== 'Audio' || request.providerId === 'suno-music')) {
     parts.push(`${request.duration}s`);
   }
   if (request.aspectRatio && getOutputLabel(request) !== 'Audio') {
@@ -367,6 +367,8 @@ function MediaAIGenerationQueueImpl() {
         if (!isDownload && !request) return null;
 
         const status = isDownload ? job!.status : record!.job?.status;
+        const generationOutputs = isDownload ? [] : record!.outputs ?? [];
+        const hasGenerationOutputs = generationOutputs.length > 0;
         const rawProgress = isDownload ? job!.progress : record!.job?.progress;
         const progress = typeof rawProgress === 'number'
           ? Math.max(0, Math.min(1, rawProgress))
@@ -388,8 +390,10 @@ function MediaAIGenerationQueueImpl() {
           ? formatElapsedRange(startedAt, completedAt ?? now)
           : null;
         const progressLabel = progress !== null ? `${Math.round(progress * 100)}%` : null;
-        const canFlyToMedia = status === 'completed' && Boolean(mediaFileId);
-        const canDismiss = status === 'failed' || status === 'canceled' || (status === 'completed' && !canFlyToMedia);
+        const canFlyToMedia = status === 'completed' && Boolean(mediaFileId) && !hasGenerationOutputs;
+        const canDismiss = status === 'failed'
+          || status === 'canceled'
+          || (status === 'completed' && (!canFlyToMedia || hasGenerationOutputs));
         const canCancel = !isDownload && (status === 'queued' || status === 'processing');
         const itemId = item.id;
         const cardClassName = [
@@ -424,7 +428,7 @@ function MediaAIGenerationQueueImpl() {
           event.preventDefault();
           void handleCompletedLocate(itemId, mediaFileId, event.currentTarget, removeItem);
         };
-        const title = isDownload ? job!.title : request!.prompt;
+        const title = isDownload ? job!.title : request!.sunoTitle || request!.prompt;
         const outputLabel = isDownload ? 'Download' : getOutputLabel(request!);
         const previewLabel = isDownload ? outputLabel : getModelLabel(request!);
         const metaLabel = isDownload ? getDownloadMetaLabel(job!) : getMetaLabel(request!);
@@ -502,6 +506,75 @@ function MediaAIGenerationQueueImpl() {
                 </div>
               )}
             </div>
+            {hasGenerationOutputs && (
+              <div className="media-ai-generation-tracks" aria-label="Generated tracks">
+                {generationOutputs.map((output, outputIndex) => {
+                  const outputMediaFileId = output.mediaFileId
+                    ?? record?.results?.find((result) => result.outputId === output.id)?.mediaFileId;
+                  const importedOutputMedia = outputMediaFileId
+                    ? mediaFilesById.get(outputMediaFileId)
+                    : undefined;
+                  const playbackUrl = importedOutputMedia?.url
+                    ?? output.downloadUrl
+                    ?? output.previewUrl;
+                  const canLocateOutput = status === 'completed' && Boolean(outputMediaFileId);
+                  const outputTitle = output.title || `Track ${outputIndex + 1}`;
+                  return (
+                    <div className="media-ai-generation-track" key={output.id}>
+                      <div className="media-ai-generation-track-art">
+                        {output.artworkUrl ? (
+                          <img src={output.artworkUrl} alt="" draggable={false} />
+                        ) : (
+                          <span aria-hidden="true">♪</span>
+                        )}
+                      </div>
+                      <div className="media-ai-generation-track-main">
+                        <div className="media-ai-generation-track-heading">
+                          <strong title={outputTitle}>{outputTitle}</strong>
+                          <span className={output.availability}>
+                            {output.availability === 'completed' ? 'Ready' : 'Preview'}
+                          </span>
+                          {output.duration ? <em>{formatElapsedDuration(output.duration * 1000)}</em> : null}
+                        </div>
+                        {playbackUrl ? (
+                          <audio
+                            controls
+                            preload="metadata"
+                            src={playbackUrl}
+                            onClick={(event) => event.stopPropagation()}
+                            onKeyDown={(event) => event.stopPropagation()}
+                            onPointerDown={(event) => event.stopPropagation()}
+                          />
+                        ) : (
+                          <div className="media-ai-generation-track-waiting">Audio preview is preparing…</div>
+                        )}
+                      </div>
+                      {canLocateOutput && (
+                        <button
+                          className="media-ai-generation-track-locate"
+                          type="button"
+                          title="Show this track in Media panel"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            const card = event.currentTarget.closest('.media-ai-generation-card');
+                            if (card instanceof HTMLElement) {
+                              void handleCompletedLocate(
+                                `${itemId}:${output.id}`,
+                                outputMediaFileId,
+                                card,
+                                () => {},
+                              );
+                            }
+                          }}
+                        >
+                          Show
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             {canCancel && (
               <button
                 className="media-ai-generation-dismiss media-ai-generation-cancel"

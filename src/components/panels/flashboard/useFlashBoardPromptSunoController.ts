@@ -48,7 +48,11 @@ export function useFlashBoardPromptSunoController({
   version,
 }: UseFlashBoardPromptSunoControllerInput) {
   const [prompt, setPrompt] = useState('');
-  const [sunoCustomMode, setSunoCustomMode] = useState(composer.sunoCustomMode ?? DEFAULT_SUNO_CUSTOM_MODE);
+  const [sunoCustomMode, setSunoCustomMode] = useState(
+    composer.sunoInstrumental
+      ? true
+      : composer.sunoCustomMode ?? DEFAULT_SUNO_CUSTOM_MODE,
+  );
   const [sunoInstrumental, setSunoInstrumental] = useState(composer.sunoInstrumental ?? DEFAULT_SUNO_INSTRUMENTAL);
   const [sunoStyle, setSunoStyle] = useState(composer.sunoStyle ?? '');
   const [sunoTitle] = useState(composer.sunoTitle ?? '');
@@ -82,16 +86,12 @@ export function useFlashBoardPromptSunoController({
 
   const sunoOptionsState = useMemo(() => buildFlashBoardSunoOptionsState({
     audioWeight: sunoAudioWeight,
-    customMode: sunoCustomMode,
-    instrumental: sunoInstrumental,
     modelId: version,
     styleWeight: sunoStyleWeight,
     vocalGender: sunoVocalGender,
     weirdnessConstraint: sunoWeirdnessConstraint,
   }), [
     sunoAudioWeight,
-    sunoCustomMode,
-    sunoInstrumental,
     sunoStyleWeight,
     sunoVocalGender,
     sunoWeirdnessConstraint,
@@ -171,7 +171,6 @@ export function useFlashBoardPromptSunoController({
     sunoCustomMode,
     sunoInstrumental,
     sunoModelButtonLabel: sunoOptionsState.modelButtonLabel,
-    sunoModeButtonLabel: sunoOptionsState.modeButtonLabel,
     sunoModelOptions: sunoOptionsState.modelOptions,
     sunoNegativeTags,
     sunoStyle,

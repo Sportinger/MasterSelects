@@ -208,8 +208,31 @@ export const analysisToolDefinitions: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'getSpeechMarkers',
+      description: 'Get a bounded page of speech markers such as breaths, fillers, repetitions, false starts, and long pauses, mapped to source and timeline time.',
+      parameters: {
+        type: 'object',
+        properties: {
+          clipId: { type: 'string', description: 'The clip ID to inspect' },
+          sourceStart: { type: 'number', description: 'Optional source-time range start in seconds' },
+          sourceEnd: { type: 'number', description: 'Optional source-time range end in seconds' },
+          kinds: {
+            type: 'array',
+            items: { type: 'string', enum: ['breath', 'filler', 'repetition', 'false-start', 'long-pause'] },
+            description: 'Optional marker types to include',
+          },
+          offset: { type: 'number', minimum: 0, description: 'Marker offset within the matching range (default 0)' },
+          limit: { type: 'number', minimum: 1, maximum: 250, description: 'Maximum markers to return (default 100)' },
+        },
+        required: ['clipId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'findSilentSections',
-      description: 'Find sections in a clip where there is no speech (based on transcript). Useful for finding pauses to cut.',
+      description: 'Detect silent sections using voice-activity analysis when available, RMS signal analysis as fallback, and transcript gaps last. Returns the detectionSource used.',
       parameters: {
         type: 'object',
         properties: {
@@ -282,6 +305,44 @@ export const analysisToolDefinitions: ToolDefinition[] = [
         type: 'object',
         properties: {
           clipId: { type: 'string', description: 'The video clip ID to analyze' },
+        },
+        required: ['clipId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'startClipAudioIntelligence',
+      description: 'Start background audio intelligence for voice activity, alignment, speech markers, prosody, and room tone. Poll getSpeechMarkers or findSilentSections for results.',
+      parameters: {
+        type: 'object',
+        properties: {
+          clipId: { type: 'string', description: 'The clip ID to analyze' },
+          features: {
+            type: 'array',
+            minItems: 1,
+            uniqueItems: true,
+            items: { type: 'string', enum: ['vad', 'alignment', 'speech-markers', 'prosody', 'room-tone'] },
+            description: 'Optional subset of audio-intelligence features; all run by default',
+          },
+        },
+        required: ['clipId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'repairClipTranscript',
+      description: 'Safely remove duplicated complete transcription runs from a clip source while preserving canonical word IDs, timings, and annotations. Isolated repeated speech is retained.',
+      parameters: {
+        type: 'object',
+        properties: {
+          clipId: {
+            type: 'string',
+            description: 'The ID of a clip whose source transcript should be repaired',
+          },
         },
         required: ['clipId'],
       },

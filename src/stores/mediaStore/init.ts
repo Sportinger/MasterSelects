@@ -252,42 +252,62 @@ function calcRangeCoverage(ranges: [number, number][], totalDuration: number): n
   return Math.min(1, merged.reduce((sum, [s, e]) => sum + (e - s), 0) / totalDuration);
 }
 
+interface ClipTranscriptCandidate {
+  words: import('../../types').TranscriptWord[];
+  ranges: [number, number][];
+  latestRunCreatedAt: number;
+  restoreOrder: number;
+}
+
+function latestTranscriptRunCreatedAt(words: import('../../types').TranscriptWord[]): number {
+  return words.reduce((latest, word) => {
+    const match = /-(\d+):word-\d+$/.exec(word.id);
+    const createdAt = match ? Number(match[1]) : 0;
+    return Number.isFinite(createdAt) ? Math.max(latest, createdAt) : latest;
+  }, 0);
+}
+
+function preferClipTranscript(
+  candidate: ClipTranscriptCandidate,
+  current: ClipTranscriptCandidate | undefined,
+): boolean {
+  if (!current) return true;
+  if (candidate.words.length !== current.words.length) {
+    return candidate.words.length > current.words.length;
+  }
+  if (candidate.latestRunCreatedAt !== current.latestRunCreatedAt) {
+    return candidate.latestRunCreatedAt > current.latestRunCreatedAt;
+  }
+  return candidate.restoreOrder > current.restoreOrder;
+}
+
 /**
  * Scan timeline clips for transcripts and analysis and propagate status + coverage to MediaFiles.
  * This ensures the "T" and "A" badges show correctly after project reload.
  */
 function syncStatusFromClips(useMediaStore: MediaStore): void {
   const clips = useTimelineStore.getState().clips;
-  const transcriptMap = new Map<string, import('../../types').TranscriptWord[]>();
-  // Track transcribed time ranges per media file (clip in/out = entire range was processed)
-  const transcribedRangesMap = new Map<string, [number, number][]>();
+  const transcriptMap = new Map<string, ClipTranscriptCandidate>();
   // Track analysis ranges per media file for coverage calculation
   const analysisRanges = new Map<string, [number, number][]>();
 
-  for (const clip of clips) {
+  for (let restoreOrder = 0; restoreOrder < clips.length; restoreOrder++) {
+    const clip = clips[restoreOrder];
     const mediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
     if (!mediaFileId) continue;
 
     // Transcript sync
     if (clip.transcriptStatus === 'ready' && clip.transcript?.length) {
-      const existing = transcriptMap.get(mediaFileId);
-      if (existing) {
-        for (const word of clip.transcript) {
-          const dup = existing.some(
-            (w: import('../../types').TranscriptWord) => Math.abs(w.start - word.start) < 0.05 && Math.abs(w.end - word.end) < 0.05
-          );
-          if (!dup) existing.push(word);
-        }
-      } else {
-        transcriptMap.set(mediaFileId, [...clip.transcript]);
-      }
-      // Track the clip's full range as "transcribed" (silence still counts)
       const inPt = clip.inPoint ?? 0;
       const outPt = clip.outPoint ?? (clip.source?.naturalDuration ?? 0);
-      if (outPt > inPt) {
-        const existingRanges = transcribedRangesMap.get(mediaFileId) || [];
-        existingRanges.push([inPt, outPt]);
-        transcribedRangesMap.set(mediaFileId, existingRanges);
+      const candidate: ClipTranscriptCandidate = {
+        words: clip.transcript,
+        ranges: outPt > inPt ? [[inPt, outPt]] : [],
+        latestRunCreatedAt: latestTranscriptRunCreatedAt(clip.transcript),
+        restoreOrder,
+      };
+      if (preferClipTranscript(candidate, transcriptMap.get(mediaFileId))) {
+        transcriptMap.set(mediaFileId, candidate);
       }
     }
 
@@ -305,27 +325,22 @@ function syncStatusFromClips(useMediaStore: MediaStore): void {
 
   if (transcriptMap.size === 0 && analysisRanges.size === 0) return;
 
-  // Sort each transcript by start time
-  for (const [, words] of transcriptMap) {
-    words.sort((a, b) => a.start - b.start);
-  }
-
   useMediaStore.setState((state: MediaState) => ({
     files: state.files.map((f: MediaFile): MediaFile => {
       const transcript = transcriptMap.get(f.id);
-      const tRanges = transcribedRangesMap.get(f.id);
       const aRanges = analysisRanges.get(f.id);
       if (!transcript && !aRanges) return f;
 
       const dur = f.duration || 0;
+      const shouldFillTranscript = Boolean(transcript) && !f.transcript?.length;
       return {
         ...f,
-        ...(transcript && {
+        ...(shouldFillTranscript && transcript && {
           transcriptStatus: 'ready' as const,
-          transcript,
+          transcript: transcript.words.toSorted((a, b) => a.start - b.start),
           // Use transcribed time ranges (not word ranges) - silence is still "transcribed"
-          transcriptCoverage: dur > 0 && tRanges ? calcRangeCoverage(tRanges, dur) : 0,
-          transcribedRanges: tRanges,
+          transcriptCoverage: dur > 0 ? calcRangeCoverage(transcript.ranges, dur) : 0,
+          transcribedRanges: transcript.ranges,
         }),
         ...(aRanges && f.analysisStatus !== 'ready' && {
           analysisStatus: 'ready' as const,

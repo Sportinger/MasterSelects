@@ -38,10 +38,12 @@ export function useExternalDropNewTrackDragOver({
     if (preview.isAudio && trackType === 'video') {
       updateVideoNewTrackGesture(event.clientY, true);
       event.dataTransfer.dropEffect = 'none';
+      setExternalDrag(null);
       return;
     }
     if (!preview.isAudio && trackType === 'audio') {
       event.dataTransfer.dropEffect = 'none';
+      setExternalDrag(null);
       return;
     }
 
@@ -50,18 +52,13 @@ export function useExternalDropNewTrackDragOver({
       : getVideoNewTrackOffered();
     if (trackType === 'video' && !showVideoNewTrackZone) {
       event.dataTransfer.dropEffect = 'none';
-      setExternalDrag((prev) => prev ? {
-        ...prev,
-        x: event.clientX,
-        y: event.clientY,
-        newTrackType: null,
-        showVideoNewTrackZone: false,
-      } : null);
+      setExternalDrag(null);
       return;
     }
 
     event.dataTransfer.dropEffect = 'copy';
     if (!hasTimelineElement()) {
+      setExternalDrag(null);
       return;
     }
 

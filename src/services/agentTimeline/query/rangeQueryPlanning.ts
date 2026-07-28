@@ -41,7 +41,7 @@ const CHANNEL_EVENTS: Record<AgentTimelineChannel, readonly AgentTimelineEvent['
   cuts: ['cut'],
   shots: ['shot'],
   scenes: ['scene-block'],
-  speech: ['speech'],
+  speech: ['speech', 'speech-marker'],
   people: ['person-visible'],
   'active-speaker': ['active-speaker'],
   'camera-motion': ['camera-motion'],

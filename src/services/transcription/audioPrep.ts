@@ -1,3 +1,5 @@
+import { resampleAudioBuffer } from '../audio/audioResample';
+
 const AUDIO_VIDEO_EXTS = ['mp4', 'webm', 'mkv', 'mov', 'avi', 'mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a'];
 
 export function isAudioBearingFile(file: File): boolean {
@@ -73,31 +75,13 @@ export async function decodeAudioBlob(audioBlob: Blob): Promise<AudioBuffer> {
 
 /**
  * Resample audio to target sample rate (e.g., 16kHz for Whisper).
+ * Delegates to the shared resampler in services/audio/audioResample.
  */
 export async function resampleAudio(
   audioBuffer: AudioBuffer,
   targetSampleRate: number,
 ): Promise<Float32Array> {
-  const channelData = audioBuffer.getChannelData(0);
-  const originalSampleRate = audioBuffer.sampleRate;
-
-  if (originalSampleRate === targetSampleRate) {
-    return channelData;
-  }
-
-  const ratio = originalSampleRate / targetSampleRate;
-  const newLength = Math.floor(channelData.length / ratio);
-  const resampled = new Float32Array(newLength);
-
-  for (let i = 0; i < newLength; i++) {
-    const srcIndex = i * ratio;
-    const srcIndexFloor = Math.floor(srcIndex);
-    const srcIndexCeil = Math.min(srcIndexFloor + 1, channelData.length - 1);
-    const t = srcIndex - srcIndexFloor;
-    resampled[i] = channelData[srcIndexFloor] * (1 - t) + channelData[srcIndexCeil] * t;
-  }
-
-  return resampled;
+  return resampleAudioBuffer(audioBuffer, targetSampleRate);
 }
 
 /**

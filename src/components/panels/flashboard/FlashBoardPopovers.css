@@ -358,6 +358,33 @@
   margin-bottom: 8px;
 }
 
+.fb-duration-range {
+  display: grid;
+  grid-template-columns: auto minmax(150px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 4px 2px 2px;
+}
+
+.fb-duration-range > span {
+  min-width: 38px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.fb-duration-range > input {
+  width: 100%;
+  accent-color: var(--accent, #7c4dff);
+}
+
+.fb-duration-range > em {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-style: normal;
+}
+
 .fb-model-category-tabs {
   display: flex;
   gap: 5px;

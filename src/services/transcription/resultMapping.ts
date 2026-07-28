@@ -127,17 +127,122 @@ export function findGaps(
   return gaps;
 }
 
+export interface TranscriptWordMatch {
+  existingIndex: number;
+  newIndex: number;
+}
+
+const COHERENT_MATCH_CENTER_TOLERANCE = 0.25;
+const COHERENT_MATCH_OFFSET_TOLERANCE = 0.15;
+const MIN_COHERENT_MATCH_LENGTH = 3;
+
+export function normalizeTranscriptToken(text: string): string {
+  return text
+    .normalize('NFKC')
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+function wordCenter(word: TranscriptWord): number {
+  return (word.start + word.end) / 2;
+}
+
+function spansOverlap(left: TranscriptWord, right: TranscriptWord): boolean {
+  return left.start < right.end && right.start < left.end;
+}
+
+function isTextTimingMatch(left: TranscriptWord, right: TranscriptWord): boolean {
+  const normalized = normalizeTranscriptToken(left.text);
+  return normalized.length > 0
+    && normalized === normalizeTranscriptToken(right.text)
+    && (
+      Math.abs(wordCenter(left) - wordCenter(right)) <= COHERENT_MATCH_CENTER_TOLERANCE
+      || spansOverlap(left, right)
+    );
+}
+
+/**
+ * Find monotonic duplicate word pairs backed by at least three consecutive
+ * token matches. A locally stable center offset tolerates provider drift while
+ * preventing isolated repeated words from being collapsed.
+ */
+export function findCoherentTranscriptWordMatches(
+  existingWords: TranscriptWord[],
+  newWords: TranscriptWord[],
+): TranscriptWordMatch[] {
+  const existing = existingWords
+    .map((word, index) => ({ index, word }))
+    .toSorted((left, right) => left.word.start - right.word.start);
+  const incoming = newWords
+    .map((word, index) => ({ index, word }))
+    .toSorted((left, right) => left.word.start - right.word.start);
+  const existingByToken = new Map<string, number[]>();
+
+  for (let index = 0; index < existing.length; index++) {
+    const token = normalizeTranscriptToken(existing[index].word.text);
+    if (!token) continue;
+    const indices = existingByToken.get(token) ?? [];
+    indices.push(index);
+    existingByToken.set(token, indices);
+  }
+
+  const matches = new Map<number, TranscriptWordMatch>();
+  for (let newStart = 0; newStart < incoming.length; newStart++) {
+    const token = normalizeTranscriptToken(incoming[newStart].word.text);
+    for (const existingStart of existingByToken.get(token) ?? []) {
+      if (!isTextTimingMatch(existing[existingStart].word, incoming[newStart].word)) continue;
+
+      let minimumOffset = Number.POSITIVE_INFINITY;
+      let maximumOffset = Number.NEGATIVE_INFINITY;
+      let length = 0;
+      while (
+        existingStart + length < existing.length
+        && newStart + length < incoming.length
+        && isTextTimingMatch(
+          existing[existingStart + length].word,
+          incoming[newStart + length].word,
+        )
+      ) {
+        const offset = wordCenter(incoming[newStart + length].word)
+          - wordCenter(existing[existingStart + length].word);
+        minimumOffset = Math.min(minimumOffset, offset);
+        maximumOffset = Math.max(maximumOffset, offset);
+        if (maximumOffset - minimumOffset > COHERENT_MATCH_OFFSET_TOLERANCE) break;
+        length += 1;
+      }
+
+      if (length < MIN_COHERENT_MATCH_LENGTH) continue;
+      for (let offset = 0; offset < length; offset++) {
+        const incomingEntry = incoming[newStart + offset];
+        if (!matches.has(incomingEntry.index)) {
+          matches.set(incomingEntry.index, {
+            existingIndex: existing[existingStart + offset].index,
+            newIndex: incomingEntry.index,
+          });
+        }
+      }
+    }
+  }
+
+  return [...matches.values()].toSorted((left, right) => left.newIndex - right.newIndex);
+}
+
 export function mergeTranscriptWords(
   existingWords: TranscriptWord[],
   newWords: TranscriptWord[],
 ): TranscriptWord[] {
   const merged = [...existingWords];
+  const coherentDuplicateIndices = new Set(
+    findCoherentTranscriptWordMatches(existingWords, newWords)
+      .map(match => match.newIndex),
+  );
 
-  for (const word of newWords) {
+  for (let index = 0; index < newWords.length; index++) {
+    const word = newWords[index];
     const duplicate = merged.some(
       (w: TranscriptWord) => Math.abs(w.start - word.start) < 0.05 && Math.abs(w.end - word.end) < 0.05,
     );
-    if (!duplicate) merged.push(word);
+    if (!duplicate && !coherentDuplicateIndices.has(index)) merged.push(word);
   }
 
   return merged.sort((a, b) => a.start - b.start);

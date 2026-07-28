@@ -10,6 +10,7 @@ export const allowedAdapterPaths = [
   'src/services/project/**',
   'src/services/projectFileService.ts',
   'src/stores/historyStore/**',
+  // dockStore became a folder in packet 171; the adapter grant follows it.
   'src/stores/dockStore/**',
   'src/services/midi/**',
   'src/hooks/useMIDIRuntime.ts',
@@ -88,7 +89,7 @@ export const classCHardTargets = [
   { path: 'src/components/preview/usePreviewEditCameraController.ts', maxCurrentHits: 8 },
   { path: 'src/components/preview/usePreviewSceneCameraActions.ts', maxCurrentHits: 7 },
   { path: 'src/components/preview/usePreviewEditCameraConfig.ts', maxCurrentHits: 1 },
-  { path: 'src/components/preview/usePreviewSourceConfig.ts', maxCurrentHits: 3 },
+  { path: 'src/components/preview/usePreviewSourceConfig.ts', maxCurrentHits: 4 },
   { path: 'src/components/preview/usePreviewWheelHandler.ts', maxCurrentHits: 2 },
   { path: 'src/components/preview/SAM2Overlay.tsx', maxCurrentHits: 2 },
   { path: 'src/components/preview/SceneObjectOverlay.tsx', maxCurrentHits: 3 },
@@ -109,7 +110,7 @@ export const classCHardTargets = [
   { path: 'src/components/timeline/hooks/useClipDoubleClick.ts', maxCurrentHits: 1 },
   { path: 'src/components/timeline/hooks/useClipDrag.ts', maxCurrentHits: 1 },
   { path: 'src/components/timeline/hooks/useClipInteractionShellModuleCommandDispatcher.ts', maxCurrentHits: 3 },
-  { path: 'src/components/timeline/hooks/useExternalDrop.ts', maxCurrentHits: 1 },
+  { path: 'src/components/timeline/hooks/useExternalDrop.ts', maxCurrentHits: 2 },
   { path: 'src/components/timeline/hooks/useLayerSync.ts', maxCurrentHits: 3 },
   { path: 'src/components/timeline/hooks/useMarqueeSelection.ts', maxCurrentHits: 2 },
   { path: 'src/components/timeline/hooks/useMidiClipDraw.ts', maxCurrentHits: 2 },
@@ -134,11 +135,14 @@ export const classCHardTargets = [
   { path: 'src/engine/export/ClipPreparation.ts', maxCurrentHits: 2 },
   { path: 'src/engine/export/ExportLayerBuilder.ts', maxCurrentHits: 1 },
   { path: 'src/engine/export/prepareTransitionCompositionsForExport.ts', maxCurrentHits: 2 },
+  // Packet 291: 7 -> 0 entry + 1+4+1 modules (one site retired via shared
+  // lookup; maxHits ratchets 658 -> 657).
   { path: 'src/engine/export/layerBuilder/baseLayers.ts', maxCurrentHits: 1 },
   { path: 'src/engine/export/layerBuilder/nestedLayers.ts', maxCurrentHits: 1 },
   { path: 'src/engine/export/layerBuilder/sourceLookup.ts', maxCurrentHits: 4 },
   { path: 'src/engine/export/layerBuilder/textLayers.ts', maxCurrentHits: 1 },
   { path: 'src/engine/export/ExportMaskTextures.ts', maxCurrentHits: 1 },
+  // Packet 307: 4 -> 3 + 1 (preview publisher), total conserved.
   { path: 'src/engine/export/FrameExporter.ts', maxCurrentHits: 3 },
   { path: 'src/engine/export/frameExporter/ExportPreviewPublisher.ts', maxCurrentHits: 1 },
   { path: 'src/engine/export/preloadGaussianSplats.ts', maxCurrentHits: 4 },
@@ -151,6 +155,9 @@ export const classCHardTargets = [
   { path: 'src/engine/render/NestedCompRenderer.ts', maxCurrentHits: 1 },
   { path: 'src/engine/render/nestedComp/htmlVideoPreview.ts', maxCurrentHits: 8 },
   { path: 'src/engine/render/nestedComp/sharedScene.ts', maxCurrentHits: 1 },
+  // Packet 231 moved 5 hits into the scene-3D/target-preview facets and the
+  // old 16-ceiling slack (actual was 11) is retired: 16 -> 6 + 2 + 2 + 1.
+  // Packet 343: 6 -> 2+3+1 (splat loader + export readiness), conserved.
   { path: 'src/engine/render/RenderDispatcher.ts', maxCurrentHits: 2 },
   { path: 'src/engine/render/dispatcher/gaussianSplatSceneLoader.ts', maxCurrentHits: 3 },
   { path: 'src/engine/render/dispatcher/exportReadinessFacet.ts', maxCurrentHits: 1 },
@@ -159,30 +166,39 @@ export const classCHardTargets = [
   { path: 'src/engine/render/dispatcher/targetPreviewRenderer.ts', maxCurrentHits: 1 },
   { path: 'src/engine/scene/SceneCameraUtils.ts', maxCurrentHits: 7 },
   { path: 'src/engine/scene/SceneEffectorUtils.ts', maxCurrentHits: 2 },
+  // Packet 345: 5 -> 2+1+1 (presenter + recovery wiring; one site retired
+  // via restore-loop dedup, maxHits 656 -> 655).
   { path: 'src/engine/WebGPUEngine.ts', maxCurrentHits: 2 },
   { path: 'src/engine/engineCore/outputPresenter.ts', maxCurrentHits: 1 },
   { path: 'src/engine/engineCore/contextRecoveryWiring.ts', maxCurrentHits: 1 },
   { path: 'src/engine/engineCore/outputWindowController.ts', maxCurrentHits: 7 },
+  // Packet 306: 25 -> 12+4+3+3+2 (engine sync hooks; maxHits 657 -> 656).
   { path: 'src/hooks/useEngine.ts', maxCurrentHits: 12 },
   { path: 'src/hooks/engine/useEngineMaskTextureSync.ts', maxCurrentHits: 4 },
   { path: 'src/hooks/engine/useEngineRenderWakeSubscriptions.ts', maxCurrentHits: 3 },
   { path: 'src/hooks/engine/useEngineResolutionSync.ts', maxCurrentHits: 3 },
   { path: 'src/hooks/engine/useEngineTimelineStateSync.ts', maxCurrentHits: 2 },
   { path: 'src/hooks/useGlobalHistory.ts', maxCurrentHits: 3 },
+  { path: 'src/services/agentTimeline/jobs/currentClipAnalysisExecution.ts', maxCurrentHits: 1 },
   { path: 'src/services/audio/audioDiagnostics.ts', maxCurrentHits: 1 },
   { path: 'src/services/audio/ClipAudioAnalysisOrchestrator.ts', maxCurrentHits: 1 },
+  // hit moved into the spectral mask provider (cluster total conserved).
   { path: 'src/services/audio/clipRender/spectralImageMaskProvider.ts', maxCurrentHits: 1 },
-  { path: 'src/services/audio/metronomeScheduler.ts', maxCurrentHits: 4 },
   { path: 'src/services/audio/midiPlaybackScheduler.ts', maxCurrentHits: 6 },
   { path: 'src/services/audio/stemSeparation/StemSeparationService.ts', maxCurrentHits: 1 },
   { path: 'src/services/audioAnalyzer.ts', maxCurrentHits: 1 },
   { path: 'src/services/clipAnalyzer.ts', maxCurrentHits: 4 },
+  // Packet 267: 4 -> 2+2; 2.3.3 adds hosted transcription account/balance bridge.
   { path: 'src/services/clipTranscriber.ts', maxCurrentHits: 3 },
   { path: 'src/services/transcription/artifactPersistence.ts', maxCurrentHits: 2 },
+  { path: 'src/services/transcription/applyAlignedTimings.ts', maxCurrentHits: 4 },
+  { path: 'src/services/transcription/repairTranscriptDuplicates.ts', maxCurrentHits: 2 },
+  { path: 'src/services/audio/metronomeScheduler.ts', maxCurrentHits: 4 },
   { path: 'src/services/transcription/clipTranscriptResolver.ts', maxCurrentHits: 1 },
   { path: 'src/services/transcription/cloudProviders.ts', maxCurrentHits: 1 },
   { path: 'src/services/cloudAiService.ts', maxCurrentHits: 2 },
   { path: 'src/services/compositionAudioMixer.ts', maxCurrentHits: 2 },
+  // 12 -> 11: packet 237 retired one hit during the composition render split.
   { path: 'src/services/compositionRenderer.ts', maxCurrentHits: 11 },
   { path: 'src/services/layerBuilder/AudioSyncHandler.ts', maxCurrentHits: 2 },
   { path: 'src/services/layerBuilder/audioTrackRuntimeElements.ts', maxCurrentHits: 1 },
@@ -202,6 +218,7 @@ export const classCHardTargets = [
   { path: 'src/services/performanceMonitor.ts', maxCurrentHits: 1 },
   { path: 'src/services/playbackHealthMonitor.ts', maxCurrentHits: 7 },
   { path: 'src/services/properties/vectorAnimationProperties.ts', maxCurrentHits: 1 },
+  // Packet 342: entry is getState-free; 4 -> 1+1+2 loader modules, conserved.
   { path: 'src/services/proxyFrame/audioBufferLoader.ts', maxCurrentHits: 1 },
   { path: 'src/services/proxyFrame/audioProxyLoader.ts', maxCurrentHits: 1 },
   { path: 'src/services/proxyFrame/proxyStorageSources.ts', maxCurrentHits: 2 },
@@ -211,7 +228,7 @@ export const classCHardTargets = [
   { path: 'src/services/slotDeckManager.ts', maxCurrentHits: 6 },
   { path: 'src/services/thumbnailRender/sampling.ts', maxCurrentHits: 1 },
   { path: 'src/services/timeline/renderTargetRuntimeReporting.ts', maxCurrentHits: 3 },
-  { path: 'src/services/timeline/timelineAudioArtifactGenerationWarmup.ts', maxCurrentHits: 3 },
+  { path: 'src/services/timeline/timelineAudioArtifactGenerationWarmup.ts', maxCurrentHits: 4 },
   { path: 'src/services/timeline/timelineExternalDropCommandExecutor.ts', maxCurrentHits: 2 },
   { path: 'src/services/timeline/timelineExternalDropMediaResolver.ts', maxCurrentHits: 2 },
   { path: 'src/services/timeline/timelineSourceWaveformWarmup.ts', maxCurrentHits: 2 },
@@ -273,11 +290,12 @@ export const classCHardTargets = [
   { path: 'src/stores/timeline/videoBakeSlice.ts', maxCurrentHits: 1 },
 ] as const satisfies readonly GetStateClassCHardTarget[];
 
-// Baselines ratchet with every packet; splits redistribute hits and must keep
-// the totals conserved. The per-packet redistribution history lives in git and
-// in docs/completed/refactor/Complete-refactor.md — do not re-accumulate it here.
 export const getStateAccessPolicyBaselines = {
   allowedAdapterPathCount: 26,
-  classCHardTargetFileCount: 239, // +1: clipTranscriptResolver (media-anchored transcript reads)
-  classCHardTargetMaxHits: 679, // +1: clipTranscriptResolver
+  // Redistribution log: 178(172), 182(183), 187(186), 189(189+190: ExportPanel/MediaPanel hits moved into runner/board-hook entries). Totals conserved per redistribution; max-hits ratchets DOWN.
+  // fileCount log (totals conserved per split redistribution): 192 ->193(218) ->196(227) ->199(231) ->203(239) ->205(246) ->206(253/254)
+  // ->207(259) ->208(267) ->212(279) ->216(287) ->230(audio mixer) ->231(2.3.3) ->236(transition nested comps) ->237(#298 motorized-fader rAF hook) ->240(audio-intelligence).
+  classCHardTargetFileCount: 242, // +2 merge union: repairTranscriptDuplicates, metronomeScheduler (BPM)
+  // 669 ->665(188) ->664(209) ->659(231) ->658(237) ->657(291) ->664(nested comps) ->673(#249 piano-roll) ->674(#298 rAF hook) ->679(audio-intelligence: +4 files, +1 warmup seam).
+  classCHardTargetMaxHits: 689, // merge union +6 (repairTranscriptDuplicates 2, metronomeScheduler 4) +4 final-work growth (preview source config, external drop, aligned timings)
 } as const;

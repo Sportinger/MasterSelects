@@ -797,6 +797,109 @@
   min-width: 0;
 }
 
+.media-ai-generation-tracks {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 6px;
+  min-width: 0;
+}
+
+.media-ai-generation-track {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.media-ai-generation-track-art {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  overflow: hidden;
+  place-items: center;
+  border-radius: 5px;
+  background: linear-gradient(135deg, rgba(124, 77, 255, 0.35), rgba(34, 211, 238, 0.18));
+  color: var(--text-secondary);
+  font-size: 18px;
+}
+
+.media-ai-generation-track-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.media-ai-generation-track-main {
+  min-width: 0;
+}
+
+.media-ai-generation-track-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-bottom: 3px;
+}
+
+.media-ai-generation-track-heading strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.media-ai-generation-track-heading span,
+.media-ai-generation-track-heading em {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.media-ai-generation-track-heading span.preview {
+  color: var(--accent);
+}
+
+.media-ai-generation-track-heading span.completed {
+  color: #62d98b;
+}
+
+.media-ai-generation-track audio {
+  display: block;
+  width: 100%;
+  height: 28px;
+}
+
+.media-ai-generation-track-waiting {
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.media-ai-generation-track-locate {
+  padding: 4px 6px;
+  border: 1px solid color-mix(in srgb, #62d98b 36%, var(--border-color));
+  border-radius: 999px;
+  background: rgba(98, 217, 139, 0.08);
+  color: #8be9aa;
+  font-size: 9px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.media-ai-generation-track-locate:hover {
+  background: rgba(98, 217, 139, 0.16);
+}
+
 .media-ai-generation-status-row {
   display: flex;
   align-items: center;

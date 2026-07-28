@@ -208,6 +208,30 @@
   color: var(--bg-primary);
 }
 
+.analysis-scene-blob__marker--breath {
+  margin: 0 1px;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+}
+
+.AnalysisSceneBlob__word--filler:not(.AnalysisSceneBlob__word--active) {
+  color: var(--text-muted);
+}
+
+.AnalysisSceneBlob__word--filler {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-color: currentColor;
+  text-underline-offset: 2px;
+}
+
+.AnalysisSceneBlob__word--emphasis {
+  font-weight: var(--font-semibold);
+  text-decoration: underline;
+  text-decoration-color: currentColor;
+  text-underline-offset: 2px;
+}
+
 .AnalysisSceneBlob__noSpeech {
   color: var(--text-muted);
   font-style: italic;
@@ -285,4 +309,31 @@
     min-width: 20px;
     height: 18px;
   }
+}
+
+.AnalysisSceneBlob__speech--withSparkline {
+  display: flex;
+  flex-direction: column;
+  -webkit-line-clamp: unset;
+}
+
+.AnalysisSceneBlob__speech--withSparkline > .AnalysisSceneBlob__turn {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.AnalysisSceneSparkline {
+  display: block;
+  flex: 0 0 16px;
+  width: 100%;
+  height: 16px;
+  margin-top: 2px;
+  opacity: 0.55;
+  --analysis-scene-sparkline-color: var(--text-muted);
+}
+
+.AnalysisSceneSparkline polyline {
+  stroke-width: 1;
 }

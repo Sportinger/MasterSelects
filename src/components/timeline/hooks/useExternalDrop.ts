@@ -2,13 +2,14 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { useMediaStore } from '../../../stores/mediaStore';
+import { useTimelineStore } from '../../../stores/timeline';
 import {
   isAudioFile,
   getVideoMetadataQuick,
 } from '../utils/fileTypeHelpers';
 import {
+  findBottommostTrackWithoutOverlap,
   findClosestNonOverlappingStartTime,
-  findFirstTrackWithoutOverlap,
 } from '../utils/externalDragPlacement';
 import {
   getNextVideoNewTrackGestureState,
@@ -42,6 +43,11 @@ const log = Logger.create('useExternalDrop');
 
 function isAudioOnlyMediaFile(mediaFile: MediaFile, file?: File): boolean {
   return mediaFile.type === 'audio' || Boolean(file && isAudioFile(file));
+}
+
+function resolveAvailableLinkedVideoTrackId(startTime: number, duration = 5): string | undefined {
+  const { tracks, clips } = useTimelineStore.getState();
+  return findBottommostTrackWithoutOverlap('video', startTime, duration, tracks, clips) ?? undefined;
 }
 
 interface UseExternalDropProps {
@@ -225,11 +231,6 @@ export function useExternalDrop({
     return next.isOffered;
   }, [timelineRef]);
 
-  const applyVideoNewTrackOffer = useCallback((state: ExternalDragState): ExternalDragState => ({
-    ...state,
-    showVideoNewTrackZone: updateVideoNewTrackGesture(state.y, !!state.isAudio),
-  }), [updateVideoNewTrackGesture]);
-
   const getDesiredStartTime = useCallback((clientX: number) => {
     const rect = timelineRef.current?.getBoundingClientRect();
     if (!rect) return 0;
@@ -290,7 +291,7 @@ export function useExternalDrop({
     hasAudio?: boolean;
     isVideo: boolean;
     isAudio: boolean;
-  }): ExternalDragState => {
+  }): ExternalDragState | null => {
     const {
       trackId,
       desiredStartTime,
@@ -310,17 +311,21 @@ export function useExternalDrop({
     const previewHasAudio = hasAudio ?? dragMetadataCacheRef.current?.hasAudio;
     const resolvedStartTime = resolveTrackStartTime(trackId, desiredStartTime, previewDuration);
 
-    let audioTrackId: string | undefined;
+    if (!targetTrack || targetTrack.locked || targetTrack.type === 'midi') return null;
+    if (isVideoTrack && isAudio) return null;
+    if (isAudioTrack && (!isVideo || isAudio || previewHasAudio !== true)) return null;
+
     let videoTrackId: string | undefined;
 
-    if (isVideoTrack && isVideo && !isAudio && (previewHasAudio ?? true)) {
-      audioTrackId =
-        findFirstTrackWithoutOverlap('audio', resolvedStartTime, previewDuration, tracks, clips) ??
-        '__new_audio_track__';
-    } else if (isAudioTrack && isVideo && !isAudio) {
-      videoTrackId =
-        findFirstTrackWithoutOverlap('video', resolvedStartTime, previewDuration, tracks, clips) ??
-        '__new_video_track__';
+    if (isAudioTrack && isVideo && !isAudio) {
+      videoTrackId = findBottommostTrackWithoutOverlap(
+        'video',
+        resolvedStartTime,
+        previewDuration,
+        tracks,
+        clips,
+      ) ?? undefined;
+      if (!videoTrackId) return null;
     }
 
     return {
@@ -328,7 +333,6 @@ export function useExternalDrop({
       startTime: resolvedStartTime,
       x,
       y,
-      audioTrackId,
       videoTrackId,
       isVideo,
       isAudio,
@@ -409,7 +413,6 @@ export function useExternalDrop({
     rejectDropDuringExport,
     getDesiredStartTime,
     resolveImmediateDragPreview,
-    applyVideoNewTrackOffer,
     buildTrackPreviewState,
     setExternalDrag,
   });
@@ -592,6 +595,10 @@ export function useExternalDrop({
         });
         return;
       }
+      if (!targetTrack || targetTrack.locked) {
+        log.debug('External drops cannot be routed to missing or locked tracks', { trackId });
+        return;
+      }
 
       const commandResult = await executeTimelineExternalDropCommand({
         actions: {
@@ -611,6 +618,7 @@ export function useExternalDrop({
         isAudioOnlyMediaFile,
         isVideoTrack,
         mediaFilePolicy: 'allow-video-on-audio',
+        resolveLinkedVideoTrackId: resolveAvailableLinkedVideoTrackId,
         resolveStartTime: prepareDropStartTime,
         trackId,
       });
@@ -630,6 +638,7 @@ export function useExternalDrop({
         baseStartTime: desiredStartTime,
         fallbackDuration: cachedDuration,
         filePath,
+        resolveLinkedVideoTrackId: resolveAvailableLinkedVideoTrackId,
         // Snap/avoid overlaps the same way single drops do, and prep position-overwrite ranges.
         resolveStartTime: (desired, duration) => {
           const startTime = resolveTrackStartTime(trackId, desired, duration ?? cachedDuration);

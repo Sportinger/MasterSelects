@@ -418,6 +418,15 @@ currently spoken word and active speech segment are highlighted and the list
 follows them when that segment is visible under the current search filter.
 Scrubbing updates the same highlight without animated lag.
 
+For audio-bearing clips, the overview also renders an **Audio** sparkline lane
+from loaded loudness and VAD spans plus a **Markers** needle lane for persisted
+speech markers. The Audio Intelligence Action Center card reports analysis
+state, progress, and marker count and supports run/re-run or cancel. Inside the
+Analysis settings disclosure, `AnalysisAudioSettings` lists the persisted age
+of VAD, alignment, markers, prosody, and room-tone artifacts and provides the
+same run/re-run or cancel control. These surfaces reflect the artifact state
+implemented by WP13; opening the panel does not start analysis implicitly.
+
 Best Quality uses a fixed provider split: Deepgram supplies every displayed word
 and timestamp, while OpenAI supplies the speaker turns. The completed summary
 states these two roles directly; it has no agreement percentage, conflict count,

@@ -224,6 +224,7 @@ export type ClipTransformUpdate = Omit<Partial<ClipTransform>, 'position' | 'sca
 
 export interface AddClipOptions {
   name?: string;
+  linkedAudioTrackId?: string;
   signalAssetId?: string;
   signalRefId?: string;
   signalRenderAdapterId?: string;
@@ -261,6 +262,7 @@ export interface CoreClipActions {
   generateLoudnessForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
   generateBeatOnsetForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
   generateFrequencyPhaseForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
+  generateAudioIntelligenceForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
   cancelAudioAnalysisForClip: (clipId: string) => void;
   setClipParent: (clipId: string, parentClipId: string | null) => void;
   getClipChildren: (clipId: string) => TimelineClip[];

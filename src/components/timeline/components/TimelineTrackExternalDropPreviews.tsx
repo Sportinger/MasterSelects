@@ -42,18 +42,16 @@ export function TimelineTrackExternalDropPreviews({
 
   const duration = externalDrag.duration ?? 5;
   const previewRect = getTrackRangeShellRect(externalDrag.startTime, duration);
+  const primaryTrackType = externalDrag.isAudio || externalDrag.videoTrackId
+    ? 'audio'
+    : 'video';
   return (
     <>
       {externalDrag.trackId === trackId && renderExternalPreview(
-        'timeline-clip-preview',
+        `timeline-clip-preview ${primaryTrackType}`,
         previewRect,
         externalDrag.label ?? 'Drop to add clip',
         externalDrag.thumbnailUrl,
-      )}
-      {externalDrag.audioTrackId === trackId && renderExternalPreview(
-        'timeline-clip-preview audio',
-        previewRect,
-        'Audio (linked)',
       )}
       {externalDrag.videoTrackId === trackId && renderExternalPreview(
         'timeline-clip-preview video',

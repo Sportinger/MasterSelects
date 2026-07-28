@@ -22,6 +22,17 @@
   overflow: hidden;
 }
 
+.fb-bubble.is-suno-composer,
+.fb-bubble.is-suno-composer:not(.has-references) {
+  max-height: none;
+  overflow: visible;
+}
+
+.fb-bubble.is-suno-composer:not(.has-references) > .fb-bubble-main {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
 .fb-bubble.has-references {
   display: grid;
   grid-template-columns: fit-content(792px) clamp(320px, 42vw, 560px);
@@ -243,6 +254,7 @@
 }
 
 .fb-suno-prompt-field {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -265,6 +277,86 @@
   font-size: 11px;
 }
 
+.fb-suno-section-toggle {
+  display: flex;
+  align-items: center;
+  grid-column: 1 / -1;
+  gap: 7px;
+  width: 100%;
+  padding: 4px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.16);
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.fb-suno-section-toggle:first-child {
+  padding-right: 44px;
+}
+
+.fb-suno-section-toggle > span {
+  flex: 1;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.fb-suno-section-toggle > em {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.fb-suno-section-toggle > svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.fb-suno-section-toggle:hover {
+  border-color: color-mix(in srgb, var(--accent, #7c4dff) 34%, rgba(255, 255, 255, 0.08));
+  color: var(--text-primary);
+}
+
+.fb-suno-field-wand {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  display: inline-grid;
+  z-index: 2;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.fb-suno-field-wand:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.fb-suno-field-wand:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.fb-suno-field-wand.is-loading svg {
+  animation: fb-wand-pulse 760ms ease-in-out infinite;
+}
+
+.fb-suno-input-with-wand {
+  padding-right: 34px;
+}
+
 .fb-suno-lyrics-input {
   height: 60px;
   min-height: 60px;
@@ -273,11 +365,7 @@
 
 .fb-bubble-row-suno .fb-bubble-close,
 .fb-bubble-row-suno .fb-bubble-rewind {
-  top: 22px;
-}
-
-.fb-bubble-row-suno .fb-bubble-wand {
-  top: 42px;
+  top: 5px;
 }
 
 .fb-bubble-row-elevenlabs .fb-bubble-close,

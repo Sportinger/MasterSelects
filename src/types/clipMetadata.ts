@@ -13,7 +13,16 @@ export interface TranscriptWord {
   needsReview?: boolean;
   originalSpeaker?: string;
   alternatives?: TranscriptWordAlternative[];
+  // Acoustically refined timings from the transcript-timing artifact.
+  // start/end stay the provider-reported values and are never mutated.
+  alignedStart?: number;
+  alignedEnd?: number;
+  alignmentConfidence?: number;
+  alignmentMethod?: TranscriptAlignmentMethod;
+  emphasis?: number; // 0..1, prosody-derived
 }
+
+export type TranscriptAlignmentMethod = 'acoustic-refine' | 'ctc-align' | 'whisperx';
 
 export type TranscriptProviderId = 'deepgram' | 'openai';
 export type TranscriptWordSource = TranscriptProviderId | 'consensus';

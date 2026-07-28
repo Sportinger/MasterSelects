@@ -2,6 +2,7 @@ import { fireEvent, render } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useTimelineKeyboard } from '../../src/components/timeline/hooks/useTimelineKeyboard';
+import { usePointerFocusHandoff } from '../../src/hooks/usePointerFocusHandoff';
 import { ALL_BLEND_MODES } from '../../src/components/timeline/constants';
 import { useTimelineStore } from '../../src/stores/timeline';
 import type { Composition } from '../../src/stores/mediaStore';
@@ -17,6 +18,7 @@ function KeyboardHarness({
   playheadPosition = 0,
   duration = 10,
   setPlayheadPosition = vi.fn(),
+  play = vi.fn(),
   applyTimelineEditOperation,
 }: {
   selectedClipIds?: Set<string>;
@@ -26,11 +28,13 @@ function KeyboardHarness({
   playheadPosition?: number;
   duration?: number;
   setPlayheadPosition?: (time: number) => void;
+  play?: () => void;
   applyTimelineEditOperation: TimelineEditOperationActions['applyTimelineEditOperation'];
 }) {
+  usePointerFocusHandoff();
   useTimelineKeyboard({
     isPlaying: false,
-    play: vi.fn(),
+    play,
     pause: vi.fn(),
     playForward: vi.fn(),
     playReverse: vi.fn(),
@@ -56,7 +60,14 @@ function KeyboardHarness({
     addMarker: vi.fn(),
   });
 
-  return <input data-testid="text-input" />;
+  return (
+    <>
+      <input data-testid="text-input" />
+      <button data-testid="focused-button" type="button">Control</button>
+      <input data-testid="focused-slider" type="range" />
+      <div data-testid="editor-surface" onPointerDown={(event) => event.preventDefault()} />
+    </>
+  );
 }
 
 describe('useTimelineKeyboard edit operation routing', () => {
@@ -68,6 +79,9 @@ describe('useTimelineKeyboard edit operation routing', () => {
       selectedClipIds: new Set(),
       primarySelectedClipId: null,
       playheadPosition: 0,
+      maskPanelActive: false,
+      maskEditMode: 'none',
+      selectedVertexIds: new Set(),
     });
     applyTimelineEditOperation = vi.fn(() => ({
       success: true,
@@ -198,6 +212,153 @@ describe('useTimelineKeyboard edit operation routing', () => {
 
     fireEvent.keyDown(getByTestId('text-input'), { key: 'Delete' });
 
+    expect(applyTimelineEditOperation).not.toHaveBeenCalled();
+  });
+
+  it('keeps Space assigned to timeline playback outside text entry', () => {
+    const play = vi.fn();
+    const { getByTestId } = render(
+      <KeyboardHarness
+        play={play}
+        applyTimelineEditOperation={applyTimelineEditOperation}
+      />,
+    );
+    const button = getByTestId('focused-button');
+    button.focus();
+    const event = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      code: 'Space',
+      key: ' ',
+    });
+
+    const mayRunNativeDefault = button.dispatchEvent(event);
+
+    expect(mayRunNativeDefault).toBe(false);
+    expect(event.defaultPrevented).toBe(true);
+    expect(document.activeElement).not.toBe(button);
+    expect(play).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not claim timeline Space while the user is typing', () => {
+    const play = vi.fn();
+    const { getByTestId } = render(
+      <KeyboardHarness
+        play={play}
+        applyTimelineEditOperation={applyTimelineEditOperation}
+      />,
+    );
+    const input = getByTestId('text-input');
+    input.focus();
+    const event = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      code: 'Space',
+      key: ' ',
+    });
+
+    input.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(input);
+    expect(play).not.toHaveBeenCalled();
+  });
+
+  it('plays normally after pointer focus moves away from a control', () => {
+    const play = vi.fn();
+    const { getByTestId } = render(
+      <KeyboardHarness
+        play={play}
+        applyTimelineEditOperation={applyTimelineEditOperation}
+      />,
+    );
+    const button = getByTestId('focused-button');
+    button.focus();
+    fireEvent.pointerDown(getByTestId('editor-surface'), {
+      button: 0,
+      isPrimary: true,
+      pointerId: 1,
+    });
+    const event = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      code: 'Space',
+      key: ' ',
+    });
+
+    window.dispatchEvent(event);
+
+    expect(document.activeElement).not.toBe(button);
+    expect(event.defaultPrevented).toBe(true);
+    expect(play).toHaveBeenCalledTimes(1);
+  });
+
+  it('defers frame arrows to an intentionally focused range slider', () => {
+    const setPlayheadPosition = vi.fn();
+    const activeComposition: Composition = {
+      id: 'comp-slider-focus',
+      name: 'Slider focus comp',
+      type: 'composition',
+      parentId: null,
+      createdAt: 0,
+      width: 1920,
+      height: 1080,
+      frameRate: 30,
+      duration: 10,
+      backgroundColor: '#000000',
+    };
+    const { getByTestId } = render(
+      <KeyboardHarness
+        activeComposition={activeComposition}
+        setPlayheadPosition={setPlayheadPosition}
+        applyTimelineEditOperation={applyTimelineEditOperation}
+      />,
+    );
+    const slider = getByTestId('focused-slider');
+    slider.focus();
+    const event = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'ArrowRight',
+    });
+
+    slider.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(slider);
+    expect(setPlayheadPosition).not.toHaveBeenCalled();
+  });
+
+  it('yields conflicting tool and delete shortcuts to an active mask context', () => {
+    useTimelineStore.setState({
+      maskPanelActive: true,
+      maskEditMode: 'editing',
+      selectedVertexIds: new Set(['vertex-1']),
+      activeTimelineTool: 'blade',
+    });
+    render(
+      <KeyboardHarness
+        selectedClipIds={new Set(['clip-1'])}
+        applyTimelineEditOperation={applyTimelineEditOperation}
+      />,
+    );
+    const toolEvent = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'v',
+    });
+    const deleteEvent = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Delete',
+    });
+
+    window.dispatchEvent(toolEvent);
+    window.dispatchEvent(deleteEvent);
+
+    expect(toolEvent.defaultPrevented).toBe(false);
+    expect(deleteEvent.defaultPrevented).toBe(false);
+    expect(useTimelineStore.getState().activeTimelineTool).toBe('blade');
     expect(applyTimelineEditOperation).not.toHaveBeenCalled();
   });
 

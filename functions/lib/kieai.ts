@@ -105,10 +105,11 @@ export interface HostedSunoParams {
   audioWeight?: number;
   callBackUrl?: string;
   customMode?: boolean;
+  duration?: number;
   instrumental?: boolean;
   model?: string;
   negativeTags?: string;
-  prompt: string;
+  prompt?: string;
   soundLoop?: boolean;
   style?: string;
   styleWeight?: number;
@@ -118,7 +119,7 @@ export interface HostedSunoParams {
 }
 
 export interface HostedSunoResult {
-  audioUrl: string;
+  audioUrl?: string;
   duration?: number;
   id?: string;
   imageUrl?: string;
@@ -678,7 +679,8 @@ function normalizeSunoMusicResult(value: unknown): HostedSunoResult | null {
 
   const record = value as Record<string, unknown>;
   const audioUrl = asString(record.audioUrl ?? record.audio_url ?? record.sourceAudioUrl ?? record.source_audio_url);
-  if (!audioUrl) {
+  const streamAudioUrl = asString(record.streamAudioUrl ?? record.stream_audio_url);
+  if (!audioUrl && !streamAudioUrl) {
     return null;
   }
 
@@ -688,7 +690,7 @@ function normalizeSunoMusicResult(value: unknown): HostedSunoResult | null {
     id: asString(record.id),
     imageUrl: asString(record.imageUrl ?? record.image_url),
     prompt: asString(record.prompt),
-    streamAudioUrl: asString(record.streamAudioUrl ?? record.stream_audio_url),
+    streamAudioUrl,
     tags: asString(record.tags),
     title: asString(record.title),
   };
@@ -1266,19 +1268,19 @@ export async function createHostedSunoMusicTask(
   env: Env,
   params: HostedSunoParams,
 ): Promise<{ taskId: string }> {
-  const prompt = params.prompt.trim();
-  if (!prompt) {
+  const prompt = params.prompt?.trim() ?? '';
+  const customMode = params.customMode ?? false;
+  const instrumental = params.instrumental ?? true;
+  const model = normalizeSunoModel(params.model);
+  if (!prompt && (!customMode || !instrumental)) {
     throw new Error('Describe the music before generating with Suno.');
   }
 
-  const customMode = params.customMode ?? false;
-  const instrumental = params.instrumental ?? true;
   const body: Record<string, unknown> = {
     callBackUrl: params.callBackUrl?.trim() || DEFAULT_SUNO_CALLBACK_URL,
     customMode,
     instrumental,
-    model: normalizeSunoModel(params.model),
-    prompt,
+    model,
   };
 
   if (customMode) {
@@ -1290,18 +1292,18 @@ export async function createHostedSunoMusicTask(
 
     body.style = style;
     body.title = title;
+    if (prompt) body.prompt = prompt;
+    if (params.negativeTags?.trim()) body.negativeTags = params.negativeTags.trim();
+    if (!instrumental && params.vocalGender) body.vocalGender = params.vocalGender;
+    if (model === 'V5_5' && typeof params.duration === 'number' && Number.isFinite(params.duration)) {
+      body.duration = Math.max(10, Math.min(360, Math.round(params.duration)));
+    }
+    body.styleWeight = clampWeight(params.styleWeight, 0.65);
+    body.weirdnessConstraint = clampWeight(params.weirdnessConstraint, 0.65);
+    body.audioWeight = clampWeight(params.audioWeight, 0.65);
+  } else {
+    body.prompt = prompt;
   }
-
-  if (params.negativeTags?.trim()) {
-    body.negativeTags = params.negativeTags.trim();
-  }
-  if (params.vocalGender) {
-    body.vocalGender = params.vocalGender;
-  }
-
-  body.styleWeight = clampWeight(params.styleWeight, 0.65);
-  body.weirdnessConstraint = clampWeight(params.weirdnessConstraint, 0.65);
-  body.audioWeight = clampWeight(params.audioWeight, 0.65);
 
   const payload = await kieAiJsonRequest<KieSunoCreateResponse>(env, '/api/v1/generate', 'POST', body);
   const taskId = payload.data?.taskId;
@@ -1317,7 +1319,7 @@ export async function createHostedSunoSoundsTask(
   env: Env,
   params: HostedSunoParams,
 ): Promise<{ taskId: string }> {
-  const prompt = params.prompt.trim();
+  const prompt = params.prompt?.trim() ?? '';
   if (!prompt) {
     throw new Error('Describe the sound before generating with Suno Sounds.');
   }

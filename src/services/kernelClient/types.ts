@@ -17,6 +17,12 @@ export interface KernelResolvedCall {
   args: Record<string, unknown>;
 }
 
+export type KernelAnalysisSource =
+  | 'transcript'
+  | 'voice-activity'
+  | 'speech-markers'
+  | 'prosody';
+
 export interface KernelTranscriptMoment {
   schemaVersion: 1;
   handle: string;
@@ -24,10 +30,16 @@ export interface KernelTranscriptMoment {
   sourceRange: { startSeconds: number; endSeconds: number };
   evidence: {
     transcript?: string;
+    pauses?: { startSeconds: number; endSeconds: number }[];
+    emphasis?: { text: string; startSeconds: number; score: number }[];
+    markers?: {
+      kind: 'breath' | 'filler' | 'disfluency';
+      timeSeconds: number;
+    }[];
   };
   confidence: number;
   indexVersion: string;
-  analysisSources: ['transcript'];
+  analysisSources: KernelAnalysisSource[];
 }
 
 export interface KernelCompileRequest {

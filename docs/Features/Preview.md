@@ -58,7 +58,9 @@ The source monitor shows a raw media file in the preview panel instead of the co
 - Supports images, but images do not show transport controls.
 - Time display, play/pause, scrubbing, start/end buttons, and frame stepping are provided for video sources.
 - Audio sources provide waveform scrubbing, playback controls, In/Out marking, and placement actions for inserting or dragging the selected range into the timeline.
-- `Space` toggles playback and `Escape` closes the monitor without also triggering the timeline shortcut.
+- `Space` toggles source playback only while the pointer hovers the playable source monitor. Outside it, `Space` controls timeline playback.
+- Starting timeline playback through any transport path closes the source monitor and restores the composition preview.
+- `Escape` closes the monitor without also triggering a timeline shortcut.
 
 ### Limitation
 

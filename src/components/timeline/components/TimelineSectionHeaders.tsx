@@ -197,12 +197,15 @@ export function TimelineSectionHeaders({
         );
       })}
 
-      {!isVideoSection && ((externalDrag && externalDrag.hasAudio) || clipDragNewTrackType === 'audio') && !sectionCollapsed && (
+      {!isVideoSection && (
+        externalDrag?.newTrackType === 'audio' ||
+        externalDrag?.audioTrackId === '__new_audio_track__' ||
+        clipDragNewTrackType === 'audio'
+      ) && !sectionCollapsed && (
         <TimelineNewTrackHeaderPreview
           active={Boolean(
             clipDragNewTrackType === 'audio' ||
             externalDrag?.newTrackType === 'audio' ||
-            (externalDrag?.newTrackType === 'video' && externalDrag?.hasAudio) ||
             (externalDrag?.isVideo && externalDrag?.audioTrackId === '__new_audio_track__')
           )}
           height={audioNewTrackPreviewHeight}

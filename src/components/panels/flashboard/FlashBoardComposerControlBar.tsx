@@ -48,7 +48,8 @@ function getInlineSubmenuStyle(
       optionCount = parameterPopovers.aspectOptions.length;
       break;
     case parameterPopovers.activePopover === 'duration':
-      optionCount = parameterPopovers.durationOptions.length;
+      optionCount = parameterPopovers.durationRange ? 2 : parameterPopovers.durationOptions.length;
+      if (parameterPopovers.durationRange) extraHeight = 34;
       break;
     case parameterPopovers.activePopover === 'imageSize':
       optionCount = parameterPopovers.imageSizeOptions.length;
@@ -58,9 +59,6 @@ function getInlineSubmenuStyle(
       break;
     case sunoPopovers.activePopover === 'sunoModel':
       optionCount = sunoPopovers.modelOptions.length;
-      break;
-    case sunoPopovers.activePopover === 'sunoMode':
-      optionCount = 4;
       break;
     case chatControls.renderedPopover === 'chatProvider':
       optionCount = chatControls.chatProviderOptions.length;

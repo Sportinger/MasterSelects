@@ -429,10 +429,16 @@ function buildPromptBookPages(
     const page = ensureGenerationPage(generationPagesByPrompt, userPrompt, record.createdAt, magicPrompt);
     addPromptBookRun(page, run);
 
-    const mediaFileId = record.result?.mediaFileId;
-    const mediaFile = mediaFileId ? mediaFilesById.get(mediaFileId) : undefined;
-    if (mediaFile) {
-      addPromptBookMedia(page, mediaFile, magicPrompt ? 'magic' : 'user');
+    const mediaFileIds = new Set(
+      (record.results ?? (record.result ? [record.result] : []))
+        .map((result) => result.mediaFileId)
+        .filter(Boolean),
+    );
+    for (const mediaFileId of mediaFileIds) {
+      const mediaFile = mediaFilesById.get(mediaFileId);
+      if (mediaFile) {
+        addPromptBookMedia(page, mediaFile, magicPrompt ? 'magic' : 'user');
+      }
     }
   }
 

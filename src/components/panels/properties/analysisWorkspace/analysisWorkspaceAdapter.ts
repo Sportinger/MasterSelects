@@ -17,6 +17,7 @@ import type {
   AnalysisSceneTranscriptWord,
   AnalysisSceneView,
 } from './analysisSceneViewModel';
+import { effectiveWordTiming } from '../../../../services/transcription/effectiveWordTiming';
 import { normalizedRanges, partitionIndexedRanges } from './analysisWorkspaceRangeIndex';
 
 /** The selected source-time interval; the out point is always exclusive. */
@@ -31,11 +32,18 @@ export interface AnalysisWorkspaceAdapterInput {
   cuts?: readonly SceneCutPoint[];
   sceneSegments?: readonly SceneSegment[];
   transcript?: readonly TranscriptWord[];
+  audio?: AnalysisWorkspaceAudioInput;
   channels?: Partial<Record<AnalysisWorkspaceChannel, AnalysisWorkspaceChannelInput>>;
 }
 
+export interface AnalysisWorkspaceAudioInput {
+  levels?: readonly { start: number; end: number; loudnessDb: number }[];
+  vadSegments?: readonly { start: number; end: number; probability: number }[];
+  markers?: readonly { id: string; kind: string; time: number; text?: string; confidence?: number }[];
+}
+
 type AnalysisWorkspaceChannel = 'cuts' | 'metrics' | 'faces' | 'transcript' | 'descriptions' | 'audio';
-type AnalysisWorkspaceChannelStatus = 'none' | 'analyzing' | 'transcribing' | 'describing' | 'ready' | 'error';
+type AnalysisWorkspaceChannelStatus = 'none' | 'partial' | 'analyzing' | 'transcribing' | 'describing' | 'ready' | 'error';
 
 /** Explicit producer state and measured source coverage; event counts never imply coverage. */
 export interface AnalysisWorkspaceChannelInput {
@@ -122,6 +130,7 @@ function channelCoverage(
   if (state.status === 'analyzing' || state.status === 'transcribing' || state.status === 'describing') {
     return coverage('partial', 'Analysis is still running.');
   }
+  if (state.status === 'partial') return coverage('partial', 'Some audio-intelligence artifacts are available.');
   return coverage('missing', state.status === 'error' ? 'Analysis failed.' : 'Analysis has not run.');
 }
 
@@ -153,7 +162,8 @@ function peopleForScene(people: readonly FacePersonSummary[], scene: AnalysisSce
 
 function transcriptWords(words: readonly TranscriptWord[], bounds: AnalysisSceneRange): readonly AnalysisSceneTranscriptWord[] {
   return sorted(words.flatMap(word => {
-    const range = eventRange(word.start, word.end, bounds);
+    const timing = effectiveWordTiming(word);
+    const range = eventRange(timing.start, timing.end, bounds);
     if (!range) return [];
     return [{
       id: word.id,
@@ -163,6 +173,7 @@ function transcriptWords(words: readonly TranscriptWord[], bounds: AnalysisScene
       speakerLabel: word.speaker,
       confidence: score(word.confidence),
       needsReview: word.needsReview,
+      ...(word.emphasis !== undefined ? { emphasis: word.emphasis } : {}),
     }];
   }), (left, right) => left.start - right.start || left.end - right.end || left.id.localeCompare(right.id));
 }
@@ -317,6 +328,15 @@ export function buildAnalysisWorkspaceViewModel(input: AnalysisWorkspaceAdapterI
     ...(analysis?.faceAnalysis ? { faces: { status: 'ready', measuredRanges: [bounds] } } : {}),
     ...(input.transcript !== undefined ? { transcript: { status: 'ready', measuredRanges: [bounds] } } : {}),
     ...(input.sceneSegments !== undefined ? { descriptions: { status: 'ready', measuredRanges: sources.map(source => source.range) } } : {}),
+    ...(input.audio ? {
+      audio: {
+        status: 'ready',
+        measuredRanges: [
+          ...(input.audio.levels ?? []),
+          ...(input.audio.vadSegments ?? []),
+        ].map(({ start, end }) => ({ start, end })),
+      },
+    } : {}),
   };
   const scenes = sources.map((source, index) => makeScene(
     source,
@@ -337,6 +357,22 @@ export function buildAnalysisWorkspaceViewModel(input: AnalysisWorkspaceAdapterI
   });
   const peopleEvents = people.flatMap(person => rangesForPerson(person, bounds).map((range, index) => ({ id: `person:${person.id}:${index}`, ...range, label: person.label, score: score(person.averageConfidence) })));
   const speechEvents = wordEntries.map(({ value: word }) => ({ id: `speech:${word.id}`, start: word.start, end: word.end, label: word.speakerLabel ?? word.text, score: word.confidence }));
+  const audioEvents: AnalysisOverviewEvent[] = [
+    ...(input.audio?.levels ?? []).flatMap((level, index) => {
+      const range = eventRange(level.start, level.end, bounds);
+      if (!range || !finite(level.loudnessDb)) return [];
+      return [{ id: `level:${index}`, ...range, label: 'Loudness', score: score((level.loudnessDb + 60) / 60) }];
+    }),
+    ...(input.audio?.vadSegments ?? []).flatMap((segment, index) => {
+      const range = eventRange(segment.start, segment.end, bounds);
+      return range ? [{ id: `vad:${index}`, ...range, label: 'Speech activity', score: score(segment.probability) }] : [];
+    }),
+  ];
+  const markerEvents: readonly AnalysisOverviewEvent[] = sorted((input.audio?.markers ?? []).flatMap(marker => (
+    finite(marker.time) && marker.time >= bounds.start && marker.time < bounds.end
+      ? [{ id: marker.id, start: marker.time, label: marker.kind, score: score(marker.confidence) }]
+      : []
+  )), (left, right) => left.start - right.start || left.id.localeCompare(right.id));
 
   return {
     overview: {
@@ -351,7 +387,8 @@ export function buildAnalysisWorkspaceViewModel(input: AnalysisWorkspaceAdapterI
         motion: frameEvents('globalMotion', 'Motion'),
         focus: frameEvents('focus', 'Focus'),
         quality: frameEvents('brightness', 'Brightness'),
-        audio: [],
+        audio: audioEvents,
+        markers: markerEvents,
         text: sorted(segments.flatMap(segment => {
           const range = eventRange(segment.start, segment.end, bounds);
           return range ? [{ id: `text:${segment.id}`, ...range, label: segment.text }] : [];

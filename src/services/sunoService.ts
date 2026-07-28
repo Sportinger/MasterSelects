@@ -15,6 +15,9 @@ export const DEFAULT_SUNO_INSTRUMENTAL = true;
 export const DEFAULT_SUNO_STYLE_WEIGHT = 0.65;
 export const DEFAULT_SUNO_WEIRDNESS_CONSTRAINT = 0.65;
 export const DEFAULT_SUNO_AUDIO_WEIGHT = 0.65;
+export const DEFAULT_SUNO_DURATION = 20;
+export const MIN_SUNO_DURATION = 10;
+export const MAX_SUNO_DURATION = 360;
 
 export type SunoModelId = typeof SUNO_MODEL_IDS[number];
 export type SunoVocalGender = 'm' | 'f';
@@ -23,10 +26,11 @@ export interface SunoCreateMusicParams {
   audioWeight?: number;
   callBackUrl?: string;
   customMode?: boolean;
+  duration?: number;
   instrumental?: boolean;
   model?: string;
   negativeTags?: string;
-  prompt: string;
+  prompt?: string;
   style?: string;
   styleWeight?: number;
   title?: string;
@@ -45,7 +49,7 @@ export interface SunoCreateSoundsParams {
 }
 
 export interface SunoMusicResult {
-  audioUrl: string;
+  audioUrl?: string;
   duration?: number;
   id?: string;
   imageUrl?: string;
@@ -152,7 +156,8 @@ function normalizeMusicResult(value: unknown): SunoMusicResult | null {
 
   const record = value as Record<string, unknown>;
   const audioUrl = asString(record.audioUrl ?? record.audio_url ?? record.sourceAudioUrl ?? record.source_audio_url);
-  if (!audioUrl) {
+  const streamAudioUrl = asString(record.streamAudioUrl ?? record.stream_audio_url);
+  if (!audioUrl && !streamAudioUrl) {
     return null;
   }
 
@@ -162,7 +167,7 @@ function normalizeMusicResult(value: unknown): SunoMusicResult | null {
     id: asString(record.id),
     imageUrl: asString(record.imageUrl ?? record.image_url),
     prompt: asString(record.prompt),
-    streamAudioUrl: asString(record.streamAudioUrl ?? record.stream_audio_url),
+    streamAudioUrl,
     tags: asString(record.tags),
     title: asString(record.title),
   };
@@ -217,19 +222,19 @@ class SunoService {
   }
 
   async createMusic(params: SunoCreateMusicParams, signal?: AbortSignal): Promise<string> {
-    const prompt = params.prompt.trim();
-    if (!prompt) {
+    const prompt = params.prompt?.trim() ?? '';
+    const customMode = params.customMode ?? DEFAULT_SUNO_CUSTOM_MODE;
+    const instrumental = params.instrumental ?? DEFAULT_SUNO_INSTRUMENTAL;
+    const model = normalizeModel(params.model);
+    if (!prompt && (!customMode || !instrumental)) {
       throw new Error('Describe the music before generating with Suno.');
     }
 
-    const customMode = params.customMode ?? DEFAULT_SUNO_CUSTOM_MODE;
-    const instrumental = params.instrumental ?? DEFAULT_SUNO_INSTRUMENTAL;
     const body: Record<string, unknown> = {
       callBackUrl: params.callBackUrl?.trim() || DEFAULT_CALLBACK_URL,
       customMode,
       instrumental,
-      model: normalizeModel(params.model),
-      prompt,
+      model,
     };
 
     if (customMode) {
@@ -241,18 +246,18 @@ class SunoService {
 
       body.style = style;
       body.title = title;
+      if (prompt) body.prompt = prompt;
+      if (params.negativeTags?.trim()) body.negativeTags = params.negativeTags.trim();
+      if (!instrumental && params.vocalGender) body.vocalGender = params.vocalGender;
+      if (model === 'V5_5' && typeof params.duration === 'number' && Number.isFinite(params.duration)) {
+        body.duration = Math.max(MIN_SUNO_DURATION, Math.min(MAX_SUNO_DURATION, Math.round(params.duration)));
+      }
+      body.styleWeight = clampWeight(params.styleWeight, DEFAULT_SUNO_STYLE_WEIGHT);
+      body.weirdnessConstraint = clampWeight(params.weirdnessConstraint, DEFAULT_SUNO_WEIRDNESS_CONSTRAINT);
+      body.audioWeight = clampWeight(params.audioWeight, DEFAULT_SUNO_AUDIO_WEIGHT);
+    } else {
+      body.prompt = prompt;
     }
-
-    if (params.negativeTags?.trim()) {
-      body.negativeTags = params.negativeTags.trim();
-    }
-    if (params.vocalGender) {
-      body.vocalGender = params.vocalGender;
-    }
-
-    body.styleWeight = clampWeight(params.styleWeight, DEFAULT_SUNO_STYLE_WEIGHT);
-    body.weirdnessConstraint = clampWeight(params.weirdnessConstraint, DEFAULT_SUNO_WEIRDNESS_CONSTRAINT);
-    body.audioWeight = clampWeight(params.audioWeight, DEFAULT_SUNO_AUDIO_WEIGHT);
 
     log.debug('Creating Suno music task:', {
       customMode,

@@ -75,6 +75,7 @@ import {
   generateBeatOnsetForClipAction,
   generateFrequencyPhaseForClipAction,
 } from './clip/clipRhythmFrequencyAnalysisActions';
+import { generateAudioIntelligenceForClipAction } from './clip/clipAudioIntelligenceActions';
 import { generateMidiNoteId } from './helpers/idGenerator';
 import { partitionMidiNotesAtCut } from '../../services/midi/midiClipTiming';
 import { cleanupDeletedClipResources } from './deletedClipResources';
@@ -535,6 +536,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
   generateLoudnessForClip: (clipId, options = {}) => generateLoudnessForClipAction({ set, get }, clipId, options),
   generateBeatOnsetForClip: (clipId, options = {}) => generateBeatOnsetForClipAction({ set, get }, clipId, options),
   generateFrequencyPhaseForClip: (clipId, options = {}) => generateFrequencyPhaseForClipAction({ set, get }, clipId, options),
+  generateAudioIntelligenceForClip: (clipId, options = {}) => generateAudioIntelligenceForClipAction({ set, get }, clipId, options),
 
   // ========== PARENTING (PICK WHIP) ==========
 

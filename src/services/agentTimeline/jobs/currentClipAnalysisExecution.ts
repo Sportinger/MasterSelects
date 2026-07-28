@@ -13,6 +13,11 @@ import {
   runAgentTimelineAnalysis,
   type AgentTimelineAnalysisOperation,
 } from './analysisExecutionCoordinator';
+import { createCurrentAudioArtifactStore } from '../../audio/timelineWaveformPyramidCache';
+import { clipAudioAnalysisJobService } from '../../audio/ClipAudioAnalysisJobService';
+import { useTimelineStore } from '../../../stores/timeline';
+import { projectFileService } from '../../project/ProjectFileService';
+import { findGaps } from '../../transcription/resultMapping';
 
 export interface RunCurrentClipAnalysisOptions {
   clipId: string;
@@ -134,10 +139,29 @@ function transcriptOperation(clipId: string, sourceKey: string): AgentTimelineAn
     id: 'transcript',
     channel: 'speech',
     resourceLocks: [`source-audio:${sourceKey}`, 'transcription-provider'],
-    // Transcript status does not retain provider/model/range provenance at this
-    // call boundary. Re-run so the provider can apply its own compatible cache
-    // policy instead of falsely claiming this graph has a matching result.
-    isCached: () => false,
+    async isCached() {
+      const clip = currentClip(clipId);
+      const mediaFileId = mediaFileIdFor(clipId);
+      if (!clip || !mediaFileId) return false;
+      const rangeStart = clip.inPoint ?? 0;
+      const rangeEnd = clip.outPoint ?? clip.duration;
+      if (!Number.isFinite(rangeStart) || !Number.isFinite(rangeEnd) || rangeEnd <= rangeStart) {
+        return false;
+      }
+
+      const mediaRanges = findTimelineAnalysisMediaFile(mediaFileId)?.transcribedRanges ?? [];
+      let storedRanges: [number, number][] = [];
+      if (projectFileService.isProjectOpen()) {
+        try {
+          storedRanges = await projectFileService.getTranscribedRanges(mediaFileId);
+        } catch {
+          // In-memory coverage is still usable when project persistence is unavailable.
+        }
+      }
+      const gaps = findGaps([...mediaRanges, ...storedRanges], rangeStart, rangeEnd);
+      const uncovered = gaps.reduce((total, [start, end]) => total + end - start, 0);
+      return 1 - uncovered / (rangeEnd - rangeStart) >= 0.98;
+    },
     async run() {
       const { transcribeClip } = await import('../../clipTranscriber');
       await transcribeClip(clipId, 'auto');
@@ -150,6 +174,38 @@ function transcriptOperation(clipId: string, sourceKey: string): AgentTimelineAn
       void import('../../clipTranscriber').then(({ cancelTranscription }) => (
         cancelTranscription(clipId)
       ));
+    },
+  };
+}
+
+function audioIntelligenceOperation(clipId: string, sourceKey: string): AgentTimelineAnalysisOperation {
+  const artifactsAreFresh = async () => {
+    const refs = currentClip(clipId)?.audioState?.sourceAnalysisRefs;
+    const expected = [
+      [refs?.voiceActivityId, 'voice-activity'],
+      [refs?.transcriptTimingId, 'transcript-timing'],
+      [refs?.speechMarkersId, 'speech-markers'],
+      [refs?.prosodyContourId, 'prosody-contour'],
+      [refs?.roomToneProfileId, 'room-tone-profile'],
+    ] as const;
+    if (expected.some(([id]) => !id)) return false;
+    const store = createCurrentAudioArtifactStore();
+    const artifacts = await Promise.all(expected.map(([id]) => store.getAnalysisArtifact(id!)));
+    return artifacts.every((artifact, index) => (
+      artifact?.kind === expected[index][1] && !artifact.stale
+    ));
+  };
+  return {
+    id: 'audio',
+    channel: 'audio',
+    resourceLocks: [`source-audio:${sourceKey}`],
+    isCached: artifactsAreFresh,
+    async run() {
+      await useTimelineStore.getState().generateAudioIntelligenceForClip(clipId);
+      if (!await artifactsAreFresh()) throw failure('Audio intelligence analysis failed.');
+    },
+    cancel() {
+      clipAudioAnalysisJobService.cancelJob(clipId, 'audio-intelligence');
     },
   };
 }
@@ -220,6 +276,7 @@ export function runCurrentClipAnalysis(
   if (options.includeTranscript !== false) {
     operations.push(transcriptOperation(options.clipId, sourceKey));
   }
+  operations.push(audioIntelligenceOperation(options.clipId, sourceKey));
   return runAgentTimelineAnalysis({
     runKey: clipRunKey(options.clipId, localVisual),
     operations,

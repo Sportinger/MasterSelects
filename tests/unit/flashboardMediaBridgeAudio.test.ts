@@ -153,4 +153,87 @@ describe('FlashBoardMediaBridge audio imports', () => {
     ]);
     expect(importFile).toHaveBeenCalledTimes(1);
   });
+
+  it('retries only missing Suno outputs after a partial batch import failure', async () => {
+    useFlashBoardStore.setState((state) => ({
+      activeGenerationRecords: state.activeGenerationRecords.map((record) => ({
+        ...record,
+        outputs: [{
+          id: 'track-1',
+          availability: 'completed',
+          mediaType: 'audio',
+        }, {
+          id: 'track-2',
+          availability: 'completed',
+          mediaType: 'audio',
+        }],
+      })),
+    }));
+    const folders: MediaFolder[] = [];
+    const createFolder = vi.fn((name: string, parentId: string | null = null): MediaFolder => {
+      const folder: MediaFolder = {
+        id: `folder-${name.toLowerCase().replace(/\s+/g, '-')}`,
+        name,
+        parentId,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      folders.push(folder);
+      return folder;
+    });
+    const makeImportedAudio = (id: string): MediaFile => ({
+      id,
+      name: `${id}.mp3`,
+      type: 'audio',
+      file: new File(['mp3'], `${id}.mp3`, { type: 'audio/mpeg' }),
+      url: `blob:${id}`,
+      duration: 2,
+      parentId: 'folder-audio',
+      createdAt: Date.now(),
+    });
+    const importFile = vi.fn()
+      .mockResolvedValueOnce(makeImportedAudio('media-track-1'))
+      .mockRejectedValueOnce(new Error('track 2 import failed'))
+      .mockResolvedValueOnce(makeImportedAudio('media-track-2'));
+    vi.mocked(useMediaStore.getState).mockReturnValue({
+      folders,
+      files: [],
+      createFolder,
+      importFile,
+    } as unknown as ReturnType<typeof useMediaStore.getState>);
+    vi.spyOn(flashBoardMediaBridge, 'downloadAsFile').mockImplementation(async (_url, filename) => (
+      new File(['mp3'], filename, { type: 'audio/mpeg' })
+    ));
+    const assets = [{
+      mediaType: 'audio' as const,
+      outputId: 'track-1',
+      url: 'https://cdn.example/track-1.mp3',
+    }, {
+      mediaType: 'audio' as const,
+      outputId: 'track-2',
+      url: 'https://cdn.example/track-2.mp3',
+    }];
+
+    await expect(
+      flashBoardMediaBridge.importGeneratedAssets('generation-audio', assets),
+    ).rejects.toThrow('track 2 import failed');
+    expect(useFlashBoardStore.getState().activeGenerationRecords[0].results).toMatchObject([
+      { mediaFileId: 'media-track-1', outputId: 'track-1' },
+    ]);
+
+    await expect(
+      flashBoardMediaBridge.importGeneratedAssets('generation-audio', assets),
+    ).resolves.toMatchObject([
+      { mediaFileId: 'media-track-1', outputId: 'track-1' },
+      { mediaFileId: 'media-track-2', outputId: 'track-2' },
+    ]);
+    expect(importFile).toHaveBeenCalledTimes(3);
+    expect(useFlashBoardStore.getState().activeGenerationRecords[0]).toMatchObject({
+      job: { status: 'completed' },
+      outputs: [
+        { id: 'track-1', mediaFileId: 'media-track-1' },
+        { id: 'track-2', mediaFileId: 'media-track-2' },
+      ],
+    });
+  });
 });

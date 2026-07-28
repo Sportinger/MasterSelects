@@ -23,6 +23,7 @@ import {
   getRequiredTrackTypeForMedia,
   resolveUnlockedPlacementTrackId,
 } from './unlockedPlacementTrack';
+import { resolveLinkedAudioTrackId } from './linkedAudioPlacement';
 
 const log = Logger.create('ClipAddAction');
 function getPositiveFiniteDuration(value: number | undefined): number | undefined {
@@ -84,27 +85,26 @@ export async function applyAddClipAction(
   const sourceTranscript = sourceMediaFile?.transcriptStatus === 'ready' && sourceMediaFile.transcript?.length
     ? sourceMediaFile.transcript
     : undefined;
-
   if (mediaType === 'video') {
     const { videoId: clipId, audioId } = generateLinkedClipIds();
     let finalAudioClipId: string | undefined;
-
+    const audioTrackResolution = resolveLinkedAudioTrackId(
+      get().tracks,
+      get().clips,
+      startTime,
+      estimatedDuration,
+      options?.linkedAudioTrackId,
+      options?.linkedAudioTrackId ? trackId : undefined,
+    );
+    if (audioTrackResolution.requestedTrackRejected) {
+      log.warn('Cannot add requested linked video/audio placement', {
+        linkedAudioTrackId: options?.linkedAudioTrackId,
+      });
+      return undefined;
+    }
     set(state => {
-      const endTime = startTime + estimatedDuration;
       const audioTracks = state.tracks.filter(t => t.type === 'audio' && !t.locked);
-      let audioTrackId: string | null = null;
-
-      for (const track of audioTracks) {
-        const trackClips = state.clips.filter(c => c.trackId === track.id);
-        const hasOverlap = trackClips.some(clip => {
-          const clipEnd = clip.startTime + clip.duration;
-          return !(endTime <= clip.startTime || startTime >= clipEnd);
-        });
-        if (!hasOverlap) {
-          audioTrackId = track.id;
-          break;
-        }
-      }
+      let audioTrackId = audioTrackResolution.trackId;
 
       let newTracks = state.tracks;
       if (!audioTrackId) {

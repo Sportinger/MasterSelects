@@ -6,6 +6,10 @@ import type { TimelineClip } from '../../../types';
 import type { Composition } from '../../../stores/mediaStore';
 import { ALL_BLEND_MODES } from '../constants';
 import { getShortcutRegistry } from '../../../services/shortcutRegistry';
+import {
+  claimShortcut,
+  isTextEntryTarget,
+} from '../../../services/shortcutFocusPolicy';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { isUserVisibleComposition } from '../../../stores/mediaStore/compositionVisibility';
@@ -21,53 +25,17 @@ const GROUP_SHORTCUT_ACTIONS = new Set([
   'tool.navigationGroup',
 ]);
 
-const BLURRABLE_SHORTCUT_CONTROL_ROLES = new Set([
-  'button',
-  'checkbox',
-  'menuitem',
-  'menuitemcheckbox',
-  'menuitemradio',
-  'option',
-  'radio',
-  'switch',
-  'tab',
-]);
-
-function isTextEntryTarget(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLTextAreaElement ||
-    (target instanceof HTMLInputElement &&
-      target.type !== 'range' &&
-      target.type !== 'checkbox' &&
-      target.type !== 'radio') ||
-    (target instanceof HTMLElement && target.isContentEditable)
-  );
-}
-
-function blurFocusedShortcutControl(target: EventTarget | null): void {
-  const activeElement = document.activeElement;
-  const element =
-    activeElement instanceof HTMLElement
-      ? activeElement
-      : target instanceof HTMLElement
-        ? target
-        : null;
-
-  if (!element || isTextEntryTarget(element)) {
-    return;
-  }
-
-  const role = element.getAttribute('role');
-  const isShortcutControl =
-    element instanceof HTMLButtonElement ||
-    element instanceof HTMLSelectElement ||
-    element instanceof HTMLInputElement ||
-    (role !== null && BLURRABLE_SHORTCUT_CONTROL_ROLES.has(role));
-
-  if (isShortcutControl) {
-    element.blur();
-  }
-}
+const MASK_CONTEXT_SHORTCUT_ACTIONS = [
+  'mask.pen',
+  'mask.edit',
+  'mask.rectangle',
+  'mask.ellipse',
+  'mask.closePath',
+  'mask.invert',
+  'mask.toggleOutline',
+  'mask.selectAllVertices',
+  'mask.toggleVertexHandles',
+] as const;
 
 function getFreshPlayheadPosition(fallbackPosition: number): number {
   const storePosition = useTimelineStore.getState().playheadPosition;
@@ -180,10 +148,12 @@ export function useTimelineKeyboard({
         }
       }
 
-      // Play/Pause (also blur any focused control that was last clicked)
+      // Play/Pause claims global ownership and releases stale control focus.
       if (registry.matches('playback.playPause', e)) {
-        blurFocusedShortcutControl(e.target);
-        e.preventDefault();
+        if (!claimShortcut(e, 'playback.playPause', {
+          blurFocusedControl: true,
+          deferToFocusedControl: false,
+        })) return;
         if (isPlaying) {
           pause();
         } else {
@@ -194,54 +164,54 @@ export function useTimelineKeyboard({
 
       // Set In point
       if (registry.matches('edit.setIn', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'edit.setIn')) return;
         setInPointAtPlayhead();
         return;
       }
 
       // Set Out point
       if (registry.matches('edit.setOut', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'edit.setOut')) return;
         setOutPointAtPlayhead();
         return;
       }
 
       // Clear In/Out
       if (registry.matches('edit.clearInOut', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'edit.clearInOut')) return;
         clearInOut();
         return;
       }
 
       // Play reverse
       if (registry.matches('playback.playReverse', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'playback.playReverse')) return;
         playReverse();
         return;
       }
 
       // Pause
       if (registry.matches('playback.pause', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'playback.pause')) return;
         pause();
         return;
       }
 
       // Toggle loop / Play forward
       if (registry.matches('playback.toggleLoop', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'playback.toggleLoop')) return;
         toggleLoopPlayback();
         return;
       }
       if (registry.matches('playback.playForward', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'playback.playForward')) return;
         playForward();
         return;
       }
 
       // Add marker
       if (registry.matches('edit.addMarker', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'edit.addMarker')) return;
         if (addMarker) {
           addMarker(playheadPosition);
         }
@@ -250,8 +220,10 @@ export function useTimelineKeyboard({
 
       // Delete: remove selected keyframes first, then clips
       if (registry.matches('edit.delete', e)) {
-        e.preventDefault();
-        const propertiesSelection = useTimelineStore.getState().propertiesSelection;
+        const timelineState = useTimelineStore.getState();
+        if (timelineState.maskEditMode !== 'none') return;
+        if (!claimShortcut(e, 'edit.delete')) return;
+        const propertiesSelection = timelineState.propertiesSelection;
         if (propertiesSelection?.kind === 'transition') {
           const transactionId = `keyboard-delete-transition:${propertiesSelection.transitionId}:${Date.now()}`;
           applyTimelineEditOperation({
@@ -295,7 +267,7 @@ export function useTimelineKeyboard({
       if (registry.matches('edit.copy', e)) {
         const timelineState = useTimelineStore.getState();
         if (timelineState.maskPanelActive && timelineState.activeMaskId) return;
-        e.preventDefault();
+        if (!claimShortcut(e, 'edit.copy')) return;
         if (selectedKeyframeIds.size > 0) {
           copyKeyframes();
         } else {
@@ -308,29 +280,35 @@ export function useTimelineKeyboard({
       if (registry.matches('edit.paste', e)) {
         const timelineState = useTimelineStore.getState();
         if (timelineState.maskPanelActive && timelineState.hasClipboardMask()) return;
-        e.preventDefault();
+        if (!claimShortcut(e, 'edit.paste')) return;
         pasteKeyframes();
         return;
       }
 
       // Split at playhead
       if (registry.matches('edit.splitAtPlayhead', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'edit.splitAtPlayhead')) return;
         splitClipAtPlayhead();
         return;
       }
 
       const timelineToolState = useTimelineStore.getState();
+      if (
+        timelineToolState.maskPanelActive &&
+        MASK_CONTEXT_SHORTCUT_ACTIONS.some((action) => registry.matches(action, e))
+      ) {
+        return;
+      }
 
       // Timeline tool selection
       if (registry.matches('tool.select', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'tool.select')) return;
         timelineToolState.setActiveTimelineTool('select');
         return;
       }
 
       if (registry.matches('tool.selectionGroup', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'tool.selectionGroup')) return;
         timelineToolState.cycleTimelineToolGroup('selection', e.shiftKey ? -1 : 1);
         return;
       }
@@ -339,25 +317,25 @@ export function useTimelineKeyboard({
       // the shortcut land on the single Blade/Razor tool instead of cycling to
       // Blade All Tracks.
       if (registry.matches('tool.cutToggle', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'tool.cutToggle')) return;
         timelineToolState.setActiveTimelineTool('blade');
         return;
       }
 
       if (registry.matches('tool.trimGroup', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'tool.trimGroup')) return;
         timelineToolState.cycleTimelineToolGroup('trim', e.shiftKey ? -1 : 1);
         return;
       }
 
       if (registry.matches('tool.placementGroup', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'tool.placementGroup')) return;
         timelineToolState.cycleTimelineToolGroup('placement', e.shiftKey ? -1 : 1);
         return;
       }
 
       if (registry.matches('tool.navigationGroup', e)) {
-        e.preventDefault();
+        if (!claimShortcut(e, 'tool.navigationGroup')) return;
         timelineToolState.cycleTimelineToolGroup('navigation', e.shiftKey ? -1 : 1);
         return;
       }
@@ -366,7 +344,7 @@ export function useTimelineKeyboard({
         if (!tool.shortcutActionId || GROUP_SHORTCUT_ACTIONS.has(tool.shortcutActionId)) continue;
         if (!registry.matches(tool.shortcutActionId, e)) continue;
 
-        e.preventDefault();
+        if (!claimShortcut(e, tool.shortcutActionId)) return;
         if (tool.kind === 'command') {
           runTimelineToolCommand(tool.id);
         } else {
@@ -383,8 +361,13 @@ export function useTimelineKeyboard({
       }
 
       // Blend mode cycling
-      if (registry.matches('edit.blendModeNext', e) || registry.matches('edit.blendModePrev', e)) {
-        e.preventDefault();
+      const blendModeAction = registry.matches('edit.blendModeNext', e)
+        ? 'edit.blendModeNext'
+        : registry.matches('edit.blendModePrev', e)
+          ? 'edit.blendModePrev'
+          : null;
+      if (blendModeAction) {
+        if (!claimShortcut(e, blendModeAction)) return;
         const firstSelectedId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
         if (!firstSelectedId) return;
 
@@ -393,7 +376,7 @@ export function useTimelineKeyboard({
 
         const currentMode = clip.transform?.blendMode || 'normal';
         const currentIndex = ALL_BLEND_MODES.indexOf(currentMode);
-        const direction = registry.matches('edit.blendModeNext', e) ? 1 : -1;
+        const direction = blendModeAction === 'edit.blendModeNext' ? 1 : -1;
         const nextIndex =
           (currentIndex + direction + ALL_BLEND_MODES.length) %
           ALL_BLEND_MODES.length;
@@ -419,7 +402,9 @@ export function useTimelineKeyboard({
 
       // Frame backward
       if (registry.matches('nav.frameBackward', e)) {
-        e.preventDefault();
+        const timelineState = useTimelineStore.getState();
+        if (timelineState.maskEditMode === 'editing' && timelineState.selectedVertexIds.size > 0) return;
+        if (!claimShortcut(e, 'nav.frameBackward')) return;
         if (activeComposition) {
           const frameRate = Math.max(1, activeComposition.frameRate || 30);
           const currentPosition = getFreshPlayheadPosition(playheadPosition);
@@ -432,7 +417,9 @@ export function useTimelineKeyboard({
 
       // Frame forward
       if (registry.matches('nav.frameForward', e)) {
-        e.preventDefault();
+        const timelineState = useTimelineStore.getState();
+        if (timelineState.maskEditMode === 'editing' && timelineState.selectedVertexIds.size > 0) return;
+        if (!claimShortcut(e, 'nav.frameForward')) return;
         if (activeComposition) {
           const frameRate = Math.max(1, activeComposition.frameRate || 30);
           const currentPosition = getFreshPlayheadPosition(playheadPosition);

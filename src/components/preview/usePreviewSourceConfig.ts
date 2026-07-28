@@ -4,6 +4,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useDockStore } from '../../stores/dockStore';
 import { useMediaStore, type Composition, type MediaFile } from '../../stores/mediaStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useTimelineStore } from '../../stores/timeline';
 import type { TimelineTrack } from '../../types/timeline';
 import type { PreviewPanelSource } from '../../types/dock';
 import {
@@ -55,6 +56,7 @@ export function usePreviewSourceConfig({
   const previewCompositionId = useMediaStore(state => state.previewCompositionId);
   const sourceMonitorFileId = useMediaStore(state => state.sourceMonitorFileId);
   const sourceMonitorPlaybackRequestId = useMediaStore(state => state.sourceMonitorPlaybackRequestId);
+  const timelineIsPlaying = useTimelineStore(state => state.isPlaying);
   const sourceMonitorFile = useMediaStore(state =>
     state.sourceMonitorFileId ? state.files.find(f => f.id === state.sourceMonitorFileId) ?? null : null
   );
@@ -74,6 +76,7 @@ export function usePreviewSourceConfig({
   );
 
   const sourceMonitorActive = source.type === 'activeComp'
+    && !timelineIsPlaying
     && sourceMonitorFile !== null
     && getFirstEditablePreviewPanelId() === panelId;
 
@@ -90,6 +93,12 @@ export function usePreviewSourceConfig({
       }
     }
   }, [activeCompositionId, sourceMonitorFileId]);
+
+  useEffect(() => {
+    if (timelineIsPlaying && sourceMonitorFileId) {
+      useMediaStore.getState().setSourceMonitorFile(null);
+    }
+  }, [sourceMonitorFileId, timelineIsPlaying]);
 
   const slotPreviewActive = source.type === 'activeComp' && previewCompositionId !== null;
   const renderSource = useMemo<PreviewPanelSource>(

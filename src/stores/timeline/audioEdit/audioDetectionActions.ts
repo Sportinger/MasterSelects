@@ -6,11 +6,17 @@ import type {
   SliceCreator,
   TimelineAudioRegionSelection,
 } from '../types';
-import {
-  detectClipSilenceRanges as detectClipSilenceRangesForAudio,
-  type AudioSilenceRange,
+import type {
+  AudioSilenceDetectionOptions,
+  AudioSilenceRange,
 } from '../../../services/audio/audioSilenceDetection';
 import { getClipAudioSourceRange } from '../../../services/audio/audioRepairSuggestionOperations';
+import {
+  detectRmsAudioSilence,
+  detectSilenceWithAudioArtifacts,
+  normalizeAudioEditSilenceRanges,
+  resolveRoomToneProfileFillParams,
+} from '../../../services/audio/intelligence/audioEditDetectionArtifacts';
 import { Logger } from '../../../services/logger';
 import { captureSnapshot } from '../../historyStore';
 import { clearProcessedAudioAnalysisRefs } from '../helpers/audioAnalysisStateHelpers';
@@ -32,51 +38,18 @@ function sourceTimeToTimelineTime(clip: TimelineClip, sourceTime: number): numbe
   return clip.startTime + ratio * clip.duration;
 }
 
-function normalizeDetectedSilenceRanges(
-  clip: TimelineClip,
-  ranges: readonly AudioSilenceRange[],
-): AudioSilenceRange[] {
-  const sourceRange = getClipAudioSourceRange(clip);
-  const normalized = ranges
-    .map(range => {
-      const start = Math.max(sourceRange.start, Math.min(sourceRange.end, Math.min(range.start, range.end)));
-      const end = Math.max(sourceRange.start, Math.min(sourceRange.end, Math.max(range.start, range.end)));
-      return {
-        start,
-        end,
-        duration: Math.max(0, end - start),
-        rmsDb: typeof range.rmsDb === 'number' && Number.isFinite(range.rmsDb) ? range.rmsDb : -120,
-      };
-    })
-    .filter(range => range.duration > 0.01)
-    .toSorted((a, b) => a.start - b.start);
-
-  const merged: AudioSilenceRange[] = [];
-  for (const range of normalized) {
-    const previous = merged[merged.length - 1];
-    if (previous && range.start <= previous.end + 0.001) {
-      previous.end = Math.max(previous.end, range.end);
-      previous.duration = previous.end - previous.start;
-      previous.rmsDb = Math.min(previous.rmsDb, range.rmsDb);
-      continue;
-    }
-    merged.push({ ...range });
-  }
-  return merged;
-}
-
 function rangesOverlap(a: { start: number; end: number }, b: { start: number; end: number }): boolean {
   return Math.min(a.end, b.end) - Math.max(a.start, b.start) > 0.0005;
 }
 
 async function resolveDetectedSilenceRanges(
-  clip: TimelineClip,
   options: ApplyDetectedSilenceRemovalOptions,
+  detect: (options: AudioSilenceDetectionOptions) => Promise<AudioSilenceRange[]>,
 ): Promise<AudioSilenceRange[]> {
   if (options.ranges?.length) {
     return options.ranges;
   }
-  return detectClipSilenceRangesForAudio(clip, options.detection ?? {});
+  return detect(options.detection ?? {});
 }
 
 function getSelectedRoomToneTargetRange(
@@ -107,7 +80,7 @@ export const createAudioDetectionActions: SliceCreator<DetectedAudioEditActions>
       return [];
     }
 
-    return detectClipSilenceRangesForAudio(clip, options);
+    return detectSilenceWithAudioArtifacts(clip, options);
   },
 
   applyDetectedSilenceRemoval: async (clipId, options = {}) => {
@@ -124,9 +97,12 @@ export const createAudioDetectionActions: SliceCreator<DetectedAudioEditActions>
       return [];
     }
 
-    const ranges = normalizeDetectedSilenceRanges(
+    const ranges = normalizeAudioEditSilenceRanges(
       clip,
-      await resolveDetectedSilenceRanges(clip, options),
+      await resolveDetectedSilenceRanges(
+        options,
+        detection => detectSilenceWithAudioArtifacts(clip, detection),
+      ),
     );
     if (ranges.length === 0) {
       log.info('No detected silence ranges to remove', { clipId });
@@ -227,9 +203,14 @@ export const createAudioDetectionActions: SliceCreator<DetectedAudioEditActions>
       return null;
     }
 
+    const profileFillParams = options.sourceRanges?.length
+      ? undefined
+      : await resolveRoomToneProfileFillParams(clip);
     const detectedSourceRanges = options.sourceRanges?.length
       ? options.sourceRanges
-      : await detectClipSilenceRangesForAudio(clip, {
+      : profileFillParams
+        ? []
+        : await detectRmsAudioSilence(clip, {
           thresholdDb: options.detection?.thresholdDb ?? -48,
           minSilenceSeconds: options.detection?.minSilenceSeconds ?? 0.2,
           windowSeconds: options.detection?.windowSeconds,
@@ -238,11 +219,15 @@ export const createAudioDetectionActions: SliceCreator<DetectedAudioEditActions>
           mergeGapSeconds: options.detection?.mergeGapSeconds,
           maxRanges: options.detection?.maxRanges ?? 16,
         });
-    const sourceRanges = normalizeDetectedSilenceRanges(clip, detectedSourceRanges)
+    const sourceRanges = normalizeAudioEditSilenceRanges(clip, detectedSourceRanges)
       .filter(range => !rangesOverlap(range, clampedTarget))
       .slice(0, 12);
-    const encodedSourceRanges = encodeRoomToneSourceRanges(sourceRanges);
-    const firstSourceRange = sourceRanges[0];
+    const encodedSourceRanges = profileFillParams?.roomToneSourceRanges
+      ?? encodeRoomToneSourceRanges(sourceRanges);
+    const profileSourceRanges = profileFillParams?.roomToneSourceRanges
+      ? JSON.parse(profileFillParams.roomToneSourceRanges) as { start: number; end: number }[]
+      : [];
+    const firstSourceRange = profileSourceRanges[0] ?? sourceRanges[0];
     const operation: ClipAudioEditOperation = {
       id: createAudioEditOperationId(),
       type: 'room-tone-fill',
@@ -255,7 +240,7 @@ export const createAudioDetectionActions: SliceCreator<DetectedAudioEditActions>
         roomToneGainDb: options.gainDb ?? 0,
         crossfadeSeconds: options.crossfadeSeconds ?? 0.025,
         generatedNoiseDb: -66,
-        roomToneSourceCount: sourceRanges.length,
+        roomToneSourceCount: profileSourceRanges.length || sourceRanges.length,
         ...(encodedSourceRanges ? { roomToneSourceRanges: encodedSourceRanges } : {}),
         ...(firstSourceRange ? {
           sourceInPoint: firstSourceRange.start,

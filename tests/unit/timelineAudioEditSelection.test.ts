@@ -58,6 +58,62 @@ describe('timeline audio edit selection', () => {
     expect(selection.endTime).toBeCloseTo(2.86, 1);
   });
 
+  it('refines valley snaps to true zero crossings when sampleSnap is provided', () => {
+    const clip = createMockClip({
+      id: 'audio-clip',
+      trackId: 'audio-1',
+      startTime: 0,
+      duration: 4,
+      inPoint: 0,
+      outPoint: 4,
+      waveform: [0.8, 0.7, 0.02, 0.6, 0.5, 0.03, 0.7, 0.9],
+    });
+    const sampleRate = 1000;
+    const channelData = new Float32Array(4 * sampleRate + 1);
+    for (let i = 0; i < channelData.length; i += 1) {
+      channelData[i] = Math.sin(2 * Math.PI * 50 * (i / sampleRate) + Math.PI / 4);
+    }
+
+    const selection = resolveTimelineAudioRegionSelection({
+      clip,
+      anchorTimelineTime: 0.85,
+      focusTimelineTime: 2.35,
+      snapThresholdSeconds: 0.65,
+      sampleSnap: { channelData, sampleRate },
+    });
+
+    expect(selection.snappedToZeroCrossing).toBe(true);
+    expect(selection.sourceInPoint).toBeCloseTo(1.1475, 6);
+    expect(selection.sourceOutPoint).toBeCloseTo(2.8575, 6);
+    expect(selection.startTime).toBeCloseTo(1.1475, 6);
+    expect(selection.endTime).toBeCloseTo(2.8575, 6);
+  });
+
+  it('keeps the coarse valley snap without the zero-crossing flag when no crossing exists', () => {
+    const clip = createMockClip({
+      id: 'audio-clip',
+      trackId: 'audio-1',
+      startTime: 0,
+      duration: 4,
+      inPoint: 0,
+      outPoint: 4,
+      waveform: [0.8, 0.7, 0.02, 0.6, 0.5, 0.03, 0.7, 0.9],
+    });
+    const channelData = new Float32Array(4001).fill(0.5);
+
+    const selection = resolveTimelineAudioRegionSelection({
+      clip,
+      anchorTimelineTime: 0.85,
+      focusTimelineTime: 2.35,
+      snapThresholdSeconds: 0.65,
+      sampleSnap: { channelData, sampleRate: 1000 },
+    });
+
+    expect(selection.snappedToZeroCrossing).toBe(false);
+    expect(selection.startTime).toBeCloseTo(1.14, 1);
+    expect(selection.endTime).toBeCloseTo(2.86, 1);
+  });
+
   it('maps reversed clips back to ascending source ranges', () => {
     const clip = createMockClip({
       id: 'reversed-audio',
