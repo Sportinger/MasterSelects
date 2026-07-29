@@ -5,9 +5,15 @@ import {
 import type { KernelTranscriptMoment } from './types';
 
 export const TRANSCRIPT_MOMENT_INDEX_VERSION = 'app-transcript-v2';
-export const TRANSCRIPT_MOMENT_WORD_CAP = 400;
-const TRANSCRIPT_PAGE_SIZE = 120;
-const SPEECH_MARKERS_PAGE_SIZE = 250;
+/**
+ * No word ceiling: the kernel used to see only the first ~400 words, so a
+ * two-hour interview was compiled from its first two minutes without saying so.
+ */
+export const TRANSCRIPT_MOMENT_WORD_CAP = Number.POSITIVE_INFINITY;
+// Page size for collecting the transcript. The tool no longer caps pages, so
+// a two-hour transcript arrives in a handful of round trips instead of ~150.
+const TRANSCRIPT_PAGE_SIZE = 5_000;
+const SPEECH_MARKERS_PAGE_SIZE = 5_000;
 // A longer pause represents a natural phrase boundary.
 const PHRASE_GAP_BOUNDARY_SECONDS = 0.6;
 // Keep each phrase small enough to be useful as a single editing moment.

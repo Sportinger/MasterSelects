@@ -242,6 +242,35 @@
   color: var(--text-primary);
 }
 
+.help-menu-trigger {
+  height: 22px;
+  margin: 3px 2px 3px 4px;
+  border: 1px solid rgba(204, 91, 91, 0.32);
+  border-radius: 5px;
+  background: rgba(116, 116, 122, 0.1);
+  color: #c87878;
+  padding: 0 8px;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.045em;
+}
+
+.help-menu-trigger:hover,
+.help-menu-trigger.active {
+  border-color: rgba(221, 105, 105, 0.58);
+  background: rgba(170, 72, 72, 0.14);
+  color: #e18b8b;
+}
+
+.help-menu-dropdown {
+  min-width: 190px;
+}
+
+[data-theme="light"] .help-menu-trigger {
+  background: rgba(80, 80, 86, 0.07);
+  color: #a74747;
+}
+
 .menu-dropdown {
   position: absolute;
   top: 100%;

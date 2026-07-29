@@ -276,9 +276,17 @@ export function useMediaPanelSelectionCommands({
   });
   const floatingTextIdRef = useRef(0);
   const [floatingTexts, setFloatingTexts] = useState<FloatingText[]>([]);
-  const hasTimelineClipboardSelection = useTimelineStore((state) => (
-    state.selectedClipIds.size > 0 || state.selectedKeyframeIds.size > 0
-  ));
+  const timelineClipboardRouting = useTimelineStore((state) => {
+    const hasSelection = state.selectedClipIds.size > 0 || state.selectedKeyframeIds.size > 0;
+    const ownsPaste =
+      hasSelection ||
+      Boolean(state.clipboardData?.length) ||
+      Boolean(state.clipboardKeyframes?.length) ||
+      (state.maskPanelActive && state.clipboardMask !== null);
+    return (hasSelection ? 1 : 0) | (ownsPaste ? 2 : 0);
+  });
+  const hasTimelineSelection = (timelineClipboardRouting & 1) !== 0;
+  const timelineOwnsPaste = (timelineClipboardRouting & 2) !== 0;
   const loadTimelineState = useTimelineStore((state) => state.loadState);
   const addTimelineClip = useTimelineStore((state) => state.addClip);
   const setTimelineDuration = useTimelineStore((state) => state.setDuration);
@@ -518,9 +526,9 @@ export function useMediaPanelSelectionCommands({
       if (!isMediaPanelPasteTarget(root, lastPointerRef.current)) return;
       const active = document.activeElement as HTMLElement | null;
       if (isEditableElement(active)) return;
-      if (hasTimelineClipboardSelection) return;
 
       if ((e.key === 'Delete' || e.key === 'Backspace') && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        if (hasTimelineSelection) return;
         if (selectedIds.length === 0) return;
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -531,12 +539,14 @@ export function useMediaPanelSelectionCommands({
       if (!(e.ctrlKey || e.metaKey) || e.shiftKey) return;
       const key = e.key.toLowerCase();
       if (key === 'c') {
+        if (hasTimelineSelection) return;
         if (selectedIds.length === 0) return;
         e.preventDefault();
         e.stopImmediatePropagation();
         copyMediaItems([...selectedIds]);
         showFloatingText('Copied');
       } else if (key === 'v') {
+        if (timelineOwnsPaste) return;
         e.preventDefault();
         e.stopImmediatePropagation();
         void (async () => {
@@ -549,6 +559,7 @@ export function useMediaPanelSelectionCommands({
           if (hasMediaClipboard()) pasteMediaPanelItems();
         });
       } else if (key === 'd') {
+        if (hasTimelineSelection) return;
         if (selectedIds.length === 0) return;
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -563,11 +574,12 @@ export function useMediaPanelSelectionCommands({
     duplicateMediaItems,
     handleDelete,
     hasMediaClipboard,
-    hasTimelineClipboardSelection,
+    hasTimelineSelection,
     importClipboardFiles,
     pasteMediaPanelItems,
     selectedIds,
     showFloatingText,
+    timelineOwnsPaste,
   ]);
 
   useEffect(() => {
@@ -576,7 +588,7 @@ export function useMediaPanelSelectionCommands({
       if (!isMediaPanelPasteTarget(root, lastPointerRef.current)) return;
       const active = document.activeElement as HTMLElement | null;
       if (isEditableElement(active)) return;
-      if (hasTimelineClipboardSelection) return;
+      if (timelineOwnsPaste) return;
 
       const clipboardData = event.clipboardData;
       const hasClipboardFiles = Boolean(
@@ -605,10 +617,10 @@ export function useMediaPanelSelectionCommands({
     document.addEventListener('paste', handlePaste, { capture: true });
     return () => document.removeEventListener('paste', handlePaste, { capture: true });
   }, [
-    hasTimelineClipboardSelection,
     importClipboardFiles,
     pasteMediaPanelItems,
     showFloatingText,
+    timelineOwnsPaste,
   ]);
 
   return {

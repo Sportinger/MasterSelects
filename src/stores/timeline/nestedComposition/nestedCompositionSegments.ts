@@ -57,6 +57,10 @@ export interface ClipSegmentData {
   startNorm: number;
   endNorm: number;
   thumbnails: string[];
+  mediaFileId?: string;
+  sourceInPoint?: number;
+  sourceOutPoint?: number;
+  reversed?: boolean;
 }
 
 export async function buildClipSegments(
@@ -104,6 +108,10 @@ export async function buildClipSegments(
       startNorm,
       endNorm,
       thumbnails,
+      mediaFileId: nestedClip?.source?.mediaFileId ?? nestedClip?.mediaFileId ?? serializedClip.mediaFileId,
+      sourceInPoint: serializedClip.inPoint,
+      sourceOutPoint: serializedClip.outPoint,
+      reversed: serializedClip.reversed,
     });
   }
 

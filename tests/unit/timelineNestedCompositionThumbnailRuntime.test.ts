@@ -75,7 +75,7 @@ describe('timeline nested composition thumbnail runtime', () => {
     toDataURLSpy.mockRestore();
   });
 
-  it('generates segment thumbnails from ready legacy video handles', async () => {
+  it('does not seek active legacy video handles while preparing timeline thumbnails', async () => {
     const video = createReadyVideo();
     const clip = createClip({ type: 'video', videoElement: video });
 
@@ -87,10 +87,9 @@ describe('timeline nested composition thumbnail runtime', () => {
       maxCount: 2,
     });
 
-    expect(thumbnails).toEqual(['data:image/jpeg;base64,thumb', 'data:image/jpeg;base64,thumb']);
-    expect(seekVideoMock).toHaveBeenCalledWith(video, 5);
-    expect(seekVideoMock).toHaveBeenCalledWith(video, 65);
-    expect(drawImage).toHaveBeenCalledWith(video, 0, 0, 71, 40);
+    expect(thumbnails).toEqual([]);
+    expect(seekVideoMock).not.toHaveBeenCalled();
+    expect(drawImage).not.toHaveBeenCalled();
   });
 
   it('generates segment thumbnails from image handles', async () => {

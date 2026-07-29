@@ -33,6 +33,10 @@ describe('TranscriptWorkspaceHeader', () => {
           finalStatus: 'waiting',
           overallProgress: 36,
           providers: { deepgram: 'complete', openai: 'running' },
+          providerProgress: {
+            deepgram: { completedChunks: 2, totalChunks: 2, percent: 100 },
+            openai: { completedChunks: 1, totalChunks: 2, percent: 50 },
+          },
           stage: 'transcribing',
         }}
         summary={{
@@ -45,7 +49,11 @@ describe('TranscriptWorkspaceHeader', () => {
     expect(screen.getByText('Listening')).toBeInTheDocument();
     expect(screen.getByText('Deepgram')).toBeInTheDocument();
     expect(screen.getByText('OpenAI')).toBeInTheDocument();
-    expect(screen.getByText('Speakers')).toBeInTheDocument();
+    expect(screen.getByText('Merge')).toBeInTheDocument();
+    expect(screen.getByText('2/2 chunks · text, timing, confidence')).toBeInTheDocument();
+    expect(screen.getByText('1/2 chunks · speaker separation')).toBeInTheDocument();
+    expect(screen.getByText('100% · Done')).toBeInTheDocument();
+    expect(screen.getByText('50% · Running')).toBeInTheDocument();
     expect(screen.queryByText('Best Quality ready')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -68,5 +76,24 @@ describe('TranscriptWorkspaceHeader', () => {
     expect(screen.getByText('Deepgram text + timing')).toBeInTheDocument();
     expect(screen.getByText('OpenAI speakers')).toBeInTheDocument();
     expect(screen.queryByText(/review/i)).not.toBeInTheDocument();
+  });
+
+  it('surfaces an OpenAI chunk failure instead of presenting a silent full success', () => {
+    render(
+      <TranscriptWorkspaceHeader
+        {...baseProps}
+        run={null}
+        summary={{
+          providers: { deepgram: 'complete', openai: 'error' },
+          stage: 'complete',
+        }}
+        transcriptStatus="ready"
+      />,
+    );
+
+    expect(screen.getByText('Transcript ready with speaker fallback')).toBeInTheDocument();
+    expect(screen.getByText(
+      'OpenAI failed for one or more chunks · Deepgram speakers kept',
+    )).toBeInTheDocument();
   });
 });

@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '2.4.3';
+export const APP_VERSION = '2.4.4';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -28,7 +28,7 @@ export const FEATURED_VIDEO: {
   banner: {
     type: 'success',
     title: `MasterSelects ${APP_VERSION}`,
-    message: 'Simple Synth release: subtractive filters, envelopes, LFO modulation, presets, CC automation, ergonomic knobs and interactive ADSR editing, plus cleaner audio/MIDI clip previews and playback/export-matched voice stealing.',
+    message: 'Reliability release: resumable parallel cloud transcription with live progress, faster nested-composition playback, waveform-first audio comps, stricter FAST export preparation and safer frame capture.',
     animated: true,
   },
 };
@@ -37,7 +37,7 @@ export const FEATURED_VIDEO: {
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
   title: `MasterSelects ${APP_VERSION}`,
-  message: 'Simple Synth release: subtractive filters, envelopes, LFO modulation, presets, CC automation, ergonomic knobs and interactive ADSR editing, plus cleaner audio/MIDI clip previews and playback/export-matched voice stealing.',
+  message: 'Reliability release: resumable parallel cloud transcription with live progress, faster nested-composition playback, waveform-first audio comps, stricter FAST export preparation and safer frame capture.',
   animated: true,
 };
 

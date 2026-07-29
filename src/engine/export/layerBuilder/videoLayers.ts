@@ -69,7 +69,9 @@ export function buildVideoLayer(
   }
 
   if (!video) {
-    return null;
+    throw new Error(
+      `PRECISE export failed: no video source is available for clip "${clip.name}" at ${time.toFixed(3)}s.`
+    );
   }
 
   if (video.readyState >= 2) {
@@ -84,8 +86,10 @@ export function buildVideoLayer(
     };
   }
 
-  log.warn(`Video not ready for clip "${clip.name}" at ${time.toFixed(3)}s (readyState: ${video.readyState}), skipping frame`);
-  return null;
+  throw new Error(
+    `PRECISE export failed: video source for clip "${clip.name}" is not ready at ` +
+    `${time.toFixed(3)}s (readyState=${video.readyState}).`
+  );
 }
 
 export function buildNestedVideoLayer(
@@ -157,6 +161,8 @@ export function buildNestedVideoLayer(
     };
   }
 
-  log.warn(`Nested clip "${nestedClip.name}" video not ready (readyState=${exportVideo?.readyState ?? 'missing'}), skipping frame`);
-  return null;
+  throw new Error(
+    `PRECISE export failed: nested video source "${nestedClip.name}" is not ready at ` +
+    `${mainTimelineTime.toFixed(3)}s (readyState=${exportVideo?.readyState ?? 'missing'}).`
+  );
 }

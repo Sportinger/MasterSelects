@@ -136,6 +136,7 @@ export function TranscriptTab({
   const fusionSummary = useMemo<TranscriptSummaryView | null>(() => {
     if (!transcriptArtifact && !transcriptFusionProgress) return null;
     return {
+      providers: transcriptFusionProgress?.providers ?? transcriptArtifact?.providerStatuses,
       stage: transcriptFusionProgress?.stage ?? 'complete',
     };
   }, [transcriptArtifact, transcriptFusionProgress]);
@@ -216,7 +217,7 @@ export function TranscriptTab({
     return Math.min(1, (maxEnd - minStart) / clipDuration);
   }, [transcript, inPoint, outPoint, clipId]);
 
-  const isPartial = transcriptStatus === 'ready' && clipCoverage > 0 && clipCoverage < 0.98;
+  const isPartial = transcriptStatus !== 'transcribing' && clipCoverage > 0 && clipCoverage < 0.98;
   const liveHybridProgress = useMemo<TranscriptRunView | null>(() => {
     if (!isHybridMode) return null;
 
@@ -240,15 +241,24 @@ export function TranscriptTab({
           : 'waiting';
     const finalProgress = stage === 'complete'
       ? 100
-      : stage === 'aligning'
-        ? 20
-        : stage === 'finalizing'
-          ? 90
-          : 0;
+      : transcriptFusionProgress?.mergeProgress
+        ?? (stage === 'aligning'
+          ? 20
+          : stage === 'finalizing'
+            ? 90
+            : 0);
     const finishedProviderCount = Object.values(providers)
       .filter(status => status === 'complete' || status === 'error').length;
-    const derivedOverallProgress = stage === 'transcribing'
-      ? 12 + finishedProviderCount * 24
+    const measuredProviderProgress = transcriptFusionProgress?.providerProgress
+      ? (
+          transcriptFusionProgress.providerProgress.deepgram.percent
+          + transcriptFusionProgress.providerProgress.openai.percent
+        ) / 2
+      : null;
+    const derivedOverallProgress = stage === 'transcribing' && measuredProviderProgress !== null
+      ? Math.round(measuredProviderProgress * 0.9)
+      : stage === 'transcribing'
+        ? 12 + finishedProviderCount * 24
       : stage === 'aligning'
         ? 68
         : stage === 'finalizing'
@@ -272,6 +282,7 @@ export function TranscriptTab({
       finalStatus,
       overallProgress: Math.max(transcriptProgress, derivedOverallProgress),
       providers,
+      providerProgress: transcriptFusionProgress?.providerProgress,
       stage,
     };
   }, [

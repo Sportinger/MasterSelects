@@ -2,7 +2,6 @@
   path: string;
   maxCurrentHits: number;
 }
-
 export const allowedAdapterPaths = [
   'src/services/aiTools/**',
   'src/services/guidedActions/**',
@@ -179,6 +178,9 @@ export const classCHardTargets = [
   { path: 'src/hooks/engine/useEngineResolutionSync.ts', maxCurrentHits: 3 },
   { path: 'src/hooks/engine/useEngineTimelineStateSync.ts', maxCurrentHits: 2 },
   { path: 'src/hooks/useGlobalHistory.ts', maxCurrentHits: 3 },
+  { path: 'src/marketing/landingBackgroundJob.ts', maxCurrentHits: 4 },
+  { path: 'src/marketing/LandingPanel.tsx', maxCurrentHits: 1 },
+  { path: 'src/marketing/runLandingBackgroundCreation.ts', maxCurrentHits: 14 },
   { path: 'src/services/agentTimeline/jobs/currentClipAnalysisExecution.ts', maxCurrentHits: 1 },
   { path: 'src/services/audio/audioDiagnostics.ts', maxCurrentHits: 1 },
   { path: 'src/services/audio/ClipAudioAnalysisOrchestrator.ts', maxCurrentHits: 1 },
@@ -292,8 +294,6 @@ export const classCHardTargets = [
 
 export const getStateAccessPolicyBaselines = {
   allowedAdapterPathCount: 26,
-  // Historical redistributions conserved totals; both baselines remain downward-only ratchets.
-  classCHardTargetFileCount: 242, // +2 merge union: repairTranscriptDuplicates, metronomeScheduler (BPM)
-  // 669 ->665(188) ->664(209) ->659(231) ->658(237) ->657(291) ->664(nested comps) ->673(#249 piano-roll) ->674(#298 rAF hook) ->679(audio-intelligence: +4 files, +1 warmup seam).
-  classCHardTargetMaxHits: 689, // merge union +6 (repairTranscriptDuplicates 2, metronomeScheduler 4) +4 final-work growth (preview source config, external drop, aligned timings)
+  classCHardTargetFileCount: 245, // +3 classified landing-background workflow files
+  classCHardTargetMaxHits: 708, // +19 classified landing-background workflow accesses
 } as const;

@@ -362,7 +362,13 @@ export async function handleGetClipTranscript(
     word.end >= sourceStart && word.start <= sourceEnd
   ));
   const offset = Math.max(0, typeof args.offset === 'number' ? Math.floor(args.offset) : 0);
-  const limit = Math.min(200, Math.max(1, typeof args.limit === 'number' ? Math.floor(args.limit) : 120));
+  // No upper page cap: a two-hour transcript is ~20,000 words, and a 200-word
+  // ceiling made reading it whole impossible inside any sane tool budget.
+  // Callers that want pages still get them by passing an explicit limit.
+  const requestedLimit = typeof args.limit === 'number' ? Math.floor(args.limit) : undefined;
+  const limit = requestedLimit === undefined
+    ? matchingSegments.length
+    : Math.max(1, requestedLimit);
   const page = matchingSegments.slice(offset, offset + limit);
   const hasMore = offset + page.length < matchingSegments.length;
   const text = page.map(word => word.text).join(' ');

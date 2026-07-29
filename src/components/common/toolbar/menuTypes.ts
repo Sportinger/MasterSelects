@@ -1,4 +1,4 @@
-export type MenuId = 'file' | 'edit' | 'view' | 'output' | 'info' | null;
+export type MenuId = 'file' | 'edit' | 'view' | 'output' | 'info' | 'help' | null;
 
 export interface ToolbarShortcutLabels {
   new: string;

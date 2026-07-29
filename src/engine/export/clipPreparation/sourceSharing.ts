@@ -70,10 +70,17 @@ export function countFastSequentialVideoDecoders(
 ): number {
   const shareableSourceKeys = collectShareableRegularVideoSourceKeys(videoClips);
   const countedSharedSources = new Set<string>();
+  const nestedClipIds = new Set<string>();
   let decoderCount = 0;
 
   for (const clip of videoClips) {
-    if (clip.isComposition || clip.source?.type !== 'video') continue;
+    if (clip.isComposition) {
+      for (const { clip: nestedClip } of collectNestedVideoClips(clip)) {
+        nestedClipIds.add(nestedClip.id);
+      }
+      continue;
+    }
+    if (clip.source?.type !== 'video') continue;
 
     const key = getExportSourceKey(clip);
     if (shareableSourceKeys.has(key)) {
@@ -83,5 +90,7 @@ export function countFastSequentialVideoDecoders(
     decoderCount += 1;
   }
 
-  return decoderCount;
+  // Nested composition clips cannot share the sequential decoder path. FAST
+  // export registers each nested clip with its own parallel decoder.
+  return decoderCount + nestedClipIds.size;
 }

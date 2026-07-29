@@ -1,7 +1,7 @@
 import { getThumbnailBitmap, ensureThumbnailBitmap } from '../../../services/timeline/thumbnailBitmapCache';
 import type { TimelinePaintSourceClip } from '../../../timeline';
 import { drawTimelineClipCanvasCover } from './timelineClipCanvasCoverDraw';
-import { getTimelineClipCanvasCompositionThumbnailSlotUrls } from './timelineClipCanvasCompositionResource';
+import { getTimelineClipCanvasCompositionSegmentThumbnailSlotUrls } from './timelineClipCanvasCompositionResource';
 
 interface DrawTimelineClipCanvasCompositionSegmentsProps {
   maxThumbSlots: number;
@@ -19,6 +19,7 @@ export function drawTimelineClipCanvasCompositionSegmentThumbnails(
   requestRedraw: () => void,
   props: DrawTimelineClipCanvasCompositionSegmentsProps,
 ): number {
+  if (clip.trackType === 'audio' || clip.source?.type === 'audio') return 0;
   const segments = clip.clipSegments;
   if (!segments || segments.length === 0 || w < props.minThumbnailWidth) return 0;
 
@@ -37,13 +38,13 @@ export function drawTimelineClipCanvasCompositionSegmentThumbnails(
     ctx.fillStyle = 'rgba(15, 23, 42, 0.62)';
     ctx.fillRect(segmentX, top, segmentW, h);
 
-    if (segment.thumbnails.length > 0) {
-      const urls = getTimelineClipCanvasCompositionThumbnailSlotUrls(
-        segment.thumbnails,
-        segmentW,
-        props.thumbSlotPx,
-        props.maxThumbSlots,
-      );
+    const urls = getTimelineClipCanvasCompositionSegmentThumbnailSlotUrls(
+      segment,
+      segmentW,
+      props.thumbSlotPx,
+      props.maxThumbSlots,
+    );
+    if (urls.length > 0) {
       const count = urls.length;
       const slotW = segmentW / count;
       for (let index = 0; index < count; index += 1) {

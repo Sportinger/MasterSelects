@@ -28,6 +28,7 @@ import {
   restorePersistedClipVideoState,
 } from '../nestedRestore';
 import { startRestoredVectorRuntimeRestore } from '../vectorRuntimeRestore';
+import { recoverPersistedTranscriptStatus } from '../../../services/transcription/persistedTranscriptStatus';
 
 const log = Logger.create('Timeline');
 type MediaStoreState = ReturnType<typeof useMediaStore.getState>;
@@ -119,7 +120,10 @@ function createRestoredMediaClip(params: {
     isLoading: !needsReload,
     masks: serializedClip.masks,
     transcript: serializedClip.transcript,
-    transcriptStatus: serializedClip.transcriptStatus || 'none',
+    transcriptStatus: recoverPersistedTranscriptStatus(
+      serializedClip.transcriptStatus,
+      serializedClip.transcript,
+    ),
     analysis,
     analysisStatus: serializedClip.analysisStatus || 'none',
     faceAnalysisStatus,

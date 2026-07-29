@@ -1,4 +1,5 @@
 import { getThumbnailBitmap } from '../../../services/timeline/thumbnailBitmapCache';
+import { thumbnailCacheService } from '../../../services/thumbnailCacheService';
 import type { TimelineClipCanvasWorkerPreparedClipResources } from './timelineClipCanvasWorkerModel';
 
 export const TIMELINE_CLIP_CANVAS_COMPOSITION_SEGMENT_MAX_COUNT = 128;
@@ -8,6 +9,10 @@ export interface TimelineClipCanvasCompositionSegmentInput {
   startNorm: number;
   endNorm: number;
   thumbnails?: readonly string[];
+  mediaFileId?: string;
+  sourceInPoint?: number;
+  sourceOutPoint?: number;
+  reversed?: boolean;
 }
 
 export function getTimelineClipCanvasCompositionThumbnailSlotUrls(
@@ -24,9 +29,42 @@ export function getTimelineClipCanvasCompositionThumbnailSlotUrls(
   )]);
 }
 
+export function getTimelineClipCanvasCompositionSegmentThumbnailSlotUrls(
+  segment: TimelineClipCanvasCompositionSegmentInput,
+  segmentWidth: number,
+  thumbnailSlotPx: number,
+  maxThumbnailSlots: number,
+): readonly string[] {
+  const count = Math.max(1, Math.min(maxThumbnailSlots, Math.ceil(segmentWidth / thumbnailSlotPx)));
+  if (
+    segment.mediaFileId &&
+    Number.isFinite(segment.sourceInPoint) &&
+    Number.isFinite(segment.sourceOutPoint)
+  ) {
+    const cached = thumbnailCacheService.getThumbnailsForRange(
+      segment.mediaFileId,
+      segment.sourceInPoint!,
+      segment.sourceOutPoint!,
+      count,
+      segment.reversed,
+    ).filter((thumbnail): thumbnail is string => Boolean(thumbnail));
+    if (cached.length > 0) {
+      return cached;
+    }
+  }
+
+  return getTimelineClipCanvasCompositionThumbnailSlotUrls(
+    segment.thumbnails ?? [],
+    segmentWidth,
+    thumbnailSlotPx,
+    maxThumbnailSlots,
+  );
+}
+
 export interface TimelineClipCanvasCompositionResourceClipInput {
   isComposition?: boolean;
   compositionId?: string;
+  trackType?: 'video' | 'audio' | 'midi';
   source?: {
     type?: string | null;
   } | null;
@@ -48,7 +86,7 @@ type WorkerPreparedCompositionSegmentThumbnailStripResource = NonNullable<
 function hasTimelineClipCanvasCompositionAudioMixdown(
   clip: TimelineClipCanvasCompositionResourceClipInput,
 ): boolean {
-  if (clip.source?.type !== 'audio') return false;
+  if (clip.trackType !== 'audio' && clip.source?.type !== 'audio') return false;
   return Boolean(
     clip.mixdownGenerating ||
       (clip.mixdownWaveform && clip.mixdownWaveform.length > 0) ||
@@ -71,6 +109,7 @@ export function hasTimelineClipCanvasCompositionDecorations(
 function createTimelineClipCanvasWorkerCompositionSegmentRects(
   clip: TimelineClipCanvasCompositionResourceClipInput,
 ): Float32Array | undefined {
+  if (clip.trackType === 'audio' || clip.source?.type === 'audio') return undefined;
   const segments = clip.clipSegments;
   if (!segments || segments.length === 0) return undefined;
   const values: number[] = [];
@@ -121,6 +160,7 @@ function createTimelineClipCanvasWorkerCompositionSegmentThumbnailStripResource(
   maxBitmapHeight: number;
 }): WorkerPreparedCompositionSegmentThumbnailStripResource | undefined {
   const { clip, clipWidth, height } = input;
+  if (clip.trackType === 'audio' || clip.source?.type === 'audio') return undefined;
   const segments = clip.clipSegments;
   if (!segments || segments.length === 0 || clipWidth < input.minThumbnailWidth || typeof OffscreenCanvas === 'undefined') {
     return undefined;
@@ -146,14 +186,13 @@ function createTimelineClipCanvasWorkerCompositionSegmentThumbnailStripResource(
     ctx.fillStyle = 'rgba(15, 23, 42, 0.62)';
     ctx.fillRect(segmentX, 0, segmentW, bitmapHeight);
 
-    const thumbnails = segment.thumbnails ?? [];
-    if (thumbnails.length > 0) {
-      const urls = getTimelineClipCanvasCompositionThumbnailSlotUrls(
-        thumbnails,
-        segmentW / bitmapWidth * clipWidth,
-        input.thumbnailSlotPx,
-        input.maxThumbnailSlots,
-      );
+    const urls = getTimelineClipCanvasCompositionSegmentThumbnailSlotUrls(
+      segment,
+      segmentW / bitmapWidth * clipWidth,
+      input.thumbnailSlotPx,
+      input.maxThumbnailSlots,
+    );
+    if (urls.length > 0) {
       const count = urls.length;
       const slotW = segmentW / count;
       for (let index = 0; index < count; index += 1) {
@@ -187,6 +226,7 @@ export function createTimelineClipCanvasWorkerCompositionVisualsResource(input: 
   clipWidth: number;
   height: number;
   mixdownWaveform?: WorkerPreparedCompositionVisualsResource['mixdownWaveform'];
+  prepareSegmentThumbnailStrip?: boolean;
   minThumbnailWidth: number;
   thumbnailSlotPx: number;
   maxThumbnailSlots: number;
@@ -200,7 +240,9 @@ export function createTimelineClipCanvasWorkerCompositionVisualsResource(input: 
     outline: Boolean(clip.isComposition || clip.compositionId),
     nestedBoundaries: createTimelineClipCanvasWorkerCompositionNestedBoundaries(clip),
     segmentRects: createTimelineClipCanvasWorkerCompositionSegmentRects(clip),
-    segmentThumbnailStrip: createTimelineClipCanvasWorkerCompositionSegmentThumbnailStripResource(input),
+    segmentThumbnailStrip: input.prepareSegmentThumbnailStrip
+      ? createTimelineClipCanvasWorkerCompositionSegmentThumbnailStripResource(input)
+      : undefined,
     mixdownWaveform: input.mixdownWaveform,
     mixdownGenerating: clip.mixdownGenerating,
   };

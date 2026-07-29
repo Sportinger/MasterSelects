@@ -228,8 +228,21 @@ export class VideoEncoderWrapper {
 
     const timestampMicros = Math.round(frameIndex * (1_000_000 / this.settings.fps));
     const durationMicros = Math.round(1_000_000 / this.settings.fps);
+    const expectedByteLength = this.settings.width * this.settings.height * 4;
+    if (pixels.byteLength !== expectedByteLength) {
+      throw new Error(
+        `Export frame buffer size mismatch at frame ${frameIndex}: ` +
+        `received ${pixels.byteLength} RGBA bytes, expected ${expectedByteLength} ` +
+        `for ${this.settings.width}x${this.settings.height}.`
+      );
+    }
 
-    const frame = new VideoFrame(pixels.buffer, {
+    // Keep the exact view bounds. A subarray's backing buffer can contain
+    // unrelated bytes before or after the RGBA frame.
+    const frameData = pixels.byteOffset === 0 && pixels.byteLength === pixels.buffer.byteLength
+      ? pixels.buffer
+      : pixels.slice().buffer;
+    const frame = new VideoFrame(frameData, {
       format: 'RGBA',
       codedWidth: this.settings.width,
       codedHeight: this.settings.height,

@@ -2,7 +2,7 @@ import { hasThumbnailBitmap } from '../../../services/timeline/thumbnailBitmapCa
 import { thumbnailCacheService } from '../../../services/thumbnailCacheService';
 import type { TimelinePaintSourceClip } from '../../../timeline';
 import {
-  getTimelineClipCanvasCompositionThumbnailSlotUrls,
+  getTimelineClipCanvasCompositionSegmentThumbnailSlotUrls,
   TIMELINE_CLIP_CANVAS_COMPOSITION_SEGMENT_MAX_COUNT,
 } from './timelineClipCanvasCompositionResource';
 import type { TimelineClipCanvasTrimGeometry } from './timelineClipCanvasTrimResource';
@@ -51,7 +51,7 @@ export function collectTimelineClipCanvasWorkerThumbnailPreparation(input: {
   const h = Math.max(1, input.height - 2);
 
   for (const clip of input.clips) {
-    if (clip.clipSegments?.length) {
+    if (clip.trackType !== 'audio' && clip.source?.type !== 'audio' && clip.clipSegments?.length) {
       const geometry = input.resolveGeometry(clip);
       if (geometry.visible) {
         const absoluteX = input.timeToPixel(geometry.startTime);
@@ -66,8 +66,8 @@ export function collectTimelineClipCanvasWorkerThumbnailPreparation(input: {
             const startNorm = Math.max(0, Math.min(1, segment.startNorm));
             const endNorm = Math.max(startNorm, Math.min(1, segment.endNorm));
             const segmentWidth = Math.max(1, (endNorm - startNorm) * absoluteW);
-            getTimelineClipCanvasCompositionThumbnailSlotUrls(
-              segment.thumbnails,
+            getTimelineClipCanvasCompositionSegmentThumbnailSlotUrls(
+              segment,
               segmentWidth,
               input.thumbnailSlotPx,
               input.maxThumbnailSlots,
@@ -77,7 +77,10 @@ export function collectTimelineClipCanvasWorkerThumbnailPreparation(input: {
                 visibleBitmapClipIds.add(clip.id);
                 return;
               }
-              missingBitmapRefsByUrl.set(url, { url, mediaFileId: clip.mediaFileId ?? clip.source?.mediaFileId });
+              missingBitmapRefsByUrl.set(url, {
+                url,
+                mediaFileId: segment.mediaFileId ?? clip.mediaFileId ?? clip.source?.mediaFileId,
+              });
             });
           });
         }

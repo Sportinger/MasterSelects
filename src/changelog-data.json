@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-07-29",
+    "type": "improve",
+    "title": "MasterSelects 2.4.4",
+    "description": "Reliability release: cloud transcription runs providers in parallel with chunk-aware progress and persisted resume state; nested compositions avoid repeated playback/audio synchronization work and render audio variants as waveforms; FAST export keeps a bounded decoder pool without silently switching to PRECISE, validates readback dimensions, improves nested-media preparation and recovery, and reports resource pressure more clearly; AI generation, keyframe units, prompt layout and kernel preconditions receive additional hardening.",
+    "section": "Release"
+  },
+  {
     "date": "2026-07-18",
     "type": "new",
     "title": "MasterSelects 2.4.3",

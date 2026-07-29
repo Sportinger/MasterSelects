@@ -66,7 +66,9 @@ export interface ParallelDecodeParseResult {
  * callback would yield control before setExtractionOptions/start/flush,
  * causing MP4Box to never deliver samples.
  */
-export function parseMP4TrackInfo(clipInfo: ClipInfo): Promise<ParallelDecodeParseResult> {
+export function parseMP4TrackInfo(
+  clipInfo: ClipInfo & { fileData: ArrayBuffer }
+): Promise<ParallelDecodeParseResult> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       reject(new Error(`MP4 parsing timeout for clip "${clipInfo.clipName}"`));

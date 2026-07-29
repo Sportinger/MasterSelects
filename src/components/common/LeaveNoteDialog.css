@@ -1,0 +1,271 @@
+@layer overlays {
+  .leave-note-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 10020;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(5, 8, 13, 0.72);
+    backdrop-filter: blur(7px);
+    animation: leave-note-backdrop-in 140ms ease-out both;
+  }
+
+  .leave-note-dialog {
+    width: min(420px, calc(100vw - 32px));
+    overflow: hidden;
+    border: 1px solid rgba(216, 100, 100, 0.34);
+    border-radius: 12px;
+    background:
+      linear-gradient(145deg, rgba(41, 43, 49, 0.99), rgba(25, 27, 32, 0.99)),
+      var(--bg-secondary);
+    color: var(--text-primary);
+    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.58);
+    animation: leave-note-dialog-in 160ms ease-out both;
+  }
+
+  .leave-note-accent {
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #d86464, transparent);
+  }
+
+  .leave-note-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 22px 14px;
+  }
+
+  .leave-note-header h2 {
+    margin: 0;
+    color: #e48a8a;
+    font-size: 17px;
+    font-weight: 680;
+    letter-spacing: -0.01em;
+  }
+
+  .leave-note-close {
+    display: flex;
+    width: 28px;
+    height: 28px;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .leave-note-close:hover:not(:disabled) {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .leave-note-dialog form {
+    padding: 0 22px 20px;
+  }
+
+  .leave-note-field {
+    display: block;
+  }
+
+  .leave-note-field textarea {
+    display: block;
+    width: 100%;
+    min-height: 132px;
+    box-sizing: border-box;
+    resize: vertical;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 9px;
+    outline: none;
+    background: rgba(6, 8, 12, 0.48);
+    color: var(--text-primary);
+    padding: 11px 12px;
+    font: inherit;
+    font-size: 13px;
+    line-height: 1.5;
+    transition:
+      border-color var(--transition-fast),
+      box-shadow var(--transition-fast),
+      background var(--transition-fast);
+  }
+
+  .leave-note-field textarea::placeholder {
+    color: var(--text-muted);
+  }
+
+  .leave-note-field textarea:focus {
+    border-color: #cf6868;
+    background: rgba(6, 8, 12, 0.68);
+    box-shadow: 0 0 0 3px rgba(207, 104, 104, 0.14);
+  }
+
+  .leave-note-field textarea[aria-invalid="true"] {
+    border-color: var(--danger, #e36060);
+  }
+
+  .leave-note-error {
+    padding-top: 8px;
+    color: var(--danger-light, #ff9999);
+    font-size: 11px;
+  }
+
+  .leave-note-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 9px;
+    margin-top: 16px;
+  }
+
+  .leave-note-button {
+    display: inline-flex;
+    min-width: 84px;
+    height: 34px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 0 14px;
+    color: var(--text-primary);
+    font-size: 11px;
+    font-weight: 650;
+    cursor: pointer;
+    transition:
+      transform var(--transition-fast),
+      border-color var(--transition-fast),
+      background var(--transition-fast);
+  }
+
+  .leave-note-button:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+
+  .leave-note-button.secondary {
+    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.045);
+    color: var(--text-secondary);
+  }
+
+  .leave-note-button.primary {
+    border-color: rgba(232, 128, 128, 0.46);
+    background: linear-gradient(180deg, #b95353, #943f3f);
+    color: #fff;
+    box-shadow: 0 8px 22px rgba(139, 47, 47, 0.24);
+  }
+
+  .leave-note-button.primary:hover:not(:disabled) {
+    background: linear-gradient(180deg, #ca6060, #a84848);
+  }
+
+  .leave-note-button:disabled,
+  .leave-note-close:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .leave-note-spinner {
+    width: 11px;
+    height: 11px;
+    border: 2px solid rgba(255, 255, 255, 0.32);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: leave-note-spinner 700ms linear infinite;
+  }
+
+  .leave-note-dialog.is-success {
+    width: min(300px, calc(100vw - 32px));
+  }
+
+  .leave-note-thanks {
+    display: flex;
+    min-height: 150px;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 6px;
+    animation: leave-note-success-out 180ms ease 820ms both;
+  }
+
+  .leave-note-thanks > span {
+    display: flex;
+    width: 34px;
+    height: 34px;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 3px;
+    border: 1px solid rgba(232, 128, 128, 0.48);
+    border-radius: 50%;
+    background: rgba(207, 104, 104, 0.12);
+    color: #e98d8d;
+    font-size: 18px;
+  }
+
+  .leave-note-thanks strong {
+    color: var(--text-primary);
+    font-size: 18px;
+  }
+
+  .leave-note-thanks small {
+    color: var(--text-secondary);
+    font-size: 11px;
+  }
+
+  [data-theme="light"] .leave-note-dialog {
+    border-color: rgba(163, 59, 59, 0.24);
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.99), rgba(245, 242, 242, 0.99));
+    box-shadow: 0 28px 80px rgba(35, 18, 18, 0.25);
+  }
+
+  [data-theme="light"] .leave-note-field textarea {
+    border-color: rgba(0, 0, 0, 0.15);
+    background: rgba(255, 255, 255, 0.82);
+  }
+
+  @keyframes leave-note-backdrop-in {
+    from { opacity: 0; }
+  }
+
+  @keyframes leave-note-dialog-in {
+    from {
+      opacity: 0;
+      transform: translateY(7px) scale(0.985);
+    }
+  }
+
+  @keyframes leave-note-spinner {
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes leave-note-success-out {
+    to {
+      opacity: 0;
+      transform: translateY(-3px);
+    }
+  }
+
+  @media (max-width: 520px) {
+    .leave-note-backdrop {
+      align-items: flex-end;
+      padding: 12px;
+    }
+
+    .leave-note-dialog,
+    .leave-note-dialog.is-success {
+      width: 100%;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .leave-note-backdrop,
+    .leave-note-dialog,
+    .leave-note-spinner,
+    .leave-note-thanks {
+      animation: none;
+    }
+  }
+}

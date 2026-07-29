@@ -11,7 +11,7 @@ const mockFactory = vi.hoisted(() => {
     codedWidth: 1920,
     codedHeight: 1080,
   };
-  const pixels = new Uint8ClampedArray([1, 2, 3, 4]);
+  const pixels = new Uint8ClampedArray(1920 * 2160 * 4);
 
   const engine = {
     getOutputDimensions: vi.fn(() => {
@@ -117,7 +117,7 @@ function createInjectedHost(): ExportRenderHostPort {
     ensureExportLayersReady: vi.fn(async () => undefined),
     render: vi.fn(),
     createVideoFrameFromExport: vi.fn(async () => null),
-    readPixels: vi.fn(async () => new Uint8ClampedArray([5, 6, 7, 8])),
+    readPixels: vi.fn(async () => new Uint8ClampedArray(320 * 180 * 4)),
     cleanupExportCanvas: vi.fn(),
     hasMaskTexture: vi.fn(() => false),
     updateMaskTexture: vi.fn(),
@@ -197,7 +197,7 @@ describe('ExportRenderSessionImpl', () => {
 
     expect(capture.kind).toBe('rgba-pixels');
     expect(capture.width).toBe(1920);
-    expect(capture.height).toBe(1080);
+    expect(capture.height).toBe(2160);
     expect(mockFactory.calls).toEqual([
       'isDeviceValid',
       'setRenderTimeOverride:2',
@@ -340,7 +340,7 @@ describe('ExportRenderSessionImpl', () => {
 
     expect(capture.kind).toBe('rgba-pixels');
     expect(capture.width).toBe(1920);
-    expect(capture.height).toBe(1080);
+    expect(capture.height).toBe(2160);
     expect(mockFactory.calls).toEqual([
       'isDeviceValid',
       'setRenderTimeOverride:3',

@@ -12,6 +12,11 @@ export interface TimelineThumbnailDbWarmupClip {
     type?: string | null;
     mediaFileId?: string;
   } | null;
+  clipSegments?: readonly {
+    startNorm: number;
+    endNorm: number;
+    mediaFileId?: string;
+  }[];
 }
 
 export interface VisibleTimelineThumbnailRef {
@@ -52,18 +57,35 @@ export function collectVisibleTimelineThumbnailRefs(input: {
   const refs = new Map<string, VisibleTimelineThumbnailRef>();
 
   for (const clip of input.clips) {
-    const mediaFileId = getTimelineThumbnailSourceId(clip);
-    if (!mediaFileId) continue;
-
     const x = input.timeToPixel(clip.startTime);
     const w = input.timeToPixel(clip.duration);
     if (x + w < visibleLeft || x > visibleRight) continue;
 
-    const ref = {
-      mediaFileId,
-      fileHash: input.mediaFileHashById?.get(mediaFileId),
-    };
-    refs.set(getThumbnailLoadKey(ref), ref);
+    const mediaFileIds = new Set<string>();
+    const mediaFileId = getTimelineThumbnailSourceId(clip);
+    if (mediaFileId) {
+      mediaFileIds.add(mediaFileId);
+    }
+
+    const visibleStartNorm = w > 0 ? Math.max(0, (visibleLeft - x) / w) : 0;
+    const visibleEndNorm = w > 0 ? Math.min(1, (visibleRight - x) / w) : 1;
+    for (const segment of clip.clipSegments ?? []) {
+      if (
+        segment.mediaFileId &&
+        segment.endNorm > visibleStartNorm &&
+        segment.startNorm < visibleEndNorm
+      ) {
+        mediaFileIds.add(segment.mediaFileId);
+      }
+    }
+
+    for (const sourceId of mediaFileIds) {
+      const ref = {
+        mediaFileId: sourceId,
+        fileHash: input.mediaFileHashById?.get(sourceId),
+      };
+      refs.set(getThumbnailLoadKey(ref), ref);
+    }
   }
 
   return Array.from(refs.values());

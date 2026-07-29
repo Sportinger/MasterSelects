@@ -7,6 +7,7 @@ import {
 } from '../../src/services/flashboard/FlashBoardChatService';
 import { findFlashBoardChatRunByIdempotencyKey } from '../../src/services/flashboard/FlashBoardChatRunAudit';
 import { normalizeHostedKieChatRequest } from '../../functions/lib/providers/kieChat';
+import { FLASHBOARD_CHAT_MAX_OUTPUT_TOKENS } from '../../src/services/flashboard/FlashBoardChatConfig';
 
 describe('FlashBoardChatService', () => {
   afterEach(() => {
@@ -62,7 +63,7 @@ describe('FlashBoardChatService', () => {
     expect(proxyBody.endpoint).toBe('/codex/v1/responses');
     expect(proxyBody.body).toMatchObject({
       input: [{ role: 'user', content: 'Make this more cinematic' }],
-      max_output_tokens: 2048,
+      max_output_tokens: FLASHBOARD_CHAT_MAX_OUTPUT_TOKENS,
       model: 'gpt-5-6-luna',
       reasoning: { effort: 'xhigh' },
       store: false,
@@ -112,7 +113,7 @@ describe('FlashBoardChatService', () => {
     expect(body).toMatchObject({
       idempotencyKey: expect.stringMatching(/^flashboard-chat:/),
       input: [{ role: 'user', content: 'Suggest lighting' }],
-      max_output_tokens: 2048,
+      max_output_tokens: FLASHBOARD_CHAT_MAX_OUTPUT_TOKENS,
       model: 'gpt-5-6-luna',
       protocol: 'openai-responses',
       reasoning: { effort: 'low' },
@@ -217,7 +218,7 @@ describe('FlashBoardChatService', () => {
     const proxyBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(proxyBody.endpoint).toBe('/claude/v1/messages');
     expect(proxyBody.body).toMatchObject({
-      max_tokens: 2048,
+      max_tokens: FLASHBOARD_CHAT_MAX_OUTPUT_TOKENS,
       model: 'claude-opus-4-8',
       temperature: 0.6,
     });

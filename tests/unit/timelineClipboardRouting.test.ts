@@ -98,6 +98,54 @@ describe('timeline clipboard routing', () => {
     expect(useTimelineStore.getState().clipboardData).toBeNull();
   });
 
+  it('pastes copied clips into another timeline after the selection is cleared', async () => {
+    const clip = createMockClip({
+      id: 'clip-1',
+      trackId: 'video-1',
+      startTime: 3,
+    });
+    useTimelineStore.setState({
+      clips: [clip],
+      selectedClipIds: new Set(['clip-1']),
+    });
+    useTimelineStore.getState().copyClips();
+
+    await useTimelineStore.getState().loadState({
+      tracks: [{
+        id: 'video-target',
+        name: 'Video Target',
+        type: 'video',
+        height: 60,
+        muted: false,
+        visible: true,
+        solo: false,
+      }],
+      clips: [],
+      playheadPosition: 12,
+      duration: 60,
+      zoom: 50,
+      scrollX: 0,
+      inPoint: null,
+      outPoint: null,
+      loopPlayback: false,
+    });
+
+    expect(useTimelineStore.getState().selectedClipIds).toEqual(new Set());
+    expect(useTimelineStore.getState().clipboardData).toHaveLength(1);
+
+    useTimelineStore.getState().pasteClips();
+
+    expect(useTimelineStore.getState().clips).toHaveLength(1);
+    expect(useTimelineStore.getState().clips[0]).toMatchObject({
+      trackId: 'video-target',
+      startTime: 12,
+      name: clip.name,
+    });
+    expect(useTimelineStore.getState().selectedClipIds).toEqual(
+      new Set([useTimelineStore.getState().clips[0].id]),
+    );
+  });
+
   it('does not let media panel capture copy while a timeline clip is selected', () => {
     const copyMediaItems = vi.fn();
     const clip = createMockClip({ id: 'clip-1' });
@@ -164,6 +212,82 @@ describe('timeline clipboard routing', () => {
     }));
 
     expect(copyMediaItems).not.toHaveBeenCalled();
+  });
+
+  it('does not let media panel capture paste when copied timeline clips remain after selection clears', () => {
+    const pasteMediaItems = vi.fn(() => []);
+    const clip = createMockClip({ id: 'clip-1' });
+    useTimelineStore.setState({
+      clips: [clip],
+      selectedClipIds: new Set(['clip-1']),
+    });
+    useTimelineStore.getState().copyClips();
+    useTimelineStore.setState({
+      selectedClipIds: new Set(),
+      selectedKeyframeIds: new Set(),
+    });
+
+    const { result } = renderHook(() => useMediaPanelSelectionCommands({
+      addToSelection: vi.fn(),
+      closeContextMenu: vi.fn(),
+      contextMenu: null,
+      createComposition: vi.fn(),
+      copyMediaItems: vi.fn(),
+      createFolder: vi.fn(),
+      duplicateMediaItems: vi.fn(),
+      ensureFileThumbnail: vi.fn(),
+      folders: [],
+      generateAudioProxy: vi.fn(),
+      generateMediaSpectrogram: vi.fn(),
+      generateMediaWaveform: vi.fn(),
+      getActiveParentId: () => null,
+      getAiReferenceMediaFileIds: () => [],
+      handleDelete: vi.fn(),
+      importFiles: vi.fn(),
+      importFilesWithHandles: vi.fn(),
+      openCompositionTab: vi.fn(),
+      pasteMediaItems,
+      reloadFile: vi.fn(),
+      removeFromSelection: vi.fn(),
+      selectedIds: [],
+      setContextMenu: vi.fn(),
+      setGenerativeTrayExpanded: vi.fn(),
+      setGridFolderId: vi.fn(),
+      setSelectedMediaBoardAnnotationId: vi.fn(),
+      setSelection: vi.fn(),
+      setSourceMonitorFile: vi.fn(),
+      toggleFolderExpanded: vi.fn(),
+      updateAiReferenceMediaFileIds: vi.fn(),
+      updateComposition: vi.fn(),
+      viewMode: 'classic',
+      hasMediaClipboard: () => true,
+    }));
+
+    const root = document.createElement('div');
+    root.getBoundingClientRect = () => ({
+      bottom: 10000,
+      height: 10000,
+      left: 0,
+      right: 10000,
+      toJSON: () => ({}),
+      top: 0,
+      width: 10000,
+      x: 0,
+      y: 0,
+    });
+    result.current.mediaPanelRootRef.current = root;
+
+    const pasteEvent = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+      key: 'v',
+    });
+    document.dispatchEvent(pasteEvent);
+
+    expect(pasteEvent.defaultPrevented).toBe(false);
+    expect(pasteMediaItems).not.toHaveBeenCalled();
+    expect(useTimelineStore.getState().clipboardData).toHaveLength(1);
   });
 
   it('derives create-comp settings from media dimensions and duration', () => {

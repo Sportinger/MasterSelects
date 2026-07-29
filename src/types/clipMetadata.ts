@@ -100,6 +100,7 @@ export interface TranscriptFusionArtifact {
   schemaVersion: 1;
   primaryProvider: 'deepgram';
   createdAt: number;
+  providerStatuses?: Record<TranscriptProviderId, TranscriptFusionProviderStatus>;
   rawRuns: TranscriptProviderRun[];
   words: TranscriptWord[];
   conflicts: TranscriptConflict[];
@@ -116,10 +117,18 @@ export type TranscriptFusionStage =
 
 export type TranscriptFusionProviderStatus = 'waiting' | 'running' | 'complete' | 'error';
 
+export interface TranscriptProviderProgress {
+  completedChunks: number;
+  totalChunks: number;
+  percent: number;
+}
+
 export interface TranscriptFusionProgress {
   stage: TranscriptFusionStage;
   range: [number, number];
   providers: Record<TranscriptProviderId, TranscriptFusionProviderStatus>;
+  providerProgress?: Record<TranscriptProviderId, TranscriptProviderProgress>;
+  mergeProgress?: number;
   conflictCount: number;
   resolvedCount: number;
   updatedAt: number;
@@ -225,6 +234,10 @@ export interface ClipSegment {
   startNorm: number;    // Normalized start position (0-1)
   endNorm: number;      // Normalized end position (0-1)
   thumbnails: string[]; // Thumbnails from this clip's content
+  mediaFileId?: string; // Runtime/cache source for lazily loaded thumbnails
+  sourceInPoint?: number;
+  sourceOutPoint?: number;
+  reversed?: boolean;
 }
 
 export type VideoBakeRegionScope = 'composition' | 'clip';

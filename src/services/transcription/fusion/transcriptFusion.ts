@@ -182,6 +182,7 @@ export function fuseTranscriptProviderRuns(
     schemaVersion: 1,
     primaryProvider: 'deepgram',
     createdAt: Math.max(deepgramRun.createdAt, openaiRun.createdAt),
+    providerStatuses: { deepgram: 'complete', openai: 'complete' },
     rawRuns: [deepgramRun, openaiRun],
     words: projection.words,
     conflicts: [],
@@ -199,6 +200,14 @@ export function mergeTranscriptFusionArtifacts(
     schemaVersion: 1,
     primaryProvider: 'deepgram',
     createdAt: Math.max(...artifacts.map(artifact => artifact.createdAt)),
+    providerStatuses: {
+      deepgram: artifacts.some(artifact => artifact.providerStatuses?.deepgram === 'error')
+        ? 'error'
+        : 'complete',
+      openai: artifacts.some(artifact => artifact.providerStatuses?.openai === 'error')
+        ? 'error'
+        : 'complete',
+    },
     rawRuns: artifacts.flatMap(artifact => artifact.rawRuns),
     words: finalWords.map(word => ({
       ...word,

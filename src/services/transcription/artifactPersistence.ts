@@ -26,6 +26,12 @@ export interface TranscriptFusionPreviewUpdate {
   words?: TranscriptWord[];
 }
 
+interface AppliedTranscript {
+  artifact?: TranscriptFusionArtifact;
+  ranges: [number, number][];
+  words: TranscriptWord[];
+}
+
 /**
  * Update clip transcript data in the timeline store.
  */
@@ -79,6 +85,137 @@ export function updateTranscriptFusionPreview(
   }));
 }
 
+function applyTranscriptToMediaFile(
+  mediaFileId: string,
+  words: TranscriptWord[],
+  newRanges: [number, number][],
+  artifact?: TranscriptFusionArtifact,
+  options?: {
+    progress?: TranscriptFusionProgress;
+    status?: TranscriptStatus;
+  },
+): AppliedTranscript | null {
+  try {
+    const mediaState = useMediaStore.getState();
+    const file = mediaState.files.find((f: MediaFile) => f.id === mediaFileId);
+    if (!file) return null;
+
+    const existingWords = file.transcript ?? [];
+    const retainedWords = newRanges.length
+      ? existingWords.filter(word => !newRanges.some(
+          ([rangeStart, rangeEnd]) => word.start < rangeEnd && rangeStart < word.end,
+        ))
+      : existingWords;
+    const mergedWords = (
+      newRanges.length
+        ? [...retainedWords, ...words]
+        : mergeTranscriptWords(retainedWords, words)
+    ).toSorted((left, right) => left.start - right.start);
+
+    let transcriptCoverage = 0;
+    if (file.duration && file.duration > 0) {
+      const existingRanges = file.transcribedRanges || [];
+      const allRanges = [...existingRanges, ...newRanges];
+      transcriptCoverage = allRanges.length > 0 ? calcCoverage(allRanges, file.duration) : 0;
+    }
+
+    const existingRanges: [number, number][] = file.transcribedRanges || [];
+    const mergedRanges = mergeRanges([...existingRanges, ...newRanges]);
+    const persistedArtifact = artifact
+      ? { ...artifact, words: mergedWords }
+      : undefined;
+    const status = options?.status ?? 'ready';
+    const finalProgress = persistedArtifact
+      ? {
+          stage: 'complete' as const,
+          range: [
+            mergedRanges[0]?.[0] ?? 0,
+            mergedRanges.at(-1)?.[1] ?? mergedWords.at(-1)?.end ?? 0,
+          ] as [number, number],
+          providers: file.transcriptFusionProgress?.providers
+            ?? persistedArtifact.providerStatuses
+            ?? { deepgram: 'complete' as const, openai: 'complete' as const },
+          providerProgress: file.transcriptFusionProgress?.providerProgress,
+          mergeProgress: 100,
+          conflictCount: persistedArtifact.conflicts.length,
+          resolvedCount: persistedArtifact.conflicts.filter(
+            conflict => conflict.status !== 'needs-review',
+          ).length,
+          updatedAt: Date.now(),
+        }
+      : undefined;
+
+    useMediaStore.setState({
+      files: mediaState.files.map((f: MediaFile) =>
+        f.id === mediaFileId
+          ? {
+              ...f,
+              transcriptStatus: status,
+              transcript: mergedWords,
+              transcriptArtifact: persistedArtifact,
+              transcriptFusionProgress: options?.progress ?? finalProgress,
+              transcriptCoverage,
+              transcribedRanges: mergedRanges,
+            }
+          : f,
+      ),
+    });
+
+    log.debug('Propagated transcript to MediaFile', {
+      mediaFileId,
+      wordCount: mergedWords.length,
+      coverage: transcriptCoverage.toFixed(2),
+      status,
+    });
+    return {
+      artifact: persistedArtifact,
+      ranges: mergedRanges,
+      words: mergedWords,
+    };
+  } catch (e) {
+    log.warn('Failed to propagate transcript to MediaFile', e);
+    return null;
+  }
+}
+
+/**
+ * Persist a completed transcription chunk while the larger run keeps going.
+ * The stored ranges are the resume boundary after a reload.
+ */
+export async function persistTranscriptCheckpoint(
+  mediaFileId: string,
+  words: TranscriptWord[],
+  newRanges: [number, number][],
+  artifact: TranscriptFusionArtifact,
+  progress: TranscriptFusionProgress,
+): Promise<boolean> {
+  const applied = applyTranscriptToMediaFile(
+    mediaFileId,
+    words,
+    newRanges,
+    artifact,
+    { progress, status: 'transcribing' },
+  );
+  if (!applied) return false;
+
+  try {
+    const saved = await projectFileService.saveTranscript(mediaFileId, {
+      words: applied.words,
+      artifact: applied.artifact,
+    }, applied.ranges);
+    if (saved) {
+      log.debug('Transcript checkpoint saved to project folder', {
+        mediaFileId,
+        rangeCount: applied.ranges.length,
+      });
+    }
+    return saved;
+  } catch (error) {
+    log.warn('Failed to save transcript checkpoint', error);
+    return false;
+  }
+}
+
 /**
  * Propagate transcript to MediaFile for badge display and carry-over to new clips.
  * When source ranges are supplied, the incoming words are authoritative for
@@ -90,80 +227,13 @@ export function propagateTranscriptToMediaFile(
   newRanges?: [number, number][],
   artifact?: TranscriptFusionArtifact,
 ): void {
-  try {
-    const mediaState = useMediaStore.getState();
-    const file = mediaState.files.find((f: MediaFile) => f.id === mediaFileId);
-    if (!file) return;
+  const applied = applyTranscriptToMediaFile(mediaFileId, words, newRanges ?? [], artifact);
+  if (!applied) return;
 
-    const existingWords = file.transcript ?? [];
-    const retainedWords = newRanges?.length
-      ? existingWords.filter(word => !newRanges.some(
-          ([rangeStart, rangeEnd]) => word.start < rangeEnd && rangeStart < word.end,
-        ))
-      : existingWords;
-    const mergedWords = (
-      newRanges?.length
-        ? [...retainedWords, ...words]
-        : mergeTranscriptWords(retainedWords, words)
-    ).toSorted((left, right) => left.start - right.start);
-
-    let transcriptCoverage = 0;
-    if (file.duration && file.duration > 0) {
-      const existingRanges = file.transcribedRanges || [];
-      const allRanges = [...existingRanges, ...(newRanges || [])];
-      transcriptCoverage = allRanges.length > 0 ? calcCoverage(allRanges, file.duration) : 0;
-    }
-
-    const existingRanges: [number, number][] = file.transcribedRanges || [];
-    const mergedRanges = mergeRanges([...existingRanges, ...(newRanges || [])]);
-    const persistedArtifact = artifact
-      ? { ...artifact, words: mergedWords }
-      : undefined;
-
-    useMediaStore.setState({
-      files: mediaState.files.map((f: MediaFile) =>
-        f.id === mediaFileId
-          ? {
-              ...f,
-              transcriptStatus: 'ready' as TranscriptStatus,
-              transcript: mergedWords,
-              transcriptArtifact: persistedArtifact,
-              transcriptFusionProgress: persistedArtifact
-                ? {
-                    stage: 'complete',
-                    range: [
-                      mergedRanges[0]?.[0] ?? 0,
-                      mergedRanges.at(-1)?.[1] ?? mergedWords.at(-1)?.end ?? 0,
-                    ],
-                    providers: file.transcriptFusionProgress?.providers
-                      ?? { deepgram: 'complete', openai: 'complete' },
-                    conflictCount: persistedArtifact.conflicts.length,
-                    resolvedCount: persistedArtifact.conflicts.filter(
-                      conflict => conflict.status !== 'needs-review',
-                    ).length,
-                    updatedAt: Date.now(),
-                  }
-                : undefined,
-              transcriptCoverage,
-              transcribedRanges: mergedRanges,
-            }
-          : f,
-      ),
-    });
-
-    projectFileService.saveTranscript(mediaFileId, {
-      words: mergedWords,
-      artifact: persistedArtifact,
-    }, mergedRanges).then(saved => {
-      if (saved) log.debug('Transcript saved to project folder', { mediaFileId });
-    }).catch(() => { /* no project open */ });
-
-    log.debug('Propagated transcript to MediaFile', {
-      mediaFileId,
-      wordCount: mergedWords.length,
-      coverage: transcriptCoverage.toFixed(2),
-    });
-  } catch (e) {
-    log.warn('Failed to propagate transcript to MediaFile', e);
-  }
+  projectFileService.saveTranscript(mediaFileId, {
+    words: applied.words,
+    artifact: applied.artifact,
+  }, applied.ranges).then(saved => {
+    if (saved) log.debug('Transcript saved to project folder', { mediaFileId });
+  }).catch(() => { /* no project open */ });
 }

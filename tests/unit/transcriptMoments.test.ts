@@ -117,7 +117,7 @@ describe('transcript moments', () => {
         sourceStart: 10,
         sourceEnd: 30,
         offset: 2,
-        limit: 120,
+        limit: 5000,
         includeSegments: true,
       },
     }], 'chat', {
@@ -126,32 +126,27 @@ describe('transcript moments', () => {
     });
   });
 
-  it('stops paging at the 400-word hard cap', async () => {
+  it('pages through a transcript past the former 400-word cap', async () => {
     const words = Array.from({ length: 450 }, (_, index) => ({
       start: index,
       end: index + 0.5,
       text: `word-${index + 1}`,
     }));
-    const executor = vi.fn(async (
-      calls: AIToolCallExecution[],
-    ): Promise<AIToolCallExecutionResult[]> => {
+    const executor = vi.fn(async (calls: AIToolCallExecution[]) => {
       const tool = calls[0]?.tool;
       if (tool === 'getSpeechMarkers') {
         return [{
-          id: calls[0]?.id,
-          tool,
-          result: {
-            success: true,
-            data: { hasMarkers: false, hasMore: false, markers: [] },
-          },
+          id: calls[0]?.id ?? 'markers',
+          tool: 'getSpeechMarkers',
+          result: { success: true, data: { markers: [], hasMore: false } },
         }];
       }
-      const offset = calls[0]?.args.offset as number;
+      const offset = (calls[0]?.args.offset as number) ?? 0;
       const limit = calls[0]?.args.limit as number;
       const segments = words.slice(offset, offset + limit);
       const nextOffset = offset + segments.length;
       return [{
-        id: calls[0]?.id,
+        id: calls[0]?.id ?? 'transcript',
         tool: 'getClipTranscript',
         result: {
           success: true,
@@ -168,38 +163,12 @@ describe('transcript moments', () => {
     const moments = await buildTranscriptMoments(transcriptSnapshot(), executor);
     const indexedWords = moments.flatMap(moment => moment.evidence.words ?? []);
 
-    expect(moments).toHaveLength(50);
-    expect(indexedWords).toHaveLength(TRANSCRIPT_MOMENT_WORD_CAP);
-    expect(moments.at(-1)).toMatchObject({
-      handle: '$m50',
-      sourceRange: { startSeconds: 392, endSeconds: 399.5 },
-      evidence: {
-        transcript: [
-          'word-393',
-          'word-394',
-          'word-395',
-          'word-396',
-          'word-397',
-          'word-398',
-          'word-399',
-          'word-400',
-        ].join(' '),
-      },
-    });
-    expect(indexedWords.at(-1)).toEqual({
-      text: 'word-400',
-      startSeconds: 399,
-      endSeconds: 399.5,
-    });
-    // Four transcript pages plus the trailing speech-marker read (v2).
-    expect(executor).toHaveBeenCalledTimes(5);
-    const transcriptCalls = executor.mock.calls.filter(
-      call => call[0]?.[0]?.tool === 'getClipTranscript',
-    );
-    expect(transcriptCalls.at(-1)?.[0]?.[0]?.args).toMatchObject({
-      offset: 360,
-      limit: 40,
-    });
+    // The kernel used to see only the first 400 words of any transcript, so a
+    // two-hour interview was compiled from its opening minutes without saying
+    // so. Every word reaches the index now.
+    expect(TRANSCRIPT_MOMENT_WORD_CAP).toBe(Number.POSITIVE_INFINITY);
+    expect(indexedWords).toHaveLength(words.length);
+    expect(indexedWords.at(-1)?.text).toBe('word-450');
   });
 
   it('returns no moments when the transcript handler reports an empty transcript', async () => {

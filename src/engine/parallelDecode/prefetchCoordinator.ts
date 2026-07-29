@@ -36,6 +36,7 @@ export interface ParallelDecodePrefetchDeps {
   isActive(): boolean;
   clipDecoders: ReadonlyMap<string, ClipDecoder>;
   frameToleranceUs: number;
+  ensureDecoder(clipDecoder: ClipDecoder): Promise<VideoDecoder>;
   decodeAhead(
     clipDecoder: ClipDecoder,
     targetSampleIndex: number,
@@ -102,7 +103,7 @@ export async function prefetchFramesForTime(
       continue;
     }
 
-    log.debug(`"${clipInfo.clipName}": Processing at time ${prefetchTarget.timelineTime.toFixed(3)}s - samples=${clipDecoder.samples.length}, buffer=${clipDecoder.frameBuffer.size}, decoderState=${clipDecoder.decoder.state}, blocking=${prefetchTarget.shouldBlock}`);
+    log.debug(`"${clipInfo.clipName}": Processing at time ${prefetchTarget.timelineTime.toFixed(3)}s - samples=${clipDecoder.samples.length}, buffer=${clipDecoder.frameBuffer.size}, decoderState=${clipDecoder.decoder?.state ?? 'dormant'}, blocking=${prefetchTarget.shouldBlock}`);
 
     // Wait for samples if lazy loading hasn't delivered them yet
     if (clipDecoder.samples.length === 0) {
@@ -189,7 +190,7 @@ export async function prefetchFramesForTime(
               sampleIndex: clipDecoder.sampleIndex,
               directDecodeMs: Number(directDecodeMs.toFixed(1)),
               directSeek: shouldSeekDirectlyToTarget,
-              decodeQueueSize: clipDecoder.decoder.decodeQueueSize,
+              decodeQueueSize: clipDecoder.decoder?.decodeQueueSize ?? 0,
               bufferSize: clipDecoder.frameBuffer.size,
               bufferedStart: Number.isFinite(clipDecoder.oldestTimestamp)
                 ? Number((clipDecoder.oldestTimestamp / 1_000_000).toFixed(3))
@@ -200,12 +201,16 @@ export async function prefetchFramesForTime(
             });
           }
         } else {
-          void decodePromise;
+          void decodePromise.catch(error => {
+            log.warn(`"${clipDecoder.clipName}": upcoming-frame prefetch failed`, error);
+          });
         }
       } else {
         // Frame already in buffer - background decode for future frames
         log.debug(`"${clipInfo.clipName}": Background decode (frame in buffer)`);
-        deps.decodeAhead(clipDecoder, decodeTarget, false);
+        void deps.decodeAhead(clipDecoder, decodeTarget, false).catch(error => {
+          log.warn(`"${clipDecoder.clipName}": background decode failed`, error);
+        });
       }
     }
 
@@ -232,6 +237,7 @@ export async function prefetchFramesForTime(
     let attemptsUsed = 0;
 
     for (let attempt = 0; attempt < 10; attempt++) {
+      if (!deps.isActive()) return;
       attemptsUsed = attempt + 1;
       // Wait for pending decode to complete
       if (clipDecoder.pendingDecode) {
@@ -258,10 +264,11 @@ export async function prefetchFramesForTime(
       if (attempt < 2) {
         // First 2 attempts: just wait briefly for async output callback
         await new Promise(r => setTimeout(r, 8));
-      } else if (clipDecoder.decoder.decodeQueueSize > 0) {
+      } else if ((clipDecoder.decoder?.decodeQueueSize ?? 0) > 0) {
         // Flush decoder queue to force output
-        log.debug(`"${clipDecoder.clipName}": Flushing decoder (attempt ${attempt + 1}, queue=${clipDecoder.decoder.decodeQueueSize})`);
-        await clipDecoder.decoder.flush();
+        const decoder = await deps.ensureDecoder(clipDecoder);
+        log.debug(`"${clipDecoder.clipName}": Flushing decoder (attempt ${attempt + 1}, queue=${decoder.decodeQueueSize})`);
+        await decoder.flush();
         clipDecoder.needsKeyframe = true;
       } else if (!clipDecoder.isDecoding) {
         // Queue is empty but frame not found — re-decode with forceFlush
@@ -292,7 +299,7 @@ export async function prefetchFramesForTime(
         sampleIndex: clipDecoder.sampleIndex,
         attempts: attemptsUsed,
         blockingMs: Number(blockingMs.toFixed(1)),
-        decodeQueueSize: clipDecoder.decoder.decodeQueueSize,
+        decodeQueueSize: clipDecoder.decoder?.decodeQueueSize ?? 0,
         bufferSize: clipDecoder.frameBuffer.size,
         bufferedStart: Number.isFinite(clipDecoder.oldestTimestamp)
           ? Number((clipDecoder.oldestTimestamp / 1_000_000).toFixed(3))
@@ -310,7 +317,7 @@ export async function prefetchFramesForTime(
         .slice(0, 10)
         .join(', ');
 
-      throw new Error(`FAST export failed: "${clipDecoder.clipName}" has no decoded frame at ${(targetTimestamp/1_000_000).toFixed(3)}s after all attempts (buffer: ${clipDecoder.frameBuffer.size} frames, decoderState: ${clipDecoder.decoder.state}, nearby: [${availableFrames}...]).`);
+      throw new Error(`FAST export failed: "${clipDecoder.clipName}" has no decoded frame at ${(targetTimestamp/1_000_000).toFixed(3)}s after all attempts (buffer: ${clipDecoder.frameBuffer.size} frames, decoderState: ${clipDecoder.decoder?.state ?? 'dormant'}, nearby: [${availableFrames}...]).`);
     }
   }
 }

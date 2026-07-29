@@ -64,12 +64,6 @@
   color: var(--success-light);
 }
 
-.analysis-action-pill--transcript.state-ready {
-  border-color: color-mix(in srgb, var(--warning) 38%, transparent);
-  background: color-mix(in srgb, var(--warning) 11%, transparent);
-  color: var(--warning);
-}
-
 .analysis-action-pill--descriptions.state-ready {
   border-color: color-mix(in srgb, var(--accent) 38%, transparent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);

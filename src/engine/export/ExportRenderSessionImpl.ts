@@ -301,12 +301,20 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
       }
       return null;
     }
+    const captureHeight = this.stackedAlpha ? this.height * 2 : this.height;
+    const expectedByteLength = this.width * captureHeight * 4;
+    if (pixels.byteLength !== expectedByteLength) {
+      throw new Error(
+        `Export readback returned ${pixels.byteLength} RGBA bytes; expected ` +
+        `${expectedByteLength} for ${this.width}x${captureHeight}.`
+      );
+    }
 
     return {
       kind: 'rgba-pixels',
       pixels,
       width: this.width,
-      height: this.height,
+      height: captureHeight,
       timestampMicros: input.timestampMicros,
       durationMicros: input.durationMicros,
       metrics: { ...metrics, captureMs },

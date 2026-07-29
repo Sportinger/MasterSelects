@@ -89,7 +89,7 @@ export function getAudioElementSrcKind(src: string | undefined): 'blob-url' | 'f
 }
 
 export function pauseAudioElement(element: HTMLAudioElement | HTMLVideoElement | null | undefined): void {
-  if (!element) return;
+  if (!element || element.paused) return;
   element.pause();
 }
 

@@ -92,6 +92,20 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
     transcriptProgress,
     transcriptStatus,
   });
+  const transcriptRun = transcriptController.run;
+  const transcriptProviderProgress = transcriptRun?.providerProgress;
+  const transcriptIsMerging = transcriptRun?.stage === 'aligning'
+    || transcriptRun?.stage === 'finalizing';
+  const transcriptRunningStatus = transcriptIsMerging
+    ? `Merge ${Math.round(transcriptRun?.finalProgress ?? 0)}%`
+    : transcriptProviderProgress
+      ? `Deepgram ${Math.round(transcriptProviderProgress.deepgram.percent)}% · OpenAI ${Math.round(transcriptProviderProgress.openai.percent)}%`
+      : `${Math.round(transcriptProgress)}%`;
+  const transcriptCompactStatus = transcriptIsMerging
+    ? `Merge ${Math.round(transcriptRun?.finalProgress ?? 0)}%`
+    : transcriptProviderProgress
+      ? `DG ${Math.round(transcriptProviderProgress.deepgram.percent)}% · OA ${Math.round(transcriptProviderProgress.openai.percent)}%`
+      : `${Math.round(transcriptProgress)}%`;
   const audioIntelligence = useAnalysisAudioIntelligence(clipId);
 
   // Reactive data - subscribe to specific value only
@@ -458,7 +472,7 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
       detail: 'Timed words and diarized speakers',
       state: transcriptStatus,
       statusText: transcriptStatus === 'transcribing'
-        ? `${Math.round(transcriptProgress)}%`
+        ? transcriptRunningStatus
         : analyzeAllRunning && transcriptGraphText
           ? transcriptGraphText
         : transcriptStatus === 'ready'
@@ -466,6 +480,9 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
           : transcriptStatus === 'error'
             ? 'Transcription failed'
             : 'Not transcribed',
+      compactStatusText: transcriptStatus === 'transcribing'
+        ? transcriptCompactStatus
+        : undefined,
       onRun: transcriptController.onTranscribe,
       onCancel: handleCancelTranscriptAction,
       disabled: analyzeAllRunning,
@@ -540,6 +557,8 @@ export function AnalysisTab({ clipId, analysis, analysisStatus, analysisProgress
     handleContinue,
     handleDescribe,
     transcriptController.onTranscribe,
+    transcriptCompactStatus,
+    transcriptRunningStatus,
     isPartial,
     localVisual,
     localVisualBlockedReason,

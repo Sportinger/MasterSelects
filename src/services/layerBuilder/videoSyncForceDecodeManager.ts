@@ -2,14 +2,19 @@ import { renderHostPort } from '../render/renderHostPort';
 import { vfPipelineMonitor } from '../vfPipelineMonitor';
 
 export class VideoSyncForceDecodeManager {
+  private static readonly RETRY_COOLDOWN_MS = 2000;
+
   private inProgress = new Set<string>();
+  private lastAttemptAt = new Map<string, number>();
 
   reset(): void {
     this.inProgress.clear();
+    this.lastAttemptAt.clear();
   }
 
   clearClip(clipId: string): void {
     this.inProgress.delete(clipId);
+    this.lastAttemptAt.delete(clipId);
   }
 
   isInProgress(clipId: string): boolean {
@@ -21,7 +26,19 @@ export class VideoSyncForceDecodeManager {
   }
 
   forceVideoFrameDecode(clipId: string, video: HTMLVideoElement): void {
-    if (this.inProgress.has(clipId)) return;
+    const now = performance.now();
+    const lastAttemptAt = this.lastAttemptAt.get(clipId);
+    if (
+      this.inProgress.has(clipId) ||
+      (
+        lastAttemptAt !== undefined &&
+        now - lastAttemptAt < VideoSyncForceDecodeManager.RETRY_COOLDOWN_MS
+      )
+    ) {
+      return;
+    }
+
+    this.lastAttemptAt.set(clipId, now);
     this.inProgress.add(clipId);
 
     const currentTime = video.currentTime;

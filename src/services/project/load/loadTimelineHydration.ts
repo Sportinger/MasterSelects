@@ -21,6 +21,7 @@ import type {
   TranscriptStatus,
 } from '../../../types';
 import { calcRangeCoverage } from './loadMediaCacheHydration';
+import { recoverPersistedTranscriptStatus } from '../../transcription/persistedTranscriptStatus';
 import {
   normalizePersistedFaceStatus,
   sanitizePersistedFaceAnalysis,
@@ -310,7 +311,10 @@ export function convertProjectCompositionToStore(
         vectorAnimationSettings: c.vectorAnimationSettings,
         is3D: c.is3D,
         transcript: c.transcript,
-        transcriptStatus: c.transcriptStatus as TranscriptStatus | undefined,
+        transcriptStatus: recoverPersistedTranscriptStatus(
+          c.transcriptStatus as TranscriptStatus | undefined,
+          c.transcript,
+        ),
         analysis,
         analysisStatus: c.analysisStatus as AnalysisStatus | undefined,
         faceAnalysisStatus,

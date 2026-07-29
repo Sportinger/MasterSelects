@@ -387,6 +387,7 @@ export default defineConfig(({ command, mode }) => {
     '/api/auth',
     '/api/billing',
     '/api/credits',
+    '/api/support',
     '/api/stripe',
     '/api/ai/chat',
     '/api/ai/audio',

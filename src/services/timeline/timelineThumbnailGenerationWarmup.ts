@@ -32,6 +32,7 @@ export interface TimelineThumbnailGenerationClipRef {
     videoElement?: HTMLVideoElement;
     naturalDuration?: number;
   } | null;
+  nestedClips?: readonly TimelineThumbnailGenerationClipRef[];
 }
 
 export interface TimelineThumbnailGenerationMediaFileRef {
@@ -119,6 +120,24 @@ function getClipMediaFileId(clip: TimelineThumbnailGenerationClipRef): string | 
   return clip.source.mediaFileId ?? clip.mediaFileId ?? null;
 }
 
+function findThumbnailGenerationClip(
+  clips: readonly TimelineThumbnailGenerationClipRef[],
+  mediaFileId: string,
+): TimelineThumbnailGenerationClipRef | undefined {
+  for (const clip of clips) {
+    if (getClipMediaFileId(clip) === mediaFileId) {
+      return clip;
+    }
+    const nestedClip = clip.nestedClips
+      ? findThumbnailGenerationClip(clip.nestedClips, mediaFileId)
+      : undefined;
+    if (nestedClip) {
+      return nestedClip;
+    }
+  }
+  return undefined;
+}
+
 function getFinitePositiveDuration(...values: Array<number | undefined>): number | null {
   for (const value of values) {
     if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
@@ -152,9 +171,7 @@ function resolveThumbnailGenerationRequest(
 ): TimelineThumbnailGenerationRequest | null {
   const mediaFile = state.mediaFiles.find((file) => file.id === ref.mediaFileId);
   const fileHash = ref.fileHash ?? mediaFile?.fileHash;
-  const clip = state.clips.find((candidate) => (
-    getClipMediaFileId(candidate) === ref.mediaFileId
-  ));
+  const clip = findThumbnailGenerationClip(state.clips, ref.mediaFileId);
   const video = clip?.source?.videoElement;
   const sourceUrl = mediaFile?.url || video?.currentSrc || video?.src || '';
   if (!clip || !sourceUrl) return null;

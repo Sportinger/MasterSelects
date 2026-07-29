@@ -481,7 +481,7 @@ export class FrameExporter {
           videoFrame.close();
         } else {
           const pixels = capture.pixels;
-          this.previewPublisher.publishPixels(pixels, width, height, time);
+          this.previewPublisher.publishPixels(pixels, capture.width, capture.height, time);
           const encodeStart = performance.now();
           await this.encoder.encodeFrame(pixels, frame, keyframeInterval);
           encodeMs = performance.now() - encodeStart;

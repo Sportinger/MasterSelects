@@ -1,6 +1,7 @@
 ENVIRONMENT=development
 SESSION_SECRET=replace-me
 AUTH_EMAIL_FROM="MasterSelects <auth@example.com>"
+SUPPORT_NOTE_EMAIL=admin@masterselects.com
 GOOGLE_CLIENT_ID=replace-me
 GOOGLE_CLIENT_SECRET=replace-me
 RESEND_API_KEY=replace-me

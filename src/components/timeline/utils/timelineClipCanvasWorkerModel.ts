@@ -392,6 +392,16 @@ export function getTimelineClipCanvasWorkerEligibility(
     }
     if (hasSourceTimingFallbackVisuals(clip, input, preparedResources)) addReason(reasons, 'source-timing-visuals');
     if (clip.visuals.composition && !preparedResources?.compositionVisuals) addReason(reasons, 'composition-visuals');
+    // Composition filmstrips are prepared once and contain an ImageBitmap.
+    // Transferring that persistent bitmap would detach it, so a later draw
+    // could no longer post the same resource. Keep this track on the software
+    // canvas path until composition strips are produced as per-draw resources.
+    if (
+      clip.hasCompositionSegmentThumbnails ||
+      preparedResources?.compositionVisuals?.segmentThumbnailStrip
+    ) {
+      addReason(reasons, 'composition-segment-thumbnails');
+    }
     if (hasAudioResourceVisuals(clip, input, preparedResources)) addReason(reasons, 'audio-resource-visuals');
     if (input.waveformsEnabled && input.audioDisplayMode === 'spectral' && clip.isAudio && !preparedResources?.spectrogram) {
       addReason(reasons, 'spectrogram-resource-missing');

@@ -612,7 +612,7 @@ describe('timeline clip canvas worker model', () => {
     });
   });
 
-  it('carries prepared composition visuals with transferables', () => {
+  it('keeps persistent composition segment bitmaps on the main-thread path', () => {
     const bitmap = createBitmap();
     const result = buildTimelineClipCanvasWorkerDrawMessage({
       clips: [createClip({
@@ -658,21 +658,12 @@ describe('timeline clip canvas worker model', () => {
       requestId: 15,
     });
 
-    const compositionVisuals = result.message?.paintPayloads.compositionVisuals[0]?.resource;
-    expect(result.eligibility).toEqual({ eligible: true, reasons: [] });
-    expect('compositionVisuals' in (result.message?.clips[0] ?? {})).toBe(false);
-    expect(compositionVisuals?.outline).toBe(true);
-    expect(compositionVisuals?.nestedBoundaries).toBeInstanceOf(Float32Array);
-    expect(compositionVisuals?.segmentRects).toBeInstanceOf(Float32Array);
-    expect(compositionVisuals?.segmentThumbnailStrip?.bitmap).toBe(bitmap);
-    expect(compositionVisuals?.mixdownWaveform?.columns).toBeInstanceOf(Float32Array);
-    expect(compositionVisuals?.mixdownGenerating).toBe(true);
-    expect(result.transferables).toEqual([
-      compositionVisuals?.nestedBoundaries?.buffer,
-      compositionVisuals?.segmentRects?.buffer,
-      bitmap,
-      compositionVisuals?.mixdownWaveform?.columns.buffer,
-    ]);
+    expect(result.eligibility).toEqual({
+      eligible: false,
+      reasons: ['composition-segment-thumbnails'],
+    });
+    expect(result.message).toBeNull();
+    expect(result.transferables).toEqual([]);
   });
 
   it('keeps active trim on fallback when trim visuals are missing for the active clip', () => {

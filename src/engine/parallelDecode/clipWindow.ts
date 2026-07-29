@@ -6,6 +6,8 @@ export interface ParallelDecodeClipWindow {
   reversed: boolean;
   speed: number;
   isNested?: boolean;
+  mainTimelineStart?: number;
+  mainTimelineDuration?: number;
   parentStartTime?: number;
   parentInPoint?: number;
 }
@@ -13,7 +15,8 @@ export interface ParallelDecodeClipWindow {
 export interface ParallelDecodeClipInfo extends ParallelDecodeClipWindow {
   clipId: string;
   clipName: string;
-  fileData: ArrayBuffer;
+  fileData?: ArrayBuffer;
+  loadFileData?: () => Promise<ArrayBuffer>;
   parentClipId?: string;
 }
 
@@ -25,8 +28,10 @@ export interface ParallelDecodePrefetchTarget {
 export function timelineToSourceTime(clipInfo: ParallelDecodeClipWindow, timelineTime: number): number {
   let clipLocalTime: number;
 
-  if (clipInfo.isNested && clipInfo.parentStartTime !== undefined) {
-    const compTime = timelineTime - clipInfo.parentStartTime - (clipInfo.parentInPoint || 0);
+  if (clipInfo.mainTimelineStart !== undefined) {
+    clipLocalTime = timelineTime - clipInfo.mainTimelineStart;
+  } else if (clipInfo.isNested && clipInfo.parentStartTime !== undefined) {
+    const compTime = timelineTime - clipInfo.parentStartTime + (clipInfo.parentInPoint || 0);
     clipLocalTime = compTime - clipInfo.startTime;
   } else {
     clipLocalTime = timelineTime - clipInfo.startTime;
@@ -41,8 +46,14 @@ export function timelineToSourceTime(clipInfo: ParallelDecodeClipWindow, timelin
 }
 
 export function isTimeInClipRange(clipInfo: ParallelDecodeClipWindow, timelineTime: number): boolean {
+  if (clipInfo.mainTimelineStart !== undefined) {
+    const duration = clipInfo.mainTimelineDuration ?? clipInfo.duration;
+    return timelineTime >= clipInfo.mainTimelineStart &&
+      timelineTime < clipInfo.mainTimelineStart + duration;
+  }
+
   if (clipInfo.isNested && clipInfo.parentStartTime !== undefined) {
-    const compTime = timelineTime - clipInfo.parentStartTime - (clipInfo.parentInPoint || 0);
+    const compTime = timelineTime - clipInfo.parentStartTime + (clipInfo.parentInPoint || 0);
     return compTime >= clipInfo.startTime && compTime < clipInfo.startTime + clipInfo.duration;
   }
 
@@ -50,11 +61,19 @@ export function isTimeInClipRange(clipInfo: ParallelDecodeClipWindow, timelineTi
 }
 
 export function getClipMainTimelineStart(clipInfo: ParallelDecodeClipWindow): number {
+  if (clipInfo.mainTimelineStart !== undefined) {
+    return clipInfo.mainTimelineStart;
+  }
+
   if (clipInfo.isNested && clipInfo.parentStartTime !== undefined) {
-    return clipInfo.parentStartTime + (clipInfo.parentInPoint || 0) + clipInfo.startTime;
+    return clipInfo.parentStartTime - (clipInfo.parentInPoint || 0) + clipInfo.startTime;
   }
 
   return clipInfo.startTime;
+}
+
+export function getClipMainTimelineDuration(clipInfo: ParallelDecodeClipWindow): number {
+  return clipInfo.mainTimelineDuration ?? clipInfo.duration;
 }
 
 export function getPrefetchTargetForClip(

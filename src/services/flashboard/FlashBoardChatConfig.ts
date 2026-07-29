@@ -121,9 +121,28 @@ export const FLASHBOARD_OPENAI_REASONING_EFFORT_OPTIONS: Array<{
 ];
 export const DEFAULT_FLASHBOARD_CHAT_TEMPERATURE = 0.7;
 export const FLASHBOARD_CHAT_MAX_PROVIDER_TOOLS = 128;
-export const FLASHBOARD_CHAT_MAX_TOOL_ITERATIONS = 12;
-export const FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS = 8000;
-export const FLASHBOARD_LEMONADE_MAX_TOOL_RESULT_CHARS = 2000;
+/**
+ * Tool rounds per turn. 12 could not finish real work: reading a 26-clip
+ * timeline plus editing it already spent most of the budget, and a long
+ * transcript was unreachable. This is a runaway guard, not a work budget —
+ * it exists so a looping model cannot burn credits forever.
+ */
+export const FLASHBOARD_CHAT_MAX_TOOL_ITERATIONS = 400;
+/** Output tokens per provider round. 2048 truncated long plans mid-list. */
+export const FLASHBOARD_CHAT_MAX_OUTPUT_TOKENS = 32_000;
+/**
+ * Hosted models get the full tool result. The old 8,000-char cap replaced the
+ * whole payload with a sliced prefix, which forced the model to re-read the
+ * same timeline in overlapping slices and cost it clip ids mid-list. Hosted
+ * context windows are large enough to carry the real thing.
+ */
+export const FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS = Number.POSITIVE_INFINITY;
+/**
+ * Local models keep a real cap: their context is whatever the user configured
+ * for Lemonade, so an unbounded result would overflow the window instead of
+ * informing it. Raised from 2,000 — still finite on purpose.
+ */
+export const FLASHBOARD_LEMONADE_MAX_TOOL_RESULT_CHARS = 24_000;
 export const FLASHBOARD_LEMONADE_INITIAL_RESPONSE_TIMEOUT_MS = 180_000;
 export const FLASHBOARD_LEMONADE_STREAM_IDLE_TIMEOUT_MS = 90_000;
 

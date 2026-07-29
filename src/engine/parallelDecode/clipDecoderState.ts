@@ -26,7 +26,13 @@ export interface DecodedFrame {
 export interface ClipDecoder {
   clipId: string;
   clipName: string;
-  decoder: VideoDecoder;
+  /**
+   * Decoder handles are leased from the manager's fixed-size pool. Clip
+   * metadata and buffered frames remain registered while the handle is
+   * dormant, so long timelines do not consume one native decoder per clip.
+   */
+  decoder: VideoDecoder | null;
+  decoderUseSerial: number;
   samples: ParallelDecodeSample[];
   sampleIndex: number;
   videoTrack: MP4VideoTrack;
@@ -109,8 +115,8 @@ export function buildClipRuntimeSnapshot(clipDecoder: ClipDecoder): ParallelDeco
     clipId: clipDecoder.clipId,
     clipName: clipDecoder.clipName,
     codec: clipDecoder.codecConfig.codec,
-    decoderState: clipDecoder.decoder.state,
-    decodeQueueSize: clipDecoder.decoder.decodeQueueSize,
+    decoderState: clipDecoder.decoder?.state ?? 'dormant',
+    decodeQueueSize: clipDecoder.decoder?.decodeQueueSize ?? 0,
     hardwareAcceleration: clipDecoder.codecConfig.hardwareAcceleration,
     dimensions: {
       width: clipDecoder.videoTrack.video.width,

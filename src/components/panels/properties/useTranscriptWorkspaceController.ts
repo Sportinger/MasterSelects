@@ -5,6 +5,7 @@ import { useSettingsStore, type TranscriptionProvider } from '../../../stores/se
 import { useTimelineStore } from '../../../stores/timeline';
 import type {
   TranscriptFusionArtifact,
+  TranscriptFusionProgress,
   TranscriptFusionProviderStatus,
   TranscriptStatus,
   TranscriptWord,
@@ -63,7 +64,10 @@ function buildRun(
   provider: TranscriptionProvider,
   progress: number,
   status: TranscriptStatus,
-  fusionProgress: { stage?: TranscriptRunView['stage']; providers?: TranscriptRunView['providers'] } | undefined,
+  fusionProgress: Pick<
+    TranscriptFusionProgress,
+    'mergeProgress' | 'providerProgress' | 'providers' | 'stage'
+  > | undefined,
 ): TranscriptRunView | null {
   if (provider !== 'hybrid') return null;
   const stage = fusionProgress?.stage ?? (status === 'ready' ? 'complete' : status === 'error' ? 'error' : 'transcribing');
@@ -75,9 +79,20 @@ function buildRun(
     ? 'complete'
     : stage === 'error' ? 'error'
       : stage === 'aligning' || stage === 'finalizing' ? 'running' : 'waiting';
-  const finalProgress = stage === 'complete' ? 100 : stage === 'aligning' ? 20 : stage === 'finalizing' ? 90 : 0;
+  const finalProgress = stage === 'complete'
+    ? 100
+    : fusionProgress?.mergeProgress
+      ?? (stage === 'aligning' ? 20 : stage === 'finalizing' ? 90 : 0);
   const finished = Object.values(providers).filter(item => item === 'complete' || item === 'error').length;
-  const derivedProgress = stage === 'transcribing' ? 12 + finished * 24
+  const measuredProviderProgress = fusionProgress?.providerProgress
+    ? (
+        fusionProgress.providerProgress.deepgram.percent
+        + fusionProgress.providerProgress.openai.percent
+      ) / 2
+    : null;
+  const derivedProgress = stage === 'transcribing' && measuredProviderProgress !== null
+    ? Math.round(measuredProviderProgress * 0.9)
+    : stage === 'transcribing' ? 12 + finished * 24
     : stage === 'aligning' ? 68 : stage === 'finalizing' ? 95 : stage === 'complete' ? 100 : 0;
   const finalDetail = stage === 'transcribing' ? 'Starts when both transcripts are ready'
     : stage === 'aligning' ? 'Mapping the speaker timeline'
@@ -89,6 +104,7 @@ function buildRun(
     finalStatus,
     overallProgress: Math.max(progress, derivedProgress),
     providers,
+    providerProgress: fusionProgress?.providerProgress,
     stage,
   };
 }
@@ -119,13 +135,18 @@ export function useTranscriptWorkspaceController({
     () => coverageForRanges(mediaState?.transcribedRanges, transcript, inPoint, outPoint),
     [inPoint, mediaState?.transcribedRanges, outPoint, transcript],
   );
-  const isPartial = transcriptStatus === 'ready' && coverage > 0 && coverage < 0.98;
+  const isPartial = transcriptStatus !== 'transcribing' && coverage > 0 && coverage < 0.98;
   const run = useMemo(
     () => buildRun(activeProvider, transcriptProgress, transcriptStatus, fusionProgress),
     [activeProvider, fusionProgress, transcriptProgress, transcriptStatus],
   );
   const summary = useMemo<TranscriptSummaryView | null>(
-    () => artifact || fusionProgress ? { stage: fusionProgress?.stage ?? 'complete' } : null,
+    () => artifact || fusionProgress
+      ? {
+          providers: fusionProgress?.providers ?? artifact?.providerStatuses,
+          stage: fusionProgress?.stage ?? 'complete',
+        }
+      : null,
     [artifact, fusionProgress],
   );
   const onTranscribe = useCallback(() => {

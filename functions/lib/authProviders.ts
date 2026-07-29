@@ -85,6 +85,10 @@ function getCreditClaimNotifyEmail(env: Env): string {
   return email;
 }
 
+function getSupportNoteEmail(env: Env): string {
+  return trimOrNull(env.SUPPORT_NOTE_EMAIL) ?? 'admin@masterselects.com';
+}
+
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => ({
     '&': '&amp;',
@@ -251,6 +255,54 @@ export async function sendFreeCreditClaimNotification(
         : typeof payload.error === 'string'
           ? payload.error
           : `Free credit claim notification failed with status ${response.status}`;
+    throw new Error(message);
+  }
+}
+
+export async function sendSupportNoteEmail(
+  env: Env,
+  input: {
+    appVersion?: string;
+    message: string;
+    page?: string;
+    senderEmail?: string;
+  },
+): Promise<void> {
+  const metadata = [
+    input.senderEmail ? `Signed-in user: ${input.senderEmail}` : 'Signed-in user: anonymous',
+    input.appVersion ? `App version: ${input.appVersion}` : null,
+    input.page ? `Page: ${input.page}` : null,
+  ].filter((value): value is string => Boolean(value));
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${getResendApiKey(env)}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: getAuthFromEmail(env),
+      html: `
+        <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
+          <h2 style="margin:0 0 12px">New MasterSelects note</h2>
+          <div style="margin:0 0 18px;padding:14px 16px;background:#f4f4f5;border-radius:10px;white-space:pre-wrap">${escapeHtml(input.message)}</div>
+          <p style="margin:0;font-size:13px;color:#64748b">${metadata.map(escapeHtml).join('<br>')}</p>
+        </div>
+      `,
+      reply_to: input.senderEmail,
+      subject: 'MasterSelects: new note',
+      text: `${input.message}\n\n${metadata.join('\n')}`,
+      to: [getSupportNoteEmail(env)],
+    }),
+  });
+  const payload = (await parseJsonResponse<Record<string, unknown>>(response)) ?? {};
+
+  if (!response.ok) {
+    const message =
+      typeof payload.message === 'string'
+        ? payload.message
+        : typeof payload.error === 'string'
+          ? payload.error
+          : `Support note email failed with status ${response.status}`;
     throw new Error(message);
   }
 }

@@ -57,6 +57,22 @@ interface VideoFrameCallbackMetadataLike {
   readonly expectedDisplayTime?: number;
 }
 
+interface LongAnimationFrameScriptLike {
+  readonly duration?: number;
+  readonly invoker?: string;
+  readonly invokerType?: string;
+  readonly sourceURL?: string;
+  readonly sourceFunctionName?: string;
+  readonly forcedStyleAndLayoutDuration?: number;
+}
+
+interface LongAnimationFrameEntryLike extends PerformanceEntry {
+  readonly blockingDuration?: number;
+  readonly renderStart?: number;
+  readonly styleAndLayoutStart?: number;
+  readonly scripts?: readonly LongAnimationFrameScriptLike[];
+}
+
 type VideoFrameCallbackHandle = number;
 
 type VideoWithFrameCallback = HTMLVideoElement & {
@@ -398,6 +414,7 @@ export async function handleSamplePlaybackFramePacing(args: Record<string, unkno
   const initialRenderCount = readRenderCount();
   const samples: FramePacingSample[] = [];
   const longTasks: Array<Record<string, unknown>> = [];
+  const longAnimationFrames: Array<Record<string, unknown>> = [];
   const startedAt = performance.now();
   let frameId: number | null = null;
   let timeoutId: number | null = null;
@@ -431,15 +448,38 @@ export async function handleSamplePlaybackFramePacing(args: Record<string, unkno
     try {
       observer = new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
-          longTasks.push({
-            name: entry.name,
-            startMs: round(entry.startTime - startedAt),
-            durationMs: round(entry.duration),
-            entryType: entry.entryType,
-          });
+          if (entry.entryType === 'long-animation-frame') {
+            const frame = entry as LongAnimationFrameEntryLike;
+            const scripts = [...(frame.scripts ?? [])]
+              .toSorted((left, right) => (right.duration ?? 0) - (left.duration ?? 0))
+              .slice(0, 5)
+              .map((script) => ({
+                durationMs: round(script.duration ?? 0),
+                invoker: script.invoker ?? '',
+                invokerType: script.invokerType ?? '',
+                sourceURL: script.sourceURL ?? '',
+                sourceFunctionName: script.sourceFunctionName ?? '',
+                forcedStyleAndLayoutDurationMs: round(script.forcedStyleAndLayoutDuration ?? 0),
+              }));
+            longAnimationFrames.push({
+              startMs: round(entry.startTime - startedAt),
+              durationMs: round(entry.duration),
+              blockingDurationMs: round(frame.blockingDuration ?? 0),
+              renderStartMs: round((frame.renderStart ?? entry.startTime) - startedAt),
+              styleAndLayoutStartMs: round((frame.styleAndLayoutStart ?? entry.startTime) - startedAt),
+              scripts,
+            });
+          } else {
+            longTasks.push({
+              name: entry.name,
+              startMs: round(entry.startTime - startedAt),
+              durationMs: round(entry.duration),
+              entryType: entry.entryType,
+            });
+          }
         }
       });
-      observer.observe({ entryTypes: ['longtask'] });
+      observer.observe({ entryTypes: ['longtask', 'long-animation-frame'] });
     } catch {
       observer = null;
     }
@@ -562,6 +602,8 @@ export async function handleSamplePlaybackFramePacing(args: Record<string, unkno
       videoFrameCallbacks: summarizeVideoFrameCallbacks(videoFrameCallbackEvents, elapsedMs),
       longTaskCount: longTasks.length,
       longTasks: longTasks.slice(-24),
+      longAnimationFrameCount: longAnimationFrames.length,
+      longAnimationFrames: longAnimationFrames.slice(-12),
       ...(sampleTail ? { samples: sampleTail } : {}),
     },
   };

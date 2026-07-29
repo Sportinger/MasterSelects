@@ -39,7 +39,7 @@ interface DeepgramResponse {
 
 type TranscriptUpdater = (clipId: string, data: ClipTranscriptUpdate) => void;
 
-const HOSTED_TRANSCRIPTION_MAX_BYTES = 24 * 1024 * 1024;
+export const HOSTED_TRANSCRIPTION_MAX_BYTES = 24 * 1024 * 1024;
 type HostedTranscriptionProvider = 'deepgram' | 'openai';
 export type OpenAITranscriptionVariant = 'word-timestamps' | 'diarized-speakers';
 export interface TranscriptionRequestOptions {

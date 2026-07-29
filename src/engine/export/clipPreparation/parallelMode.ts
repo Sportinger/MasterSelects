@@ -3,15 +3,10 @@ import type { TimelineClip } from '../../../stores/timeline/types';
 import type { MediaFile } from '../../../stores/mediaStore/types';
 import { ParallelDecodeManager } from '../../ParallelDecodeManager';
 import type { ClipPreparationModeResult, ExportClipState } from '../ClipPreparation';
-import type { ExportParallelDecodeAdmissionReport } from '../../../services/timeline/exportRuntimeReporting';
-import {
-  createParallelDecodeAdmissionReport,
-  getClipMediaFileId,
-  releaseParallelDecodeAdmission,
-  reserveParallelDecodeAdmission,
-} from './admission';
-import { type ClipFileDataCache, loadClipFileDataCached } from './sourceResolution';
+import { getClipMediaFileId } from './admission';
+import { type ClipFileDataCache, loadClipFileData } from './sourceResolution';
 import { createExportRuntimeSource, getExportRuntimeOwnerId } from './runtimeBinding';
+import type { NestedVideoClip } from './nestedVideoClips';
 
 const log = Logger.create('ClipPreparation');
 
@@ -21,68 +16,40 @@ export async function initializeParallelDecoding(
   clips: TimelineClip[],
   mediaFiles: MediaFile[],
   _startTime: number,
-  endTime: number,
-  nestedClips: Array<{ clip: TimelineClip; parentClip: TimelineClip }>,
+  _endTime: number,
+  nestedClips: NestedVideoClip[],
   clipStates: Map<string, ExportClipState>,
   fps: number,
   exportRunId: string | undefined,
   endPrepare: () => void,
-  fileDataCache: ClipFileDataCache
+  _fileDataCache: ClipFileDataCache
 ): Promise<ClipPreparationModeResult> {
-  const reservedParallelReports: ExportParallelDecodeAdmissionReport[] = [];
-  if (exportRunId) {
-    try {
-      for (const clip of clips) {
-        const mediaFileId = getClipMediaFileId(clip);
-        const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
-        const report = createParallelDecodeAdmissionReport({
-          runId: exportRunId,
-          clip,
-          mediaFile,
-          fps,
-        });
-        reserveParallelDecodeAdmission(report, clip);
-        reservedParallelReports.push(report);
-      }
-
-      for (const { clip } of nestedClips) {
-        const mediaFileId = getClipMediaFileId(clip);
-        const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
-        const report = createParallelDecodeAdmissionReport({
-          runId: exportRunId,
-          clip,
-          mediaFile,
-          fps,
-          isNested: true,
-        });
-        reserveParallelDecodeAdmission(report, clip);
-        reservedParallelReports.push(report);
-      }
-    } catch (e) {
-      for (const report of reservedParallelReports) {
-        releaseParallelDecodeAdmission(report);
-      }
-      throw e;
-    }
-  }
-
   const parallelDecoder = new ParallelDecodeManager();
 
   try {
-    const endLoadAll = log.time('loadAllClipFileData');
-    const loadPromises: Promise<ParallelClipInfo>[] = clips.map(async (clip) => {
+    const createFileDataLoader = (
+      clip: TimelineClip,
+      mediaFile: MediaFile | null,
+      nested: boolean
+    ): (() => Promise<ArrayBuffer>) => async () => {
+      const fileData = await loadClipFileData(clip, mediaFile);
+      if (!fileData) {
+        throw new Error(
+          `FAST export failed: Could not load file data for ${nested ? 'nested ' : ''}` +
+          `clip "${clip.name}".`
+        );
+      }
+      return fileData;
+    };
+
+    const loadedClips: ParallelClipInfo[] = clips.map((clip) => {
       const mediaFileId = getClipMediaFileId(clip);
       const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
-      const fileData = await loadClipFileDataCached(clip, mediaFile, fileDataCache);
-
-      if (!fileData) {
-        throw new Error(`FAST export failed: Could not load file data for clip "${clip.name}". Try PRECISE mode instead.`);
-      }
 
       return {
         clipId: clip.id,
         clipName: clip.name,
-        fileData,
+        loadFileData: createFileDataLoader(clip, mediaFile ?? null, false),
         startTime: clip.startTime,
         duration: clip.duration,
         inPoint: clip.inPoint,
@@ -92,19 +59,19 @@ export async function initializeParallelDecoding(
       };
     });
 
-    const nestedLoadPromises: Promise<ParallelClipInfo | null>[] = nestedClips.map(async ({ clip, parentClip }) => {
+    const loadedNestedClips: ParallelClipInfo[] = nestedClips.map(({
+      clip,
+      parentClip,
+      mainTimelineStart,
+      mainTimelineDuration,
+    }) => {
       const mediaFileId = getClipMediaFileId(clip);
       const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
-      const fileData = await loadClipFileDataCached(clip, mediaFile, fileDataCache);
-
-      if (!fileData) {
-        throw new Error(`FAST export failed: Could not load file data for nested clip "${clip.name}". Select HTMLVideo Precise explicitly if this export should use HTMLVideo decoding.`);
-      }
 
       return {
         clipId: clip.id,
         clipName: `${parentClip.name}/${clip.name}`,
-        fileData,
+        loadFileData: createFileDataLoader(clip, mediaFile ?? null, true),
         startTime: clip.startTime,
         duration: clip.duration,
         inPoint: clip.inPoint,
@@ -112,21 +79,17 @@ export async function initializeParallelDecoding(
         reversed: clip.reversed || false,
         speed: clip.speed ?? 1,
         isNested: true,
+        mainTimelineStart,
+        mainTimelineDuration,
         parentClipId: parentClip.id,
         parentStartTime: parentClip.startTime,
         parentInPoint: parentClip.inPoint || 0,
       };
     });
 
-    const loadedClips = await Promise.all(loadPromises);
-    const loadedNestedClips = (await Promise.all(nestedLoadPromises)).filter(
-      (clipInfo): clipInfo is ParallelClipInfo => clipInfo !== null
-    );
-    endLoadAll();
-
     const clipInfos: ParallelClipInfo[] = [...loadedClips, ...loadedNestedClips];
 
-    log.info(`Loaded ${loadedClips.length} regular + ${loadedNestedClips.length} nested clips for parallel decoding`);
+    log.info(`Registered ${loadedClips.length} regular + ${loadedNestedClips.length} nested clips for windowed decoding`);
 
     const endParallelInit = log.time('parallelDecoder.initialize');
     await parallelDecoder.initialize(clipInfos, fps);
@@ -140,8 +103,14 @@ export async function initializeParallelDecoding(
       let clipActiveAtStart: boolean;
       let clipTimeAtExportStart: number;
 
-      if (clipInfo.isNested && clipInfo.parentStartTime !== undefined) {
-        const compTime = _startTime - clipInfo.parentStartTime - (clipInfo.parentInPoint || 0);
+      if (clipInfo.mainTimelineStart !== undefined) {
+        const mainDuration = clipInfo.mainTimelineDuration ?? clipInfo.duration;
+        clipActiveAtStart =
+          _startTime >= clipInfo.mainTimelineStart &&
+          _startTime < clipInfo.mainTimelineStart + mainDuration;
+        clipTimeAtExportStart = _startTime;
+      } else if (clipInfo.isNested && clipInfo.parentStartTime !== undefined) {
+        const compTime = _startTime - clipInfo.parentStartTime + (clipInfo.parentInPoint || 0);
         clipActiveAtStart = compTime >= clipInfo.startTime && compTime < clipInfo.startTime + clipInfo.duration;
         clipTimeAtExportStart = _startTime;
       } else {
@@ -174,10 +143,6 @@ export async function initializeParallelDecoding(
       }
     }
 
-    const prewarmedClipStarts = await parallelDecoder.prewarmClipStarts(_startTime, endTime);
-    if (prewarmedClipStarts > 0) {
-      log.info(`Prewarmed ${prewarmedClipStarts} clip start frames for smoother cuts`);
-    }
     endPrefetch();
 
     for (const clip of clips) {
@@ -214,9 +179,6 @@ export async function initializeParallelDecoding(
       exportMode: 'fast',
     };
   } catch (e) {
-    for (const report of reservedParallelReports) {
-      releaseParallelDecodeAdmission(report);
-    }
     parallelDecoder.cleanup();
     throw e;
   }

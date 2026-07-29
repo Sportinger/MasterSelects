@@ -1,6 +1,7 @@
 import type {
   TranscriptFusionProviderStatus,
   TranscriptFusionStage,
+  TranscriptProviderProgress,
 } from '../../../types/clipMetadata';
 import type { TranscriptionProvider } from '../../../stores/settingsStore';
 import './TranscriptWorkspaceHeader.css';
@@ -11,10 +12,12 @@ export interface TranscriptRunView {
   finalStatus: TranscriptFusionProviderStatus;
   overallProgress: number;
   providers: Record<'deepgram' | 'openai', TranscriptFusionProviderStatus>;
+  providerProgress?: Record<'deepgram' | 'openai', TranscriptProviderProgress>;
   stage: TranscriptFusionStage;
 }
 
 export interface TranscriptSummaryView {
+  providers?: Record<'deepgram' | 'openai', TranscriptFusionProviderStatus>;
   stage: TranscriptFusionStage;
 }
 
@@ -104,7 +107,10 @@ function RunStage({
           <span className="transcript-run-stage-dot" aria-hidden="true" />
           {label}
         </span>
-        <span>{STATUS_LABELS[status]}</span>
+        <span>
+          {boundedProgress === undefined ? '' : `${Math.round(boundedProgress)}% · `}
+          {STATUS_LABELS[status]}
+        </span>
       </div>
       <div
         aria-label={`${label}: ${STATUS_LABELS[status]}`}
@@ -154,18 +160,24 @@ function TranscriptRunStatus({
       {run && (
         <div className="transcript-run-stages">
           <RunStage
-            detail="Text · word timing · confidence"
+            detail={run.providerProgress
+              ? `${run.providerProgress.deepgram.completedChunks}/${run.providerProgress.deepgram.totalChunks} chunks · text, timing, confidence`
+              : 'Text · word timing · confidence'}
             label="Deepgram"
+            progress={run.providerProgress?.deepgram.percent}
             status={run.providers.deepgram}
           />
           <RunStage
-            detail="Speaker separation only"
+            detail={run.providerProgress
+              ? `${run.providerProgress.openai.completedChunks}/${run.providerProgress.openai.totalChunks} chunks · speaker separation`
+              : 'Speaker separation only'}
             label="OpenAI"
+            progress={run.providerProgress?.openai.percent}
             status={run.providers.openai}
           />
           <RunStage
             detail={run.finalDetail}
-            label="Speakers"
+            label="Merge"
             progress={run.finalProgress}
             status={run.finalStatus}
           />
@@ -175,16 +187,19 @@ function TranscriptRunStatus({
   );
 }
 
-function TranscriptResultStatus() {
+function TranscriptResultStatus({ summary }: { summary: TranscriptSummaryView }) {
+  const openAIFailed = summary.providers?.openai === 'error';
   return (
     <section className="transcript-result-status">
       <div className="transcript-result-main">
         <span className="transcript-result-ready">
           <span aria-hidden="true">✓</span>
-          Best Quality ready
+          {openAIFailed ? 'Transcript ready with speaker fallback' : 'Best Quality ready'}
         </span>
         <span className="transcript-provider-role">Deepgram text + timing</span>
-        <span className="transcript-provider-role">OpenAI speakers</span>
+        <span className="transcript-provider-role">
+          {openAIFailed ? 'OpenAI failed for one or more chunks · Deepgram speakers kept' : 'OpenAI speakers'}
+        </span>
       </div>
     </section>
   );
@@ -248,22 +263,25 @@ export function TranscriptWorkspaceHeader({
           </label>
         </div>
         <div className="transcript-command-actions">
-          {transcriptStatus !== 'ready' && !isBusy && (
+          {transcriptStatus !== 'ready' && !isBusy && !isPartial && (
             <button className="btn btn-sm btn-accent" onClick={onTranscribe}>Transcribe</button>
+          )}
+          {!isBusy && isPartial && (
+            <button className="btn btn-sm btn-accent" onClick={onContinue}>
+              Resume {Math.round(clipCoverage * 100)}%
+            </button>
           )}
           {isBusy && (
             <button className="btn btn-sm transcript-cancel-button" onClick={onCancel}>Cancel</button>
           )}
           {transcriptStatus === 'ready' && (
             <>
-              {isPartial && (
-                <button className="btn btn-sm btn-accent" onClick={onContinue}>
-                  Continue {Math.round(clipCoverage * 100)}%
-                </button>
-              )}
               <button className="btn btn-sm" onClick={onTranscribe}>Re-transcribe</button>
               <button className="btn btn-sm transcript-delete-button" onClick={onDelete}>Delete</button>
             </>
+          )}
+          {transcriptStatus === 'error' && isPartial && (
+            <button className="btn btn-sm transcript-delete-button" onClick={onDelete}>Delete</button>
           )}
         </div>
       </div>
@@ -275,7 +293,7 @@ export function TranscriptWorkspaceHeader({
           transcriptProgress={transcriptProgress}
         />
       ) : summary && transcriptStatus === 'ready' ? (
-        <TranscriptResultStatus />
+        <TranscriptResultStatus summary={summary} />
       ) : null)}
 
       {!settingsMode && transcriptStatus === 'ready' && clipCoverage > 0 && (

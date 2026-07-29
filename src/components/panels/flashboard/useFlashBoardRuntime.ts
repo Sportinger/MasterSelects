@@ -30,6 +30,7 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
   const selectedRecordIds = useSelectedFlashBoardActiveGenerationRecordIds();
   const removeGenerationRecord = useRemoveFlashBoardActiveGenerationRecord();
   const refundDialogKeysRef = useRef<Set<string>>(new Set());
+  const importingRecordIdsRef = useRef<Set<string>>(new Set());
   const [refundDialog, setRefundDialog] = useState<FlashBoardRefundDialogState | null>(null);
 
   const dismissRefundDialog = useCallback(() => {
@@ -45,19 +46,26 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
   useEffect(() => {
     flashBoardJobService.setUpdateCallback((recordId, update) => {
       if (update.status === 'completed') {
+        importingRecordIdsRef.current.add(recordId);
+
         if (update.outputs?.length) {
           updateFlashBoardActiveGenerationOutputs(recordId, update.outputs);
         }
 
         if (update.assets?.length) {
-          void flashBoardMediaBridge.importGeneratedAssets(recordId, update.assets).catch((error) => {
-            const message = error instanceof Error ? error.message : 'Failed to import generated media';
-            failFlashBoardActiveGenerationRecord(recordId, message);
-          });
+          void flashBoardMediaBridge.importGeneratedAssets(recordId, update.assets)
+            .catch((error) => {
+              const message = error instanceof Error ? error.message : 'Failed to import generated media';
+              failFlashBoardActiveGenerationRecord(recordId, message);
+            })
+            .finally(() => {
+              importingRecordIdsRef.current.delete(recordId);
+            });
           return;
         }
 
         if (!update.mediaType || (!update.assetUrl && !update.assetFile)) {
+          importingRecordIdsRef.current.delete(recordId);
           failFlashBoardActiveGenerationRecord(recordId, 'Generation finished without importable media.');
           return;
         }
@@ -66,10 +74,14 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
           ? flashBoardMediaBridge.importGeneratedFile(recordId, update.assetFile, update.mediaType)
           : flashBoardMediaBridge.importGeneratedMedia(recordId, update.assetUrl as string, update.mediaType);
 
-        void importPromise.catch((error) => {
-          const message = error instanceof Error ? error.message : 'Failed to import generated media';
-          failFlashBoardActiveGenerationRecord(recordId, message);
-        });
+        void importPromise
+          .catch((error) => {
+            const message = error instanceof Error ? error.message : 'Failed to import generated media';
+            failFlashBoardActiveGenerationRecord(recordId, message);
+          })
+          .finally(() => {
+            importingRecordIdsRef.current.delete(recordId);
+          });
         return;
       }
 
@@ -116,6 +128,9 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
           request,
           remoteTaskId,
         });
+        return;
+      }
+      if (importingRecordIdsRef.current.has(record.id)) {
         return;
       }
       if (!flashBoardJobService.hasJob(record.id)) {

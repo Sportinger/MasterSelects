@@ -4,6 +4,7 @@ import type { TimelineClip } from '../../types/timeline';
 import { evaluateTransitionMappedAnimation } from '../compositionRender/transitionMappedAnimation';
 import { resolveTransitionRecipeBlendMode } from '../timeline/transitionRecipeBlendWindows';
 import { addLayerBuilderMaskProperties } from './layerBuilderLayerPostProcessing';
+import { tryBuildNestedCompositionPassthroughLayer } from './layerBuilderNestedCompositionPassthrough';
 import type { LayerBuilderProxyFrames } from './layerBuilderProxyFrames';
 import type { TransformCache } from './TransformCache';
 import type { ClipTimeInfo, FrameContext } from './types';
@@ -37,6 +38,23 @@ export function buildLayerBuilderNestedCompositionLayer(input: BuildNestedCompLa
     `${ctx.activeCompId}_${layerIndex}`,
     mappedAnimation?.transform ?? ctx.getInterpolatedTransform(clip.id, timeInfo.clipTime),
   );
+  const effects = mappedAnimation?.effects ?? ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime);
+  const colorCorrection = ctx.getInterpolatedColorCorrection(clip.id, timeInfo.clipTime);
+  const passthroughLayer = tryBuildNestedCompositionPassthroughLayer({
+    clip,
+    layerIndex,
+    ctx,
+    nestedLayers,
+    mappedAnimation,
+    opacityOverride,
+    transform,
+    effects,
+    colorCorrection,
+  });
+  if (passthroughLayer) {
+    return passthroughLayer;
+  }
+
   const composition = ctx.compositionById.get(clip.compositionId || '');
   const nestedCompData: NestedCompositionData = {
     compositionId: clip.compositionId || clip.id,
@@ -63,8 +81,8 @@ export function buildLayerBuilderNestedCompositionLayer(input: BuildNestedCompLa
         )
       : transform.blendMode as BlendMode,
     source: { type: 'image', mediaTime: timeInfo.clipTime, nestedComposition: nestedCompData },
-    effects: mappedAnimation?.effects ?? ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime),
-    colorCorrection: ctx.getInterpolatedColorCorrection(clip.id, timeInfo.clipTime),
+    effects,
+    colorCorrection,
     position: transform.position,
     scale: transform.scale,
     rotation: transform.rotation,

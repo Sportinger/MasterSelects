@@ -134,7 +134,10 @@ export class VideoSyncNestedCompositionCoordinator {
         continue;
       }
 
-      if (!video.seeking && video.readyState >= 2) {
+      // Live playback imports the current HTML video frame directly. Match the
+      // regular HTML clip path and only maintain the paused-frame cache while
+      // playback is stopped.
+      if (!ctx.isPlaying && !video.seeking && video.readyState >= 2) {
         renderHostPort.ensureVideoFrameCached(video, nestedClip.id);
       }
 
@@ -170,9 +173,17 @@ export class VideoSyncNestedCompositionCoordinator {
       if (ctx.isPlaying) {
         scrubSettleState.resolve(nestedClip.id);
         if (video.paused) {
+          // Position the nested source before starting playback. Starting from
+          // a stale paused position lets the parent clock immediately build up
+          // a large drift and used to trigger repeated hard seeks below.
+          if (!video.seeking && timeDiff > 0.05) {
+            video.currentTime = this.deps.safeSeekTime(video, nestedClipTime);
+          }
           video.play().catch(() => {});
-        }
-        if (timeDiff > 0.5) {
+        } else if (!video.seeking && timeDiff > 0.5) {
+          // Never retarget a seek that is already in flight. Reassigning
+          // currentTime on every parent frame restarts Chromium's decoder seek
+          // and can turn nested playback into a main-thread long-task loop.
           video.currentTime = this.deps.safeSeekTime(video, nestedClipTime);
         }
       } else {

@@ -260,7 +260,7 @@ export function drawTimelineClipCanvasMainThread(
       }
     }
 
-    const hasCompositionSegments = Boolean(clip.isComposition && clip.clipSegments?.length);
+    const hasCompositionSegments = Boolean(clip.trackType !== 'audio' && clip.source?.type !== 'audio' && clip.isComposition && clip.clipSegments?.length);
     if (hasCompositionSegments) {
       diagnostics.thumbnailClipCount += 1;
     }

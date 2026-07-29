@@ -12,6 +12,7 @@ import {
   FLASHBOARD_CHAT_MODEL_OPTIONS,
 } from './FlashBoardChatConfig';
 import { buildFlashBoardChatRequestPrompt } from './FlashBoardChatHistory';
+import type { KernelRunReport } from '../kernelClient/runReport';
 import {
   sendFlashBoardChatMessage,
   type FlashBoardChatRunRecord,
@@ -33,6 +34,7 @@ export interface FlashBoardBridgeChatTurnInput {
   model?: string;
   onExecutedToolCalls?: (toolCalls: FlashBoardExecutedToolCall[]) => void;
   onKernelProgress?: import('../kernelClient/runProgress').KernelProgressReporter;
+  onKernelReport?: (report: KernelRunReport) => void;
   onPhase?: (phase: 'kernel' | 'provider') => void;
   openAiReasoningEffort?: FlashBoardOpenAiReasoningEffort;
   persistToChat?: boolean;
@@ -78,6 +80,7 @@ export async function runFlashBoardBridgeChatTurn(
   const requestPrompt = buildFlashBoardChatRequestPrompt(messages, visiblePrompt);
   const toolCalls: FlashBoardExecutedToolCall[] = [];
   const completedRunRef: { current: FlashBoardChatRunRecord | null } = { current: null };
+  const kernelReportRef: { current: KernelRunReport | undefined } = { current: undefined };
   const persistToChat = input.persistToChat !== false;
   const messageIds = persistToChat
     ? appendPendingMessages(visiblePrompt, input.idempotencyKey)
@@ -108,6 +111,11 @@ export async function runFlashBoardBridgeChatTurn(
       ...(input.onKernelProgress === undefined
         ? {}
         : { onKernelProgress: input.onKernelProgress }),
+      // Without this a bridge-initiated kernel turn persists as a plain text
+      // bubble, while the same turn from the UI renders as a run card.
+      onKernelReport: (report) => {
+        kernelReportRef.current = report;
+      },
       ...(input.onPhase === undefined ? {} : { onPhase: input.onPhase }),
       onRunCompleted: (run) => {
         completedRunRef.current = run;
@@ -126,7 +134,15 @@ export async function runFlashBoardBridgeChatTurn(
     });
     const completedRun = completedRunRef.current;
     if (!completedRun) throw new Error('Chat completed without a run trace.');
-    if (messageIds) completePendingMessage(messageIds.assistantId, response, toolCalls);
+    if (messageIds) {
+      completePendingMessage(
+        messageIds.assistantId,
+        response,
+        toolCalls,
+        false,
+        kernelReportRef.current,
+      );
+    }
     return {
       model,
       persistedToChat: persistToChat,
@@ -233,6 +249,7 @@ function completePendingMessage(
   text: string,
   toolCalls: FlashBoardExecutedToolCall[],
   isError = false,
+  kernelReport?: KernelRunReport,
 ): void {
   useFlashBoardStore.setState((state) => ({
     chatMessages: state.chatMessages.map((message): FlashBoardChatMessage => (
@@ -241,6 +258,8 @@ function completePendingMessage(
             ...message,
             isError: isError || undefined,
             isPending: false,
+            kernelProgress: undefined,
+            kernelReport,
             text: text || 'Empty response.',
             toolCalls,
           }

@@ -97,7 +97,9 @@ export class AudioSyncHandler {
     const effectivelyMuted = isMuted || volume <= 0.01;
 
     // Set muted state
-    element.muted = effectivelyMuted;
+    if (element.muted !== effectivelyMuted) {
+      element.muted = effectivelyMuted;
+    }
     if (effectivelyMuted) {
       this.cancelTailMeterPolling(meterTrackId);
       this.publishSilentMeterOnce(meterTrackId, ctx.now);
@@ -367,7 +369,9 @@ export class AudioSyncHandler {
    */
   private pauseIfPlaying(element: HTMLAudioElement | HTMLVideoElement): void {
     this.clearScrubAudioTimeout(element);
-    element.pause();
+    if (!element.paused) {
+      element.pause();
+    }
   }
 
   private clearScrubAudioTimeout(element: HTMLAudioElement | HTMLVideoElement): void {

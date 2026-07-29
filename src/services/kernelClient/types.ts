@@ -86,13 +86,20 @@ export interface KernelCompileCompiledResponse {
 export type KernelCompileAbortReason =
   | 'notMechanicalTask'
   | 'storyPathNeedsProvider'
-  | 'storyPathNeedsMoments';
+  | 'storyPathNeedsMoments'
+  /** Story-only calibration parked the mechanical families. */
+  | 'storyOnlyModeActive';
+
+export interface KernelMissingPrecondition {
+  kind: 'transcript';
+}
 
 export interface KernelCompileStoppedResponse {
   runId: string;
   status: 'aborted' | 'failed';
   failures: unknown;
   reason?: KernelCompileAbortReason;
+  missingPrecondition?: KernelMissingPrecondition;
 }
 
 export type KernelCompileResponse =

@@ -1,8 +1,18 @@
 import type { FlashBoardChatMessage } from '../../stores/flashboardStore';
 
-const MAX_HISTORY_CHARACTERS = 24_000;
-const MAX_TOOL_RESULT_CHARACTERS = 1_500;
-const MAX_TOOL_ARGUMENT_CHARACTERS = 1_000;
+/**
+ * Cross-turn history budget. Whole messages are dropped oldest-first when the
+ * budget is exceeded; the ones that survive are never trimmed mid-content.
+ * Raised from 24,000 because a single 26-clip timeline read fills that alone.
+ */
+const MAX_HISTORY_CHARACTERS = 400_000;
+/**
+ * Tool arguments and results carry the ids the next turn needs ("now shuffle
+ * them"). They used to be cut at 1,500 / 1,000 characters, so a clip list was
+ * already lossy by the time the follow-up turn read it. Kept verbatim now.
+ */
+const MAX_TOOL_RESULT_CHARACTERS = Number.POSITIVE_INFINITY;
+const MAX_TOOL_ARGUMENT_CHARACTERS = Number.POSITIVE_INFINITY;
 
 export function buildFlashBoardChatRequestPrompt(
   messages: FlashBoardChatMessage[],
@@ -43,7 +53,7 @@ function formatHistoryMessage(message: FlashBoardChatMessage): string {
 }
 
 function truncate(value: string, maximum: number): string {
-  return value.length > maximum
+  return Number.isFinite(maximum) && value.length > maximum
     ? `${value.slice(0, maximum)}… [truncated]`
     : value;
 }

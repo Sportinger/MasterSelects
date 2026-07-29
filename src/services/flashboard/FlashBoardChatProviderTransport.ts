@@ -7,6 +7,7 @@ import { requestKieChatByo, type KieChatEndpoint } from '../kieAi/chatTransport'
 import { cloudAiService } from '../cloudAiService';
 import {
   FLASHBOARD_CHAT_MODEL_OPTIONS,
+  FLASHBOARD_CHAT_MAX_OUTPUT_TOKENS,
   FLASHBOARD_CHAT_MAX_TOOL_ITERATIONS,
   FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS,
   FLASHBOARD_LEMONADE_INITIAL_RESPONSE_TIMEOUT_MS,
@@ -109,7 +110,7 @@ async function sendKieResponsesChat(request: FlashBoardChatRequest, systemPrompt
       input,
       tools: OPENAI_RESPONSES_TOOLS,
       tool_choice: 'auto',
-      max_output_tokens: 2048,
+      max_output_tokens: FLASHBOARD_CHAT_MAX_OUTPUT_TOKENS,
       store: false,
     };
 
@@ -184,7 +185,7 @@ async function sendKieClaudeChat(
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
     const body: Record<string, unknown> = {
       model: request.model,
-      max_tokens: 2048,
+      max_tokens: FLASHBOARD_CHAT_MAX_OUTPUT_TOKENS,
       temperature: clampTemperature(request.temperature),
       system: systemPrompt,
       messages,

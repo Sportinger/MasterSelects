@@ -24,6 +24,7 @@ import { buildTextLikeLayer, isTextLikeClipSource } from './layerBuilder/textLay
 import { buildVideoLayer } from './layerBuilder/videoLayers';
 
 const log = Logger.create('ExportLayerBuilder');
+const IDENTITY_EPSILON = 0.000001;
 
 type FrameContextWithMedia = FrameContext & {
   mediaFiles: NonNullable<FrameContext['mediaFiles']>;
@@ -49,6 +50,77 @@ function withOpacityOverride<T extends { opacity: number }>(baseLayerProps: T, o
   return {
     ...baseLayerProps,
     opacity: baseLayerProps.opacity * opacityOverride,
+  };
+}
+
+function isIdentityNumber(value: number | undefined, identity: number): boolean {
+  return Math.abs((value ?? identity) - identity) <= IDENTITY_EPSILON;
+}
+
+function isIdentityLayerRotation(rotation: Layer['rotation']): boolean {
+  return typeof rotation === 'number'
+    ? isIdentityNumber(rotation, 0)
+    : isIdentityNumber(rotation.x, 0) &&
+        isIdentityNumber(rotation.y, 0) &&
+        isIdentityNumber(rotation.z, 0);
+}
+
+function tryBuildExportNestedCompositionPassthrough(input: {
+  clip: TimelineClip;
+  nestedLayers: Layer[];
+  baseLayer: Omit<Layer, 'source'>;
+  compositionWidth: number;
+  compositionHeight: number;
+  outputWidth?: number;
+  outputHeight?: number;
+  opacityOverride?: number;
+}): Layer | null {
+  const {
+    clip,
+    nestedLayers,
+    baseLayer,
+    compositionWidth,
+    compositionHeight,
+    outputWidth,
+    outputHeight,
+    opacityOverride,
+  } = input;
+  const nestedLayer = nestedLayers.length === 1 ? nestedLayers[0] : undefined;
+
+  if (
+    !nestedLayer?.source ||
+    nestedLayer.source.type !== 'video' ||
+    nestedLayer.source.nestedComposition ||
+    nestedLayer.is3D ||
+    outputWidth === undefined ||
+    outputHeight === undefined ||
+    compositionWidth !== outputWidth ||
+    compositionHeight !== outputHeight ||
+    opacityOverride !== undefined ||
+    baseLayer.effects.length > 0 ||
+    baseLayer.colorCorrection !== undefined ||
+    clip.is3D ||
+    clip.nodeGraph !== undefined ||
+    baseLayer.sourceRect !== undefined ||
+    baseLayer.transitionRender !== undefined ||
+    baseLayer.maskClipId !== undefined ||
+    !isIdentityNumber(baseLayer.opacity, 1) ||
+    baseLayer.blendMode !== 'normal' ||
+    !isIdentityNumber(baseLayer.position.x, 0) ||
+    !isIdentityNumber(baseLayer.position.y, 0) ||
+    !isIdentityNumber(baseLayer.position.z, 0) ||
+    !isIdentityNumber(baseLayer.scale.x, 1) ||
+    !isIdentityNumber(baseLayer.scale.y, 1) ||
+    !isIdentityNumber(baseLayer.scale.z, 1) ||
+    !isIdentityLayerRotation(baseLayer.rotation)
+  ) {
+    return null;
+  }
+
+  return {
+    ...nestedLayer,
+    id: baseLayer.id,
+    name: baseLayer.name,
   };
 }
 
@@ -89,6 +161,19 @@ function buildExportLayerForClip(
 
     if (nestedLayers.length > 0) {
       const { width: compWidth, height: compHeight } = getCompositionSize(clip.compositionId);
+      const passthroughLayer = tryBuildExportNestedCompositionPassthrough({
+        clip,
+        nestedLayers,
+        baseLayer: baseLayerProps,
+        compositionWidth: compWidth,
+        compositionHeight: compHeight,
+        outputWidth: ctx.outputWidth,
+        outputHeight: ctx.outputHeight,
+        opacityOverride,
+      });
+      if (passthroughLayer) {
+        return passthroughLayer;
+      }
 
       const nestedCompData: NestedCompositionData = {
         compositionId: clip.compositionId || clip.id,

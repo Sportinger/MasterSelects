@@ -2,6 +2,7 @@ import type { TimelineClip } from '../../types';
 import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 import { seekVideo } from '../../engine/export/VideoSeeker';
 import { Logger } from '../logger';
+import { thumbnailCacheService } from '../thumbnailCacheService';
 import { vectorAnimationRuntimeManager } from '../vectorAnimation/VectorAnimationRuntimeManager';
 
 const log = Logger.create('TimelineNestedCompositionThumbnailRuntime');
@@ -97,24 +98,32 @@ export async function generateTimelineNestedClipSegmentThumbnails(
   params: TimelineNestedSegmentThumbnailParams,
 ): Promise<string[]> {
   const source = params.clip?.source;
+  const mediaFileId = source?.mediaFileId ?? params.clip?.mediaFileId;
+  if (mediaFileId) {
+    const cached = thumbnailCacheService.getThumbnailsForRange(
+      mediaFileId,
+      params.inPoint,
+      params.inPoint + params.clipDuration,
+      params.maxCount,
+      params.clip?.reversed,
+    ).filter((thumbnail): thumbnail is string => Boolean(thumbnail));
+    if (cached.length > 0) {
+      return cached;
+    }
+  }
+
+  if (params.clip?.thumbnails?.length) {
+    return params.clip.thumbnails;
+  }
+
   if (!source) {
     return [];
   }
 
   if (source.videoElement) {
-    if (source.videoElement.readyState < 2) {
-      return [];
-    }
-
-    try {
-      return await generateTimelineVideoThumbnails(source.videoElement, params.clipDuration, {
-        offset: params.inPoint,
-        maxCount: params.maxCount,
-      });
-    } catch (e) {
-      log.warn('Failed to generate segment thumbnails', { clipId: params.clipId, error: e });
-      return [];
-    }
+    // Never seek the preview element while building timeline decorations.
+    // Visible-thumbnail warmup uses an isolated video and updates the cache.
+    return [];
   }
 
   if (source.imageElement) {

@@ -1,3 +1,5 @@
+import type { KernelMissingPrecondition } from './types';
+
 /**
  * Structured record of one kernel run.
  *
@@ -106,6 +108,7 @@ export interface KernelReportDecline {
   nextStep?: string;
   /** Raw kernel detail, shown only on demand — it is contract jargon. */
   detail?: string;
+  missingPrecondition?: KernelMissingPrecondition;
 }
 
 export interface KernelRunReport {
@@ -466,7 +469,11 @@ const DECLINE_COPY: Record<string, { explanation: string; nextStep?: string }> =
 };
 
 /** Translates a kernel decline reason into user-facing copy. */
-export function buildDecline(reason: string | undefined, detail?: string): KernelReportDecline {
+export function buildDecline(
+  reason: string | undefined,
+  detail?: string,
+  missingPrecondition?: KernelMissingPrecondition,
+): KernelReportDecline {
   const trimmedDetail = detail?.trim();
   const known = reason === undefined ? undefined : DECLINE_COPY[reason];
   if (reason !== undefined && known) {
@@ -475,6 +482,7 @@ export function buildDecline(reason: string | undefined, detail?: string): Kerne
       explanation: known.explanation,
       ...(known.nextStep === undefined ? {} : { nextStep: known.nextStep }),
       ...(trimmedDetail ? { detail: trimmedDetail } : {}),
+      ...(missingPrecondition === undefined ? {} : { missingPrecondition }),
     };
   }
   // An unmapped reason is a contract drift. Surface the detail rather than a
@@ -483,6 +491,7 @@ export function buildDecline(reason: string | undefined, detail?: string): Kerne
     reason: reason ?? 'unknown',
     explanation: 'The kernel stopped before changing anything.',
     ...(trimmedDetail ? { detail: trimmedDetail } : {}),
+    ...(missingPrecondition === undefined ? {} : { missingPrecondition }),
   };
 }
 

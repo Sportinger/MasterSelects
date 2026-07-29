@@ -73,6 +73,7 @@ export interface Env {
   STRIPE_PRICE_STUDIO?: string;
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
+  SUPPORT_NOTE_EMAIL?: string;
   VISITOR_NOTIFY_SECRET?: string;
 }
 

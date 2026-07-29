@@ -118,7 +118,9 @@ function estimateParallelFrameBufferBytes(
   if (!mediaFile?.width || !mediaFile.height) {
     return undefined;
   }
-  const plannedBufferedFrames = Math.min(60, Math.max(1, Math.ceil(fps || 30)));
+  // Parallel export loads only the active and immediately upcoming time
+  // window. Keep the estimate aligned with one pooled decoder slot.
+  const plannedBufferedFrames = Math.min(8, Math.max(1, Math.ceil(fps || 30)));
   return mediaFile.width * mediaFile.height * 4 * plannedBufferedFrames;
 }
 

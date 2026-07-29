@@ -105,7 +105,16 @@ function shouldRequireConfirmation(
   return !policy.readOnly;
 }
 
-function sanitizeToolResultValue(value: unknown, depth = 0, maximumDepth = 4): unknown {
+/**
+ * Strips base64 image payloads and nothing else.
+ *
+ * This used to also cap nesting depth at 4, arrays at 30 entries and objects at
+ * 50 keys. On a 26-clip timeline that turned `getTimelineState` into a lossy
+ * prefix, so the model had to re-read the same range in overlapping slices
+ * (0-130, 0-65, 65-130, 55-65 in one observed run) and clip ids were dropped
+ * mid-list. Structural truncation is gone: the model gets the whole result.
+ */
+function sanitizeToolResultValue(value: unknown): unknown {
   if (typeof value === 'string') {
     if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(value)) {
       return '[image data omitted from compact chat context]';
@@ -122,28 +131,14 @@ function sanitizeToolResultValue(value: unknown, depth = 0, maximumDepth = 4): u
     return value;
   }
 
-  if (depth >= maximumDepth) {
-    return '[truncated nested value]';
-  }
-
   if (Array.isArray(value)) {
-    const items = value.slice(0, 30).map((item) => (
-      sanitizeToolResultValue(item, depth + 1, maximumDepth)
-    ));
-    if (value.length > 30) {
-      items.push(`[${value.length - 30} more items truncated]`);
-    }
-    return items;
+    return value.map((item) => sanitizeToolResultValue(item));
   }
 
   if (typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>);
     const sanitized: Record<string, unknown> = {};
-    for (const [key, nestedValue] of entries.slice(0, 50)) {
-      sanitized[key] = sanitizeToolResultValue(nestedValue, depth + 1, maximumDepth);
-    }
-    if (entries.length > 50) {
-      sanitized.__truncatedKeys = entries.length - 50;
+    for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+      sanitized[key] = sanitizeToolResultValue(nestedValue);
     }
     return sanitized;
   }
@@ -154,19 +149,17 @@ function sanitizeToolResultValue(value: unknown, depth = 0, maximumDepth = 4): u
 function formatToolResultForModel(
   result: ToolResult,
   maxLength: number,
-  toolName?: string,
 ): string {
   const sanitized = JSON.stringify({
     success: result.success,
-    data: sanitizeToolResultValue(
-      result.data,
-      0,
-      toolName === 'getTimelineAnalysis' ? 8 : 4,
-    ),
+    data: sanitizeToolResultValue(result.data),
     error: result.error,
   });
 
-  if (sanitized.length <= maxLength) {
+  // A non-finite budget means "hand the model everything", which is the
+  // default for hosted models. Local models keep a real cap because their
+  // context is genuinely small.
+  if (!Number.isFinite(maxLength) || sanitized.length <= maxLength) {
     return sanitized;
   }
 
@@ -286,11 +279,7 @@ export async function executeFlashBoardToolCalls(
     return {
       toolCall,
       result: resolvedResult,
-      modelContent: formatToolResultForModel(
-        resolvedResult,
-        maxToolResultChars,
-        toolCall.name,
-      ),
+      modelContent: formatToolResultForModel(resolvedResult, maxToolResultChars),
     };
   });
 }

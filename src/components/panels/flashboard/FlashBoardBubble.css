@@ -446,27 +446,13 @@
   overflow-wrap: anywhere;
 }
 
-.fb-bubble-input.has-magic-prompt {
-  animation: fb-magic-prompt-collapse 220ms ease 1800ms forwards;
+.fb-bubble-input.has-magic-prompt,
+.fb-bubble-input.has-magic-prompt:focus {
+  max-height: 96px;
   overflow-y: auto !important;
 }
 
-.fb-bubble-input.has-magic-prompt:focus {
-  animation: none;
-  max-height: min(42vh, 320px);
-}
-
 .fb-bubble-input:focus { border-color: var(--accent); }
-
-@keyframes fb-magic-prompt-collapse {
-  from {
-    max-height: min(42vh, 320px);
-  }
-
-  to {
-    max-height: 96px;
-  }
-}
 
 .fb-elevenlabs-panel {
   display: flex;

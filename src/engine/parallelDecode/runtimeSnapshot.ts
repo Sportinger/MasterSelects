@@ -26,6 +26,7 @@ export interface ParallelDecodeRuntimeSnapshot {
   isActive: boolean;
   frameToleranceUs: number;
   clipCount: number;
+  registeredClipIds?: string[];
   totalBufferedFrames: number;
   estimatedBufferedFrameBytes: number;
   clips: ParallelDecodeClipRuntimeSnapshot[];
@@ -43,11 +44,13 @@ export function createParallelDecodeRuntimeSnapshot(params: {
   isActive: boolean;
   frameToleranceUs: number;
   clips: ParallelDecodeClipRuntimeSnapshot[];
+  registeredClipIds?: string[];
 }): ParallelDecodeRuntimeSnapshot {
   return {
     isActive: params.isActive,
     frameToleranceUs: params.frameToleranceUs,
     clipCount: params.clips.length,
+    registeredClipIds: params.registeredClipIds ?? params.clips.map(clip => clip.clipId),
     totalBufferedFrames: params.clips.reduce((sum, clip) => sum + clip.frameBufferSize, 0),
     estimatedBufferedFrameBytes: params.clips.reduce(
       (sum, clip) => sum + clip.estimatedBufferedFrameBytes,

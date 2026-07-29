@@ -34,12 +34,18 @@ import {
   TRANSCRIPT_MOMENT_INDEX_VERSION,
 } from './transcriptMoments';
 import { buildSilenceRanges } from './silenceEvidence';
+import {
+  describeTranscriptPrecondition,
+  findPreconditionResolver,
+  type PreconditionResolverContext,
+} from './preconditionResolvers';
 import type {
   KernelCompileAbortReason,
   KernelCompileCompiledResponse,
   KernelCompileResponse,
   KernelResolvedCall,
   KernelRunCompleteResponse,
+  KernelMissingPrecondition,
   KernelSilenceRange,
 } from './types';
 
@@ -73,6 +79,13 @@ export interface KernelChatGatewayDependencies {
   fetchImpl?: typeof fetch;
   getSilenceRanges?: (snapshot: unknown) => Promise<KernelSilenceRange[]>;
   getSnapshot?: () => Promise<unknown> | unknown;
+  /** Injected so the gateway stays free of store reads (plan Â§8.3). */
+  satisfyPrecondition?: (
+    precondition: KernelMissingPrecondition,
+    context: PreconditionResolverContext,
+  ) => Promise<boolean>;
+  /** Whether automatic repair is allowed; defaults to false when absent. */
+  autoApprove?: boolean;
   /** Reports the local stage the run is in, so the chat can show progress. */
   onProgress?: KernelProgressReporter;
   seed?: string;
@@ -183,13 +196,21 @@ function parseResolvedCall(value: unknown): KernelResolvedCall | undefined {
   return { stepId, tool, args: value.args };
 }
 
+const KERNEL_ABORT_REASONS: readonly KernelCompileAbortReason[] = [
+  'notMechanicalTask',
+  'storyPathNeedsProvider',
+  'storyPathNeedsMoments',
+  'storyOnlyModeActive',
+];
+
 function parseAbortReason(value: unknown): KernelCompileAbortReason | undefined {
   const reason = readString(value);
-  return reason === 'notMechanicalTask'
-    || reason === 'storyPathNeedsProvider'
-    || reason === 'storyPathNeedsMoments'
-    ? reason
-    : undefined;
+  return KERNEL_ABORT_REASONS.find((known) => known === reason);
+}
+
+function parseMissingPrecondition(value: unknown): KernelMissingPrecondition | undefined {
+  if (!isRecord(value)) return undefined;
+  return readString(value.kind) === 'transcript' ? { kind: 'transcript' } : undefined;
 }
 
 function parseCompileResponse(value: unknown): KernelCompileResponse | undefined {
@@ -205,11 +226,13 @@ function parseCompileResponse(value: unknown): KernelCompileResponse | undefined
 
   if (status === 'aborted' || status === 'failed') {
     const reason = parseAbortReason(value.reason);
+    const missingPrecondition = parseMissingPrecondition(value.missingPrecondition);
     return {
       runId,
       status,
       failures: value.failures,
       ...(reason === undefined ? {} : { reason }),
+      ...(missingPrecondition === undefined ? {} : { missingPrecondition }),
     };
   }
 
@@ -423,6 +446,7 @@ export async function tryKernelFirst(
     reason: string,
     detail?: string,
     runId?: string,
+    missingPrecondition?: KernelMissingPrecondition,
   ): KernelChatGatewayResult => (
     fallbackEnabled
       ? { handled: false }
@@ -430,7 +454,7 @@ export async function tryKernelFirst(
           outcome: 'declined',
           ...(runId === undefined ? {} : { runId }),
           steps: [],
-          decline: buildDecline(reason, detail),
+          decline: buildDecline(reason, detail, missingPrecondition),
         }))
   );
 
@@ -524,6 +548,93 @@ export async function tryKernelFirst(
     );
   }
 
+  // A precondition abort occurs before any transaction starts. In auto mode we
+  // may establish the declared evidence and compile one more time; never repair
+  // a second abort, even if it repeats the same precondition.
+  const declaredPrecondition = compiled.status === 'aborted'
+    ? compiled.missingPrecondition
+    : undefined;
+  if (compiled.status === 'aborted'
+    && declaredPrecondition !== undefined
+    && deps.autoApprove === true
+    && deps.satisfyPrecondition !== undefined) {
+    const resolver = findPreconditionResolver(declaredPrecondition.kind);
+    if (resolver) {
+      const originalAbort = compiled;
+      try {
+        throwIfAborted();
+        const detail = declaredPrecondition.kind === 'transcript'
+          ? describeTranscriptPrecondition(compileSnapshot)
+          : resolver.describe();
+        notify('preparing-evidence', { detail });
+        const satisfied = await deps.satisfyPrecondition(declaredPrecondition, {
+          executeToolCalls,
+          snapshot: compileSnapshot,
+          signal: deps.signal,
+          onProgress: (progressDetail, current, total) => {
+            notify('preparing-evidence', { detail: progressDetail, current, total });
+          },
+        });
+        throwIfAborted();
+
+        if (satisfied) {
+          throwIfAborted();
+          notify('reading-timeline');
+          const snapshot = await getSnapshot();
+          compileSnapshot = snapshot;
+          throwIfAborted();
+          notify('reading-transcript');
+          const moments = await buildTranscriptMoments(snapshot, executeToolCalls);
+          throwIfAborted();
+          notify('reading-audio');
+          const silenceRanges = await (deps.getSilenceRanges
+            ? deps.getSilenceRanges(snapshot)
+            : buildSilenceRanges(snapshot, executeToolCalls));
+          throwIfAborted();
+          notify('compiling', {
+            detail: moments.length > 0 ? `${moments.length} transcript moments` : undefined,
+          });
+          const compileStartedAt = Date.now();
+          const compileResult = await client.compile({
+            request,
+            snapshot,
+            ...(deps.seed === undefined ? {} : { seed: deps.seed }),
+            ...(moments.length === 0
+              ? {}
+              : { moments, indexVersion: TRANSCRIPT_MOMENT_INDEX_VERSION }),
+            ...(silenceRanges.length === 0 ? {} : { silentRanges: silenceRanges }),
+          });
+          compileMs = (compileMs ?? 0) + Date.now() - compileStartedAt;
+          if (!compileResult.ok) {
+            return declineResult(
+              'transportError',
+              `The kernel service replied ${compileResult.status}: ${compileResult.error}`,
+            );
+          }
+          const parsed = parseCompileResponse(compileResult.data);
+          if (!parsed) {
+            return declineResult('unreadableResponse');
+          }
+          compiled = parsed;
+        }
+      } catch (error) {
+        if (error instanceof KernelRunAbortedError) {
+          return declineResult('cancelled');
+        }
+        log.warn('kernel precondition repair failed', {
+          error: error instanceof Error ? error.message : String(error),
+          kind: declaredPrecondition.kind,
+        });
+        return declineResult(
+          originalAbort.reason ?? 'declined',
+          Array.isArray(originalAbort.failures) ? originalAbort.failures.join('; ') : undefined,
+          originalAbort.runId,
+          declaredPrecondition,
+        );
+      }
+    }
+  }
+
   if (compiled.status !== 'compiled') {
     if (compiled.status === 'aborted') {
       log.info('kernel declined the task', {
@@ -535,6 +646,7 @@ export async function tryKernelFirst(
         compiled.reason ?? 'declined',
         abortFailures.length > 0 ? abortFailures.join('; ') : undefined,
         compiled.runId,
+        compiled.missingPrecondition,
       );
     }
     // Compile failures happen before any local mutation. The provider path is

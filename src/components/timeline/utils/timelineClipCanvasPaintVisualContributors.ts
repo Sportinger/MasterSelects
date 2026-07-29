@@ -66,7 +66,7 @@ export const timelineClipCanvasPaintVisualContributors = [
   {
     id: 'composition',
     apply: (clip, visuals) => {
-      const hasCompositionAudioMixdown = clip.source?.type === 'audio' && (
+      const hasCompositionAudioMixdown = (clip.trackType === 'audio' || clip.source?.type === 'audio') && (
         (clip.mixdownWaveform?.length ?? 0) > 0 ||
         Boolean(clip.mixdownGenerating) ||
         Boolean(clip.hasMixdownAudio)

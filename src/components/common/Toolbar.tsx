@@ -15,6 +15,7 @@ import { useAccountStore } from '../../stores/accountStore';
 import { SettingsDialog } from './SettingsDialog';
 import { SavedToast } from './SavedToast';
 import { InfoDialog } from './InfoDialog';
+import { LeaveNoteDialog } from './LeaveNoteDialog';
 import { LegalDialog } from './LegalDialog';
 import type { LegalPage } from './LegalDialog';
 import { NativeHelperStatus } from './NativeHelperStatus';
@@ -38,6 +39,7 @@ import { openOutputManager } from '../outputManager/OutputManagerBoot';
 import { EditMenu } from './toolbar/EditMenu';
 import { FileMenu } from './toolbar/FileMenu';
 import { InfoMenu } from './toolbar/InfoMenu';
+import { HelpMenu } from './toolbar/HelpMenu';
 import { OutputMenu } from './toolbar/OutputMenu';
 import { ViewMenu } from './toolbar/ViewMenu';
 import { getToolbarShortcutLabels } from './toolbar/shortcutLabels';
@@ -127,6 +129,7 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
   const [pendingProjectName, setPendingProjectName] = useState<string | null>(null);
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [showInfoDialog, setShowInfoDialog] = useState(false);
+  const [showLeaveNoteDialog, setShowLeaveNoteDialog] = useState(false);
   const [showLegalDialog, setShowLegalDialog] = useState<LegalPage | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
   const [projectNameDialog, setProjectNameDialog] = useState<
@@ -441,6 +444,14 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
           openMenu={openMenu}
           setShowLegalDialog={setShowLegalDialog}
         />
+
+        <HelpMenu
+          closeMenu={closeMenu}
+          onMenuClick={handleMenuClick}
+          onMenuHover={handleMenuHover}
+          onOpenLeaveNote={() => setShowLeaveNoteDialog(true)}
+          openMenu={openMenu}
+        />
       </div>
 
       <div className="toolbar-spacer" />
@@ -530,6 +541,7 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
       )}
 
       {showInfoDialog && <InfoDialog onClose={() => setShowInfoDialog(false)} />}
+      {showLeaveNoteDialog && <LeaveNoteDialog onClose={() => setShowLeaveNoteDialog(false)} />}
       {showLegalDialog && <LegalDialog initialPage={showLegalDialog} onClose={() => setShowLegalDialog(null)} />}
     </div>
   );

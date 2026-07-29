@@ -20,6 +20,9 @@ import {
 } from './parallelDecode/decoderConfig';
 import { isDecoderResetAbort } from './parallelDecode/decoderErrors';
 import {
+  getClipMainTimelineDuration,
+  getClipMainTimelineStart,
+  getPrefetchTargetForClip,
   isTimeInClipRange,
   timelineToSourceTime,
   type ParallelDecodeClipInfo as ClipInfo,
@@ -29,7 +32,7 @@ import { getNormalizedSampleSourceTime, getPresentationOffsetSeconds } from './p
 import {
   BUFFER_AHEAD_FRAMES,
   MAX_BUFFER_SIZE,
-  MAX_PREWARM_CLIP_STARTS,
+  UPCOMING_CLIP_PREFETCH_SECONDS,
   collectPresentationKeyframeCandidates,
   createDecodeSchedulingPlan,
   findKeyframeAtOrBeforeSample,
@@ -56,7 +59,6 @@ import {
 } from './parallelDecode/clipDecoderState';
 import {
   prefetchFramesForTime as runPrefetchFramesForTime,
-  prewarmClipStarts as runPrewarmClipStarts,
   type ParallelDecodePrefetchDeps,
 } from './parallelDecode/prefetchCoordinator';
 import {
@@ -77,11 +79,16 @@ export type {
   ParallelDecodeRuntimeSnapshot,
 } from './parallelDecode/runtimeSnapshot';
 
+export const MAX_PARALLEL_DECODE_POOL_SIZE = 8;
+
 export class ParallelDecodeManager {
   private clipDecoders: Map<string, ClipDecoder> = new Map();
+  private clipInfos: Map<string, ClipInfo> = new Map();
+  private clipInitializationPromises: Map<string, Promise<ClipDecoder>> = new Map();
   private isActive = false;
   private decodePromises: Map<string, Promise<void>> = new Map();
   private frameTolerance = 50_000;  // Default 50ms in microseconds
+  private decoderUseSerial = 0;
 
   /**
    * Initialize the manager with clips to decode
@@ -92,74 +99,40 @@ export class ParallelDecodeManager {
     // FPS-based tolerance: 1.5 frame duration
     this.frameTolerance = Math.round((1_000_000 / exportFps) * 1.5);
 
-    log.info(`Initializing ${clips.length} clips:`, clips.map(c => c.clipName));
-
-    // Parse all clips in parallel
-    const initPromises = clips.map(clip => this.initializeClip(clip));
-    await Promise.all(initPromises);
-
-    log.info(`All ${clips.length} clips initialized`);
+    this.clipInfos = new Map(clips.map(clip => [clip.clipId, clip]));
+    log.info(`Registered ${clips.length} clips for sliding-window decode`);
     endInit();
   }
 
   /**
-   * Initialize a single clip decoder - LAZY MODE
-   * Phase 1: Parse MP4 synchronously (onReady must be sync to not break MP4Box pipeline)
-   * Phase 2: Async hwAccel probing
-   * Phase 3: Configure decoder and start sample extraction
+   * Register a clip and parse its MP4 samples. The native decoder is leased
+   * later, when the sliding export window reaches this clip.
    */
-  private async initializeClip(clipInfo: ClipInfo): Promise<void> {
-    // Phase 1: Parse MP4 and extract track info (sync onReady)
-    const parseResult = await parseMP4TrackInfo(clipInfo);
-
-    // Phase 2: Async hardware acceleration probing
-    const hwAccel = await this.findSupportedHwAccel(parseResult.baseConfig, clipInfo.clipName);
-
-    const codecConfig = createHardwareDecoderConfig(parseResult.baseConfig, hwAccel);
-
-    // Phase 3: Configure decoder
-    const decoder = new VideoDecoder({
-      output: (frame) => {
-        if (!this.isActive) {
-          frame.close();
-          return;
-        }
-        const clipDecoder = this.clipDecoders.get(clipInfo.clipId);
-        if (clipDecoder) {
-          this.handleDecodedFrame(clipDecoder, frame);
-        } else {
-          log.warn(`Frame output for unknown clip ${clipInfo.clipId}`);
-          frame.close();
-        }
-      },
-      error: (e) => {
-        if (!this.isActive) {
-          if (isDecoderResetAbort(e)) {
-            log.debug(`Decoder reset cancelled pending work for ${clipInfo.clipName}`);
-          }
-          return;
-        }
-        log.error(`Decoder error for ${clipInfo.clipName}: ${e.message || e}`);
-      },
-    });
-
-    try {
-      decoder.configure(codecConfig);
-      log.info(`Decoder configured for "${clipInfo.clipName}": ${codecConfig.codec} ${parseResult.videoTrack.video.width}x${parseResult.videoTrack.video.height} (hwAccel=${hwAccel})`);
-    } catch (e) {
-      log.error(`Failed to configure decoder for "${clipInfo.clipName}":`, e);
-      throw e;
+  private async initializeClip(clipInfo: ClipInfo): Promise<ClipDecoder> {
+    const fileData = clipInfo.fileData ?? await clipInfo.loadFileData?.();
+    if (!fileData) {
+      throw new Error(`FAST export failed: Could not load file data for clip "${clipInfo.clipName}".`);
     }
+    const parseResult = await parseMP4TrackInfo({ ...clipInfo, fileData });
+    const hwAccel = await this.findSupportedHwAccel(parseResult.baseConfig, clipInfo.clipName);
+    const codecConfig = createHardwareDecoderConfig(parseResult.baseConfig, hwAccel);
 
     const presentationOffsetSeconds = getPresentationOffsetSeconds(parseResult.samples);
     if (Math.abs(presentationOffsetSeconds) > 0.0005) {
       log.info(`"${clipInfo.clipName}": normalizing MP4 presentation offset ${presentationOffsetSeconds.toFixed(3)}s so source starts at 0.000s`);
     }
+    if (!this.isActive || !this.clipInfos.has(clipInfo.clipId)) {
+      throw new DOMException(
+        `FAST export initialization was cancelled for "${clipInfo.clipName}".`,
+        'AbortError',
+      );
+    }
 
     const clipDecoder: ClipDecoder = {
       clipId: clipInfo.clipId,
       clipName: clipInfo.clipName,
-      decoder,
+      decoder: null,
+      decoderUseSerial: 0,
       samples: parseResult.samples,
       sampleIndex: 0,
       videoTrack: parseResult.videoTrack,
@@ -177,7 +150,155 @@ export class ParallelDecodeManager {
     };
 
     this.clipDecoders.set(clipInfo.clipId, clipDecoder);
-    log.info(`Clip "${clipInfo.clipName}" initialized: ${parseResult.videoTrack.video.width}x${parseResult.videoTrack.video.height} (${parseResult.samples.length} samples ready)`);
+    log.info(`Clip "${clipInfo.clipName}" registered dormant: ${parseResult.videoTrack.video.width}x${parseResult.videoTrack.video.height} (${parseResult.samples.length} samples ready, hwAccel=${hwAccel})`);
+    return clipDecoder;
+  }
+
+  private async ensureClipInitialized(clipInfo: ClipInfo): Promise<ClipDecoder> {
+    const existing = this.clipDecoders.get(clipInfo.clipId);
+    if (existing) return existing;
+
+    let pending = this.clipInitializationPromises.get(clipInfo.clipId);
+    if (!pending) {
+      pending = this.initializeClip(clipInfo);
+      this.clipInitializationPromises.set(clipInfo.clipId, pending);
+      const clearPending = () => {
+        if (this.clipInitializationPromises.get(clipInfo.clipId) === pending) {
+          this.clipInitializationPromises.delete(clipInfo.clipId);
+        }
+      };
+      void pending.then(clearPending, clearPending);
+    }
+    return pending;
+  }
+
+  private async ensureWindowClipsInitialized(timelineTime: number): Promise<void> {
+    const windowClips = Array.from(this.clipInfos.values()).filter(clipInfo =>
+      getPrefetchTargetForClip(
+        clipInfo,
+        timelineTime,
+        UPCOMING_CLIP_PREFETCH_SECONDS
+      ) !== null
+    );
+    await Promise.all(windowClips.map(clipInfo => this.ensureClipInitialized(clipInfo)));
+  }
+
+  private touchDecoder(clipDecoder: ClipDecoder): void {
+    clipDecoder.decoderUseSerial = ++this.decoderUseSerial;
+  }
+
+  private createConfiguredDecoder(clipDecoder: ClipDecoder): VideoDecoder {
+    const decoder = new VideoDecoder({
+      output: (frame) => {
+        if (!this.isActive) {
+          frame.close();
+          return;
+        }
+        const current = this.clipDecoders.get(clipDecoder.clipId);
+        if (current) {
+          this.handleDecodedFrame(current, frame);
+        } else {
+          frame.close();
+        }
+      },
+      error: (e) => {
+        if (!this.isActive) {
+          if (isDecoderResetAbort(e)) {
+            log.debug(`Decoder reset cancelled pending work for ${clipDecoder.clipName}`);
+          }
+          return;
+        }
+        log.error(`Decoder error for ${clipDecoder.clipName}: ${e.message || e}`);
+      },
+    });
+
+    try {
+      decoder.configure(clipDecoder.codecConfig);
+    } catch (error) {
+      try { decoder.close(); } catch { /* configure may already have closed it */ }
+      throw error;
+    }
+    clipDecoder.decoder = decoder;
+    clipDecoder.needsKeyframe = true;
+    clipDecoder.sampleIndex = 0;
+    this.touchDecoder(clipDecoder);
+    log.info(
+      `Decoder leased to "${clipDecoder.clipName}" ` +
+      `(${this.getActiveDecoderCount()}/${MAX_PARALLEL_DECODE_POOL_SIZE} active)`
+    );
+    return decoder;
+  }
+
+  private getActiveDecoderCount(): number {
+    let count = 0;
+    for (const clipDecoder of this.clipDecoders.values()) {
+      if (clipDecoder.decoder && clipDecoder.decoder.state !== 'closed') {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  private releaseDecoderHandle(clipDecoder: ClipDecoder): void {
+    const decoder = clipDecoder.decoder;
+    if (!decoder) return;
+
+    try {
+      if (decoder.state !== 'closed') {
+        decoder.reset();
+        decoder.close();
+      }
+    } catch {
+      // A codec error may already have closed the handle.
+    }
+    clipDecoder.decoder = null;
+    clipDecoder.needsKeyframe = true;
+    clipDecoder.sampleIndex = 0;
+  }
+
+  private async ensureDecoder(clipDecoder: ClipDecoder): Promise<VideoDecoder> {
+    const existing = clipDecoder.decoder;
+    if (existing?.state === 'configured') {
+      this.touchDecoder(clipDecoder);
+      return existing;
+    }
+    if (existing) {
+      this.releaseDecoderHandle(clipDecoder);
+    }
+
+    while (this.getActiveDecoderCount() >= MAX_PARALLEL_DECODE_POOL_SIZE) {
+      const candidate = Array.from(this.clipDecoders.values())
+        .filter(item =>
+          item !== clipDecoder &&
+          item.decoder !== null &&
+          !item.isDecoding &&
+          !item.pendingDecode
+        )
+        .sort((a, b) => a.decoderUseSerial - b.decoderUseSerial)[0];
+
+      if (candidate) {
+        log.debug(`Recycling decoder from "${candidate.clipName}" to "${clipDecoder.clipName}"`);
+        this.releaseDecoderHandle(candidate);
+        break;
+      }
+
+      const pending = Array.from(this.clipDecoders.values())
+        .filter(item => item !== clipDecoder)
+        .map(item => item.pendingDecode)
+        .filter((promise): promise is Promise<void> => promise !== null);
+      if (pending.length === 0) {
+        throw new Error(
+          `FAST export decoder pool is saturated (${MAX_PARALLEL_DECODE_POOL_SIZE} active decoders).`
+        );
+      }
+      await Promise.race(pending);
+    }
+
+    if (!this.isActive) {
+      throw new DOMException('FAST export decoder pool is no longer active.', 'AbortError');
+    }
+
+    return this.createConfiguredDecoder(clipDecoder);
   }
 
   /**
@@ -230,27 +351,24 @@ export class ParallelDecodeManager {
     }
   }
 
-  async prewarmClipStarts(
-    startTime: number,
-    endTime: number,
-    maxStarts: number = MAX_PREWARM_CLIP_STARTS
-  ): Promise<number> {
-    return runPrewarmClipStarts(this.prefetchDeps(), startTime, endTime, maxStarts);
-  }
-
   /**
    * Pre-decode frames for a specific timeline time across all clips
    * Optimized for speed: fires decode ahead in background, only waits if frame is missing
    */
   async prefetchFramesForTime(timelineTime: number): Promise<void> {
+    await this.ensureWindowClipsInitialized(timelineTime);
     return runPrefetchFramesForTime(this.prefetchDeps(), timelineTime);
   }
 
   async prefetchFrameForClipSourceTime(clipId: string, sourceTime: number): Promise<void> {
     if (!this.isActive) return;
 
-    const clipDecoder = this.clipDecoders.get(clipId);
-    if (!clipDecoder) return;
+    let clipDecoder = this.clipDecoders.get(clipId);
+    if (!clipDecoder) {
+      const clipInfo = this.clipInfos.get(clipId);
+      if (!clipInfo) return;
+      clipDecoder = await this.ensureClipInitialized(clipInfo);
+    }
 
     if (clipDecoder.samples.length === 0) {
       const maxWaitMs = 10000;
@@ -298,6 +416,7 @@ export class ParallelDecodeManager {
     }
 
     for (let attempt = 0; attempt < 10; attempt++) {
+      if (!this.isActive) return;
       if (clipDecoder.pendingDecode) {
         await clipDecoder.pendingDecode;
       }
@@ -312,8 +431,9 @@ export class ParallelDecodeManager {
 
       if (attempt < 2) {
         await new Promise(r => setTimeout(r, 8));
-      } else if (clipDecoder.decoder.decodeQueueSize > 0) {
-        await clipDecoder.decoder.flush();
+      } else if ((clipDecoder.decoder?.decodeQueueSize ?? 0) > 0) {
+        const decoder = await this.ensureDecoder(clipDecoder);
+        await decoder.flush();
         clipDecoder.needsKeyframe = true;
       } else if (!clipDecoder.isDecoding) {
         const decodeTarget = Math.max(targetSampleIndex + BUFFER_AHEAD_FRAMES, BUFFER_AHEAD_FRAMES);
@@ -332,6 +452,7 @@ export class ParallelDecodeManager {
       isActive: () => this.isActive,
       clipDecoders: this.clipDecoders,
       frameToleranceUs: this.frameTolerance,
+      ensureDecoder: (clipDecoder) => this.ensureDecoder(clipDecoder),
       decodeAhead: (clipDecoder, targetSampleIndex, forceFlush, recursionDepth, seekTargetSampleIndex) =>
         this.decodeAhead(clipDecoder, targetSampleIndex, forceFlush, recursionDepth, seekTargetSampleIndex),
     };
@@ -342,7 +463,7 @@ export class ParallelDecodeManager {
    * WebCodecs decoders cannot be reset() once closed - a full recreate is needed.
    * Re-checks hardware acceleration support since the original mode may have been the cause.
    */
-  private async recreateDecoder(clipDecoder: ClipDecoder): Promise<void> {
+  private async recreateDecoder(clipDecoder: ClipDecoder): Promise<VideoDecoder> {
     log.warn(`${clipDecoder.clipName}: Recreating closed decoder`);
 
     // Re-check hardware acceleration — the original mode may have caused the failure
@@ -395,6 +516,8 @@ export class ParallelDecodeManager {
     clearFrameBufferState(clipDecoder);
 
     log.info(`${clipDecoder.clipName}: Decoder recreated successfully (hwAccel=${hwAccel})`);
+    this.touchDecoder(clipDecoder);
+    return newDecoder;
   }
 
   /**
@@ -415,20 +538,13 @@ export class ParallelDecodeManager {
       return; // Let current decode continue, don't wait
     }
 
-    // Check if decoder is still valid - recreate if closed
-    if (!clipDecoder.decoder || clipDecoder.decoder.state === 'closed') {
-      log.warn(`${clipDecoder.clipName}: Decoder is ${clipDecoder.decoder?.state || 'null'}, recreating...`);
-      await this.recreateDecoder(clipDecoder);
-    }
-
     clipDecoder.isDecoding = true;
 
     clipDecoder.pendingDecode = (async () => {
       try {
-        // Double-check decoder state inside async block - recreate if closed
-        if (!clipDecoder.decoder || clipDecoder.decoder.state === 'closed') {
-          log.warn(`${clipDecoder.clipName}: Decoder closed during decode setup, recreating...`);
-          await this.recreateDecoder(clipDecoder);
+        let decoder = await this.ensureDecoder(clipDecoder);
+        if (decoder.state === 'closed') {
+          decoder = await this.recreateDecoder(clipDecoder);
         }
         // Check if we need to seek (target is far from current position - either ahead OR behind)
         // But ONLY seek if forceFlush is true (we actually need the frame now)
@@ -476,8 +592,8 @@ export class ParallelDecodeManager {
               clipDecoder.presentationOffsetSeconds
             ).toFixed(3);
 
-            clipDecoder.decoder.reset();
-            clipDecoder.decoder.configure(exportConfig);
+            decoder.reset();
+            decoder.configure(exportConfig);
 
             const chunk = createEncodedChunkForSample(
               candidateSample,
@@ -486,7 +602,7 @@ export class ParallelDecodeManager {
             );
 
             try {
-              clipDecoder.decoder.decode(chunk);
+              decoder.decode(chunk);
               clipDecoder.sampleIndex = candidateIndex + 1; // Already decoded this one
               log.debug(`${clipDecoder.clipName}: Seek keyframe accepted at sample ${candidateIndex} (source=${candidateSourceTime}s, targetSource=${targetSourceTime.toFixed(3)}s, bufferTarget=${targetSampleIndex})`);
               break;
@@ -494,8 +610,8 @@ export class ParallelDecodeManager {
               log.debug(`${clipDecoder.clipName}: Seek keyframe REJECTED at sample ${candidateIndex} (source=${candidateSourceTime}s) - not a real IDR, trying earlier`);
               if (k === keyframeCandidates.length - maxAttempts) {
                 // Last attempt failed - reset and start from first sample
-                clipDecoder.decoder.reset();
-                clipDecoder.decoder.configure(exportConfig);
+                decoder.reset();
+                decoder.configure(exportConfig);
                 clipDecoder.sampleIndex = 0;
                 log.warn(`${clipDecoder.clipName}: No valid keyframe found after ${maxAttempts} attempts, starting from sample 0`);
               }
@@ -535,8 +651,8 @@ export class ParallelDecodeManager {
             clipDecoder.sampleIndex
           );
           // Reset decoder to clean state and start from keyframe
-          clipDecoder.decoder.reset();
-          clipDecoder.decoder.configure(clipDecoder.codecConfig);
+          decoder.reset();
+          decoder.configure(clipDecoder.codecConfig);
           clipDecoder.sampleIndex = keyframeIndex;
           clipDecoder.needsKeyframe = false;
           log.debug(`${clipDecoder.clipName}: needsKeyframe - reset decoder, starting from keyframe at sample ${keyframeIndex}`);
@@ -555,8 +671,8 @@ export class ParallelDecodeManager {
           }
           if (needsKeyframeRecovery && sample.is_sync) {
             // Found a keyframe — reset decoder to clean state before feeding it
-            clipDecoder.decoder.reset();
-            clipDecoder.decoder.configure(clipDecoder.codecConfig);
+            decoder.reset();
+            decoder.configure(clipDecoder.codecConfig);
             needsKeyframeRecovery = false;
             log.debug(`${clipDecoder.clipName}: keyframe recovery at sample ${clipDecoder.sampleIndex}`);
           }
@@ -570,7 +686,7 @@ export class ParallelDecodeManager {
           );
 
           try {
-            clipDecoder.decoder.decode(chunk);
+            decoder.decode(chunk);
             decodedCount++;
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -584,11 +700,11 @@ export class ParallelDecodeManager {
           }
         }
 
-        log.debug(`${clipDecoder.clipName}: Queued ${decodedCount} chunks to decoder, decodeQueueSize=${clipDecoder.decoder.decodeQueueSize}`);
+        log.debug(`${clipDecoder.clipName}: Queued ${decodedCount} chunks to decoder, decodeQueueSize=${decoder.decodeQueueSize}`);
 
         // Only flush if explicitly requested (when we need frames NOW)
         if (forceFlush) {
-          await clipDecoder.decoder.flush();
+          await decoder.flush();
           clipDecoder.needsKeyframe = true; // After flush, next decode needs keyframe
         }
       } catch (e) {
@@ -597,6 +713,7 @@ export class ParallelDecodeManager {
           return;
         }
         log.error(`Decode error for ${clipDecoder.clipName}: ${e}`);
+        throw e;
       } finally {
         clipDecoder.isDecoding = false;
         clipDecoder.pendingDecode = null;
@@ -633,7 +750,9 @@ export class ParallelDecodeManager {
     const clipDecoder = this.clipDecoders.get(clipId);
     if (!clipDecoder) return null;
 
-    return getBufferedFrameForClip(clipDecoder, timelineTime, this.frameTolerance, options);
+    const frame = getBufferedFrameForClip(clipDecoder, timelineTime, this.frameTolerance, options);
+    if (frame) this.touchDecoder(clipDecoder);
+    return frame;
   }
 
   getFrameForClipSourceTime(
@@ -648,12 +767,14 @@ export class ParallelDecodeManager {
       clipDecoder.clipInfo.inPoint,
       Math.min(sourceTime, clipDecoder.clipInfo.outPoint - 0.001)
     );
-    return getBufferedFrameForClipSourceTime(
+    const frame = getBufferedFrameForClipSourceTime(
       clipDecoder,
       clampedSourceTime,
       this.frameTolerance,
       options,
     );
+    if (frame) this.touchDecoder(clipDecoder);
+    return frame;
   }
 
   /**
@@ -683,6 +804,21 @@ export class ParallelDecodeManager {
   advanceToTime(timelineTime: number): void {
     for (const [, clipDecoder] of this.clipDecoders) {
       const clipInfo = clipDecoder.clipInfo;
+      const clipEnd =
+        getClipMainTimelineStart(clipInfo) +
+        getClipMainTimelineDuration(clipInfo);
+
+      // Once the sequential export window has passed a clip, retire its
+      // decoder and buffered frames. Later clips can reuse the same pool slot.
+      if (timelineTime > clipEnd + 0.25 && !clipDecoder.isDecoding) {
+        this.releaseDecoderHandle(clipDecoder);
+        for (const [, decodedFrame] of clipDecoder.frameBuffer) {
+          this.closeDecodedFrame(decodedFrame);
+        }
+        clearFrameBufferState(clipDecoder);
+        this.clipDecoders.delete(clipDecoder.clipId);
+        continue;
+      }
 
       // Skip if time is not in this clip's range
       if (!isTimeInClipRange(clipInfo, timelineTime)) {
@@ -717,7 +853,7 @@ export class ParallelDecodeManager {
    * Check if a clip is managed by this decoder
    */
   hasClip(clipId: string): boolean {
-    return this.clipDecoders.has(clipId);
+    return this.clipInfos.has(clipId);
   }
 
   getRuntimeSnapshot(): ParallelDecodeRuntimeSnapshot {
@@ -725,6 +861,7 @@ export class ParallelDecodeManager {
       isActive: this.isActive,
       frameToleranceUs: this.frameTolerance,
       clips: Array.from(this.clipDecoders.values()).map(buildClipRuntimeSnapshot),
+      registeredClipIds: Array.from(this.clipInfos.keys()),
     });
   }
 
@@ -766,7 +903,7 @@ export class ParallelDecodeManager {
       // Reset decoder first to stop any pending decode operations
       // This will cause output callback to fire for any buffered frames
       try {
-        if (clipDecoder.decoder.state !== 'closed') {
+        if (clipDecoder.decoder && clipDecoder.decoder.state !== 'closed') {
           clipDecoder.decoder.reset();
         }
       } catch (e) {
@@ -786,7 +923,7 @@ export class ParallelDecodeManager {
 
       // Close decoder
       try {
-        if (clipDecoder.decoder.state !== 'closed') {
+        if (clipDecoder.decoder && clipDecoder.decoder.state !== 'closed') {
           clipDecoder.decoder.close();
         }
       } catch (e) {
@@ -795,6 +932,8 @@ export class ParallelDecodeManager {
     }
 
     this.clipDecoders.clear();
+    this.clipInfos.clear();
+    this.clipInitializationPromises.clear();
     this.decodePromises.clear();
     log.info('Cleaned up');
   }

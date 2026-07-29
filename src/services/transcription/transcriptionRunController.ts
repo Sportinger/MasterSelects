@@ -125,6 +125,36 @@ export function publishTranscriptionRunUpdate(
   }
 }
 
+/**
+ * Move the cancellation/reload restore point forward after a durable chunk
+ * checkpoint. Cancelling a later chunk then keeps all previously saved words.
+ */
+export function commitTranscriptionRunCheckpoint(
+  run: ActiveTranscriptionRun,
+  checkpoint: {
+    artifact?: TranscriptFusionArtifact;
+    clipWords: TranscriptWord[];
+    mediaWords?: TranscriptWord[];
+  },
+): void {
+  if (!isActiveTranscriptionRun(run)) return;
+
+  run.clipSnapshot = {
+    message: undefined,
+    progress: 100,
+    status: checkpoint.clipWords.length > 0 ? 'ready' : 'none',
+    words: checkpoint.clipWords,
+  };
+  if (run.mediaFileId) {
+    run.mediaSnapshot = {
+      artifact: checkpoint.artifact,
+      progress: undefined,
+      status: checkpoint.mediaWords?.length ? 'ready' : 'none',
+      words: checkpoint.mediaWords,
+    };
+  }
+}
+
 export function restoreActiveTranscriptionRun(run: ActiveTranscriptionRun): void {
   if (activeRun === run) restoreRun(run);
 }

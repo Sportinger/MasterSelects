@@ -44,6 +44,7 @@ import { createAIActionFeedbackSlice } from './aiActionFeedbackSlice';
 import { createPositioningUtils } from './positioningUtils';
 import { createSerializationUtils } from './serializationUtils';
 import { Logger } from '../../services/logger';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import { lockTimelineEditActions } from './exportEditLock';
 import {
   readStoredAudioLayerAdvancedMode,
@@ -387,6 +388,7 @@ export const useTimelineStore = create<TimelineStore>()(
           exportPreviewFrame: null,
           exportPreviewFrameTime: null,
         });
+        renderHostPort.requestNewFrameRender();
       },
     };
 

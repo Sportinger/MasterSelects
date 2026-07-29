@@ -2,11 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 import {
+  persistTranscriptCheckpoint,
   propagateTranscriptToMediaFile,
   updateClipTranscript,
 } from '../../src/services/transcription/artifactPersistence';
 import { mergeTranscriptWords } from '../../src/services/transcription/resultMapping';
-import type { TranscriptWord } from '../../src/types/clipMetadata';
+import type {
+  TranscriptFusionArtifact,
+  TranscriptFusionProgress,
+  TranscriptWord,
+} from '../../src/types/clipMetadata';
 import { createMockClip } from '../helpers/mockData';
 
 const saveTranscriptMock = vi.hoisted(() => vi.fn().mockResolvedValue(true));
@@ -152,5 +157,58 @@ describe('transcript artifact persistence', () => {
 
     expect(useMediaStore.getState().files[0].transcript).toEqual([]);
     expect(useMediaStore.getState().files[0].transcribedRanges).toEqual([[0, 2]]);
+  });
+
+  it('durably saves a completed chunk while keeping the larger run active', async () => {
+    const checkpointWord = { id: 'checkpoint', text: 'saved', start: 0.2, end: 0.6 };
+    const artifact: TranscriptFusionArtifact = {
+      agent: { status: 'not-requested' },
+      conflicts: [],
+      createdAt: 1,
+      patches: [],
+      primaryProvider: 'deepgram',
+      providerStatuses: { deepgram: 'complete', openai: 'complete' },
+      rawRuns: [],
+      schemaVersion: 1,
+      words: [checkpointWord],
+    };
+    const progress: TranscriptFusionProgress = {
+      conflictCount: 0,
+      mergeProgress: 0,
+      providerProgress: {
+        deepgram: { completedChunks: 1, totalChunks: 3, percent: 33 },
+        openai: { completedChunks: 1, totalChunks: 3, percent: 33 },
+      },
+      providers: { deepgram: 'running', openai: 'running' },
+      range: [0, 1],
+      resolvedCount: 0,
+      stage: 'transcribing',
+      updatedAt: 1,
+    };
+    useMediaStore.setState({
+      files: [{
+        id: 'media-1', name: 'speech.wav', type: 'audio', parentId: null,
+        createdAt: 1, url: 'blob:speech', duration: 3,
+      }],
+    });
+
+    await expect(persistTranscriptCheckpoint(
+      'media-1',
+      [checkpointWord],
+      [[0, 1]],
+      artifact,
+      progress,
+    )).resolves.toBe(true);
+
+    expect(useMediaStore.getState().files[0]).toMatchObject({
+      transcriptStatus: 'transcribing',
+      transcribedRanges: [[0, 1]],
+      transcriptFusionProgress: progress,
+    });
+    expect(saveTranscriptMock).toHaveBeenCalledWith(
+      'media-1',
+      expect.objectContaining({ artifact: expect.any(Object), words: [checkpointWord] }),
+      [[0, 1]],
+    );
   });
 });

@@ -36,6 +36,8 @@ vi.mock('../../src/engine/WebGPUEngine', () => ({
   engine: {
     requestNewFrameRender: (...args: unknown[]) => requestNewFrameRender(...args),
     setIsPlaying: vi.fn(),
+    clearScrubbingCache: vi.fn(),
+    clearVideoCache: vi.fn(),
   },
 }));
 

@@ -18,6 +18,8 @@ const localWorkerSecretKeys = [
   'ELEVENLABS_API_KEY',
   'ANTHROPIC_API_KEY',
   'PIAPI_API_KEY',
+  'RESEND_API_KEY',
+  'AUTH_EMAIL_FROM',
 ];
 const children = [];
 let shuttingDown = false;

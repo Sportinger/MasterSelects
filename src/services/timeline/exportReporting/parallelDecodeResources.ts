@@ -30,7 +30,11 @@ function getParallelDecodeStatus(
   snapshot: ParallelDecodeRuntimeSnapshot,
   clip: ParallelDecodeClipRuntimeSnapshot
 ): RuntimeHealthStatus {
-  if (!snapshot.isActive || clip.decoderState === 'closed') return 'disposed';
+  if (
+    !snapshot.isActive ||
+    clip.decoderState === 'closed' ||
+    clip.decoderState === 'dormant'
+  ) return 'disposed';
   if (clip.decoderState !== 'configured') return 'warning';
   return 'ok';
 }
@@ -181,7 +185,9 @@ export function reportExportParallelDecodeResources(
   snapshot: ParallelDecodeRuntimeSnapshot,
   clipStates?: ReadonlyMap<string, ExportClipState>
 ): void {
+  const reportedClipIds = new Set<string>();
   for (const clip of snapshot.clips) {
+    reportedClipIds.add(clip.clipId);
     const runtimeSource = getExportClipSource(clipStates, clip.clipId);
     const status = getParallelDecodeStatus(snapshot, clip);
     const report: ExportParallelDecodeAdmissionReport = {
@@ -216,42 +222,56 @@ export function reportExportParallelDecodeResources(
       clip.hardwareAcceleration
     );
 
-    retainExportResource({
-      ...decoderResource,
-      diagnostics: {
-        status,
-        provider: {
-          providerId: decoderId,
-          providerKind: 'native-decoder',
+    if (clip.decoderState === 'dormant' || clip.decoderState === 'closed') {
+      releaseExportResource(decoderId);
+    } else {
+      retainExportResource({
+        ...decoderResource,
+        diagnostics: {
           status,
-          isReady: clip.decoderState === 'configured',
-          isDecodePending: clip.hasPendingDecode || clip.isDecoding || clip.decodeQueueSize > 0,
-          isDisposed: !snapshot.isActive || clip.decoderState === 'closed',
-          decodeQueueDepth: clip.decodeQueueSize,
-          bufferedFrameCount: clip.frameBufferSize,
-          currentTimeSeconds: clip.lastDecodedTimeSeconds,
-          errorCode: clip.decoderState === 'configured' ? undefined : clip.decoderState,
+          provider: {
+            providerId: decoderId,
+            providerKind: 'native-decoder',
+            status,
+            isReady: clip.decoderState === 'configured',
+            isDecodePending: clip.hasPendingDecode || clip.isDecoding || clip.decodeQueueSize > 0,
+            isDisposed: !snapshot.isActive,
+            decodeQueueDepth: clip.decodeQueueSize,
+            bufferedFrameCount: clip.frameBufferSize,
+            currentTimeSeconds: clip.lastDecodedTimeSeconds,
+            errorCode: clip.decoderState === 'configured' ? undefined : clip.decoderState,
+          },
         },
-      },
-    });
+      });
+    }
 
-    retainExportResource({
-      ...frameBufferResource,
-      diagnostics: {
-        status,
-        provider: {
-          providerId,
-          providerKind: 'webcodecs',
+    if (clip.frameBufferSize === 0) {
+      releaseExportResource(providerId);
+    } else {
+      retainExportResource({
+        ...frameBufferResource,
+        diagnostics: {
           status,
-          isReady: clip.frameBufferSize > 0,
-          isDecodePending: clip.hasPendingDecode || clip.isDecoding || clip.decodeQueueSize > 0,
-          isDisposed: !snapshot.isActive,
-          currentTimeSeconds: clip.lastDecodedTimeSeconds,
-          lastFrameTimeSeconds: clip.newestBufferedTimeSeconds,
-          decodeQueueDepth: clip.decodeQueueSize,
-          bufferedFrameCount: clip.frameBufferSize,
+          provider: {
+            providerId,
+            providerKind: 'webcodecs',
+            status,
+            isReady: true,
+            isDecodePending: clip.hasPendingDecode || clip.isDecoding || clip.decodeQueueSize > 0,
+            isDisposed: !snapshot.isActive,
+            currentTimeSeconds: clip.lastDecodedTimeSeconds,
+            lastFrameTimeSeconds: clip.newestBufferedTimeSeconds,
+            decodeQueueDepth: clip.decodeQueueSize,
+            bufferedFrameCount: clip.frameBufferSize,
+          },
         },
-      },
-    });
+      });
+    }
+  }
+
+  for (const clipId of snapshot.registeredClipIds ?? []) {
+    if (reportedClipIds.has(clipId)) continue;
+    releaseExportResource(getRunResourceId(runId, `parallel:${clipId}:decoder`));
+    releaseExportResource(getRunResourceId(runId, `parallel:${clipId}:frame-buffer`));
   }
 }

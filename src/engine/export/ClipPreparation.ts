@@ -14,22 +14,9 @@ import { cleanupExportMode } from './clipPreparation/cleanup';
 import { initializeFastMode } from './clipPreparation/fastMode';
 import { prepareImageClipsForExport } from './clipPreparation/mediaElements';
 import { initializePreciseMode } from './clipPreparation/preciseMode';
-import { getFastModeFileSizeStats, loadClipFileData } from './clipPreparation/sourceResolution';
-import { countFastSequentialVideoDecoders } from './clipPreparation/sourceSharing';
+import { loadClipFileData } from './clipPreparation/sourceResolution';
 
 const log = Logger.create('ClipPreparation');
-const FAST_EXPORT_SINGLE_FILE_LIMIT_BYTES = 1536 * 1024 * 1024; // 1.5 GB
-const FAST_EXPORT_TOTAL_FILE_LIMIT_BYTES = 2048 * 1024 * 1024; // 2 GB
-// Keep concurrently required FAST decoders within the export policy's native
-// decoder budget. Non-overlapping clips from one source share a decoder.
-const FAST_EXPORT_MAX_SEQUENTIAL_VIDEO_CLIPS = 8;
-
-interface FastExportFileSizeStats {
-  totalBytes: number;
-  largestBytes: number;
-  largestClipName: string | null;
-  uniqueSourceCount: number;
-}
 
 export type { ExportClipState, ExportMode } from './types';
 export { cleanupExportMode, loadClipFileData };
@@ -44,56 +31,6 @@ export interface ClipPreparationModeResult {
 export interface ClipPreparationResult extends ClipPreparationModeResult {
   mediaFiles: MediaFile[];
   mediaCompositions: Composition[];
-}
-
-export function shouldUsePreciseForFastExportFileSizes(stats: FastExportFileSizeStats): boolean {
-  return stats.largestBytes >= FAST_EXPORT_SINGLE_FILE_LIMIT_BYTES ||
-    stats.totalBytes >= FAST_EXPORT_TOTAL_FILE_LIMIT_BYTES;
-}
-
-export function shouldUsePreciseForFastExportClipTopology(
-  videoClips: readonly TimelineClip[]
-): boolean {
-  return countFastSequentialVideoDecoders(videoClips) >
-    FAST_EXPORT_MAX_SEQUENTIAL_VIDEO_CLIPS;
-}
-
-function formatLargeFastExportFallbackMessage(
-  stats: FastExportFileSizeStats,
-  videoClipCount: number
-): string {
-  const largestMb = (stats.largestBytes / 1024 / 1024).toFixed(0);
-  const totalMb = (stats.totalBytes / 1024 / 1024).toFixed(0);
-  return (
-    `FAST export is using HTMLVideo Precise for large source media ` +
-    `(largest=${largestMb}MB, uniqueTotal=${totalMb}MB, ` +
-    `uniqueSources=${stats.uniqueSourceCount}/${videoClipCount}, ` +
-    `largestClip="${stats.largestClipName ?? 'unknown'}").`
-  );
-}
-
-export function shouldAutoFallbackToPrecise(error: unknown): boolean {
-  const errorRecord = typeof error === 'object' && error !== null
-    ? error as { name?: unknown; message?: unknown }
-    : null;
-  const errorName = typeof errorRecord?.name === 'string' ? errorRecord.name : '';
-  const errorMessage = typeof errorRecord?.message === 'string'
-    ? errorRecord.message
-    : String(error);
-  const message = errorName ? `${errorName}: ${errorMessage}` : errorMessage;
-
-  return (
-    errorName === 'InvalidStateError' ||
-    errorName === 'EncodingError' ||
-    message.includes('FAST export decoder') ||
-    message.includes('VideoDecoder') ||
-    message.includes('closed codec') ||
-    message.includes('FAST export failed') ||
-    message.includes('NotReadableError') ||
-    message.includes('The requested file could not be read') ||
-    message.includes('Array buffer allocation failed') ||
-    message.includes('out of memory')
-  );
 }
 
 /**
@@ -175,26 +112,6 @@ export async function prepareClipsForExport(
     return withMedia(result);
   }
 
-  if (shouldUsePreciseForFastExportClipTopology(videoClips)) {
-    const sequentialDecoderCount = countFastSequentialVideoDecoders(videoClips);
-    log.warn(
-      `FAST export is using PRECISE mode for ${videoClips.length} visible video clips ` +
-      `(required sequential decoders=${sequentialDecoderCount}, ` +
-      `limit=${FAST_EXPORT_MAX_SEQUENTIAL_VIDEO_CLIPS}).`
-    );
-    const result = await initializePreciseMode(videoClips, clipStates, mediaFiles, startTime, exportRunId);
-    endPrepare();
-    return withMedia(result);
-  }
-
-  const fileSizeStats = getFastModeFileSizeStats(videoClips, mediaFiles);
-  if (shouldUsePreciseForFastExportFileSizes(fileSizeStats)) {
-    log.warn(formatLargeFastExportFallbackMessage(fileSizeStats, videoClips.length));
-    const result = await initializePreciseMode(videoClips, clipStates, mediaFiles, startTime, exportRunId);
-    endPrepare();
-    return withMedia(result);
-  }
-
   try {
     return withMedia(await initializeFastMode(
       videoClips,
@@ -207,15 +124,6 @@ export async function prepareClipsForExport(
       endPrepare
     ));
   } catch (e) {
-    if (shouldAutoFallbackToPrecise(e)) {
-      log.warn('FAST export failed; retrying with PRECISE HTMLVideo export mode', e);
-      cleanupExportMode(clipStates, null);
-      clipStates.clear();
-      await prepareImageClipsForExport(videoClips, mediaFiles, clipStates, exportRunId);
-      const result = await initializePreciseMode(videoClips, clipStates, mediaFiles, startTime, exportRunId);
-      endPrepare();
-      return withMedia(result);
-    }
     cleanupExportMode(clipStates, null);
     endPrepare();
     throw e;

@@ -201,6 +201,7 @@ function createCanvasContextMock(): CanvasRenderingContext2D {
     roundRect: vi.fn(),
     fill: vi.fn(),
     stroke: vi.fn(),
+    strokeRect: vi.fn(),
     fillRect: vi.fn(),
     drawImage: vi.fn(),
     rect: vi.fn(),
@@ -790,7 +791,7 @@ describe('TimelineClipCanvas worker runtime', () => {
     ]);
   });
 
-  it('posts prepared composition visuals with a transfer-owned segment bitmap', async () => {
+  it('keeps composition segment thumbnails on fallback without allocating transfer bitmaps', async () => {
     const cacheBitmap = {
       width: 320,
       height: 180,
@@ -801,7 +802,7 @@ describe('TimelineClipCanvas worker runtime', () => {
     vi.spyOn(thumbnailBitmapCache, 'hasThumbnailBitmap').mockReturnValue(true);
     vi.spyOn(thumbnailBitmapCache, 'getThumbnailBitmap').mockReturnValue(cacheBitmap);
 
-    renderWorkerCanvas({
+    const { container } = renderWorkerCanvas({
       clips: [createClip({
         id: 'clip-comp',
         isComposition: true,
@@ -817,40 +818,9 @@ describe('TimelineClipCanvas worker runtime', () => {
       hoveredClipId: null,
     });
 
-    await waitFor(() => expect(workers).toHaveLength(1));
-    const worker = workers[0];
-
-    await act(async () => {
-      worker.emit({ type: 'ready' });
-    });
-
-    await waitFor(() => {
-      expect(worker.postedMessages.some((message) => message.type === 'draw')).toBe(true);
-    });
-    const drawIndex = worker.postedMessages.findIndex((message) => message.type === 'draw');
-    const drawMessage = worker.postedMessages[drawIndex];
-    const compositionVisuals = drawMessage.paintPayloads?.compositionVisuals?.[0]?.resource;
-
-    expect(createdStripBitmaps).toHaveLength(1);
-    expect('compositionVisuals' in (drawMessage.clips?.[0] ?? {})).toBe(false);
-    expect(compositionVisuals?.outline).toBe(true);
-    expect(Array.from(compositionVisuals?.nestedBoundaries ?? [])).toEqual([
-      expect.closeTo(0.25),
-      expect.closeTo(0.75),
-    ]);
-    expect(Array.from(compositionVisuals?.segmentRects ?? [])).toEqual([
-      0,
-      1,
-    ]);
-    expect(compositionVisuals?.segmentThumbnailStrip?.bitmap).toBe(createdStripBitmaps[0]);
-    expect(compositionVisuals?.segmentThumbnailStrip?.drawCount).toBe(1);
-    expect(compositionVisuals?.mixdownWaveform?.columns).toBeInstanceOf(Float32Array);
-    expect(compositionVisuals?.mixdownGenerating).toBe(true);
-    expect(worker.postedTransferables[drawIndex]).toContain(createdStripBitmaps[0]);
-    expect(worker.postedTransferables[drawIndex]).toContain(compositionVisuals?.nestedBoundaries?.buffer);
-    expect(worker.postedTransferables[drawIndex]).toContain(compositionVisuals?.segmentRects?.buffer);
-    expect(worker.postedTransferables[drawIndex]).toContain(compositionVisuals?.mixdownWaveform?.columns?.buffer);
-    expect(worker.postedTransferables[drawIndex]).not.toContain(cacheBitmap);
+    await waitFor(() => expect(workers).toHaveLength(0));
+    expect(createdStripBitmaps).toHaveLength(0);
+    expect(container.querySelector('[data-clip-type="composition"]')).toBeNull();
     expect(cacheBitmap.close).not.toHaveBeenCalled();
   });
 

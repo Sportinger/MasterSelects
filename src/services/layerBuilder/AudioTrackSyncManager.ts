@@ -41,6 +41,7 @@ import {
 import { shouldUseInlineCompositionMixdown } from '../timeline/compositionAudioClipLinks';
 
 const log = Logger.create('CutTransition');
+const MAX_AUDIO_PLAYBACK_START_SYNC_PASSES = 3;
 
 function getClipAudioRouteSettings(
   ctx: FrameContext,
@@ -167,11 +168,23 @@ export class AudioTrackSyncManager {
     const isStartup = playheadState.playbackJustStarted;
     if (isStartup) {
       this.playbackStartFrames++;
-      if (this.playbackStartFrames > 10) {
+      const masterElement = playheadState.masterAudioElement;
+      const masterClockReady = playheadState.masterAudioClock !== null;
+      const masterElementReady = Boolean(
+        masterElement &&
+        !masterElement.paused &&
+        masterElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA,
+      );
+      if (
+        masterClockReady ||
+        masterElementReady ||
+        this.playbackStartFrames >= MAX_AUDIO_PLAYBACK_START_SYNC_PASSES
+      ) {
         playheadState.playbackJustStarted = false;
         this.playbackStartFrames = 0;
       }
     } else {
+      this.playbackStartFrames = 0;
       // Throttle audio sync
       if (ctx.now - this.lastAudioSyncTime < LAYER_BUILDER_CONSTANTS.AUDIO_SYNC_INTERVAL) {
         return;

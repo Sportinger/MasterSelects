@@ -23,6 +23,7 @@ interface AnalysisAction {
   detail: string;
   state: ActionState;
   statusText: string;
+  compactStatusText?: string;
   onRun: () => void;
   onCancel?: () => void;
   disabled?: boolean;
@@ -75,7 +76,7 @@ function actionIntent(action: AnalysisAction): string {
 
 function compactStatus(action: AnalysisAction): string | undefined {
   const leadingValue = action.statusText.match(/^(\d+(?:\.\d+)?%?)/)?.[1];
-  if (isRunning(action.state)) return leadingValue ?? '…';
+  if (isRunning(action.state)) return action.compactStatusText ?? leadingValue ?? '…';
   if (action.state === 'error') return '!';
   if (action.state !== 'ready') return undefined;
   if (action.id === 'metrics' && leadingValue === '100%') return undefined;

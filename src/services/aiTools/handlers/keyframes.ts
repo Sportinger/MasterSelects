@@ -7,6 +7,10 @@ import {
   captureMutationEntitySnapshot,
   describeMutationEntities,
 } from './mutationEntityResults';
+import {
+  keyframeValueFromStore,
+  keyframeValueToStore,
+} from './keyframePositionUnits';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
@@ -33,7 +37,7 @@ export async function handleGetKeyframes(
       keyframes: keyframes.map(kf => ({
         id: kf.id,
         property: kf.property,
-        value: kf.value,
+        value: keyframeValueFromStore(kf.property, kf.value),
         pathValue: kf.pathValue,
         time: kf.time,
         easing: normalizeEasingType(kf.easing, 'linear'),
@@ -61,7 +65,10 @@ export async function handleAddKeyframe(
     timelineStore.getClipKeyframes(clipId),
   );
   const { addKeyframe, invalidateCache } = useTimelineStore.getState();
-  addKeyframe(clipId, property, value, time, easing);
+  // Position values arrive in pixels and are stored normalized, exactly like
+  // setTransform does. Writing the raw number put clips thousands of pixels
+  // off-screen.
+  addKeyframe(clipId, property, keyframeValueToStore(property, value), time, easing);
   invalidateCache();
 
   // Visual feedback: keyframe pop animation

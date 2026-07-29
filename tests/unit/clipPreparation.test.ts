@@ -2,9 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   cleanupExportMode,
   prepareClipsForExport,
-  shouldAutoFallbackToPrecise,
-  shouldUsePreciseForFastExportClipTopology,
-  shouldUsePreciseForFastExportFileSizes,
 } from '../../src/engine/export/ClipPreparation';
 import type { ExportSettings } from '../../src/engine/export/types';
 import { useMediaStore } from '../../src/stores/mediaStore';
@@ -264,7 +261,7 @@ describe('ClipPreparation image export state', () => {
     expect(timelineRuntimeCoordinator.getBridgeStats().policies.export.budgetReport.usage.resources).toBe(128);
   });
 
-  it('falls back from FAST WebCodecs parse errors to PRECISE export preparation', async () => {
+  it('keeps FAST strict when WebCodecs parsing fails and cleans prepared resources', async () => {
     const createdImages: HTMLImageElement[] = [];
     installAutoLoadingImageMock(createdImages);
     const originalCreateElement = document.createElement.bind(document);
@@ -340,89 +337,17 @@ describe('ClipPreparation image export state', () => {
       files: [imageMediaFile, mediaFile],
     });
 
-    const result = await prepareClipsForExport(exportSettings, 'fast', 'fallback-fast-run');
+    await expect(
+      prepareClipsForExport(exportSettings, 'fast', 'strict-fast-run'),
+    ).rejects.toThrow('FAST export failed');
 
-    expect(result.exportMode).toBe('precise');
-    expect(result.useParallelDecode).toBe(false);
-    expect(result.parallelDecoder).toBeNull();
-    expect(result.clipStates.get(clip.id)).toMatchObject({
-      clipId: clip.id,
-      webCodecsPlayer: null,
-      isSequential: false,
-      preciseVideoObjectUrl: 'blob:precise-video',
-      hasDedicatedPreciseVideoElement: true,
-    });
-    expect(result.clipStates.get(imageClip.id)).toMatchObject({
-      exportImageObjectUrl: 'blob:export-image',
-    });
-    expect(createdImages.length).toBeGreaterThanOrEqual(2);
+    expect(createdImages.length).toBeGreaterThanOrEqual(1);
     expect(arrayBuffer).toHaveBeenCalledTimes(1);
     expect(fastPlayer.loadArrayBuffer).toHaveBeenCalledTimes(1);
     expect(fastPlayer.destroy).toHaveBeenCalledTimes(1);
-    expect(createObjectUrl).toHaveBeenCalledWith(file);
-    expect(createObjectUrl).toHaveBeenCalledWith(imageFile);
+    expect(createObjectUrl).toHaveBeenCalledTimes(1);
+    expect(createObjectUrl.mock.calls[0]?.[0]).toBe(imageFile);
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:export-image');
-
-    cleanupExportMode(result.clipStates, result.parallelDecoder);
-    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:precise-video');
-  });
-
-  it('routes large FAST WebCodecs source sets to PRECISE preparation', () => {
-    expect(shouldUsePreciseForFastExportFileSizes({
-      totalBytes: 1024 * 1024 * 1024,
-      largestBytes: 512 * 1024 * 1024,
-      largestClipName: 'Small.mp4',
-      uniqueSourceCount: 1,
-    })).toBe(false);
-
-    expect(shouldUsePreciseForFastExportFileSizes({
-      totalBytes: 1600 * 1024 * 1024,
-      largestBytes: 1536 * 1024 * 1024,
-      largestClipName: 'Large.mp4',
-      uniqueSourceCount: 1,
-    })).toBe(true);
-
-    expect(shouldUsePreciseForFastExportFileSizes({
-      totalBytes: 2048 * 1024 * 1024,
-      largestBytes: 800 * 1024 * 1024,
-      largestClipName: 'Part.mp4',
-      uniqueSourceCount: 3,
-    })).toBe(true);
-  });
-
-  it('counts shareable sources instead of raw clip count for FAST topology', () => {
-    const source: NonNullable<TimelineClip['source']> = {
-      type: 'video',
-      mediaFileId: 'media-video',
-      naturalDuration: 5,
-    };
-    const clips = Array.from({ length: 9 }, (_, index) => ({
-      ...makeVideoClip(source),
-      id: `clip-video-${index}`,
-      startTime: index * 0.4,
-      duration: 0.4,
-      inPoint: index * 0.4,
-      outPoint: (index + 1) * 0.4,
-    }));
-
-    expect(shouldUsePreciseForFastExportClipTopology(clips.slice(0, 8))).toBe(false);
-    expect(shouldUsePreciseForFastExportClipTopology(clips)).toBe(false);
-
-    const distinctSourceClips = clips.map((clip, index) => ({
-      ...clip,
-      mediaFileId: `media-video-${index}`,
-      source: {
-        ...clip.source!,
-        mediaFileId: `media-video-${index}`,
-      },
-    }));
-    expect(shouldUsePreciseForFastExportClipTopology(distinctSourceClips)).toBe(true);
-
-    const overlappingSameSourceClips = clips.map(clip => ({
-      ...clip,
-      startTime: 0,
-    }));
-    expect(shouldUsePreciseForFastExportClipTopology(overlappingSameSourceClips)).toBe(true);
   });
 
   it('prepares dense same-source FAST cut-ups with one shared decoder', async () => {
@@ -502,19 +427,4 @@ describe('ClipPreparation image export state', () => {
     expect(fastPlayer.destroy).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back from closed or failed WebCodecs decoder states', () => {
-    expect(shouldAutoFallbackToPrecise(
-      new DOMException(
-        "Failed to execute 'decode' on 'VideoDecoder': Cannot call 'decode' on a closed codec.",
-        'InvalidStateError'
-      )
-    )).toBe(true);
-    expect(shouldAutoFallbackToPrecise(
-      new DOMException('Decoding error.', 'EncodingError')
-    )).toBe(true);
-    expect(shouldAutoFallbackToPrecise(
-      new Error('FAST export decoder closed during decodeSampleWindow')
-    )).toBe(true);
-    expect(shouldAutoFallbackToPrecise(new Error('Unrelated export failure'))).toBe(false);
-  });
 });

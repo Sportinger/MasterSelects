@@ -1,7 +1,7 @@
 // Video clip addition - extracted from addClip
 // Handles video file loading, WebCodecs initialization, thumbnails, and linked audio
 
-import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
+import type { TimelineClip } from '../../../types/timeline';
 import { DEFAULT_TRANSFORM } from '../constants';
 import { useMediaStore } from '../../mediaStore';
 import { useSettingsStore } from '../../settingsStore';
@@ -13,7 +13,6 @@ import {
   waitForVideoMetadata,
 } from '../helpers/webCodecsHelpers';
 import { shouldSkipWaveform } from '../helpers/waveformHelpers';
-import { generateLinkedClipIds } from '../helpers/idGenerator';
 import { detectVideoAudio } from '../helpers/audioDetection';
 import { getMP4MetadataFast, estimateDurationFromFileSize } from '../helpers/mp4MetadataHelper';
 import { Logger } from '../../../services/logger';
@@ -21,75 +20,12 @@ import { registerNativeDecoderForTimelineClip } from '../../../services/timeline
 import { loadLinkedAudio } from './videoLinkedAudioLoader';
 import { loadCachedProjectAnalysisForVideo } from './videoCachedAnalysisLoader';
 import { startVideoThumbnailGeneration } from './videoThumbnailLoader';
+export { createVideoClipPlaceholders } from './videoClipPlaceholders';
+export type { AddVideoClipParams, AddVideoClipResult } from './videoClipPlaceholders';
 
 const log = Logger.create('AddVideoClip');
 
 type FileWithPath = File & { path?: string };
-
-export interface AddVideoClipParams {
-  trackId: string;
-  file: File;
-  startTime: number;
-  estimatedDuration: number;
-  mediaFileId?: string;
-  tracks: TimelineTrack[];
-  findAvailableAudioTrack: (startTime: number, duration: number) => string | null;
-}
-
-export interface AddVideoClipResult {
-  videoClip: TimelineClip;
-  audioClip: TimelineClip | null;
-  audioClipId: string | undefined;
-}
-
-/**
- * Create placeholder clips for video (and linked audio) immediately.
- * Returns clips ready to be added to state while media loads in background.
- */
-export function createVideoClipPlaceholders(params: AddVideoClipParams): AddVideoClipResult {
-  const { trackId, file, startTime, estimatedDuration, mediaFileId, findAvailableAudioTrack } = params;
-
-  const { videoId: clipId, audioId } = generateLinkedClipIds();
-  const audioTrackId = findAvailableAudioTrack(startTime, estimatedDuration);
-  const audioClipId = audioTrackId ? audioId : undefined;
-
-  const videoClip: TimelineClip = {
-    id: clipId,
-    trackId,
-    name: file.name,
-    file,
-    startTime,
-    duration: estimatedDuration,
-    inPoint: 0,
-    outPoint: estimatedDuration,
-    source: { type: 'video', naturalDuration: estimatedDuration, mediaFileId },
-    linkedClipId: audioClipId,
-    transform: { ...DEFAULT_TRANSFORM },
-    effects: [],
-    isLoading: true,
-  };
-
-  let audioClip: TimelineClip | null = null;
-  if (audioTrackId && audioClipId) {
-    audioClip = {
-      id: audioClipId,
-      trackId: audioTrackId,
-      name: `${file.name} (Audio)`,
-      file,
-      startTime,
-      duration: estimatedDuration,
-      inPoint: 0,
-      outPoint: estimatedDuration,
-      source: { type: 'audio', naturalDuration: estimatedDuration, mediaFileId },
-      linkedClipId: clipId,
-      transform: { ...DEFAULT_TRANSFORM },
-      effects: [],
-      isLoading: true,
-    };
-  }
-
-  return { videoClip, audioClip, audioClipId };
-}
 
 export interface LoadVideoMediaParams {
   clipId: string;
@@ -128,8 +64,9 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
   let video: HTMLVideoElement | null = null;
   let naturalDuration = 5; // default estimate
   let linkedAudioClipId = audioClipId;
+  const importedMediaStore = useMediaStore.getState();
   const importedMedia = mediaFileId
-    ? useMediaStore.getState().files.find((candidate) => candidate.id === mediaFileId)
+    ? importedMediaStore.files.find((candidate) => candidate.id === mediaFileId)
     : undefined;
   const importedHasAudio = importedMedia?.hasAudio;
 
@@ -137,7 +74,7 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
   if (useNativeDecoder) {
     try {
       const mediaFile = mediaFileId
-        ? useMediaStore.getState().files.find(f => f.id === mediaFileId)
+        ? importedMediaStore.files.find(f => f.id === mediaFileId)
         : null;
       let filePath = mediaFile?.absolutePath || (file as FileWithPath).path;
 

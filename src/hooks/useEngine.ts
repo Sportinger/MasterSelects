@@ -186,9 +186,15 @@ export function useEngine() {
           !hasActiveTemporalClip &&
           renderHostPort.renderCachedFrame(currentPlayhead)
         ) {
-          const syncAudioStart = performance.now();
-          layerBuilder.syncAudioElements();
-          syncAudioMs += performance.now() - syncAudioStart;
+          // Stable playback audio is synchronized by usePlaybackLoop on its
+          // dedicated cadence. Re-running the same media-element sync from the
+          // render callback creates duplicate seek/pause work and can make the
+          // browser decoder monopolize the main thread.
+          if (!timelineState.isPlaying || timelineState.isDraggingPlayhead) {
+            const syncAudioStart = performance.now();
+            layerBuilder.syncAudioElements();
+            syncAudioMs += performance.now() - syncAudioStart;
+          }
           recordFramePhases('cached');
           return;
         }
@@ -234,10 +240,14 @@ export function useEngine() {
         renderHostPort.render(layers);
         renderMs += performance.now() - renderStart;
 
-        // Audio sync after render (video and audio now see same playhead)
-        const syncAudioStart = performance.now();
-        layerBuilder.syncAudioElements();
-        syncAudioMs += performance.now() - syncAudioStart;
+        // Audio sync after render (video and audio now see same playhead).
+        // During stable playback usePlaybackLoop owns this work; keep this
+        // render-driven path only for paused preview and active scrubbing.
+        if (!timelineState.isPlaying || timelineState.isDraggingPlayhead) {
+          const syncAudioStart = performance.now();
+          layerBuilder.syncAudioElements();
+          syncAudioMs += performance.now() - syncAudioStart;
+        }
 
         // Cache rendered frame for instant scrubbing (like Premiere's playback caching)
         // Don't cache during active playback - GPU readback (mapAsync GPUMapMode.READ)

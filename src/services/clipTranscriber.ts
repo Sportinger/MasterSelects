@@ -8,20 +8,32 @@ import type {
   TranscriptFusionArtifact,
   TranscriptFusionProgress,
   TranscriptFusionProviderStatus,
+  TranscriptProviderProgress,
   TranscriptProviderId,
   TranscriptWord,
 } from '../types/clipMetadata';
 import { projectFileService } from './project/ProjectFileService';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAccountStore } from '../stores/accountStore';
-import { extractAudioBuffer, isAudioBearingFile, resampleAudio, audioBufferToWav } from './transcription/audioPrep';
 import {
+  audioBufferToWav,
+  extractAudioBuffer,
+  isAudioBearingFile,
+  resampleAudio,
+  splitAudioBuffer,
+} from './transcription/audioPrep';
+import {
+  persistTranscriptCheckpoint,
   propagateTranscriptToMediaFile,
   updateClipTranscript,
   updateTranscriptFusionPreview,
 } from './transcription/artifactPersistence';
 import { findGaps, mergeTranscriptWords } from './transcription/resultMapping';
-import { transcribeWithCloudProvider, transcribeWithHostedProvider } from './transcription/cloudProviders';
+import {
+  HOSTED_TRANSCRIPTION_MAX_BYTES,
+  transcribeWithCloudProvider,
+  transcribeWithHostedProvider,
+} from './transcription/cloudProviders';
 import {
   createTranscriptProviderRun,
   fuseTranscriptProviderRuns,
@@ -31,6 +43,7 @@ import { runWorkerTranscription } from './transcription/workerClient';
 import {
   beginTranscriptionRun,
   cancelTranscriptionRun,
+  commitTranscriptionRunCheckpoint,
   finishTranscriptionRun,
   hasActiveTranscriptionRun,
   isActiveTranscriptionRun,
@@ -45,6 +58,26 @@ import {
 } from './timeline/timelineRuntimeCoordinator';
 
 const log = Logger.create('ClipTranscriber');
+const WAV_HEADER_BYTES = 44;
+const WAV_MONO_BYTES_PER_SAMPLE = 2;
+
+function estimateHybridChunkCount(
+  ranges: readonly [number, number][],
+  sampleRate: number,
+): number {
+  const maxSamples = Math.floor(
+    (HOSTED_TRANSCRIPTION_MAX_BYTES - WAV_HEADER_BYTES) / WAV_MONO_BYTES_PER_SAMPLE,
+  );
+  const maxChunkSeconds = maxSamples / sampleRate;
+  return ranges.reduce((total, [start, end]) => (
+    total + Math.max(1, Math.ceil(Math.max(0, end - start) / maxChunkSeconds))
+  ), 0);
+}
+
+function boundedPercent(completed: number, total: number): number {
+  if (total <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((completed / total) * 100)));
+}
 
 function isLocalHostedApiUnavailable(error: unknown): boolean {
   if (!(error instanceof Error)) {
@@ -172,7 +205,13 @@ async function transcribeHybridRange(options: {
     log.warn('OpenAI speaker separation failed; keeping Deepgram speaker labels', openaiResult.reason);
   }
 
-  const artifact = fuseTranscriptProviderRuns(deepgramRun, openaiRun);
+  const artifact = {
+    ...fuseTranscriptProviderRuns(deepgramRun, openaiRun),
+    providerStatuses: {
+      deepgram: 'complete' as const,
+      openai: openaiResult.status === 'fulfilled' ? 'complete' as const : 'error' as const,
+    },
+  };
   options.onArtifactUpdate?.(artifact, 'finalizing');
   return artifact;
 }
@@ -324,6 +363,11 @@ export async function transcribeClip(
           deepgram: 'running',
           openai: 'running',
         },
+        providerProgress: {
+          deepgram: { completedChunks: 0, totalChunks: 1, percent: 0 },
+          openai: { completedChunks: 0, totalChunks: 1, percent: 0 },
+        },
+        mergeProgress: 0,
         conflictCount: 0,
         resolvedCount: 0,
         updatedAt: Date.now(),
@@ -337,6 +381,126 @@ export async function transcribeClip(
     const fusionArtifacts: TranscriptFusionArtifact[] = [];
     const totalDuration = ranges.reduce((sum, [s, e]) => sum + (e - s), 0);
     let processedDuration = 0;
+    const completedHybridRanges: [number, number][] = [];
+    const providerCompletedDuration: Record<TranscriptProviderId, number> = {
+      deepgram: 0,
+      openai: 0,
+    };
+    const providerCompletedChunks: Record<TranscriptProviderId, number> = {
+      deepgram: 0,
+      openai: 0,
+    };
+    const providerHadError: Record<TranscriptProviderId, boolean> = {
+      deepgram: false,
+      openai: false,
+    };
+    let hybridTotalChunks = 0;
+    let hybridChunkIndex = 0;
+
+    const getProviderProgress = (): Record<TranscriptProviderId, TranscriptProviderProgress> => ({
+      deepgram: {
+        completedChunks: providerCompletedChunks.deepgram,
+        totalChunks: Math.max(1, hybridTotalChunks),
+        percent: boundedPercent(providerCompletedDuration.deepgram, totalDuration),
+      },
+      openai: {
+        completedChunks: providerCompletedChunks.openai,
+        totalChunks: Math.max(1, hybridTotalChunks),
+        percent: boundedPercent(providerCompletedDuration.openai, totalDuration),
+      },
+    });
+    const getProviderStatuses = (
+      providerProgress: Record<TranscriptProviderId, TranscriptProviderProgress>,
+    ): Record<TranscriptProviderId, TranscriptFusionProviderStatus> => ({
+      deepgram: providerHadError.deepgram
+        ? 'error'
+        : providerProgress.deepgram.percent >= 100 ? 'complete' : 'running',
+      openai: providerHadError.openai
+        ? 'error'
+        : providerProgress.openai.percent >= 100 ? 'complete' : 'running',
+    });
+    const buildHybridProgress = (
+      stage: TranscriptFusionProgress['stage'],
+      range: [number, number],
+      mergeProgress: number = 0,
+    ): TranscriptFusionProgress => {
+      const providerProgress = getProviderProgress();
+      return {
+        stage,
+        range,
+        providers: getProviderStatuses(providerProgress),
+        providerProgress,
+        mergeProgress,
+        conflictCount: 0,
+        resolvedCount: 0,
+        updatedAt: Date.now(),
+      };
+    };
+    const publishHybridProgress = ({
+      currentWords,
+      mergeProgress = 0,
+      message,
+      range,
+      stage,
+    }: {
+      currentWords?: TranscriptWord[];
+      mergeProgress?: number;
+      message?: string;
+      range: [number, number];
+      stage: TranscriptFusionProgress['stage'];
+    }): TranscriptFusionProgress => {
+      const progress = buildHybridProgress(stage, range, mergeProgress);
+      if (!isActiveTranscriptionRun(run)) return progress;
+      const stagedNewWords = currentWords?.length
+        ? mergeTranscriptWords(allNewWords, currentWords)
+        : allNewWords;
+      const stagedWords = continueMode && existingTranscript?.length
+        ? mergeTranscriptWords(existingTranscript, stagedNewWords)
+        : stagedNewWords;
+      const stagedArtifact = fusionArtifacts.length > 0
+        ? replaceTranscriptFusionRanges(
+            existingFusionArtifact,
+            fusionArtifacts,
+            completedHybridRanges,
+            stagedWords,
+          )
+        : undefined;
+      const providerAverage = (
+        progress.providerProgress!.deepgram.percent
+        + progress.providerProgress!.openai.percent
+      ) / 2;
+      const overallProgress = stage === 'transcribing'
+        ? Math.round(providerAverage * 0.9)
+        : stage === 'aligning' || stage === 'finalizing'
+          ? 90 + Math.round(Math.max(0, Math.min(100, mergeProgress)) * 0.1)
+          : stage === 'complete'
+            ? 100
+            : Math.round(providerAverage * 0.9);
+      const liveMessage = message ?? (
+        stage === 'transcribing'
+          ? `Deepgram ${progress.providerProgress!.deepgram.percent}% · OpenAI ${progress.providerProgress!.openai.percent}%`
+          : stage === 'aligning'
+            ? 'Merging provider chunks...'
+            : stage === 'finalizing'
+              ? 'Applying speaker separation...'
+              : stage === 'error'
+                ? 'Best Quality transcription stopped.'
+                : 'Best Quality transcription complete.'
+      );
+
+      publishClipUpdate({
+        ...(stagedWords.length > 0 ? { words: stagedWords } : {}),
+        progress: overallProgress,
+        message: liveMessage,
+      });
+      if (mediaFileId) {
+        updateTranscriptFusionPreview(mediaFileId, {
+          ...(stagedArtifact ? { artifact: stagedArtifact } : {}),
+          progress,
+        });
+      }
+      return progress;
+    };
 
     for (let ri = 0; ri < ranges.length; ri++) {
       signal.throwIfAborted();
@@ -356,125 +520,102 @@ export async function transcribeClip(
       let words: TranscriptWord[];
 
       if (useHybridTranscription) {
-        let liveDeepgramWords: TranscriptWord[] | undefined;
-        let liveProviderStatuses: TranscriptFusionProgress['providers'] = {
-          deepgram: 'running',
-          openai: 'running',
-        };
-        const buildLiveWords = (currentWords: TranscriptWord[]): TranscriptWord[] => {
-          const newWords = mergeTranscriptWords(allNewWords, currentWords);
-          return continueMode && existingTranscript?.length
-            ? mergeTranscriptWords(existingTranscript, newWords)
-            : newWords;
-        };
-        const publishLiveFusion = (
-          stage: TranscriptFusionProgress['stage'],
-          currentWords?: TranscriptWord[],
-          currentArtifact?: TranscriptFusionArtifact,
-        ): void => {
-          if (!isActiveTranscriptionRun(run)) return;
-          const stagedWords = currentWords ? buildLiveWords(currentWords) : undefined;
-          const stagedArtifact = currentArtifact && stagedWords
-            ? replaceTranscriptFusionRanges(
-                existingFusionArtifact,
-                [...fusionArtifacts, currentArtifact],
-                ranges.slice(0, ri + 1),
-                stagedWords,
-              )
-            : undefined;
-          const progress: TranscriptFusionProgress = {
-            stage,
-            range: [rangeStart, rangeEnd],
-            providers: { ...liveProviderStatuses },
-            conflictCount: 0,
-            resolvedCount: 0,
-            updatedAt: Date.now(),
-          };
-          const finishedProviderCount = Object.values(liveProviderStatuses)
-            .filter(status => status === 'complete' || status === 'error').length;
-          const stagePercent = stage === 'transcribing'
-            ? 12 + finishedProviderCount * 24
-            : stage === 'aligning'
-              ? 68
-              : stage === 'finalizing'
-                ? 95
-                : stage === 'complete'
-                  ? 100
-                  : 0;
-          const readyProviders = (Object.entries(liveProviderStatuses) as Array<
-            [TranscriptProviderId, TranscriptFusionProviderStatus]
-          >)
-            .filter(([, status]) => status === 'complete')
-            .map(([provider]) => provider === 'deepgram' ? 'Deepgram' : 'OpenAI');
-          const liveMessage = stage === 'transcribing'
-            ? readyProviders.length > 0
-              ? `${readyProviders.join(' + ')} ready; waiting for the other transcript...`
-              : 'Deepgram and OpenAI are transcribing in parallel...'
-            : stage === 'aligning'
-              ? 'Mapping OpenAI speaker turns onto Deepgram words...'
-              : stage === 'finalizing'
-                ? 'Applying OpenAI speaker separation...'
-                : stage === 'error'
-                  ? 'Best Quality transcription stopped.'
-                  : 'Best Quality transcription complete.';
+        const audioChunks = splitAudioBuffer(audioBuffer, HOSTED_TRANSCRIPTION_MAX_BYTES);
+        if (hybridTotalChunks === 0) {
+          hybridTotalChunks = estimateHybridChunkCount(ranges, audioBuffer.sampleRate);
+        }
+        let sampleOffset = 0;
 
-          publishClipUpdate({
-            ...(stagedWords ? { words: stagedWords } : {}),
-            progress: progressBase + Math.round(stagePercent * progressScale),
-            message: liveMessage,
+        for (const audioChunk of audioChunks) {
+          signal.throwIfAborted();
+          const chunkStart = rangeStart + sampleOffset / audioBuffer.sampleRate;
+          const chunkEnd = Math.min(
+            rangeEnd,
+            chunkStart + audioChunk.length / audioBuffer.sampleRate,
+          );
+          const chunkRange: [number, number] = [chunkStart, chunkEnd];
+          const chunkDuration = Math.max(0, chunkEnd - chunkStart);
+          const chunkNumber = hybridChunkIndex + 1;
+          const terminalProviders = new Set<TranscriptProviderId>();
+          let liveDeepgramWords: TranscriptWord[] | undefined;
+
+          publishHybridProgress({
+            range: chunkRange,
+            stage: 'transcribing',
+            message: `Chunk ${chunkNumber}/${hybridTotalChunks} · Deepgram and OpenAI running in parallel...`,
           });
-          if (mediaFileId) {
-            updateTranscriptFusionPreview(mediaFileId, {
-              ...(ri === 0 && !continueMode && !currentArtifact ? { artifact: null } : {}),
-              ...(stagedArtifact ? { artifact: stagedArtifact } : {}),
-              ...(stagedWords ? { words: stagedWords } : {}),
-              progress,
-            });
-          }
-        };
+          const audioBlob = await audioBufferToWav(audioChunk);
+          const artifact = await transcribeHybridRange({
+            apiKeys,
+            audioBlob,
+            clipId,
+            isSignedIn: useHostedTranscription,
+            language,
+            onProviderUpdate: (provider, status, providerWords) => {
+              if (
+                (status === 'complete' || status === 'error')
+                && !terminalProviders.has(provider)
+              ) {
+                terminalProviders.add(provider);
+                providerCompletedChunks[provider] += 1;
+                providerCompletedDuration[provider] += chunkDuration;
+                if (status === 'error') providerHadError[provider] = true;
+              }
+              if (provider === 'deepgram' && providerWords) {
+                liveDeepgramWords = providerWords;
+              }
+              publishHybridProgress({
+                currentWords: liveDeepgramWords,
+                range: chunkRange,
+                stage: 'transcribing',
+              });
+            },
+            range: chunkRange,
+            signal,
+          });
 
-        publishLiveFusion('transcribing');
-        publishClipUpdate({
-          progress: progressBase + Math.round(12 * progressScale),
-          message: ranges.length > 1
-            ? `Cross-checking range ${ri + 1}/${ranges.length} with Deepgram and OpenAI...`
-            : 'Cross-checking with Deepgram and OpenAI...',
-        });
-        const audioBlob = await audioBufferToWav(audioBuffer);
-        const artifact = await transcribeHybridRange({
-          apiKeys,
-          audioBlob,
-          clipId,
-          isSignedIn: useHostedTranscription,
-          language,
-          onArtifactUpdate: (liveArtifact, stage) => {
-            publishLiveFusion(stage, liveArtifact.words, liveArtifact);
-          },
-          onProviderUpdate: (provider, status, providerWords) => {
-            liveProviderStatuses = {
-              ...liveProviderStatuses,
-              [provider]: status,
-            };
-            if (provider === 'deepgram' && providerWords) {
-              liveDeepgramWords = providerWords;
-            }
-            const providersFinished = Object.values(liveProviderStatuses)
-              .every(providerStatus => providerStatus === 'complete' || providerStatus === 'error');
-            publishLiveFusion(
-              providersFinished ? 'aligning' : 'transcribing',
-              liveDeepgramWords,
+          words = artifact.words;
+          allNewWords.push(...words);
+          fusionArtifacts.push(artifact);
+          completedHybridRanges.push(chunkRange);
+          hybridChunkIndex += 1;
+          sampleOffset += audioChunk.length;
+
+          const checkpointWords = continueMode && existingTranscript?.length
+            ? mergeTranscriptWords(existingTranscript, allNewWords)
+            : [...allNewWords];
+          const checkpointArtifact = replaceTranscriptFusionRanges(
+            existingFusionArtifact,
+            fusionArtifacts,
+            completedHybridRanges,
+            checkpointWords,
+          );
+          const checkpointProgress = publishHybridProgress({
+            range: chunkRange,
+            stage: 'transcribing',
+            message: `Saved chunk ${hybridChunkIndex}/${hybridTotalChunks} · Deepgram ${getProviderProgress().deepgram.percent}% · OpenAI ${getProviderProgress().openai.percent}%`,
+          });
+
+          if (mediaFileId && checkpointArtifact) {
+            await persistTranscriptCheckpoint(
+              mediaFileId,
+              allNewWords,
+              completedHybridRanges,
+              checkpointArtifact,
+              checkpointProgress,
             );
-          },
-          range: [rangeStart, rangeEnd],
-          signal,
-        });
-        words = artifact.words;
-        publishLiveFusion('finalizing', artifact.words, artifact);
-        fusionArtifacts.push(artifact);
-        publishClipUpdate({
-          progress: progressBase + Math.round(88 * progressScale),
-          message: 'Applied OpenAI speaker separation...',
-        });
+            const checkpointMedia = findTimelineAnalysisMediaFile(mediaFileId);
+            commitTranscriptionRunCheckpoint(run, {
+              artifact: checkpointArtifact,
+              clipWords: checkpointWords,
+              mediaWords: checkpointMedia?.transcript,
+            });
+            triggerTimelineSave();
+          }
+        }
+
+        processedDuration += rangeDuration;
+        continue;
       } else if (effectiveProvider === 'local' && !useHostedTranscription) {
         const audioData = await resampleAudio(audioBuffer, 16000);
         publishClipUpdate({
@@ -562,14 +703,30 @@ export async function transcribeClip(
     const finalWords = continueMode && existingTranscript?.length
       ? mergeTranscriptWords(existingTranscript, allNewWords)
       : allNewWords;
+    if (useHybridTranscription) {
+      publishHybridProgress({
+        currentWords: finalWords,
+        mergeProgress: 35,
+        range: [inPoint, outPoint],
+        stage: 'aligning',
+      });
+    }
     const fusionArtifact = useHybridTranscription
       ? replaceTranscriptFusionRanges(
           existingFusionArtifact,
           fusionArtifacts,
-          ranges,
+          completedHybridRanges,
           finalWords,
         )
       : undefined;
+    if (useHybridTranscription) {
+      publishHybridProgress({
+        currentWords: finalWords,
+        mergeProgress: 90,
+        range: [inPoint, outPoint],
+        stage: 'finalizing',
+      });
+    }
 
     signal.throwIfAborted();
     publishClipUpdate({
@@ -581,7 +738,9 @@ export async function transcribeClip(
     triggerTimelineSave();
 
     if (isActiveTranscriptionRun(run) && mediaFileId) {
-      const newRanges: [number, number][] = ranges.map(([s, e]) => [s, e]);
+      const newRanges: [number, number][] = (
+        useHybridTranscription ? completedHybridRanges : ranges
+      ).map(([s, e]) => [s, e]);
       propagateTranscriptToMediaFile(mediaFileId, allNewWords, newRanges, fusionArtifact);
     }
 
@@ -603,6 +762,8 @@ export async function transcribeClip(
             deepgram: 'error',
             openai: 'error',
           },
+          providerProgress: activeProgress?.providerProgress,
+          mergeProgress: activeProgress?.mergeProgress,
           conflictCount: activeProgress?.conflictCount ?? 0,
           resolvedCount: activeProgress?.resolvedCount ?? 0,
           updatedAt: Date.now(),

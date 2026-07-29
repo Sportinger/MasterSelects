@@ -45,9 +45,6 @@ export function collectTimelineClipCanvasVisibleThumbnailSecondRanges(input: {
   const visibleRight = input.scrollX + input.viewportWidth + input.thumbnailViewportOverscanPx;
 
   for (const clip of input.clips) {
-    const mediaFileId = getTimelineClipCanvasThumbnailMediaFileId(clip);
-    if (!mediaFileId) continue;
-
     const geometry = input.resolveGeometry(clip);
     if (!geometry.visible) continue;
 
@@ -59,13 +56,46 @@ export function collectTimelineClipCanvasVisibleThumbnailSecondRanges(input: {
     const overlapRight = Math.min(absoluteX + absoluteW, visibleRight);
     if (overlapRight <= overlapLeft) continue;
 
-    const sourceDuration = Math.max(0.001, geometry.outPoint - geometry.inPoint);
     const overlapStartRatio = Math.max(0, Math.min(1, (overlapLeft - absoluteX) / absoluteW));
     const overlapEndRatio = Math.max(0, Math.min(1, (overlapRight - absoluteX) / absoluteW));
-    const sourceStart = geometry.inPoint + overlapStartRatio * sourceDuration;
-    const sourceEnd = geometry.inPoint + overlapEndRatio * sourceDuration;
+    const mediaFileId = getTimelineClipCanvasThumbnailMediaFileId(clip);
+    if (mediaFileId) {
+      const sourceDuration = Math.max(0.001, geometry.outPoint - geometry.inPoint);
+      const sourceStart = geometry.inPoint + overlapStartRatio * sourceDuration;
+      const sourceEnd = geometry.inPoint + overlapEndRatio * sourceDuration;
+      addTimelineClipCanvasVisibleThumbnailSecondRange(rangesByMediaId, mediaFileId, sourceStart - 1, sourceEnd + 1);
+    }
 
-    addTimelineClipCanvasVisibleThumbnailSecondRange(rangesByMediaId, mediaFileId, sourceStart - 1, sourceEnd + 1);
+    const compositionSegments = clip.trackType === 'audio' || clip.source?.type === 'audio'
+      ? []
+      : clip.clipSegments ?? [];
+    for (const segment of compositionSegments) {
+      if (
+        !segment.mediaFileId ||
+        !Number.isFinite(segment.sourceInPoint) ||
+        !Number.isFinite(segment.sourceOutPoint)
+      ) {
+        continue;
+      }
+      const segmentStartNorm = Math.max(0, Math.min(1, segment.startNorm));
+      const segmentEndNorm = Math.max(segmentStartNorm, Math.min(1, segment.endNorm));
+      const visibleSegmentStartNorm = Math.max(segmentStartNorm, overlapStartRatio);
+      const visibleSegmentEndNorm = Math.min(segmentEndNorm, overlapEndRatio);
+      if (visibleSegmentEndNorm <= visibleSegmentStartNorm) continue;
+
+      const segmentNormDuration = Math.max(0.000001, segmentEndNorm - segmentStartNorm);
+      const sourceDuration = segment.sourceOutPoint! - segment.sourceInPoint!;
+      const sourceStart = segment.sourceInPoint!
+        + ((visibleSegmentStartNorm - segmentStartNorm) / segmentNormDuration) * sourceDuration;
+      const sourceEnd = segment.sourceInPoint!
+        + ((visibleSegmentEndNorm - segmentStartNorm) / segmentNormDuration) * sourceDuration;
+      addTimelineClipCanvasVisibleThumbnailSecondRange(
+        rangesByMediaId,
+        segment.mediaFileId,
+        sourceStart - 1,
+        sourceEnd + 1,
+      );
+    }
   }
 
   return rangesByMediaId;
