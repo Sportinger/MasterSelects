@@ -49,6 +49,7 @@ interface UseFlashBoardReferenceValidationControllerInput {
 }
 
 interface UseFlashBoardReferenceControllerInput {
+  chatPanelOpen: boolean;
   composer: FlashBoardComposerState;
   isAudioMode: boolean;
   mediaFiles: MediaFile[];
@@ -253,6 +254,7 @@ export function useFlashBoardReferenceValidationController({
 }
 
 export function useFlashBoardReferenceController({
+  chatPanelOpen,
   composer,
   isAudioMode,
   mediaFiles,
@@ -402,14 +404,21 @@ export function useFlashBoardReferenceController({
     effectiveReferenceMediaFileIds,
     mediaFilesById,
   ]);
-  const composerReferenceSlots = useMemo(() => buildReferenceSlots({
-    hasEndFrame: Boolean(composer.endMediaFileId),
-    hasStartFrame: Boolean(composer.startMediaFileId),
-    multiShots,
-    selectedEntry,
-    supportsEndFrameReference,
-    supportsTimelineReferenceRoles,
-  }), [
+  const composerReferenceSlots = useMemo(() => {
+    const slots = buildReferenceSlots({
+      hasEndFrame: Boolean(composer.endMediaFileId),
+      hasStartFrame: Boolean(composer.startMediaFileId),
+      multiShots,
+      selectedEntry,
+      supportsEndFrameReference,
+      supportsTimelineReferenceRoles,
+    });
+
+    return chatPanelOpen
+      ? slots.filter((slot) => slot.roleLabel === 'REF')
+      : slots;
+  }, [
+    chatPanelOpen,
     composer.endMediaFileId,
     composer.startMediaFileId,
     multiShots,

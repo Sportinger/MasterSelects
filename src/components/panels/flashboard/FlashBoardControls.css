@@ -10,6 +10,12 @@
   transition: min-height 260ms cubic-bezier(0.16, 1, 0.28, 1);
 }
 
+.fb-bubble-bar.is-chat-mode {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "controls generate";
+  min-height: 32px;
+}
+
 .fb-control-stack {
   display: contents;
 }
@@ -29,6 +35,19 @@
   justify-content: center;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.fb-bubble-bar.is-chat-mode .fb-pill-group {
+  flex-wrap: nowrap;
+}
+
+.fb-bubble-bar.is-chat-mode .fb-chat-control-stack > .fb-pill-group > .fb-chat-model-pill {
+  flex: 0 0 auto;
+  height: 32px;
+  padding-inline: 14px;
+  border-radius: 18px;
+  font-size: 12px;
+  font-weight: 650;
 }
 
 .fb-bubble-bar .fb-pill-group.is-suno-controls {

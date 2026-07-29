@@ -4,7 +4,7 @@ import type { AppContext, AppRouteHandler } from '../../lib/env';
 
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_PAGE_LENGTH = 500;
-const RATE_LIMIT_SECONDS = 30;
+const RATE_LIMIT_SECONDS = 60;
 
 interface SupportNoteBody {
   message?: unknown;

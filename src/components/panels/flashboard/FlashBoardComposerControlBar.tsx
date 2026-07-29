@@ -63,19 +63,6 @@ function getInlineSubmenuStyle(
     case chatControls.renderedPopover === 'chatProvider':
       optionCount = chatControls.chatProviderOptions.length;
       break;
-    case chatControls.renderedPopover === 'chatModel':
-      optionCount = chatControls.chatModelOptions.length;
-      break;
-    case chatControls.renderedPopover === 'chatContext':
-      optionCount = 8;
-      break;
-    case chatControls.renderedPopover === 'chatReasoning':
-      optionCount = chatControls.chatReasoningEffortOptions.length;
-      break;
-    case chatControls.renderedPopover === 'chatTemperature':
-      optionCount = 2;
-      extraHeight = 38;
-      break;
   }
 
   const estimatedRows = Math.max(1, Math.ceil(optionCount / 2));
@@ -104,7 +91,10 @@ export function FlashBoardComposerControlBar({
   );
 
   return (
-    <div className={`fb-bubble-bar ${inlineSubmenuStateClassName}`} style={inlineSubmenuStyle}>
+    <div
+      className={`fb-bubble-bar ${chatPanelOpen ? 'is-chat-mode' : ''} ${inlineSubmenuStateClassName}`}
+      style={inlineSubmenuStyle}
+    >
       {!chatPanelOpen && (
         <FlashBoardGenerationControls {...generationControls}>
           <FlashBoardModelPopover {...modelPopover} />

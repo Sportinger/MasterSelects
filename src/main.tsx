@@ -3,6 +3,9 @@ import './styles/tokens.css'
 import './styles/base.css'
 import RootApp from './RootApp.tsx'
 import { resolveEntryExperience } from './routing/entryExperience'
+import { installChunkLoadRecovery } from './runtime/chunkLoadRecovery'
+
+installChunkLoadRecovery();
 
 const initialExperience = resolveEntryExperience(window.location);
 

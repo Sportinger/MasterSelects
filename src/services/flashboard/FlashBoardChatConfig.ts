@@ -2,8 +2,8 @@ import { DEFAULT_LEMONADE_MODEL } from '../lemonadeProvider';
 import type { FlashBoardChatModelOption, FlashBoardChatProvider, FlashBoardChatProviderOption, FlashBoardOpenAiReasoningEffort } from './FlashBoardChatTypes';
 
 export const FLASHBOARD_CHAT_PROVIDERS: FlashBoardChatProviderOption[] = [
-  { id: 'kie', label: 'Kie.ai' },
-  { id: 'lemonade', label: 'Lemon' },
+  { id: 'kie', label: 'MasterSelects' },
+  { id: 'lemonade', label: 'Lemonade' },
 ];
 
 const KIE_GPT_REASONING_EFFORTS: FlashBoardOpenAiReasoningEffort[] = ['low', 'medium', 'high', 'xhigh'];

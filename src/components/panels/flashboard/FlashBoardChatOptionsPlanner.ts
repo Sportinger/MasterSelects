@@ -84,9 +84,7 @@ export function buildFlashBoardChatOptionsState({
   const chatTemperatureSupported = activeChatModel?.supportsTemperature ?? chatProvider !== 'kie';
   const chatReasoningSupported = chatProvider === 'kie' && isOpenAiReasoningEffortSupported(activeChatModelId);
   const chatReasoningEffortOptions = chatReasoningSupported ? getOpenAiReasoningEffortOptions(activeChatModelId) : [];
-  const chatProviderOptions = useHostedProductionProviders
-    ? FLASHBOARD_CHAT_PROVIDERS.filter((provider) => provider.id === 'kie')
-    : FLASHBOARD_CHAT_PROVIDERS;
+  const chatProviderOptions = FLASHBOARD_CHAT_PROVIDERS;
   const chatProviderLabel = chatProviderOptions.find((provider) => provider.id === chatProvider)?.label ?? 'Chat';
   const chatCreditLabel = chatProvider === 'kie' && (useHostedProductionProviders || !useKieAiKeyByDefault)
     ? getFlashBoardChatCreditLabel(activeChatModelId)
@@ -95,7 +93,7 @@ export function buildFlashBoardChatOptionsState({
   return {
     activeChatModel,
     activeChatModelId,
-    chatButtonLabel: isChatting ? 'Stop' : chatCreditLabel ? `Chat - ${chatCreditLabel}` : 'Chat',
+    chatButtonLabel: isChatting ? 'Stop' : 'Chat',
     chatChargeTitle: chatCreditLabel
       ? `${chatCreditLabel} per hosted model round. Tool follow-up rounds are charged separately.`
       : undefined,

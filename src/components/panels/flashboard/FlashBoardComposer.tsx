@@ -63,12 +63,12 @@ export function FlashBoardComposer({
   const setHoveredComposerReference = useFlashBoardStore((s) => s.setHoveredComposerReference);
   const mediaFiles = useMediaStore((s) => s.files);
   const {
-    accountSession, aiApprovalMode, aiProvider, canUseByoPromptRefiner,
+    accountSession, aiProvider, canUseByoPromptRefiner,
     aiSystemPromptOverrides, aiSystemPromptSendContext, canUseHostedPromptRefiner, elevenLabsApiKey,
     hasElevenLabsKey, hasEvolinkKey, hasHostedAudioAccess, hasHostedSession,
     hasKieAiKey, hostedAIEnabled, kieAiApiKey, lemonadeContextSize, lemonadeEndpoint, lemonadeModel,
-    openAuthDialog, openPricingDialog, openSettings, setAiApprovalMode,
-    setAiProvider, setAiSystemPromptOverride, setAiSystemPromptSendContext, setLemonadeContextSize, setLemonadeModel,
+    openAuthDialog, openPricingDialog, openSettings,
+    setAiProvider, setAiSystemPromptOverride, setAiSystemPromptSendContext, setLemonadeModel,
     useElevenLabsKeyByDefault, useEvolinkKeyByDefault, useHostedProductionProviders,
     useKieAiKeyByDefault, usePiApiKeyByDefault,
   } = useFlashBoardComposerAccessState();
@@ -138,15 +138,13 @@ export function FlashBoardComposer({
   const [copiedPromptBookEntryId, setCopiedPromptBookEntryId] = useState<string | null>(null);
   const copiedPromptBookResetRef = useRef<number | null>(null);
   const {
-    activeChatModel, activeChatModelId, chatButtonLabel, chatChargeTitle, chatError,
-    chatMessages, chatModelOptions, chatPanelOpen, chatPrompt, chatProvider,
-    chatProviderLabel, chatProviderOptions, chatReasoningEffortOptions,
-    chatReasoningSupported, chatTemperature, chatTemperatureSupported, clearChatError,
+    activeChatModelId, chatButtonLabel, chatChargeTitle, chatError,
+    chatMessages, chatPanelOpen, chatPrompt, chatProvider,
+    chatProviderLabel, chatProviderOptions, chatTemperature,
     copiedChatMessageId, handleChatButtonClick, handleChatInputKeyDown,
     handleChatMessageDoubleClick, handleChatProviderSelect, handleChatPromptChange,
-    handleClearChatHistory, handleClearChatPrompt, isChatting, lemonadeStatus,
-    openAiReasoningEffort, chatSystemPromptProvider, chatSystemPromptSendContext, setChatModel, setChatTemperature,
-    setOpenAiReasoningEffort, showChatCloudActions,
+    handleClearChatPrompt, isChatting, openAiReasoningEffort,
+    chatSystemPromptProvider, chatSystemPromptSendContext, showChatCloudActions,
   } = useFlashBoardChatController({
     aiProvider,
     aiSystemPromptSendContext,
@@ -504,6 +502,7 @@ export function FlashBoardComposer({
     maxReferenceMedia, referenceStripRef, showComposerReferences, supportsEndFrameReference,
     supportsTimelineReferenceRoles, updateReferenceCardFocus, activeReferenceSlotKey,
   } = useFlashBoardReferenceController({
+    chatPanelOpen,
     composer,
     isAudioMode,
     mediaFiles,
@@ -807,24 +806,14 @@ export function FlashBoardComposer({
           onImageSizeChange: setImageSize, onModeChange: setMode,
         }}
         chatControls={{
-          activeChatModel, activeChatModelId, activePopover: popover,
-          chatError, chatModelOptions, chatPrompt, chatProvider, chatProviderLabel,
-          chatProviderOptions,
-          chatReasoningEffortOptions, chatReasoningSupported,
-          chatTemperature, chatTemperatureSupported, hasChatMessages: chatMessages.length > 0,
-          isChatting, lemonadeContextSize, lemonadeStatus, openAiReasoningEffort, popoverHostClassName,
-          popoverRef, renderedPopover,
-          onChatErrorClear: clearChatError, onChatModelChange: setChatModel,
-          onChatProviderSelect: handleChatProviderSelect, onChatTemperatureChange: setChatTemperature,
-          onClearChatHistory: handleClearChatHistory, onClosePopover: closePopover,
-          onLemonadeContextSizeChange: setLemonadeContextSize,
-          onOpenPopover: togglePopover, onOpenPromptBook: () => openPromptBook('chat'),
-          onReasoningEffortChange: setOpenAiReasoningEffort,
+          activePopover: popover, chatProvider, chatProviderLabel, chatProviderOptions,
+          isChatting, popoverHostClassName, popoverRef, renderedPopover,
+          onChatProviderSelect: handleChatProviderSelect,
+          onClosePopover: closePopover, onOpenPopover: togglePopover,
         }}
         actionStack={{
-          aiApprovalMode, canGenerate, chatButtonLabel, chatButtonTitle: chatChargeTitle ?? 'Send chat prompt',
+          canGenerate, chatButtonLabel, chatButtonTitle: chatChargeTitle ?? 'Send chat prompt',
           chatPanelOpen, generateButtonLabel, generateButtonTitle,
-          onAiApprovalModeChange: setAiApprovalMode,
           onChatButtonClick: handleChatButtonClick, onGenerate: handleGenerate,
         }}
       />
