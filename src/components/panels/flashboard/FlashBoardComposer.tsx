@@ -138,12 +138,12 @@ export function FlashBoardComposer({
   const [copiedPromptBookEntryId, setCopiedPromptBookEntryId] = useState<string | null>(null);
   const copiedPromptBookResetRef = useRef<number | null>(null);
   const {
-    activeChatModelId, chatButtonLabel, chatChargeTitle, chatError,
+    chatButtonLabel, chatChargeTitle, chatError,
     chatMessages, chatPanelOpen, chatPrompt, chatProvider,
-    chatProviderLabel, chatProviderOptions, chatTemperature,
+    chatProviderLabel, chatProviderOptions,
     copiedChatMessageId, handleChatButtonClick, handleChatInputKeyDown,
     handleChatMessageDoubleClick, handleChatProviderSelect, handleChatPromptChange,
-    handleClearChatPrompt, isChatting, openAiReasoningEffort,
+    handleClearChatPrompt, isChatting,
     chatSystemPromptProvider, chatSystemPromptSendContext, showChatCloudActions,
   } = useFlashBoardChatController({
     aiProvider,
