@@ -9,29 +9,39 @@ type RenderedPopover = string | null;
 
 interface FlashBoardChatControlsProps {
   activePopover: RenderedPopover;
+  chatError: string | null;
+  chatPrompt: string;
   chatProvider: FlashBoardChatProvider;
   chatProviderLabel: string;
   chatProviderOptions: FlashBoardChatProviderOption[];
+  hasChatMessages: boolean;
   isChatting: boolean;
   popoverHostClassName: string;
   popoverRef: RefObject<HTMLDivElement | null>;
   renderedPopover: RenderedPopover;
   onChatProviderSelect: (provider: FlashBoardChatProvider) => void;
+  onClearChatHistory: () => void;
   onClosePopover: (popover: ChatControlsPopover) => void;
+  onOpenPromptBook: () => void;
   onOpenPopover: (popover: ChatControlsPopover) => void;
 }
 
 export function FlashBoardChatControls({
   activePopover,
+  chatError,
+  chatPrompt,
   chatProvider,
   chatProviderLabel,
   chatProviderOptions,
+  hasChatMessages,
   isChatting,
   popoverHostClassName,
   popoverRef,
   renderedPopover,
   onChatProviderSelect,
+  onClearChatHistory,
   onClosePopover,
+  onOpenPromptBook,
   onOpenPopover,
 }: FlashBoardChatControlsProps) {
   return (
@@ -46,6 +56,23 @@ export function FlashBoardChatControls({
           aria-expanded={activePopover === 'chatProvider'}
         >
           <span className="fb-pill-label">Model</span>
+        </button>
+        <button
+          className="fb-pill fb-prompt-book-pill"
+          type="button"
+          onClick={onOpenPromptBook}
+          title="Open chat Prompt Book"
+        >
+          <span className="fb-pill-label">Prompt Book</span>
+        </button>
+        <button
+          className="fb-pill fb-chat-clear-pill"
+          type="button"
+          onClick={onClearChatHistory}
+          disabled={!hasChatMessages && !chatPrompt && !chatError}
+          title="Clear chat history and start a new chat"
+        >
+          <span className="fb-pill-label">New</span>
         </button>
 
         {renderedPopover === 'chatProvider' && (

@@ -143,7 +143,7 @@ export function FlashBoardComposer({
     chatProviderLabel, chatProviderOptions,
     copiedChatMessageId, handleChatButtonClick, handleChatInputKeyDown,
     handleChatMessageDoubleClick, handleChatProviderSelect, handleChatPromptChange,
-    handleClearChatPrompt, isChatting,
+    handleClearChatHistory, handleClearChatPrompt, isChatting,
     chatSystemPromptProvider, chatSystemPromptSendContext, showChatCloudActions,
   } = useFlashBoardChatController({
     aiProvider,
@@ -806,10 +806,12 @@ export function FlashBoardComposer({
           onImageSizeChange: setImageSize, onModeChange: setMode,
         }}
         chatControls={{
-          activePopover: popover, chatProvider, chatProviderLabel, chatProviderOptions,
+          activePopover: popover, chatError, chatPrompt, chatProvider, chatProviderLabel,
+          chatProviderOptions, hasChatMessages: chatMessages.length > 0,
           isChatting, popoverHostClassName, popoverRef, renderedPopover,
           onChatProviderSelect: handleChatProviderSelect,
-          onClosePopover: closePopover, onOpenPopover: togglePopover,
+          onClearChatHistory: handleClearChatHistory, onClosePopover: closePopover,
+          onOpenPopover: togglePopover, onOpenPromptBook: () => openPromptBook('chat'),
         }}
         actionStack={{
           canGenerate, chatButtonLabel, chatButtonTitle: chatChargeTitle ?? 'Send chat prompt',
