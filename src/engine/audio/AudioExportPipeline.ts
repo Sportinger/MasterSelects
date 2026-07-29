@@ -27,7 +27,6 @@ import {
 } from './MidiClipRenderer';
 import { getGmSampleBank } from './GmSampleBank';
 import { useTimelineStore } from '../../stores/timeline';
-import { useMediaStore } from '../../stores/mediaStore';
 import { proxyFrameCache } from '../../services/proxyFrameCache';
 import type { MasterAudioState, TimelineClip, TimelineTrack, Keyframe } from '../../types';
 import {
@@ -55,6 +54,7 @@ import {
 import { MediaAudioRangeReader } from './exportPipeline/MediaAudioRangeReader';
 import { projectFileService } from '../../services/projectFileService';
 import { getAudioProxyStorageKey } from '../../services/audio/AudioProxyService';
+import { readAudioExportMediaFiles } from '../../services/export/audioExportMediaStoreAdapter';
 
 const log = Logger.create('AudioExportPipeline');
 
@@ -523,7 +523,7 @@ export class AudioExportPipeline {
     endTime: number,
     masterAudioState?: MasterAudioState
   ): TimelineClip[] {
-    const mediaFiles = useMediaStore.getState().files;
+    const mediaFiles = readAudioExportMediaFiles();
 
     const candidates = clips.filter(clip => {
       // Check if clip is in range
@@ -737,7 +737,7 @@ export class AudioExportPipeline {
           }
 
           const mediaFile = mediaFileId
-            ? useMediaStore.getState().files.find(file => file.id === mediaFileId)
+            ? readAudioExportMediaFiles().find(file => file.id === mediaFileId)
             : undefined;
           const sourceFile = mediaFile?.file ?? clip.file;
           const sourceDuration = mediaFile?.duration ?? clip.source?.naturalDuration ?? 0;
@@ -856,7 +856,7 @@ export class AudioExportPipeline {
     mediaFileId: string,
     releasedFullSourceMediaIds: Set<string>,
   ): Promise<AudioBuffer | null> {
-    const mediaFile = useMediaStore.getState().files.find(file => file.id === mediaFileId);
+    const mediaFile = readAudioExportMediaFiles().find(file => file.id === mediaFileId);
     if (!mediaFile) return null;
 
     const proxyReady = mediaFile.audioProxyStatus === 'ready' || mediaFile.hasProxyAudio === true;

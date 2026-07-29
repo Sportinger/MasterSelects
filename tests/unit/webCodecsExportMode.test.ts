@@ -64,7 +64,6 @@ describe('WebCodecsExportMode decoder recovery', () => {
     const samples = createSamples(300);
     let currentFrame: VideoFrame | null = null;
     let currentDecoder: MutableDecoder;
-    let mode: WebCodecsExportMode;
     const emitFrame = (timestamp: number) => {
       mode.handleDecoderOutput({
         timestamp,
@@ -92,7 +91,7 @@ describe('WebCodecsExportMode decoder recovery', () => {
       seekAsync: vi.fn(),
       recreateExportDecoder,
     };
-    mode = new WebCodecsExportMode(player);
+    const mode = new WebCodecsExportMode(player);
 
     await mode.prepareForSequentialExport(0);
 
@@ -111,7 +110,6 @@ describe('WebCodecsExportMode decoder recovery', () => {
   it('keeps the initial decoded export window small', async () => {
     const samples = createSamples(300);
     let currentFrame: VideoFrame | null = null;
-    let mode: WebCodecsExportMode;
     const decoder = createDecoder(timestamp => {
       mode.handleDecoderOutput({
         timestamp,
@@ -133,7 +131,7 @@ describe('WebCodecsExportMode decoder recovery', () => {
       isSimpleMode: () => false,
       seekAsync: vi.fn(),
     };
-    mode = new WebCodecsExportMode(player);
+    const mode = new WebCodecsExportMode(player);
 
     await mode.prepareForSequentialExport(0);
 
@@ -146,7 +144,6 @@ describe('WebCodecsExportMode decoder recovery', () => {
   it('restarts at a nearby keyframe and discards distant preroll on a large forward jump', async () => {
     const samples = createSamples(900, 300);
     let currentFrame: VideoFrame | null = null;
-    let mode: WebCodecsExportMode;
     const emittedFrames: VideoFrame[] = [];
     const decoder = createDecoder(timestamp => {
       const frame = {
@@ -171,7 +168,7 @@ describe('WebCodecsExportMode decoder recovery', () => {
       isSimpleMode: () => false,
       seekAsync: vi.fn(),
     };
-    mode = new WebCodecsExportMode(player);
+    const mode = new WebCodecsExportMode(player);
 
     await mode.prepareForSequentialExport(0);
     decoder.decode.mockClear();

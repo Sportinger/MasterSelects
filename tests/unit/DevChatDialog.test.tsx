@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DevChatDialog } from '../../src/components/common/DevChatDialog';
 
 const STORAGE_KEY = 'masterselects.devChat.conversationId';
+const TEST_CONVERSATION_ID = 'conversation-123';
 
 describe('DevChatDialog', () => {
   beforeEach(() => {
@@ -15,7 +16,7 @@ describe('DevChatDialog', () => {
 
   it('sends a trimmed message and persists the returned conversation', async () => {
     const sendMessage = vi.fn(async () => ({
-      conversationId: 'conversation-123',
+      conversationId: TEST_CONVERSATION_ID,
       message: {
         deliveryStatus: 'delivered' as const,
         id: 1,
@@ -25,7 +26,7 @@ describe('DevChatDialog', () => {
       },
     }));
     const fetchMessages = vi.fn(async () => ({
-      conversationId: 'conversation-123',
+      conversationId: TEST_CONVERSATION_ID,
       messages: [],
       cursor: 1,
     }));
@@ -51,7 +52,7 @@ describe('DevChatDialog', () => {
       undefined,
       expect.any(String),
     );
-    expect(window.localStorage.getItem(STORAGE_KEY)).toBe('conversation-123');
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe(TEST_CONVERSATION_ID);
     expect(screen.getByText('Hello developer')).toBeInTheDocument();
     expect(screen.getByText('You')).toBeInTheDocument();
     expect(textarea).toHaveValue('');
@@ -133,9 +134,9 @@ describe('DevChatDialog', () => {
   });
 
   it('does not downgrade a delivered message when a late send response is pending', async () => {
-    window.localStorage.setItem(STORAGE_KEY, 'conversation-123');
+    window.localStorage.setItem(STORAGE_KEY, TEST_CONVERSATION_ID);
     const fetchMessages = vi.fn(async () => ({
-      conversationId: 'conversation-123',
+      conversationId: TEST_CONVERSATION_ID,
       cursor: 5,
       messages: [{
         createdAt: '2026-07-29T18:00:00.000Z',
@@ -146,7 +147,7 @@ describe('DevChatDialog', () => {
       }],
     }));
     const sendMessage = vi.fn(async () => ({
-      conversationId: 'conversation-123',
+      conversationId: TEST_CONVERSATION_ID,
       message: {
         createdAt: '2026-07-29T18:00:00.000Z',
         deliveryStatus: 'pending' as const,
@@ -180,11 +181,11 @@ describe('DevChatDialog', () => {
 
   it('passes known pending message IDs to later polls and removes delivered IDs', async () => {
     vi.useFakeTimers();
-    window.localStorage.setItem(STORAGE_KEY, 'conversation-123');
+    window.localStorage.setItem(STORAGE_KEY, TEST_CONVERSATION_ID);
     const fetchMessages = vi
       .fn()
       .mockResolvedValueOnce({
-        conversationId: 'conversation-123',
+        conversationId: TEST_CONVERSATION_ID,
         cursor: 7,
         messages: [{
           createdAt: '2026-07-29T18:01:00.000Z',
@@ -195,7 +196,7 @@ describe('DevChatDialog', () => {
         }],
       })
       .mockResolvedValueOnce({
-        conversationId: 'conversation-123',
+        conversationId: TEST_CONVERSATION_ID,
         cursor: 7,
         messages: [{
           createdAt: '2026-07-29T18:01:00.000Z',
@@ -206,7 +207,7 @@ describe('DevChatDialog', () => {
         }],
       })
       .mockResolvedValue({
-        conversationId: 'conversation-123',
+        conversationId: TEST_CONVERSATION_ID,
         cursor: 7,
         messages: [],
       });
@@ -241,7 +242,7 @@ describe('DevChatDialog', () => {
 
   it('rotates more than 50 pending message IDs across bounded poll requests', async () => {
     vi.useFakeTimers();
-    window.localStorage.setItem(STORAGE_KEY, 'conversation-123');
+    window.localStorage.setItem(STORAGE_KEY, TEST_CONVERSATION_ID);
     const pendingMessages = Array.from({ length: 60 }, (_, index) => ({
       createdAt: '2026-07-29T18:01:00.000Z',
       deliveryStatus: 'pending' as const,
@@ -252,12 +253,12 @@ describe('DevChatDialog', () => {
     const fetchMessages = vi
       .fn()
       .mockResolvedValueOnce({
-        conversationId: 'conversation-123',
+        conversationId: TEST_CONVERSATION_ID,
         cursor: 60,
         messages: pendingMessages,
       })
       .mockResolvedValue({
-        conversationId: 'conversation-123',
+        conversationId: TEST_CONVERSATION_ID,
         cursor: 60,
         messages: [],
       });
@@ -299,11 +300,11 @@ describe('DevChatDialog', () => {
 
   it('polls immediately and then every three seconds using the latest cursor', async () => {
     vi.useFakeTimers();
-    window.localStorage.setItem(STORAGE_KEY, 'conversation-123');
+    window.localStorage.setItem(STORAGE_KEY, TEST_CONVERSATION_ID);
     const fetchMessages = vi
       .fn()
       .mockResolvedValueOnce({
-        conversationId: 'conversation-123',
+        conversationId: TEST_CONVERSATION_ID,
         messages: [{
           deliveryStatus: 'delivered',
           id: 7,
@@ -314,7 +315,7 @@ describe('DevChatDialog', () => {
         cursor: 7,
       })
       .mockResolvedValue({
-        conversationId: 'conversation-123',
+        conversationId: TEST_CONVERSATION_ID,
         messages: [{
           deliveryStatus: 'delivered',
           id: 8,
@@ -338,7 +339,7 @@ describe('DevChatDialog', () => {
     });
 
     expect(fetchMessages).toHaveBeenCalledTimes(1);
-    expect(fetchMessages.mock.calls[0]?.slice(0, 2)).toEqual(['conversation-123', 0]);
+    expect(fetchMessages.mock.calls[0]?.slice(0, 2)).toEqual([TEST_CONVERSATION_ID, 0]);
     expect(screen.getByText('First reply')).toBeInTheDocument();
 
     await act(async () => {
@@ -353,13 +354,13 @@ describe('DevChatDialog', () => {
     });
 
     expect(fetchMessages).toHaveBeenCalledTimes(2);
-    expect(fetchMessages.mock.calls[1]?.slice(0, 2)).toEqual(['conversation-123', 7]);
+    expect(fetchMessages.mock.calls[1]?.slice(0, 2)).toEqual([TEST_CONVERSATION_ID, 7]);
     expect(screen.getByText('Second reply')).toBeInTheDocument();
   });
 
   it('does not overlap polls while the preceding request is still in flight', async () => {
     vi.useFakeTimers();
-    window.localStorage.setItem(STORAGE_KEY, 'conversation-123');
+    window.localStorage.setItem(STORAGE_KEY, TEST_CONVERSATION_ID);
     let resolvePoll: ((value: {
       conversationId: string;
       messages: never[];
@@ -390,7 +391,7 @@ describe('DevChatDialog', () => {
 
     await act(async () => {
       resolvePoll?.({
-        conversationId: 'conversation-123',
+        conversationId: TEST_CONVERSATION_ID,
         messages: [],
         cursor: 0,
       });
@@ -405,7 +406,7 @@ describe('DevChatDialog', () => {
   });
 
   it('aborts polling when the dialog closes', () => {
-    window.localStorage.setItem(STORAGE_KEY, 'conversation-123');
+    window.localStorage.setItem(STORAGE_KEY, TEST_CONVERSATION_ID);
     let observedSignal: AbortSignal | undefined;
     const fetchMessages = vi.fn((
       _conversationId: string,
@@ -490,7 +491,7 @@ describe('DevChatDialog', () => {
   });
 
   it('keeps a send error visible when an overlapping poll succeeds', async () => {
-    window.localStorage.setItem(STORAGE_KEY, 'conversation-123');
+    window.localStorage.setItem(STORAGE_KEY, TEST_CONVERSATION_ID);
     let resolvePoll: ((value: {
       conversationId: string;
       messages: never[];
@@ -528,7 +529,7 @@ describe('DevChatDialog', () => {
 
     await act(async () => {
       resolvePoll?.({
-        conversationId: 'conversation-123',
+        conversationId: TEST_CONVERSATION_ID,
         messages: [],
         cursor: 0,
       });
