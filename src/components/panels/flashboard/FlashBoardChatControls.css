@@ -161,7 +161,9 @@
   display: flex;
   flex-direction: column;
   gap: 7px;
-  max-height: min(240px, calc(100vh - 240px));
+  /* A kernel run card carries far more than a chat line; the old 240px cut
+     the result off behind the composer. */
+  max-height: min(420px, calc(100vh - 220px));
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 2px 2px 3px;

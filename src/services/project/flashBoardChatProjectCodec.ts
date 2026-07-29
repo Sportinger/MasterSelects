@@ -1,6 +1,24 @@
+import type { KernelRunReport } from '../kernelClient/runReport';
 import type { FlashBoardChatMessage } from '../../stores/flashboardStore/types';
 import { redactFlashBoardChatImageData } from '../flashboard/FlashBoardChatImageData';
 import type { ProjectFlashBoardChatMessage } from './types/flashboard.types';
+
+/**
+ * Guards a persisted report before it is handed back to the run card. Project
+ * files are user-editable, so only a report of the schema version this build
+ * knows how to render is restored.
+ */
+function isStoredKernelReport(value: unknown): value is KernelRunReport {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const report = value as Partial<KernelRunReport>;
+  return report.schemaVersion === 1
+    && Array.isArray(report.steps)
+    && (report.outcome === 'verified'
+      || report.outcome === 'declined'
+      || report.outcome === 'failed');
+}
 
 export function serializeFlashBoardChatMessage(
   message: FlashBoardChatMessage,
@@ -13,6 +31,7 @@ export function serializeFlashBoardChatMessage(
     editOptions: message.editOptions,
     isError: message.isError,
     isPending: message.isPending,
+    kernelReport: message.kernelReport,
     toolCalls: redactFlashBoardChatImageData(message.toolCalls),
   };
 }
@@ -37,6 +56,10 @@ export function normalizeFlashBoardChatMessage(
     editOptions: Array.isArray(message.editOptions) ? message.editOptions : undefined,
     isError: message.isError || wasPending || undefined,
     isPending: false,
+    // A reload cannot resume a run, so only a settled report is restored.
+    kernelReport: !wasPending && isStoredKernelReport(message.kernelReport)
+      ? message.kernelReport
+      : undefined,
     toolCalls: Array.isArray(message.toolCalls)
       ? redactFlashBoardChatImageData(message.toolCalls)
       : undefined,

@@ -44,13 +44,14 @@ import {
   useFlashBoardReferenceValidationController,
 } from './useFlashBoardReferenceController';
 
-type FlashBoardComposerProps = { initialProviderId?: string; initialService?: CatalogEntry['service']; initialVersion?: string; initialMode?: 'generate' | 'chat'; allowedServices?: CatalogEntry['service'][]; serviceScope?: CatalogEntry['service']; };
+type FlashBoardComposerProps = { initialProviderId?: string; initialService?: CatalogEntry['service']; initialVersion?: string; initialMode?: 'generate' | 'chat'; initialChatPrompt?: string; allowedServices?: CatalogEntry['service'][]; serviceScope?: CatalogEntry['service']; };
 
 export function FlashBoardComposer({
   initialProviderId,
   initialService,
   initialVersion,
   initialMode = 'generate',
+  initialChatPrompt,
   allowedServices,
   serviceScope,
 }: FlashBoardComposerProps) {
@@ -154,6 +155,7 @@ export function FlashBoardComposer({
     hasHostedSession,
     hasKieAiKey,
     hostedAIEnabled,
+    initialChatPrompt,
     initialMode,
     kieAiApiKey,
     lemonadeContextSize,

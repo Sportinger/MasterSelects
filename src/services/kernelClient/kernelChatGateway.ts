@@ -11,12 +11,24 @@ import {
   type AgentTransaction,
 } from '../aiTools/agentTransaction';
 import { Logger } from '../logger';
+import { getDevBridgeToken } from '../security/devBridgeAuth';
 import { createExecutionIdBinding } from './executionIdBinding';
 import { KernelServiceClient } from './index';
+import { formatAssumptionNote } from './storyVerification';
 import {
-  formatAssumptionNote,
-  formatStoryVerificationDetails,
-} from './storyVerification';
+  buildDecline,
+  buildSteps,
+  buildUnderstood,
+  buildVerified,
+  formatKernelRunMessage,
+  type KernelReportStep,
+  type KernelRunReport,
+} from './runReport';
+import {
+  createKernelProgressEvent,
+  type KernelProgressReporter,
+  type KernelProgressStage,
+} from './runProgress';
 import {
   buildTranscriptMoments,
   TRANSCRIPT_MOMENT_INDEX_VERSION,
@@ -34,13 +46,17 @@ import type {
 const KERNEL_ENABLED_KEY = 'ms.kernel.enabled';
 const KERNEL_TOKEN_KEY = 'ms.kernel.token';
 const KERNEL_URL_KEY = 'ms.kernel.url';
-const FINGERPRINT_SHORT_LENGTH = 8;
 
 const log = Logger.create('KernelGateway');
 
+/**
+ * A handled turn now carries the structured run report alongside the derived
+ * message. `message` stays the contract for the bridge, MCP, and the chat-run
+ * audit; `report` is what the UI renders.
+ */
 export type KernelChatGatewayResult =
   | { handled: false }
-  | { handled: true; message: string; runId?: string };
+  | { handled: true; message: string; runId?: string; report?: KernelRunReport };
 
 type ExecuteToolCalls = typeof executeAIToolCalls;
 
@@ -57,15 +73,32 @@ export interface KernelChatGatewayDependencies {
   fetchImpl?: typeof fetch;
   getSilenceRanges?: (snapshot: unknown) => Promise<KernelSilenceRange[]>;
   getSnapshot?: () => Promise<unknown> | unknown;
+  /** Reports the local stage the run is in, so the chat can show progress. */
+  onProgress?: KernelProgressReporter;
   seed?: string;
+  /**
+   * Cancels the run. Checked before every mutating step and before the commit,
+   * so a stopped turn can never leave a committed edit behind.
+   */
+  signal?: AbortSignal;
   storage?: Storage;
   transaction?: Partial<KernelTransactionAdapter>;
+}
+
+/** Thrown when the caller aborts; converted to a decline by the run wrapper. */
+class KernelRunAbortedError extends Error {
+  constructor() {
+    super('Kernel run cancelled.');
+    this.name = 'KernelRunAbortedError';
+  }
 }
 
 interface KernelConfig {
   baseUrl: string;
   token: string;
 }
+
+const DEFAULT_LOCAL_KERNEL_URL = 'http://127.0.0.1:8787';
 
 function getDefaultStorage(): Storage | undefined {
   if (typeof window === 'undefined') {
@@ -89,7 +122,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function readConfig(storage: Storage): KernelConfig | undefined {
+function isLocalKernelUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (url.hostname === '127.0.0.1' || url.hostname === 'localhost')
+      && url.port === '8787';
+  } catch {
+    return false;
+  }
+}
+
+export function resolveKernelConfig(
+  storage: Storage,
+  devToken = import.meta.env.DEV ? getDevBridgeToken().trim() : '',
+): KernelConfig | undefined {
   try {
     if (storage.getItem(KERNEL_ENABLED_KEY) === 'false') {
       return undefined;
@@ -97,6 +143,15 @@ function readConfig(storage: Storage): KernelConfig | undefined {
 
     const token = storage.getItem(KERNEL_TOKEN_KEY)?.trim();
     const baseUrl = storage.getItem(KERNEL_URL_KEY)?.trim();
+    // dev-full rotates its local bridge token on every start. Keep an
+    // explicit remote override intact, but heal stale localhost credentials
+    // automatically so browser localStorage cannot strand the chat gateway.
+    if (devToken && (!baseUrl || isLocalKernelUrl(baseUrl))) {
+      return {
+        baseUrl: baseUrl || DEFAULT_LOCAL_KERNEL_URL,
+        token: devToken,
+      };
+    }
     if (token && baseUrl) {
       return { baseUrl, token };
     }
@@ -237,7 +292,7 @@ function parseCompleteResponse(value: unknown): KernelRunCompleteResponse | unde
 }
 
 // Snapshots go through the semantic tool gateway like every other kernel
-// interaction (plan Â§8.3) â€” the gateway never reads stores directly.
+// interaction (plan §8.3) — the gateway never reads stores directly.
 async function buildTimelineSnapshot(executor: ExecuteToolCalls): Promise<unknown> {
   const [execution] = await executor(
     [{ id: 'kernel-snapshot', tool: 'getTimelineState', args: {} }],
@@ -274,13 +329,6 @@ function describeFailure(value: unknown): string | undefined {
   return undefined;
 }
 
-function failedMessage(detail: unknown, prefix = 'Kernel-Ausf\u00fchrung fehlgeschlagen'): string {
-  const reason = describeFailure(detail);
-  return reason
-    ? `${prefix}: ${reason}`
-    : `${prefix}: Der Kernel hat keinen Fehlergrund angegeben.`;
-}
-
 function readFingerprint(value: unknown): string | undefined {
   const direct = readString(value);
   if (direct) {
@@ -298,121 +346,6 @@ function readFingerprint(value: unknown): string | undefined {
     ?? readFingerprint(value.simulated)
     ?? readFingerprint(value.expectedFingerprint)
     ?? readFingerprint(value.expected);
-}
-
-function firstRecord(values: unknown[]): Record<string, unknown> | undefined {
-  return values.find(isRecord) as Record<string, unknown> | undefined;
-}
-
-function readFiniteNumber(
-  sources: Array<Record<string, unknown> | undefined>,
-  keys: string[],
-): number | undefined {
-  for (const source of sources) {
-    if (!source) continue;
-    for (const key of keys) {
-      const value = source[key];
-      if (typeof value === 'number' && Number.isFinite(value)) {
-        return value;
-      }
-      if (Array.isArray(value)) {
-        return value.length;
-      }
-    }
-  }
-  return undefined;
-}
-
-function formatNumber(value: number): string {
-  if (Number.isInteger(value)) {
-    return String(value);
-  }
-  return value.toFixed(6).replace(/0+$/, '').replace(/\.$/, '');
-}
-
-function shortFingerprint(fingerprint: string | undefined): string {
-  if (!fingerprint) {
-    return 'unbekannt';
-  }
-  const separatorIndex = fingerprint.indexOf(':');
-  const digest = separatorIndex >= 0 ? fingerprint.slice(separatorIndex + 1) : fingerprint;
-  return digest.slice(0, FINGERPRINT_SHORT_LENGTH) || 'unbekannt';
-}
-
-function formatVerificationDetails(report: unknown, compileSummary: unknown): string {
-  const reportRecord = isRecord(report) ? report : undefined;
-  const reportSummary = reportRecord && isRecord(reportRecord.summary)
-    ? reportRecord.summary
-    : undefined;
-  const verified = reportRecord && isRecord(reportRecord.verified)
-    ? reportRecord.verified
-    : undefined;
-  const compileSummaryRecord = isRecord(compileSummary) ? compileSummary : undefined;
-  const counts = firstRecord([
-    reportSummary?.counts,
-    reportRecord?.counts,
-    compileSummaryRecord?.counts,
-  ]);
-  const sources = [counts, verified, reportSummary, reportRecord, compileSummaryRecord];
-  const videoCount = readFiniteNumber(sources, ['videoCount', 'videoClipCount']);
-  const audioCount = readFiniteNumber(sources, ['audioCount', 'audioClipCount']);
-  const clipCount = readFiniteNumber(sources, ['clipCount', 'totalClips', 'clips']);
-  const trackCount = readFiniteNumber(sources, ['trackCount', 'totalTracks', 'tracks']);
-  const occupancy = firstRecord([
-    reportSummary?.occupied,
-    reportSummary?.occupiedSpan,
-    reportRecord?.occupied,
-    reportRecord?.occupiedSpan,
-    isRecord(reportRecord?.occupancy) ? reportRecord.occupancy.occupied : undefined,
-    compileSummaryRecord?.occupied,
-    compileSummaryRecord?.occupiedSpan,
-  ]);
-  const range = [
-    reportSummary?.occupiedRange,
-    verified?.occupiedRange,
-    reportRecord?.occupiedRange,
-    compileSummaryRecord?.occupiedRange,
-  ].find((value): value is unknown[] => Array.isArray(value) && value.length >= 2);
-  const rangeStart = range?.[0];
-  const rangeEnd = range?.[1];
-  const startSeconds = typeof rangeStart === 'number' && Number.isFinite(rangeStart)
-    ? rangeStart
-    : readFiniteNumber([occupancy, ...sources], ['occupiedStartSeconds', 'startSeconds', 'start']);
-  const endSeconds = typeof rangeEnd === 'number' && Number.isFinite(rangeEnd)
-    ? rangeEnd
-    : readFiniteNumber([occupancy, ...sources], ['occupiedEndSeconds', 'endSeconds', 'end']);
-  const spanSeconds = readFiniteNumber([occupancy, ...sources], [
-    'occupiedSpanSeconds',
-    'spanSeconds',
-    'durationSeconds',
-    'duration',
-  ]);
-  const details: string[] = [];
-
-  if (videoCount !== undefined) details.push(`${formatNumber(videoCount)} Video-Clips`);
-  if (audioCount !== undefined) details.push(`${formatNumber(audioCount)} Audio-Clips`);
-  if (videoCount === undefined && audioCount === undefined && clipCount !== undefined) {
-    details.push(`${formatNumber(clipCount)} Clips`);
-  }
-  if (trackCount !== undefined) details.push(`${formatNumber(trackCount)} Spuren`);
-  if (startSeconds !== undefined && endSeconds !== undefined) {
-    const measuredSpan = spanSeconds ?? endSeconds - startSeconds;
-    details.push(
-      `belegter Bereich ${formatNumber(startSeconds)}\u2013${formatNumber(endSeconds)} s (${formatNumber(measuredSpan)} s)`,
-    );
-  } else if (spanSeconds !== undefined) {
-    details.push(`belegte Spanne ${formatNumber(spanSeconds)} s`);
-  } else if (endSeconds !== undefined) {
-    details.push(`belegte Timeline bis ${formatNumber(endSeconds)} s`);
-  }
-
-  if (details.length > 0) {
-    return details.join(', ');
-  }
-
-  return readString(reportRecord?.summary)
-    ?? readString(compileSummary)
-    ?? 'Der Auftrag wurde erfolgreich ausgef\u00fchrt.';
 }
 
 function toolExecutionFailure(
@@ -444,19 +377,13 @@ function transactionAdapter(
   };
 }
 
-function verificationFailure(
-  runId: string,
-  detail: unknown,
-  fingerprint?: string,
-): KernelChatGatewayResult {
-  const fingerprintShort = shortFingerprint(fingerprint);
+/** Wraps a report into the gateway result, deriving the legacy message. */
+function handledResult(report: KernelRunReport): KernelChatGatewayResult {
   return {
     handled: true,
-    message: failedMessage(
-      detail,
-      `Kernel-Verifikation fehlgeschlagen (${fingerprintShort})`,
-    ),
-    runId,
+    message: formatKernelRunMessage(report),
+    ...(report.runId === undefined ? {} : { runId: report.runId }),
+    report,
   };
 }
 
@@ -469,27 +396,57 @@ export async function tryKernelFirst(
     return { handled: false };
   }
 
-  const config = readConfig(storage);
+  const config = resolveKernelConfig(storage);
   if (!config) {
     return { handled: false };
   }
-  // Calibration switch: 'ms.kernel.fallback' = 'false' surfaces every
-  // kernel decline/failure honestly instead of running the community
-  // provider, so story-path calibration is never masked by the fallback.
-  let fallbackDisabled = false;
+  // Kernel-enabled turns fail closed by default so a timeout or decline can
+  // never silently hand editing authority to the community provider. Legacy
+  // fallback remains available only as an explicit local calibration opt-in.
+  let fallbackEnabled = false;
   try {
-    fallbackDisabled = storage.getItem('ms.kernel.fallback') === 'false';
+    fallbackEnabled = storage.getItem('ms.kernel.fallback') === 'true';
   } catch {
-    fallbackDisabled = false;
+    fallbackEnabled = false;
   }
-  const declineResult = (reason: string): KernelChatGatewayResult => (
-    fallbackDisabled
-      ? {
-          handled: true,
-          message: `Kernel-Pfad nicht erfolgreich (Fallback deaktiviert): ${reason}`,
-        }
-      : { handled: false }
+
+  const startedAt = Date.now();
+  const report = (partial: Omit<KernelRunReport, 'schemaVersion' | 'timings'> & {
+    timings?: Partial<KernelRunReport['timings']>;
+  }): KernelRunReport => ({
+    schemaVersion: 1,
+    ...partial,
+    timings: { totalMs: Date.now() - startedAt, ...partial.timings },
+  });
+
+  const declineResult = (
+    reason: string,
+    detail?: string,
+    runId?: string,
+  ): KernelChatGatewayResult => (
+    fallbackEnabled
+      ? { handled: false }
+      : handledResult(report({
+          outcome: 'declined',
+          ...(runId === undefined ? {} : { runId }),
+          steps: [],
+          decline: buildDecline(reason, detail),
+        }))
   );
+
+  const notify = (
+    stage: KernelProgressStage,
+    options?: { detail?: string; current?: number; total?: number },
+  ): void => {
+    deps.onProgress?.(createKernelProgressEvent(stage, options ?? {}));
+  };
+  // Every mutating step is gated on this, so a cancelled turn cannot leave a
+  // committed edit behind.
+  const throwIfAborted = (): void => {
+    if (deps.signal?.aborted) {
+      throw new KernelRunAbortedError();
+    }
+  };
 
   const client = deps.client ?? new KernelServiceClient({
     authToken: config.token,
@@ -501,10 +458,17 @@ export async function tryKernelFirst(
 
   let compiled: KernelCompileResponse;
   let compileSnapshot: unknown;
+  let compileMs: number | undefined;
   try {
+    throwIfAborted();
+    notify('reading-timeline');
     const snapshot = await getSnapshot();
     compileSnapshot = snapshot;
+    throwIfAborted();
+    notify('reading-transcript');
     const moments = await buildTranscriptMoments(snapshot, executeToolCalls);
+    throwIfAborted();
+    notify('reading-audio');
     const silenceRanges = await (deps.getSilenceRanges
       ? deps.getSilenceRanges(snapshot)
       : buildSilenceRanges(snapshot, executeToolCalls));
@@ -513,6 +477,11 @@ export async function tryKernelFirst(
       requestLength: request.length,
       silenceRangeCount: silenceRanges.length,
     });
+    throwIfAborted();
+    notify('compiling', {
+      detail: moments.length > 0 ? `${moments.length} transcript moments` : undefined,
+    });
+    const compileStartedAt = Date.now();
     const compileResult = await client.compile({
       request,
       snapshot,
@@ -522,47 +491,64 @@ export async function tryKernelFirst(
         : { moments, indexVersion: TRANSCRIPT_MOMENT_INDEX_VERSION }),
       ...(silenceRanges.length === 0 ? {} : { silentRanges: silenceRanges }),
     });
+    compileMs = Date.now() - compileStartedAt;
     if (!compileResult.ok) {
-      log.warn('kernel compile transport failed; falling back', {
+      log.warn('kernel compile transport failed', {
         status: compileResult.status,
         error: compileResult.error,
       });
-      return declineResult(`Compile-Transportfehler (${compileResult.status}): ${compileResult.error}`);
+      return declineResult(
+        'transportError',
+        `The kernel service replied ${compileResult.status}: ${compileResult.error}`,
+      );
     }
 
     const parsed = parseCompileResponse(compileResult.data);
     if (!parsed) {
-      log.warn('kernel compile response unparseable; falling back', {
+      log.warn('kernel compile response unparseable', {
         data: compileResult.data,
       });
-      return declineResult('Compile-Antwort unlesbar');
+      return declineResult('unreadableResponse');
     }
     compiled = parsed;
   } catch (error) {
-    log.warn('kernel gateway threw before execution; falling back', {
+    if (error instanceof KernelRunAbortedError) {
+      return declineResult('cancelled');
+    }
+    log.warn('kernel gateway threw before execution', {
       error: error instanceof Error ? error.message : String(error),
     });
-    return declineResult(`Gateway-Fehler vor Ausführung: ${error instanceof Error ? error.message : String(error)}`);
+    return declineResult(
+      'gatewayError',
+      error instanceof Error ? error.message : String(error),
+    );
   }
 
   if (compiled.status !== 'compiled') {
     if (compiled.status === 'aborted') {
-      log.info('kernel declined the task; falling back to community chat', {
+      log.info('kernel declined the task', {
         reason: compiled.reason,
         failures: compiled.failures,
       });
       const abortFailures = Array.isArray(compiled.failures) ? compiled.failures : [];
-      return declineResult(`Kernel lehnte ab: ${compiled.reason}${abortFailures.length ? ` – ${abortFailures.join('; ')}` : ''}`);
+      return declineResult(
+        compiled.reason ?? 'declined',
+        abortFailures.length > 0 ? abortFailures.join('; ') : undefined,
+        compiled.runId,
+      );
     }
-    // Compile failures happen before any local mutation, so the legacy
-    // loop can still serve the request. Honest failures are reserved for
-    // post-execution states (deferred rollback, fingerprint mismatch).
-    log.warn('kernel compile failed; falling back', {
+    // Compile failures happen before any local mutation. The provider path is
+    // only available when the local calibration fallback was explicitly enabled.
+    log.warn('kernel compile failed', {
       runId: compiled.runId,
       failures: compiled.failures,
     });
     const compileFailures = Array.isArray(compiled.failures) ? compiled.failures : [];
-    return declineResult(`Story-Compile fehlgeschlagen: ${compileFailures.length ? compileFailures.join('; ') : 'unbekannt'}`);
+    return declineResult(
+      'compileFailed',
+      compileFailures.length > 0 ? compileFailures.join('; ') : undefined,
+      compiled.runId,
+    );
   }
 
   const compiledPlan: KernelCompileCompiledResponse = compiled;
@@ -575,19 +561,33 @@ export async function tryKernelFirst(
 
   type RollbackOutcome = 'rolled-back' | 'deferred' | 'ownership-lost' | 'unavailable';
 
+  const understood = buildUnderstood(compiledPlan.taskContract);
+  const plannedSteps = buildSteps(compiledPlan.resolvedCalls, compiledPlan.plan);
+  const executedSteps: KernelReportStep[] = [];
+
   const failureResult = (detail: unknown, rollback: RollbackOutcome): KernelChatGatewayResult => {
     // A deferred rollback means our mutations are still applied; falling
     // back to the legacy loop would double-edit the timeline. Report the
     // failure honestly instead.
     if (rollback === 'deferred' || rollback === 'ownership-lost') {
-      return {
-        handled: true,
-        message: failedMessage(detail),
+      return handledResult(report({
         runId: compiledPlan.runId,
-      };
+        ...(compiledPlan.mode === undefined ? {} : { mode: compiledPlan.mode }),
+        outcome: 'failed',
+        ...(understood === undefined ? {} : { understood }),
+        steps: executedSteps,
+        ...(describeFailure(detail) === undefined
+          ? {}
+          : { failure: describeFailure(detail) }),
+        timings: { ...(compileMs === undefined ? {} : { compileMs }) },
+      }));
     }
-    console.warn('Kernel tool execution failed; rolled back and falling back to community chat.', detail);
-    return declineResult(`Tool-Ausführung fehlgeschlagen (zurückgerollt): ${String(detail)}`);
+    console.warn('Kernel tool execution failed; rolled back.', detail);
+    return declineResult(
+      'toolExecutionFailed',
+      describeFailure(detail) ?? String(detail),
+      compiledPlan.runId,
+    );
   };
 
   // Setup rollback: the history-batch abort restores store contents but not
@@ -648,10 +648,13 @@ export async function tryKernelFirst(
     return agentTransaction.abortNoop ? 'deferred' : 'rolled-back';
   };
 
+  const executeStartedAt = Date.now();
   try {
+    throwIfAborted();
     agentTransaction = transaction.begin(`Kernel task: ${compiledPlan.runId}`);
 
     if (compiledPlan.setup?.newComposition) {
+      notify('preparing', { detail: compiledPlan.setup.newComposition.name });
       const setupCall: KernelResolvedCall = {
         stepId: 'kernel-setup-new-composition',
         tool: 'createComposition',
@@ -695,7 +698,16 @@ export async function tryKernelFirst(
         : { simulatedVideoClipIds: compiledPlan.segments.simulatedVideoClipIds }),
     });
 
-    for (const call of compiledPlan.resolvedCalls) {
+    const totalCalls = compiledPlan.resolvedCalls.length;
+    for (let index = 0; index < totalCalls; index++) {
+      const call = compiledPlan.resolvedCalls[index]!;
+      throwIfAborted();
+      notify('executing', {
+        detail: call.tool,
+        current: index + 1,
+        total: totalCalls,
+      });
+      const stepStartedAt = Date.now();
       const execution: AIToolCallExecution = {
         id: call.stepId,
         tool: call.tool,
@@ -706,77 +718,136 @@ export async function tryKernelFirst(
         suppressHistory: true,
       });
       const failure = toolExecutionFailure([call], results);
+      const planned = plannedSteps[index];
       if (failure) {
+        executedSteps.push({
+          ...(planned ?? { stepId: call.stepId, tool: call.tool }),
+          status: 'failed',
+          durationMs: Date.now() - stepStartedAt,
+          error: failure,
+        });
         return failureResult(failure, await rollbackExecution());
       }
+      executedSteps.push({
+        ...(planned ?? { stepId: call.stepId, tool: call.tool, status: 'ok' as const }),
+        status: 'ok',
+        durationMs: Date.now() - stepStartedAt,
+      });
 
       binding.observeResult(call.tool, results[0]?.result.data);
     }
+  } catch (error) {
+    if (error instanceof KernelRunAbortedError) {
+      await rollbackExecution();
+      return declineResult('cancelled', undefined, compiledPlan.runId);
+    }
+    return failureResult(error, await rollbackExecution());
+  }
+  const executeMs = Date.now() - executeStartedAt;
+
+  // A verification failure is not a decline: the edit already ran locally and
+  // was rolled back, so the turn is reported as failed rather than handed to
+  // the provider.
+  const verificationFailure = (
+    detail: unknown,
+    fingerprint?: string,
+  ): KernelChatGatewayResult => handledResult(report({
+    runId: compiledPlan.runId,
+    ...(compiledPlan.mode === undefined ? {} : { mode: compiledPlan.mode }),
+    outcome: 'failed',
+    ...(understood === undefined ? {} : { understood }),
+    steps: executedSteps,
+    ...(fingerprint === undefined
+      ? {}
+      : {
+          verified: {
+            matches: false,
+            fingerprint,
+            counts: {},
+            checks: [],
+          },
+        }),
+    failure: describeFailure(detail) ?? 'The kernel did not report a reason.',
+    timings: {
+      ...(compileMs === undefined ? {} : { compileMs }),
+      executeMs,
+    },
+  }));
+
+  notify('verifying');
+  let completion: KernelRunCompleteResponse;
+  let finalSnapshot: unknown;
+  const verifyStartedAt = Date.now();
+  try {
+    finalSnapshot = await getSnapshot();
+    const completeResult = await client.completeRun(compiledPlan.runId, { finalSnapshot });
+    if (!completeResult.ok) {
+      await rollbackExecution();
+      return verificationFailure(completeResult.error);
+    }
+
+    const parsed = parseCompleteResponse(completeResult.data);
+    if (!parsed) {
+      await rollbackExecution();
+      return verificationFailure('The completion check returned an unreadable response.');
+    }
+    completion = parsed;
+  } catch (error) {
+    await rollbackExecution();
+    return verificationFailure(error);
+  }
+  const verifyMs = Date.now() - verifyStartedAt;
+
+  const fingerprint = readFingerprint(completion.fingerprintAssert)
+    ?? readFingerprint(compiledPlan.expectedFingerprint);
+  if (completion.fingerprintAssert.matches !== true) {
+    await rollbackExecution();
+    return verificationFailure(
+      describeFailure(completion.verificationReport)
+        ?? 'The final fingerprint does not match the simulated result.',
+      fingerprint,
+    );
+  }
+  if (completion.status !== 'succeeded') {
+    await rollbackExecution();
+    return verificationFailure(completion.verificationReport, fingerprint);
+  }
+
+  // Last cancellation window: after this the edit is durable.
+  if (deps.signal?.aborted) {
+    await rollbackExecution();
+    return declineResult('cancelled', undefined, compiledPlan.runId);
+  }
+
+  notify('committing');
+  try {
     transaction.commit(agentTransaction);
   } catch (error) {
     return failureResult(error, await rollbackExecution());
   }
 
-  let completion: KernelRunCompleteResponse;
-  let finalSnapshot: unknown;
-  try {
-    finalSnapshot = await getSnapshot();
-    const completeResult = await client.completeRun(compiledPlan.runId, { finalSnapshot });
-    if (!completeResult.ok) {
-      return verificationFailure(compiledPlan.runId, completeResult.error);
-    }
+  const assumptionNote = compiledPlan.mode === 'story'
+    ? formatAssumptionNote(compiledPlan.storySummary)
+    : undefined;
 
-    const parsed = parseCompleteResponse(completeResult.data);
-    if (!parsed) {
-      return verificationFailure(compiledPlan.runId, 'Ung\u00fcltige Antwort der Abschlusspr\u00fcfung.');
-    }
-    completion = parsed;
-  } catch (error) {
-    return verificationFailure(compiledPlan.runId, error);
-  }
-
-  const fingerprint = readFingerprint(completion.fingerprintAssert)
-    ?? readFingerprint(compiledPlan.expectedFingerprint);
-  if (completion.fingerprintAssert.matches !== true) {
-    return verificationFailure(
-      compiledPlan.runId,
-      describeFailure(completion.verificationReport)
-        ?? 'Der finale Fingerprint stimmt nicht mit dem erwarteten Ergebnis \u00fcberein.',
-      fingerprint,
-    );
-  }
-  if (completion.status !== 'succeeded') {
-    return verificationFailure(
-      compiledPlan.runId,
-      completion.verificationReport,
-      fingerprint,
-    );
-  }
-
-  const fingerprintShort = shortFingerprint(fingerprint);
-  if (compiledPlan.mode === 'story') {
-    const details = formatStoryVerificationDetails(
-      finalSnapshot,
+  return handledResult(report({
+    runId: compiledPlan.runId,
+    ...(compiledPlan.mode === undefined ? {} : { mode: compiledPlan.mode }),
+    outcome: 'verified',
+    ...(understood === undefined ? {} : { understood }),
+    steps: executedSteps,
+    verified: buildVerified(
+      completion.fingerprintAssert,
       completion.verificationReport,
       compiledPlan.summary,
-      compiledPlan.storySummary,
-    );
-    const assumptionNote = formatAssumptionNote(compiledPlan.storySummary);
-    return {
-      handled: true,
-      message: `Kernel-verifiziert (${fingerprintShort}): ${details}`
-        + (assumptionNote ? `\n${assumptionNote}` : ''),
-      runId: compiledPlan.runId,
-    };
-  }
-
-  const details = formatVerificationDetails(
-    completion.verificationReport,
-    compiledPlan.summary,
-  );
-  return {
-    handled: true,
-    message: `Kernel-verifiziert (${fingerprintShort}): ${details}`,
-    runId: compiledPlan.runId,
-  };
+      fingerprint,
+      finalSnapshot,
+    ),
+    ...(assumptionNote === undefined ? {} : { assumptionNote }),
+    timings: {
+      ...(compileMs === undefined ? {} : { compileMs }),
+      executeMs,
+      verifyMs,
+    },
+  }));
 }

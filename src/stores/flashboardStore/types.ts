@@ -1,3 +1,6 @@
+import type { KernelProgressEvent } from '../../services/kernelClient/runProgress';
+import type { KernelRunReport } from '../../services/kernelClient/runReport';
+
 export interface FlashBoardStoreState {
   activeGenerationRecords: FlashBoardActiveGenerationRecord[];
   selectedActiveGenerationRecordIds: string[];
@@ -99,6 +102,10 @@ export interface FlashBoardChatMessage {
   editOptions?: FlashBoardChatEditOption[];
   isError?: boolean;
   isPending?: boolean;
+  /** Live stage while a kernel turn is running; cleared once it settles. */
+  kernelProgress?: KernelProgressEvent;
+  /** Structured kernel evidence, rendered as a run card instead of prose. */
+  kernelReport?: KernelRunReport;
   toolCalls?: FlashBoardChatExecutedToolCall[];
 }
 

@@ -5,8 +5,14 @@ import {
   beginFlashBoardChatRun,
   completeFlashBoardChatRun,
 } from './FlashBoardChatRunAudit';
-import type { FlashBoardChatRequest } from './FlashBoardChatTypes';
+import type { KernelRunReport } from '../kernelClient/runReport';
+import type {
+  FlashBoardChatRequest,
+  FlashBoardExecutedToolCall,
+} from './FlashBoardChatTypes';
 
+export type { KernelProgressEvent } from '../kernelClient/runProgress';
+export type { KernelRunReport } from '../kernelClient/runReport';
 export type {
   FlashBoardExecutedToolCall,
   FlashBoardChatModelOption,
@@ -42,6 +48,27 @@ export {
   type FlashBoardChatRunRecord,
 } from './FlashBoardChatRunAudit';
 
+/**
+ * Projects kernel run steps into the executed-tool-call shape the chat run
+ * audit and the Prompt Book already understand.
+ */
+function kernelExecutedToolCalls(
+  report: KernelRunReport | undefined,
+): FlashBoardExecutedToolCall[] {
+  if (!report) return [];
+  return report.steps.map((step) => ({
+    modelContent: step.error ?? (step.status === 'ok' ? 'ok' : step.status),
+    result: step.status === 'ok'
+      ? { success: true as const }
+      : { success: false as const, error: step.error ?? 'Step failed.' },
+    toolCall: {
+      id: step.stepId,
+      name: step.tool,
+      arguments: JSON.stringify(step.args ?? {}),
+    },
+  }));
+}
+
 export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest): Promise<string> {
   const prompt = request.prompt.trim();
   if (!prompt) {
@@ -49,10 +76,20 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
   }
 
   request.onPhase?.('kernel');
-  const kernelResult = await tryKernelFirst(request.playbookPrompt ?? prompt);
+  const kernelResult = await tryKernelFirst(request.playbookPrompt ?? prompt, {
+    ...(request.idempotencyKey === undefined
+      ? {}
+      : { seed: request.idempotencyKey }),
+    ...(request.onKernelProgress === undefined
+      ? {}
+      : { onProgress: request.onKernelProgress }),
+    ...(request.signal === undefined ? {} : { signal: request.signal }),
+  });
   if (kernelResult.handled) {
     // Kernel-handled turns still record a durable chat run so bridge and
-    // in-app audits see the same history as legacy turns.
+    // in-app audits see the same history as legacy turns. The executed steps
+    // are replayed into the audit shape, otherwise a kernel run that applied
+    // N calls would show up as a run with no tool calls at all.
     const kernelRun = beginFlashBoardChatRun(
       { ...request, prompt },
       kernelResult.runId === undefined
@@ -60,10 +97,11 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
         : `agent-kernel: kernel-first cutover run ${kernelResult.runId}`,
     );
     const completed = completeFlashBoardChatRun(kernelRun.runId, {
-      executedToolCalls: [],
+      executedToolCalls: kernelExecutedToolCalls(kernelResult.report),
       response: kernelResult.message,
     });
     if (completed) request.onRunCompleted?.(completed);
+    if (kernelResult.report) request.onKernelReport?.(kernelResult.report);
     return kernelResult.message;
   }
 

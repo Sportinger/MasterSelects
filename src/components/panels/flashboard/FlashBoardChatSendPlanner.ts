@@ -118,10 +118,19 @@ export function buildFlashBoardChatCompletionMessages(
   response: string,
   editOptions: FlashBoardChatMessage['editOptions'] = undefined,
   toolCalls: FlashBoardChatMessage['toolCalls'] = undefined,
+  kernelReport: FlashBoardChatMessage['kernelReport'] = undefined,
 ): FlashBoardChatMessage[] {
   return messages.map((message) => (
     message.id === assistantMessageId
-      ? { ...message, text: response || 'Empty response.', editOptions, toolCalls, isPending: false }
+      ? {
+          ...message,
+          text: response || 'Empty response.',
+          editOptions,
+          toolCalls,
+          kernelReport,
+          kernelProgress: undefined,
+          isPending: false,
+        }
       : message
   ));
 }
@@ -133,7 +142,13 @@ export function buildFlashBoardChatErrorMessages(
 ): FlashBoardChatMessage[] {
   return messages.map((message) => (
     message.id === assistantMessageId
-      ? { ...message, text: errorMessage, isError: true, isPending: false }
+      ? {
+          ...message,
+          text: errorMessage,
+          isError: true,
+          isPending: false,
+          kernelProgress: undefined,
+        }
       : message
   ));
 }

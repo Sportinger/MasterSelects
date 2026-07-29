@@ -31,6 +31,10 @@ export interface FlashBoardChatRequest {
   lemonadeEndpoint?: string;
   model: string;
   onExecutedToolCalls?: (toolCalls: FlashBoardExecutedToolCall[]) => void;
+  /** Live stage updates while the kernel works the turn. */
+  onKernelProgress?: import('../kernelClient/runProgress').KernelProgressReporter;
+  /** Structured record of a kernel-handled turn, for the run card. */
+  onKernelReport?: (report: import('../kernelClient/runReport').KernelRunReport) => void;
   /** Reports which engine is working on the turn: kernel-first, then the
    * community provider when the kernel does not handle it. */
   onPhase?: (phase: 'kernel' | 'provider') => void;

@@ -5,7 +5,10 @@ import type {
 } from '../../src/services/aiTools';
 import type { AgentTransaction } from '../../src/services/aiTools/agentTransaction';
 import { Logger } from '../../src/services/logger';
-import { tryKernelFirst } from '../../src/services/kernelClient/kernelChatGateway';
+import {
+  resolveKernelConfig,
+  tryKernelFirst,
+} from '../../src/services/kernelClient/kernelChatGateway';
 
 function createStorage(values: Record<string, string> = {}): Storage {
   const entries = new Map(Object.entries(values));
@@ -134,8 +137,9 @@ function perCallSuccess() {
   })));
 }
 
-const configuredStorage = (enabled?: string) => createStorage({
+const configuredStorage = (enabled?: string, fallback?: string) => createStorage({
   ...(enabled === undefined ? {} : { 'ms.kernel.enabled': enabled }),
+  ...(fallback === undefined ? {} : { 'ms.kernel.fallback': fallback }),
   'ms.kernel.token': 'test-token',
   'ms.kernel.url': 'http://kernel.test/',
 });
@@ -145,6 +149,30 @@ afterEach(() => {
 });
 
 describe('kernel chat gateway WP11 cutover', () => {
+  it('heals a stale localhost kernel token with the current dev token', () => {
+    const storage = createStorage({
+      'ms.kernel.token': 'stale-token',
+      'ms.kernel.url': 'http://127.0.0.1:8787',
+    });
+
+    expect(resolveKernelConfig(storage, 'current-dev-token')).toEqual({
+      baseUrl: 'http://127.0.0.1:8787',
+      token: 'current-dev-token',
+    });
+  });
+
+  it('keeps explicit remote kernel credentials in dev', () => {
+    const storage = createStorage({
+      'ms.kernel.token': 'remote-token',
+      'ms.kernel.url': 'https://kernel.example.test',
+    });
+
+    expect(resolveKernelConfig(storage, 'current-dev-token')).toEqual({
+      baseUrl: 'https://kernel.example.test',
+      token: 'remote-token',
+    });
+  });
+
   it('compiles, executes one transaction, completes, and returns the verified result', async () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(jsonResponse(compiledResponse()))
@@ -163,9 +191,9 @@ describe('kernel chat gateway WP11 cutover', () => {
       transaction,
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       handled: true,
-      message: 'Kernel-verifiziert (abcdef12): 2 Video-Clips, 1 Audio-Clips, belegte Timeline bis 12 s',
+      message: 'Kernel verified (abcdef12): 2 video clips, 1 audio clips, timeline 0–12s (12s)',
       runId: 'run-1',
     });
     expect(transaction.begin).toHaveBeenCalledTimes(1);
@@ -235,10 +263,10 @@ describe('kernel chat gateway WP11 cutover', () => {
       transaction,
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       handled: true,
-      message: 'Kernel-verifiziert (abcdef12): 3 Clips, belegt bis 12s\n'
-        + 'Annahmen: Die Reihenfolge folgt den verfuegbaren Transkriptstellen.',
+      message: 'Kernel verified (abcdef12): 2 video clips, 1 audio clips, timeline 0–12s (12s)\n'
+        + 'Assumed: Die Reihenfolge folgt den verfuegbaren Transkriptstellen.',
       runId: 'run-1',
     });
     expect(executeToolCalls.mock.calls.map((call) => call[0]?.[0]?.tool)).toEqual([
@@ -319,9 +347,9 @@ describe('kernel chat gateway WP11 cutover', () => {
       transaction,
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       handled: true,
-      message: 'Kernel-verifiziert (abcdef12): 3 Clips, belegt bis 12s',
+      message: 'Kernel verified (abcdef12): 2 video clips, 1 audio clips, timeline 0–12s (12s)',
       runId: 'run-1',
     });
     expect(executeToolCalls.mock.calls.map((call) => call[0]?.[0]?.tool)).toEqual([
@@ -335,7 +363,7 @@ describe('kernel chat gateway WP11 cutover', () => {
     'notMechanicalTask',
     'storyPathNeedsProvider',
     'storyPathNeedsMoments',
-  ])('falls back silently when compile aborts with %s', async (reason) => {
+  ])('uses the explicitly enabled provider fallback when compile aborts with %s', async (reason) => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({
       failures: ['mechanical coverage not migrated'],
       reason,
@@ -349,13 +377,34 @@ describe('kernel chat gateway WP11 cutover', () => {
       executeToolCalls,
       fetchImpl: fetchImpl as unknown as typeof fetch,
       getSnapshot: vi.fn().mockResolvedValue(initialSnapshot),
-      storage: configuredStorage(),
+      storage: configuredStorage(undefined, 'true'),
       transaction,
     })).resolves.toEqual({ handled: false });
 
     expect(executeToolCalls).not.toHaveBeenCalled();
     expect(transaction.begin).not.toHaveBeenCalled();
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed by default when the kernel compile transport fails', async () => {
+    const fetchImpl = vi.fn().mockRejectedValue(new Error('network down'));
+    const executeToolCalls = vi.fn();
+    const transaction = createTransactionMocks();
+
+    const result = await tryKernelFirst('Baue einen neuen Schnitt', {
+      executeToolCalls,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      getSnapshot: vi.fn().mockResolvedValue(initialSnapshot),
+      storage: configuredStorage(),
+      transaction,
+    });
+
+    expect(result).toMatchObject({
+      handled: true,
+      message: expect.stringContaining('The kernel service could not be reached'),
+    });
+    expect(executeToolCalls).not.toHaveBeenCalled();
+    expect(transaction.begin).not.toHaveBeenCalled();
   });
 
   it('binds null and stale track ids to live timeline tracks at execution time', async () => {
@@ -471,7 +520,7 @@ describe('kernel chat gateway WP11 cutover', () => {
       executeToolCalls,
       fetchImpl: fetchImpl as unknown as typeof fetch,
       getSnapshot: vi.fn().mockResolvedValueOnce(trackedSnapshot),
-      storage: configuredStorage(),
+      storage: configuredStorage(undefined, 'true'),
       transaction,
     })).resolves.toEqual({ handled: false });
 
@@ -536,7 +585,7 @@ describe('kernel chat gateway WP11 cutover', () => {
 
     expect(result).toMatchObject({
       handled: true,
-      message: expect.stringContaining('Kernel-Ausführung fehlgeschlagen'),
+      message: expect.stringContaining('Kernel run failed'),
       runId: 'run-1',
     });
     const toolSequence = executeToolCalls.mock.calls.map((call) => call[0]?.[0]?.tool);
@@ -564,7 +613,7 @@ describe('kernel chat gateway WP11 cutover', () => {
       executeToolCalls,
       fetchImpl: fetchImpl as unknown as typeof fetch,
       getSnapshot: vi.fn().mockResolvedValue(initialSnapshot),
-      storage: configuredStorage(),
+      storage: configuredStorage(undefined, 'true'),
       transaction,
     })).resolves.toEqual({ handled: false });
 
@@ -572,12 +621,12 @@ describe('kernel chat gateway WP11 cutover', () => {
     expect(transaction.commit).not.toHaveBeenCalled();
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(warning).toHaveBeenCalledWith(
-      'Kernel tool execution failed; rolled back and falling back to community chat.',
+      'Kernel tool execution failed; rolled back.',
       'clip missing',
     );
   });
 
-  it('reports a fingerprint mismatch without falling back after the commit', async () => {
+  it('rolls back a fingerprint mismatch instead of committing it', async () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(jsonResponse(compiledResponse()))
       .mockResolvedValueOnce(jsonResponse(completedResponse(false)));
@@ -595,11 +644,11 @@ describe('kernel chat gateway WP11 cutover', () => {
 
     expect(result).toMatchObject({
       handled: true,
-      message: expect.stringContaining('Kernel-Verifikation fehlgeschlagen (deadbeef)'),
+      message: expect.stringContaining('Kernel verification failed (deadbeef)'),
       runId: 'run-1',
     });
-    expect(transaction.commit).toHaveBeenCalledWith(transaction.agentTransaction);
-    expect(transaction.abort).not.toHaveBeenCalled();
+    expect(transaction.commit).not.toHaveBeenCalled();
+    expect(transaction.abort).toHaveBeenCalledWith(transaction.agentTransaction);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
@@ -681,7 +730,7 @@ describe('kernel chat gateway WP11 cutover', () => {
       executeToolCalls,
       fetchImpl: fetchImpl as unknown as typeof fetch,
       getSnapshot: vi.fn().mockResolvedValue(initialSnapshot),
-      storage: configuredStorage(),
+      storage: configuredStorage(undefined, 'true'),
       transaction,
     })).resolves.toEqual({ handled: false });
 
@@ -713,7 +762,7 @@ describe('kernel chat gateway WP11 cutover', () => {
       executeToolCalls,
       fetchImpl: fetchImpl as unknown as typeof fetch,
       getSnapshot: vi.fn().mockResolvedValue({ ...initialSnapshot, activeCompositionId: 'comp-prev' }),
-      storage: configuredStorage(),
+      storage: configuredStorage(undefined, 'true'),
       transaction,
     })).resolves.toEqual({ handled: false });
 
@@ -756,7 +805,7 @@ describe('kernel chat gateway WP11 cutover', () => {
 
     expect(result).toMatchObject({
       handled: true,
-      message: expect.stringContaining('Kernel-Ausführung fehlgeschlagen'),
+      message: expect.stringContaining('Kernel run failed'),
       runId: 'run-1',
     });
     expect(executeToolCalls.mock.calls.map((call) => call[0]?.[0]?.tool)).toEqual([
@@ -765,6 +814,209 @@ describe('kernel chat gateway WP11 cutover', () => {
     ]);
     expect(transaction.abort).not.toHaveBeenCalled();
     expect(transaction.commit).not.toHaveBeenCalled();
+  });
+
+  it('reports the structured run report alongside the derived message', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        ...compiledResponse(),
+        plan: {
+          steps: [
+            { id: 'step-1', capability: 'timeline.splitClip' },
+            { id: 'step-2', capability: 'timeline.moveClip' },
+          ],
+        },
+        taskContract: {
+          request: 'Schneide den Clip',
+          goals: [{ property: 'silence', operation: 'remove', value: true }],
+          preserve: ['sourceOrder'],
+          assumptions: { minSilence: 0.4 },
+          ambiguities: [{
+            description: '"the intro"',
+            resolvedBy: 'assumption',
+            chosen: 'first 12s',
+          }],
+        },
+      }))
+      .mockResolvedValueOnce(jsonResponse(completedResponse()));
+
+    const result = await tryKernelFirst('Schneide den Clip', {
+      executeToolCalls: perCallSuccess(),
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      getSnapshot: vi.fn()
+        .mockResolvedValueOnce(initialSnapshot)
+        .mockResolvedValueOnce(finalSnapshot),
+      storage: configuredStorage(),
+      transaction: createTransactionMocks(),
+    });
+
+    if (!result.handled) throw new Error('expected a handled kernel turn');
+    expect(result.report).toMatchObject({
+      schemaVersion: 1,
+      runId: 'run-1',
+      outcome: 'verified',
+      understood: {
+        goals: [{ property: 'silence', operation: 'remove' }],
+        preserve: ['sourceOrder'],
+        assumptions: [{ name: 'minSilence', value: 0.4 }],
+        ambiguities: [{ description: '"the intro"', chosen: 'first 12s' }],
+      },
+      verified: { matches: true, counts: { video: 2, audio: 1 } },
+    });
+    expect(result.report?.steps).toMatchObject([
+      { stepId: 'step-1', tool: 'splitClip', capability: 'timeline.splitClip', status: 'ok' },
+      { stepId: 'step-2', tool: 'moveClip', capability: 'timeline.moveClip', status: 'ok' },
+    ]);
+  });
+
+  it('emits local progress stages while it works the turn', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(compiledResponse()))
+      .mockResolvedValueOnce(jsonResponse(completedResponse()));
+    const stages: string[] = [];
+
+    await tryKernelFirst('Schneide den Clip', {
+      executeToolCalls: perCallSuccess(),
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      getSnapshot: vi.fn()
+        .mockResolvedValueOnce(initialSnapshot)
+        .mockResolvedValueOnce(finalSnapshot),
+      onProgress: (event) => stages.push(event.stage),
+      storage: configuredStorage(),
+      transaction: createTransactionMocks(),
+    });
+
+    expect(stages).toEqual([
+      'reading-timeline',
+      'reading-transcript',
+      'reading-audio',
+      'compiling',
+      'executing',
+      'executing',
+      'verifying',
+      'committing',
+    ]);
+  });
+
+  it('counts executing progress per resolved call', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(compiledResponse()))
+      .mockResolvedValueOnce(jsonResponse(completedResponse()));
+    const executing: Array<{ current?: number; total?: number; detail?: string }> = [];
+
+    await tryKernelFirst('Schneide den Clip', {
+      executeToolCalls: perCallSuccess(),
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      getSnapshot: vi.fn()
+        .mockResolvedValueOnce(initialSnapshot)
+        .mockResolvedValueOnce(finalSnapshot),
+      onProgress: (event) => {
+        if (event.stage === 'executing') {
+          executing.push({
+            ...(event.current === undefined ? {} : { current: event.current }),
+            ...(event.total === undefined ? {} : { total: event.total }),
+            ...(event.detail === undefined ? {} : { detail: event.detail }),
+          });
+        }
+      },
+      storage: configuredStorage(),
+      transaction: createTransactionMocks(),
+    });
+
+    expect(executing).toEqual([
+      { current: 1, total: 2, detail: 'splitClip' },
+      { current: 2, total: 2, detail: 'moveClip' },
+    ]);
+  });
+
+  it('stops before any tool runs when the caller aborts during compile', async () => {
+    const controller = new AbortController();
+    const fetchImpl = vi.fn().mockImplementation(async () => {
+      controller.abort();
+      return jsonResponse(compiledResponse());
+    });
+    const executeToolCalls = perCallSuccess();
+    const transaction = createTransactionMocks();
+
+    const result = await tryKernelFirst('Schneide den Clip', {
+      executeToolCalls,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      getSnapshot: vi.fn().mockResolvedValue(initialSnapshot),
+      signal: controller.signal,
+      storage: configuredStorage(),
+      transaction,
+    });
+
+    expect(result).toMatchObject({
+      handled: true,
+      message: expect.stringContaining('cancelled'),
+    });
+    expect(transaction.begin).not.toHaveBeenCalled();
+    expect(transaction.commit).not.toHaveBeenCalled();
+  });
+
+  it('rolls back instead of committing when the caller aborts mid-execution', async () => {
+    const controller = new AbortController();
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(compiledResponse()))
+      .mockResolvedValueOnce(jsonResponse(completedResponse()));
+    // Abort after the first resolved call has been applied.
+    const executeToolCalls = vi.fn(async (
+      calls: AIToolCallExecution[],
+    ): Promise<AIToolCallExecutionResult[]> => {
+      if (calls[0]?.tool === 'splitClip') controller.abort();
+      return calls.map((call) => ({
+        ...(call.id === undefined ? {} : { id: call.id }),
+        tool: call.tool,
+        result: { success: true },
+      }));
+    });
+    const transaction = createTransactionMocks();
+
+    const result = await tryKernelFirst('Schneide den Clip', {
+      executeToolCalls,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      getSnapshot: vi.fn().mockResolvedValue(initialSnapshot),
+      signal: controller.signal,
+      storage: configuredStorage(),
+      transaction,
+    });
+
+    expect(result).toMatchObject({ handled: true, runId: 'run-1' });
+    expect(result).toMatchObject({
+      report: { outcome: 'declined', decline: { reason: 'cancelled' } },
+    });
+    expect(executeToolCalls.mock.calls.map((call) => call[0]?.[0]?.tool)).toEqual(['splitClip']);
+    expect(transaction.abort).toHaveBeenCalledWith(transaction.agentTransaction);
+    expect(transaction.commit).not.toHaveBeenCalled();
+  });
+
+  it('translates a kernel decline reason into user-facing copy', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({
+      failures: ['no transcript index'],
+      reason: 'storyPathNeedsMoments',
+      runId: 'run-aborted',
+      status: 'aborted',
+    }));
+
+    const result = await tryKernelFirst('Baue eine Story', {
+      executeToolCalls: vi.fn(),
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      getSnapshot: vi.fn().mockResolvedValue(initialSnapshot),
+      storage: configuredStorage(),
+      transaction: createTransactionMocks(),
+    });
+
+    if (!result.handled) throw new Error('expected a handled decline');
+    expect(result.message).toBe(
+      'Story edits are built from what is actually said on screen, '
+      + 'and this footage has no transcript yet. Transcribe the clip, then ask again.',
+    );
+    expect(result.report).toMatchObject({
+      outcome: 'declined',
+      runId: 'run-aborted',
+      decline: { reason: 'storyPathNeedsMoments', detail: 'no transcript index' },
+    });
   });
 
   it('bypasses kernel-first when the flag is explicitly false', async () => {

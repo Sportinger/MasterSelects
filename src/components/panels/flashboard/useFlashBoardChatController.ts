@@ -14,6 +14,7 @@ import {
   type FlashBoardExecutedToolCall,
   type FlashBoardChatProvider,
   type FlashBoardOpenAiReasoningEffort,
+  type KernelRunReport,
 } from '../../../services/flashboard/FlashBoardChatService';
 import { useFlashBoardStore } from '../../../stores/flashboardStore';
 import { appendFlashBoardPromptHistoryEntry } from '../../../stores/flashboardStore/activeGenerationRecords';
@@ -46,6 +47,7 @@ interface UseFlashBoardChatControllerInput {
   hasHostedSession: boolean;
   hasKieAiKey: boolean;
   hostedAIEnabled: boolean;
+  initialChatPrompt?: string;
   initialMode: 'generate' | 'chat';
   lemonadeContextSize: number;
   lemonadeEndpoint: string;
@@ -72,6 +74,7 @@ export function useFlashBoardChatController({
   hasHostedSession,
   hasKieAiKey,
   hostedAIEnabled,
+  initialChatPrompt,
   initialMode,
   lemonadeContextSize,
   lemonadeEndpoint,
@@ -88,7 +91,7 @@ export function useFlashBoardChatController({
   const chatAbortRef = useRef<AbortController | null>(null);
   const copiedChatResetTimeoutRef = useRef<number | null>(null);
   const [chatPanelOpen, setChatPanelOpen] = useState(initialMode === 'chat');
-  const [chatPrompt, setChatPrompt] = useState('');
+  const [chatPrompt, setChatPrompt] = useState(initialChatPrompt ?? '');
   const [chatProvider, setChatProvider] = useState<FlashBoardChatProvider>(
     aiProvider === 'lemonade' ? 'lemonade' : 'kie',
   );
@@ -287,18 +290,27 @@ export function useFlashBoardChatController({
 
     try {
       const executedToolCalls: FlashBoardExecutedToolCall[] = [];
-      const setPendingText = (text: string) => {
+      let kernelReport: KernelRunReport | undefined;
+      const updatePending = (patch: Partial<FlashBoardChatMessage>) => {
         setChatMessages((current) => current.map((message) => (
           message.id === assistantMessageId && message.isPending
-            ? { ...message, text }
+            ? { ...message, ...patch }
             : message
         )));
       };
       const response = await sendFlashBoardChatMessage({
         ...chatSendPlan.request,
         onExecutedToolCalls: (toolCalls) => executedToolCalls.push(...toolCalls),
+        onKernelProgress: (progress) => {
+          updatePending({ kernelProgress: progress, text: progress.label });
+        },
+        onKernelReport: (report) => {
+          kernelReport = report;
+        },
         onPhase: (phase) => {
-          setPendingText(phase === 'kernel' ? 'MS thinking…' : 'AI thinking…');
+          updatePending(phase === 'kernel'
+            ? { text: 'Starting kernel…' }
+            : { text: 'AI thinking…', kernelProgress: undefined });
         },
         playbookPrompt: effectiveChatPrompt,
         signal: abortController.signal,
@@ -311,6 +323,7 @@ export function useFlashBoardChatController({
         response,
         undefined,
         executedToolCalls,
+        kernelReport,
       ));
     } catch (error) {
       const errorMessage = abortController.signal.aborted
