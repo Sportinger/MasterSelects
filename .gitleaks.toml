@@ -1,0 +1,13 @@
+title = "MasterSelects Gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+  [[rules.allowlists]]
+  description = "Ignore the documented fake conversation ID in DevChatDialog tests"
+  condition = "AND"
+  regexes = ['''^conversation-123$''']
+  paths = ['''^tests/unit/DevChatDialog\.test\.tsx$''']
