@@ -13,6 +13,7 @@ const MEDIA_GENERATIVE_SERVICES: Array<'cloud'> = [
 ];
 
 interface MediaAIGenerativeTrayExpandedProps {
+  initialChatPrompt?: string;
   mode: 'generate' | 'chat' | 'download';
   onCollapse: () => void;
 }
@@ -30,6 +31,7 @@ function getHostedInitialProviderId(service: string | undefined, providerId: str
 }
 
 export function MediaAIGenerativeTrayExpanded({
+  initialChatPrompt,
   mode,
   onCollapse,
 }: MediaAIGenerativeTrayExpandedProps) {
@@ -60,6 +62,7 @@ export function MediaAIGenerativeTrayExpanded({
           initialService="cloud"
           initialVersion={useHostedDefaults ? 'latest' : flashBoardComposer.version}
           initialMode={mode}
+          initialChatPrompt={initialChatPrompt}
           allowedServices={MEDIA_GENERATIVE_SERVICES}
         />
       )}

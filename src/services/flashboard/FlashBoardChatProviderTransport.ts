@@ -67,8 +67,13 @@ const FLASHBOARD_LEMONADE_TOOL_NAMES = new Set([
 const FLASHBOARD_LEMONADE_TOOLS = FLASHBOARD_CHAT_TOOLS.filter((tool) => (
   FLASHBOARD_LEMONADE_TOOL_NAMES.has(tool.function.name)
 ));
-function createHostedChatRoundIdempotencyKey(): string {
-  return `flashboard-chat:${Date.now()}:${crypto.randomUUID()}`;
+function createHostedChatRoundIdempotencyKey(
+  request: FlashBoardChatRequest,
+  roundKey: string,
+): string {
+  return request.idempotencyKey
+    ? `${request.idempotencyKey}:${roundKey}`
+    : `flashboard-chat:${Date.now()}:${crypto.randomUUID()}`;
 }
 
 async function requestKieChatRound(
@@ -76,11 +81,12 @@ async function requestKieChatRound(
   endpoint: KieChatEndpoint,
   protocol: 'claude-messages' | 'openai-responses',
   providerBody: Record<string, unknown>,
+  roundKey: string,
 ): Promise<unknown> {
   if (request.hostedAvailable) {
     return cloudAiService.createChatCompletion({
       ...providerBody,
-      idempotencyKey: createHostedChatRoundIdempotencyKey(),
+      idempotencyKey: createHostedChatRoundIdempotencyKey(request, roundKey),
       protocol,
     });
   }
@@ -122,6 +128,7 @@ async function sendKieResponsesChat(request: FlashBoardChatRequest, systemPrompt
       '/codex/v1/responses',
       'openai-responses',
       body,
+      `openai-responses:${iteration}`,
     );
 
     const toolCalls = parseOpenAiResponsesToolCalls(data);
@@ -190,6 +197,7 @@ async function sendKieClaudeChat(
       '/claude/v1/messages',
       'claude-messages',
       body,
+      `claude-messages:${iteration}`,
     );
 
     const parsed = parseAnthropicToolCalls(data);

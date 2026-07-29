@@ -31,6 +31,9 @@ export interface FlashBoardBridgeChatTurnInput {
   includeHistory?: boolean;
   includePlaybook?: boolean;
   model?: string;
+  onExecutedToolCalls?: (toolCalls: FlashBoardExecutedToolCall[]) => void;
+  onKernelProgress?: import('../kernelClient/runProgress').KernelProgressReporter;
+  onPhase?: (phase: 'kernel' | 'provider') => void;
   openAiReasoningEffort?: FlashBoardOpenAiReasoningEffort;
   persistToChat?: boolean;
   prompt: string;
@@ -76,7 +79,9 @@ export async function runFlashBoardBridgeChatTurn(
   const toolCalls: FlashBoardExecutedToolCall[] = [];
   const completedRunRef: { current: FlashBoardChatRunRecord | null } = { current: null };
   const persistToChat = input.persistToChat !== false;
-  const messageIds = persistToChat ? appendPendingMessages(visiblePrompt) : null;
+  const messageIds = persistToChat
+    ? appendPendingMessages(visiblePrompt, input.idempotencyKey)
+    : null;
 
   try {
     const kieAiApiKey = settings.apiKeysUnlocked
@@ -96,7 +101,14 @@ export async function runFlashBoardBridgeChatTurn(
       lemonadeContextSize: settings.lemonadeContextSize,
       lemonadeEndpoint: settings.lemonadeEndpoint,
       model,
-      onExecutedToolCalls: (calls) => toolCalls.push(...calls),
+      onExecutedToolCalls: (calls) => {
+        toolCalls.push(...calls);
+        input.onExecutedToolCalls?.(calls);
+      },
+      ...(input.onKernelProgress === undefined
+        ? {}
+        : { onKernelProgress: input.onKernelProgress }),
+      ...(input.onPhase === undefined ? {} : { onPhase: input.onPhase }),
       onRunCompleted: (run) => {
         completedRunRef.current = run;
       },
@@ -189,16 +201,29 @@ function normalizeApiKey(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function appendPendingMessages(prompt: string): { assistantId: string; userId: string } {
+function appendPendingMessages(
+  prompt: string,
+  idempotencyKey?: string,
+): { assistantId: string; userId: string } {
   const createdAt = Date.now();
-  const userId = createMessageId('user');
-  const assistantId = createMessageId('assistant');
+  const userId = idempotencyKey
+    ? `user-${idempotencyKey}`
+    : createMessageId('user');
+  const assistantId = idempotencyKey
+    ? `assistant-${idempotencyKey}`
+    : createMessageId('assistant');
   useFlashBoardStore.setState((state) => ({
-    chatMessages: [
-      ...state.chatMessages,
-      { createdAt, id: userId, role: 'user', text: prompt },
-      { createdAt, id: assistantId, role: 'assistant', text: 'Thinking...', isPending: true },
-    ],
+    chatMessages: state.chatMessages.some((message) => message.id === assistantId)
+      ? state.chatMessages.map((message): FlashBoardChatMessage => (
+          message.id === assistantId
+            ? { ...message, isError: undefined, isPending: true, text: 'Thinking...' }
+            : message
+        ))
+      : [
+          ...state.chatMessages,
+          { createdAt, id: userId, role: 'user', text: prompt },
+          { createdAt, id: assistantId, role: 'assistant', text: 'Thinking...', isPending: true },
+        ],
   }));
   return { assistantId, userId };
 }

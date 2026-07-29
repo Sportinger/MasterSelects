@@ -15,28 +15,33 @@ function isPanelType(value: string): value is PanelType {
 export function activateDockPanel(panelType: string): void {
   if (!isAIExecutionActive()) return;
   if (!isPanelType(panelType)) return;
-  // Lazy import to avoid circular deps — no guard inside .then() since we checked above
-  import('../../stores/dockStore').then(({ useDockStore }) => {
+  // Lazy import avoids a cycle with the dock store.
+  void import('../../stores/dockStore').then(({ FACTORY_START_LAYOUT_ID, useDockStore }) => {
+    if (useDockStore.getState().activeSavedLayoutId === FACTORY_START_LAYOUT_ID) return;
     useDockStore.getState().activatePanelType(panelType);
   });
 }
 
 /** Request a specific tab in the Properties panel (transform, effects, masks, transcript, analysis, volume, text) */
 export function openPropertiesTab(tab: string): void {
-  window.dispatchEvent(new CustomEvent('openPropertiesTab', { detail: { tab } }));
+  void import('../../stores/dockStore').then(({ FACTORY_START_LAYOUT_ID, useDockStore }) => {
+    if (useDockStore.getState().activeSavedLayoutId === FACTORY_START_LAYOUT_ID) return;
+    window.dispatchEvent(new CustomEvent('openPropertiesTab', { detail: { tab } }));
+  });
 }
 
 /** Select a clip and open a specific properties tab */
 export function selectClipAndOpenTab(clipId: string, tab: string): void {
   if (!isAIExecutionActive()) return;
-  import('../../stores/timeline').then(({ useTimelineStore }) => {
-    useTimelineStore.getState().selectClips([clipId]);
+  void import('../../stores/dockStore').then(({ FACTORY_START_LAYOUT_ID, useDockStore }) => {
+    if (useDockStore.getState().activeSavedLayoutId === FACTORY_START_LAYOUT_ID) return;
+    void import('../../stores/timeline').then(({ useTimelineStore }) => {
+      useTimelineStore.getState().selectClips([clipId]);
+      useDockStore.getState().activatePanelType('clip-properties');
+      // Small delay so selection propagates before the tab switch.
+      setTimeout(() => openPropertiesTab(tab), 50);
+    });
   });
-  // Activate the properties panel in dock
-  activateDockPanel('clip-properties');
-  // Small delay so selection propagates before tab switch
-  // No guard needed — we already checked isAIExecutionActive above
-  setTimeout(() => openPropertiesTab(tab), 50);
 }
 
 /** Flash the preview canvas with a brief overlay effect */

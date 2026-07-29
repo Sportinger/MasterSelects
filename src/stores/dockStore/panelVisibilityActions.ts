@@ -6,7 +6,11 @@ import {
   removePanel,
 } from '../../utils/dockLayout';
 import { createPreviewPanelDataPatch, createPreviewPanelSource } from '../../utils/previewPanelSource';
-import { getPanelConfig, VALID_PANEL_TYPES } from './panelRegistry';
+import {
+  FACTORY_START_LAYOUT_ID,
+  getPanelConfig,
+  VALID_PANEL_TYPES,
+} from './panelRegistry';
 import {
   collectPanelTypes,
   findFirstTabGroup,
@@ -119,6 +123,10 @@ export const createPanelVisibilityActions: DockSliceCreator<PanelVisibilityActio
 
   activatePanelType: (type) => {
     if (!VALID_PANEL_TYPES.has(type)) return;
+    // The Start layout is a facade. Background AI work may update project
+    // state, but it must never reveal or focus editor panels before the user
+    // explicitly opens the editor.
+    if (get().activeSavedLayoutId === FACTORY_START_LAYOUT_ID) return;
     const { setActiveTab, showPanelType, isPanelTypeVisible, bringToFront } = get();
 
     if (!isPanelTypeVisible(type)) {

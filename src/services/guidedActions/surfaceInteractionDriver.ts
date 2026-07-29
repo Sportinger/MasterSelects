@@ -1,5 +1,5 @@
 import { useGuidedActionStore } from '../../stores/guidedActionStore';
-import { useDockStore } from '../../stores/dockStore';
+import { FACTORY_START_LAYOUT_ID, useDockStore } from '../../stores/dockStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { endBatch, startBatch, useHistoryStore } from '../../stores/historyStore';
 import type { TimelineToolId } from '../../stores/timeline/types';
@@ -99,6 +99,7 @@ export class GuidedSurfaceInteractionDriver {
   }
 
   private focusPanel(panel: Extract<GuidedAction, { type: 'focusPanel' }>['panel']): GuidedSurfaceInteractionResult {
+    if (startFacadeIsActive()) return success('focusPanel', false, 'implicit');
     useDockStore.getState().activatePanelType(panel);
     return success('focusPanel', true, 'implicit');
   }
@@ -107,6 +108,9 @@ export class GuidedSurfaceInteractionDriver {
     action: Extract<GuidedAction, { type: 'openTimelineToolGroupVisual' }>,
     context: GuidedActionHandlerContext,
   ): Promise<GuidedSurfaceInteractionResult> {
+    if (startFacadeIsActive()) {
+      return success('openTimelineToolGroupVisual', false, 'implicit');
+    }
     const target = action.target ?? {
       kind: 'button' as const,
       id: `timeline-tool-group:${action.groupId}`,
@@ -143,6 +147,7 @@ export class GuidedSurfaceInteractionDriver {
   }
 
   private openPropertiesTab(tab: string): GuidedSurfaceInteractionResult {
+    if (startFacadeIsActive()) return success('openPropertiesTab', false, 'implicit');
     useDockStore.getState().activatePanelType('clip-properties');
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('openPropertiesTab', { detail: { tab } }));
@@ -219,6 +224,7 @@ export class GuidedSurfaceInteractionDriver {
     context: GuidedActionHandlerContext,
   ): Promise<GuidedSurfaceInteractionResult> {
     const policy = action.policy ?? 'visualOnly';
+    if (startFacadeIsActive()) return success('resizePanel', false, policy);
     if (action.visualTarget) {
       const resolution = await requireResolvedTarget(action.visualTarget, context);
       useGuidedActionStore.getState().setCursor({ visible: true, position: resolution.center, toolId: getGuidedCursorToolId() });
@@ -606,6 +612,10 @@ function fail(
 
 function shouldExecuteUiPolicy(policy: SurfaceExecutionPolicy): boolean {
   return policy === 'persistUi' || policy === 'transientUi';
+}
+
+function startFacadeIsActive(): boolean {
+  return useDockStore.getState().activeSavedLayoutId === FACTORY_START_LAYOUT_ID;
 }
 
 function getGuidedCursorToolId(

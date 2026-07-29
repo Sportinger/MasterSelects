@@ -1,5 +1,11 @@
-import { lazy, Suspense, useCallback, useState, type SyntheticEvent } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState, type SyntheticEvent } from 'react';
 import { useFlashBoardRuntime } from '../flashboard/useFlashBoardRuntime';
+import { useFlashBoardStore } from '../../../stores/flashboardStore';
+import {
+  subscribeLandingEntryRequests,
+  takeLandingEntryRequest,
+  type LandingEntryRequest,
+} from '../../../marketing/landingEntryRequest';
 import './MediaAIGenerativeTray.css';
 
 // Shared factory so we can both lazy-render and prefetch the (heavy) expanded
@@ -22,6 +28,7 @@ export function MediaAIGenerativeTray({
 }: MediaAIGenerativeTrayProps) {
   const { dismissRefundDialog, refundDialog } = useFlashBoardRuntime({ enableKeyboardDelete: false });
   const [trayMode, setTrayMode] = useState<MediaAITrayMode>('generate');
+  const [landingRequest, setLandingRequest] = useState<LandingEntryRequest | null>(null);
 
   const stopEvent = useCallback((event: SyntheticEvent) => {
     event.stopPropagation();
@@ -34,8 +41,39 @@ export function MediaAIGenerativeTray({
 
   const openTray = useCallback((mode: MediaAITrayMode) => {
     setTrayMode(mode);
+    setLandingRequest(null);
     onExpandedChange(true);
   }, [onExpandedChange]);
+
+  const applyLandingRequest = useCallback((request: LandingEntryRequest) => {
+    if (request.mode === 'generate' && request.providerId && request.outputType) {
+      useFlashBoardStore.setState((state) => ({
+        composer: {
+          ...state.composer,
+          outputType: request.outputType,
+          providerId: request.providerId,
+          service: request.service ?? 'cloud',
+          version: 'latest',
+        },
+      }));
+    }
+
+    setLandingRequest(request);
+    setTrayMode(request.mode);
+    onExpandedChange(true);
+  }, [onExpandedChange]);
+
+  useEffect(() => {
+    const pendingRequest = takeLandingEntryRequest();
+    if (pendingRequest) {
+      applyLandingRequest(pendingRequest);
+    }
+
+    return subscribeLandingEntryRequests((request) => {
+      takeLandingEntryRequest();
+      applyLandingRequest(request);
+    });
+  }, [applyLandingRequest]);
 
   return (
     <>
@@ -91,7 +129,9 @@ export function MediaAIGenerativeTray({
         >
           <Suspense fallback={<div className="media-ai-tray-loading" />}>
             <MediaAIGenerativeTrayExpanded
+              key={landingRequest?.id ?? trayMode}
               mode={trayMode}
+              initialChatPrompt={landingRequest?.mode === 'chat' ? landingRequest.prompt : undefined}
               onCollapse={() => onExpandedChange(false)}
             />
           </Suspense>
