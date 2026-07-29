@@ -23,8 +23,10 @@ export interface ScrubTextureCacheSnapshot {
 export class ScrubTextureCache {
   private readonly device: GPUDevice;
   private readonly cache: Map<string, ScrubbingTextureEntry> = new Map();
-  private readonly maxFrames = 480;
-  private readonly maxBytes = 1024 * 1024 * 1024;
+  // Keep enough paused/scrub context for responsive seeking without allowing
+  // discontinuous montage source ranges to consume most of the GPU budget.
+  private readonly maxFrames = 192;
+  private readonly maxBytes = 192 * 1024 * 1024;
   readonly maxDimension = 960;
   private bytes = 0;
   private evictions = 0;

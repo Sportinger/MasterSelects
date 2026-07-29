@@ -63,9 +63,26 @@ describe('useExternalDropTrackDragEnter', () => {
     expect(subject.buildTrackPreviewState).not.toHaveBeenCalled();
   });
 
-  it('clears the ghost for silent video dragged over an audio lane', () => {
+  it('keeps audio drops enabled on audio lanes', () => {
     const subject = renderDragEnter({
-      preview: { isAudio: false, isVideo: true, hasAudio: false },
+      preview: { isAudio: true, isVideo: false, hasAudio: true },
+      trackType: 'audio',
+    });
+    const event = dragEvent(['application/x-media-file-id', 'application/x-media-is-audio']);
+
+    act(() => subject.handler(event, 'target'));
+
+    expect(event.dataTransfer.dropEffect).toBe('copy');
+    expect(subject.buildTrackPreviewState).toHaveBeenCalledWith(expect.objectContaining({
+      trackId: 'target',
+      isAudio: true,
+      isVideo: false,
+    }));
+  });
+
+  it('clears the ghost for video dragged over an audio lane', () => {
+    const subject = renderDragEnter({
+      preview: { isAudio: false, isVideo: true, hasAudio: true },
       trackType: 'audio',
     });
     const event = dragEvent(['application/x-media-file-id']);
@@ -77,7 +94,7 @@ describe('useExternalDropTrackDragEnter', () => {
     expect(subject.buildTrackPreviewState).not.toHaveBeenCalled();
   });
 
-  it('waits for positive audio metadata before showing an audio-lane video ghost', () => {
+  it('also rejects video with unknown audio metadata on an audio lane', () => {
     const subject = renderDragEnter({
       preview: { isAudio: false, isVideo: true, hasAudio: undefined },
       trackType: 'audio',

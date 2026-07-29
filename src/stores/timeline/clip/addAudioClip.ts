@@ -50,6 +50,7 @@ export interface AddAudioClipParams {
 export function createAudioClipPlaceholder(params: AddAudioClipParams): TimelineClip {
   const { trackId, file, startTime, estimatedDuration, mediaFileId } = params;
   const clipId = generateClipId('clip-audio');
+  const cachedWaveform = getCachedMediaWaveform(mediaFileId);
 
   return {
     id: clipId,
@@ -64,6 +65,7 @@ export function createAudioClipPlaceholder(params: AddAudioClipParams): Timeline
     transform: { ...DEFAULT_TRANSFORM },
     effects: [],
     isLoading: true,
+    ...(cachedWaveform ?? {}),
   };
 }
 

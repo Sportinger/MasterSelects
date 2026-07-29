@@ -46,7 +46,10 @@ vi.mock('../../src/services/project/ProjectFileService', () => ({
   },
 }));
 import { useMediaStore } from '../../src/stores/mediaStore';
-import { loadAudioMedia } from '../../src/stores/timeline/clip/addAudioClip';
+import {
+  createAudioClipPlaceholder,
+  loadAudioMedia,
+} from '../../src/stores/timeline/clip/addAudioClip';
 import { loadVideoMedia } from '../../src/stores/timeline/clip/addVideoClip';
 
 function createFile(name: string, type: string): File {
@@ -193,5 +196,33 @@ describe('direct video/audio add runtime sources', () => {
     expect(patch.source).not.toHaveProperty('audioElement');
     expect(patch.isLoading).toBe(false);
     expect(webCodecsHelperMocks.releaseTemporaryMediaElement).toHaveBeenCalledWith(audioElement);
+  });
+
+  it('attaches a ready media waveform to an audio placeholder immediately', () => {
+    const waveform = [0.1, 0.5, 0.2];
+    const waveformChannels = [[0.1, 0.4], [0.2, 0.5]];
+    vi.mocked(useMediaStore.getState).mockReturnValue({
+      files: [{
+        id: 'media-audio',
+        waveform,
+        waveformChannels,
+        waveformStatus: 'ready',
+        audioAnalysisRefs: { waveformPyramidId: 'waveform-media-audio' },
+      }],
+    } as unknown as ReturnType<typeof useMediaStore.getState>);
+
+    const clip = createAudioClipPlaceholder({
+      trackId: 'audio-1',
+      file: createFile('clip.wav', 'audio/wav'),
+      startTime: 3,
+      estimatedDuration: 8,
+      mediaFileId: 'media-audio',
+    });
+
+    expect(clip.waveform).toBe(waveform);
+    expect(clip.waveformChannels).toBe(waveformChannels);
+    expect(clip.audioState?.sourceAnalysisRefs?.waveformPyramidId).toBe('waveform-media-audio');
+    expect(clip.waveformGenerating).toBe(false);
+    expect(clip.waveformProgress).toBe(100);
   });
 });

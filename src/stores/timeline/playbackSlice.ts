@@ -112,6 +112,12 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
     }
     if (!wasPlaying) {
       playheadState.position = playbackStartPosition;
+      // Scrub textures and their detached preload videos are useful while
+      // seeking, but compete directly with decoder/GPU resources once normal
+      // playback starts. AI montages can leave many discontinuous source
+      // neighborhoods cached, so release them before warming the first frame.
+      renderHostPort.clearScrubbingCache();
+      renderHostPort.clearVideoCache();
     }
 
     const {

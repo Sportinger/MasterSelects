@@ -433,6 +433,14 @@ const DECLINE_COPY: Record<string, { explanation: string; nextStep?: string }> =
       + 'and this footage has no transcript yet.',
     nextStep: 'Transcribe the clip, then ask again.',
   },
+  storyOnlyModeActive: {
+    // Not a transcript problem: story-only calibration mode parks the
+    // mechanical families, so every request lands on the story path.
+    explanation: 'Story-only calibration mode is active, so every request is '
+      + 'routed to the story path — including this one, which is not a story edit.',
+    nextStep: 'Turn off KERNEL_STORY_ONLY on the kernel service to run '
+      + 'mechanical edits again.',
+  },
   // Gateway-local codes.
   cancelled: {
     explanation: 'Run cancelled. Your timeline is unchanged.',

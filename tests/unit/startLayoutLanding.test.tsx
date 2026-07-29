@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LandingPage, type LandingProjectMediaItem } from '../../src/marketing/LandingPage';
 import { LandingPanel } from '../../src/marketing/LandingPanel';
@@ -66,13 +66,13 @@ describe('Start layout landing panel', () => {
     expect(openButton).toHaveTextContent('Opening');
   });
 
-  it('groups the real project media by video, image, audio, and text', () => {
+  it('renders the real project media as individual files', () => {
     render(<LandingPage projectMedia={projectMedia} />);
 
-    expect(screen.getByRole('button', { name: 'Videos 1 file' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Images 1 file' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Audio 1 file' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Text 1 file' })).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'Interview.mp4' })).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'Poster.png' })).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'Theme.wav' })).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'Opening title' })).toBeInTheDocument();
   });
 
   it('forwards the landing prompt to the background AI runner', async () => {
@@ -84,22 +84,24 @@ describe('Start layout landing panel', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }));
 
-    expect(onOpenChat).toHaveBeenCalledWith('Make a quiet documentary intro');
+    await waitFor(() => {
+      expect(onOpenChat).toHaveBeenCalledWith(
+        'Make a quiet documentary intro',
+        expect.any(Function),
+      );
+    });
   });
 
-  it('expands the individual files when a media category is hovered', () => {
+  it('shows file duration and text previews in the project strip', () => {
     render(<LandingPage projectMedia={projectMedia} />);
 
-    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Videos 1 file' }));
     expect(screen.getByText('Interview.mp4')).toBeInTheDocument();
     expect(screen.getByText('1:05')).toBeInTheDocument();
-
-    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Text 1 file' }));
     expect(screen.getByText('Opening title')).toBeInTheDocument();
     expect(screen.getByText('A film by MasterSelects')).toBeInTheDocument();
   });
 
-  it('runs a typed message in the background without leaving the Start layout', () => {
+  it('runs a typed message in the background without leaving the Start layout', async () => {
     render(<LandingPanel />);
 
     fireEvent.change(screen.getByLabelText('Message for AI Chat'), {
@@ -107,10 +109,17 @@ describe('Start layout landing panel', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Create with AI' }));
 
-    expect(runLandingBackgroundCreationMock).toHaveBeenCalledWith(
-      'Help me plan a short film',
-      expect.any(Function),
-    );
+    await waitFor(() => {
+      expect(runLandingBackgroundCreationMock).toHaveBeenCalledWith(
+        'Help me plan a short film',
+        expect.any(Function),
+        expect.objectContaining({
+          idempotencyKey: expect.stringMatching(/^landing-/),
+          onPhaseChange: expect.any(Function),
+          resumeFrom: 'preparing',
+        }),
+      );
+    });
     expect(screen.getByRole('main')).not.toHaveClass('is-opening-editor');
     expect(useDockStore.getState().activeSavedLayoutId).toBe(FACTORY_START_LAYOUT_ID);
   });

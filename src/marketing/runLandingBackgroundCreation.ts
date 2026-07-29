@@ -2,6 +2,7 @@ import { useMediaStore } from '../stores/mediaStore';
 import { appendFlashBoardPromptHistoryEntry } from '../stores/flashboardStore/activeGenerationRecords';
 import { useTimelineStore } from '../stores/timeline';
 import { findFlashBoardChatRunByIdempotencyKey } from '../services/flashboard/FlashBoardChatRunAudit';
+import { renderHostPort } from '../services/render/renderHostPort';
 
 export const LANDING_FINAL_OUTPUT_PREFIX = 'MasterSelects Final';
 
@@ -212,6 +213,16 @@ function createOutputFilename(): string {
   return `${LANDING_FINAL_OUTPUT_PREFIX} ${timestamp}.mp4`;
 }
 
+function prepareTimelineForEditorHandoff(startTime: number): void {
+  const timeline = useTimelineStore.getState();
+  timeline.pause();
+  timeline.setPlayheadPosition(startTime);
+  renderHostPort.clearScrubbingCache();
+  renderHostPort.clearVideoCache();
+  renderHostPort.clearCompositeCache();
+  renderHostPort.requestNewFrameRender();
+}
+
 async function renderCurrentTimeline(
   onStatus?: LandingBackgroundStatusReporter,
 ): Promise<string | undefined> {
@@ -267,6 +278,7 @@ async function renderCurrentTimeline(
     return imported.type === 'video' ? imported.id : undefined;
   } finally {
     useTimelineStore.getState().endExport();
+    prepareTimelineForEditorHandoff(range.startTime);
   }
 }
 

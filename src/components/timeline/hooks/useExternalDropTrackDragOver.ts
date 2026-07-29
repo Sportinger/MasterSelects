@@ -2,7 +2,11 @@ import { useCallback, type Dispatch, type DragEvent, type SetStateAction } from 
 import type { TimelineTrack } from '../../../types';
 import type { ExternalDragState } from '../types';
 import type { ExternalDropImmediatePreview } from './externalDropImmediatePreview';
-import { hasGeneratedVisualDropType, hasTrackPreviewDropType } from './externalDropPreviewDragTypes';
+import {
+  canDropExternalMediaPreviewOnTrack,
+  hasGeneratedVisualDropType,
+  hasTrackPreviewDropType,
+} from './externalDropPreviewDragTypes';
 
 interface TrackPreviewStateParams {
   trackId: string;
@@ -61,13 +65,9 @@ export function useExternalDropTrackDragOver({
       setExternalDrag(null);
       return;
     }
-    const isVideoTrack = targetTrack?.type === 'video';
     const isAudioTrack = targetTrack?.type === 'audio';
 
-    if (
-      (preview.isAudio && isVideoTrack) ||
-      (isAudioTrack && preview.isVideo && preview.hasAudio !== true)
-    ) {
+    if (!canDropExternalMediaPreviewOnTrack(targetTrack.type, preview)) {
       event.dataTransfer.dropEffect = 'none';
       updateVideoNewTrackGesture(event.clientY, preview.isAudio);
       setExternalDrag(null);

@@ -17,8 +17,22 @@ export const TRACK_PREVIEW_DROP_TYPES = [
   'Files',
 ] as const;
 
+interface ExternalDropMediaPreview {
+  isAudio: boolean;
+  isVideo: boolean;
+}
+
 function hasAnyDropType(types: readonly string[], acceptedTypes: readonly string[]): boolean {
   return acceptedTypes.some((type) => types.includes(type));
+}
+
+export function canDropExternalMediaPreviewOnTrack(
+  trackType: 'video' | 'audio',
+  preview: ExternalDropMediaPreview,
+): boolean {
+  return trackType === 'audio'
+    ? preview.isAudio
+    : preview.isVideo && !preview.isAudio;
 }
 
 export function hasGeneratedVisualDropType(types: readonly string[]): boolean {

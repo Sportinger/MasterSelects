@@ -117,6 +117,40 @@ describe('timeline external drop command executor', () => {
     );
   });
 
+  it('places audio media on audio tracks under strict track validation', async () => {
+    const actions = createActions();
+    const file = new File(['audio'], 'dialog.wav', { type: 'audio/wav' });
+    setMediaState({
+      files: [mediaFile({
+        id: 'media-audio',
+        name: 'dialog.wav',
+        type: 'audio',
+        file,
+        duration: 12,
+      })],
+    });
+
+    const result = await executeTimelineExternalDropCommand({
+      actions,
+      command: { kind: 'media-file', itemId: 'media-audio' },
+      isAudioOnlyMediaFile: (candidate) => candidate.type === 'audio',
+      isVideoTrack: false,
+      mediaFilePolicy: 'strict-track-type',
+      resolveStartTime: () => 3,
+      trackId: 'audio-1',
+    });
+
+    expect(result).toEqual({ handled: true });
+    expect(actions.addClip).toHaveBeenCalledWith(
+      'audio-1',
+      file,
+      3,
+      12,
+      'media-audio',
+      undefined,
+    );
+  });
+
   it('rejects strict media-file commands before creating clips on the wrong track type', async () => {
     const actions = createActions();
     setMediaState({

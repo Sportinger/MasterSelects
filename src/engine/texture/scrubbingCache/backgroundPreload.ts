@@ -70,7 +70,10 @@ export class BackgroundPreloadController {
 
     if (options.isPlaying) {
       this.paused = true;
-      this.clearQueues();
+      // Playback owns the decoder budget now. Tear down detached preload
+      // videos as well as their queues so an in-flight scrub seek cannot
+      // compete with the first playback frames.
+      this.clear();
       return;
     }
 
@@ -263,12 +266,6 @@ export class BackgroundPreloadController {
   private resetQueue(session: BackgroundPreloadSession): void {
     session.queue = [];
     session.queuedFrames.clear();
-  }
-
-  private clearQueues(): void {
-    for (const session of this.sessions.values()) {
-      this.resetQueue(session);
-    }
   }
 
   private processQueue(session: BackgroundPreloadSession): void {
