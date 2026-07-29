@@ -30,6 +30,7 @@ export {
   DEFAULT_FLASHBOARD_CHAT_MODEL,
   DEFAULT_FLASHBOARD_CHAT_PROVIDER,
   DEFAULT_FLASHBOARD_CHAT_TEMPERATURE,
+  DEFAULT_FLASHBOARD_KERNEL_MODEL,
   DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT,
   FLASHBOARD_CHAT_MODEL_OPTIONS,
   FLASHBOARD_CHAT_PROVIDERS,
@@ -77,44 +78,45 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
     throw new Error('Write a prompt before starting chat.');
   }
 
-  request.onPhase?.('kernel');
-  // Establishing a missing precondition (transcribing, analysing) is a
-  // mutating action, so it goes through the approval switch the user already
-  // controls — the "Auto" button next to send. Auto means "run edits without
-  // asking", which is exactly the promise here.
-  const autoApprove = useSettingsStore.getState().aiApprovalMode === 'auto';
-  const kernelResult = await tryKernelFirst(request.playbookPrompt ?? prompt, {
-    autoApprove,
-    satisfyPrecondition: async (precondition, context) => {
-      const resolver = findPreconditionResolver(precondition.kind);
-      return resolver ? resolver.satisfy(context) : false;
-    },
-    ...(request.idempotencyKey === undefined
-      ? {}
-      : { seed: request.idempotencyKey }),
-    ...(request.onKernelProgress === undefined
-      ? {}
-      : { onProgress: request.onKernelProgress }),
-    ...(request.signal === undefined ? {} : { signal: request.signal }),
-  });
-  if (kernelResult.handled) {
-    // Kernel-handled turns still record a durable chat run so bridge and
-    // in-app audits see the same history as legacy turns. The executed steps
-    // are replayed into the audit shape, otherwise a kernel run that applied
-    // N calls would show up as a run with no tool calls at all.
-    const kernelRun = beginFlashBoardChatRun(
-      { ...request, prompt },
-      kernelResult.runId === undefined
-        ? 'agent-kernel: kernel-first cutover run'
-        : `agent-kernel: kernel-first cutover run ${kernelResult.runId}`,
-    );
-    const completed = completeFlashBoardChatRun(kernelRun.runId, {
-      executedToolCalls: kernelExecutedToolCalls(kernelResult.report),
-      response: kernelResult.message,
+  if (request.provider === 'kernel') {
+    request.onPhase?.('kernel');
+    // Establishing a missing precondition (transcribing, analysing) is a
+    // mutating action, so it goes through the approval switch the user already
+    // controls — the "Auto" button next to send.
+    const autoApprove = useSettingsStore.getState().aiApprovalMode === 'auto';
+    const kernelResult = await tryKernelFirst(request.playbookPrompt ?? prompt, {
+      autoApprove,
+      satisfyPrecondition: async (precondition, context) => {
+        const resolver = findPreconditionResolver(precondition.kind);
+        return resolver ? resolver.satisfy(context) : false;
+      },
+      ...(request.idempotencyKey === undefined
+        ? {}
+        : { seed: request.idempotencyKey }),
+      ...(request.onKernelProgress === undefined
+        ? {}
+        : { onProgress: request.onKernelProgress }),
+      ...(request.signal === undefined ? {} : { signal: request.signal }),
     });
-    if (completed) request.onRunCompleted?.(completed);
-    if (kernelResult.report) request.onKernelReport?.(kernelResult.report);
-    return kernelResult.message;
+    if (kernelResult.handled) {
+      const kernelRun = beginFlashBoardChatRun(
+        { ...request, prompt },
+        kernelResult.runId === undefined
+          ? 'agent-kernel: selected MasterSelectsAI run'
+          : `agent-kernel: selected MasterSelectsAI run ${kernelResult.runId}`,
+      );
+      const completed = completeFlashBoardChatRun(kernelRun.runId, {
+        executedToolCalls: kernelExecutedToolCalls(kernelResult.report),
+        response: kernelResult.message,
+      });
+      if (completed) request.onRunCompleted?.(completed);
+      if (kernelResult.report) request.onKernelReport?.(kernelResult.report);
+      return kernelResult.message;
+    }
+
+    throw new Error(
+      'MasterSelectsAI kernel is unavailable. Start the dev kernel or select AI / Local AI.'
+    );
   }
 
   request.onPhase?.('provider');

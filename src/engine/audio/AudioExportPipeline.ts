@@ -32,6 +32,7 @@ import { proxyFrameCache } from '../../services/proxyFrameCache';
 import type { MasterAudioState, TimelineClip, TimelineTrack, Keyframe } from '../../types';
 import {
   canRetainExportAudioBuffer,
+  releaseExportAudioBuffer,
   reportExportAudioBuffer,
   type ExportAudioBufferStage,
 } from '../../services/timeline/exportRuntimeReporting';
@@ -46,6 +47,14 @@ import { renderExportClipAudioEffects } from './exportPipeline/effectStage';
 import { renderExportMasterBusAudio } from './exportPipeline/masterBusStage';
 import { getClipExportTailSeconds } from './exportPipeline/rangePlanning';
 import { prepareExportTrackData } from './exportPipeline/trackDataPlanning';
+import {
+  createFileAudioByteRangeSource,
+  createUrlAudioByteRangeSource,
+  readWavPcmAudioRange,
+} from './exportPipeline/WavPcmRangeReader';
+import { MediaAudioRangeReader } from './exportPipeline/MediaAudioRangeReader';
+import { projectFileService } from '../../services/projectFileService';
+import { getAudioProxyStorageKey } from '../../services/audio/AudioProxyService';
 
 const log = Logger.create('AudioExportPipeline');
 
@@ -77,6 +86,8 @@ export class AudioExportPipeline {
   private settings: AudioExportSettings;
   private cancelled = false;
   private exportRunId?: string;
+  private readonly preTrimmedClipIds = new Set<string>();
+  private readonly suspendedPreviewAudioMediaIds = new Set<string>();
 
   constructor(settings?: Partial<AudioExportSettings>, runtimeOptions?: AudioExportRuntimeOptions) {
     this.settings = {
@@ -110,6 +121,9 @@ export class AudioExportPipeline {
     onProgress?: AudioExportProgressCallback
   ): Promise<EncodedAudioResult | null> {
     this.cancelled = false;
+    this.resumeSuspendedPreviewAudioBuffers();
+    this.preTrimmedClipIds.clear();
+    this.extractor.clearCache();
 
     const { clips, tracks, clipKeyframes, masterAudioState } = useTimelineStore.getState();
     const duration = endTime - startTime;
@@ -148,6 +162,7 @@ export class AudioExportPipeline {
         audioGraphPlan,
         onProgress
       );
+      this.releaseRenderedSourceAudioBuffers(audioClips, extractedBuffers, effectBuffers);
 
       if (this.cancelled) return null;
 
@@ -166,6 +181,8 @@ export class AudioExportPipeline {
         masterLimiterEnabled: false,
       });
       const mixedBuffer = await this.mixer.mixTracks(trackData, duration);
+      this.releaseProcessedAudioBuffers(audioClips, effectBuffers);
+      trackData.length = 0;
       if (this.cancelled) return null;
       this.reportAudioBuffer('mix-buffer', mixedBuffer);
       this.assertAudioBufferAdmission('master-buffer', mixedBuffer);
@@ -188,6 +205,8 @@ export class AudioExportPipeline {
       log.error('Export failed:', error);
       throw error;
     } finally {
+      this.resumeSuspendedPreviewAudioBuffers();
+      this.preTrimmedClipIds.clear();
       this.extractor.clearCache();
     }
   }
@@ -205,6 +224,9 @@ export class AudioExportPipeline {
     onProgress?: AudioExportProgressCallback
   ): Promise<AudioBuffer | null> {
     this.cancelled = false;
+    this.resumeSuspendedPreviewAudioBuffers();
+    this.preTrimmedClipIds.clear();
+    this.extractor.clearCache();
 
     const { clips, tracks, clipKeyframes, masterAudioState } = useTimelineStore.getState();
     const duration = endTime - startTime;
@@ -243,6 +265,7 @@ export class AudioExportPipeline {
         audioGraphPlan,
         onProgress
       );
+      this.releaseRenderedSourceAudioBuffers(audioClips, extractedBuffers, effectBuffers);
 
       if (this.cancelled) return null;
 
@@ -261,6 +284,8 @@ export class AudioExportPipeline {
         masterLimiterEnabled: false,
       });
       const mixedBuffer = await this.mixer.mixTracks(trackData, duration);
+      this.releaseProcessedAudioBuffers(audioClips, effectBuffers);
+      trackData.length = 0;
       if (this.cancelled) return null;
       this.reportAudioBuffer('mix-buffer', mixedBuffer);
       this.assertAudioBufferAdmission('master-buffer', mixedBuffer);
@@ -278,6 +303,8 @@ export class AudioExportPipeline {
       log.error('Raw audio export failed:', error);
       throw error;
     } finally {
+      this.resumeSuspendedPreviewAudioBuffers();
+      this.preTrimmedClipIds.clear();
       this.extractor.clearCache();
     }
   }
@@ -374,8 +401,103 @@ export class AudioExportPipeline {
     return true;
   }
 
+  private releaseAudioBuffer(
+    stage: ExportAudioBufferStage,
+    buffer: AudioBuffer,
+    clip?: TimelineClip
+  ): void {
+    if (!this.exportRunId) {
+      return;
+    }
+
+    releaseExportAudioBuffer({
+      runId: this.exportRunId,
+      stage,
+      buffer,
+      clipId: clip?.id,
+      mediaFileId: clip ? this.getClipMediaFileId(clip) : undefined,
+      trackId: clip?.trackId,
+    });
+  }
+
+  /**
+   * Clip rendering turns a long shared source into short timeline-sized
+   * buffers. Drop every source that is no longer an output before allocating
+   * the mix buffer; otherwise a 70-minute stereo source can keep ~1.5 GB alive
+   * for the rest of a three-minute export.
+   */
+  private releaseRenderedSourceAudioBuffers(
+    clips: TimelineClip[],
+    sourceBuffers: Map<string, AudioBuffer>,
+    processedBuffers: Map<string, AudioBuffer>
+  ): void {
+    const processedValues = new Set(processedBuffers.values());
+    const visited = new Set<AudioBuffer>();
+
+    for (const clip of clips) {
+      const sourceBuffer = sourceBuffers.get(clip.id);
+      if (!sourceBuffer || visited.has(sourceBuffer)) {
+        continue;
+      }
+      visited.add(sourceBuffer);
+
+      // A whole-source clip can legitimately reuse its input as its processed
+      // output. Keep that allocation until mixing has consumed it.
+      if (processedValues.has(sourceBuffer)) {
+        continue;
+      }
+
+      this.releaseAudioBuffer('source-buffer', sourceBuffer, clip);
+      this.extractor.releaseCachedBuffer?.(sourceBuffer);
+      for (const candidate of clips) {
+        if (sourceBuffers.get(candidate.id) !== sourceBuffer) {
+          continue;
+        }
+        const mediaFileId = this.getClipMediaFileId(candidate);
+        if (mediaFileId) {
+          proxyFrameCache.releaseCachedAudioBuffer(mediaFileId, sourceBuffer);
+        }
+      }
+    }
+
+    sourceBuffers.clear();
+  }
+
+  private releaseProcessedAudioBuffers(
+    clips: TimelineClip[],
+    processedBuffers: Map<string, AudioBuffer>
+  ): void {
+    for (const clip of clips) {
+      const buffer = processedBuffers.get(clip.id);
+      if (buffer) {
+        this.releaseAudioBuffer('processed-buffer', buffer, clip);
+      }
+    }
+    processedBuffers.clear();
+  }
+
   private getClipMediaFileId(clip: TimelineClip): string | undefined {
     return clip.mediaFileId ?? clip.source?.mediaFileId;
+  }
+
+  private resumeSuspendedPreviewAudioBuffers(): void {
+    for (const mediaFileId of this.suspendedPreviewAudioMediaIds) {
+      proxyFrameCache.resumeDecodedAudioBuffer(mediaFileId);
+    }
+    this.suspendedPreviewAudioMediaIds.clear();
+  }
+
+  private suspendPreviewAudioBufferForExport(
+    mediaFileId: string,
+    suspendedMediaIds: Set<string>,
+  ): void {
+    if (suspendedMediaIds.has(mediaFileId)) {
+      return;
+    }
+
+    proxyFrameCache.suspendDecodedAudioBuffer(mediaFileId);
+    suspendedMediaIds.add(mediaFileId);
+    this.suspendedPreviewAudioMediaIds.add(mediaFileId);
   }
 
   /**
@@ -478,6 +600,8 @@ export class AudioExportPipeline {
     const sourceBuffersByFile = new WeakMap<File, AudioBuffer>();
     const sourceBuffersByElement = new WeakMap<HTMLMediaElement, AudioBuffer>();
     const retainedSourceBuffers = new WeakSet<AudioBuffer>();
+    const releasedFullSourceMediaIds = new Set<string>();
+    const mediaRangeReadersByFile = new Map<File, MediaAudioRangeReader>();
 
     const getSharedSourceBuffer = (
       clip: TimelineClip,
@@ -559,99 +683,242 @@ export class AudioExportPipeline {
       midiPlans.set(clip.id, planMidiClipNotes(clip, undefined));
     }
 
-    for (let i = 0; i < clips.length; i++) {
-      const clip = clips[i];
+    try {
+      for (let i = 0; i < clips.length; i++) {
+        const clip = clips[i];
 
-      if (this.cancelled) break;
+        if (this.cancelled) break;
 
-      onProgress?.({
-        phase: 'extracting',
-        percent: Math.round((i / clips.length) * 100),
-        currentClip: clip.name,
-        message: `Extracting: ${clip.name}`,
-      });
+        onProgress?.({
+          phase: 'extracting',
+          percent: Math.round((i / clips.length) * 100),
+          currentClip: clip.name,
+          message: `Extracting: ${clip.name}`,
+        });
 
-      try {
-        let buffer: AudioBuffer;
+        try {
+          let buffer: AudioBuffer;
 
-        // MIDI clips: render the track instrument's synth into a buffer (no file
-        // to decode). Flows through the rest of the pipeline like any audio clip.
-        if (clip.source?.type === 'midi') {
-          const track = tracks.find(t => t.id === clip.trackId);
-          const midiBuffer = await renderMidiClipToBuffer(
-            clip,
-            track,
-            this.settings.sampleRate,
-            midiPlans.get(clip.id),
-          );
-          const buffer = midiBuffer ?? this.extractor.createSilentBuffer(Math.max(clip.duration, 0.001));
-          buffers.set(clip.id, buffer);
-          retainSourceBuffer(clip, buffer);
-          continue;
-        }
-
-        // Prefer audio the app already has decoded (in-memory cache) or a fast
-        // PCM-WAV audio proxy on disk, instead of re-decoding the full source.
-        // This is the same audio used for playback, so it stays consistent.
-        const mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
-        const sharedSourceBuffer = getSharedSourceBuffer(clip, mediaFileId);
-        let reusable: AudioBuffer | null = sharedSourceBuffer ?? null;
-        if (!reusable && !clip.isComposition && mediaFileId) {
-          reusable = proxyFrameCache.getCachedAudioBuffer(mediaFileId)
-            ?? await proxyFrameCache.getAudioBuffer(mediaFileId);
-        }
-
-        if (sharedSourceBuffer) {
-          buffer = sharedSourceBuffer;
-          log.debug(`Reusing export source audio for ${clip.name} (${mediaFileId ?? 'shared source'})`);
-        } else if (clip.isComposition) {
-          const mixdown = await requestCompositionAudioMixdown(clip);
-          if (!mixdown?.hasAudio) {
-            log.debug(`Skipping nested comp without audio ${clip.name}`);
+          // MIDI clips: render the track instrument's synth into a buffer (no file
+          // to decode). Flows through the rest of the pipeline like any audio clip.
+          if (clip.source?.type === 'midi') {
+            const track = tracks.find(t => t.id === clip.trackId);
+            const midiBuffer = await renderMidiClipToBuffer(
+              clip,
+              track,
+              this.settings.sampleRate,
+              midiPlans.get(clip.id),
+            );
+            const buffer = midiBuffer ?? this.extractor.createSilentBuffer(Math.max(clip.duration, 0.001));
+            buffers.set(clip.id, buffer);
+            retainSourceBuffer(clip, buffer);
             continue;
           }
-          buffer = mixdown.buffer;
-          // Admission must succeed before committing lazily generated mixdown
-          // state to the timeline.
-          retainSourceBuffer(clip, buffer);
-          applyCompositionAudioMixdownToTimelineClip(clip.id, mixdown);
-          log.debug(`Using lazy mixdown buffer for nested comp ${clip.name}`);
-        } else if (reusable) {
-          buffer = reusable;
-          log.debug(`Using cached/proxy audio for ${clip.name} (${mediaFileId})`);
-        } else if (clip.source?.audioElement) {
-          // Extract from audio element
-          buffer = await this.extractor.extractFromElement(
-            clip.source.audioElement,
-            clip.id
-          );
-        } else if (clip.file) {
-          // Last resort: decode the full source file
-          buffer = await this.extractor.extractAudio(clip.file, clip.id);
-        } else {
-          log.warn(`No audio source for clip ${clip.id}`);
-          continue;
-        }
 
-        rememberSharedSourceBuffer(clip, mediaFileId, buffer);
-        buffers.set(clip.id, buffer);
-        retainSourceBuffer(clip, buffer);
-      } catch (error) {
-        if (error instanceof Error && error.name === 'ExportAudioAdmissionError') {
-          throw error;
+          // Read only this clip's byte range from the PCM-WAV proxy. A 70-minute
+          // stereo source is ~1.5 GB after Float32 decoding; retaining that whole
+          // allocation while video frames are decoded can crash Chrome even when
+          // the exported sequence itself is only a few minutes long.
+          const mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
+          const rangedProxyBuffer = !clip.isComposition && mediaFileId
+            ? await this.tryReadRangedProxyAudio(
+              clip,
+              mediaFileId,
+              releasedFullSourceMediaIds,
+            )
+            : null;
+          if (rangedProxyBuffer) {
+            buffer = rangedProxyBuffer;
+            buffers.set(clip.id, buffer);
+            this.preTrimmedClipIds.add(clip.id);
+            retainSourceBuffer(clip, buffer);
+            log.debug(`Using ranged PCM proxy audio for ${clip.name} (${mediaFileId})`);
+            continue;
+          }
+
+          const mediaFile = mediaFileId
+            ? useMediaStore.getState().files.find(file => file.id === mediaFileId)
+            : undefined;
+          const sourceFile = mediaFile?.file ?? clip.file;
+          const sourceDuration = mediaFile?.duration ?? clip.source?.naturalDuration ?? 0;
+          if (
+            !clip.isComposition
+            && sourceFile
+            && sourceFile.size > 0
+            && sourceDuration >= 15 * 60
+          ) {
+            if (mediaFileId) {
+              this.suspendPreviewAudioBufferForExport(
+                mediaFileId,
+                releasedFullSourceMediaIds,
+              );
+            }
+
+            let reader = mediaRangeReadersByFile.get(sourceFile);
+            if (!reader) {
+              reader = new MediaAudioRangeReader(sourceFile);
+              mediaRangeReadersByFile.set(sourceFile, reader);
+            }
+
+            const rangeStart = Math.max(0, clip.inPoint ?? 0);
+            const rangeEnd = Number.isFinite(clip.outPoint)
+              ? Math.max(rangeStart + 0.001, clip.outPoint as number)
+              : rangeStart + Math.max(clip.duration * Math.abs(clip.speed ?? 1), 0.001);
+            try {
+              buffer = await reader.read(rangeStart, rangeEnd);
+            } catch (error) {
+              const reason = error instanceof Error ? error.message : String(error);
+              throw this.createAudioRangeRequiredError(mediaFile?.name ?? clip.name, reason);
+            }
+
+            buffers.set(clip.id, buffer);
+            this.preTrimmedClipIds.add(clip.id);
+            retainSourceBuffer(clip, buffer);
+            log.debug(`Using direct ranged media audio for ${clip.name} (${mediaFileId ?? 'file'})`);
+            continue;
+          }
+
+          // Fall back to an already-decoded source or full-source extraction for
+          // short media and formats that do not yet have a bounded decoder.
+          const sharedSourceBuffer = getSharedSourceBuffer(clip, mediaFileId);
+          let reusable: AudioBuffer | null = sharedSourceBuffer ?? null;
+          if (!reusable && !clip.isComposition && mediaFileId) {
+            reusable = proxyFrameCache.getCachedAudioBuffer(mediaFileId)
+              ?? await proxyFrameCache.getAudioBuffer(mediaFileId);
+          }
+
+          if (sharedSourceBuffer) {
+            buffer = sharedSourceBuffer;
+            log.debug(`Reusing export source audio for ${clip.name} (${mediaFileId ?? 'shared source'})`);
+          } else if (clip.isComposition) {
+            const mixdown = await requestCompositionAudioMixdown(clip);
+            if (!mixdown?.hasAudio) {
+              log.debug(`Skipping nested comp without audio ${clip.name}`);
+              continue;
+            }
+            buffer = mixdown.buffer;
+            // Admission must succeed before committing lazily generated mixdown
+            // state to the timeline.
+            retainSourceBuffer(clip, buffer);
+            applyCompositionAudioMixdownToTimelineClip(clip.id, mixdown);
+            log.debug(`Using lazy mixdown buffer for nested comp ${clip.name}`);
+          } else if (reusable) {
+            buffer = reusable;
+            log.debug(`Using cached/proxy audio for ${clip.name} (${mediaFileId})`);
+          } else if (clip.source?.audioElement) {
+            // Extract from audio element
+            buffer = await this.extractor.extractFromElement(
+              clip.source.audioElement,
+              clip.id
+            );
+          } else if (clip.file) {
+            // Last resort: decode the full source file
+            buffer = await this.extractor.extractAudio(clip.file, clip.id);
+          } else {
+            log.warn(`No audio source for clip ${clip.id}`);
+            continue;
+          }
+
+          rememberSharedSourceBuffer(clip, mediaFileId, buffer);
+          buffers.set(clip.id, buffer);
+          retainSourceBuffer(clip, buffer);
+        } catch (error) {
+          if (
+            error instanceof Error
+            && (
+              error.name === 'ExportAudioAdmissionError'
+              || error.name === 'ExportAudioRangeRequiredError'
+            )
+          ) {
+            throw error;
+          }
+          log.error(`Failed to extract audio from ${clip.name}:`, error);
+          // Create silent buffer as fallback
+          const fallbackDuration = Math.max(clip.outPoint ?? clip.duration, clip.duration, 0.001);
+          const fallbackBuffer = this.extractor.createSilentBuffer(fallbackDuration);
+          const mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
+          rememberSharedSourceBuffer(clip, mediaFileId, fallbackBuffer);
+          buffers.set(clip.id, fallbackBuffer);
+          retainSourceBuffer(clip, fallbackBuffer);
         }
-        log.error(`Failed to extract audio from ${clip.name}:`, error);
-        // Create silent buffer as fallback
-        const fallbackDuration = Math.max(clip.outPoint ?? clip.duration, clip.duration, 0.001);
-        const fallbackBuffer = this.extractor.createSilentBuffer(fallbackDuration);
-        const mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
-        rememberSharedSourceBuffer(clip, mediaFileId, fallbackBuffer);
-        buffers.set(clip.id, fallbackBuffer);
-        retainSourceBuffer(clip, fallbackBuffer);
+      }
+    } finally {
+      for (const reader of mediaRangeReadersByFile.values()) {
+        reader.dispose();
       }
     }
 
     return buffers;
+  }
+
+  private async tryReadRangedProxyAudio(
+    clip: TimelineClip,
+    mediaFileId: string,
+    releasedFullSourceMediaIds: Set<string>,
+  ): Promise<AudioBuffer | null> {
+    const mediaFile = useMediaStore.getState().files.find(file => file.id === mediaFileId);
+    if (!mediaFile) return null;
+
+    const proxyReady = mediaFile.audioProxyStatus === 'ready' || mediaFile.hasProxyAudio === true;
+    if (!proxyReady) return null;
+
+    const rangeStart = Math.max(0, clip.inPoint ?? 0);
+    const rangeEnd = Number.isFinite(clip.outPoint)
+      ? Math.max(rangeStart + 0.001, clip.outPoint as number)
+      : rangeStart + Math.max(clip.duration * Math.abs(clip.speed ?? 1), 0.001);
+
+    // Drop any preview-time full decode before allocating export resources.
+    this.suspendPreviewAudioBufferForExport(mediaFileId, releasedFullSourceMediaIds);
+
+    let source = mediaFile.audioProxyUrl
+      ? createUrlAudioByteRangeSource(mediaFile.audioProxyUrl)
+      : null;
+
+    // FSA returns a disk-backed File whose slice() reads only the requested
+    // bytes. The native helper currently downloads the entire proxy, so do not
+    // use that path until its transport supports ranged file reads.
+    if (
+      !source
+      && projectFileService.isProjectOpen()
+      && projectFileService.activeBackend === 'fsa'
+    ) {
+      const proxyFile = await projectFileService.getProxyAudio(getAudioProxyStorageKey(mediaFile));
+      if (proxyFile) {
+        source = createFileAudioByteRangeSource(proxyFile);
+      }
+    }
+
+    if (!source) {
+      if ((mediaFile.duration ?? 0) >= 15 * 60) {
+        throw this.createAudioRangeRequiredError(mediaFile.name, 'no range-readable PCM proxy is available');
+      }
+      return null;
+    }
+
+    try {
+      return await readWavPcmAudioRange(source, rangeStart, rangeEnd);
+    } catch (error) {
+      log.warn('Ranged PCM audio proxy read failed', {
+        mediaFileId,
+        clipId: clip.id,
+        rangeStart,
+        rangeEnd,
+        error,
+      });
+      if ((mediaFile.duration ?? rangeEnd) >= 15 * 60) {
+        const reason = error instanceof Error ? error.message : String(error);
+        throw this.createAudioRangeRequiredError(mediaFile.name, reason);
+      }
+      return null;
+    }
+  }
+
+  private createAudioRangeRequiredError(mediaName: string, reason: string): Error {
+    const error = new Error(
+      `Long-source audio export requires a range-readable PCM proxy for ${mediaName}: ${reason}`,
+    );
+    error.name = 'ExportAudioRangeRequiredError';
+    return error;
   }
 
   /**
@@ -667,6 +934,7 @@ export class AudioExportPipeline {
     return renderExportClipAudioEffects({
       clips,
       buffers,
+      preTrimmedClipIds: this.preTrimmedClipIds,
       clipKeyframes,
       audioGraphPlan,
       clipAudioRenderer: this.clipAudioRenderer,

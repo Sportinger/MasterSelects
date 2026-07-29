@@ -4,8 +4,31 @@ import {
   buildFlashBoardChatModelFallback,
   buildFlashBoardChatModelOptions,
 } from '../../src/components/panels/flashboard/FlashBoardChatOptionsPlanner';
+import {
+  DEFAULT_FLASHBOARD_CHAT_PROVIDER,
+  FLASHBOARD_CHAT_PROVIDERS,
+} from '../../src/services/flashboard/FlashBoardChatService';
 
 describe('FlashBoard chat options planner', () => {
+  it('offers MasterSelectsAI, AI, and Local AI with AI as the default', () => {
+    expect(FLASHBOARD_CHAT_PROVIDERS).toEqual([
+      { id: 'kernel', label: 'MasterSelectsAI' },
+      { id: 'kie', label: 'AI' },
+      { id: 'lemonade', label: 'Local AI' },
+    ]);
+    expect(DEFAULT_FLASHBOARD_CHAT_PROVIDER).toBe('kie');
+    expect(buildFlashBoardChatModelOptions({
+      chatModel: 'masterselects-ai',
+      chatProvider: 'kernel',
+      lemonadeModels: [],
+    })).toEqual([
+      expect.objectContaining({
+        id: 'masterselects-ai',
+        provider: 'kernel',
+      }),
+    ]);
+  });
+
   it('falls back from the stale Lemonade default when discovered models are available', () => {
     const options = buildFlashBoardChatModelOptions({
       chatModel: 'gemma4-it-e2b-FLM',

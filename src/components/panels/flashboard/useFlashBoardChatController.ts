@@ -156,7 +156,7 @@ export function useFlashBoardChatController({
 
   useEffect(() => {
     const settingsChatProvider: FlashBoardChatProvider = aiProvider === 'lemonade' ? 'lemonade' : 'kie';
-    if (isChatting || chatProvider === settingsChatProvider) {
+    if (isChatting || chatProvider === 'kernel' || chatProvider === settingsChatProvider) {
       return;
     }
 
@@ -202,7 +202,9 @@ export function useFlashBoardChatController({
 
   const handleChatProviderSelect = useCallback((provider: FlashBoardChatProvider) => {
     setChatProvider(provider);
-    setAiProvider(provider === 'lemonade' ? 'lemonade' : 'openai');
+    if (provider !== 'kernel') {
+      setAiProvider(provider === 'lemonade' ? 'lemonade' : 'openai');
+    }
     setChatError(null);
 
     const nextDefaultModel = buildFlashBoardChatProviderDefaultModel(provider, lemonadeModels);

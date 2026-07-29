@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AudioExportPipeline } from '../../src/engine/audio/AudioExportPipeline';
 import { renderAudioGraph } from '../../src/engine/audio/AudioGraphRenderer';
+import { renderExportClipAudioEffects } from '../../src/engine/audio/exportPipeline/effectStage';
 import type { AudioTrackData } from '../../src/engine/audio/AudioMixer';
 import type { AudioGraphRenderPlan } from '../../src/engine/audio/AudioGraphTypes';
 import { analyzeAudioBufferLoudnessSummary } from '../../src/services/audio/LoudnessEnvelopeGenerator';
@@ -510,7 +511,7 @@ describe('AudioExportPipeline audio preflight', () => {
     const result = await pipeline.exportRawAudio(0, 1);
 
     expect(result).toBeNull();
-    expect(clearCache).toHaveBeenCalledTimes(1);
+    expect(clearCache).toHaveBeenCalledTimes(2);
   });
 
   it('does not complete raw export when cancellation happens after master rendering', async () => {
@@ -543,7 +544,7 @@ describe('AudioExportPipeline audio preflight', () => {
     const result = await pipeline.exportRawAudio(0, 1);
 
     expect(result).toBeNull();
-    expect(clearCache).toHaveBeenCalledTimes(1);
+    expect(clearCache).toHaveBeenCalledTimes(2);
   });
 
   it('reports audio buffers only while an export run is active', () => {
@@ -616,6 +617,58 @@ describe('AudioExportPipeline audio preflight', () => {
         resources: 1,
         audioSources: 0,
       });
+  });
+
+  it('admits the trimmed processed buffer instead of counting the full source twice', async () => {
+    const clip = createClip({
+      id: 'dense-cut-audio',
+      trackId: audioTrack.id,
+      duration: 1,
+      inPoint: 2400,
+      outPoint: 2401,
+      source: { type: 'audio' },
+    });
+    const fullSource = {
+      ...createMockAudioBuffer(),
+      duration: 4320,
+      length: 191_603_200,
+    } as AudioBuffer;
+    const trimmed = createMockAudioBuffer();
+    const assertAudioBufferAdmission = vi.fn();
+    const reportAudioBuffer = vi.fn(() => true);
+    const renderClipAudio = vi.fn(async () => ({ buffer: trimmed }));
+    const plan = renderAudioGraph({
+      clips: [clip],
+      tracks: [audioTrack],
+      mode: 'export',
+    });
+
+    const result = await renderExportClipAudioEffects({
+      clips: [clip],
+      buffers: new Map([[clip.id, fullSource]]),
+      preTrimmedClipIds: new Set([clip.id]),
+      clipKeyframes: new Map(),
+      audioGraphPlan: plan,
+      clipAudioRenderer: {
+        render: renderClipAudio,
+      } as never,
+      graphEffectRenderer: {
+        renderEffectInstances: vi.fn(),
+      } as never,
+      shouldCancel: () => false,
+      assertAudioBufferAdmission,
+      reportAudioBuffer,
+    });
+
+    expect(result.get(clip.id)).toBe(trimmed);
+    expect(renderClipAudio).toHaveBeenCalledWith(expect.objectContaining({
+      clip,
+      sourceBuffer: fullSource,
+      sourceIsClipRange: true,
+    }));
+    expect(assertAudioBufferAdmission).toHaveBeenCalledOnce();
+    expect(assertAudioBufferAdmission).toHaveBeenCalledWith('processed-buffer', trimmed, clip);
+    expect(reportAudioBuffer).toHaveBeenCalledWith('processed-buffer', trimmed, clip);
   });
 
   it('throws source-buffer admission denial without falling back to silence', async () => {

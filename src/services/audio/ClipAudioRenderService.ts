@@ -46,6 +46,12 @@ export interface ClipAudioRenderProgress {
 export interface ClipAudioRenderRequest {
   clip: TimelineClip;
   sourceBuffer: AudioBuffer;
+  /**
+   * The source buffer already contains exactly clip.inPoint..clip.outPoint.
+   * Export uses this for ranged PCM proxy reads so a long source never has to
+   * be decoded into one giant AudioBuffer.
+   */
+  sourceIsClipRange?: boolean;
   keyframes?: readonly Keyframe[];
   effectMode?: 'output' | 'analysis-shape';
   effectTailSeconds?: number;
@@ -100,10 +106,27 @@ export class ClipAudioRenderService {
   }
 
   async render(request: ClipAudioRenderRequest): Promise<ClipAudioRenderResult> {
-    const { clip, sourceBuffer, keyframes = [], effectMode = 'output', effectTailSeconds = 0, onProgress } = request;
+    const {
+      clip,
+      sourceBuffer,
+      sourceIsClipRange = false,
+      keyframes = [],
+      effectMode = 'output',
+      effectTailSeconds = 0,
+      onProgress,
+    } = request;
 
     const resolvedSourceBuffer = await this.resolveStemSourceBuffer(clip, sourceBuffer, onProgress);
-    let processedBuffer = this.trimClipBuffer(clip, resolvedSourceBuffer, onProgress);
+    let processedBuffer = sourceIsClipRange
+      ? resolvedSourceBuffer
+      : this.trimClipBuffer(clip, resolvedSourceBuffer, onProgress);
+    if (sourceIsClipRange) {
+      emitProgress(onProgress, {
+        phase: 'trimming',
+        percent: 8,
+        message: 'Clip audio range ready',
+      });
+    }
     processedBuffer = await this.renderEditStack(clip, processedBuffer, onProgress);
     processedBuffer = await this.renderSpectralImageLayers(clip, processedBuffer, onProgress);
 

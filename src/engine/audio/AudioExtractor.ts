@@ -270,6 +270,20 @@ export class AudioExtractor {
   }
 
   /**
+   * Release every cache entry that points at one decoded source buffer.
+   * Dense timeline cut-ups can share that source across many clip ids.
+   */
+  releaseCachedBuffer(buffer: AudioBuffer): number {
+    let released = 0;
+    for (const [key, cached] of this.cache) {
+      if (cached !== buffer) continue;
+      this.cache.delete(key);
+      released += 1;
+    }
+    return released;
+  }
+
+  /**
    * Clear all cached buffers
    */
   clearCache(): void {

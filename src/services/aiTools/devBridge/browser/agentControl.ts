@@ -398,7 +398,9 @@ function normalizePromptVersion(value: unknown): FlashBoardChatPromptVersion | u
 }
 
 function normalizeProvider(value: unknown): FlashBoardChatProvider | undefined {
-  return value === 'kie' || value === 'lemonade' ? value : undefined;
+  return value === 'kernel' || value === 'kie' || value === 'lemonade'
+    ? value
+    : undefined;
 }
 
 function normalizeRunSource(value: unknown): FlashBoardChatRunSource | undefined {

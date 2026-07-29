@@ -8,6 +8,7 @@ import {
   createExportDemand,
   getRunOwner,
   getRunResourceId,
+  releaseExportResource,
   removeUndefinedValues,
   retainExportResource,
 } from './core';
@@ -67,6 +68,10 @@ export function canRetainExportAudioBuffer(
 
 export function reportExportAudioBuffer(report: ExportAudioBufferReport): void {
   retainExportResource(createExportAudioBufferResource(report));
+}
+
+export function releaseExportAudioBuffer(report: ExportAudioBufferReport): void {
+  releaseExportResource(createExportAudioBufferResource(report).id);
 }
 
 function createExportPreviewFrameResource(report: ExportPreviewFrameReport): RenderResourceDescriptor {

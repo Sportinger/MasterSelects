@@ -12,7 +12,7 @@ function cloneForExportProbe<T>(value: T): T {
 
 function summarizeExportPanelForProbe() {
   const panel = document.querySelector<HTMLElement>('.export-panel');
-  const button = panel?.querySelector<HTMLButtonElement>('.export-start-btn.export-summary-cta') ?? null;
+  const button = panel?.querySelector<HTMLButtonElement>('.export-summary-cta') ?? null;
   const progress = panel?.querySelector<HTMLElement>('.export-progress-container') ?? null;
   const error = panel?.querySelector<HTMLElement>('.export-error') ?? null;
   return {
@@ -22,6 +22,76 @@ function summarizeExportPanelForProbe() {
     progressVisible: Boolean(progress),
     progressText: progress?.textContent?.replace(/\s+/g, ' ').trim() ?? null,
     errorText: error?.textContent?.replace(/\s+/g, ' ').trim() ?? null,
+  };
+}
+
+export async function startCurrentExportFromPanel() {
+  if (useTimelineStore.getState().isExporting) {
+    return {
+      success: false,
+      error: 'An export is already running.',
+      data: summarizeExportPanelForProbe(),
+    };
+  }
+
+  useDockStore.getState().activatePanelType('export');
+  await waitForExportProbe(180);
+
+  const beforeClick = summarizeExportPanelForProbe();
+  const button = document.querySelector<HTMLButtonElement>(
+    '.export-panel .export-summary-cta',
+  );
+  if (!button) {
+    return {
+      success: false,
+      error: 'Export button was not found after opening the Export panel.',
+      data: { beforeClick },
+    };
+  }
+  if (button.disabled) {
+    return {
+      success: false,
+      error: 'Export button is disabled.',
+      data: { beforeClick },
+    };
+  }
+
+  button.click();
+  await waitForExportProbe(150);
+
+  const timeline = useTimelineStore.getState();
+  return {
+    success: timeline.isExporting,
+    ...(!timeline.isExporting ? { error: 'Export did not enter the running state.' } : {}),
+    data: {
+      beforeClick,
+      afterClick: summarizeExportPanelForProbe(),
+      timelineExportState: {
+        isExporting: timeline.isExporting,
+        exportProgress: timeline.exportProgress,
+        exportCurrentTime: timeline.exportCurrentTime,
+        inPoint: timeline.inPoint,
+        outPoint: timeline.outPoint,
+      },
+      settings: cloneForExportProbe(useExportStore.getState().settings),
+    },
+  };
+}
+
+export function getCurrentExportPanelState() {
+  const timeline = useTimelineStore.getState();
+  return {
+    success: true,
+    data: {
+      panel: summarizeExportPanelForProbe(),
+      timelineExportState: {
+        isExporting: timeline.isExporting,
+        exportProgress: timeline.exportProgress,
+        exportCurrentTime: timeline.exportCurrentTime,
+        inPoint: timeline.inPoint,
+        outPoint: timeline.outPoint,
+      },
+    },
   };
 }
 
@@ -119,7 +189,7 @@ export async function runExportPanelButtonProbe(args: Record<string, unknown> = 
     await waitForExportProbe(250);
 
     const beforeClick = summarizeExportPanelForProbe();
-    const button = document.querySelector<HTMLButtonElement>('.export-panel .export-start-btn.export-summary-cta');
+    const button = document.querySelector<HTMLButtonElement>('.export-panel .export-summary-cta');
     if (!button) {
       return {
         success: false,

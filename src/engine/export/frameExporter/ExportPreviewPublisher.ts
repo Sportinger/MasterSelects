@@ -18,6 +18,7 @@ type SoftAdmissionDenialLogger = (
 
 export class ExportPreviewPublisher {
   private lastPreviewFramePublishMs = Number.NEGATIVE_INFINITY;
+  private bitmapInFlight = false;
   private readonly previewFrameIntervalMs: number;
   private readonly getActiveRunId: ActiveRunIdProvider;
   private readonly logSoftAdmissionDenial: SoftAdmissionDenialLogger;
@@ -45,11 +46,16 @@ export class ExportPreviewPublisher {
       return;
     }
 
-    this.publishBitmapWhenStillExporting(
-      createImageBitmap(previewFrame),
-      currentTime,
-      () => previewFrame.close(),
-    );
+    try {
+      this.publishBitmapWhenStillExporting(
+        createImageBitmap(previewFrame),
+        currentTime,
+        () => previewFrame.close(),
+      );
+    } catch (error) {
+      previewFrame.close();
+      log.warn('Could not publish export preview frame', error);
+    }
   }
 
   publishPixels(
@@ -60,8 +66,12 @@ export class ExportPreviewPublisher {
   ): void {
     if (!this.shouldAllocateExportPreviewFrame(width, height, currentTime)) return;
 
-    const imageData = new ImageData(new Uint8ClampedArray(pixels), width, height);
-    this.publishBitmapWhenStillExporting(createImageBitmap(imageData), currentTime);
+    try {
+      const imageData = new ImageData(new Uint8ClampedArray(pixels), width, height);
+      this.publishBitmapWhenStillExporting(createImageBitmap(imageData), currentTime);
+    } catch (error) {
+      log.warn('Could not publish export preview frame', error);
+    }
   }
 
   private shouldPublishExportPreviewFrame(): boolean {
@@ -78,6 +88,7 @@ export class ExportPreviewPublisher {
     height: number,
     currentTime: number
   ): boolean {
+    if (this.bitmapInFlight) return false;
     if (!this.shouldPublishExportPreviewFrame()) return false;
 
     const runId = this.getActiveRunId();
@@ -101,6 +112,7 @@ export class ExportPreviewPublisher {
     currentTime: number,
     cleanup?: () => void,
   ): void {
+    this.bitmapInFlight = true;
     void bitmapPromise
       .then((bitmap) => {
         const timeline = useTimelineStore.getState();
@@ -124,6 +136,7 @@ export class ExportPreviewPublisher {
         log.warn('Could not publish export preview frame', error);
       })
       .finally(() => {
+        this.bitmapInFlight = false;
         cleanup?.();
       });
   }

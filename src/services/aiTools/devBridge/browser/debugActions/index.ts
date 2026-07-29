@@ -14,7 +14,12 @@ import { proxyFrameCache } from '../../../../proxyFrameCache';
 import { collectStemDebugState, runAudioElementBenchmark } from './audio';
 import { measureClipDragInteraction } from './clipDragInteraction';
 import { measureDockResizeInteraction } from './dock';
-import { probeVideoEncoderConfigs, runExportPanelButtonProbe } from './exportPanel';
+import {
+  getCurrentExportPanelState,
+  probeVideoEncoderConfigs,
+  runExportPanelButtonProbe,
+  startCurrentExportFromPanel,
+} from './exportPanel';
 import { measureTimelineInteraction } from './interaction';
 import {
   armMixerFaderRecording,
@@ -339,6 +344,10 @@ export async function runDebugAction(action: string, args: Record<string, unknow
       return runTransformPanelInputProbe(args);
     case 'probe-export-panel-button':
       return runExportPanelButtonProbe(args);
+    case 'start-current-export':
+      return startCurrentExportFromPanel();
+    case 'get-current-export-state':
+      return getCurrentExportPanelState();
     case 'probe-video-encoder-configs':
       return probeVideoEncoderConfigs(args);
     case 'pause-playback': {

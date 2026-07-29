@@ -2,13 +2,23 @@ import { DEFAULT_LEMONADE_MODEL } from '../lemonadeProvider';
 import type { FlashBoardChatModelOption, FlashBoardChatProvider, FlashBoardChatProviderOption, FlashBoardOpenAiReasoningEffort } from './FlashBoardChatTypes';
 
 export const FLASHBOARD_CHAT_PROVIDERS: FlashBoardChatProviderOption[] = [
-  { id: 'kie', label: 'MasterSelects' },
-  { id: 'lemonade', label: 'Lemonade' },
+  { id: 'kernel', label: 'MasterSelectsAI' },
+  { id: 'kie', label: 'AI' },
+  { id: 'lemonade', label: 'Local AI' },
 ];
 
 const KIE_GPT_REASONING_EFFORTS: FlashBoardOpenAiReasoningEffort[] = ['low', 'medium', 'high', 'xhigh'];
 
 export const FLASHBOARD_CHAT_MODEL_OPTIONS: Record<FlashBoardChatProvider, FlashBoardChatModelOption[]> = {
+  kernel: [
+    {
+      id: 'masterselects-ai',
+      label: 'MasterSelectsAI',
+      provider: 'kernel',
+      supportsTemperature: false,
+      supportsTools: true,
+    },
+  ],
   kie: [
     {
       id: 'gpt-5-6-luna',
@@ -97,6 +107,7 @@ export const FLASHBOARD_CHAT_MODEL_OPTIONS: Record<FlashBoardChatProvider, Flash
 };
 
 export const DEFAULT_FLASHBOARD_CHAT_PROVIDER: FlashBoardChatProvider = 'kie';
+export const DEFAULT_FLASHBOARD_KERNEL_MODEL = 'masterselects-ai';
 export const DEFAULT_FLASHBOARD_CHAT_MODEL = 'gpt-5-6-luna';
 export const DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT: FlashBoardOpenAiReasoningEffort = 'low';
 const FLASHBOARD_CHAT_MODEL_CREDIT_COSTS: Record<string, number> = {

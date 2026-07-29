@@ -483,6 +483,42 @@ describe('proxyFrameCache decoded audio buffer runtime reporting', () => {
       .not.toEqual(expect.arrayContaining([expect.objectContaining({ id: resourceId })]));
   });
 
+  it('releases one decoded audio buffer without clearing other media caches', () => {
+    const first = createMockAudioBuffer(2);
+    const second = createMockAudioBuffer(1);
+    expect(cache.cacheDecodedAudioBuffer('media-first', first)).toBe(true);
+    expect(cache.cacheDecodedAudioBuffer('media-second', second)).toBe(true);
+
+    expect(proxyFrameCache.releaseCachedAudioBuffer('media-first', first)).toBe(true);
+
+    expect(cache.audioBufferCache.has('media-first')).toBe(false);
+    expect(cache.audioBufferCache.get('media-second')).toBe(second);
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies.interactive.resources)
+      .not.toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'proxy-frame-cache:media-first:audio-buffer' }),
+      ]));
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies.interactive.resources)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'proxy-frame-cache:media-second:audio-buffer' }),
+      ]));
+  });
+
+  it('blocks full decoded audio buffers while an export owns ranged audio', () => {
+    const initial = createMockAudioBuffer(2);
+    const lateWarmup = createMockAudioBuffer(2);
+    const resumed = createMockAudioBuffer(1);
+
+    expect(cache.cacheDecodedAudioBuffer('media-export', initial)).toBe(true);
+    proxyFrameCache.suspendDecodedAudioBuffer('media-export');
+
+    expect(cache.audioBufferCache.has('media-export')).toBe(false);
+    expect(cache.cacheDecodedAudioBuffer('media-export', lateWarmup)).toBe(false);
+    expect(cache.audioBufferCache.has('media-export')).toBe(false);
+
+    proxyFrameCache.resumeDecodedAudioBuffer('media-export');
+    expect(cache.cacheDecodedAudioBuffer('media-export', resumed)).toBe(true);
+  });
+
   it('releases decoded audio buffer resources when the cache evicts old entries', () => {
     for (let index = 0; index < MAX_AUDIO_BUFFER_CACHE_ENTRIES + 1; index += 1) {
       expect(cache.cacheDecodedAudioBuffer(`audio-${index}`, createMockAudioBuffer(1))).toBe(true);

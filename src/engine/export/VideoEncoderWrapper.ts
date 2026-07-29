@@ -9,10 +9,19 @@ import type { ExportSettings, VideoCodec, ContainerFormat } from './types';
 import { getCodecString, isCodecSupportedInContainer, getFallbackCodec } from './codecHelpers';
 
 export class VideoEncoderWrapper {
+  // VideoEncoder.encode() only enqueues work. Without backpressure each queued
+  // 1080p RGBA VideoFrame can retain ~8.3 MB until the codec consumes it,
+  // allowing a fast render loop to grow the renderer into multiple GB.
+  private static readonly MAX_ENCODE_QUEUE_SIZE = 4;
+  // Bound retained input surfaces by bytes rather than frame count. This keeps
+  // 4K/8K exports within the same memory envelope as 1080p exports.
+  private static readonly MAX_UNFLUSHED_INPUT_BYTES = 96 * 1024 * 1024;
+
   private encoder: VideoEncoder | null = null;
   private muxer: MuxerAdapter | null = null;
   private settings: ExportSettings;
   private encodedFrameCount = 0;
+  private framesSubmittedSinceFlush = 0;
   private isClosed = false;
   private hasAudio = false;
   private audioCodec: AudioCodec = 'aac';
@@ -225,6 +234,7 @@ export class VideoEncoderWrapper {
     if (!this.encoder || this.isClosed) {
       throw new Error('Encoder not initialized or already closed');
     }
+    await this.waitForEncodeCapacity();
 
     const timestampMicros = Math.round(frameIndex * (1_000_000 / this.settings.fps));
     const durationMicros = Math.round(1_000_000 / this.settings.fps);
@@ -253,8 +263,12 @@ export class VideoEncoderWrapper {
     // FPS-based keyframe interval (default: 1 keyframe per second)
     const interval = keyframeInterval ?? this.settings.fps;
     const keyFrame = frameIndex % interval === 0;
-    this.encoder.encode(frame, { keyFrame });
-    frame.close();
+    try {
+      this.encoder.encode(frame, { keyFrame });
+      this.framesSubmittedSinceFlush++;
+    } finally {
+      frame.close();
+    }
 
     // Yield to event loop periodically - use queueMicrotask for lower latency
     if (frameIndex % 30 === 0) {
@@ -270,11 +284,13 @@ export class VideoEncoderWrapper {
     if (!this.encoder || this.isClosed) {
       throw new Error('Encoder not initialized or already closed');
     }
+    await this.waitForEncodeCapacity();
 
     // FPS-based keyframe interval (default: 1 keyframe per second)
     const interval = keyframeInterval ?? this.settings.fps;
     const keyFrame = frameIndex % interval === 0;
     this.encoder.encode(frame, { keyFrame });
+    this.framesSubmittedSinceFlush++;
 
     // Yield to event loop periodically
     if (frameIndex % 30 === 0) {
@@ -286,9 +302,41 @@ export class VideoEncoderWrapper {
     return this.encoder?.encodeQueueSize ?? 0;
   }
 
+  private async waitForEncodeCapacity(): Promise<void> {
+    const encoder = this.encoder;
+    if (!encoder || this.isClosed) {
+      throw new Error('Encoder not initialized or already closed');
+    }
+    const queueIsBelowLimit =
+      encoder.encodeQueueSize < VideoEncoderWrapper.MAX_ENCODE_QUEUE_SIZE;
+    const bytesPerFrame = this.settings.width * this.settings.height * 4;
+    const maxFramesWithoutFlush = Math.max(
+      1,
+      Math.floor(VideoEncoderWrapper.MAX_UNFLUSHED_INPUT_BYTES / bytesPerFrame)
+    );
+    const submittedFramesAreBelowLimit =
+      this.framesSubmittedSinceFlush < maxFramesWithoutFlush;
+    if (queueIsBelowLimit && submittedFramesAreBelowLimit) {
+      return;
+    }
+
+    // flush() is deliberately used instead of merely waiting for a dequeue
+    // event: dequeue means the control message left the JS queue, but the codec
+    // may still retain the frame's backing pixels. The submitted-frame limit is
+    // essential for Chromium, where encodeQueueSize often returns to zero while
+    // full-resolution input surfaces remain owned by the codec. The byte-based
+    // boundary drains after 3 frames at 4K and 12 frames at 1080p.
+    await encoder.flush();
+    this.framesSubmittedSinceFlush = 0;
+    if (encoder.state === 'closed' || this.isClosed) {
+      throw new Error('Encoder closed while applying export backpressure');
+    }
+  }
+
   async flushPendingVideo(): Promise<void> {
     if (!this.encoder || this.isClosed) return;
     await this.encoder.flush();
+    this.framesSubmittedSinceFlush = 0;
   }
 
   addAudioChunks(audioResult: EncodedAudioResult): void {
@@ -317,6 +365,7 @@ export class VideoEncoderWrapper {
 
     // Flush all pending frames from the WebCodecs encoder
     await this.encoder.flush();
+    this.framesSubmittedSinceFlush = 0;
     this.encoder.close();
 
     // Finalize the muxer — this flushes the internal queue and writes the file
@@ -335,6 +384,7 @@ export class VideoEncoderWrapper {
       try {
         this.encoder.close();
       } catch {}
+      this.framesSubmittedSinceFlush = 0;
       // Cancel any pending muxer flush
       if (this.muxer && this.muxer instanceof MediaBunnyMuxerAdapter) {
         this.muxer.cancel();

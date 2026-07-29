@@ -3,6 +3,7 @@ export { createExportRunId, getExportRunOwnerId } from './exportReporting/core';
 export {
   canRetainExportAudioBuffer,
   canRetainExportPreviewFrame,
+  releaseExportAudioBuffer,
   reportExportAudioBuffer,
   reportExportPreviewFrame,
 } from './exportReporting/audioPreviewResources';

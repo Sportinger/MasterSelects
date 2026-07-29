@@ -9,10 +9,62 @@ import { findFlashBoardChatRunByIdempotencyKey } from '../../src/services/flashb
 import { normalizeHostedKieChatRequest } from '../../functions/lib/providers/kieChat';
 import { FLASHBOARD_CHAT_MAX_OUTPUT_TOKENS } from '../../src/services/flashboard/FlashBoardChatConfig';
 
+const kernelGatewayMocks = vi.hoisted(() => ({
+  tryKernelFirst: vi.fn(),
+}));
+
+vi.mock('../../src/services/kernelClient/kernelChatGateway', () => ({
+  tryKernelFirst: kernelGatewayMocks.tryKernelFirst,
+}));
+
 describe('FlashBoardChatService', () => {
   afterEach(() => {
+    kernelGatewayMocks.tryKernelFirst.mockReset();
     vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  it('routes AI directly to Kie.ai without invoking the kernel', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      output: [{
+        type: 'message',
+        content: [{ type: 'output_text', text: 'Kie response.' }],
+      }],
+    }), { status: 200 })));
+
+    await expect(sendFlashBoardChatMessage({
+      kieAiApiKey: 'kie-test',
+      model: 'gpt-5-6-luna',
+      prompt: 'Inspect this timeline',
+      provider: 'kie',
+      temperature: 0.7,
+    })).resolves.toBe('Kie response.');
+
+    expect(kernelGatewayMocks.tryKernelFirst).not.toHaveBeenCalled();
+  });
+
+  it('routes MasterSelectsAI exclusively through the selected kernel', async () => {
+    kernelGatewayMocks.tryKernelFirst.mockResolvedValue({
+      handled: true,
+      message: 'Kernel response.',
+      runId: 'kernel-run',
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const onPhase = vi.fn();
+
+    await expect(sendFlashBoardChatMessage({
+      model: 'masterselects-ai',
+      onPhase,
+      prompt: 'Cut the strongest moments',
+      provider: 'kernel',
+      temperature: 0.7,
+    })).resolves.toBe('Kernel response.');
+
+    expect(kernelGatewayMocks.tryKernelFirst).toHaveBeenCalledOnce();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(onPhase).toHaveBeenCalledWith('kernel');
+    expect(onPhase).not.toHaveBeenCalledWith('provider');
   });
 
   it('sends Kie.ai GPT chat through Responses with reasoning effort', async () => {

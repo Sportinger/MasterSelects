@@ -476,7 +476,7 @@ function chatInputSchema(extraProperties = {}) {
     openAiReasoningEffort: { type: 'string', enum: ['none', 'low', 'medium', 'high', 'xhigh'] },
     prompt: { type: 'string' },
     promptVersion: { type: 'string', enum: ['v2', 'legacy-v1'], default: 'v2' },
-    provider: { type: 'string', enum: ['kie', 'lemonade'] },
+    provider: { type: 'string', enum: ['kernel', 'kie', 'lemonade'] },
     sessionId: { type: 'string' },
     temperature: { type: 'number', minimum: 0, maximum: 2 },
     timeoutMs: { type: 'number', minimum: 1000, maximum: 300000 },

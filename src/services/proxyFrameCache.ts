@@ -104,6 +104,7 @@ class ProxyFrameCache {
   // Audio buffer cache for instant scrubbing (Web Audio API)
   private audioBufferCache: Map<string, AudioBuffer> = new Map();
   private readonly audioBufferLoadState = createAudioBufferLoadState();
+  private readonly suspendedAudioBufferMediaIds = new Set<string>();
   private audioContext: AudioContext | null = null;
 
   // Cache hit/miss tracking
@@ -226,6 +227,9 @@ class ProxyFrameCache {
   }
 
   private cacheDecodedAudioBuffer(mediaFileId: string, buffer: AudioBuffer): boolean {
+    if (this.suspendedAudioBufferMediaIds.has(mediaFileId)) {
+      return false;
+    }
     const admission = canRetainAudioBufferResource(mediaFileId, buffer);
     if (!admission.admitted) {
       logRuntimeAdmissionSkip('Skipped decoded audio buffer cache retention due to runtime budget', {
@@ -629,6 +633,9 @@ class ProxyFrameCache {
    * Works with BOTH proxy audio AND original video files
    */
   async getAudioBuffer(mediaFileId: string, videoElementSrc?: string): Promise<AudioBuffer | null> {
+    if (this.suspendedAudioBufferMediaIds.has(mediaFileId)) {
+      return null;
+    }
     // Check cache
     const cached = this.audioBufferCache.get(mediaFileId);
     if (cached) {
@@ -718,6 +725,46 @@ class ProxyFrameCache {
     return cached;
   }
 
+  /**
+   * Prevent a full-source decoded buffer from being recreated while an export
+   * is using byte-ranged clip audio. This also blocks an already-running warmup
+   * from committing its decoded result after the export has started.
+   */
+  suspendDecodedAudioBuffer(mediaFileId: string): void {
+    this.suspendedAudioBufferMediaIds.add(mediaFileId);
+    const cached = this.audioBufferCache.get(mediaFileId);
+    if (cached) {
+      this.audioBufferCache.delete(mediaFileId);
+      this.releaseAudioBufferResource(mediaFileId);
+    }
+  }
+
+  resumeDecodedAudioBuffer(mediaFileId: string): void {
+    this.suspendedAudioBufferMediaIds.delete(mediaFileId);
+    this.audioBufferLoadState.nextAllowedWarmAt.delete(mediaFileId);
+    this.audioBufferLoadState.warmBackoffLogged.delete(mediaFileId);
+  }
+
+  /**
+   * Release one decoded PCM buffer without disturbing the media's frame or
+   * proxy-element caches. Long exports call this after trimming their source
+   * into clip-sized buffers so the full source cannot keep ~GB of heap alive.
+   */
+  releaseCachedAudioBuffer(mediaFileId: string, expectedBuffer?: AudioBuffer): boolean {
+    const cached = this.audioBufferCache.get(mediaFileId);
+    if (!cached || (expectedBuffer && cached !== expectedBuffer)) {
+      return false;
+    }
+
+    this.audioBufferCache.delete(mediaFileId);
+    this.releaseAudioBufferResource(mediaFileId);
+    this.deferScrubAudioBufferWarmup(
+      mediaFileId,
+      'decoded audio buffer released after export source trimming'
+    );
+    return true;
+  }
+
   // ============================================
   // CLEAR / DISPOSE / STATS
   // ============================================
@@ -740,6 +787,7 @@ class ProxyFrameCache {
     this.audioBufferLoadState.retryTime.delete(mediaFileId);
     this.audioBufferLoadState.nextAllowedWarmAt.delete(mediaFileId);
     this.audioBufferLoadState.warmBackoffLogged.delete(mediaFileId);
+    this.suspendedAudioBufferMediaIds.delete(mediaFileId);
   }
 
   // Clear entire cache
@@ -757,6 +805,7 @@ class ProxyFrameCache {
     this.ownedAudioUrlLeaseIds.clear();
 
     this.releaseAllAudioBuffers();
+    this.suspendedAudioBufferMediaIds.clear();
 
     // Clean up audio context
     this.disposeAudioContext();
@@ -777,6 +826,7 @@ class ProxyFrameCache {
     this.audioBufferLoadState.nextAllowedWarmAt.clear();
     this.audioBufferLoadState.warmBackoffLogged.clear();
     this.audioBufferLoadState.loading.clear();
+    this.suspendedAudioBufferMediaIds.clear();
   }
 
   /**

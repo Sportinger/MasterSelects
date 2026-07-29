@@ -11,6 +11,7 @@ import type { TimelineClip } from '../../../types/timeline';
 export interface RenderExportClipAudioOptions {
   clips: TimelineClip[];
   buffers: Map<string, AudioBuffer>;
+  preTrimmedClipIds?: ReadonlySet<string>;
   clipKeyframes: Map<string, Keyframe[]>;
   audioGraphPlan: AudioGraphRenderPlan;
   clipAudioRenderer: ClipAudioRenderService;
@@ -33,7 +34,6 @@ export async function renderExportClipAudioEffects(
   const renderOne = async (clip: TimelineClip, index: number): Promise<void> => {
     const buffer = options.buffers.get(clip.id);
     if (!buffer || options.shouldCancel()) return;
-    options.assertAudioBufferAdmission('processed-buffer', buffer, clip);
 
     const keyframes = options.clipKeyframes.get(clip.id) || [];
     const clipPlan = clipPlanById.get(clip.id);
@@ -42,6 +42,7 @@ export async function renderExportClipAudioEffects(
     const rendered = await options.clipAudioRenderer.render({
       clip,
       sourceBuffer: buffer,
+      sourceIsClipRange: options.preTrimmedClipIds?.has(clip.id) === true,
       keyframes,
       effectTailSeconds: clipTailSeconds,
       onProgress: progress => options.onProgress?.(

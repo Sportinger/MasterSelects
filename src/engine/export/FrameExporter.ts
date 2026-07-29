@@ -54,7 +54,9 @@ import { ExportPreviewPublisher } from './frameExporter/ExportPreviewPublisher';
 import { prepareTransitionCompositionsForExport } from './prepareTransitionCompositionsForExport';
 
 export class FrameExporter {
-  private static readonly PREVIEW_FRAME_INTERVAL_MS = 0;
+  // The export preview is informational; four updates per second are smooth
+  // enough and avoid allocating a full-resolution ImageBitmap for every frame.
+  private static readonly PREVIEW_FRAME_INTERVAL_MS = 250;
   private static readonly RUNTIME_REPORT_INTERVAL_MS = 1000;
 
   private settings: FullExportSettings;
@@ -400,8 +402,14 @@ export class FrameExporter {
           });
       }
 
+      const throwIfAudioExportFailed = (): void => {
+        if (!audioError) return;
+        throw audioError instanceof Error ? audioError : new Error(String(audioError));
+      };
+
       // Phase 1: Encode video frames
       for (let frame = 0; frame < totalFrames; frame++) {
+        throwIfAudioExportFailed();
         if (this.isCancelled) {
           log.info('Export cancelled');
           this.encoder.cancel();
@@ -431,6 +439,7 @@ export class FrameExporter {
 
         const seekStart = performance.now();
         await seekAllClipsToTime(ctx, this.clipStates, this.parallelDecoder, this.useParallelDecode);
+        throwIfAudioExportFailed();
         const seekMs = performance.now() - seekStart;
         this.reportExportRuntimeState(exportRunId);
 
@@ -474,11 +483,14 @@ export class FrameExporter {
         let encodeMs = 0;
         if (capture.kind === 'video-frame') {
           const videoFrame = capture.frame;
-          this.previewPublisher.publishFrame(videoFrame, time);
-          const encodeStart = performance.now();
-          await this.encoder.encodeVideoFrame(videoFrame, frame, keyframeInterval);
-          encodeMs = performance.now() - encodeStart;
-          videoFrame.close();
+          try {
+            this.previewPublisher.publishFrame(videoFrame, time);
+            const encodeStart = performance.now();
+            await this.encoder.encodeVideoFrame(videoFrame, frame, keyframeInterval);
+            encodeMs = performance.now() - encodeStart;
+          } finally {
+            videoFrame.close();
+          }
         } else {
           const pixels = capture.pixels;
           this.previewPublisher.publishPixels(pixels, capture.width, capture.height, time);

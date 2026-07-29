@@ -36,19 +36,28 @@ export interface ExportModePlayer {
 }
 
 export class WebCodecsExportMode {
-  private static readonly INITIAL_LOOKAHEAD_SAMPLES = 120;
-  private static readonly DECODE_LOOKAHEAD_SAMPLES = 90;
-  private static readonly KEEP_FRAMES_BEHIND = 24;
+  // A decoded 1080p VideoFrame can occupy several MB of GPU memory. The old
+  // 120/90-frame windows allowed a single export to retain hundreds of MB (or
+  // more, depending on the decoder's backing format) and could crash Chrome's
+  // GPU process on long, densely-cut timelines. Keep a small rolling window;
+  // sequential export only needs enough headroom to hide decoder latency.
+  private static readonly INITIAL_LOOKAHEAD_SAMPLES = 36;
+  private static readonly DECODE_LOOKAHEAD_SAMPLES = 24;
+  private static readonly KEEP_FRAMES_BEHIND = 6;
   // Start the background decode-ahead while the buffer is still half full, so it
   // finishes before the export catches the buffer edge (otherwise the export
   // briefly freezes at every decode-window boundary).
-  private static readonly WARM_AHEAD_THRESHOLD_SAMPLES = 60;
+  private static readonly WARM_AHEAD_THRESHOLD_SAMPLES = 12;
+  // Timeline cuts may jump minutes forward inside one source. Beyond two
+  // normal lookahead windows, restart at the target keyframe instead of
+  // decoding every intermediate sample.
+  private static readonly MAX_SEQUENTIAL_FORWARD_GAP_SAMPLES = 48;
   // Max pending decodes before applying backpressure. Software decoders can throw
   // a generic "Decoding error" (EncodingError) when fed far ahead, which closes
   // the decoder and forces a slow keyframe restart — pacing the feed avoids that.
   // Kept well above the old unbounded feed (whole window at once) but high enough
   // that the decode-ahead stays comfortably in front of the export.
-  private static readonly MAX_DECODE_QUEUE = 24;
+  private static readonly MAX_DECODE_QUEUE = 8;
 
   private player: ExportModePlayer;
 
@@ -60,6 +69,7 @@ export class WebCodecsExportMode {
   private decodeCursorIndex = 0;
   private presentationOffsetUs = 0;
   private pendingWarmBuffer: Promise<void> | null = null;
+  private discardOutputBeforeCtsUs: number | null = null;
 
   constructor(player: ExportModePlayer) {
     this.player = player;
@@ -76,12 +86,52 @@ export class WebCodecsExportMode {
     return decoder;
   }
 
+  private isRecoverableDecoderFailure(error: unknown): boolean {
+    if ((this.player.getDecoder()?.state ?? 'closed') === 'closed') {
+      return true;
+    }
+
+    const record = typeof error === 'object' && error !== null
+      ? error as { name?: unknown; message?: unknown }
+      : null;
+    const name = typeof record?.name === 'string' ? record.name : '';
+    const message = typeof record?.message === 'string'
+      ? record.message.toLowerCase()
+      : String(error).toLowerCase();
+
+    return name === 'FastExportDecoderClosedError'
+      || name === 'InvalidStateError'
+      || name === 'EncodingError'
+      || message.includes('decoder closed')
+      || message.includes('closed codec')
+      || message.includes('decoding error');
+  }
+
   private getFrameToleranceUs(multiplier = 1.5): number {
     return frameToleranceUs(this.player.getFrameRate(), multiplier);
   }
 
   private getNormalizedSampleTimestampUs(sample: Sample): number {
     return normalizedSampleTimestampUs(sample, this.presentationOffsetUs);
+  }
+
+  private getRetainedHistoryStartCtsUs(targetCtsUs: number): number {
+    const frameDurationUs = 1_000_000 / Math.max(1, this.player.getFrameRate());
+    return targetCtsUs - WebCodecsExportMode.KEEP_FRAMES_BEHIND * frameDurationUs;
+  }
+
+  private async decodeWindowDiscardingDistantPreroll(
+    startIndex: number,
+    endIndexExclusive: number,
+    targetCtsUs: number
+  ): Promise<void> {
+    const previousDiscardBoundary = this.discardOutputBeforeCtsUs;
+    this.discardOutputBeforeCtsUs = this.getRetainedHistoryStartCtsUs(targetCtsUs);
+    try {
+      await this.decodeSampleWindow(startIndex, endIndexExclusive, targetCtsUs);
+    } finally {
+      this.discardOutputBeforeCtsUs = previousDiscardBoundary;
+    }
   }
 
   private refreshBufferedFrameIndex(): void {
@@ -284,6 +334,10 @@ export class WebCodecsExportMode {
     if (this.pendingWarmBuffer || !this.isActive) {
       return;
     }
+    const decoder = this.player.getDecoder();
+    if (!decoder || decoder.state === 'closed') {
+      return;
+    }
     const samples = this.player.getSamples();
     if (this.decodeCursorIndex >= samples.length) {
       return;
@@ -320,7 +374,7 @@ export class WebCodecsExportMode {
       )
     );
 
-    await this.decodeSampleWindow(
+    await this.decodeWindowDiscardingDistantPreroll(
       keyframeIndex,
       endIndexExclusive,
       this.getNormalizedSampleTimestampUs(targetSample)
@@ -332,6 +386,13 @@ export class WebCodecsExportMode {
    */
   handleDecoderOutput(frame: VideoFrame): void {
     const cts = frame.timestamp;
+    if (
+      this.discardOutputBeforeCtsUs !== null &&
+      cts < this.discardOutputBeforeCtsUs
+    ) {
+      try { frame.close(); } catch {}
+      return;
+    }
     const existingFrame = this.exportFrameBuffer.get(cts);
     if (existingFrame && existingFrame !== frame) {
       if (existingFrame === this.player.getCurrentFrame()) {
@@ -422,7 +483,7 @@ export class WebCodecsExportMode {
     );
 
     const endDecode = log.time('decodeInitialSamples');
-    await this.decodeSampleWindow(
+    await this.decodeWindowDiscardingDistantPreroll(
       keyframeIndex,
       decodeEnd,
       this.getNormalizedSampleTimestampUs(startSample)
@@ -605,20 +666,40 @@ export class WebCodecsExportMode {
     // A closed decoder must restart from a keyframe (which recreates it) — decoding
     // more samples on a dead decoder would just keep throwing.
     const decoderClosed = (this.player.getDecoder()?.state ?? 'closed') === 'closed';
-    if (
-      decoderClosed ||
-      targetCts < minCtsInBuffer ||
-      targetSampleIndex < this.decodeCursorIndex - WebCodecsExportMode.KEEP_FRAMES_BEHIND
-    ) {
-      log.info(`Restarting FAST decode window around ${timeSeconds.toFixed(3)}s${decoderClosed ? ' (decoder closed — recovering)' : ''}`);
-      await this.restartFromKeyframe(targetSampleIndex);
-    } else {
-      if (targetCts > maxCtsInBuffer) {
-        log.info(`Decoding more: target ahead of buffer by ${((targetCts - maxCtsInBuffer) / 1000).toFixed(1)}ms`);
+    const largeForwardJump =
+      targetSampleIndex >
+      this.decodeCursorIndex + WebCodecsExportMode.MAX_SEQUENTIAL_FORWARD_GAP_SAMPLES;
+    try {
+      if (
+        decoderClosed ||
+        targetCts < minCtsInBuffer ||
+        targetSampleIndex < this.decodeCursorIndex - WebCodecsExportMode.KEEP_FRAMES_BEHIND ||
+        largeForwardJump
+      ) {
+        const reason = decoderClosed
+          ? 'decoder closed — recovering'
+          : largeForwardJump
+            ? `forward source jump of ${targetSampleIndex - this.decodeCursorIndex} samples`
+            : 'backward source jump';
+        log.info(`Restarting FAST decode window around ${timeSeconds.toFixed(3)}s (${reason})`);
+        await this.restartFromKeyframe(targetSampleIndex);
       } else {
-        log.info('Decoding more: target within current window but frame is not buffered yet');
+        if (targetCts > maxCtsInBuffer) {
+          log.info(`Decoding more: target ahead of buffer by ${((targetCts - maxCtsInBuffer) / 1000).toFixed(1)}ms`);
+        } else {
+          log.info('Decoding more: target within current window but frame is not buffered yet');
+        }
+        await this.warmBufferAroundSample(targetSampleIndex);
       }
-      await this.warmBufferAroundSample(targetSampleIndex);
+    } catch (error) {
+      if (!this.isRecoverableDecoderFailure(error)) {
+        throw error;
+      }
+      log.warn(
+        `FAST export decoder failed near ${timeSeconds.toFixed(3)}s; restarting from the previous keyframe`,
+        error
+      );
+      await this.restartFromKeyframe(targetSampleIndex);
     }
 
     bestIndex = this.findBufferedFrameIndex(targetCts, this.getFrameToleranceUs(3));
@@ -674,6 +755,7 @@ export class WebCodecsExportMode {
     this.exportCurrentIndex = 0;
     this.decodeCursorIndex = 0;
     this.pendingWarmBuffer = null;
+    this.discardOutputBeforeCtsUs = null;
     log.info('Export mode ended');
   }
 
@@ -689,6 +771,7 @@ export class WebCodecsExportMode {
     this.exportCurrentIndex = 0;
     this.decodeCursorIndex = 0;
     this.pendingWarmBuffer = null;
+    this.discardOutputBeforeCtsUs = null;
     this.isActive = false;
   }
 }

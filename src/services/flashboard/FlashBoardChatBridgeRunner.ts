@@ -193,6 +193,13 @@ function resolveModel(
   requestedModel: string | undefined,
   lemonadeModel: string,
 ): string {
+  if (provider === 'kernel') {
+    const model = requestedModel?.trim() || FLASHBOARD_CHAT_MODEL_OPTIONS.kernel[0]?.id;
+    if (!model || !FLASHBOARD_CHAT_MODEL_OPTIONS.kernel.some((candidate) => candidate.id === model)) {
+      throw new Error(`Unsupported MasterSelectsAI model: ${model ?? 'missing'}`);
+    }
+    return model;
+  }
   if (provider === 'lemonade') {
     return requestedModel?.trim() || lemonadeModel.trim() || DEFAULT_LEMONADE_MODEL;
   }

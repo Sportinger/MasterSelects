@@ -8,6 +8,7 @@ import {
   canRetainExportPreviewFrame,
   canRetainExportRunJob,
   releaseExportRunResources,
+  releaseExportAudioBuffer,
   reportExportAudioBuffer,
   reportExportClipStates,
   reportExportOutputSurface,
@@ -383,6 +384,29 @@ describe('exportRuntimeReporting', () => {
       audioBufferId: 'export:run-audio-output:audio:output-buffer:timeline',
       tags: expect.arrayContaining(['audio', 'master-buffer']),
     });
+  });
+
+  it('releases a source audio buffer before the mix allocation', () => {
+    const source = createAudioBufferLike(48_000, 2, 48_000);
+    reportExportAudioBuffer({
+      runId: 'run-audio-lifecycle',
+      stage: 'source-buffer',
+      buffer: source,
+      clipId: 'clip-source',
+      mediaFileId: 'media-source',
+      trackId: 'track-source',
+    });
+
+    releaseExportAudioBuffer({
+      runId: 'run-audio-lifecycle',
+      stage: 'source-buffer',
+      buffer: source,
+      clipId: 'clip-source',
+      mediaFileId: 'media-source',
+      trackId: 'track-source',
+    });
+
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies.export.resources).toHaveLength(0);
   });
 
   it('checks export admissions without retaining denied resources', () => {

@@ -1,6 +1,6 @@
 import type { ToolDefinition, ToolResult } from '../aiTools';
 
-export type FlashBoardChatProvider = 'kie' | 'lemonade';
+export type FlashBoardChatProvider = 'kernel' | 'kie' | 'lemonade';
 export type FlashBoardKieChatProtocol = 'claude-messages' | 'openai-responses';
 export type FlashBoardOpenAiReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh';
 export type FlashBoardChatPromptVersion = 'v2' | 'legacy-v1';
@@ -35,8 +35,7 @@ export interface FlashBoardChatRequest {
   onKernelProgress?: import('../kernelClient/runProgress').KernelProgressReporter;
   /** Structured record of a kernel-handled turn, for the run card. */
   onKernelReport?: (report: import('../kernelClient/runReport').KernelRunReport) => void;
-  /** Reports which engine is working on the turn: kernel-first, then the
-   * community provider when the kernel does not handle it. */
+  /** Reports which explicitly selected engine is working on the turn. */
   onPhase?: (phase: 'kernel' | 'provider') => void;
   onRunCompleted?: (run: import('./FlashBoardChatRunAudit').FlashBoardChatRunRecord) => void;
   openAiReasoningEffort?: FlashBoardOpenAiReasoningEffort;
