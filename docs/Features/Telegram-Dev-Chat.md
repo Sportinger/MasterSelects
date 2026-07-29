@@ -36,6 +36,7 @@ The integration uses these server-only values:
 |---|---|
 | `TELEGRAM_BOT_TOKEN` | Authenticates calls from the backend to the Bot API |
 | `TELEGRAM_DEV_CHAT_ID` | Restricts delivery and accepted replies to one private group |
+| `TELEGRAM_DEV_USER_IDS` | Optional comma-separated allowlist of Telegram account IDs that may answer |
 | `TELEGRAM_WEBHOOK_SECRET` | Authenticates Telegram webhook requests |
 
 Never expose these values through a `VITE_` variable, client bundle, issue,
@@ -81,7 +82,11 @@ Do this before registering the webhook:
 3. Find the update for the private group and copy its `message.chat.id`.
    Group IDs are negative numbers. Store the full value, including the minus
    sign, as `TELEGRAM_DEV_CHAT_ID`.
-4. Clear the temporary shell variable:
+4. For a stricter production setup, also copy the numeric `message.from.id` of
+   every developer who may answer. Join those IDs with commas and store the
+   result as `TELEGRAM_DEV_USER_IDS`. Do not use usernames: they can change and
+   are not the Bot API sender identity.
+5. Clear the temporary shell variable:
 
    ```powershell
    Remove-Variable botToken, updates
@@ -106,6 +111,7 @@ replace them locally:
 ```dotenv
 TELEGRAM_BOT_TOKEN=replace-me
 TELEGRAM_DEV_CHAT_ID=-1000000000000
+TELEGRAM_DEV_USER_IDS=123456789,987654321
 TELEGRAM_WEBHOOK_SECRET=replace-me-with-a-random-hex-string
 ```
 
@@ -144,10 +150,12 @@ npm run cf:migrate:remote
 ```
 
 The commands use the `DB` binding and `migrations_dir` configured in
-`wrangler.toml`. The integration schema is defined by
-`migrations/0012_dev_chat.sql`. Review the migration output and confirm that
-the intended database is selected. Re-running a recorded D1 migration is safe;
-Wrangler tracks applied migration files.
+`wrangler.toml`. The base integration schema is defined by
+`migrations/0012_dev_chat.sql`; idempotency, retention, account-delete cleanup,
+and atomic rate counters are added by
+`migrations/0013_dev_chat_hardening.sql`. Apply both in order. Review the
+migration output and confirm that the intended database is selected. Re-running
+a recorded D1 migration is safe; Wrangler tracks applied migration files.
 
 ---
 
@@ -159,8 +167,17 @@ values in `wrangler.toml`:
 ```powershell
 npx wrangler pages secret put TELEGRAM_BOT_TOKEN --project-name masterselects
 npx wrangler pages secret put TELEGRAM_DEV_CHAT_ID --project-name masterselects
+npx wrangler pages secret put TELEGRAM_DEV_USER_IDS --project-name masterselects
 npx wrangler pages secret put TELEGRAM_WEBHOOK_SECRET --project-name masterselects
 ```
+
+`TELEGRAM_DEV_USER_IDS` is optional. When it is unset, any human member of the
+configured private group can answer by replying to a bot message. Set it when
+the group has more members than the trusted developer responders. Invalid or
+unlisted senders are terminally ignored by the webhook (`200` with
+`{"ignored":true,"ok":true}`), never enter D1, and are not retried by
+Telegram. A malformed configured CSV fails closed in the same way: nobody is
+allowed until the value is corrected.
 
 If the Cloudflare Pages project uses a different project name, substitute the
 exact name shown by:
@@ -246,6 +263,65 @@ If multiple requests are active, always reply to the corresponding bot message.
 This is the thread key; quoting or manually copying text does not create the
 association.
 
+Each MasterSelects bot message contains an internal `MasterSelects ref`. If
+Telegram delivers a valid direct reply before the normal bot-message mapping
+was committed, the webhook uses that reference to recover the pending outgoing
+message and save the mapping and developer reply together. Users do not need to
+copy or enter the reference.
+
+If a MasterSelects-looking reply cannot yet be recovered, the webhook returns
+`503 telegram_reply_mapping_pending` with `Retry-After: 3` instead of
+acknowledging and discarding it, so Telegram can retry. Clearly unrelated bot
+messages are acknowledged and ignored. Repeated deliveries remain safe because
+Telegram update/message IDs are unique in D1.
+
+---
+
+## Delivery Idempotency and Rate Limits
+
+Each browser send attempt carries a generated `clientMessageId`. Retrying the
+same unchanged failed draft reuses that ID. The backend stores it uniquely. If
+the original delivery is recorded as `delivered`, a retry returns the same
+message with `201` and does not call Telegram again. If delivery is still
+`pending`, both the original ambiguous result and its retry return `202` with
+the pending message and `Retry-After: 3`; the retry deliberately does not call
+Telegram again. The dialog marks that message as **Delivery pending**.
+
+Polling advances normally and separately asks the backend to reconcile the
+small set of known pending message IDs. A pending row therefore cannot block
+newer messages behind the normal page limit. After normal confirmation or
+webhook reference recovery changes it to `delivered`, the pending badge
+disappears; a stale response can never downgrade it back to `pending`.
+
+Only a valid Telegram JSON response with `{"ok":false}` is a definitive
+rejection: the backend rolls back the pending row, returns
+`502 telegram_delivery_failed`, and allows the same `clientMessageId` to be
+retried safely. A bare HTTP error or malformed/non-JSON response remains
+ambiguous and returns the `202` pending message without resending it. Editing
+the draft or starting a new conversation generates a new ID.
+
+Send and poll rate limits use an atomic D1 counter per identity, scope, and
+minute. Concurrent requests cannot all read the same stale counter value.
+Expired counter rows are removed best-effort. If D1 cannot enforce the counter,
+the hosted endpoint fails closed temporarily instead of silently disabling
+abuse protection.
+
+---
+
+## Data Retention
+
+Anonymous conversations expire 90 days after their last activity. Their
+messages are removed with the conversation through the D1 foreign-key cascade.
+Activity extends the expiry. Cleanup is best-effort during normal dev-chat
+traffic, so deletion can happen shortly after the exact expiry time rather than
+at a guaranteed scheduled second. The hardening migration also installs a D1
+default-expiry trigger, so a newly inserted conversation still receives the
+90-day default if a write path omits an explicit expiry value.
+
+Signed-in conversations are associated with the account and are not subject to
+the anonymous 90-day expiry. Deleting the owning account cascades to its
+developer-chat conversations and messages.
+
 ---
 
 ## Verification Checklist
@@ -260,6 +336,10 @@ After the first deployment:
 - Refresh or reopen the dialog and confirm that both messages persist.
 - Send a normal standalone group message and confirm that it does not appear in
   the dialog.
+- If `TELEGRAM_DEV_USER_IDS` is configured, have an unlisted test account reply
+  and confirm that the reply is rejected and not stored.
+- Retry one browser send with the same `clientMessageId` and confirm that only
+  one Telegram bot message and one D1 user message exist.
 - Inspect `getWebhookInfo` and confirm that no delivery error is reported.
 
 Do not use real customer data for smoke tests.
@@ -284,6 +364,8 @@ Do not use real customer data for smoke tests.
 - Check `last_error_message` and `pending_update_count`.
 - Confirm Telegram and Cloudflare use the same `TELEGRAM_WEBHOOK_SECRET`.
 - Confirm the reply is in the configured group, not a similarly named group.
+- If `TELEGRAM_DEV_USER_IDS` is set, confirm the responder's numeric
+  `message.from.id` is present in the comma-separated list.
 
 ### Reply appears twice
 

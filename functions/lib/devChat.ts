@@ -3,13 +3,18 @@ import type { AppContext, AppUser, Env } from './env';
 export const DEV_CHAT_MAX_MESSAGE_LENGTH = 2_000;
 export const DEV_CHAT_MAX_PAGE_LENGTH = 500;
 export const DEV_CHAT_POLL_LIMIT = 100;
+export const DEV_CHAT_RETENTION_DAYS = 90;
 
 const TELEGRAM_MESSAGE_LIMIT = 4_096;
 const TELEGRAM_TIMEOUT_MS = 8_000;
-const RATE_LIMIT_WINDOW_SECONDS = 60;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_RETENTION_MINUTES = 2;
+
+export type DevChatRateLimitResult = 'allowed' | 'limited' | 'unavailable';
 
 export interface DevChatMessage {
   createdAt: string;
+  deliveryStatus: 'delivered' | 'pending';
   id: number;
   message: string;
   sender: 'developer' | 'user';
@@ -23,9 +28,14 @@ export class TelegramConfigurationError extends Error {
 }
 
 export class TelegramDeliveryError extends Error {
-  constructor() {
-    super('Telegram did not accept the dev chat message.');
+  readonly deliveryUnknown: boolean;
+
+  constructor(deliveryUnknown: boolean) {
+    super(deliveryUnknown
+      ? 'Telegram delivery could not be confirmed.'
+      : 'Telegram rejected the dev chat message.');
     this.name = 'TelegramDeliveryError';
+    this.deliveryUnknown = deliveryUnknown;
   }
 }
 
@@ -34,6 +44,10 @@ interface TelegramSendMessageResponse {
   result?: {
     message_id?: unknown;
   };
+}
+
+interface RateCounterRow {
+  count: number;
 }
 
 function bytesToHex(buffer: ArrayBuffer): string {
@@ -59,6 +73,14 @@ export function normalizeConversationId(value: unknown): string | null {
     : null;
 }
 
+export function normalizeClientMessageId(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(normalized)
+    ? normalized
+    : null;
+}
+
 export function normalizePage(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const normalized = value.trim();
@@ -75,44 +97,80 @@ export function normalizePage(value: unknown): string | undefined {
   }
 }
 
-export async function isDevChatRateLimited(
+export function devChatExpiresAt(date = new Date()): string {
+  return new Date(date.getTime() + DEV_CHAT_RETENTION_DAYS * 24 * 60 * 60 * 1_000).toISOString();
+}
+
+export async function deleteExpiredAnonymousDevChats(env: Env, now = new Date().toISOString()): Promise<void> {
+  await env.DB
+    .prepare(
+      `DELETE FROM dev_chat_conversations
+       WHERE user_id IS NULL AND expires_at <= ?`,
+    )
+    .bind(now)
+    .run();
+}
+
+export async function consumeDevChatRateLimit(
   context: AppContext,
   scope: 'poll' | 'send',
   maximum: number,
-): Promise<boolean> {
+): Promise<DevChatRateLimitResult> {
   const clientIdentity = context.request.headers.get('cf-connecting-ip')?.trim()
     || context.data.user?.id;
-  if (!clientIdentity) return false;
+  if (!clientIdentity) return 'allowed';
 
   try {
     const secret = context.env.SESSION_SECRET?.trim()
       || context.env.VISITOR_NOTIFY_SECRET?.trim()
       || 'masterselects-dev-chat-rate';
     const clientHash = await digestLabel(`${secret}:${clientIdentity}`, 24);
-    const window = Math.floor(Date.now() / (RATE_LIMIT_WINDOW_SECONDS * 1_000));
-    const key = `dev-chat-rate:${scope}:${clientHash}:${window}`;
-    const count = Number(await context.env.KV.get(key)) || 0;
-    if (count >= maximum) return true;
+    const now = new Date();
+    const windowMinute = Math.floor(now.getTime() / RATE_LIMIT_WINDOW_MS);
+    const expiresAt = new Date(
+      (windowMinute + RATE_LIMIT_RETENTION_MINUTES) * RATE_LIMIT_WINDOW_MS,
+    ).toISOString();
+    const counter = await context.env.DB
+      .prepare(
+        `INSERT INTO dev_chat_rate_limits (
+           identity_hash, scope, window_minute, count, expires_at
+         )
+         VALUES (?, ?, ?, 1, ?)
+         ON CONFLICT(identity_hash, scope, window_minute) DO UPDATE SET
+           count = dev_chat_rate_limits.count + 1,
+           expires_at = excluded.expires_at
+         WHERE dev_chat_rate_limits.count < ?
+         RETURNING count`,
+      )
+      .bind(clientHash, scope, windowMinute, expiresAt, maximum)
+      .first<RateCounterRow>();
 
-    await context.env.KV.put(key, String(count + 1), {
-      expirationTtl: RATE_LIMIT_WINDOW_SECONDS * 2,
-    });
-    return false;
+    context.waitUntil(
+      context.env.DB
+        .prepare('DELETE FROM dev_chat_rate_limits WHERE expires_at <= ?')
+        .bind(now.toISOString())
+        .run()
+        .catch(() => undefined),
+    );
+    return counter ? 'allowed' : 'limited';
   } catch {
-    // A temporary KV failure must not make support unavailable.
-    return false;
+    return 'unavailable';
   }
 }
 
 export async function buildTelegramDevChatText(input: {
   appVersion?: string;
+  correlationId: string;
   conversationId: string;
   message: string;
   page?: string;
   user?: AppUser | null;
 }): Promise<string> {
   const conversationLabel = await digestLabel(`conversation:${input.conversationId}`, 10);
-  const lines = [`MasterSelects dev chat #${conversationLabel}`];
+  const lines = [
+    `MasterSelects dev chat #${conversationLabel}`,
+    `MasterSelects ref: ${input.correlationId}`,
+  ];
 
   if (input.user) {
     const userLabel = await digestLabel(`user:${input.user.id}`, 8);
@@ -141,34 +199,50 @@ export async function sendTelegramDevChatMessage(
   const timeout = setTimeout(() => controller.abort(), TELEGRAM_TIMEOUT_MS);
 
   try {
-    const response = await fetch(`https://api.telegram.org/bot${encodeURIComponent(botToken)}/sendMessage`, {
-      body: JSON.stringify({
-        chat_id: chatId,
-        ...(replyToMessageId
-          ? {
-              reply_parameters: {
-                allow_sending_without_reply: true,
-                message_id: replyToMessageId,
-              },
-            }
-          : {}),
-        text: text.slice(0, TELEGRAM_MESSAGE_LIMIT),
-      }),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
-      signal: controller.signal,
-    });
-    const payload = await response.json().catch(() => null) as TelegramSendMessageResponse | null;
+    let response: Response;
+    try {
+      response = await fetch(`https://api.telegram.org/bot${encodeURIComponent(botToken)}/sendMessage`, {
+        body: JSON.stringify({
+          chat_id: chatId,
+          ...(replyToMessageId
+            ? {
+                reply_parameters: {
+                  allow_sending_without_reply: true,
+                  message_id: replyToMessageId,
+                },
+              }
+            : {}),
+          text: text.slice(0, TELEGRAM_MESSAGE_LIMIT),
+        }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        signal: controller.signal,
+      });
+    } catch {
+      throw new TelegramDeliveryError(true);
+    }
+
+    let payload: TelegramSendMessageResponse | null;
+    try {
+      payload = await response.json() as TelegramSendMessageResponse;
+    } catch {
+      // Without a valid Telegram response body, even an HTTP error could have
+      // crossed the external delivery boundary. Never make it retryable.
+      throw new TelegramDeliveryError(true);
+    }
     const messageId = payload?.result?.message_id;
 
-    if (!response.ok || payload?.ok !== true || typeof messageId !== 'number' || !Number.isSafeInteger(messageId)) {
-      throw new TelegramDeliveryError();
+    if (payload?.ok === false) {
+      throw new TelegramDeliveryError(false);
+    }
+    if (!response.ok) {
+      throw new TelegramDeliveryError(true);
+    }
+    if (payload?.ok !== true || typeof messageId !== 'number' || !Number.isSafeInteger(messageId)) {
+      throw new TelegramDeliveryError(true);
     }
 
     return messageId;
-  } catch (error) {
-    if (error instanceof TelegramDeliveryError) throw error;
-    throw new TelegramDeliveryError();
   } finally {
     clearTimeout(timeout);
   }

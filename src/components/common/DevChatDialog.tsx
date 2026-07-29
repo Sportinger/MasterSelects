@@ -10,6 +10,7 @@ import {
   clearStoredDevChatConversationId,
   fetchDevChatMessages,
   getStoredDevChatConversationId,
+  MAX_DEV_CHAT_PENDING_IDS_PER_REQUEST,
   sendDevChatMessage,
   storeDevChatConversationId,
   type DevChatMessage,
@@ -26,18 +27,54 @@ interface DevChatDialogProps {
     conversationId: string,
     after?: number,
     signal?: AbortSignal,
+    pendingIds?: number[],
   ) => Promise<FetchDevChatMessagesResponse>;
   sendMessage?: (
     message: string,
     conversationId?: string,
+    clientMessageId?: string,
   ) => Promise<SendDevChatMessageResponse>;
+}
+
+interface PendingClientMessage {
+  clientMessageId: string;
+  draft: string;
+}
+
+function getPendingMessageBatch(
+  pendingMessageIds: Set<number>,
+  offset: number,
+): { ids: number[]; nextOffset: number } {
+  const sortedIds = [...pendingMessageIds].sort((a, b) => a - b);
+  if (sortedIds.length <= MAX_DEV_CHAT_PENDING_IDS_PER_REQUEST) {
+    return { ids: sortedIds, nextOffset: 0 };
+  }
+
+  const start = offset % sortedIds.length;
+  const ids = Array.from(
+    { length: MAX_DEV_CHAT_PENDING_IDS_PER_REQUEST },
+    (_, index) => sortedIds[(start + index) % sortedIds.length],
+  );
+  return {
+    ids,
+    nextOffset: (start + MAX_DEV_CHAT_PENDING_IDS_PER_REQUEST) % sortedIds.length,
+  };
 }
 
 function mergeMessages(current: DevChatMessage[], incoming: DevChatMessage[]): DevChatMessage[] {
   if (incoming.length === 0) return current;
 
   const messagesById = new Map(current.map((message) => [message.id, message]));
-  for (const message of incoming) messagesById.set(message.id, message);
+  for (const message of incoming) {
+    const existing = messagesById.get(message.id);
+    const incomingStatus = message.deliveryStatus === 'pending' ? 'pending' : 'delivered';
+    messagesById.set(message.id, {
+      ...message,
+      deliveryStatus: existing?.deliveryStatus === 'delivered'
+        ? 'delivered'
+        : incomingStatus,
+    });
+  }
   return [...messagesById.values()].sort((a, b) => a.id - b.id);
 }
 
@@ -66,6 +103,7 @@ export function DevChatDialog({
   const messagesRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pollGenerationRef = useRef(0);
+  const pendingClientMessageRef = useRef<PendingClientMessage | null>(null);
   const [conversationId, setConversationId] = useState(getStoredDevChatConversationId);
   const [messages, setMessages] = useState<DevChatMessage[]>([]);
   const [draft, setDraft] = useState('');
@@ -112,16 +150,35 @@ export function DevChatDialog({
     let cursor = 0;
     let isActive = true;
     let pollInFlight = false;
+    const pendingMessageIds = new Set<number>();
+    let pendingMessageOffset = 0;
 
     const poll = async () => {
       if (pollInFlight || !isActive) return;
       pollInFlight = true;
 
       try {
-        const response = await fetchMessages(conversationId, cursor, controller.signal);
+        const pendingBatch = getPendingMessageBatch(
+          pendingMessageIds,
+          pendingMessageOffset,
+        );
+        pendingMessageOffset = pendingBatch.nextOffset;
+        const response = await fetchMessages(
+          conversationId,
+          cursor,
+          controller.signal,
+          pendingBatch.ids,
+        );
         if (!isActive || pollGenerationRef.current !== pollGeneration) return;
 
         cursor = Math.max(cursor, response.cursor);
+        for (const message of response.messages) {
+          if (message.deliveryStatus === 'pending') {
+            pendingMessageIds.add(message.id);
+          } else {
+            pendingMessageIds.delete(message.id);
+          }
+        }
         setMessages((current) => mergeMessages(current, response.messages));
         setPollError(null);
 
@@ -179,6 +236,7 @@ export function DevChatDialog({
 
   const handleNewConversation = () => {
     pollGenerationRef.current += 1;
+    pendingClientMessageRef.current = null;
     clearStoredDevChatConversationId();
     setConversationId(undefined);
     setMessages([]);
@@ -203,7 +261,13 @@ export function DevChatDialog({
     setIsSending(true);
 
     try {
-      const response = await sendMessage(message, conversationId);
+      const pendingClientMessage = pendingClientMessageRef.current;
+      const clientMessageId = pendingClientMessage?.draft === draft
+        ? pendingClientMessage.clientMessageId
+        : crypto.randomUUID();
+      pendingClientMessageRef.current = { clientMessageId, draft };
+      const response = await sendMessage(message, conversationId, clientMessageId);
+      pendingClientMessageRef.current = null;
       storeDevChatConversationId(response.conversationId);
       setMessages((current) => mergeMessages(current, [response.message]));
       setDraft('');
@@ -289,10 +353,14 @@ export function DevChatDialog({
           ) : (
             messages.map((chatMessage) => {
               const displayTime = formatMessageTime(chatMessage.createdAt);
+              const isDeliveryPending = (
+                chatMessage.sender === 'user'
+                && chatMessage.deliveryStatus === 'pending'
+              );
               return (
                 <div
                   key={chatMessage.id}
-                  className={`dev-chat-message ${chatMessage.sender}`}
+                  className={`dev-chat-message ${chatMessage.sender}${isDeliveryPending ? ' pending' : ''}`}
                 >
                   <div className="dev-chat-message-meta">
                     <strong>{chatMessage.sender === 'developer' ? 'Dev' : 'You'}</strong>
@@ -301,6 +369,11 @@ export function DevChatDialog({
                     )}
                   </div>
                   <p>{chatMessage.message}</p>
+                  {isDeliveryPending && (
+                    <span className="dev-chat-delivery-status" role="status">
+                      Delivery pending…
+                    </span>
+                  )}
                 </div>
               );
             })
@@ -326,6 +399,7 @@ export function DevChatDialog({
               aria-invalid={sendError ? 'true' : undefined}
               aria-describedby={visibleError ? `${titleId}-error` : undefined}
               onChange={(event) => {
+                pendingClientMessageRef.current = null;
                 setDraft(event.target.value);
                 if (sendError) setSendError(null);
               }}

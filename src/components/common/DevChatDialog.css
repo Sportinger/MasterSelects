@@ -182,6 +182,21 @@
     background: rgba(255, 255, 255, 0.065);
   }
 
+  .dev-chat-message.user.pending p {
+    border-color: rgba(221, 170, 94, 0.34);
+    border-style: dashed;
+    background: rgba(221, 170, 94, 0.055);
+    color: var(--text-secondary);
+  }
+
+  .dev-chat-delivery-status {
+    display: block;
+    margin: 5px 4px 0;
+    color: #d4a45d;
+    font-size: 9px;
+    text-align: right;
+  }
+
   .dev-chat-dialog form {
     padding: 13px 20px 17px;
     border-top: 1px solid rgba(255, 255, 255, 0.07);
