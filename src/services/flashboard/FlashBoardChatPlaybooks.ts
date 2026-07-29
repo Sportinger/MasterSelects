@@ -4,6 +4,7 @@ export type FlashBoardChatPlaybookId =
   | 'montage'
   | 'quality'
   | 'silence'
+  | 'text'
   | 'transcript'
   | 'visual';
 
@@ -14,6 +15,15 @@ interface FlashBoardChatPlaybook {
 }
 
 const PLAYBOOKS: FlashBoardChatPlaybook[] = [
+  {
+    id: 'text',
+    matches: /\b(?:text|title|typography|kinetic|schrift|titel|textanimation|bauchbinde|lower third)\b/i,
+    text: `TEXT / TITLES
+- Use createTextClip to create editable text with its typography, fill, outline, shadow, timing, and initial text-field rectangle. Use composition-pixel coordinates for the text field.
+- Use the returned clipId for dependent calls. Use updateTextProperties for content/style and setTextBox for area-text position/size.
+- Animate layer position, scale, rotation, or opacity with addKeyframe. Animate the text field itself with addTextBoundsKeyframe at clip-local times.
+- Verify the finished title at representative times with getFramesAtTimes or captureFrame and adjust any off-frame or unreadable result.`,
+  },
   {
     id: 'montage',
     matches: /\b(?:montage|random|shuffle|zusammenschnitt|highlight|best of|cuts?|clips?|segmente?)\b/i,

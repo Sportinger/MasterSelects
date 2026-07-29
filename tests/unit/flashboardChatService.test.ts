@@ -25,12 +25,13 @@ describe('FlashBoardChatService', () => {
   });
 
   it('routes AI directly to Kie.ai without invoking the kernel', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       output: [{
         type: 'message',
         content: [{ type: 'output_text', text: 'Kie response.' }],
       }],
-    }), { status: 200 })));
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
 
     await expect(sendFlashBoardChatMessage({
       kieAiApiKey: 'kie-test',
@@ -41,6 +42,8 @@ describe('FlashBoardChatService', () => {
     })).resolves.toBe('Kie response.');
 
     expect(kernelGatewayMocks.tryKernelFirst).not.toHaveBeenCalled();
+    const proxyBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(proxyBody.body.reasoning).toEqual({ effort: 'medium' });
   });
 
   it('routes MasterSelectsAI exclusively through the selected kernel', async () => {

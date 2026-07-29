@@ -39,6 +39,11 @@ const FLASHBOARD_CHAT_PRIORITY_TOOL_NAMES = new Set([
   'splitClip',
   'deleteClip',
   'trimClip',
+  'getTextProperties',
+  'createTextClip',
+  'updateTextProperties',
+  'setTextBox',
+  'addTextBoundsKeyframe',
 ]);
 
 const eligibleFlashBoardChatTools = AI_TOOLS.filter((tool) => (

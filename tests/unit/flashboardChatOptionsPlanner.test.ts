@@ -5,8 +5,12 @@ import {
   buildFlashBoardChatModelOptions,
 } from '../../src/components/panels/flashboard/FlashBoardChatOptionsPlanner';
 import {
+  DEFAULT_FLASHBOARD_CHAT_MODEL,
   DEFAULT_FLASHBOARD_CHAT_PROVIDER,
+  DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT,
   FLASHBOARD_CHAT_PROVIDERS,
+  FLASHBOARD_CHAT_MODEL_OPTIONS,
+  FLASHBOARD_OPENAI_REASONING_EFFORT_OPTIONS,
 } from '../../src/services/flashboard/FlashBoardChatService';
 
 describe('FlashBoard chat options planner', () => {
@@ -17,6 +21,14 @@ describe('FlashBoard chat options planner', () => {
       { id: 'lemonade', label: 'Local AI' },
     ]);
     expect(DEFAULT_FLASHBOARD_CHAT_PROVIDER).toBe('kie');
+    expect(DEFAULT_FLASHBOARD_CHAT_MODEL).toBe('gpt-5-6-terra');
+    expect(DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT).toBe('medium');
+    expect(FLASHBOARD_CHAT_MODEL_OPTIONS.kie[0]?.id).toBe(DEFAULT_FLASHBOARD_CHAT_MODEL);
+    expect(FLASHBOARD_CHAT_MODEL_OPTIONS.kie[0]?.reasoningEfforts).not.toContain('none');
+    expect(FLASHBOARD_OPENAI_REASONING_EFFORT_OPTIONS[0]).toEqual({
+      id: 'none',
+      label: 'None',
+    });
     expect(buildFlashBoardChatModelOptions({
       chatModel: 'masterselects-ai',
       chatProvider: 'kernel',

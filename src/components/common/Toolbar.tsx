@@ -15,6 +15,7 @@ import { useAccountStore } from '../../stores/accountStore';
 import { SettingsDialog } from './SettingsDialog';
 import { SavedToast } from './SavedToast';
 import { InfoDialog } from './InfoDialog';
+import { DevChatDialog } from './DevChatDialog';
 import { LeaveNoteDialog } from './LeaveNoteDialog';
 import { LegalDialog } from './LegalDialog';
 import type { LegalPage } from './LegalDialog';
@@ -129,6 +130,7 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
   const [pendingProjectName, setPendingProjectName] = useState<string | null>(null);
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [showInfoDialog, setShowInfoDialog] = useState(false);
+  const [showDevChatDialog, setShowDevChatDialog] = useState(false);
   const [showLeaveNoteDialog, setShowLeaveNoteDialog] = useState(false);
   const [showLegalDialog, setShowLegalDialog] = useState<LegalPage | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -449,6 +451,7 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
           closeMenu={closeMenu}
           onMenuClick={handleMenuClick}
           onMenuHover={handleMenuHover}
+          onOpenDevChat={() => setShowDevChatDialog(true)}
           onOpenLeaveNote={() => setShowLeaveNoteDialog(true)}
           openMenu={openMenu}
         />
@@ -541,6 +544,7 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
       )}
 
       {showInfoDialog && <InfoDialog onClose={() => setShowInfoDialog(false)} />}
+      {showDevChatDialog && <DevChatDialog onClose={() => setShowDevChatDialog(false)} />}
       {showLeaveNoteDialog && <LeaveNoteDialog onClose={() => setShowLeaveNoteDialog(false)} />}
       {showLegalDialog && <LegalDialog initialPage={showLegalDialog} onClose={() => setShowLegalDialog(null)} />}
     </div>

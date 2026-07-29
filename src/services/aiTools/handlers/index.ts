@@ -101,6 +101,14 @@ import {
 } from './keyframes';
 
 import {
+  handleGetTextProperties,
+  handleCreateTextClip,
+  handleUpdateTextProperties,
+  handleSetTextBox,
+  handleAddTextBoundsKeyframe,
+} from './text';
+
+import {
   handlePlay,
   handlePause,
   handleSimulateFrameKeypresses,
@@ -607,6 +615,12 @@ export {
   handleGetKeyframes,
   handleAddKeyframe,
   handleRemoveKeyframe,
+  // Text
+  handleGetTextProperties,
+  handleCreateTextClip,
+  handleUpdateTextProperties,
+  handleSetTextBox,
+  handleAddTextBoundsKeyframe,
   // Playback & Control
   handlePlay,
   handlePause,

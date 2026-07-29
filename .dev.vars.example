@@ -16,3 +16,6 @@ PIAPI_API_KEY=replace-me
 KIEAI_API_KEY=replace-me
 ELEVENLABS_API_KEY=replace-me
 VISITOR_NOTIFY_SECRET=replace-me-with-a-random-string
+TELEGRAM_BOT_TOKEN=replace-me
+TELEGRAM_DEV_CHAT_ID=-1000000000000
+TELEGRAM_WEBHOOK_SECRET=replace-me-with-a-random-hex-string

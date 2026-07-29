@@ -11,6 +11,7 @@ import { youtubeToolDefinitions } from './youtube';
 import { transformToolDefinitions } from './transform';
 import { effectToolDefinitions } from './effects';
 import { keyframeToolDefinitions } from './keyframes';
+import { textToolDefinitions } from './text';
 import { playbackToolDefinitions } from './playback';
 import { transitionToolDefinitions } from './transitions';
 import { maskToolDefinitions } from './masks';
@@ -32,6 +33,7 @@ export const AI_TOOLS = [
   ...transformToolDefinitions,
   ...effectToolDefinitions,
   ...keyframeToolDefinitions,
+  ...textToolDefinitions,
   ...playbackToolDefinitions,
   ...transitionToolDefinitions,
   ...maskToolDefinitions,
@@ -54,6 +56,7 @@ export {
   transformToolDefinitions,
   effectToolDefinitions,
   keyframeToolDefinitions,
+  textToolDefinitions,
   playbackToolDefinitions,
   transitionToolDefinitions,
   maskToolDefinitions,

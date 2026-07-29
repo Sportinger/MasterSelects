@@ -21,9 +21,9 @@ export const FLASHBOARD_CHAT_MODEL_OPTIONS: Record<FlashBoardChatProvider, Flash
   ],
   kie: [
     {
-      id: 'gpt-5-6-luna',
+      id: 'gpt-5-6-terra',
       kieProtocol: 'openai-responses',
-      label: '5.6 Luna',
+      label: '5.6 Terra',
       provider: 'kie',
       supportsTemperature: false,
       supportsTools: true,
@@ -31,9 +31,9 @@ export const FLASHBOARD_CHAT_MODEL_OPTIONS: Record<FlashBoardChatProvider, Flash
       reasoningEfforts: KIE_GPT_REASONING_EFFORTS,
     },
     {
-      id: 'gpt-5-6-terra',
+      id: 'gpt-5-6-luna',
       kieProtocol: 'openai-responses',
-      label: '5.6 Terra',
+      label: '5.6 Luna',
       provider: 'kie',
       supportsTemperature: false,
       supportsTools: true,
@@ -108,8 +108,8 @@ export const FLASHBOARD_CHAT_MODEL_OPTIONS: Record<FlashBoardChatProvider, Flash
 
 export const DEFAULT_FLASHBOARD_CHAT_PROVIDER: FlashBoardChatProvider = 'kie';
 export const DEFAULT_FLASHBOARD_KERNEL_MODEL = 'masterselects-ai';
-export const DEFAULT_FLASHBOARD_CHAT_MODEL = 'gpt-5-6-luna';
-export const DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT: FlashBoardOpenAiReasoningEffort = 'low';
+export const DEFAULT_FLASHBOARD_CHAT_MODEL = 'gpt-5-6-terra';
+export const DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT: FlashBoardOpenAiReasoningEffort = 'medium';
 const FLASHBOARD_CHAT_MODEL_CREDIT_COSTS: Record<string, number> = {
   'gpt-5-6-luna': 3,
   'gpt-5-6-terra': 5,

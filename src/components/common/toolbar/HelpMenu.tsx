@@ -8,6 +8,7 @@ const COMMUNITY_LINKS = {
 
 interface HelpMenuProps extends ToolbarMenuController {
   closeMenu: () => void;
+  onOpenDevChat: () => void;
   onOpenLeaveNote: () => void;
 }
 
@@ -15,9 +16,15 @@ export function HelpMenu({
   closeMenu,
   onMenuClick,
   onMenuHover,
+  onOpenDevChat,
   onOpenLeaveNote,
   openMenu,
 }: HelpMenuProps) {
+  const openDevChat = () => {
+    closeMenu();
+    onOpenDevChat();
+  };
+
   const openLeaveNote = () => {
     closeMenu();
     onOpenLeaveNote();
@@ -37,12 +44,10 @@ export function HelpMenu({
         <div className="menu-dropdown help-menu-dropdown" aria-label="Help menu">
           <button
             className="menu-option"
-            disabled
-            title="Coming soon"
+            onClick={openDevChat}
             type="button"
           >
             <span>Chat with dev</span>
-            <span className="menu-hint" aria-hidden="true">Soon</span>
           </button>
           <button className="menu-option" onClick={openLeaveNote} type="button">
             <span>Leave note</span>

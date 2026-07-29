@@ -74,6 +74,9 @@ export interface Env {
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
   SUPPORT_NOTE_EMAIL?: string;
+  TELEGRAM_BOT_TOKEN?: string;
+  TELEGRAM_DEV_CHAT_ID?: string;
+  TELEGRAM_WEBHOOK_SECRET?: string;
   VISITOR_NOTIFY_SECRET?: string;
 }
 

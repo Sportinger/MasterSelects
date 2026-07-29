@@ -96,6 +96,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 | [Security](./Security.md) | Trust boundaries, bridge auth, allowed roots, secret handling, and limitations |
 | [Hosted AI Setup](../cloudflare-hosted-ai-setup.md) | Cloudflare Pages/API setup for hosted account, billing, and AI routes |
 | [Visitor Notifier](./Visitor-Notifier.md) | Cloudflare visit feed, `/api/visits`, and the Windows tray notifier workflow |
+| [Telegram Dev Chat](./Telegram-Dev-Chat.md) | BotFather, Cloudflare secrets, webhook setup, reply workflow, verification, and recovery for the two-way developer chat |
 
 ---
 

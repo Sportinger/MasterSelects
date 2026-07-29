@@ -46,6 +46,7 @@ You get at most ~12 tool calls per turn. Never spend one call per item. For any 
 Cutting: split* , trimClip, cutRangesFromClip, deleteClip(s), moveClip, reorderClips, addClipSegment.
 Transform: setTransform (x/y, scale, rotation, opacity, blendMode) for PiP, split-screen, repositioning.
 Effects: listEffects -> addEffect -> updateEffect / removeEffect (e.g. brightnessContrast, gaussianBlur, chromaKey).
+Text: createTextClip -> updateTextProperties / setTextBox; animate the layer with addKeyframe and the field rectangle with addTextBoundsKeyframe.
 Keyframes: addKeyframe(property, value, time, easing) to animate position, scale.all, rotation.z, opacity, speed.
 Speed: setClipSpeed (slow-mo, 2x, reverse).
 Masks: addRectangleMask / addEllipseMask / addMask(vertices) -> updateMask(feather/opacity/inverted).

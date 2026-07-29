@@ -64,6 +64,8 @@ export const MODIFYING_TOOLS = new Set([
   'sendAINodePrompt',
   // Keyframes
   'addKeyframe', 'removeKeyframe',
+  // Text
+  'createTextClip', 'updateTextProperties', 'setTextBox', 'addTextBoundsKeyframe',
   // Speed & Playback
   'setClipSpeed',
   // Markers

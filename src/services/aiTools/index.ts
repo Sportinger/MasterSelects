@@ -69,6 +69,7 @@ export {
   transformToolDefinitions,
   effectToolDefinitions,
   keyframeToolDefinitions,
+  textToolDefinitions,
   playbackToolDefinitions,
   transitionToolDefinitions,
 } from './definitions';

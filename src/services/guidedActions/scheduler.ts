@@ -20,6 +20,7 @@ const INSPECT_TOOLS = new Set([
   'getMasks',
   'listEffects',
   'getKeyframes',
+  'getTextProperties',
 ]);
 
 const SELECTION_TOOLS = new Set([
@@ -47,6 +48,8 @@ const PROPERTY_EDIT_TOOLS = new Set([
   'setClipSpeed',
   'updateEffect',
   'updateMask',
+  'updateTextProperties',
+  'setTextBox',
 ]);
 
 const CREATION_TOOLS = new Set([
@@ -56,6 +59,7 @@ const CREATION_TOOLS = new Set([
   'addEffect',
   'addTransition',
   'addMarker',
+  'createTextClip',
 ]);
 
 const MASK_TOOLS = new Set([
@@ -72,6 +76,7 @@ const MASK_TOOLS = new Set([
 const KEYFRAME_TOOLS = new Set([
   'addKeyframe',
   'removeKeyframe',
+  'addTextBoundsKeyframe',
 ]);
 
 const MEDIA_TOOLS = new Set([

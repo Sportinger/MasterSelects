@@ -64,6 +64,13 @@ import {
   handleGetKeyframes,
 } from './keyframes';
 import {
+  handleAddTextBoundsKeyframe,
+  handleCreateTextClip,
+  handleGetTextProperties,
+  handleSetTextBox,
+  handleUpdateTextProperties,
+} from './text';
+import {
   handleAddMarker,
   handleGetMarkers,
   handleMonitorManualPause,
@@ -147,6 +154,11 @@ export const timelineHandlers: Readonly<Record<string, TimelineHandler>> = {
   updateEffect: handleUpdateEffect,
   getKeyframes: handleGetKeyframes,
   addKeyframe: handleAddKeyframe,
+  getTextProperties: handleGetTextProperties,
+  createTextClip: handleCreateTextClip,
+  updateTextProperties: handleUpdateTextProperties,
+  setTextBox: handleSetTextBox,
+  addTextBoundsKeyframe: handleAddTextBoundsKeyframe,
   play: handlePlay,
   pause: handlePause,
   monitorManualPause: handleMonitorManualPause,
