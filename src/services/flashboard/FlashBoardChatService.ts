@@ -5,6 +5,8 @@ import {
   beginFlashBoardChatRun,
   completeFlashBoardChatRun,
 } from './FlashBoardChatRunAudit';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { findPreconditionResolver } from '../kernelClient/preconditionResolvers';
 import type { KernelRunReport } from '../kernelClient/runReport';
 import type {
   FlashBoardChatRequest,
@@ -76,7 +78,17 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
   }
 
   request.onPhase?.('kernel');
+  // Establishing a missing precondition (transcribing, analysing) is a
+  // mutating action, so it goes through the approval switch the user already
+  // controls — the "Auto" button next to send. Auto means "run edits without
+  // asking", which is exactly the promise here.
+  const autoApprove = useSettingsStore.getState().aiApprovalMode === 'auto';
   const kernelResult = await tryKernelFirst(request.playbookPrompt ?? prompt, {
+    autoApprove,
+    satisfyPrecondition: async (precondition, context) => {
+      const resolver = findPreconditionResolver(precondition.kind);
+      return resolver ? resolver.satisfy(context) : false;
+    },
     ...(request.idempotencyKey === undefined
       ? {}
       : { seed: request.idempotencyKey }),
