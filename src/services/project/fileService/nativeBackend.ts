@@ -24,9 +24,13 @@ interface NativeAnalysisRange {
 }
 
 interface NativeAnalysisFile {
-  schemaVersion?: 2;
+  schemaVersion?: 2 | 3;
   mediaFileId: string;
   analyses: Record<string, NativeAnalysisRange>;
+  sceneDescriptions?: {
+    segments: unknown[];
+    createdAt: number;
+  };
 }
 
 export function joinProjectPath(...parts: string[]): string {
@@ -88,7 +92,7 @@ export async function saveAnalysisNative(
     mediaFileId: mediaId,
     analyses: {},
   };
-  analysis.schemaVersion = 2;
+  analysis.schemaVersion = 3;
   analysis.analyses[nativeAnalysisRangeKey(inPoint, outPoint)] = {
     frames,
     sampleInterval,
@@ -141,6 +145,48 @@ export async function getAllAnalysisMergedNative(
     frames: deduplicatedFrames,
     sampleInterval: Math.min(...ranges.map(range => range.sampleInterval)),
   };
+}
+
+export async function saveSceneDescriptionsNative(
+  projectPath: string | null | undefined,
+  mediaId: string,
+  segments: unknown[],
+): Promise<boolean> {
+  if (!projectPath) return false;
+  const analysis = await readNativeAnalysisFile(projectPath, mediaId) ?? {
+    schemaVersion: 3 as const,
+    mediaFileId: mediaId,
+    analyses: {},
+  };
+  analysis.schemaVersion = 3;
+  analysis.sceneDescriptions = {
+    segments,
+    createdAt: Date.now(),
+  };
+  return writeNativeAnalysisFile(projectPath, mediaId, analysis);
+}
+
+export async function getSceneDescriptionsNative(
+  projectPath: string | null | undefined,
+  mediaId: string,
+): Promise<unknown[] | null> {
+  if (!projectPath) return null;
+  return (await readNativeAnalysisFile(projectPath, mediaId))?.sceneDescriptions?.segments ?? null;
+}
+
+export async function deleteSceneDescriptionsNative(
+  projectPath: string | null | undefined,
+  mediaId: string,
+): Promise<boolean> {
+  if (!projectPath) return false;
+  const analysis = await readNativeAnalysisFile(projectPath, mediaId);
+  if (!analysis?.sceneDescriptions) return true;
+  delete analysis.sceneDescriptions;
+  if (Object.keys(analysis.analyses).length === 0) {
+    return NativeHelperClient.deleteFile(nativeAnalysisPath(projectPath, mediaId));
+  }
+  analysis.schemaVersion = 3;
+  return writeNativeAnalysisFile(projectPath, mediaId, analysis);
 }
 
 export async function deleteAnalysisRangeNative(

@@ -179,6 +179,42 @@ describe('DevChatDialog', () => {
     expect(screen.getByText('Already confirmed')).toBeInTheDocument();
   });
 
+  it('reports developer messages displayed by the dialog as seen', async () => {
+    window.localStorage.setItem(STORAGE_KEY, TEST_CONVERSATION_ID);
+    const developerMessage = {
+      createdAt: '2026-07-29T18:02:00.000Z',
+      deliveryStatus: 'delivered' as const,
+      id: 6,
+      message: 'A reply from the developer',
+      sender: 'developer' as const,
+    };
+    const fetchMessages = vi.fn(async () => ({
+      conversationId: TEST_CONVERSATION_ID,
+      cursor: 6,
+      messages: [developerMessage],
+    }));
+    const onMessagesSeen = vi.fn();
+
+    render(
+      <DevChatDialog
+        onClose={vi.fn()}
+        onMessagesSeen={onMessagesSeen}
+        fetchMessages={fetchMessages}
+        sendMessage={vi.fn()}
+      />,
+    );
+    await act(async () => {
+      await fetchMessages.mock.results[0]?.value;
+    });
+
+    expect(onMessagesSeen).toHaveBeenCalledWith(
+      TEST_CONVERSATION_ID,
+      [developerMessage],
+      6,
+    );
+    expect(screen.getByText('A reply from the developer')).toBeInTheDocument();
+  });
+
   it('passes known pending message IDs to later polls and removes delivered IDs', async () => {
     vi.useFakeTimers();
     window.localStorage.setItem(STORAGE_KEY, TEST_CONVERSATION_ID);

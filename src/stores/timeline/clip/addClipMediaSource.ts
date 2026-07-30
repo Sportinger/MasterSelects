@@ -1,3 +1,5 @@
+import { hydrateAndProjectMediaSourceArtifacts } from '../../../services/mediaArtifacts/mediaSourceArtifacts';
+
 export type SourceMediaFile = {
   duration?: number;
   transcript?: import('../../../types').TranscriptWord[];
@@ -11,6 +13,14 @@ export type SourceMediaFile = {
   absolutePath?: string;
   filePath?: string;
 };
+
+export function getPositiveFiniteDuration(value: number | undefined): number | undefined {
+  return Number.isFinite(value) && value !== undefined && value > 0 ? value : undefined;
+}
+
+export function queueMediaSourceArtifactProjection(mediaFileId: string | undefined): void {
+  if (mediaFileId) void hydrateAndProjectMediaSourceArtifacts(mediaFileId);
+}
 
 export async function loadSourceMediaFile(mediaFileId: string | undefined): Promise<SourceMediaFile | undefined> {
   if (!mediaFileId) return undefined;

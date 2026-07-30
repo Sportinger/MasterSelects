@@ -36,11 +36,13 @@
 .fb-bubble.has-references {
   display: grid;
   grid-template-columns: fit-content(792px) clamp(320px, 42vw, 560px);
+  grid-template-rows: minmax(0, 1fr) auto auto;
   align-items: start;
   column-gap: 10px;
   row-gap: 8px;
   width: fit-content;
   max-width: calc(100% - 16px);
+  overflow: hidden;
 }
 
 .fb-bubble-main {
@@ -85,12 +87,33 @@
 .fb-bubble.has-references .fb-bubble-prompt {
   grid-column: 2;
   grid-row: 1;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
   width: 100%;
 }
 
 .fb-bubble.has-references > .fb-bubble-bar {
   grid-column: 2;
   grid-row: 2;
+  position: relative;
+  z-index: 3;
+}
+
+.fb-bubble.has-references .fb-bubble-row {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+}
+
+.fb-bubble.has-references .fb-standard-prompt-stack {
+  min-height: 0;
+  max-height: 100%;
+}
+
+.fb-bubble.has-references .fb-bubble-input {
+  max-height: 100%;
+  overflow-y: auto !important;
 }
 
 .fb-bubble.has-references.has-chat-panel > .fb-bubble-bar {

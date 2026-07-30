@@ -180,6 +180,7 @@ export interface ProjectComposition {
   height: number;
   frameRate: number;
   duration: number;
+  durationLocked?: boolean;
   backgroundColor: string;
   folderId: string | null;
   labelColor?: string;

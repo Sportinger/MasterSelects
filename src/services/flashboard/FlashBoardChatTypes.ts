@@ -52,8 +52,6 @@ export interface FlashBoardChatRequest {
   toolExecutionMode?: FlashBoardChatToolExecutionMode;
 }
 
-export type FlashBoardApprovalMode = 'auto' | 'confirm-destructive' | 'confirm-all-mutating';
-
 export interface FlashBoardToolCall {
   id: string;
   name: string;

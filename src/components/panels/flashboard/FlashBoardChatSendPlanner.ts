@@ -17,6 +17,7 @@ interface BuildFlashBoardChatSendPlanInput {
   canUseHostedChat: boolean;
   chatMessages: FlashBoardChatMessage[];
   chatPanelOpen: boolean;
+  planThreeEnabled: boolean;
   chatProvider: FlashBoardChatProvider;
   chatTemperature: number;
   effectiveChatPrompt: string;
@@ -37,12 +38,32 @@ export type FlashBoardChatSendPlan =
   | { action: 'error'; dialogTarget?: FlashBoardChatDialogTarget; errorMessage: string }
   | { action: 'send'; request: FlashBoardChatPlannedRequest };
 
+export function buildFlashBoardPlanThreePrompt(
+  userPrompt: string,
+  planThreeEnabled: boolean,
+): string {
+  if (!planThreeEnabled) return userPrompt;
+
+  return `[PLAN 3 MODE]
+Carry out the request as exactly three separate, new, user-visible compositions. Preserve all existing compositions.
+
+- Version 1 — Balanced: the clearest, most faithful interpretation of the brief.
+- Version 2 — Dynamic: a tighter, more energetic alternative.
+- Version 3 — Alternative: a distinctly different creative interpretation that still respects the brief.
+- Give the three compositions clear, related names and make them meaningfully different through clip selection, structure, pacing, and/or visual treatment.
+- Fully build and verify all three in this turn. Do not merely describe three ideas, do not place all versions in one composition, and do not stop after the first version.
+
+Original request:
+${userPrompt}`;
+}
+
 export function buildFlashBoardChatSendPlan({
   activeChatModelId,
   canUseByoChat,
   canUseHostedChat,
   chatMessages,
   chatPanelOpen,
+  planThreeEnabled,
   chatProvider,
   chatTemperature,
   effectiveChatPrompt,
@@ -80,6 +101,8 @@ export function buildFlashBoardChatSendPlan({
     };
   }
 
+  const executionPrompt = buildFlashBoardPlanThreePrompt(effectiveChatPrompt, planThreeEnabled);
+
   return {
     action: 'send',
     request: {
@@ -89,7 +112,8 @@ export function buildFlashBoardChatSendPlan({
       lemonadeEndpoint,
       model: activeChatModelId,
       openAiReasoningEffort,
-      prompt: buildFlashBoardChatRequestPrompt(chatMessages, effectiveChatPrompt),
+      playbookPrompt: executionPrompt,
+      prompt: buildFlashBoardChatRequestPrompt(chatMessages, executionPrompt),
       provider: chatProvider,
       temperature: chatTemperature,
     },

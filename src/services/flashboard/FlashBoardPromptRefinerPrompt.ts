@@ -179,9 +179,8 @@ function getTargetModelGuidance(
       return [
         'Optimize for ByteDance Seedance 2.0 video generation.',
         'Seedance responds best to concise cinematic direction: subject identity, action, scene progression, camera motion, composition, lighting, style, and a clear final state.',
-        'When REF audio is supplied, treat it as the performance, speech, mouth-shape, rhythm, or timing driver. Do not describe it as background music unless the user asks for that. Audio references must be paired with at least one visual IN/REF image or video anchor.',
-        'When REF image or video media is supplied, preserve the requested identity, pose, costume, object, motion, or scene cues and name the relevant REF labels explicitly.',
-        'Seedance first/last-frame mode and multimodal reference mode are separate. If multiple REF media are present, write natural reference guidance instead of relying on strict first-frame wording.',
+        'Use Seedance first/last-frame mode. Treat supplied IN and OUT images as the exact visual boundary frames and describe only the motion and transition between them.',
+        'Do not reinterpret, redescribe, or replace the visible content of supplied IN and OUT frames.',
         'Avoid long shot lists, unsupported parameter names, negative prompts, or soundtrack instructions.',
         multiShotGuidance,
         audioGuidance,

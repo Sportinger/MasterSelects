@@ -8,6 +8,7 @@ import type { MaskTextureManager } from '../texture/MaskTextureManager';
 import { getPixelParticleDisintegrateRenderer } from '../particles/PixelParticleDisintegrateRenderer';
 import { splitLayerEffects } from './layerEffectStack';
 import { Logger } from '../../services/logger';
+import { calculateSourcePixelScale } from '../../utils/sourcePixelScale';
 
 const log = Logger.create('Compositor');
 
@@ -78,6 +79,12 @@ export class Compositor {
       // Calculate aspect ratios
       const sourceAspect = data.sourceWidth / data.sourceHeight;
       const outputAspect = state.outputWidth / state.outputHeight;
+      const sourcePixelScale = calculateSourcePixelScale(
+        data.sourceWidth,
+        data.sourceHeight,
+        state.outputWidth,
+        state.outputHeight,
+      );
 
       // Get mask texture (single lookup instead of two)
       const maskLookupId = layer.maskClipId || layer.id;
@@ -101,7 +108,15 @@ export class Compositor {
       }
 
       // Update uniforms (includes inline effect params)
-      this.compositorPipeline.updateLayerUniforms(layer, sourceAspect, outputAspect, hasMask, uniformBuffer, inlineEffects);
+      this.compositorPipeline.updateLayerUniforms(
+        layer,
+        sourceAspect,
+        outputAspect,
+        hasMask,
+        uniformBuffer,
+        inlineEffects,
+        sourcePixelScale,
+      );
 
       // Track which ping-pong buffer we're reading from for cache key
       const isPingBase = readView === state.pingView;

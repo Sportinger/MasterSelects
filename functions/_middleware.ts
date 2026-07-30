@@ -6,11 +6,29 @@ import { isSupportedPagePath } from '../src/routing/entryExperience';
 function withHeaders(response: Response, request: Request): Response {
   const headers = new Headers(response.headers);
   const { pathname } = new URL(request.url);
+  const isAdminApi = pathname.startsWith('/api/admin/');
+  const isAdminPage = pathname === '/admin' || pathname.startsWith('/admin/');
 
   headers.set('X-MasterSelects-Edge', 'pages-functions');
 
   if (pathname.startsWith('/api/')) {
     headers.set('Cache-Control', 'no-store');
+  }
+
+  if (isAdminApi || isAdminPage) {
+    headers.set('Cache-Control', 'no-store, private, max-age=0');
+    headers.set('Permissions-Policy', 'camera=(), display-capture=(), geolocation=(), microphone=(), payment=(), usb=()');
+    headers.set('Referrer-Policy', 'no-referrer');
+    headers.set('X-Content-Type-Options', 'nosniff');
+    headers.set('X-Frame-Options', 'DENY');
+    headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  }
+
+  if (isAdminPage && isHtmlResponse(response)) {
+    headers.set(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'",
+    );
   }
 
   return new Response(response.body, {

@@ -19,6 +19,7 @@ import { DEFAULT_MASTER_AUDIO_STATE } from './audioBusDefaults';
 import { PropertiesTabStrip } from './PropertiesTabStrip';
 import { liveInputRuntime } from '../../../services/mediaRuntime/liveInputRuntime';
 import { resolveClipTranscriptWords } from '../../../services/transcription/clipTranscriptResolver';
+import { getClipMediaFileId } from '../../../services/mediaArtifacts/mediaSourceArtifacts';
 import './PropertiesPanel.css';
 import './EffectsTab.css';
 import './AnalysisTranscriptTabs.css';
@@ -101,6 +102,10 @@ export function PropertiesPanel() {
     ? propertiesSelection.clipId
     : propertiesSelection ? null : fallbackSelectedClipId;
   const selectedClip = clips.find(c => c.id === selectedClipId);
+  const selectedMediaArtifacts = useMediaStore(state => {
+    const mediaFileId = selectedClip ? getClipMediaFileId(selectedClip) : undefined;
+    return mediaFileId ? state.files.find(file => file.id === mediaFileId) : undefined;
+  });
   useSyncExternalStore(
     (listener) => liveInputRuntime.subscribe(listener),
     () => liveInputRuntime.getRevision(),
@@ -495,6 +500,24 @@ export function PropertiesPanel() {
     ? clipLevelTranscriptStatus
     : transcriptWords.length > 0 ? 'ready' : 'none';
   const transcriptProgress = transcriptSourceClip?.transcriptProgress || 0;
+  const sourceAnalysis = selectedClip.analysis ?? selectedMediaArtifacts?.analysis;
+  const sourceAnalysisStatus = selectedClip.analysisStatus && selectedClip.analysisStatus !== 'none'
+    ? selectedClip.analysisStatus
+    : selectedMediaArtifacts?.analysisStatus ?? 'none';
+  const sourceAnalysisProgress = selectedClip.analysisProgress
+    ?? selectedMediaArtifacts?.analysisProgress
+    ?? 0;
+  const sourceSceneDescriptions = selectedClip.sceneDescriptions?.length
+    ? selectedClip.sceneDescriptions
+    : selectedMediaArtifacts?.sceneDescriptions;
+  const sourceSceneDescriptionStatus = selectedClip.sceneDescriptionStatus
+    && selectedClip.sceneDescriptionStatus !== 'none'
+    ? selectedClip.sceneDescriptionStatus
+    : selectedMediaArtifacts?.sceneDescriptionStatus;
+  const sourceSceneDescriptionProgress = selectedClip.sceneDescriptionProgress
+    ?? selectedMediaArtifacts?.sceneDescriptionProgress;
+  const sourceSceneDescriptionMessage = selectedClip.sceneDescriptionMessage
+    ?? selectedMediaArtifacts?.sceneDescriptionMessage;
 
   return (
     <div className="properties-panel">
@@ -632,7 +655,7 @@ export function PropertiesPanel() {
             {!isSolidClip && !isVectorAnimationClip && !isLightClip && (
               <>
                 <button className={`tab-btn ${activeTab === 'analysis' ? 'active' : ''}`} onClick={() => setActiveTab('analysis')}>
-                  Analysis {selectedClip.analysisStatus === 'ready' && <span className="badge">✓</span>}
+                  Analysis {sourceAnalysisStatus === 'ready' && <span className="badge">✓</span>}
                 </button>
               </>
             )}
@@ -678,16 +701,16 @@ export function PropertiesPanel() {
           {activeTab === 'analysis' && !isLightClip && (
             <AnalysisTab
               clipId={selectedClip.id}
-              analysis={selectedClip.analysis}
-              analysisStatus={selectedClip.analysisStatus || 'none'}
-              analysisProgress={selectedClip.analysisProgress || 0}
+              analysis={sourceAnalysis}
+              analysisStatus={sourceAnalysisStatus}
+              analysisProgress={sourceAnalysisProgress}
               clipStartTime={selectedClip.startTime}
               inPoint={selectedClip.inPoint}
               outPoint={selectedClip.outPoint}
-              sceneDescriptions={selectedClip.sceneDescriptions}
-              sceneDescriptionStatus={selectedClip.sceneDescriptionStatus}
-              sceneDescriptionProgress={selectedClip.sceneDescriptionProgress}
-              sceneDescriptionMessage={selectedClip.sceneDescriptionMessage}
+              sceneDescriptions={sourceSceneDescriptions}
+              sceneDescriptionStatus={sourceSceneDescriptionStatus}
+              sceneDescriptionProgress={sourceSceneDescriptionProgress}
+              sceneDescriptionMessage={sourceSceneDescriptionMessage}
               transcriptStatus={transcriptStatus}
               transcriptProgress={transcriptProgress}
               transcript={transcriptWords}

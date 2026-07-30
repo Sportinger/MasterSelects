@@ -18,12 +18,12 @@ export function clampReferenceMediaFileIds(
   if (
     typeof maxReferenceImages !== 'number'
     || !Number.isFinite(maxReferenceImages)
-    || maxReferenceImages <= 0
+    || maxReferenceImages < 0
   ) {
     return hasDuplicates ? uniqueIds : referenceMediaFileIds;
   }
 
-  const limitedIds = uniqueIds.slice(0, maxReferenceImages);
+  const limitedIds = uniqueIds.slice(0, Math.floor(maxReferenceImages));
   return !hasDuplicates && limitedIds.length === referenceMediaFileIds.length
     ? referenceMediaFileIds
     : limitedIds;

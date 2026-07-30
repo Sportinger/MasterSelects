@@ -1,5 +1,9 @@
 import type { VideoProvider } from '../piApiService';
 import {
+  KLING_3_ASPECT_RATIOS,
+  KLING_3_DURATIONS,
+  KLING_3_MODES,
+  KLING_3_PROVIDER_ID,
   RUNWAY_ASPECT_RATIOS,
   RUNWAY_VIDEO_PROVIDER_ID,
   SEEDANCE_2_ASPECT_RATIOS,
@@ -12,13 +16,13 @@ import {
 
 const KIEAI_PROVIDERS: VideoProvider[] = [
   {
-    id: 'kling-3.0',
+    id: KLING_3_PROVIDER_ID,
     name: 'Kling 3.0',
     description: 'Latest Kling model via Kie.ai',
     versions: ['3.0'],
-    supportedModes: ['std', 'pro', '4K'],
-    supportedDurations: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-    supportedAspectRatios: ['16:9', '9:16', '1:1'],
+    supportedModes: KLING_3_MODES,
+    supportedDurations: KLING_3_DURATIONS,
+    supportedAspectRatios: KLING_3_ASPECT_RATIOS,
     supportsImageToVideo: true,
     supportsTextToVideo: true,
   },
@@ -97,7 +101,7 @@ export interface KieAiCostOptions {
 // pro audio (1080p):    27 credits/s ($0.135/s)
 // 1 credit = $0.005
 const KIEAI_CREDITS_PER_SECOND: Record<string, Record<string, KieAiCreditRate>> = {
-  'kling-3.0': {
+  [KLING_3_PROVIDER_ID]: {
     'std': { normal: 14, audio: 20 },
     'pro': { normal: 18, audio: 27 },
     '4K': { normal: 67, audio: 67 },

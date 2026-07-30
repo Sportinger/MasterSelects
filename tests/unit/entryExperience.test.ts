@@ -31,6 +31,15 @@ describe('entry experience routing', () => {
     })).toBe('landing');
   });
 
+  it.each(['/admin', '/admin/'])('serves the private admin route %s', (pathname) => {
+    expect(resolveEntryExperience({
+      hostname: 'www.masterselects.com',
+      pathname,
+      search: '',
+    })).toBe('admin');
+    expect(isSupportedPagePath(pathname)).toBe(true);
+  });
+
   it.each([
     ['/impressum', 'imprint'],
     ['/impressum/', 'imprint'],

@@ -165,10 +165,16 @@ export const createCompositionCrudActions: MediaSliceCreator<Pick<
       oldComp.transitionComp?.kind === 'transition-comp' ||
       updates.transitionComp?.kind === 'transition-comp';
     const minDuration = isTransitionComposition ? 0.0001 : 1;
-    const nextDuration = updates.duration !== undefined
-      ? Math.max(minDuration, updates.duration)
+    const timelineDuration = updates.timelineData?.duration;
+    const hasDurationUpdate = updates.duration !== undefined || timelineDuration !== undefined;
+    const nextDuration = hasDurationUpdate
+      ? Math.max(minDuration, updates.duration ?? timelineDuration ?? previousDuration)
       : previousDuration;
-    const durationChanged = updates.duration !== undefined && nextDuration !== previousDuration;
+    const durationChanged = hasDurationUpdate && nextDuration !== previousDuration;
+
+    if (hasDurationUpdate) {
+      normalizedUpdates.duration = nextDuration;
+    }
 
     if (updates.width !== undefined || updates.height !== undefined) {
       const newW = updates.width ?? oldComp.width;
@@ -178,12 +184,16 @@ export const createCompositionCrudActions: MediaSliceCreator<Pick<
       }
     }
 
-    if (durationChanged) {
-      normalizedUpdates.duration = nextDuration;
+    if (updates.duration !== undefined && durationChanged) {
       normalizedUpdates.timelineData = lockTimelineDuration(
         normalizedUpdates.timelineData ?? oldComp.timelineData,
         nextDuration,
       );
+    } else if (timelineDuration !== undefined && timelineDuration !== nextDuration && normalizedUpdates.timelineData) {
+      normalizedUpdates.timelineData = {
+        ...normalizedUpdates.timelineData,
+        duration: nextDuration,
+      };
     }
 
     set((state) => ({

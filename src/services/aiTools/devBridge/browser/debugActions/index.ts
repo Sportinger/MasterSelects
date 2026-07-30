@@ -21,6 +21,7 @@ import {
   startCurrentExportFromPanel,
 } from './exportPanel';
 import { measureTimelineInteraction } from './interaction';
+import { probeMediaBitstream } from './mediaBitstream';
 import {
   armMixerFaderRecording,
   clearMixerFaderRecording,
@@ -350,6 +351,8 @@ export async function runDebugAction(action: string, args: Record<string, unknow
       return getCurrentExportPanelState();
     case 'probe-video-encoder-configs':
       return probeVideoEncoderConfigs(args);
+    case 'probe-media-bitstream':
+      return probeMediaBitstream(args);
     case 'pause-playback': {
       timelineState.pause();
       return {

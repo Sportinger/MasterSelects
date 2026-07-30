@@ -132,6 +132,23 @@ export async function createUsageEvent(
   return row;
 }
 
+export async function getUsageEventByIdempotencyKey(
+  db: AppD1Database,
+  idempotencyKey: string,
+): Promise<UsageEventRow | null> {
+  return db
+    .prepare(
+      `
+        SELECT id, user_id, feature, provider, model, request_units, credit_cost, status, ledger_entry_id, idempotency_key, metadata_json, created_at, completed_at
+        FROM usage_events
+        WHERE idempotency_key = ?
+        LIMIT 1
+      `,
+    )
+    .bind(idempotencyKey)
+    .first<UsageEventRow>();
+}
+
 export async function completeUsageEvent(
   db: AppD1Database,
   idempotencyKey: string,

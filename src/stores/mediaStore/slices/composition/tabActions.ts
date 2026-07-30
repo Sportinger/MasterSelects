@@ -20,10 +20,10 @@ export const createCompositionTabActions: MediaSliceCreator<Pick<
     if (id === activeCompositionId) {
       return;
     }
-    doSetActiveComposition(set, get, activeCompositionId, id, compositions);
+    void doSetActiveComposition(set, get, activeCompositionId, id, compositions);
   },
 
-  openCompositionTab: (id: string, options?: CompositionSwitchOptions) => {
+  openCompositionTab: async (id: string, options?: CompositionSwitchOptions) => {
     const { openCompositionIds, activeCompositionId, compositions } = get();
     if (!openCompositionIds.includes(id)) {
       set({ openCompositionIds: [...openCompositionIds, id] });
@@ -51,7 +51,7 @@ export const createCompositionTabActions: MediaSliceCreator<Pick<
       return;
     }
 
-    doSetActiveComposition(set, get, activeCompositionId, id, compositions, options);
+    await doSetActiveComposition(set, get, activeCompositionId, id, compositions, options);
   },
 
   closeCompositionTab: (id: string) => {
@@ -62,9 +62,9 @@ export const createCompositionTabActions: MediaSliceCreator<Pick<
     if (activeCompositionId === id && newOpenIds.length > 0) {
       const closedIndex = openCompositionIds.indexOf(id);
       const newActiveIndex = Math.min(closedIndex, newOpenIds.length - 1);
-      doSetActiveComposition(set, get, activeCompositionId, newOpenIds[newActiveIndex], compositions, { skipAnimation: true });
+      void doSetActiveComposition(set, get, activeCompositionId, newOpenIds[newActiveIndex], compositions, { skipAnimation: true });
     } else if (newOpenIds.length === 0) {
-      doSetActiveComposition(set, get, activeCompositionId, null, compositions, { skipAnimation: true });
+      void doSetActiveComposition(set, get, activeCompositionId, null, compositions, { skipAnimation: true });
     }
   },
 

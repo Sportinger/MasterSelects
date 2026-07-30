@@ -13,6 +13,7 @@ import { useMediaStore } from '../../stores/mediaStore';
 import { getCatalogEntry } from './FlashBoardModelCatalog';
 import { getFlashBoardImageProvider } from './FlashBoardImageProviders';
 import { getSeedanceReferenceValidationError } from './seedanceReferenceRules';
+import { getProviderTaskStartedAt } from './FlashBoardJobTiming';
 import {
   DEFAULT_ELEVENLABS_SPEECH_OUTPUT_FORMAT,
   ELEVENLABS_MP3_MIME_TYPE,
@@ -25,6 +26,7 @@ type FlashBoardProviderProcessingUpdate = {
   status: 'processing';
   remoteTaskId?: string;
   progress?: number;
+  startedAt?: number;
   outputs?: FlashBoardGenerationOutput[];
 };
 
@@ -255,7 +257,12 @@ export async function resumeFlashBoardProviderJob({
     remoteTaskId,
     (currentTask) => {
       if (abortController.signal.aborted) throw new Error('Canceled');
-      onProcessing({ status: 'processing', progress: currentTask.progress, remoteTaskId });
+      onProcessing({
+        status: 'processing',
+        progress: currentTask.progress,
+        remoteTaskId,
+        startedAt: getProviderTaskStartedAt(currentTask),
+      });
     },
     pollInterval,
   );
@@ -602,9 +609,7 @@ async function runVideoJob({
         )
       : undefined;
   const seedanceReferenceValidationError = getSeedanceReferenceValidationError({
-    hasAudioReference: referenceMedia?.some((reference) => reference.mediaType === 'audio') === true,
-    hasVisualReference: Boolean(request.startMediaFileId || request.endMediaFileId)
-      || referenceMedia?.some((reference) => reference.mediaType === 'image' || reference.mediaType === 'video') === true,
+    hasReferenceMedia: (referenceMedia?.length ?? 0) > 0,
     providerId: request.providerId,
   });
 
@@ -634,7 +639,7 @@ async function runVideoJob({
     } else if (request.service === 'kieai') {
       remoteTaskId = await kieAiService.createTextToVideo(params);
     } else {
-      remoteTaskId = await cloudAiService.createTextToVideo(params);
+      remoteTaskId = await cloudAiService.createTextToVideo(params, request.idempotencyKey);
     }
   } else {
     const startImageUrl = await resolveReferenceImage(request.startMediaFileId);
@@ -660,7 +665,7 @@ async function runVideoJob({
     } else if (request.service === 'kieai') {
       remoteTaskId = await kieAiService.createImageToVideo(params);
     } else {
-      remoteTaskId = await cloudAiService.createImageToVideo(params);
+      remoteTaskId = await cloudAiService.createImageToVideo(params, request.idempotencyKey);
     }
   }
 
@@ -678,7 +683,12 @@ async function runVideoJob({
     remoteTaskId,
     (t) => {
       if (abortController.signal.aborted) throw new Error('Canceled');
-      onProcessing({ status: 'processing', progress: t.progress });
+      onProcessing({
+        status: 'processing',
+        progress: t.progress,
+        remoteTaskId,
+        startedAt: getProviderTaskStartedAt(t),
+      });
     },
     pollInterval,
   );

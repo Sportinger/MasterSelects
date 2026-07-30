@@ -121,12 +121,8 @@ function createSerializableClip(
     isComposition: clip.isComposition,
     compositionId: clip.compositionId,
     masks: clip.masks && clip.masks.length > 0 ? clip.masks : undefined,
-    transcript: clip.transcript && clip.transcript.length > 0 ? clip.transcript : undefined,
-    transcriptStatus: clip.transcriptStatus !== 'none' ? clip.transcriptStatus : undefined,
-    analysis: clip.analysis,
-    analysisStatus: clip.analysisStatus !== 'none' ? clip.analysisStatus : undefined,
-    faceAnalysisStatus: clip.faceAnalysisStatus !== 'none' ? clip.faceAnalysisStatus : undefined,
-    faceAnalysisMessage: clip.faceAnalysisMessage,
+    // Source analysis is persisted once per mediaFileId in Transcripts/ and Analysis/.
+    // Timeline clips intentionally keep no durable copy.
     reversed: clip.reversed || undefined,
     speed: clip.speed != null && clip.speed !== 1 ? clip.speed : undefined,
     preservesPitch: clip.preservesPitch === false ? false : undefined,

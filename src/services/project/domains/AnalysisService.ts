@@ -7,7 +7,7 @@ import { FileStorageService } from '../core/FileStorageService';
  * Project analysis artifact (stored in Analysis/{mediaId}.json)
  */
 interface StoredAnalysisFile {
-  schemaVersion?: 2;
+  schemaVersion?: 2 | 3;
   mediaFileId: string;
   analyses: {
     [rangeKey: string]: {
@@ -16,6 +16,10 @@ interface StoredAnalysisFile {
       faceAnalysis?: unknown;
       createdAt: number;
     };
+  };
+  sceneDescriptions?: {
+    segments: unknown[];
+    createdAt: number;
   };
 }
 
@@ -80,7 +84,7 @@ export class AnalysisService {
       mediaFileId: mediaId,
       analyses: {},
     };
-    record.schemaVersion = 2;
+    record.schemaVersion = 3;
 
     // Add/update this range
     record.analyses[rangeKey] = {
@@ -180,6 +184,57 @@ export class AnalysisService {
     });
 
     return { frames: dedupedFrames, sampleInterval };
+  }
+
+  async saveSceneDescriptions(
+    projectHandle: FileSystemDirectoryHandle,
+    mediaId: string,
+    segments: unknown[],
+  ): Promise<boolean> {
+    const existing = await this.getAnalysisRecord(projectHandle, mediaId);
+    const record: StoredAnalysisFile = existing || {
+      schemaVersion: 3,
+      mediaFileId: mediaId,
+      analyses: {},
+    };
+    record.schemaVersion = 3;
+    record.sceneDescriptions = {
+      segments,
+      createdAt: Date.now(),
+    };
+    return this.fileStorage.writeFile(
+      projectHandle,
+      'ANALYSIS',
+      `${mediaId}.json`,
+      JSON.stringify(record, null, 2),
+    );
+  }
+
+  async getSceneDescriptions(
+    projectHandle: FileSystemDirectoryHandle,
+    mediaId: string,
+  ): Promise<unknown[] | null> {
+    const record = await this.getAnalysisRecord(projectHandle, mediaId);
+    return record?.sceneDescriptions?.segments ?? null;
+  }
+
+  async deleteSceneDescriptions(
+    projectHandle: FileSystemDirectoryHandle,
+    mediaId: string,
+  ): Promise<boolean> {
+    const record = await this.getAnalysisRecord(projectHandle, mediaId);
+    if (!record?.sceneDescriptions) return true;
+    delete record.sceneDescriptions;
+    if (Object.keys(record.analyses).length === 0) {
+      return this.deleteAnalysis(projectHandle, mediaId);
+    }
+    record.schemaVersion = 3;
+    return this.fileStorage.writeFile(
+      projectHandle,
+      'ANALYSIS',
+      `${mediaId}.json`,
+      JSON.stringify(record, null, 2),
+    );
   }
 
   /**

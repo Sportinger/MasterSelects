@@ -1,6 +1,7 @@
 // Pointer-drag value input primitives for Properties Panel tabs:
 // a pointer-locked precision slider and the legacy drag-to-scrub number.
 import { useRef, useCallback } from 'react';
+import { resolvePointerLockDragDeltaX } from '../../common/pointerLockDragDelta';
 
 // Precision slider with modifier key support
 interface PrecisionSliderProps {
@@ -18,16 +19,37 @@ export function PrecisionSlider({ min, max, step: _step, value, onChange, defaul
   const sliderRef = useRef<HTMLDivElement>(null);
   const accumulatedDelta = useRef(0);
   const startValue = useRef(0);
+  const lastClientX = useRef(0);
+  const pointerLockRequested = useRef(false);
+  const pointerLockHandoffPending = useRef(false);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
     accumulatedDelta.current = 0;
     startValue.current = value;
+    lastClientX.current = e.clientX;
+    pointerLockRequested.current = false;
+    pointerLockHandoffPending.current = false;
     onDragStart?.();
 
     const element = sliderRef.current;
-    if (element) element.requestPointerLock();
+    if (element?.requestPointerLock) {
+      pointerLockRequested.current = true;
+      pointerLockHandoffPending.current = true;
+      try {
+        const result = element.requestPointerLock();
+        if (result && typeof result.then === 'function') {
+          void result.catch(() => {
+            pointerLockRequested.current = false;
+            pointerLockHandoffPending.current = false;
+          });
+        }
+      } catch {
+        pointerLockRequested.current = false;
+        pointerLockHandoffPending.current = false;
+      }
+    }
 
     const handleMouseMove = (e: MouseEvent) => {
       if (!sliderRef.current) return;
@@ -38,7 +60,21 @@ export function PrecisionSlider({ min, max, step: _step, value, onChange, defaul
       if (e.ctrlKey) speedMultiplier = 0.01;
       else if (e.shiftKey) speedMultiplier = 0.1;
 
-      accumulatedDelta.current += e.movementX * speedMultiplier;
+      const result = resolvePointerLockDragDeltaX({
+        clientX: e.clientX,
+        lastClientX: lastClientX.current,
+        movementX: e.movementX,
+        pointerLockRequested: pointerLockRequested.current,
+        pointerLockActive:
+          element !== null && document.pointerLockElement === element,
+        pointerLockHandoffPending: pointerLockHandoffPending.current,
+      });
+      lastClientX.current = result.nextClientX;
+      if (result.pointerLockHandoffConsumed) {
+        pointerLockHandoffPending.current = false;
+      }
+
+      accumulatedDelta.current += result.deltaX * speedMultiplier;
       const deltaValue = accumulatedDelta.current / pixelsPerUnit;
       const newValue = Math.max(min, Math.min(max, startValue.current + deltaValue));
       const preciseValue = Math.round(newValue * 1000000) / 1000000;
@@ -46,7 +82,11 @@ export function PrecisionSlider({ min, max, step: _step, value, onChange, defaul
     };
 
     const handleMouseUp = () => {
-      document.exitPointerLock();
+      if (element !== null && document.pointerLockElement === element) {
+        document.exitPointerLock?.();
+      }
+      pointerLockRequested.current = false;
+      pointerLockHandoffPending.current = false;
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       onDragEnd?.();
@@ -98,6 +138,8 @@ export function LegacyDraggableNumber({ value, onChange, defaultValue, sensitivi
   const accumulatedDelta = useRef(0);
   const startValue = useRef(0);
   const lastClientX = useRef(0);
+  const pointerLockRequested = useRef(false);
+  const pointerLockHandoffPending = useRef(false);
   const hasPointerLock = useRef(false);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -106,19 +148,27 @@ export function LegacyDraggableNumber({ value, onChange, defaultValue, sensitivi
     accumulatedDelta.current = 0;
     startValue.current = value;
     lastClientX.current = e.clientX;
+    pointerLockRequested.current = false;
+    pointerLockHandoffPending.current = false;
     hasPointerLock.current = false;
     onDragStart?.();
 
     // Try pointer lock (hides cursor, infinite drag range) — but don't rely on it
     const element = inputRef.current;
     if (element) {
+      pointerLockRequested.current = true;
+      pointerLockHandoffPending.current = true;
       try {
         const result = element.requestPointerLock();
         // Modern browsers return a Promise
         if (result && typeof (result as Promise<void>).then === 'function') {
           (result as Promise<void>).then(
             () => { hasPointerLock.current = true; },
-            () => { hasPointerLock.current = false; },
+            () => {
+              pointerLockRequested.current = false;
+              pointerLockHandoffPending.current = false;
+              hasPointerLock.current = false;
+            },
           );
         } else {
           // Older browsers: check synchronously after a tick
@@ -127,6 +177,8 @@ export function LegacyDraggableNumber({ value, onChange, defaultValue, sensitivi
           });
         }
       } catch {
+        pointerLockRequested.current = false;
+        pointerLockHandoffPending.current = false;
         hasPointerLock.current = false;
       }
     }
@@ -136,14 +188,21 @@ export function LegacyDraggableNumber({ value, onChange, defaultValue, sensitivi
       if (e.ctrlKey) speedMultiplier = 0.01;
       else if (e.shiftKey) speedMultiplier = 0.1;
 
-      // Use movementX when pointer lock is active, clientX delta as fallback
-      let dx: number;
-      if (hasPointerLock.current && document.pointerLockElement) {
-        dx = e.movementX;
-      } else {
-        dx = e.clientX - lastClientX.current;
-        lastClientX.current = e.clientX;
+      const result = resolvePointerLockDragDeltaX({
+        clientX: e.clientX,
+        lastClientX: lastClientX.current,
+        movementX: e.movementX,
+        pointerLockRequested: pointerLockRequested.current,
+        pointerLockActive:
+          hasPointerLock.current ||
+          (element !== null && document.pointerLockElement === element),
+        pointerLockHandoffPending: pointerLockHandoffPending.current,
+      });
+      lastClientX.current = result.nextClientX;
+      if (result.pointerLockHandoffConsumed) {
+        pointerLockHandoffPending.current = false;
       }
+      const dx = result.deltaX;
 
       accumulatedDelta.current += dx * speedMultiplier;
       const deltaValue = accumulatedDelta.current / sensitivity;
@@ -159,6 +218,8 @@ export function LegacyDraggableNumber({ value, onChange, defaultValue, sensitivi
       if (hasPointerLock.current || document.pointerLockElement) {
         document.exitPointerLock();
       }
+      pointerLockRequested.current = false;
+      pointerLockHandoffPending.current = false;
       hasPointerLock.current = false;
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);

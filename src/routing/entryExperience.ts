@@ -1,4 +1,4 @@
-export type EntryExperience = 'creditClaim' | 'editor' | 'imprint' | 'landing' | 'privacy';
+export type EntryExperience = 'admin' | 'creditClaim' | 'editor' | 'imprint' | 'landing' | 'privacy';
 
 interface EntryLocationLike {
   hostname: string;
@@ -10,6 +10,7 @@ interface EntryLocationLike {
 
 const LANDING_HOST = 'landing.localhost';
 const LANDING_PATHS = ['/landing'];
+const ADMIN_PATHS = ['/admin'];
 const CREDIT_CLAIM_PATHS = ['/credits/claim', '/claim'];
 const EDITOR_PATHS = ['/', '/index.html'];
 const IMPRINT_PATHS = ['/impressum', '/imprint'];
@@ -54,6 +55,11 @@ export function isCreditClaimPath(pathname: string): boolean {
   return CREDIT_CLAIM_PATHS.some((basePath) => matchesPathPrefix(normalizedPath, basePath));
 }
 
+export function isAdminPath(pathname: string): boolean {
+  const normalizedPath = normalizePathname(pathname);
+  return ADMIN_PATHS.some((basePath) => matchesPathPrefix(normalizedPath, basePath));
+}
+
 function isImprintPath(pathname: string): boolean {
   return IMPRINT_PATHS.includes(normalizePathname(pathname));
 }
@@ -66,6 +72,7 @@ export function isSupportedPagePath(pathname: string): boolean {
   const normalizedPath = normalizePathname(pathname);
   return EDITOR_PATHS.includes(normalizedPath)
     || isLandingPath(normalizedPath)
+    || isAdminPath(normalizedPath)
     || isCreditClaimPath(normalizedPath)
     || isImprintPath(normalizedPath)
     || isPrivacyPath(normalizedPath);
@@ -74,6 +81,10 @@ export function isSupportedPagePath(pathname: string): boolean {
 export function resolveEntryExperience(locationLike: EntryLocationLike): EntryExperience {
   if (hasEditorOverride(locationLike.search)) {
     return 'editor';
+  }
+
+  if (isAdminPath(locationLike.pathname)) {
+    return 'admin';
   }
 
   if (isCreditClaimPath(locationLike.pathname)) {

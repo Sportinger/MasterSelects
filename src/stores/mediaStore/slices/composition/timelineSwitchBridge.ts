@@ -21,14 +21,14 @@ type MediaSliceSet = (
  * Internal helper to set active composition without calling get().setActiveComposition.
  * Handles timeline save/restore and composition switch animation phases.
  */
-export function doSetActiveComposition(
+export async function doSetActiveComposition(
   set: MediaSliceSet,
   get: () => MediaState,
   currentActiveId: string | null,
   newId: string | null,
   compositions: Composition[],
   options?: CompositionSwitchOptions,
-): void {
+): Promise<void> {
   const timelineStore = useTimelineStore.getState();
   const skipAnimation = options?.skipAnimation ?? false;
 
@@ -48,7 +48,9 @@ export function doSetActiveComposition(
     set((state) => ({
       compositions: syncTransitionCompositionTimelineToParent(
         state.compositions.map((c) =>
-          c.id === currentActiveId ? { ...c, timelineData } : c
+          c.id === currentActiveId
+            ? { ...c, duration: timelineData.duration, timelineData }
+            : c
         ),
         currentActiveId,
         timelineData,
@@ -60,7 +62,7 @@ export function doSetActiveComposition(
   if (skipAnimation) {
     timelineStore.setCompositionSwitchSourceTracks(null);
     timelineStore.setCompositionSwitchTargetTracks(null);
-    finishCompositionSwitch(set, get, newId, savedCompId, syncedPlayhead, options);
+    await finishCompositionSwitch(set, get, newId, savedCompId, syncedPlayhead, options);
     return;
   }
 
@@ -75,13 +77,16 @@ export function doSetActiveComposition(
     timelineStore.setCompositionSwitchTargetTracks(targetComp?.timelineData?.tracks ?? null);
     timelineStore.setClipAnimationPhase('exiting');
 
-    setTimeout(async () => {
-      await finishCompositionSwitch(set, get, newId, savedCompId, syncedPlayhead, options);
-    }, 175);
+    await new Promise<void>((resolve, reject) => {
+      setTimeout(() => {
+        void finishCompositionSwitch(set, get, newId, savedCompId, syncedPlayhead, options)
+          .then(resolve, reject);
+      }, 175);
+    });
   } else {
     timelineStore.setCompositionSwitchSourceTracks(null);
     timelineStore.setCompositionSwitchTargetTracks(null);
-    finishCompositionSwitch(set, get, newId, savedCompId, syncedPlayhead, options);
+    await finishCompositionSwitch(set, get, newId, savedCompId, syncedPlayhead, options);
   }
 }
 

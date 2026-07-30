@@ -11,6 +11,10 @@ export interface AiModerationResult {
   status: AiModerationStatus;
 }
 
+export interface AiModerationBlockingOptions {
+  allowedFlaggedCategories?: readonly string[];
+}
+
 interface OpenAIModerationPayload {
   results?: Array<{
     categories?: Record<string, boolean>;
@@ -90,6 +94,14 @@ export async function moderateAiInput(env: Env, value: unknown): Promise<AiModer
   }
 }
 
-export function blocksAiRequest(moderation: AiModerationResult): boolean {
-  return moderation.status === 'flagged' || moderation.status === 'error';
+export function blocksAiRequest(
+  moderation: AiModerationResult,
+  options: AiModerationBlockingOptions = {},
+): boolean {
+  if (moderation.status === 'error') return true;
+  if (moderation.status !== 'flagged') return false;
+
+  const allowedCategories = new Set(options.allowedFlaggedCategories ?? []);
+  return moderation.categories.length === 0
+    || moderation.categories.some((category) => !allowedCategories.has(category));
 }

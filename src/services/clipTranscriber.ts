@@ -28,6 +28,7 @@ import {
   updateClipTranscript,
   updateTranscriptFusionPreview,
 } from './transcription/artifactPersistence';
+import { resolveClipTranscriptWords } from './transcription/clipTranscriptResolver';
 import { findGaps, mergeTranscriptWords } from './transcription/resultMapping';
 import {
   HOSTED_TRANSCRIPTION_MAX_BYTES,
@@ -286,9 +287,8 @@ export async function transcribeClip(
   const linkedClip = clip.linkedClipId
     ? clips.find(c => c.id === clip.linkedClipId)
     : clips.find(c => c.linkedClipId === clip.id);
-  const existingTranscript = clip.transcript?.length
-    ? clip.transcript
-    : linkedClip?.transcript;
+  const existingTranscript = resolveClipTranscriptWords(clip)
+    ?? (linkedClip ? resolveClipTranscriptWords(linkedClip) : undefined);
   const mediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
   const mediaFile = mediaFileId
     ? findTimelineAnalysisMediaFile(mediaFileId)
@@ -741,7 +741,15 @@ export async function transcribeClip(
       const newRanges: [number, number][] = (
         useHybridTranscription ? completedHybridRanges : ranges
       ).map(([s, e]) => [s, e]);
-      propagateTranscriptToMediaFile(mediaFileId, allNewWords, newRanges, fusionArtifact);
+      const saved = await propagateTranscriptToMediaFile(
+        mediaFileId,
+        allNewWords,
+        newRanges,
+        fusionArtifact,
+      );
+      if (!saved && projectFileService.isProjectOpen()) {
+        throw new Error('Transcript completed but could not be saved to the project.');
+      }
     }
 
     log.info(`Complete: ${finalWords.length} words for ${clip.name}`);

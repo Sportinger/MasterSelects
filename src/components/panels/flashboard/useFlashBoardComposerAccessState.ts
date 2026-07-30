@@ -19,8 +19,6 @@ export function useFlashBoardComposerAccessState() {
   const lemonadeEndpoint = useSettingsStore((s) => s.lemonadeEndpoint);
   const lemonadeModel = useSettingsStore((s) => s.lemonadeModel);
   const openSettings = useSettingsStore((s) => s.openSettings);
-  const aiApprovalMode = useSettingsStore((s) => s.aiApprovalMode);
-  const setAiApprovalMode = useSettingsStore((s) => s.setAiApprovalMode);
   const setAiProvider = useSettingsStore((s) => s.setAiProvider);
   const setAiSystemPromptOverride = useSettingsStore((s) => s.setAiSystemPromptOverride);
   const setAiSystemPromptSendContext = useSettingsStore((s) => s.setAiSystemPromptSendContext);
@@ -43,7 +41,6 @@ export function useFlashBoardComposerAccessState() {
 
   return {
     accountSession,
-    aiApprovalMode,
     aiProvider,
     aiSystemPromptSendContext,
     aiSystemPromptOverrides,
@@ -63,7 +60,6 @@ export function useFlashBoardComposerAccessState() {
     openAuthDialog,
     openPricingDialog,
     openSettings,
-    setAiApprovalMode,
     setAiProvider,
     setAiSystemPromptOverride,
     setAiSystemPromptSendContext,

@@ -55,33 +55,15 @@ describe('kieAiService', () => {
     expect(calculateKieAiCost('bytedance/seedance-2-fast', '720p', 10, false, { hasVideoInput: true })).toBe(200);
   });
 
-  it('sends Seedance 2.0 Fast tasks with Kie reference API fields', async () => {
+  it('sends Seedance 2.0 Fast start and end images as exact Kie frame fields', async () => {
     kieAiService.setApiKey('kie_test_key');
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({
-          data: {
-            downloadUrl: 'https://example.com/download/motion',
-            fileUrl: 'https://example.com/motion.mp4',
-          },
-          success: true,
-        }), { status: 200 }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({
-          data: {
-            downloadUrl: 'https://example.com/download/timing',
-            fileUrl: 'https://example.com/timing.mp3',
-          },
-          success: true,
-        }), { status: 200 }),
-      )
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ code: 200, msg: 'success', data: { taskId: 'task_seedance_fast' } }), { status: 200 }),
       );
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(kieAiService.createTextToVideo({
+    await expect(kieAiService.createImageToVideo({
       provider: 'bytedance/seedance-2-fast',
       version: '2.0-fast',
       prompt: 'A cinematic robot crossing a neon street.',
@@ -89,21 +71,11 @@ describe('kieAiService', () => {
       aspectRatio: '21:9',
       mode: '480p',
       sound: true,
-      referenceMedia: [
-        {
-          mediaType: 'video',
-          source: 'data:video/mp4;base64,AAAA',
-          fileName: 'motion.mp4',
-        },
-        {
-          mediaType: 'audio',
-          source: 'data:audio/mpeg;base64,AAAA',
-          fileName: 'timing.mp3',
-        },
-      ],
+      startImageUrl: 'https://example.com/start.png',
+      endImageUrl: 'https://example.com/end.png',
     })).resolves.toBe('task_seedance_fast');
 
-    const request = JSON.parse(fetchMock.mock.calls[2][1].body);
+    const request = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(request).toMatchObject({
       endpoint: '/api/v1/jobs/createTask',
       method: 'POST',
@@ -112,17 +84,39 @@ describe('kieAiService', () => {
         input: {
           aspect_ratio: '21:9',
           duration: 4,
+          first_frame_url: 'https://example.com/start.png',
           generate_audio: true,
-          reference_video_urls: ['https://example.com/motion.mp4'],
-          reference_audio_urls: ['https://example.com/timing.mp3'],
+          last_frame_url: 'https://example.com/end.png',
           resolution: '480p',
           return_last_frame: false,
           web_search: false,
         },
       },
     });
-    expect(request.body.input).not.toHaveProperty('first_frame_url');
-    expect(request.body.input).not.toHaveProperty('last_frame_url');
+    expect(request.body.input).not.toHaveProperty('reference_image_urls');
+    expect(request.body.input).not.toHaveProperty('reference_video_urls');
+    expect(request.body.input).not.toHaveProperty('reference_audio_urls');
+  });
+
+  it('rejects Seedance multimodal references instead of weakening frame constraints', async () => {
+    kieAiService.setApiKey('kie_test_key');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(kieAiService.createTextToVideo({
+      provider: 'bytedance/seedance-2',
+      version: '2.0',
+      prompt: 'A cinematic robot crossing a neon street.',
+      duration: 8,
+      aspectRatio: '16:9',
+      mode: '720p',
+      referenceMedia: [{
+        mediaType: 'video',
+        source: 'data:video/mp4;base64,AAAA',
+        fileName: 'motion.mp4',
+      }],
+    })).rejects.toThrow('Seedance multimodal references are temporarily disabled');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('groups Kling image references into valid Kie element inputs', async () => {

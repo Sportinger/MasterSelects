@@ -1,0 +1,95 @@
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { FlashBoardActionStack } from '../../src/components/panels/flashboard/FlashBoardActionStack';
+import {
+  buildFlashBoardChatOptimisticMessages,
+  buildFlashBoardChatSendPlan,
+} from '../../src/components/panels/flashboard/FlashBoardChatSendPlanner';
+
+function buildSendPlan(planThreeEnabled: boolean) {
+  return buildFlashBoardChatSendPlan({
+    activeChatModelId: 'gpt-5-6-terra',
+    canUseByoChat: true,
+    canUseHostedChat: false,
+    chatMessages: [],
+    chatPanelOpen: true,
+    chatProvider: 'kie',
+    chatTemperature: 0.7,
+    effectiveChatPrompt: 'Cut a short travel montage.',
+    hasHostedSession: false,
+    hostedAIEnabled: false,
+    isChatting: false,
+    kieAiApiKey: 'test-key',
+    lemonadeContextSize: 16_384,
+    lemonadeEndpoint: 'http://localhost:13305/api/v1',
+    openAiReasoningEffort: 'medium',
+    planThreeEnabled,
+    shouldUseHostedChat: false,
+    useHostedProductionProviders: false,
+  });
+}
+
+describe('FlashBoard Plan 3 mode', () => {
+  it('keeps a normal chat request unchanged while the toggle is off', () => {
+    const plan = buildSendPlan(false);
+
+    expect(plan.action).toBe('send');
+    if (plan.action !== 'send') return;
+    expect(plan.request.prompt).toBe('Cut a short travel montage.');
+    expect(plan.request.playbookPrompt).toBe('Cut a short travel montage.');
+  });
+
+  it('instructs every AI path to build three separate composition versions', () => {
+    const plan = buildSendPlan(true);
+
+    expect(plan.action).toBe('send');
+    if (plan.action !== 'send') return;
+    expect(plan.request.prompt).toContain('[PLAN 3 MODE]');
+    expect(plan.request.prompt).toContain('exactly three separate, new, user-visible compositions');
+    expect(plan.request.prompt).toContain('Version 1 — Balanced');
+    expect(plan.request.prompt).toContain('Version 2 — Dynamic');
+    expect(plan.request.prompt).toContain('Version 3 — Alternative');
+    expect(plan.request.prompt).toContain('Original request:\nCut a short travel montage.');
+    expect(plan.request.playbookPrompt).toBe(plan.request.prompt);
+  });
+
+  it('keeps the original user wording in the visible chat history', () => {
+    const messages = buildFlashBoardChatOptimisticMessages({
+      assistantMessageId: 'assistant-1',
+      userMessageId: 'user-1',
+      userPrompt: 'Cut a short travel montage.',
+    });
+
+    expect(messages[0]?.text).toBe('Cut a short travel montage.');
+    expect(messages[0]?.text).not.toContain('PLAN 3');
+  });
+
+  it('renders Plan 3 as an accessible toggle next to the chat action', () => {
+    const onPlanThreeToggle = vi.fn();
+    const props = {
+      canGenerate: true,
+      chatButtonLabel: 'Chat',
+      chatButtonTitle: 'Send chat prompt',
+      chatPanelOpen: true,
+      generateButtonLabel: 'Generate',
+      generateButtonTitle: 'Generate media',
+      isChatting: false,
+      onChatButtonClick: vi.fn(),
+      onGenerate: vi.fn(),
+      onPlanThreeToggle,
+      planThreeEnabled: false,
+    };
+    const { rerender } = render(<FlashBoardActionStack {...props} />);
+    const toggle = screen.getByRole('button', { name: 'Plan 3' });
+
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(toggle);
+    expect(onPlanThreeToggle).toHaveBeenCalledOnce();
+
+    rerender(<FlashBoardActionStack {...props} planThreeEnabled />);
+    expect(screen.getByRole('button', { name: 'Plan 3' })).toHaveAttribute('aria-pressed', 'true');
+
+    rerender(<FlashBoardActionStack {...props} isChatting planThreeEnabled />);
+    expect(screen.getByRole('button', { name: 'Plan 3' })).toBeDisabled();
+  });
+});

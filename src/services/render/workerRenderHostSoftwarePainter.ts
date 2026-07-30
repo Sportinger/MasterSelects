@@ -5,6 +5,7 @@ import {
 } from './workerSoftwarePixelEffects';
 import { applyWorkerSoftwareTransitionMask } from './workerSoftwareTransitionMasks';
 import type { WorkerSoftwareFeedbackStore } from './workerSoftwareFeedbackEffects';
+import { calculateSourcePixelScale } from '../../utils/sourcePixelScale';
 
 function finiteNumber(value: number | undefined, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -39,8 +40,14 @@ function getLayerFootprint(input: {
   const sourceAspect = sourceWidth / sourceHeight;
   const targetAspect = input.targetWidth / input.targetHeight;
   const aspectRatio = sourceAspect / targetAspect;
-  const scaleX = finiteNumber(input.scale.x, 1);
-  const scaleY = finiteNumber(input.scale.y, 1);
+  const sourcePixelScale = calculateSourcePixelScale(
+    sourceWidth,
+    sourceHeight,
+    input.targetWidth,
+    input.targetHeight,
+  );
+  const scaleX = finiteNumber(input.scale.x, 1) * sourcePixelScale;
+  const scaleY = finiteNumber(input.scale.y, 1) * sourcePixelScale;
   let localPositionX = finiteNumber(input.position.x, 0);
   let localPositionY = finiteNumber(input.position.y, 0);
   let width = input.targetWidth;

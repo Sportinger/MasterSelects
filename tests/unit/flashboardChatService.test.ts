@@ -65,6 +65,10 @@ describe('FlashBoardChatService', () => {
     })).resolves.toBe('Kernel response.');
 
     expect(kernelGatewayMocks.tryKernelFirst).toHaveBeenCalledOnce();
+    expect(kernelGatewayMocks.tryKernelFirst).toHaveBeenCalledWith(
+      'Cut the strongest moments',
+      expect.objectContaining({ autoApprove: true }),
+    );
     expect(fetchMock).not.toHaveBeenCalled();
     expect(onPhase).toHaveBeenCalledWith('kernel');
     expect(onPhase).not.toHaveBeenCalledWith('provider');

@@ -127,6 +127,26 @@ describe('compositor uniforms', () => {
     expect(floats[28]).toBeCloseTo(0.25);
   });
 
+  it('converts stored 100 percent scale to native source pixels', () => {
+    const buffer = new ArrayBuffer(COMPOSITOR_UNIFORM_FLOAT_COUNT * 4);
+    const floats = new Float32Array(buffer);
+    const u32 = new Uint32Array(buffer);
+
+    writeLayerUniformData(
+      createLayer({ scale: { x: 1, y: -0.5 } }),
+      16 / 9,
+      16 / 9,
+      false,
+      floats,
+      u32,
+      undefined,
+      2,
+    );
+
+    expect(floats[4]).toBe(2);
+    expect(floats[5]).toBe(-1);
+  });
+
   it('encodes transition metadata into the reusable padding slots', () => {
     const buffer = new ArrayBuffer(COMPOSITOR_UNIFORM_FLOAT_COUNT * 4);
     const floats = new Float32Array(buffer);

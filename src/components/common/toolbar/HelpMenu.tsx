@@ -8,18 +8,22 @@ const COMMUNITY_LINKS = {
 
 interface HelpMenuProps extends ToolbarMenuController {
   closeMenu: () => void;
+  devChatUnreadCount: number;
   onOpenDevChat: () => void;
   onOpenLeaveNote: () => void;
 }
 
 export function HelpMenu({
   closeMenu,
+  devChatUnreadCount,
   onMenuClick,
   onMenuHover,
   onOpenDevChat,
   onOpenLeaveNote,
   openMenu,
 }: HelpMenuProps) {
+  const hasUnreadDevChat = devChatUnreadCount > 0;
+
   const openDevChat = () => {
     closeMenu();
     onOpenDevChat();
@@ -33,12 +37,25 @@ export function HelpMenu({
   return (
     <div className="menu-item">
       <button
-        className={`menu-trigger help-menu-trigger ${openMenu === 'help' ? 'active' : ''}`}
+        className={`menu-trigger help-menu-trigger ${openMenu === 'help' ? 'active' : ''}${hasUnreadDevChat ? ' has-dev-chat-unread' : ''}`}
         onClick={() => onMenuClick('help')}
         onMouseEnter={() => onMenuHover('help')}
+        title={hasUnreadDevChat ? 'New reply from the developer' : undefined}
         type="button"
       >
-        HELP!
+        <span className="help-menu-trigger-label">HELP!</span>
+        {hasUnreadDevChat && (
+          <>
+            <span className="help-menu-unread-indicator" aria-hidden="true">
+              <span />
+            </span>
+            <span className="sr-only">
+              {devChatUnreadCount === 1
+                ? '1 unread developer reply'
+                : `${devChatUnreadCount} unread developer replies`}
+            </span>
+          </>
+        )}
       </button>
       {openMenu === 'help' && (
         <div className="menu-dropdown help-menu-dropdown" aria-label="Help menu">
@@ -48,6 +65,11 @@ export function HelpMenu({
             type="button"
           >
             <span>Chat with dev</span>
+            {hasUnreadDevChat && (
+              <span className="help-menu-unread-badge">
+                {devChatUnreadCount > 9 ? '9+' : devChatUnreadCount} new
+              </span>
+            )}
           </button>
           <button className="menu-option" onClick={openLeaveNote} type="button">
             <span>Leave note</span>

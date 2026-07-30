@@ -8,7 +8,7 @@ interface TimelineRootShellProps {
   clipInteractionActive: boolean;
   effectiveAudioLayerAdvancedMode: boolean;
   isHeaderWidthResizing: boolean;
-  onMouseDown: MouseEventHandler<HTMLDivElement>;
+  onMouseDownCapture: MouseEventHandler<HTMLDivElement>;
   openCompositionCount: number;
   splitDragSmoothing: boolean;
   splitDragVideoHeight: number | null;
@@ -24,7 +24,7 @@ export function TimelineRootShell({
   clipInteractionActive,
   effectiveAudioLayerAdvancedMode,
   isHeaderWidthResizing,
-  onMouseDown,
+  onMouseDownCapture,
   openCompositionCount,
   splitDragSmoothing,
   splitDragVideoHeight,
@@ -60,7 +60,7 @@ export function TimelineRootShell({
     <div
       className={className}
       style={{ '--track-header-width': `${trackHeaderWidth}px` } as CSSProperties}
-      onMouseDown={onMouseDown}
+      onMouseDownCapture={onMouseDownCapture}
     >
       {children}
     </div>

@@ -46,7 +46,15 @@ export interface AppDurableObjectNamespace {
 }
 
 export interface Env {
+  ADMIN_PASSWORD_HASH?: string;
+  ADMIN_PASSWORD_HASH_B64?: string;
+  ADMIN_SESSION_SECRET?: string;
   AUTH_EMAIL_FROM?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_API_TOKEN?: string;
+  CLOUDFLARE_D1_DATABASE_ID?: string;
+  CLOUDFLARE_PAGES_PROJECT?: string;
+  CLOUDFLARE_ZONE_ID?: string;
   CREDIT_CLAIM_NOTIFY_EMAIL?: string;
   DB: AppD1Database;
   DEEPGRAM_API_KEY?: string;
@@ -60,6 +68,7 @@ export interface Env {
   KIEAI_GENERATION_RATE_LIMITER?: AppDurableObjectNamespace;
   KV: AppKVNamespace;
   MEDIA: AppR2Bucket;
+  MASTERSELECTS_PUBLIC_URL?: string;
   OPENAI_API_KEY?: string;
   PIAPI_API_KEY?: string;
   RESEND_API_KEY?: string;

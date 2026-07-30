@@ -63,17 +63,17 @@ describe('editModeOverlayMath', () => {
     expect(bounds.rotation).toBeCloseTo(-Math.PI / 2);
   });
 
-  it('matches the shader aspect-fit footprint for wide sources', () => {
+  it('uses native source pixels instead of silently fitting wide sources', () => {
     const bounds = calculateLayerOverlayBounds({
       ...baseParams,
       sourceWidth: 3840,
       sourceHeight: 1080,
     });
 
-    expect(bounds.corners.tl.x).toBeCloseTo(0);
-    expect(bounds.corners.tl.y).toBeCloseTo(135);
-    expect(bounds.corners.br.x).toBeCloseTo(960);
-    expect(bounds.corners.br.y).toBeCloseTo(405);
+    expect(bounds.corners.tl.x).toBeCloseTo(-480);
+    expect(bounds.corners.tl.y).toBeCloseTo(0);
+    expect(bounds.corners.br.x).toBeCloseTo(1440);
+    expect(bounds.corners.br.y).toBeCloseTo(540);
   });
 
   it('hit-tests the transformed polygon and exposes transformed handle positions', () => {

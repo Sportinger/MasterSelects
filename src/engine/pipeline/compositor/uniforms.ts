@@ -76,6 +76,7 @@ export function writeLayerUniformData(
   uniformData: Float32Array,
   uniformDataU32: Uint32Array,
   inlineEffects?: InlineEffectParams,
+  sourcePixelScale = 1,
 ): void {
   // Get rotation values (layer.rotation can be number or {x,y,z} object)
   let rotX = 0, rotY = 0, rotZ = 0;
@@ -92,8 +93,8 @@ export function writeLayerUniformData(
   uniformDataU32[1] = BLEND_MODE_MAP[layer.blendMode]; // blendMode is u32 in shader
   uniformData[2] = layer.position.x;
   uniformData[3] = layer.position.y;
-  uniformData[4] = layer.scale.x;
-  uniformData[5] = layer.scale.y;
+  uniformData[4] = layer.scale.x * sourcePixelScale;
+  uniformData[5] = layer.scale.y * sourcePixelScale;
   uniformData[6] = rotZ;         // rotationZ
   uniformData[7] = sourceAspect;
   uniformData[8] = outputAspect;

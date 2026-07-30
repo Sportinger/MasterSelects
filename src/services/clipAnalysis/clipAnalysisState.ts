@@ -85,6 +85,24 @@ export function updateClipAnalysis(
   });
 
   updateTimelineAnalysisClips(() => updatedClips);
+  const mediaFileId = originalClip?.source?.mediaFileId || originalClip?.mediaFileId;
+  if (mediaFileId) {
+    updateTimelineAnalysisMediaFiles(files => files.map(file => {
+      if (file.id !== mediaFileId) return file;
+      const next = {
+        ...file,
+        analysisStatus: data.status ?? file.analysisStatus,
+        analysisProgress: data.progress ?? file.analysisProgress,
+        faceAnalysisStatus: data.faceStatus ?? file.faceAnalysisStatus,
+        faceAnalysisProgress: data.faceProgress ?? file.faceAnalysisProgress,
+        faceAnalysisMessage: data.faceMessage === null
+          ? undefined
+          : data.faceMessage ?? file.faceAnalysisMessage,
+      };
+      if ('analysis' in data) next.analysis = data.analysis ?? undefined;
+      return next;
+    }));
+  }
   return originalClip;
 }
 
@@ -174,7 +192,16 @@ export async function clearClipAnalysis(clipId: string): Promise<void> {
     updateTimelineAnalysisMediaFiles(files =>
       files.map(file => (
         file.id === mediaFileId
-          ? { ...file, analysisStatus: 'none' as const, analysisCoverage: 0 }
+          ? {
+              ...file,
+              analysis: undefined,
+              analysisStatus: 'none' as const,
+              analysisProgress: 0,
+              analysisCoverage: 0,
+              faceAnalysisStatus: 'none' as const,
+              faceAnalysisProgress: 0,
+              faceAnalysisMessage: undefined,
+            }
           : file
       ))
     );

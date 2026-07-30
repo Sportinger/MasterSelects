@@ -10,6 +10,9 @@ import { DEFAULT_SUNO_MODEL_ID, SUNO_MODEL_IDS, SUNO_PROVIDER_ID, SUNO_SOUNDS_PR
 import {
   FLUX_KONTEXT_MAX_PROVIDER_ID,
   FLUX_KONTEXT_PRO_PROVIDER_ID,
+  KLING_3_ASPECT_RATIOS,
+  KLING_3_DURATIONS,
+  KLING_3_MODES,
   RECRAFT_CRISP_UPSCALE_PROVIDER_ID,
   RECRAFT_REMOVE_BACKGROUND_PROVIDER_ID,
   RUNWAY_ASPECT_RATIOS,
@@ -333,7 +336,7 @@ export function getCatalogEntries(): CatalogEntry[] {
       referenceInputKinds: isKling
         ? ['start-frame', 'end-frame', 'image-reference', 'video-reference']
         : isSeedance2
-          ? ['start-frame', 'end-frame', 'image-reference', 'video-reference', 'audio-reference']
+          ? ['start-frame', 'end-frame']
           : isVeo
             ? ['start-frame', 'end-frame', 'image-reference']
             : isRunway
@@ -345,7 +348,7 @@ export function getCatalogEntries(): CatalogEntry[] {
       supportsImageToVideo: p.supportsImageToVideo,
       supportsGenerateAudio: isKling || isSeedance2,
       supportsMultiShot: isKling,
-      maxReferenceMedia: isKling ? 3 : isSeedance2 ? 8 : isVeo ? 3 : isRunway || isTopazVideoUpscale ? 1 : undefined,
+      maxReferenceMedia: isKling ? 3 : isSeedance2 ? 0 : isVeo ? 3 : isRunway || isTopazVideoUpscale ? 1 : undefined,
       promptRefinerProfile: isTopazVideoUpscale
         ? 'utility-video'
         : isVeo
@@ -498,11 +501,11 @@ export function getCatalogEntries(): CatalogEntry[] {
     name: 'Kling',
     description: 'Hosted Kling via MasterSelects Cloud',
     versions: ['latest'],
-    modes: ['std', 'pro', '4K'],
+    modes: KLING_3_MODES,
     modeLabels: KLING_MODE_LABELS,
     modeControlLabel: 'Resolution',
-    durations: [5, 10],
-    aspectRatios: ['16:9', '9:16', '1:1'],
+    durations: KLING_3_DURATIONS,
+    aspectRatios: KLING_3_ASPECT_RATIOS,
     referenceInputKinds: ['start-frame', 'end-frame', 'image-reference', 'video-reference'],
     supportsTextToVideo: true,
     supportsImageToVideo: true,
@@ -516,18 +519,18 @@ export function getCatalogEntries(): CatalogEntry[] {
     service: 'cloud',
     providerId: 'bytedance/seedance-2',
     name: 'Seedance 2.0',
-    description: 'Hosted Seedance 2.0 via MasterSelects Cloud',
+    description: 'Hosted Seedance 2.0 with exact first/last-frame inputs',
     versions: ['latest'],
     modes: ['480p', '720p', '1080p'],
     modeControlLabel: 'Resolution',
     durations: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
     aspectRatios: SEEDANCE_2_ASPECT_RATIOS,
-    referenceInputKinds: ['start-frame', 'end-frame', 'image-reference', 'video-reference', 'audio-reference'],
+    referenceInputKinds: ['start-frame', 'end-frame'],
     supportsTextToVideo: true,
     supportsImageToVideo: true,
     supportsGenerateAudio: true,
     supportsMultiShot: false,
-    maxReferenceMedia: 8,
+    maxReferenceMedia: 0,
     outputType: 'video',
   });
 
@@ -535,18 +538,18 @@ export function getCatalogEntries(): CatalogEntry[] {
     service: 'cloud',
     providerId: 'bytedance/seedance-2-fast',
     name: 'Seedance 2.0 Fast',
-    description: 'Hosted Seedance 2.0 Fast via MasterSelects Cloud',
+    description: 'Hosted Seedance 2.0 Fast with exact first/last-frame inputs',
     versions: ['latest'],
     modes: ['480p', '720p'],
     modeControlLabel: 'Resolution',
     durations: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
     aspectRatios: SEEDANCE_2_ASPECT_RATIOS,
-    referenceInputKinds: ['start-frame', 'end-frame', 'image-reference', 'video-reference', 'audio-reference'],
+    referenceInputKinds: ['start-frame', 'end-frame'],
     supportsTextToVideo: true,
     supportsImageToVideo: true,
     supportsGenerateAudio: true,
     supportsMultiShot: false,
-    maxReferenceMedia: 8,
+    maxReferenceMedia: 0,
     outputType: 'video',
   });
 

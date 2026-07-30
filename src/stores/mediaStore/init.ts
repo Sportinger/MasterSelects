@@ -176,7 +176,9 @@ function saveTimelineToActiveComposition(options: SaveTimelineToActiveCompositio
       return {
         compositions: syncTransitionCompositionTimelineToParent(
           state.compositions.map((c: Composition) =>
-            c.id === activeCompositionId ? { ...c, timelineData } : c
+            c.id === activeCompositionId
+              ? { ...c, duration: timelineData.duration, timelineData }
+              : c
           ),
           activeCompositionId,
           timelineData,

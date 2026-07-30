@@ -8,6 +8,7 @@ import type { BlendMode, AnimatableProperty, MaskMode, ClipMask } from '../../ty
 import { KeyframeToggle } from './properties/shared';
 import { BLEND_MODE_GROUPS, formatBlendModeName } from './properties/sharedConstants';
 import { EditableDraggableNumber as DraggableNumber } from '../common/EditableDraggableNumber';
+import { resolvePointerLockDragDeltaX } from '../common/pointerLockDragDelta';
 import './properties/PropertiesPanel.css';
 import './properties/ClipPropertiesPanel.css';
 
@@ -27,17 +28,36 @@ function PrecisionSlider({ min, max, step: _step, value, onChange, defaultValue 
   const sliderRef = useRef<HTMLDivElement>(null);
   const accumulatedDelta = useRef(0);
   const startValue = useRef(0);
+  const lastClientX = useRef(0);
+  const pointerLockRequested = useRef(false);
+  const pointerLockHandoffPending = useRef(false);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return; // Only handle left click
     e.preventDefault();
     accumulatedDelta.current = 0;
     startValue.current = value;
+    lastClientX.current = e.clientX;
+    pointerLockRequested.current = false;
+    pointerLockHandoffPending.current = false;
 
     // Request pointer lock for infinite dragging
     const element = sliderRef.current;
-    if (element) {
-      element.requestPointerLock();
+    if (element?.requestPointerLock) {
+      pointerLockRequested.current = true;
+      pointerLockHandoffPending.current = true;
+      try {
+        const result = element.requestPointerLock();
+        if (result && typeof result.then === 'function') {
+          void result.catch(() => {
+            pointerLockRequested.current = false;
+            pointerLockHandoffPending.current = false;
+          });
+        }
+      } catch {
+        pointerLockRequested.current = false;
+        pointerLockHandoffPending.current = false;
+      }
     }
 
     const handleMouseMove = (e: MouseEvent) => {
@@ -55,8 +75,21 @@ function PrecisionSlider({ min, max, step: _step, value, onChange, defaultValue 
         speedMultiplier = 0.1; // Slow (10%)
       }
 
-      // Use movementX for pointer lock (raw delta, not position)
-      accumulatedDelta.current += e.movementX * speedMultiplier;
+      const result = resolvePointerLockDragDeltaX({
+        clientX: e.clientX,
+        lastClientX: lastClientX.current,
+        movementX: e.movementX,
+        pointerLockRequested: pointerLockRequested.current,
+        pointerLockActive:
+          element !== null && document.pointerLockElement === element,
+        pointerLockHandoffPending: pointerLockHandoffPending.current,
+      });
+      lastClientX.current = result.nextClientX;
+      if (result.pointerLockHandoffConsumed) {
+        pointerLockHandoffPending.current = false;
+      }
+
+      accumulatedDelta.current += result.deltaX * speedMultiplier;
       const deltaValue = accumulatedDelta.current / pixelsPerUnit;
       const newValue = Math.max(min, Math.min(max, startValue.current + deltaValue));
 
@@ -67,7 +100,11 @@ function PrecisionSlider({ min, max, step: _step, value, onChange, defaultValue 
 
     const handleMouseUp = () => {
       // Exit pointer lock
-      document.exitPointerLock();
+      if (element !== null && document.pointerLockElement === element) {
+        document.exitPointerLock?.();
+      }
+      pointerLockRequested.current = false;
+      pointerLockHandoffPending.current = false;
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };

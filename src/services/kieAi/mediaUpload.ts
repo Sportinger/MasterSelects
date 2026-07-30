@@ -23,14 +23,44 @@ function dataUrlToBlob(dataUrl: string): Blob {
   if (!match) {
     throw new Error('Invalid data URL');
   }
-  const mimeType = match[1];
   const base64 = match[2];
   const binary = atob(base64);
   const array = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
     array[i] = binary.charCodeAt(i);
   }
+  const mimeType = detectImageMimeType(array) ?? match[1];
   return new Blob([array], { type: mimeType });
+}
+
+function hasByteSignature(bytes: Uint8Array, signature: readonly number[], offset = 0): boolean {
+  return signature.every((value, index) => bytes[offset + index] === value);
+}
+
+function detectImageMimeType(bytes: Uint8Array): string | undefined {
+  if (hasByteSignature(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) {
+    return 'image/png';
+  }
+
+  if (hasByteSignature(bytes, [0xff, 0xd8, 0xff])) {
+    return 'image/jpeg';
+  }
+
+  if (
+    hasByteSignature(bytes, [0x47, 0x49, 0x46, 0x38, 0x37, 0x61])
+    || hasByteSignature(bytes, [0x47, 0x49, 0x46, 0x38, 0x39, 0x61])
+  ) {
+    return 'image/gif';
+  }
+
+  if (
+    hasByteSignature(bytes, [0x52, 0x49, 0x46, 0x46])
+    && hasByteSignature(bytes, [0x57, 0x45, 0x42, 0x50], 8)
+  ) {
+    return 'image/webp';
+  }
+
+  return undefined;
 }
 
 async function sourceToBlob(source: Blob | string): Promise<Blob> {
@@ -127,11 +157,15 @@ function hasFileExtension(value: string | undefined): boolean {
 
 function createUploadFileName(reference: GenerationReferenceMedia, blob: Blob): string {
   const fallbackExtension = getReferenceFallbackExtension(reference.mediaType);
-  const extension = hasFileExtension(reference.fileName)
+  const fileNameExtension = hasFileExtension(reference.fileName)
     ? reference.fileName!.split('.').pop()!.toLowerCase()
-    : getExtensionFromMimeType(reference.mimeType || blob.type, fallbackExtension);
+    : undefined;
+  const extension = getExtensionFromMimeType(blob.type, '')
+    || getExtensionFromMimeType(reference.mimeType, '')
+    || fileNameExtension
+    || fallbackExtension;
   const baseName = sanitizeUploadBaseName(reference.fileName || reference.label, reference.mediaType);
-  return `${baseName}_${Date.now()}.${extension}`;
+  return `${baseName}_${crypto.randomUUID()}.${extension}`;
 }
 
 async function compressImage(dataUrl: string, maxWidth = 1280, quality = 0.8): Promise<string> {
@@ -220,9 +254,9 @@ export function createKieAiMediaTools(getApiKey: () => string, hasApiKey: () => 
   };
 
   const uploadImage = async (imageSource: string): Promise<string> => uploadMedia({
+    label: 'image',
     mediaType: 'image',
     source: imageSource,
-    fileName: `image_${Date.now()}.jpg`,
   });
 
   return {

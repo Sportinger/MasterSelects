@@ -3,16 +3,15 @@ export function isSeedance2ProviderId(providerId: string): boolean {
 }
 
 export function getSeedanceReferenceValidationError(input: {
-  hasAudioReference: boolean;
-  hasVisualReference: boolean;
+  hasReferenceMedia: boolean;
   providerId: string;
 }): string | null {
   if (!isSeedance2ProviderId(input.providerId)) {
     return null;
   }
 
-  if (input.hasAudioReference && !input.hasVisualReference) {
-    return 'Seedance audio references need at least one image or video reference.';
+  if (input.hasReferenceMedia) {
+    return 'Seedance multimodal references are temporarily disabled. Use the IN and OUT frame slots for exact first/last-frame mode.';
   }
 
   return null;

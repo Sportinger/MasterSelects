@@ -4,6 +4,7 @@ import { getPixelParticleDisintegrateRenderer } from '../../engine/particles/Pix
 import type { Layer } from '../../types/layers';
 import type { ThumbnailLayerData, ThumbnailRenderTarget, ThumbnailResources } from './contracts';
 import { blobToDataURL } from './frameCapture';
+import { calculateSourcePixelScale } from '../../utils/sourcePixelScale';
 
 const log = Logger.create('ThumbnailRenderer');
 
@@ -90,6 +91,12 @@ function renderLayerToTarget(
   const layer = data.layer;
   const uniformBuffer = compositorPipeline.getOrCreateUniformBuffer(options.uniformId(layer));
   const sourceAspect = data.sourceWidth / data.sourceHeight;
+  const sourcePixelScale = calculateSourcePixelScale(
+    data.sourceWidth,
+    data.sourceHeight,
+    width,
+    height,
+  );
 
   const maskInfo = maskTextureManager.getMaskInfo(options.maskLookupId(layer));
   const { inlineEffects } = splitLayerEffects(layer.effects);
@@ -99,7 +106,8 @@ function renderLayerToTarget(
     outputAspect,
     maskInfo.hasMask,
     uniformBuffer,
-    inlineEffects
+    inlineEffects,
+    sourcePixelScale,
   );
 
   const source = applyComplexEffectsIfNeeded(resources, target, commandEncoder, data, width, height);

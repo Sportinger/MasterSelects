@@ -108,6 +108,7 @@ type JobUpdateCallback = (recordId: string, update: {
   status: 'queued' | 'processing' | 'completed' | 'failed' | 'canceled';
   remoteTaskId?: string;
   progress?: number;
+  startedAt?: number;
   error?: string;
   assetUrl?: string;
   assetFile?: File;
@@ -366,6 +367,10 @@ class FlashBoardJobService {
           this.running = this.running.map((job) => (
             job.recordId === recordId ? { ...job, remoteTaskId } : job
           ));
+          this.onUpdate?.(recordId, {
+            status: 'processing',
+            remoteTaskId,
+          });
         },
         onProcessing: (update) => {
           this.onUpdate?.(recordId, update);

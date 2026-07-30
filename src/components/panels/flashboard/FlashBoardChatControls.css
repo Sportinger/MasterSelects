@@ -400,7 +400,7 @@
   transform: none;
 }
 
-.fb-chat-auto-toggle {
+.fb-chat-plan-three-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -423,20 +423,25 @@
     color 0.14s ease;
 }
 
-.fb-chat-auto-toggle:hover {
+.fb-chat-plan-three-toggle:hover:not(:disabled) {
   background: var(--bg-hover, #30303c);
   color: var(--text-primary, #f5f5f5);
 }
 
-.fb-chat-auto-toggle.active {
+.fb-chat-plan-three-toggle.active {
   border-color: #43a047;
   border-right-color: rgba(255, 255, 255, 0.22);
   background: #2e7d32;
   color: #fff;
 }
 
-.fb-chat-auto-toggle.active:hover {
+.fb-chat-plan-three-toggle.active:hover:not(:disabled) {
   background: #338a37;
+}
+
+.fb-chat-plan-three-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
 }
 
 .fb-chat-button.active {

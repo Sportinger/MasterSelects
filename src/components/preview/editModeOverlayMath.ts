@@ -1,3 +1,5 @@
+import { calculateSourcePixelScale } from '../../utils/sourcePixelScale';
+
 export interface OverlayPoint {
   x: number;
   y: number;
@@ -145,8 +147,14 @@ export function projectLayerUvToCanvas(
   const posX = finiteNumber(params.position.x, 0);
   const posY = finiteNumber(params.position.y, 0);
   const posZ = finiteNumber(params.position.z, 0);
-  const scaleX = finiteNumber(params.scale.x, 1);
-  const scaleY = finiteNumber(params.scale.y, 1);
+  const sourcePixelScale = calculateSourcePixelScale(
+    safeSourceWidth,
+    safeSourceHeight,
+    safeOutputWidth,
+    safeOutputHeight,
+  );
+  const scaleX = finiteNumber(params.scale.x, 1) * sourcePixelScale;
+  const scaleY = finiteNumber(params.scale.y, 1) * sourcePixelScale;
   const perspective = Math.max(finiteNumber(params.perspective, 2), 0.5);
 
   let correctedX = uv.x - 0.5 + posX;
@@ -242,8 +250,14 @@ export function calculateLayerOverlayBounds({
   const aspectRatio = sourceAspect / outputAspect;
   const posX = finiteNumber(position.x, 0);
   const posY = finiteNumber(position.y, 0);
-  const scaleX = finiteNumber(scale.x, 1);
-  const scaleY = finiteNumber(scale.y, 1);
+  const sourcePixelScale = calculateSourcePixelScale(
+    safeSourceWidth,
+    safeSourceHeight,
+    safeOutputWidth,
+    safeOutputHeight,
+  );
+  const scaleX = finiteNumber(scale.x, 1) * sourcePixelScale;
+  const scaleY = finiteNumber(scale.y, 1) * sourcePixelScale;
   const rotationZ = finiteNumber(rotation, 0);
   const cosZ = Math.cos(-rotationZ);
   const sinZ = Math.sin(-rotationZ);

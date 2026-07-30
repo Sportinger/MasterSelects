@@ -3,6 +3,7 @@ import { useExportStore } from '../../../../../stores/exportStore';
 import { useTimelineStore } from '../../../../../stores/timeline';
 import type { ContainerFormat, VideoCodec } from '../../../../../engine/export';
 import type { ExportSettings } from '../../../../../stores/exportStore';
+import { exportDiagnostics } from '../../../../export/exportDiagnostics';
 
 const waitForExportProbe = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
@@ -122,6 +123,7 @@ export async function runExportPanelButtonProbe(args: Record<string, unknown> = 
     ? args.filename.trim()
     : 'codex-ui-export-probe';
   const includeAudio = args.includeAudio !== false;
+  const exportMode = args.exportMode === 'precise' ? 'precise' : 'fast';
   const containerFormat = pickExportProbeValue<ContainerFormat>(
     args.containerFormat ?? args.container,
     ['mp4', 'webm'],
@@ -163,7 +165,7 @@ export async function runExportPanelButtonProbe(args: Record<string, unknown> = 
     await waitForExportProbe(180);
 
     exportStore.setSettings({
-      encoder: 'webcodecs',
+      encoder: exportMode === 'precise' ? 'htmlvideo' : 'webcodecs',
       width,
       height,
       customWidth: width,
@@ -184,8 +186,11 @@ export async function runExportPanelButtonProbe(args: Record<string, unknown> = 
       specialContainer: 'none',
       stackedAlpha: false,
     });
-    timeline.setInPoint(startTime);
+    // Clear the old range first. Setting a new in-point beyond the previous
+    // out-point is otherwise clamped to that stale out-point.
+    timeline.setInPoint(null);
     timeline.setOutPoint(startTime + durationSeconds);
+    timeline.setInPoint(startTime);
     await waitForExportProbe(250);
 
     const beforeClick = summarizeExportPanelForProbe();
@@ -240,6 +245,7 @@ export async function runExportPanelButtonProbe(args: Record<string, unknown> = 
           height,
           fps,
           includeAudio,
+          exportMode,
           filename,
           containerFormat,
           videoCodec,
@@ -254,6 +260,7 @@ export async function runExportPanelButtonProbe(args: Record<string, unknown> = 
           exportProgress: exportAfter.exportProgress,
           exportCurrentTime: exportAfter.exportCurrentTime,
         },
+        exportDiagnostics: exportDiagnostics.snapshot(),
         downloadAnchorCountDelta: document.querySelectorAll('a[download]').length - downloadClickCountBefore,
       },
     };

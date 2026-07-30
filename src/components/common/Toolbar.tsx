@@ -49,6 +49,7 @@ import { useToolbarEditActions } from './toolbar/useToolbarEditActions';
 import { useToolbarProjectActions } from './toolbar/useToolbarProjectActions';
 import { useToolbarProjectShortcuts } from './toolbar/useToolbarProjectShortcuts';
 import { useToolbarViewActions } from './toolbar/useToolbarViewActions';
+import { useDevChatNotification } from './toolbar/useDevChatNotification';
 import { screenCaptureService } from '../../services/capture/ScreenCaptureService';
 
 const log = Logger.create('Toolbar');
@@ -131,6 +132,7 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [showInfoDialog, setShowInfoDialog] = useState(false);
   const [showDevChatDialog, setShowDevChatDialog] = useState(false);
+  const [devChatNotificationsEnabled, setDevChatNotificationsEnabled] = useState(false);
   const [showLeaveNoteDialog, setShowLeaveNoteDialog] = useState(false);
   const [showLegalDialog, setShowLegalDialog] = useState<LegalPage | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -142,6 +144,20 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
   const menuBarRef = useRef<HTMLDivElement>(null);
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isRenamingRef = useRef(false);
+  const {
+    markAllRead: markDevChatRead,
+    markMessagesSeen: markDevChatMessagesSeen,
+    unreadCount: devChatUnreadCount,
+  } = useDevChatNotification({
+    enabled: devChatNotificationsEnabled,
+    paused: showDevChatDialog,
+  });
+
+  const openDevChat = useCallback(() => {
+    setDevChatNotificationsEnabled(true);
+    markDevChatRead();
+    setShowDevChatDialog(true);
+  }, [markDevChatRead]);
 
   useEffect(() => {
     return screenCaptureService.subscribe(snapshot => setCapturePhase(snapshot.phase));
@@ -449,9 +465,10 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
 
         <HelpMenu
           closeMenu={closeMenu}
+          devChatUnreadCount={devChatUnreadCount}
           onMenuClick={handleMenuClick}
           onMenuHover={handleMenuHover}
-          onOpenDevChat={() => setShowDevChatDialog(true)}
+          onOpenDevChat={openDevChat}
           onOpenLeaveNote={() => setShowLeaveNoteDialog(true)}
           openMenu={openMenu}
         />
@@ -544,7 +561,12 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
       )}
 
       {showInfoDialog && <InfoDialog onClose={() => setShowInfoDialog(false)} />}
-      {showDevChatDialog && <DevChatDialog onClose={() => setShowDevChatDialog(false)} />}
+      {showDevChatDialog && (
+        <DevChatDialog
+          onClose={() => setShowDevChatDialog(false)}
+          onMessagesSeen={markDevChatMessagesSeen}
+        />
+      )}
       {showLeaveNoteDialog && <LeaveNoteDialog onClose={() => setShowLeaveNoteDialog(false)} />}
       {showLegalDialog && <LegalDialog initialPage={showLegalDialog} onClose={() => setShowLegalDialog(null)} />}
     </div>

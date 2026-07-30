@@ -260,6 +260,7 @@ export function useFlashBoardGenerationFlowController({
         && entry.supportsGenerateAudio
         ? savedSettings.generateAudio
         : undefined;
+      const nextGenerateAudio = savedGenerateAudio ?? false;
       const nextVersion = savedVersion ?? transition.nextVersion;
       const nextMode = savedMode ?? transition.nextMode;
       const nextDuration = savedDuration ?? transition.nextDuration;
@@ -271,7 +272,7 @@ export function useFlashBoardGenerationFlowController({
       if (nextDuration !== undefined) setDuration(nextDuration);
       if (nextAspectRatio !== undefined) setAspectRatio(nextAspectRatio);
       if (nextImageSize !== undefined) setImageSize(nextImageSize);
-      if (savedGenerateAudio !== undefined) setGenerateAudio(savedGenerateAudio);
+      setGenerateAudio(nextGenerateAudio);
 
       updateComposer({
         ...transition.composerPatch,
@@ -280,7 +281,9 @@ export function useFlashBoardGenerationFlowController({
         duration: nextDuration ?? duration,
         aspectRatio: nextAspectRatio ?? aspectRatio,
         imageSize: nextImageSize ?? imageSize,
-        generateAudio: savedGenerateAudio ?? transition.composerPatch.generateAudio,
+        generateAudio: nextGenerateAudio,
+        multiShots: false,
+        multiPrompt: [],
       });
     }
 

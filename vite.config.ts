@@ -393,6 +393,7 @@ export default defineConfig(({ command, mode }) => {
     '/api/ai/audio',
     '/api/ai/video',
     '/api/visits',
+    '/api/admin',
   ];
   const hostedApiProxy = Object.fromEntries(
     hostedApiProxyRoutes.map((route) => [

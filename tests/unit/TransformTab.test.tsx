@@ -6,6 +6,8 @@ import type { BlendMode } from '../../src/types/blendMode';
 
 const mockState = vi.hoisted(() => ({
   sourceType: 'gaussian-splat',
+  sourceWidth: 3840,
+  sourceHeight: 2160,
   isPlaying: false,
   setPropertyValue: vi.fn(),
   updateClipTransform: vi.fn(),
@@ -26,6 +28,9 @@ vi.mock('../../src/stores/timeline', () => {
     source: {
       type: mockState.sourceType,
       threeDEffectorsEnabled: true,
+      ...(mockState.sourceType === 'video' || mockState.sourceType === 'image'
+        ? { mediaFileId: 'media-1' }
+        : {}),
       ...(mockState.sourceType === 'camera'
         ? { cameraSettings: mockState.cameraSettings }
         : {}),
@@ -63,6 +68,12 @@ vi.mock('../../src/stores/mediaStore', () => ({
   useMediaStore: Object.assign(vi.fn(), {
     getState: vi.fn(() => ({
       getActiveComposition: () => ({ width: 1920, height: 1080 }),
+      files: [{
+        id: 'media-1',
+        width: mockState.sourceWidth,
+        height: mockState.sourceHeight,
+      }],
+      compositions: [],
     })),
   }),
 }));
@@ -191,6 +202,78 @@ describe('TransformTab position units', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     expect(mockState.setPropertyValue).toHaveBeenCalledWith('clip-1', 'speed', 100);
+  });
+
+  it('accepts negative X and Y scale values for mirrored clips', () => {
+    mockState.sourceType = 'video';
+    const { container } = render(
+      <TransformTab
+        clipId="clip-1"
+        transform={makeTransform({ x: 0, y: 0, z: 0 })}
+      />,
+    );
+
+    const scaleXValue = container.querySelector(
+      '[data-guided-property="scale.x"] .draggable-number',
+    ) as HTMLElement;
+    fireEvent.doubleClick(scaleXValue);
+    let input = container.querySelector('input.draggable-number-input') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '-125' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    const scaleYValue = container.querySelector(
+      '[data-guided-property="scale.y"] .draggable-number',
+    ) as HTMLElement;
+    fireEvent.doubleClick(scaleYValue);
+    input = container.querySelector('input.draggable-number-input') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '-75' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(mockState.setPropertyValue).toHaveBeenCalledWith('clip-1', 'scale.x', -1.25);
+    expect(mockState.setPropertyValue).toHaveBeenCalledWith('clip-1', 'scale.y', -0.75);
+  });
+
+  it('toggles horizontal and vertical flips while preserving scale magnitude', () => {
+    mockState.sourceType = 'video';
+    const { getByRole } = render(
+      <TransformTab
+        clipId="clip-1"
+        transform={{
+          ...makeTransform({ x: 0, y: 0, z: 0 }),
+          scale: { x: 1.25, y: -0.5, z: 1 },
+        }}
+      />,
+    );
+
+    const horizontalFlip = getByRole('button', { name: 'Flip horizontal' });
+    const verticalFlip = getByRole('button', { name: 'Flip vertical' });
+
+    expect(horizontalFlip).toHaveAttribute('aria-pressed', 'false');
+    expect(verticalFlip).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(horizontalFlip);
+    fireEvent.click(verticalFlip);
+
+    expect(mockState.setPropertyValue).toHaveBeenCalledWith('clip-1', 'scale.x', -1.25);
+    expect(mockState.setPropertyValue).toHaveBeenCalledWith('clip-1', 'scale.y', 0.5);
+  });
+
+  it('fits explicitly while keeping 100 percent reserved for native source pixels', () => {
+    mockState.sourceType = 'video';
+    mockState.sourceWidth = 3840;
+    mockState.sourceHeight = 2160;
+    const { getByRole } = render(
+      <TransformTab
+        clipId="clip-1"
+        transform={makeTransform({ x: 0, y: 0, z: 0 })}
+      />,
+    );
+
+    fireEvent.click(getByRole('button', { name: 'Fit source to composition' }));
+
+    expect(mockState.setPropertyValue).toHaveBeenCalledWith('clip-1', 'scale.all', 1);
+    expect(mockState.setPropertyValue).toHaveBeenCalledWith('clip-1', 'scale.x', 0.5);
+    expect(mockState.setPropertyValue).toHaveBeenCalledWith('clip-1', 'scale.y', 0.5);
   });
 
   it('edits 3D video plane positions in scene units', () => {

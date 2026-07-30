@@ -3,10 +3,8 @@ import {
   createGuidedReplayBudgetController,
   executeAIToolCalls,
   getToolPolicy,
-  type ToolPolicyEntry,
   type ToolResult,
 } from '../aiTools';
-import { useSettingsStore } from '../../stores/settingsStore';
 import {
   FLASHBOARD_CHAT_MAX_PROVIDER_TOOLS,
   FLASHBOARD_CHAT_MAX_TOOL_ITERATIONS,
@@ -18,7 +16,6 @@ import {
 } from './FlashBoardChatImageData';
 import type {
   AnthropicToolDefinition,
-  FlashBoardApprovalMode,
   FlashBoardChatCompletionMessage,
   FlashBoardChatToolExecutionMode,
   FlashBoardExecutedToolCall,
@@ -94,20 +91,6 @@ function parseToolArguments(rawArguments: string): Record<string, unknown> {
   }
 
   return {};
-}
-
-function shouldRequireConfirmation(
-  policy: ToolPolicyEntry | undefined,
-  approvalMode: FlashBoardApprovalMode,
-): boolean {
-  if (!policy) return true;
-  if (approvalMode === 'auto') return false;
-  if (approvalMode === 'confirm-destructive') {
-    return policy.requiresConfirmation || policy.riskLevel === 'high' ||
-      policy.localFileAccess || policy.sensitiveDataAccess;
-  }
-
-  return !policy.readOnly;
 }
 
 /**
@@ -195,7 +178,6 @@ export async function executeFlashBoardToolCalls(
   maxToolResultChars: number,
   options: { toolExecutionMode?: FlashBoardChatToolExecutionMode } = {},
 ): Promise<FlashBoardExecutedToolCall[]> {
-  const approvalMode = useSettingsStore.getState().aiApprovalMode;
   const guidedReplayBudgetController = createGuidedReplayBudgetController();
   const preparedToolCalls: Array<{
     args: Record<string, unknown>;
@@ -227,18 +209,6 @@ export async function executeFlashBoardToolCalls(
         result: {
           success: false,
           error: `Tool "${toolCall.name}" is mutating and this diagnostic chat run is read-only.`,
-        },
-      });
-      continue;
-    }
-
-    if (shouldRequireConfirmation(policy, approvalMode)) {
-      preparedToolCalls.push({
-        args,
-        toolCall,
-        result: {
-          success: false,
-          error: `Tool "${toolCall.name}" requires confirmation in the current AI approval mode. Use the full AI Editor approval flow or switch approval mode to Auto before running it from compact chat.`,
         },
       });
       continue;

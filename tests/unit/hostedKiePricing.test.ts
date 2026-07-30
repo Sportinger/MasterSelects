@@ -79,6 +79,58 @@ describe('hosted Kie.ai pricing', () => {
     });
   });
 
+  it('uploads parallel Nano Banana references with distinct names and detected PNG media types', async () => {
+    const uploadedFiles: Array<{ fileName: string; mimeType: string }> = [];
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.body instanceof FormData) {
+        const fileName = String(init.body.get('fileName'));
+        const file = init.body.get('file');
+
+        if (!(file instanceof Blob)) {
+          throw new Error('Expected an uploaded image blob');
+        }
+
+        uploadedFiles.push({ fileName, mimeType: file.type });
+        return new Response(JSON.stringify({
+          data: {
+            fileUrl: `https://cdn.example.com/${fileName}`,
+          },
+          success: true,
+        }), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({
+        code: 200,
+        data: { taskId: 'nano_banana_task_1' },
+        msg: 'success',
+      }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(createHostedImageTask({
+      KIEAI_API_KEY: 'kie_test_key',
+    } as Partial<Env> as Env, {
+      aspectRatio: '16:9',
+      imageInputs: [
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
+        'data:application/octet-stream;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAAC',
+      ],
+      prompt: 'Place the complete logo from REF 2 onto the image from REF 1.',
+      provider: 'nano-banana-2',
+      resolution: '1K',
+    })).resolves.toEqual({ taskId: 'nano_banana_task_1' });
+
+    expect(uploadedFiles).toHaveLength(2);
+    expect(new Set(uploadedFiles.map(({ fileName }) => fileName)).size).toBe(2);
+    expect(uploadedFiles.every(({ fileName }) => fileName.endsWith('.png'))).toBe(true);
+    expect(uploadedFiles.every(({ mimeType }) => mimeType === 'image/png')).toBe(true);
+
+    const createBody = JSON.parse(fetchMock.mock.calls[2]?.[1]?.body as string);
+    expect(createBody.input.image_input).toEqual(uploadedFiles.map(
+      ({ fileName }) => `https://cdn.example.com/${fileName}`,
+    ));
+  });
+
   it('normalizes hosted Kling reference media for production cloud requests', () => {
     expect(normalizeHostedKlingParams({
       duration: 5,
@@ -265,15 +317,8 @@ describe('hosted Kie.ai pricing', () => {
     })?.compactLabel).toBe('1980 cr');
   });
 
-  it('uploads hosted Seedance audio references into reference_audio_urls', async () => {
+  it('sends hosted Seedance start and end images as exact frame fields', async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        data: {
-          downloadUrl: 'https://cdn.example.com/download/voice-drive',
-          fileUrl: 'https://cdn.example.com/voice-drive.wav',
-        },
-        success: true,
-      }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         code: 200,
         data: { taskId: 'seedance_task_1' },
@@ -287,37 +332,53 @@ describe('hosted Kie.ai pricing', () => {
       aspectRatio: '16:9',
       duration: 8,
       mode: '720p',
-      prompt: 'A presenter speaks naturally on camera.',
+      prompt: 'A subject moves smoothly between the supplied frames.',
       provider: 'bytedance/seedance-2',
-      referenceMedia: [
-        {
-          fileName: 'voice-drive.wav',
-          mediaType: 'audio',
-          mimeType: 'audio/wav',
-          source: 'data:audio/wav;base64,UklGRg==',
-        },
-      ],
+      startImageUrl: 'https://cdn.example.com/start.png',
+      endImageUrl: 'https://cdn.example.com/end.png',
       sound: true,
     })).resolves.toEqual({ taskId: 'seedance_task_1' });
 
-    const uploadBody = fetchMock.mock.calls[0]?.[1]?.body as FormData;
-    expect(uploadBody.get('uploadPath')).toBe('audios');
-
-    const createBody = JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string);
+    const createBody = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
     expect(createBody).toMatchObject({
       input: {
         aspect_ratio: '16:9',
         duration: 8,
+        first_frame_url: 'https://cdn.example.com/start.png',
         generate_audio: true,
-        reference_audio_urls: ['https://cdn.example.com/voice-drive.wav'],
+        last_frame_url: 'https://cdn.example.com/end.png',
         resolution: '720p',
         return_last_frame: false,
         web_search: false,
       },
       model: 'bytedance/seedance-2',
     });
-    expect(createBody.input.prompt).toContain('Synchronize visible speech');
-    expect(createBody.input).not.toHaveProperty('first_frame_url');
+    expect(createBody.input).not.toHaveProperty('reference_image_urls');
+    expect(createBody.input).not.toHaveProperty('reference_video_urls');
+    expect(createBody.input).not.toHaveProperty('reference_audio_urls');
+  });
+
+  it('rejects hosted Seedance multimodal references before making provider calls', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(createHostedSeedanceTask({
+      KIEAI_API_KEY: 'kie_test_key',
+    } as Partial<Env> as Env, {
+      aspectRatio: '16:9',
+      duration: 8,
+      mode: '720p',
+      prompt: 'A presenter speaks naturally on camera.',
+      provider: 'bytedance/seedance-2',
+      referenceMedia: [{
+        fileName: 'voice-drive.wav',
+        mediaType: 'audio',
+        mimeType: 'audio/wav',
+        source: 'data:audio/wav;base64,UklGRg==',
+      }],
+      sound: true,
+    })).rejects.toThrow('Seedance multimodal references are temporarily disabled');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('routes hosted Flux Kontext image generation through Kie.ai special endpoints', async () => {

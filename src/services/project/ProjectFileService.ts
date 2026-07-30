@@ -633,6 +633,18 @@ class ProjectFileService {
     return artifactStorageDelegates.getAllAnalysisMerged(this.artifactStorageContext, mediaId);
   }
 
+  async saveSceneDescriptions(mediaId: string, segments: unknown[]): Promise<boolean> {
+    return artifactStorageDelegates.saveSceneDescriptions(this.artifactStorageContext, mediaId, segments);
+  }
+
+  async getSceneDescriptions(mediaId: string): Promise<unknown[] | null> {
+    return artifactStorageDelegates.getSceneDescriptions(this.artifactStorageContext, mediaId);
+  }
+
+  async deleteSceneDescriptions(mediaId: string): Promise<boolean> {
+    return artifactStorageDelegates.deleteSceneDescriptions(this.artifactStorageContext, mediaId);
+  }
+
   async deleteAnalysis(mediaId: string): Promise<boolean> {
     return artifactStorageDelegates.deleteAnalysis(this.artifactStorageContext, mediaId);
   }

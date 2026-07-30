@@ -19,7 +19,7 @@ export interface CompositionActions {
   updateComposition: (id: string, updates: Partial<Composition>) => void;
   setActiveComposition: (id: string | null) => void;
   getActiveComposition: () => Composition | undefined;
-  openCompositionTab: (id: string, options?: CompositionSwitchOptions) => void;
+  openCompositionTab: (id: string, options?: CompositionSwitchOptions) => void | Promise<void>;
   closeCompositionTab: (id: string) => void;
   getOpenCompositions: () => Composition[];
   reorderCompositionTabs: (fromIndex: number, toIndex: number) => void;

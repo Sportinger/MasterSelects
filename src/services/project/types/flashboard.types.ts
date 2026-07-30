@@ -117,6 +117,7 @@ export interface ProjectFlashBoardGenerationRequest {
   service: ProjectFlashBoardService;
   providerId: string;
   version: string;
+  idempotencyKey?: string;
   outputType?: ProjectFlashBoardOutputType;
   mode?: string;
   originalPrompt?: string;

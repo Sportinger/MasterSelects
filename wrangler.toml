@@ -14,6 +14,10 @@ id = "daadda485425465791a1c83afc48be67"
 
 [vars]
 ENVIRONMENT = "development"
+CLOUDFLARE_ACCOUNT_ID = "899f606d84090483cd2725e0d54b78df"
+CLOUDFLARE_D1_DATABASE_ID = "a2f0a1aa-6bd9-4c75-9406-d09b93635eac"
+CLOUDFLARE_PAGES_PROJECT = "masterselects"
+MASTERSELECTS_PUBLIC_URL = "https://www.masterselects.com"
 
 [env.preview]
 
@@ -34,6 +38,10 @@ id = "daadda485425465791a1c83afc48be67"
 
 [env.preview.vars]
 ENVIRONMENT = "development"
+CLOUDFLARE_ACCOUNT_ID = "899f606d84090483cd2725e0d54b78df"
+CLOUDFLARE_D1_DATABASE_ID = "a2f0a1aa-6bd9-4c75-9406-d09b93635eac"
+CLOUDFLARE_PAGES_PROJECT = "masterselects"
+MASTERSELECTS_PUBLIC_URL = "https://www.masterselects.com"
 
 [env.production]
 
@@ -54,3 +62,7 @@ id = "daadda485425465791a1c83afc48be67"
 
 [env.production.vars]
 ENVIRONMENT = "production"
+CLOUDFLARE_ACCOUNT_ID = "899f606d84090483cd2725e0d54b78df"
+CLOUDFLARE_D1_DATABASE_ID = "a2f0a1aa-6bd9-4c75-9406-d09b93635eac"
+CLOUDFLARE_PAGES_PROJECT = "masterselects"
+MASTERSELECTS_PUBLIC_URL = "https://www.masterselects.com"

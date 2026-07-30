@@ -238,8 +238,7 @@ export function useFlashBoardReferenceValidationController({
   const seedanceReferenceModeActive = isSeedance2ProviderId(providerId)
     && (composer.referenceMediaFileIds ?? []).length > 0;
   const seedanceReferenceValidationError = getSeedanceReferenceValidationError({
-    hasAudioReference: hasSeedanceAudioReferenceInput,
-    hasVisualReference: hasSeedanceVisualReferenceInput,
+    hasReferenceMedia: (composer.referenceMediaFileIds ?? []).length > 0,
     providerId,
   });
 

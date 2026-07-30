@@ -102,6 +102,7 @@ export function useFlashBoardChatController({
   const [openAiReasoningEffort, setOpenAiReasoningEffort] = useState<FlashBoardOpenAiReasoningEffort>(
     DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT,
   );
+  const [planThreeEnabled, setPlanThreeEnabled] = useState(false);
   const chatMessages = useFlashBoardStore((state) => state.chatMessages);
   const setChatMessages = useCallback((
     updater: FlashBoardChatMessage[] | ((current: FlashBoardChatMessage[]) => FlashBoardChatMessage[]),
@@ -220,6 +221,13 @@ export function useFlashBoardChatController({
     if (chatProvider === 'lemonade') setLemonadeModel(model);
   }, [chatProvider, setLemonadeModel]);
 
+  const handlePlanThreeToggle = useCallback(() => {
+    if (isChatting) return;
+    closePopover();
+    setPlanThreeEnabled((enabled) => !enabled);
+    setChatError(null);
+  }, [closePopover, isChatting]);
+
   useEffect(() => {
     const fallbackProvider = buildFlashBoardChatProviderFallback({ chatProvider, chatProviderOptions });
     if (fallbackProvider) {
@@ -237,6 +245,7 @@ export function useFlashBoardChatController({
       canUseHostedChat,
       chatMessages,
       chatPanelOpen,
+      planThreeEnabled,
       chatProvider,
       chatTemperature,
       effectiveChatPrompt,
@@ -314,7 +323,6 @@ export function useFlashBoardChatController({
             ? { text: 'Starting kernel…' }
             : { text: 'AI thinking…', kernelProgress: undefined });
         },
-        playbookPrompt: effectiveChatPrompt,
         signal: abortController.signal,
         systemPromptIncludeContext: chatSystemPromptSendContext,
         systemPromptOverride: chatSystemPromptOverride,
@@ -345,6 +353,7 @@ export function useFlashBoardChatController({
     chatMessages,
     chatPanelOpen,
     chatPrompt,
+    planThreeEnabled,
     chatProvider,
     chatTemperature,
     closePopover,
@@ -455,6 +464,7 @@ export function useFlashBoardChatController({
     handleChatButtonClick,
     handleChatInputKeyDown,
     handleChatMessageDoubleClick,
+    handlePlanThreeToggle,
     handleChatProviderSelect,
     handleChatPromptChange,
     handleClearChatHistory,
@@ -462,6 +472,7 @@ export function useFlashBoardChatController({
     isChatting,
     lemonadeStatus,
     openAiReasoningEffort,
+    planThreeEnabled,
     chatSystemPromptProvider,
     chatSystemPromptSendContext,
     setChatModel: handleChatModelSelect,

@@ -4,8 +4,8 @@ import {
   hasClipDragIntent,
 } from '../../src/components/timeline/utils/clipDragSelectionIntent';
 
-describe('clip drag selection intent', () => {
-  it('keeps a stationary Shift gesture available for selection toggling', () => {
+describe('clip drag intent', () => {
+  it('keeps stationary and small pointer jitter as an ordinary click', () => {
     expect(hasClipDragIntent(100, 50, 100, 50)).toBe(false);
     expect(hasClipDragIntent(
       100,
@@ -13,9 +13,10 @@ describe('clip drag selection intent', () => {
       100 + CLIP_DRAG_INTENT_THRESHOLD_PX - 0.1,
       50,
     )).toBe(false);
+    expect(hasClipDragIntent(100, 50, 103, 53)).toBe(false);
   });
 
-  it('recognizes horizontal or vertical movement as drag intent', () => {
+  it('recognizes deliberate movement as drag intent', () => {
     expect(hasClipDragIntent(
       100,
       50,
@@ -28,5 +29,6 @@ describe('clip drag selection intent', () => {
       100,
       50 + CLIP_DRAG_INTENT_THRESHOLD_PX,
     )).toBe(true);
+    expect(hasClipDragIntent(100, 50, 105, 54)).toBe(true);
   });
 });

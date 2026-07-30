@@ -9,7 +9,6 @@ export const allowedAdapterPaths = [
   'src/services/project/**',
   'src/services/projectFileService.ts',
   'src/stores/historyStore/**',
-  // dockStore became a folder in packet 171; the adapter grant follows it.
   'src/stores/dockStore/**',
   'src/services/midi/**',
   'src/hooks/useMIDIRuntime.ts',
@@ -17,6 +16,7 @@ export const allowedAdapterPaths = [
   'src/services/matanyone/**',
   'src/services/muscriptor/**',
   'src/services/flashboard/**',
+  'src/services/mediaArtifacts/**',
   'src/services/mediaRuntime/**',
   'src/services/timeline/timelineRuntimeCoordinator.ts',
   'src/services/timeline/runtimeCoordinatorTypes.ts',
@@ -293,7 +293,7 @@ export const classCHardTargets = [
 ] as const satisfies readonly GetStateClassCHardTarget[];
 
 export const getStateAccessPolicyBaselines = {
-  allowedAdapterPathCount: 26,
+  allowedAdapterPathCount: 27,
   classCHardTargetFileCount: 245, // +3 classified landing-background workflow files
   classCHardTargetMaxHits: 708, // +19 classified landing-background workflow accesses
 } as const;

@@ -25,7 +25,11 @@ import {
   createHostedGatewayEnvelope,
   type HostedGatewayEnvelope,
 } from '../../lib/providers/shared';
-import { completeUsageEvent, createUsageEvent } from '../../lib/usage';
+import {
+  completeUsageEvent,
+  createUsageEvent,
+  getUsageEventByIdempotencyKey,
+} from '../../lib/usage';
 import type { AppContext, AppRouteHandler } from '../../lib/env';
 
 interface HostedVideoRouteBody {
@@ -51,6 +55,58 @@ interface HostedGenerationConfig {
   provider: string;
   requestUnits: string | null;
   usageMetadata: Record<string, unknown>;
+}
+
+function readTaskIdFromLedgerMetadata(metadataJson: string | null | undefined): string | null {
+  if (!metadataJson) return null;
+  try {
+    const metadata = JSON.parse(metadataJson) as { taskId?: unknown };
+    return typeof metadata.taskId === 'string' && metadata.taskId.trim()
+      ? metadata.taskId.trim()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function wait(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+async function waitForExistingGenerationTask(
+  context: AppContext,
+  input: {
+    idempotencyKey: string;
+    ledgerSource: string;
+    userId: string;
+  },
+): Promise<{ balance: number; taskId: string } | null> {
+  const timeoutAt = Date.now() + 45_000;
+
+  while (Date.now() < timeoutAt) {
+    const charge = await getCreditLedgerEntryBySource(
+      context.env.DB,
+      input.userId,
+      input.ledgerSource,
+      input.idempotencyKey,
+    );
+    const taskId = readTaskIdFromLedgerMetadata(charge?.metadata_json);
+    if (charge && taskId) {
+      return {
+        balance: charge.balance_after,
+        taskId,
+      };
+    }
+
+    const usage = await getUsageEventByIdempotencyKey(context.env.DB, input.idempotencyKey);
+    if (!usage || usage.status === 'failed') {
+      return null;
+    }
+
+    await wait(500);
+  }
+
+  return null;
 }
 
 function buildRouteEnvelope<TData>(
@@ -552,6 +608,60 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     generation.ledgerSource,
     idempotencyKey,
   );
+  const existingTaskId = readTaskIdFromLedgerMetadata(existingCharge?.metadata_json);
+
+  if (existingCharge && existingTaskId) {
+    return json(
+      buildRouteEnvelope({
+        creditBalance: hostedContext.billing?.balance ?? existingCharge.balance_after,
+        creditsCharged: 0,
+        data: {
+          outputType: generation.outputType,
+          provider: generation.provider,
+          taskId: existingTaskId,
+        },
+        ok: true,
+        requestId,
+        session: {
+          authenticated: true,
+          email: hostedContext.user.email,
+          provider: 'cookie_session',
+        },
+        status: 'accepted',
+      }),
+    );
+  }
+
+  const existingUsage = await getUsageEventByIdempotencyKey(context.env.DB, idempotencyKey);
+  if (existingUsage && existingUsage.status !== 'failed') {
+    const recoveredTask = await waitForExistingGenerationTask(context, {
+      idempotencyKey,
+      ledgerSource: generation.ledgerSource,
+      userId: hostedContext.user.id,
+    });
+
+    if (recoveredTask) {
+      return json(
+        buildRouteEnvelope({
+          creditBalance: hostedContext.billing?.balance ?? recoveredTask.balance,
+          creditsCharged: 0,
+          data: {
+            outputType: generation.outputType,
+            provider: generation.provider,
+            taskId: recoveredTask.taskId,
+          },
+          ok: true,
+          requestId,
+          session: {
+            authenticated: true,
+            email: hostedContext.user.email,
+            provider: 'cookie_session',
+          },
+          status: 'accepted',
+        }),
+      );
+    }
+  }
 
   if (!existingCharge && (hostedContext.billing?.balance ?? 0) < creditsRequired) {
     return json(
@@ -577,7 +687,13 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   }
 
   const moderation = await moderateAiInput(context.env, generation.params);
-  if (blocksAiRequest(moderation)) {
+  const moderationBlocksRequest = blocksAiRequest(
+    moderation,
+    generation.outputType === 'video'
+      ? { allowedFlaggedCategories: ['violence'] }
+      : undefined,
+  );
+  if (moderationBlocksRequest) {
     await insertAiAuditEvent(context, {
       feature: generation.feature,
       idempotencyKey,

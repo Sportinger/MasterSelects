@@ -1,10 +1,7 @@
 import { useMediaStore } from '../../stores/mediaStore';
 import type { Composition } from '../../stores/mediaStore/types';
 import { useTimelineStore } from '../../stores/timeline';
-import {
-  DEFAULT_TRANSFORM,
-  calculateNativeScale,
-} from '../../stores/timeline/constants';
+import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import type {
   CompositionTimelineData,
   SerializableClip,
@@ -476,8 +473,6 @@ function buildTopLevelClips(params: {
   readonly durationSeconds: number;
   readonly tree: FixtureClipTree;
 }): TimelineClip[] {
-  const parentScale = calculateNativeScale(960, 540);
-  const childScale = calculateNativeScale(720, 405);
   return [
     makeCompositionClip({
       id: 'wfg-nested-direct-child-clip',
@@ -490,7 +485,7 @@ function buildTopLevelClips(params: {
       nestedClips: params.tree.childNestedClips,
       transform: {
         ...DEFAULT_TRANSFORM,
-        scale: { x: childScale.x * 0.62, y: childScale.y * 0.62 },
+        scale: { x: 0.62, y: 0.62 },
         position: { x: 0.34, y: 0.26, z: 0 },
         opacity: 0.84,
       },
@@ -507,7 +502,7 @@ function buildTopLevelClips(params: {
       nestedClips: params.tree.parentNestedClips,
       transform: {
         ...DEFAULT_TRANSFORM,
-        scale: { x: parentScale.x * 0.62, y: parentScale.y * 0.62 },
+        scale: { x: 0.62, y: 0.62 },
         position: { x: 0.22, y: -0.12, z: 0 },
         opacity: 0.78,
       },
@@ -523,7 +518,7 @@ function buildTopLevelClips(params: {
       nestedClips: params.tree.parentNestedClips,
       transform: {
         ...DEFAULT_TRANSFORM,
-        scale: { x: parentScale.x * 0.82, y: parentScale.y * 0.82 },
+        scale: { x: 0.82, y: 0.82 },
         position: { x: -0.18, y: 0.04, z: 0 },
       },
     }),

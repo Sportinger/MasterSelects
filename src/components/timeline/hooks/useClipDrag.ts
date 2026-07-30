@@ -165,11 +165,10 @@ export function useClipDrag({
         multiSelectClipIds: otherSelectedIds.length > 0 ? otherSelectedIds : undefined,
         multiSelectTimeDelta: 0,
       };
-      let dragStarted = !shiftSelectionClickCandidate;
-      if (dragStarted) {
-        setClipDragStateForInteraction(initialDrag);
-        setClipDragPreviewFromDrag(initialDrag, currentClipMap, tracksRef.current);
-      }
+      // A pointer-down selects the clip, but it must not immediately become a
+      // drag. Waiting for deliberate pointer movement prevents tiny hand
+      // movements during an ordinary click from nudging the clip.
+      let dragStarted = false;
 
       const processMouseMove = (moveEvent: MouseEvent) => {
         if (!dragStarted) {
@@ -187,6 +186,7 @@ export function useClipDrag({
             selectClip(clipId, false, true);
           }
           setClipDragStateForInteraction(initialDrag);
+          setClipDragPreviewFromDrag(initialDrag, clipMapRef.current, tracksRef.current);
         }
         const drag = clipDragRef.current;
         if (!drag || !trackLanesRef.current || !timelineRef.current) return;

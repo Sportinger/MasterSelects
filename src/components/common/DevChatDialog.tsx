@@ -23,6 +23,11 @@ const POLL_INTERVAL_MS = 3_000;
 
 interface DevChatDialogProps {
   onClose: () => void;
+  onMessagesSeen?: (
+    conversationId: string,
+    messages: DevChatMessage[],
+    cursor: number,
+  ) => void;
   fetchMessages?: (
     conversationId: string,
     after?: number,
@@ -95,6 +100,7 @@ function formatMessageTime(createdAt: string): string {
 
 export function DevChatDialog({
   onClose,
+  onMessagesSeen,
   fetchMessages = fetchDevChatMessages,
   sendMessage = sendDevChatMessage,
 }: DevChatDialogProps) {
@@ -172,6 +178,11 @@ export function DevChatDialog({
         if (!isActive || pollGenerationRef.current !== pollGeneration) return;
 
         cursor = Math.max(cursor, response.cursor);
+        onMessagesSeen?.(
+          response.conversationId,
+          response.messages,
+          response.cursor,
+        );
         for (const message of response.messages) {
           if (message.deliveryStatus === 'pending') {
             pendingMessageIds.add(message.id);
@@ -213,7 +224,7 @@ export function DevChatDialog({
       controller.abort();
       window.clearInterval(pollTimer);
     };
-  }, [conversationId, fetchMessages]);
+  }, [conversationId, fetchMessages, onMessagesSeen]);
 
   const handleDialogKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'Tab') return;

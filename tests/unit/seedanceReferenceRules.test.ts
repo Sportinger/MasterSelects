@@ -12,19 +12,24 @@ describe('Seedance reference rules', () => {
     expect(isSeedance2ProviderId('kling-3.0')).toBe(false);
   });
 
-  it('blocks audio-only Seedance references before Kie.ai submission', () => {
+  it('blocks all Seedance multimodal references before Kie.ai submission', () => {
     expect(getSeedanceReferenceValidationError({
-      hasAudioReference: true,
-      hasVisualReference: false,
+      hasReferenceMedia: true,
       providerId: 'bytedance/seedance-2',
-    })).toBe('Seedance audio references need at least one image or video reference.');
+    })).toContain('multimodal references are temporarily disabled');
   });
 
-  it('allows Seedance audio references with a visual anchor', () => {
+  it('allows Seedance exact-frame mode without extra references', () => {
     expect(getSeedanceReferenceValidationError({
-      hasAudioReference: true,
-      hasVisualReference: true,
+      hasReferenceMedia: false,
       providerId: 'bytedance/seedance-2-fast',
+    })).toBeNull();
+  });
+
+  it('does not apply Seedance reference rules to other providers', () => {
+    expect(getSeedanceReferenceValidationError({
+      hasReferenceMedia: true,
+      providerId: 'kling-3.0',
     })).toBeNull();
   });
 });

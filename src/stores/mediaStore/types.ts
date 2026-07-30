@@ -9,6 +9,9 @@ import type {
 } from '../../types';
 import type {
   AnalysisStatus,
+  ClipAnalysis,
+  SceneDescriptionStatus,
+  SceneSegment,
   TranscriptFusionArtifact,
   TranscriptFusionProgress,
   TranscriptStatus,
@@ -154,8 +157,17 @@ export interface MediaFile extends MediaItem {
   transcriptCoverage?: number;  // 0-1, how much of total duration is transcribed
   transcribedRanges?: [number, number][];  // Time ranges that have been transcribed
   // Analysis support (CV or AI describe)
+  analysis?: ClipAnalysis;
   analysisStatus?: AnalysisStatus;
+  analysisProgress?: number;
   analysisCoverage?: number;    // 0-1, how much of total duration is analyzed
+  faceAnalysisStatus?: AnalysisStatus;
+  faceAnalysisProgress?: number;
+  faceAnalysisMessage?: string;
+  sceneDescriptions?: SceneSegment[];
+  sceneDescriptionStatus?: SceneDescriptionStatus;
+  sceneDescriptionProgress?: number;
+  sceneDescriptionMessage?: string;
   // File System Access API
   hasFileHandle?: boolean;
   filePath?: string;

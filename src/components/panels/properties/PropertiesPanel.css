@@ -1485,6 +1485,80 @@
   align-items: center;
 }
 
+.transform-tab-compact .scale-flip-controls {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 3px;
+}
+
+.transform-tab-compact .scale-flip-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.transform-tab-compact .scale-fit-button {
+  height: 22px;
+  min-width: 30px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 84%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel-bg) 82%, transparent);
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.025em;
+  cursor: pointer;
+}
+
+.transform-tab-compact .scale-fit-button:hover,
+.transform-tab-compact .scale-fit-button:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border-color));
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel-bg));
+  color: var(--accent);
+  outline: none;
+}
+
+.transform-tab-compact .scale-flip-button:hover,
+.transform-tab-compact .scale-flip-button:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border-color));
+  color: var(--accent);
+  outline: none;
+}
+
+.transform-tab-compact .scale-flip-button.is-active {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border-color));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.transform-tab-compact .scale-flip-icon {
+  width: 14px;
+  height: 14px;
+  overflow: visible;
+  fill: currentColor;
+  stroke: none;
+}
+
+.transform-tab-compact .scale-flip-axis {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.25;
+  stroke-linecap: round;
+  stroke-dasharray: 2 2;
+  opacity: 0.72;
+}
+
 .transform-tab-compact .rotation-row {
   grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
 }

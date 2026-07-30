@@ -9,6 +9,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import {
   getFlashBoardChatMessages,
   resetFlashBoardActiveGenerationState,
+  restoreFlashBoardActiveGenerationRecordsFromRecovery,
   subscribeFlashBoardActiveGenerationRecords,
   subscribeFlashBoardChatMessages,
   subscribeFlashBoardComposerState,
@@ -276,6 +277,7 @@ export function closeCurrentProject(): void {
  */
 export function setupAutoSync(): void {
   teardownAutoSync();
+  restoreFlashBoardActiveGenerationRecordsFromRecovery();
 
   const markProjectDirtyAndMaybeSave = (options?: { immediate?: boolean; delayMs?: number }) => {
     if (projectFileService.isProjectOpen() && !isProjectStoreSyncInProgress()) {

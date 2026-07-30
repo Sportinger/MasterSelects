@@ -166,8 +166,6 @@ interface SettingsState {
   matanyoneEnabled: boolean;      // Enable MatAnyone2 video matting
   matanyonePythonPath: string;    // Python path ('' = auto-detect)
 
-  // AI approval mode for tool execution
-  aiApprovalMode: 'auto' | 'confirm-destructive' | 'confirm-all-mutating';
   aiProvider: AIProvider;
   lemonadeEndpoint: string;
   lemonadeContextSize: number;
@@ -247,7 +245,6 @@ interface SettingsState {
   setGpuPowerPreference: (preference: GPUPowerPreference) => void;
   setMatAnyoneEnabled: (enabled: boolean) => void;
   setMatAnyonePythonPath: (path: string) => void;
-  setAiApprovalMode: (mode: 'auto' | 'confirm-destructive' | 'confirm-all-mutating') => void;
   setAiProvider: (provider: AIProvider) => void;
   setLemonadeEndpoint: (endpoint: string) => void;
   setLemonadeContextSize: (contextSize: number) => void;
@@ -337,7 +334,6 @@ export const useSettingsStore = create<SettingsState>()(
       gpuPowerPreference: 'high-performance', // Prefer dGPU by default
       matanyoneEnabled: false, // MatAnyone2 disabled by default
       matanyonePythonPath: '', // Auto-detect Python path
-      aiApprovalMode: 'auto' as const, // Let compact chat run editor actions by default
       aiProvider: 'openai' as AIProvider,
       lemonadeEndpoint: DEFAULT_LEMONADE_ENDPOINT,
       lemonadeContextSize: DEFAULT_LEMONADE_CONTEXT_SIZE,
@@ -479,10 +475,6 @@ export const useSettingsStore = create<SettingsState>()(
 
       setMatAnyonePythonPath: (path) => {
         set({ matanyonePythonPath: path });
-      },
-
-      setAiApprovalMode: (mode) => {
-        set({ aiApprovalMode: mode });
       },
 
       setAiProvider: (provider) => {
@@ -739,7 +731,6 @@ export const useSettingsStore = create<SettingsState>()(
         gpuPowerPreference: state.gpuPowerPreference,
         matanyoneEnabled: state.matanyoneEnabled,
         matanyonePythonPath: state.matanyonePythonPath,
-        aiApprovalMode: state.aiApprovalMode,
         aiProvider: state.aiProvider,
         lemonadeEndpoint: state.lemonadeEndpoint,
         lemonadeContextSize: state.lemonadeContextSize,

@@ -3,6 +3,9 @@ import { LegalDialog } from './components/common/LegalDialog';
 import type { EntryExperience } from './routing/entryExperience';
 
 const EditorApp = lazy(() => import('./App'));
+const AdminPage = lazy(() =>
+  import('./admin/AdminPage').then((module) => ({ default: module.AdminPage }))
+);
 const CreditClaimPage = lazy(() =>
   import('./creditClaims/CreditClaimPage').then((module) => ({ default: module.CreditClaimPage }))
 );
@@ -24,6 +27,14 @@ const loadingShellStyle: CSSProperties = {
 };
 
 export function RootApp({ initialExperience }: RootAppProps) {
+  if (initialExperience === 'admin') {
+    return (
+      <Suspense fallback={<div style={loadingShellStyle}>Opening secure operations...</div>}>
+        <AdminPage />
+      </Suspense>
+    );
+  }
+
   if (initialExperience === 'imprint' || initialExperience === 'privacy') {
     const legalPath = window.location.pathname.replace(/\/$/, '');
     return (

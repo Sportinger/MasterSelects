@@ -1,4 +1,4 @@
-import { cleanup, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_TRACKS, useTimelineStore } from '../../src/stores/timeline';
 import {
@@ -308,5 +308,131 @@ describe('timeline clipboard routing', () => {
       height: 2160,
       width: 3840,
     });
+  });
+
+  it('waits for the composition switch before adding media to a new comp', async () => {
+    let finishCompositionSwitch!: () => void;
+    const switchPromise = new Promise<void>((resolve) => {
+      finishCompositionSwitch = resolve;
+    });
+    const openCompositionTab = vi.fn(() => switchPromise);
+    const updateComposition = vi.fn();
+    const closeContextMenu = vi.fn();
+    const timelineState = useTimelineStore.getState();
+    const addClip = vi.spyOn(timelineState, 'addClip').mockResolvedValue('clip-1');
+    const setDuration = vi.spyOn(timelineState, 'setDuration').mockImplementation(() => undefined);
+    vi.spyOn(timelineState, 'getSerializableState').mockReturnValue({
+      tracks: DEFAULT_TRACKS,
+      clips: [],
+      playheadPosition: 0,
+      duration: 4321.23356,
+      durationLocked: true,
+      zoom: 50,
+      scrollX: 0,
+      inPoint: null,
+      outPoint: null,
+      loopPlayback: false,
+    });
+    const composition = {
+      id: 'comp-long-video',
+      name: 'Long video Comp',
+      type: 'composition' as const,
+      parentId: null,
+      createdAt: 1,
+      width: 854,
+      height: 480,
+      frameRate: 25,
+      duration: 4321.23356,
+      backgroundColor: '#000000',
+      timelineData: {
+        tracks: DEFAULT_TRACKS,
+        clips: [],
+        playheadPosition: 0,
+        duration: 4321.23356,
+        durationLocked: true,
+        zoom: 50,
+        scrollX: 0,
+        inPoint: null,
+        outPoint: null,
+        loopPlayback: false,
+      },
+    };
+    const mediaFile = {
+      createdAt: 1,
+      duration: 4321.23356,
+      file: new File(['video'], 'long-video.mp4', { type: 'video/mp4' }),
+      fps: 25,
+      height: 480,
+      id: 'media-long-video',
+      name: 'long-video.mp4',
+      parentId: null,
+      type: 'video' as const,
+      url: 'blob:long-video',
+      width: 854,
+    };
+    const { result } = renderHook(() => useMediaPanelSelectionCommands({
+      addToSelection: vi.fn(),
+      closeContextMenu,
+      contextMenu: null,
+      createComposition: vi.fn(() => composition),
+      copyMediaItems: vi.fn(),
+      createFolder: vi.fn(),
+      duplicateMediaItems: vi.fn(),
+      ensureFileThumbnail: vi.fn(),
+      folders: [],
+      generateAudioProxy: vi.fn(),
+      generateMediaSpectrogram: vi.fn(),
+      generateMediaWaveform: vi.fn(),
+      getActiveParentId: () => null,
+      getAiReferenceMediaFileIds: () => [],
+      handleDelete: vi.fn(),
+      importFiles: vi.fn(),
+      importFilesWithHandles: vi.fn(),
+      openCompositionTab,
+      pasteMediaItems: vi.fn(() => []),
+      reloadFile: vi.fn(),
+      removeFromSelection: vi.fn(),
+      selectedIds: ['media-long-video'],
+      setContextMenu: vi.fn(),
+      setGenerativeTrayExpanded: vi.fn(),
+      setGridFolderId: vi.fn(),
+      setSelectedMediaBoardAnnotationId: vi.fn(),
+      setSelection: vi.fn(),
+      setSourceMonitorFile: vi.fn(),
+      toggleFolderExpanded: vi.fn(),
+      updateAiReferenceMediaFileIds: vi.fn(),
+      updateComposition,
+      viewMode: 'classic',
+      hasMediaClipboard: () => false,
+    }));
+
+    let createPromise!: Promise<void>;
+    await act(async () => {
+      createPromise = result.current.handleCreateCompositionFromMedia(mediaFile);
+      await Promise.resolve();
+    });
+
+    expect(openCompositionTab).toHaveBeenCalledWith('comp-long-video', { skipAnimation: true });
+    expect(addClip).not.toHaveBeenCalled();
+
+    await act(async () => {
+      finishCompositionSwitch();
+      await createPromise;
+    });
+
+    expect(addClip).toHaveBeenCalledWith(
+      expect.any(String),
+      mediaFile.file,
+      0,
+      4321.23356,
+      'media-long-video',
+      'video',
+    );
+    expect(setDuration).toHaveBeenCalledWith(4321.23356);
+    expect(updateComposition).toHaveBeenCalledWith(
+      'comp-long-video',
+      expect.objectContaining({ duration: 4321.23356 }),
+    );
+    expect(closeContextMenu).toHaveBeenCalled();
   });
 });

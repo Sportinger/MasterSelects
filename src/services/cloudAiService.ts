@@ -211,9 +211,10 @@ export const cloudAiService = {
     syncHostedCreditBalance(response);
     return response.data ?? response;
   },
-  async createImageToVideo(params: ImageToVideoParams): Promise<string> {
+  async createImageToVideo(params: ImageToVideoParams, idempotencyKey?: string): Promise<string> {
     const response = await cloudApi.ai.video.create({
       action: 'generate',
+      idempotencyKey,
       params: {
         aspectRatio: params.aspectRatio,
         duration: params.duration,
@@ -231,9 +232,10 @@ export const cloudAiService = {
     syncHostedCreditBalance(response);
     return getHostedTaskId(response, 'Hosted video generation did not return a task id');
   },
-  async createTextToVideo(params: TextToVideoParams): Promise<string> {
+  async createTextToVideo(params: TextToVideoParams, idempotencyKey?: string): Promise<string> {
     const response = await cloudApi.ai.video.create({
       action: 'generate',
+      idempotencyKey,
       params: {
         aspectRatio: params.aspectRatio,
         duration: params.duration,

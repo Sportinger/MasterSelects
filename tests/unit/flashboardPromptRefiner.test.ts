@@ -61,7 +61,7 @@ const seedanceEntry: CatalogEntry = {
   supportsImageToVideo: true,
   supportsGenerateAudio: true,
   supportsMultiShot: false,
-  maxReferenceMedia: 8,
+  maxReferenceMedia: 0,
   outputType: 'video',
 };
 
@@ -210,7 +210,7 @@ describe('FlashBoardPromptRefiner', () => {
     expect(userText).toContain('what happens between');
   });
 
-  it('builds Seedance 2 prompt guidance around multimodal and audio-driven references', () => {
+  it('builds Seedance 2 prompt guidance around exact start and end frames', () => {
     const instructions = buildFlashBoardPromptRefinerInstructions({
       entry: seedanceEntry,
       service: seedanceEntry.service,
@@ -220,7 +220,7 @@ describe('FlashBoardPromptRefiner', () => {
       multiShots: false,
     });
     const userText = buildFlashBoardPromptRefinerUserText({
-      prompt: 'make her speak naturally to the beat',
+      prompt: 'move smoothly from the opening pose to the final pose',
       entry: seedanceEntry,
       service: seedanceEntry.service,
       providerId: seedanceEntry.providerId,
@@ -231,16 +231,16 @@ describe('FlashBoardPromptRefiner', () => {
       generateAudio: true,
       multiShots: false,
     }, [
-      { role: 'reference', label: 'REF 1', displayName: 'voice-drive.wav', mediaType: 'audio' },
-      { role: 'reference', label: 'REF 2', displayName: 'gesture.mp4', mediaType: 'video' },
+      { role: 'start', label: 'IN', displayName: 'opening.png', mediaType: 'image' },
+      { role: 'end', label: 'OUT', displayName: 'ending.png', mediaType: 'image' },
     ]);
 
     expect(instructions).toContain('ByteDance Seedance 2.0');
-    expect(instructions).toContain('REF audio');
-    expect(instructions).toContain('performance, speech, mouth-shape');
-    expect(instructions).toContain('multimodal reference mode');
-    expect(userText).toContain('REF 1 (reference audio): voice-drive.wav');
-    expect(userText).toContain('REF 2 (reference video): gesture.mp4');
+    expect(instructions).toContain('exact visual boundary frames');
+    expect(instructions).toContain('Do not reinterpret');
+    expect(instructions).not.toContain('multimodal reference mode');
+    expect(userText).toContain('IN (start image): opening.png');
+    expect(userText).toContain('OUT (end image): ending.png');
   });
 
   it('includes selected generation settings and reference labels in user text', () => {

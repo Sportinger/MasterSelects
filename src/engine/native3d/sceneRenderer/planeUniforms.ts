@@ -6,6 +6,7 @@ import {
   PLANE_UNIFORM_SIZE,
   WORLD_HEIGHT,
 } from './constants';
+import { calculateSourcePixelScale } from '../../../utils/sourcePixelScale';
 
 export function buildPlaneUniformData(
   mvp: Float32Array,
@@ -36,14 +37,20 @@ function createPlaneScaleMatrix(
 ): Float32Array {
   const outputAspect = viewport.width / Math.max(viewport.height, 1);
   const sourceAspect = layer.sourceWidth / Math.max(layer.sourceHeight, 1);
+  const sourcePixelScale = calculateSourcePixelScale(
+    layer.sourceWidth,
+    layer.sourceHeight,
+    viewport.width,
+    viewport.height,
+  );
   let planeWidth: number;
   let planeHeight: number;
 
   if (sourceAspect >= outputAspect) {
-    planeWidth = WORLD_HEIGHT * outputAspect;
+    planeWidth = WORLD_HEIGHT * outputAspect * sourcePixelScale;
     planeHeight = planeWidth / Math.max(sourceAspect, 1e-6);
   } else {
-    planeHeight = WORLD_HEIGHT;
+    planeHeight = WORLD_HEIGHT * sourcePixelScale;
     planeWidth = planeHeight * sourceAspect;
   }
 

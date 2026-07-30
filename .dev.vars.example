@@ -1,5 +1,14 @@
 ENVIRONMENT=development
 SESSION_SECRET=replace-me
+ADMIN_PASSWORD_HASH=pbkdf2-sha256$100000$replace-salt$replace-hash
+# Optional transport-safe alternative used in hosted secret managers.
+ADMIN_PASSWORD_HASH_B64=
+ADMIN_SESSION_SECRET=replace-with-at-least-32-random-characters
+CLOUDFLARE_API_TOKEN=replace-with-a-read-only-cloudflare-token
+CLOUDFLARE_ACCOUNT_ID=899f606d84090483cd2725e0d54b78df
+CLOUDFLARE_D1_DATABASE_ID=a2f0a1aa-6bd9-4c75-9406-d09b93635eac
+CLOUDFLARE_PAGES_PROJECT=masterselects
+MASTERSELECTS_PUBLIC_URL=https://www.masterselects.com
 AUTH_EMAIL_FROM="MasterSelects <auth@example.com>"
 SUPPORT_NOTE_EMAIL=admin@masterselects.com
 GOOGLE_CLIENT_ID=replace-me

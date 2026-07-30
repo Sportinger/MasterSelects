@@ -287,7 +287,6 @@ export function useMediaPanelSelectionCommands({
   });
   const hasTimelineSelection = (timelineClipboardRouting & 1) !== 0;
   const timelineOwnsPaste = (timelineClipboardRouting & 2) !== 0;
-  const loadTimelineState = useTimelineStore((state) => state.loadState);
   const addTimelineClip = useTimelineStore((state) => state.addClip);
   const setTimelineDuration = useTimelineStore((state) => state.setDuration);
   const getSerializableTimelineState = useTimelineStore((state) => state.getSerializableState);
@@ -407,8 +406,7 @@ export function useMediaPanelSelectionCommands({
       requestMediaBoardPlacement({ itemIds: [composition.id], point: contextMenu.boardPosition });
     }
 
-    openCompositionTab(composition.id, { skipAnimation: true });
-    await loadTimelineState(composition.timelineData);
+    await openCompositionTab(composition.id, { skipAnimation: true });
 
     const tracks = composition.timelineData?.tracks ?? DEFAULT_TRACKS;
     const trackId = tracks.find((track) => track.type === 'video' && !track.locked)?.id;
@@ -429,7 +427,6 @@ export function useMediaPanelSelectionCommands({
     createComposition,
     getActiveParentId,
     getSerializableTimelineState,
-    loadTimelineState,
     openCompositionTab,
     setTimelineDuration,
     showFloatingText,

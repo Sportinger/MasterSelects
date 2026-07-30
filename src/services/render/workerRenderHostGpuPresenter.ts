@@ -4,6 +4,7 @@ import type {
   WorkerRenderSoftwareLayer,
 } from './workerRenderHostRuntimeCommands';
 import { closeWorkerSoftwareFrameBitmaps, forEachWorkerSoftwareLayerInPaintOrder } from './workerRenderHostSoftwarePainter';
+import { calculateSourcePixelScale } from '../../utils/sourcePixelScale';
 
 type WorkerGpuGlobal = typeof globalThis & {
   navigator?: Navigator & {
@@ -195,8 +196,14 @@ function layerFootprint(input: {
   const sourceAspect = sourceWidth / sourceHeight;
   const targetAspect = input.targetWidth / input.targetHeight;
   const aspectRatio = sourceAspect / targetAspect;
-  const scaleX = finiteNumber(input.layer.geometry.scale.x, 1);
-  const scaleY = finiteNumber(input.layer.geometry.scale.y, 1);
+  const sourcePixelScale = calculateSourcePixelScale(
+    sourceWidth,
+    sourceHeight,
+    input.targetWidth,
+    input.targetHeight,
+  );
+  const scaleX = finiteNumber(input.layer.geometry.scale.x, 1) * sourcePixelScale;
+  const scaleY = finiteNumber(input.layer.geometry.scale.y, 1) * sourcePixelScale;
   let localPositionX = finiteNumber(input.layer.geometry.position.x, 0);
   let localPositionY = finiteNumber(input.layer.geometry.position.y, 0);
   let width = input.targetWidth;

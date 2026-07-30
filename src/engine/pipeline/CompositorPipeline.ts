@@ -146,7 +146,8 @@ export class CompositorPipeline {
     outputAspect: number,
     hasMask: boolean,
     uniformBuffer: GPUBuffer,
-    inlineEffects?: InlineEffectParams
+    inlineEffects?: InlineEffectParams,
+    sourcePixelScale = 1,
   ): void {
     writeLayerUniformData(
       layer,
@@ -156,6 +157,7 @@ export class CompositorPipeline {
       this.uniformData,
       this.uniformDataU32,
       inlineEffects,
+      sourcePixelScale,
     );
 
     // Change detection - only write to GPU if values changed

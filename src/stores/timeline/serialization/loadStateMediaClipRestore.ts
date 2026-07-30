@@ -15,7 +15,6 @@ import {
   startLoadStateVectorRuntimeRestore,
 } from '../../../services/timeline/timelineMediaSourceRuntimeRestore';
 import { isVectorAnimationSourceType } from '../../../types/vectorAnimation';
-import { applySharedClipAnalysisState } from '../../../services/clipAnalysis/sourceAnalysisSharing';
 import type { useMediaStore } from '../../mediaStore';
 import {
   createDataOnlyRestoredGaussianSplatSource,
@@ -29,6 +28,9 @@ import {
 } from '../nestedRestore';
 import { startRestoredVectorRuntimeRestore } from '../vectorRuntimeRestore';
 import { recoverPersistedTranscriptStatus } from '../../../services/transcription/persistedTranscriptStatus';
+import {
+  hydrateAndProjectMediaSourceArtifacts,
+} from '../../../services/mediaArtifacts/mediaSourceArtifacts';
 
 const log = Logger.create('Timeline');
 type MediaStoreState = ReturnType<typeof useMediaStore.getState>;
@@ -80,11 +82,15 @@ function createRestoredMediaClip(params: {
   serializedClip: SerializableClip;
 }): TimelineClip {
   const { file, initialSource, mediaFile, needsReload, serializedClip } = params;
-  const analysis = facePersistence.sanitizePersistedFaceAnalysis(serializedClip.analysis);
+  const analysis = facePersistence.sanitizePersistedFaceAnalysis(serializedClip.analysis)
+    ?? mediaFile.analysis;
   const faceAnalysisStatus = facePersistence.normalizePersistedFaceStatus(
-    serializedClip.faceAnalysisStatus,
+    serializedClip.faceAnalysisStatus ?? mediaFile.faceAnalysisStatus,
     analysis,
   );
+  const transcript = serializedClip.transcript?.length
+    ? serializedClip.transcript
+    : mediaFile.transcript;
   return {
     id: serializedClip.id,
     trackId: serializedClip.trackId,
@@ -119,17 +125,26 @@ function createRestoredMediaClip(params: {
     nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
     isLoading: !needsReload,
     masks: serializedClip.masks,
-    transcript: serializedClip.transcript,
+    transcript,
     transcriptStatus: recoverPersistedTranscriptStatus(
-      serializedClip.transcriptStatus,
-      serializedClip.transcript,
+      serializedClip.transcriptStatus ?? mediaFile.transcriptStatus,
+      transcript,
     ),
     analysis,
-    analysisStatus: serializedClip.analysisStatus || 'none',
+    analysisStatus: serializedClip.analysisStatus ?? mediaFile.analysisStatus ?? 'none',
+    analysisProgress: mediaFile.analysisProgress,
     faceAnalysisStatus,
+    faceAnalysisProgress: mediaFile.faceAnalysisProgress,
     faceAnalysisMessage: faceAnalysisStatus === 'error'
-      ? serializedClip.faceAnalysisMessage
+      ? serializedClip.faceAnalysisMessage ?? mediaFile.faceAnalysisMessage
       : undefined,
+    sceneDescriptions: serializedClip.sceneDescriptions?.length
+      ? serializedClip.sceneDescriptions
+      : mediaFile.sceneDescriptions,
+    sceneDescriptionStatus: serializedClip.sceneDescriptionStatus
+      ?? mediaFile.sceneDescriptionStatus,
+    sceneDescriptionProgress: mediaFile.sceneDescriptionProgress,
+    sceneDescriptionMessage: mediaFile.sceneDescriptionMessage,
     reversed: serializedClip.reversed,
     speed: serializedClip.speed,
     preservesPitch: serializedClip.preservesPitch,
@@ -139,42 +154,17 @@ function createRestoredMediaClip(params: {
   };
 }
 
-function loadCachedProjectAnalysis(params: {
+function loadCachedProjectMediaArtifacts(params: {
   clip: TimelineClip;
   serializedClip: SerializableClip;
-  set: TimelineSet;
 }): void {
-  const { clip, serializedClip, set } = params;
-  if (
-    facePersistence.hasCompatibleFaceAnalysis(serializedClip.analysis)
-    || !serializedClip.mediaFileId
-    || !projectFileService.isProjectOpen()
-  ) {
-    return;
-  }
-
-  const mediaFileId = serializedClip.mediaFileId;
-  projectFileService.getAnalysis(
-    mediaFileId,
-    serializedClip.inPoint,
-    serializedClip.outPoint,
-  ).then(async cachedAnalysis => {
-    const restoredAnalysis = cachedAnalysis ?? await projectFileService.getAllAnalysisMerged(mediaFileId);
-    if (!restoredAnalysis) return;
-    log.debug('Loaded analysis from project folder', { clip: serializedClip.name });
-    const { analysis, hasFaces } = facePersistence.restoreCachedClipAnalysis(
-      restoredAnalysis,
-    );
-    set(state => ({
-      clips: applySharedClipAnalysisState(state.clips, clip.id, candidate => ({
-        ...candidate,
-        analysis,
-        analysisStatus: 'ready' as const,
-        faceAnalysisStatus: hasFaces ? 'ready' as const : 'none' as const,
-      })),
-    }));
-  }).catch(err => {
-    log.warn('Failed to load analysis from project folder', err);
+  const { serializedClip } = params;
+  if (!serializedClip.mediaFileId || !projectFileService.isProjectOpen()) return;
+  hydrateAndProjectMediaSourceArtifacts(serializedClip.mediaFileId).catch(err => {
+    log.warn('Failed to load media-scoped source artifacts', {
+      clip: serializedClip.name,
+      error: err,
+    });
   });
 }
 
@@ -280,7 +270,7 @@ export async function restoreLoadStateMediaClip(params: {
   isCurrentTimelineSession: () => boolean;
   wakePreviewAfterRestore: () => void;
 }): Promise<RestoreLoadStateMediaClipResult> {
-  const { serializedClip, mediaStore, set, pushRestoredClip, patchRestoredClip, updateMediaFile, restoreSourceThumbnails, isCurrentTimelineSession, wakePreviewAfterRestore } = params;
+  const { serializedClip, mediaStore, pushRestoredClip, patchRestoredClip, updateMediaFile, restoreSourceThumbnails, isCurrentTimelineSession, wakePreviewAfterRestore } = params;
   const mediaFile = mediaStore.files.find(f => f.id === serializedClip.mediaFileId);
   if (!mediaFile) {
     log.warn('Media file not found for clip', { clip: serializedClip.name, mediaFileId: serializedClip.mediaFileId });
@@ -296,7 +286,7 @@ export async function restoreLoadStateMediaClip(params: {
   const initialSource = createInitialRestoredMediaSource(serializedClip, mediaFile);
   const clip = createRestoredMediaClip({ file, initialSource, mediaFile, needsReload, serializedClip });
   pushRestoredClip(clip);
-  loadCachedProjectAnalysis({ clip, serializedClip, set });
+  loadCachedProjectMediaArtifacts({ clip, serializedClip });
 
   if (needsReload) {
     log.debug('Skipping media load for clip that needs reload', { clip: clip.name });

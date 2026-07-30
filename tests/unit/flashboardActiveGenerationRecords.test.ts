@@ -278,10 +278,14 @@ describe('FlashBoard active generation record adapter', () => {
     };
 
     const record = submitFlashBoardActiveGenerationRequest(request);
+    const durableRequest = {
+      ...request,
+      idempotencyKey: `flashboard-video:${record?.id}`,
+    };
 
     expect(record).toMatchObject({
       kind: 'generation',
-      request,
+      request: durableRequest,
       job: { status: 'queued' },
     });
     expect(getFlashBoardActiveGenerationRecords()).toContainEqual(record);
@@ -290,7 +294,7 @@ describe('FlashBoard active generation record adapter', () => {
     ]);
     expect(submitSpy).toHaveBeenCalledWith({
       recordId: record?.id,
-      request,
+      request: durableRequest,
     });
   });
 
@@ -356,8 +360,9 @@ describe('FlashBoard active generation record adapter', () => {
     expect(getFlashBoardActiveGenerationRecord('missing')).toBeUndefined();
   });
 
-  it('fails orphaned in-flight generation records after reload', async () => {
+  it('resubmits an orphaned in-flight generation record once after reload', async () => {
     vi.spyOn(flashBoardJobService, 'hasJob').mockReturnValue(false);
+    const submitSpy = vi.spyOn(flashBoardJobService, 'submit').mockReturnValue(null);
     useFlashBoardStore.setState({
       activeGenerationRecords: [{
         ...generationRecord,
@@ -372,9 +377,10 @@ describe('FlashBoard active generation record adapter', () => {
 
     render(createElement(FlashBoardRuntimeHarness));
 
-    await waitFor(() => expect(getFlashBoardActiveGenerationRecord('orphaned-generation')?.job).toMatchObject({
-      status: 'failed',
-      error: 'Generation was interrupted before a provider task id was created.',
-    }));
+    await waitFor(() => expect(submitSpy).toHaveBeenCalledTimes(1));
+    expect(submitSpy).toHaveBeenCalledWith({
+      recordId: 'orphaned-generation',
+      request: generationRecord.request,
+    });
   });
 });

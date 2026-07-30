@@ -10,12 +10,15 @@ import {
 import type { StoredTranscript, TranscriptService } from '../domains/TranscriptService';
 import {
   deleteAnalysisRangeNative,
+  deleteSceneDescriptionsNative,
   getAllAnalysisMergedNative,
   getAnalysisNative,
   getAnalysisRangesNative,
+  getSceneDescriptionsNative,
   getProxyAudioNative,
   hasProxyAudioNative,
   saveAnalysisNative,
+  saveSceneDescriptionsNative,
   saveProxyAudioNative,
 } from './nativeBackend';
 
@@ -315,6 +318,43 @@ export async function getAllAnalysisMerged(
   const handle = context.getProjectHandle();
   if (!handle) return null;
   return context.analysisService.getAllAnalysisMerged(handle, mediaId);
+}
+
+export async function saveSceneDescriptions(
+  context: ArtifactStorageContext,
+  mediaId: string,
+  segments: unknown[],
+): Promise<boolean> {
+  if (context.activeBackend === 'native') {
+    return saveSceneDescriptionsNative(context.getNativeProjectPath(), mediaId, segments);
+  }
+  const handle = context.getProjectHandle();
+  if (!handle) return false;
+  return context.analysisService.saveSceneDescriptions(handle, mediaId, segments);
+}
+
+export async function getSceneDescriptions(
+  context: ArtifactStorageContext,
+  mediaId: string,
+): Promise<unknown[] | null> {
+  if (context.activeBackend === 'native') {
+    return getSceneDescriptionsNative(context.getNativeProjectPath(), mediaId);
+  }
+  const handle = context.getProjectHandle();
+  if (!handle) return null;
+  return context.analysisService.getSceneDescriptions(handle, mediaId);
+}
+
+export async function deleteSceneDescriptions(
+  context: ArtifactStorageContext,
+  mediaId: string,
+): Promise<boolean> {
+  if (context.activeBackend === 'native') {
+    return deleteSceneDescriptionsNative(context.getNativeProjectPath(), mediaId);
+  }
+  const handle = context.getProjectHandle();
+  if (!handle) return false;
+  return context.analysisService.deleteSceneDescriptions(handle, mediaId);
 }
 
 export async function deleteAnalysis(context: ArtifactStorageContext, mediaId: string): Promise<boolean> {

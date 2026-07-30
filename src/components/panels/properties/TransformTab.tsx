@@ -30,6 +30,13 @@ import {
   resolvePositionValues,
   resolveScaleValues,
 } from './transformTab/transformValues';
+import { calculateFitToFrameScale } from '../../../utils/sourcePixelScale';
+
+function positiveDimension(value: number | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : null;
+}
 
 interface TransformTabProps {
   clipId: string;
@@ -100,9 +107,39 @@ export function TransformTab({
   const handleBatchStart = useCallback(() => startBatch('Adjust transform'), []);
   const handleBatchEnd = useCallback(() => endBatch(), []);
 
-  const activeComp = useMediaStore.getState().getActiveComposition();
+  const mediaState = useMediaStore.getState();
+  const activeComp = mediaState.getActiveComposition();
   const compWidth = activeComp?.width || 1920;
   const compHeight = activeComp?.height || 1080;
+  const mediaFileId = clip?.source?.mediaFileId ?? clip?.mediaFileId;
+  const mediaFile = mediaFileId
+    ? (mediaState.files ?? []).find((candidate) => candidate.id === mediaFileId)
+    : undefined;
+  const nestedComposition = clip?.compositionId
+    ? (mediaState.compositions ?? []).find((candidate) => candidate.id === clip.compositionId)
+    : undefined;
+  const sourceWidth =
+    positiveDimension(mediaFile?.width)
+    ?? positiveDimension(clip?.source?.videoElement?.videoWidth)
+    ?? positiveDimension(clip?.source?.imageElement?.naturalWidth)
+    ?? positiveDimension(clip?.source?.nativeDecoder?.width)
+    ?? positiveDimension(clip?.source?.textCanvas?.width)
+    ?? positiveDimension(nestedComposition?.width);
+  const sourceHeight =
+    positiveDimension(mediaFile?.height)
+    ?? positiveDimension(clip?.source?.videoElement?.videoHeight)
+    ?? positiveDimension(clip?.source?.imageElement?.naturalHeight)
+    ?? positiveDimension(clip?.source?.nativeDecoder?.height)
+    ?? positiveDimension(clip?.source?.textCanvas?.height)
+    ?? positiveDimension(nestedComposition?.height);
+  const fitToFrameScale = sourceWidth !== null && sourceHeight !== null
+    ? calculateFitToFrameScale(
+        sourceWidth,
+        sourceHeight,
+        compWidth,
+        compHeight,
+      )
+    : null;
 
   const handlePropertyChange = useCallback((property: AnimatableProperty, value: number) => {
     setPropertyValue(clipId, property, value);
@@ -258,6 +295,28 @@ export function TransformTab({
   const handleScaleXChange = (pct: number) => handlePropertyChange('scale.x', pct / 100);
   const handleScaleYChange = (pct: number) => handlePropertyChange('scale.y', pct / 100);
   const handleScaleZChange = (pct: number) => handlePropertyChange('scale.z', pct / 100);
+  const toggleScaleAxis = (property: 'scale.x' | 'scale.y', value: number) => {
+    const magnitude = Math.abs(value) || 1;
+    handlePropertyChange(property, value < 0 ? magnitude : -magnitude);
+  };
+  const handleFitToFrame = fitToFrameScale === null
+    ? undefined
+    : () => {
+        startBatch('Fit source to composition');
+        try {
+          handlePropertyChange('scale.all', 1);
+          handlePropertyChange(
+            'scale.x',
+            (transform.scale.x < 0 ? -1 : 1) * fitToFrameScale,
+          );
+          handlePropertyChange(
+            'scale.y',
+            (transform.scale.y < 0 ? -1 : 1) * fitToFrameScale,
+          );
+        } finally {
+          endBatch();
+        }
+      };
 
   const opacityPct = transform.opacity * 100;
   const handleOpacityChange = (pct: number) => handlePropertyChange('opacity', Math.max(0, Math.min(100, pct)) / 100);
@@ -373,6 +432,9 @@ export function TransformTab({
           onBatchEnd={handleBatchEnd}
           onBatchStart={handleBatchStart}
           onScaleAllChange={handleScaleAllChange}
+          onFitToFrame={handleFitToFrame}
+          onFlipX={() => toggleScaleAxis('scale.x', transform.scale.x)}
+          onFlipY={() => toggleScaleAxis('scale.y', transform.scale.y)}
           onScaleXChange={handleScaleXChange}
           onScaleYChange={handleScaleYChange}
           onScaleZChange={handleScaleZChange}

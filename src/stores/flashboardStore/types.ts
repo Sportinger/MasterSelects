@@ -188,6 +188,8 @@ export interface FlashBoardGenerationRequest {
   service: FlashBoardService;
   providerId: string;
   version: string;
+  /** Stable across reloads so hosted video task creation can be resumed idempotently. */
+  idempotencyKey?: string;
   outputType?: FlashBoardOutputType;
   mode?: string;
   originalPrompt?: string;

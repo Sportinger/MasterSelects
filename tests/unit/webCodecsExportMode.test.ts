@@ -138,7 +138,10 @@ describe('WebCodecsExportMode decoder recovery', () => {
     const bufferedFrames = (
       mode as unknown as { exportFrameBuffer: Map<number, VideoFrame> }
     ).exportFrameBuffer.size;
-    expect(bufferedFrames).toBeLessThanOrEqual(36);
+    expect(bufferedFrames).toBeLessThanOrEqual(8);
+    expect(decoder.configure).toHaveBeenLastCalledWith(expect.objectContaining({
+      hardwareAcceleration: 'prefer-hardware',
+    }));
   });
 
   it('restarts at a nearby keyframe and discards distant preroll on a large forward jump', async () => {
@@ -181,7 +184,7 @@ describe('WebCodecsExportMode decoder recovery', () => {
       mode as unknown as { exportFrameBuffer: Map<number, VideoFrame> }
     ).exportFrameBuffer.size;
     expect(decoder.reset).toHaveBeenCalledOnce();
-    expect(decoder.decode).toHaveBeenCalledTimes(151);
+    expect(decoder.decode).toHaveBeenCalledTimes(154);
     expect(bufferedFrames).toBeLessThanOrEqual(7);
     expect(emittedFrames.filter(frame => {
       const close = frame.close as ReturnType<typeof vi.fn>;

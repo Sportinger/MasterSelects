@@ -79,7 +79,8 @@ describe('FlashBoard audio catalog contract', () => {
       supportsImageToVideo: true,
       supportsGenerateAudio: true,
       modes: ['480p', '720p'],
-      maxReferenceMedia: 8,
+      maxReferenceMedia: 0,
+      referenceInputKinds: ['start-frame', 'end-frame'],
     });
     expect(cloudEntry).toMatchObject({
       service: 'cloud',
@@ -89,6 +90,8 @@ describe('FlashBoard audio catalog contract', () => {
       supportsImageToVideo: true,
       supportsGenerateAudio: true,
       modes: ['480p', '720p'],
+      maxReferenceMedia: 0,
+      referenceInputKinds: ['start-frame', 'end-frame'],
     });
 
     expect(
@@ -188,6 +191,7 @@ describe('FlashBoard audio catalog contract', () => {
     ))).toMatchObject({
       outputType: 'video',
       modes: ['std', 'pro', '4K'],
+      durations: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
       modeLabels: { std: '720p', pro: '1080p', '4K': '4K' },
       modeControlLabel: 'Resolution',
       referenceInputKinds: ['start-frame', 'end-frame', 'image-reference', 'video-reference'],
@@ -197,6 +201,7 @@ describe('FlashBoard audio catalog contract', () => {
       candidate.service === 'cloud' && candidate.providerId === 'cloud-kling'
     ))).toMatchObject({
       modes: ['std', 'pro', '4K'],
+      durations: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
       modeLabels: { std: '720p', pro: '1080p', '4K': '4K' },
       referenceInputKinds: ['start-frame', 'end-frame', 'image-reference', 'video-reference'],
     });
@@ -271,7 +276,9 @@ describe('FlashBoard audio catalog contract', () => {
 
   it('creates default audio composer settings for every reset path', () => {
     expect(createDefaultFlashBoardComposer()).toMatchObject({
+      generateAudio: false,
       languageOverride: false,
+      multiShots: false,
       outputFormat: DEFAULT_ELEVENLABS_OUTPUT_FORMAT,
       voiceSettings: DEFAULT_ELEVENLABS_VOICE_SETTINGS,
     });

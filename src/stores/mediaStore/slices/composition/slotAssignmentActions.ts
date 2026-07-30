@@ -88,7 +88,9 @@ export const createCompositionSlotAssignmentActions: MediaSliceCreator<Pick<
       const timelineData = useTimelineStore.getState().getSerializableState();
       set((state) => ({
         compositions: state.compositions.map((c) =>
-          c.id === comp.id ? { ...c, timelineData } : c
+          c.id === comp.id
+            ? { ...c, duration: timelineData.duration, timelineData }
+            : c
         ),
       }));
     }, 100);

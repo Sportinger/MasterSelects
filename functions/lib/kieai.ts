@@ -213,7 +213,6 @@ function dataUrlToBlob(dataUrl: string): Blob {
     throw new Error('Invalid data URL');
   }
 
-  const mimeType = match[1];
   const base64 = match[2];
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
@@ -222,7 +221,38 @@ function dataUrlToBlob(dataUrl: string): Blob {
     bytes[index] = binary.charCodeAt(index);
   }
 
+  const mimeType = detectImageMimeType(bytes) ?? match[1];
   return new Blob([bytes], { type: mimeType });
+}
+
+function hasByteSignature(bytes: Uint8Array, signature: readonly number[], offset = 0): boolean {
+  return signature.every((value, index) => bytes[offset + index] === value);
+}
+
+function detectImageMimeType(bytes: Uint8Array): string | undefined {
+  if (hasByteSignature(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) {
+    return 'image/png';
+  }
+
+  if (hasByteSignature(bytes, [0xff, 0xd8, 0xff])) {
+    return 'image/jpeg';
+  }
+
+  if (
+    hasByteSignature(bytes, [0x47, 0x49, 0x46, 0x38, 0x37, 0x61])
+    || hasByteSignature(bytes, [0x47, 0x49, 0x46, 0x38, 0x39, 0x61])
+  ) {
+    return 'image/gif';
+  }
+
+  if (
+    hasByteSignature(bytes, [0x52, 0x49, 0x46, 0x46])
+    && hasByteSignature(bytes, [0x57, 0x45, 0x42, 0x50], 8)
+  ) {
+    return 'image/webp';
+  }
+
+  return undefined;
 }
 
 function getExtensionFromMimeType(mimeType: string | undefined, fallback: string): string {
@@ -302,12 +332,16 @@ function sanitizeUploadBaseName(value: string | undefined, fallback: string): st
 
 function createReferenceUploadFileName(reference: HostedReferenceMedia, blob: Blob): string {
   const fallbackExtension = getReferenceFallbackExtension(reference.mediaType);
-  const extension = hasFileExtension(reference.fileName)
+  const fileNameExtension = hasFileExtension(reference.fileName)
     ? reference.fileName!.split('.').pop()!.toLowerCase()
-    : getExtensionFromMimeType(reference.mimeType || blob.type, fallbackExtension);
+    : undefined;
+  const extension = getExtensionFromMimeType(blob.type, '')
+    || getExtensionFromMimeType(reference.mimeType, '')
+    || fileNameExtension
+    || fallbackExtension;
   const baseName = sanitizeUploadBaseName(reference.fileName || reference.label, reference.mediaType);
 
-  return `${baseName}_${Date.now()}.${extension}`;
+  return `${baseName}_${crypto.randomUUID()}.${extension}`;
 }
 
 async function kieAiJsonRequest<T>(
@@ -355,7 +389,7 @@ async function kieAiJsonRequest<T>(
 
 async function uploadImage(env: Env, imageUrl: string): Promise<string> {
   return uploadReferenceMedia(env, {
-    fileName: `image_${Date.now()}.jpg`,
+    label: 'image',
     mediaType: 'image',
     source: imageUrl,
   });
@@ -1105,27 +1139,17 @@ export async function createHostedSeedanceTask(
   params: HostedVideoParams,
 ): Promise<{ taskId: string }> {
   const provider = normalizeSeedanceProvider(params.provider);
-  const uploadedReferences = await uploadReferenceMediaList(env, params.referenceMedia);
-  const hasReferenceMedia = uploadedReferences.length > 0;
-  const firstFrameUrl = !hasReferenceMedia && params.startImageUrl
+  if ((params.referenceMedia ?? []).length > 0) {
+    throw new Error(
+      'Seedance multimodal references are temporarily disabled. Use start and end frames instead.',
+    );
+  }
+  const firstFrameUrl = params.startImageUrl
     ? await uploadImage(env, params.startImageUrl)
     : undefined;
-  const lastFrameUrl = !hasReferenceMedia && params.endImageUrl
+  const lastFrameUrl = params.endImageUrl
     ? await uploadImage(env, params.endImageUrl)
     : undefined;
-  const referenceImageUrls = uploadedReferences
-    .filter((reference) => reference.mediaType === 'image')
-    .map((reference) => reference.url)
-    .slice(0, 9);
-  const referenceVideoUrls = uploadedReferences
-    .filter((reference) => reference.mediaType === 'video')
-    .map((reference) => reference.url)
-    .slice(0, 3);
-  const referenceAudioUrls = uploadedReferences
-    .filter((reference) => reference.mediaType === 'audio')
-    .map((reference) => reference.url)
-    .slice(0, 3);
-  const promptGuidance: string[] = [];
 
   const input: Record<string, unknown> = {
     aspect_ratio: params.aspectRatio ?? '16:9',
@@ -1137,55 +1161,12 @@ export async function createHostedSeedanceTask(
     web_search: false,
   };
 
-  if (hasReferenceMedia) {
-    const startReferenceUrl = params.startImageUrl ? await uploadImage(env, params.startImageUrl) : undefined;
-    const endReferenceUrl = params.endImageUrl ? await uploadImage(env, params.endImageUrl) : undefined;
-    const anchorImageUrls = [startReferenceUrl, endReferenceUrl].filter((url): url is string => Boolean(url));
-
-    if (anchorImageUrls.length > 0) {
-      referenceImageUrls.unshift(...anchorImageUrls);
-      referenceImageUrls.length = Math.min(referenceImageUrls.length, 9);
-    }
-
-    if (startReferenceUrl) {
-      promptGuidance.push('Use the first reference image as the opening image.');
-    }
-
-    if (endReferenceUrl) {
-      promptGuidance.push(
-        startReferenceUrl
-          ? 'Use the second reference image as the final image.'
-          : 'Use the first reference image as the final image.',
-      );
-    }
-  }
-
-  if (referenceAudioUrls.length > 0) {
-    promptGuidance.push('Synchronize visible speech, mouth shapes, and performance timing to the reference audio.');
-  }
-
-  if (promptGuidance.length > 0) {
-    input.prompt = `${params.prompt.trim()}\n\n${promptGuidance.join(' ')}`.trim();
-  }
-
   if (firstFrameUrl) {
     input.first_frame_url = firstFrameUrl;
   }
 
   if (lastFrameUrl) {
     input.last_frame_url = lastFrameUrl;
-  }
-
-  if (referenceImageUrls.length > 0) {
-    input.reference_image_urls = referenceImageUrls;
-  }
-
-  if (referenceVideoUrls.length > 0) {
-    input.reference_video_urls = referenceVideoUrls;
-  }
-
-  if (referenceAudioUrls.length > 0) {
-    input.reference_audio_urls = referenceAudioUrls;
   }
 
   const payload = await kieAiJsonRequest<KieAiCreateTaskResponse>(env, '/api/v1/jobs/createTask', 'POST', {

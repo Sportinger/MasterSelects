@@ -221,19 +221,25 @@ export async function persistTranscriptCheckpoint(
  * When source ranges are supplied, the incoming words are authoritative for
  * those ranges; words outside them remain intact.
  */
-export function propagateTranscriptToMediaFile(
+export async function propagateTranscriptToMediaFile(
   mediaFileId: string,
   words: TranscriptWord[],
   newRanges?: [number, number][],
   artifact?: TranscriptFusionArtifact,
-): void {
+): Promise<boolean> {
   const applied = applyTranscriptToMediaFile(mediaFileId, words, newRanges ?? [], artifact);
-  if (!applied) return;
+  if (!applied) return false;
 
-  projectFileService.saveTranscript(mediaFileId, {
-    words: applied.words,
-    artifact: applied.artifact,
-  }, applied.ranges).then(saved => {
+  try {
+    const saved = await projectFileService.saveTranscript(mediaFileId, {
+      words: applied.words,
+      artifact: applied.artifact,
+    }, applied.ranges);
     if (saved) log.debug('Transcript saved to project folder', { mediaFileId });
-  }).catch(() => { /* no project open */ });
+    else log.warn('Transcript remained in memory but was not saved to the project folder', { mediaFileId });
+    return saved;
+  } catch (error) {
+    log.warn('Failed to save transcript to the project folder', { mediaFileId, error });
+    return false;
+  }
 }

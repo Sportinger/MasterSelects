@@ -11,7 +11,7 @@ type RootShellProps = ComponentProps<typeof TimelineRootShell>;
 type SlotGridChromeProps = ComponentProps<typeof TimelineSlotGridChrome>;
 type NavigatorChromeProps = ComponentProps<typeof TimelineNavigatorChrome>;
 
-interface UseTimelineRootChromeControllerParams extends Omit<RootShellProps, 'children' | 'onMouseDown'> {
+interface UseTimelineRootChromeControllerParams extends Omit<RootShellProps, 'children' | 'onMouseDownCapture'> {
   duration: NavigatorChromeProps['duration'];
   onScrollChange: NavigatorChromeProps['onScrollChange'];
   onZoomChange: NavigatorChromeProps['onZoomChange'];
@@ -53,7 +53,7 @@ export function useTimelineRootChromeController({
     clipInteractionActive,
     effectiveAudioLayerAdvancedMode,
     isHeaderWidthResizing,
-    onMouseDown: handleTimelineSourceMonitorDismiss,
+    onMouseDownCapture: handleTimelineSourceMonitorDismiss,
     openCompositionCount,
     splitDragSmoothing,
     splitDragVideoHeight,

@@ -14,6 +14,10 @@ import { useExportStore } from '../../../stores/exportStore';
 import { useMIDIStore } from '../../../stores/midiStore';
 import { hydrateHistoryStateFromProject } from '../../../stores/historyStore';
 import { flashBoardMediaBridge } from '../../flashboard/FlashBoardMediaBridge';
+import {
+  mergeFlashBoardVideoJobRecovery,
+  readFlashBoardVideoJobRecovery,
+} from '../../flashboard/FlashBoardVideoJobRecovery';
 import { normalizeFlashBoardChatMessages } from '../flashBoardChatProjectCodec';
 import { readFlashBoardChatJournal } from '../flashBoardChatProjectJournal';
 import type {
@@ -198,11 +202,11 @@ function normalizeFlashBoardJob(
   if (!job) return undefined;
 
   const resumable = (job.status === 'queued' || job.status === 'processing') && Boolean(job.remoteTaskId);
-  const interrupted = (job.status === 'queued' || job.status === 'processing') && !job.remoteTaskId;
+  const legacyReloadFailure = job.status === 'failed' && job.error === 'Job interrupted by reload';
   return {
     ...job,
-    status: interrupted ? 'failed' : resumable ? 'processing' : job.status,
-    error: interrupted && !job.error ? 'Job interrupted by reload' : job.error,
+    status: legacyReloadFailure ? 'queued' : resumable ? 'processing' : job.status,
+    error: legacyReloadFailure ? undefined : job.error,
   };
 }
 
@@ -228,9 +232,14 @@ function normalizeFlashBoardGenerationRecord(
 function hydrateFlashBoardGenerationRecordsFromProject(
   data: ProjectFlashBoardState,
   journalMessages: FlashBoardChatMessage[] | null,
+  projectCreatedAt: string,
 ): void {
+  const projectRecords = data.generationRecords.map(normalizeFlashBoardGenerationRecord);
   hydrateFlashBoardActiveGenerationRecords(
-    data.generationRecords.map(normalizeFlashBoardGenerationRecord),
+    mergeFlashBoardVideoJobRecovery(
+      projectRecords,
+      readFlashBoardVideoJobRecovery(projectCreatedAt),
+    ),
     normalizeFlashBoardComposer(data.composer),
     normalizeFlashBoardPromptHistory(data.promptHistory),
     journalMessages ?? normalizeFlashBoardChatMessages(data.chatMessages),
@@ -247,12 +256,16 @@ export async function hydrateDockFlashboardAndWorkspaceFromProject(projectData: 
   }
 
   if (projectData.flashboard) {
-    hydrateFlashBoardGenerationRecordsFromProject(projectData.flashboard, journalMessages);
+    hydrateFlashBoardGenerationRecordsFromProject(
+      projectData.flashboard,
+      journalMessages,
+      projectData.createdAt,
+    );
     flashBoardMediaBridge.hydrateMetadata(projectData.flashboard.generationMetadataByMediaId ?? {});
     log.info(' Restored FlashBoard state from project');
   } else if (journalMessages) {
     hydrateFlashBoardActiveGenerationRecords(
-      [],
+      readFlashBoardVideoJobRecovery(projectData.createdAt),
       createDefaultFlashBoardComposer(),
       [],
       journalMessages,
@@ -260,7 +273,12 @@ export async function hydrateDockFlashboardAndWorkspaceFromProject(projectData: 
     flashBoardMediaBridge.hydrateMetadata({});
     log.info(' Restored FlashBoard chat journal from project folder');
   } else {
-    resetFlashBoardActiveGenerationState();
+    const recoveredRecords = readFlashBoardVideoJobRecovery(projectData.createdAt);
+    if (recoveredRecords.length > 0) {
+      hydrateFlashBoardActiveGenerationRecords(recoveredRecords);
+    } else {
+      resetFlashBoardActiveGenerationState();
+    }
     flashBoardMediaBridge.hydrateMetadata({});
   }
 

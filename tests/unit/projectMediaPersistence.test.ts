@@ -339,6 +339,40 @@ describe('project media persistence', () => {
     ]);
   }, 10_000);
 
+  it('persists the current timeline duration instead of a stale composition duration', async () => {
+    mocks.mediaState.compositions = [{
+      id: 'comp-long-video',
+      name: 'Long video Comp',
+      type: 'composition',
+      parentId: null,
+      createdAt: 1,
+      width: 854,
+      height: 480,
+      frameRate: 25,
+      duration: 60,
+      backgroundColor: '#000000',
+      timelineData: {
+        tracks: [],
+        clips: [],
+        playheadPosition: 0,
+        duration: 4321.23356,
+        durationLocked: true,
+        zoom: 50,
+        scrollX: 0,
+        inPoint: null,
+        outPoint: null,
+        loopPlayback: false,
+      },
+    }];
+
+    const { syncStoresToProject } = await import('../../src/services/project/projectSave');
+    await syncStoresToProject();
+
+    const [savedComposition] = mocks.updateCompositions.mock.calls[0][0];
+    expect(savedComposition.duration).toBe(4321.23356);
+    expect(savedComposition.durationLocked).toBe(true);
+  });
+
   it('persists transition source fields through project save/load without shared references', async () => {
     const transitionSourceMap = {
       version: 1 as const,
@@ -375,6 +409,7 @@ describe('project media persistence', () => {
       transitionComp,
       timelineData: {
         duration: 1,
+        durationLocked: true,
         tracks: [],
         clips: [{
           id: 'clip-1',
@@ -427,6 +462,8 @@ describe('project media persistence', () => {
     }));
     expect(savedComposition.transitionComp?.sourceLayout).toBe('mapped-v3');
     expect(savedComposition.transitionComp?.legacyBackupCompositionId).toBe('legacy-backup');
+    expect(savedComposition.duration).toBe(1);
+    expect(savedComposition.durationLocked).toBe(true);
 
     transitionSourceMap.segments[0].sourceStart = 99;
     transitionRecipeBlendWindows[0].compStart = 99;
@@ -442,6 +479,7 @@ describe('project media persistence', () => {
     expect(restoredClip.transitionRecipeBlendWindows).toEqual(savedClip.transitionRecipeBlendWindows);
     expect(restoredComposition.transitionComp?.sourceLayout).toBe('mapped-v3');
     expect(restoredComposition.transitionComp?.legacyBackupCompositionId).toBe('legacy-backup');
+    expect(restoredComposition.timelineData?.durationLocked).toBe(true);
     expect(restoredClip.transitionSourceMap).not.toBe(savedClip.transitionSourceMap);
     expect(restoredClip.transitionRecipeBlendWindows).not.toBe(savedClip.transitionRecipeBlendWindows);
     expect(restoredComposition.transitionComp).not.toBe(savedComposition.transitionComp);

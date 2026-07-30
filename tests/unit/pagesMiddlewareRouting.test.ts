@@ -51,6 +51,7 @@ describe('Pages middleware routing', () => {
       '/?test=parallel-decode',
       '/index.html',
       '/landing',
+      '/admin',
       '/claim/code',
       '/credits/claim/code',
       '/impressum',
@@ -80,5 +81,28 @@ describe('Pages middleware routing', () => {
     const api = makeContext('/api/me', Response.json({ ok: true }));
     expect((await onRequest(api.context)).status).toBe(200);
     expect(api.pending).toHaveLength(0);
+  });
+
+  it('adds defense-in-depth headers to the admin page and API', async () => {
+    const page = makeContext('/admin', new Response('<!doctype html>', {
+      headers: { 'Content-Type': 'text/html; charset=UTF-8' },
+      status: 200,
+    }));
+    const pageResponse = await onRequest(page.context);
+
+    expect(pageResponse.headers.get('Cache-Control')).toBe('no-store, private, max-age=0');
+    expect(pageResponse.headers.get('Content-Security-Policy')).toContain("frame-ancestors 'none'");
+    expect(pageResponse.headers.get('Content-Security-Policy')).toContain("connect-src 'self'");
+    expect(pageResponse.headers.get('Permissions-Policy')).toContain('camera=()');
+    expect(pageResponse.headers.get('Referrer-Policy')).toBe('no-referrer');
+    expect(pageResponse.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(pageResponse.headers.get('X-Frame-Options')).toBe('DENY');
+    expect(pageResponse.headers.get('X-Robots-Tag')).toContain('noindex');
+
+    const api = makeContext('/api/admin/dashboard', Response.json({ ok: true }));
+    const apiResponse = await onRequest(api.context);
+    expect(apiResponse.headers.get('Cache-Control')).toBe('no-store, private, max-age=0');
+    expect(apiResponse.headers.get('Content-Security-Policy')).toBeNull();
+    expect(apiResponse.headers.get('X-Frame-Options')).toBe('DENY');
   });
 });

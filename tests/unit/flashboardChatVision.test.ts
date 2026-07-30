@@ -6,7 +6,6 @@ import {
   prepareFlashBoardToolCallsForHistory,
 } from '../../src/services/flashboard/FlashBoardChatTools';
 import { handleGetFramesAtTimes } from '../../src/services/aiTools/handlers/preview';
-import { useSettingsStore } from '../../src/stores/settingsStore';
 
 const mocks = vi.hoisted(() => ({
   executeAIToolCalls: vi.fn(),
@@ -31,7 +30,6 @@ function mockCapturedFrame(): void {
 
 describe('FlashBoard compact-chat vision follow-ups', () => {
   beforeEach(() => {
-    useSettingsStore.setState({ aiApprovalMode: 'auto' });
     mockCapturedFrame();
   });
 

@@ -18,6 +18,7 @@
     "cf:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "cf:types": "wrangler types",
     "credits:create-claim": "node scripts/create-credit-claim.mjs",
+    "admin:hash-password": "node scripts/hash-admin-password.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",

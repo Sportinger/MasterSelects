@@ -16,20 +16,18 @@ import { readLottieMetadata } from '../../../services/vectorAnimation/lottieMeta
 import { readRiveMetadata } from '../../../services/vectorAnimation/riveMetadata';
 import type { ClipActionContext } from './clipActionContext';
 import {
+  getPositiveFiniteDuration,
   hasVisualMediaType,
   loadSourceMediaFile,
+  queueMediaSourceArtifactProjection,
 } from './addClipMediaSource';
 import {
   getRequiredTrackTypeForMedia,
   resolveUnlockedPlacementTrackId,
 } from './unlockedPlacementTrack';
 import { resolveLinkedAudioTrackId } from './linkedAudioPlacement';
-
+import { projectMediaSourceArtifactsOntoClip } from '../../../services/mediaArtifacts/mediaSourceArtifacts';
 const log = Logger.create('ClipAddAction');
-function getPositiveFiniteDuration(value: number | undefined): number | undefined {
-  return Number.isFinite(value) && value !== undefined && value > 0 ? value : undefined;
-}
-
 export async function applyAddClipAction(
   context: ClipActionContext,
   trackId: string,
@@ -49,7 +47,6 @@ export async function applyAddClipAction(
   const resolvedTrackId = requiredTrackType
     ? resolveUnlockedPlacementTrackId(context, trackId, requiredTrackType)
     : trackId;
-
   if (!resolvedTrackId) return undefined;
   trackId = resolvedTrackId;
   const { tracks, clips, updateDuration, thumbnailsEnabled, waveformsEnabled, invalidateCache } = get();
@@ -122,7 +119,7 @@ export async function applyAddClipAction(
         audioTrackId = newTrackId;
       }
 
-      const videoClip: TimelineClip = {
+      const videoClip = projectMediaSourceArtifactsOntoClip({
         id: clipId,
         trackId,
         name: file.name,
@@ -137,7 +134,7 @@ export async function applyAddClipAction(
         effects: [],
         isLoading: true,
         ...(sourceTranscript ? { transcript: sourceTranscript, transcriptStatus: 'ready' as const } : {}),
-      };
+      });
 
       const audioClip: TimelineClip = {
         id: audioId,
@@ -153,6 +150,7 @@ export async function applyAddClipAction(
         transform: { ...DEFAULT_TRANSFORM },
         effects: [],
         isLoading: true,
+        ...(sourceTranscript ? { transcript: sourceTranscript, transcriptStatus: 'ready' as const } : {}),
       };
 
       finalAudioClipId = audioId;
@@ -176,6 +174,7 @@ export async function applyAddClipAction(
     });
 
     invalidateCache();
+    queueMediaSourceArtifactProjection(mediaFileId);
     return clipId;
   }
   if (mediaType === 'audio') {
@@ -192,6 +191,7 @@ export async function applyAddClipAction(
 
     await loadAudioMedia({ clip: audioClip, file, mediaFileId, waveformsEnabled, updateClip });
     invalidateCache();
+    queueMediaSourceArtifactProjection(mediaFileId);
     return audioClip.id;
   }
 

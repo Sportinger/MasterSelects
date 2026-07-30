@@ -10,6 +10,7 @@ import { projectDB } from '../../projectDB';
 import { withProjectStoreSyncGuard } from '../projectSave';
 import { createThumbnailMediaObjectUrl } from '../mediaObjectUrlManager';
 import { yieldToBrowser } from './loadProgress';
+import { restoreCachedClipAnalysis } from '../../faceAnalysis/faceAnalysisPersistence';
 
 const log = Logger.create('ProjectSync');
 const CACHED_THUMBNAIL_RESTORE_BATCH_SIZE = 48;
@@ -225,6 +226,14 @@ export async function restoreDeferredMediaCacheState(
       const ranges = await projectFileService.getAnalysisRanges(pm.id);
       if (ranges.length > 0) {
         updates.analysisStatus = 'ready';
+        const merged = await projectFileService.getAllAnalysisMerged(pm.id);
+        if (merged) {
+          const restored = restoreCachedClipAnalysis(merged);
+          updates.analysis = restored.analysis;
+          updates.analysisProgress = 100;
+          updates.faceAnalysisStatus = restored.hasFaces ? 'ready' : 'none';
+          updates.faceAnalysisProgress = restored.hasFaces ? 100 : 0;
+        }
         if (pm.duration && pm.duration > 0) {
           const parsed: [number, number][] = ranges.map(key => {
             const [s, e] = key.split('-').map(Number);
@@ -234,6 +243,15 @@ export async function restoreDeferredMediaCacheState(
         }
       }
     } catch { /* no analysis file */ }
+
+    try {
+      const scenes = await projectFileService.getSceneDescriptions(pm.id);
+      if (scenes?.length) {
+        updates.sceneDescriptions = scenes as import('../../../types').SceneSegment[];
+        updates.sceneDescriptionStatus = 'ready';
+        updates.sceneDescriptionProgress = 100;
+      }
+    } catch { /* no scene descriptions */ }
 
     if (pm.type === 'video' && pm.hasProxy) {
       try {

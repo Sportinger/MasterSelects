@@ -37,6 +37,11 @@ import { liveInputRuntime } from '../mediaRuntime/liveInputRuntime';
 import { collectUsedLiveInputIds } from '../liveInputTimeline';
 import { useTimelineStore } from '../../stores/timeline';
 import { useDockStore } from '../../stores/dockStore';
+import {
+  applyLegacyMediaArtifactSeeds,
+  collectLegacyMediaArtifactSeeds,
+  persistLegacyMediaArtifactSeeds,
+} from './load/loadMediaArtifactMigration';
 
 export { setProjectLoadProgress } from './load/loadProgress';
 export { reloadNestedCompositionClips } from './load/loadTimelineHydration';
@@ -108,6 +113,12 @@ export async function loadProjectToStores(): Promise<void> {
       const { projectData, hydrateFiles } = parsedProject;
       backgroundProjectData = projectData;
       backgroundHydrateFiles = hydrateFiles;
+      const legacyArtifactSeeds = collectLegacyMediaArtifactSeeds(projectData);
+      try {
+        await persistLegacyMediaArtifactSeeds(legacyArtifactSeeds);
+      } catch (error) {
+        log.warn('Legacy media artifacts remain available in memory but could not be migrated yet', error);
+      }
 
       setProjectLoadProgress({
         phase: 'media',
@@ -123,7 +134,8 @@ export async function loadProjectToStores(): Promise<void> {
       }
       revokeAllMediaObjectUrls();
 
-      const loadedFiles = await convertProjectMediaToStore(projectData.media, {
+      const loadedFiles = applyLegacyMediaArtifactSeeds(
+        await convertProjectMediaToStore(projectData.media, {
         hydrateFiles,
         deferCacheChecks: true,
         onProgress: (done, total, name) => {
@@ -138,7 +150,9 @@ export async function loadProjectToStores(): Promise<void> {
             blocking: true,
           });
         },
-      });
+        }),
+        legacyArtifactSeeds,
+      );
 
       const folders = normalizeFolderParents(convertProjectFolderToStore(projectData.folders));
       const validFolderIds = new Set(folders.map((folder) => folder.id));

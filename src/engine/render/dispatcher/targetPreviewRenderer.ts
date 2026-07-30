@@ -5,6 +5,7 @@ import { useRenderTargetStore } from '../../../stores/renderTargetStore';
 import type { RenderDeps } from '../RenderDispatcher';
 import type { PreviewFrameRecorder } from './dispatcherTelemetry';
 import { TargetPreviewLayerCollector } from './targetPreviewLayerCollector';
+import { calculateSourcePixelScale } from '../../../utils/sourcePixelScale';
 
 interface TargetBuffers {
   device: GPUDevice;
@@ -223,13 +224,27 @@ export class TargetPreviewRenderer {
       const uniformBuffer = d.compositorPipeline!.getOrCreateUniformBuffer(layer.id);
       const sourceAspect = data.sourceWidth / data.sourceHeight;
       const outputAspect = width / height;
+      const sourcePixelScale = calculateSourcePixelScale(
+        data.sourceWidth,
+        data.sourceHeight,
+        width,
+        height,
+      );
       const maskLookupId = layer.maskClipId || layer.id;
       const maskManager = d.maskTextureManager!;
       const maskInfo = maskManager.getMaskInfo(maskLookupId) ?? { hasMask: false, view: maskManager.getWhiteMaskView() };
       const hasMask = maskInfo.hasMask;
       const maskTextureView = maskInfo.view;
 
-      d.compositorPipeline!.updateLayerUniforms(layer, sourceAspect, outputAspect, hasMask, uniformBuffer);
+      d.compositorPipeline!.updateLayerUniforms(
+        layer,
+        sourceAspect,
+        outputAspect,
+        hasMask,
+        uniformBuffer,
+        undefined,
+        sourcePixelScale,
+      );
 
       let pipeline: GPURenderPipeline;
       let bindGroup: GPUBindGroup;

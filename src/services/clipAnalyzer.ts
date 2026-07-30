@@ -38,6 +38,7 @@ import {
   hasCompatibleFaceAnalysis,
   restoreCachedClipAnalysis,
 } from './faceAnalysis/faceAnalysisPersistence';
+import { hydrateAndProjectMediaSourceArtifacts } from './mediaArtifacts/mediaSourceArtifacts';
 import { FACE_ANALYSIS_MODEL_VERSION } from './faceAnalysis/modelCatalog';
 import type {
   ClipAnalysis,
@@ -203,8 +204,12 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
     throw new Error(`Another clip analysis is already running (${currentClipId ?? 'unknown clip'}).`);
   }
 
-  const store = useTimelineStore.getState();
-  const clip = store.clips.find(c => c.id === clipId);
+  const initialClip = useTimelineStore.getState().clips.find(c => c.id === clipId);
+  const mediaFileId = initialClip?.source?.mediaFileId || initialClip?.mediaFileId;
+  if (mediaFileId) {
+    await hydrateAndProjectMediaSourceArtifacts(mediaFileId);
+  }
+  const clip = useTimelineStore.getState().clips.find(c => c.id === clipId);
 
   if (!clip || !clip.file) {
     log.warn('Clip not found or has no file', { clipId });
@@ -244,7 +249,6 @@ export async function analyzeClip(clipId: string, options: ClipAnalysisOptions =
   });
 
   // Check for cached analysis first (from project folder, not browser cache)
-  const mediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
   const [inPoint, outPoint] = resolveSourceAnalysisRange(
     options.sourceRange,
     clip.inPoint ?? 0,

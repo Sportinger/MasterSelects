@@ -31,6 +31,7 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
   const removeGenerationRecord = useRemoveFlashBoardActiveGenerationRecord();
   const refundDialogKeysRef = useRef<Set<string>>(new Set());
   const importingRecordIdsRef = useRef<Set<string>>(new Set());
+  const recoverySubmissionIdsRef = useRef<Set<string>>(new Set());
   const [refundDialog, setRefundDialog] = useState<FlashBoardRefundDialogState | null>(null);
 
   const dismissRefundDialog = useCallback(() => {
@@ -106,8 +107,9 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
       }
       updateFlashBoardActiveGenerationJob(recordId, {
         status: update.status,
-        remoteTaskId: update.remoteTaskId,
-        progress: update.progress,
+        ...(update.remoteTaskId === undefined ? {} : { remoteTaskId: update.remoteTaskId }),
+        ...(update.progress === undefined ? {} : { progress: update.progress }),
+        ...(update.startedAt === undefined ? {} : { startedAt: update.startedAt }),
       });
     });
 
@@ -133,11 +135,15 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
       if (importingRecordIdsRef.current.has(record.id)) {
         return;
       }
-      if (!flashBoardJobService.hasJob(record.id)) {
-        failFlashBoardActiveGenerationRecord(
-          record.id,
-          'Generation was interrupted before a provider task id was created.',
-        );
+      if (
+        !flashBoardJobService.hasJob(record.id)
+        && !recoverySubmissionIdsRef.current.has(record.id)
+      ) {
+        recoverySubmissionIdsRef.current.add(record.id);
+        flashBoardJobService.submit({
+          recordId: record.id,
+          request,
+        });
       }
     });
   }, [activeGenerationRecords]);

@@ -41,13 +41,17 @@ export class WebCodecsExportMode {
   // more, depending on the decoder's backing format) and could crash Chrome's
   // GPU process on long, densely-cut timelines. Keep a small rolling window;
   // sequential export only needs enough headroom to hide decoder latency.
-  private static readonly INITIAL_LOOKAHEAD_SAMPLES = 36;
-  private static readonly DECODE_LOOKAHEAD_SAMPLES = 24;
-  private static readonly KEEP_FRAMES_BEHIND = 6;
+  // Hardware decoders commonly expose only a small surface pool. Retaining a
+  // 24-36 frame window can exhaust that pool and stall decode completely.
+  // Keep the rolling window below the usual surface limit so FAST export can
+  // use hardware decode without deadlocking.
+  private static readonly TARGET_LOOKAHEAD_SAMPLES = 4;
+  private static readonly DECODE_LOOKAHEAD_SAMPLES = 4;
+  private static readonly KEEP_FRAMES_BEHIND = 1;
   // Start the background decode-ahead while the buffer is still half full, so it
   // finishes before the export catches the buffer edge (otherwise the export
   // briefly freezes at every decode-window boundary).
-  private static readonly WARM_AHEAD_THRESHOLD_SAMPLES = 12;
+  private static readonly WARM_AHEAD_THRESHOLD_SAMPLES = 2;
   // Timeline cuts may jump minutes forward inside one source. Beyond two
   // normal lookahead windows, restart at the target keyframe instead of
   // decoding every intermediate sample.
@@ -57,7 +61,7 @@ export class WebCodecsExportMode {
   // the decoder and forces a slow keyframe restart — pacing the feed avoids that.
   // Kept well above the old unbounded feed (whole window at once) but high enough
   // that the decode-ahead stays comfortably in front of the export.
-  private static readonly MAX_DECODE_QUEUE = 8;
+  private static readonly MAX_DECODE_QUEUE = 2;
 
   private player: ExportModePlayer;
 
@@ -152,8 +156,8 @@ export class WebCodecsExportMode {
     let stablePolls = 0;
 
     while (performance.now() - startTime < timeoutMs) {
+      this.refreshBufferedFrameIndex();
       if (this.findBufferedFrameIndex(targetCtsUs, toleranceUs) >= 0) {
-        this.refreshBufferedFrameIndex();
         return;
       }
 
@@ -206,7 +210,7 @@ export class WebCodecsExportMode {
     decoder.reset();
     decoder.configure({
       ...codecConfig,
-      hardwareAcceleration: 'prefer-software',
+      hardwareAcceleration: 'prefer-hardware',
     });
   }
 
@@ -368,10 +372,7 @@ export class WebCodecsExportMode {
 
     const endIndexExclusive = Math.min(
       samples.length,
-      Math.max(
-        targetSampleIndex + 1,
-        keyframeIndex + WebCodecsExportMode.INITIAL_LOOKAHEAD_SAMPLES
-      )
+      targetSampleIndex + WebCodecsExportMode.TARGET_LOOKAHEAD_SAMPLES
     );
 
     await this.decodeWindowDiscardingDistantPreroll(
@@ -468,10 +469,7 @@ export class WebCodecsExportMode {
     const startSample = allSamples[startSampleIndex];
     const decodeEnd = Math.min(
       allSamples.length,
-      Math.max(
-        startSampleIndex + 1,
-        keyframeIndex + WebCodecsExportMode.INITIAL_LOOKAHEAD_SAMPLES
-      )
+      startSampleIndex + WebCodecsExportMode.TARGET_LOOKAHEAD_SAMPLES
     );
 
     await this.reconfigureDecoderForExport('prepareForSequentialExport');

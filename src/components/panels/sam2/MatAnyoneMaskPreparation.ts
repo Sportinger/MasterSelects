@@ -1,6 +1,7 @@
 import type { LayerSourceRect } from '../../../types/layers';
 import type { ClipTransform } from '../../../types/timelineCore';
 import { getEffectiveScale } from '../../../utils/transformScale';
+import { calculateSourcePixelScale } from '../../../utils/sourcePixelScale';
 
 const MAX_MASK_DIMENSION = 8192;
 const PERSPECTIVE_DISTANCE = 2;
@@ -96,11 +97,21 @@ export function mapSourceUvToPreviewUv(
     ? { x: positioned.x, y: positioned.y / aspectRatio }
     : { x: positioned.x * aspectRatio, y: positioned.y };
   const scale = getEffectiveScale(geometry.transform.scale);
-  if (Math.abs(scale.x) < EPSILON || Math.abs(scale.y) < EPSILON) return null;
+  const sourcePixelScale = calculateSourcePixelScale(
+    geometry.sourceWidth,
+    geometry.sourceHeight,
+    geometry.outputWidth,
+    geometry.outputHeight,
+  );
+  const nativeScale = {
+    x: scale.x * sourcePixelScale,
+    y: scale.y * sourcePixelScale,
+  };
+  if (Math.abs(nativeScale.x) < EPSILON || Math.abs(nativeScale.y) < EPSILON) return null;
 
   const projected = {
-    x: beforeAspect.x * scale.x,
-    y: beforeAspect.y * scale.y / outputAspect,
+    x: beforeAspect.x * nativeScale.x,
+    y: beforeAspect.y * nativeScale.y / outputAspect,
   };
 
   // The compositor rotates a plane whose initial z is position.z, then applies

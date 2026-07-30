@@ -18,7 +18,9 @@ import type {
   Effect,
   Keyframe,
   SceneDescriptionStatus,
+  SceneSegment,
   TranscriptStatus,
+  TranscriptWord,
 } from '../../../types';
 import { calcRangeCoverage } from './loadMediaCacheHydration';
 import { recoverPersistedTranscriptStatus } from '../../transcription/persistedTranscriptStatus';
@@ -165,12 +167,55 @@ export function clearProjectTimelineForLoad(): ProjectLoadTimelineStore {
   return timelineStore;
 }
 
+const LEGACY_DURATION_EPSILON = 0.0001;
+const AUTO_TIMELINE_MIN_DURATION = 60;
+const AUTO_TIMELINE_PADDING_SECONDS = 10;
+
+function resolveProjectCompositionDuration(
+  composition: ProjectComposition,
+): { duration: number; durationLocked: boolean } {
+  const minimumDuration = composition.transitionComp?.kind === 'transition-comp' ? 0.0001 : 1;
+  const maxClipEnd = composition.clips.reduce((maximum, clip) => {
+    const clipEnd = clip.startTime + clip.duration;
+    return Number.isFinite(clipEnd) ? Math.max(maximum, clipEnd) : maximum;
+  }, 0);
+  const savedDuration = Number.isFinite(composition.duration)
+    ? Math.max(minimumDuration, composition.duration)
+    : Math.max(minimumDuration, maxClipEnd);
+
+  if (typeof composition.durationLocked === 'boolean') {
+    return {
+      duration: savedDuration,
+      durationLocked: composition.durationLocked,
+    };
+  }
+
+  // Older project files did not persist durationLocked. A saved composition
+  // must never become shorter than its own clips during that migration.
+  if (maxClipEnd > savedDuration + LEGACY_DURATION_EPSILON) {
+    return {
+      duration: maxClipEnd,
+      durationLocked: true,
+    };
+  }
+
+  const automaticDuration = composition.clips.length === 0
+    ? AUTO_TIMELINE_MIN_DURATION
+    : Math.max(AUTO_TIMELINE_MIN_DURATION, maxClipEnd + AUTO_TIMELINE_PADDING_SECONDS);
+
+  return {
+    duration: savedDuration,
+    durationLocked: Math.abs(savedDuration - automaticDuration) > LEGACY_DURATION_EPSILON,
+  };
+}
+
 export function convertProjectCompositionToStore(
   projectComps: ProjectComposition[],
   compositionViewState?: CompositionViewState,
 ): Composition[] {
   return projectComps.map((pc) => {
     const viewState = compositionViewState?.[pc.id];
+    const { duration, durationLocked } = resolveProjectCompositionDuration(pc);
     const timelineData: CompositionTimelineData = {
       tracks: pc.tracks.map((t) => ({
         id: t.id,
@@ -324,7 +369,8 @@ export function convertProjectCompositionToStore(
         };
       }),
       playheadPosition: viewState?.playheadPosition ?? 0,
-      duration: pc.duration,
+      duration,
+      durationLocked,
       zoom: viewState?.zoom ?? 1,
       scrollX: viewState?.scrollX ?? 0,
       inPoint: viewState?.inPoint ?? null,
@@ -359,7 +405,7 @@ export function convertProjectCompositionToStore(
       width: pc.width,
       height: pc.height,
       frameRate: pc.frameRate,
-      duration: pc.duration,
+      duration,
       backgroundColor: pc.backgroundColor,
       transitionComp: pc.transitionComp ? structuredClone(pc.transitionComp) : undefined,
       timelineData,
@@ -508,8 +554,10 @@ export async function reloadNestedCompositionClips(): Promise<void> {
 
 function syncStatusFromClipsToMedia(): void {
   const clips = useTimelineStore.getState().clips;
-  const transcriptWords = new Map<string, { start: number; end: number }[]>();
+  const transcriptWords = new Map<string, TranscriptWord[]>();
   const transcribedRangesMap = new Map<string, [number, number][]>();
+  const analysisByMedia = new Map<string, ClipAnalysis>();
+  const scenesByMedia = new Map<string, SceneSegment[]>();
   const analysisRanges = new Map<string, [number, number][]>();
 
   for (const clip of clips) {
@@ -517,9 +565,10 @@ function syncStatusFromClipsToMedia(): void {
     if (!mediaFileId) continue;
 
     if (clip.transcriptStatus === 'ready' && clip.transcript?.length) {
-      const existing = transcriptWords.get(mediaFileId) || [];
-      for (const w of clip.transcript) existing.push({ start: w.start, end: w.end });
-      transcriptWords.set(mediaFileId, existing);
+      const existing = transcriptWords.get(mediaFileId);
+      if (!existing || clip.transcript.length > existing.length) {
+        transcriptWords.set(mediaFileId, clip.transcript);
+      }
       const inPt = clip.inPoint ?? 0;
       const outPt = clip.outPoint ?? (clip.source?.naturalDuration ?? 0);
       if (outPt > inPt) {
@@ -530,6 +579,18 @@ function syncStatusFromClipsToMedia(): void {
     }
 
     if (clip.analysisStatus === 'ready' || clip.sceneDescriptionStatus === 'ready') {
+      if (clip.analysis?.frames.length) {
+        const existingAnalysis = analysisByMedia.get(mediaFileId);
+        if (!existingAnalysis || clip.analysis.frames.length > existingAnalysis.frames.length) {
+          analysisByMedia.set(mediaFileId, clip.analysis);
+        }
+      }
+      if (clip.sceneDescriptions?.length) {
+        const existingScenes = scenesByMedia.get(mediaFileId);
+        if (!existingScenes || clip.sceneDescriptions.length > existingScenes.length) {
+          scenesByMedia.set(mediaFileId, clip.sceneDescriptions);
+        }
+      }
       const inPt = clip.inPoint ?? 0;
       const outPt = clip.outPoint ?? (clip.source?.naturalDuration ?? 0);
       if (outPt > inPt) {
@@ -546,15 +607,29 @@ function syncStatusFromClipsToMedia(): void {
     files: state.files.map((f) => {
       const tWords = transcriptWords.get(f.id);
       const tRanges = transcribedRangesMap.get(f.id);
+      const analysis = analysisByMedia.get(f.id);
+      const scenes = scenesByMedia.get(f.id);
       const aRanges = analysisRanges.get(f.id);
-      if (!tWords && !aRanges) return f;
+      if (!tWords && !analysis && !scenes && !aRanges) return f;
       const dur = f.duration || 0;
       return {
         ...f,
-        ...(tWords && f.transcriptStatus !== 'ready' && {
+        ...(tWords && !f.transcript?.length && {
           transcriptStatus: 'ready' as const,
+          transcript: tWords.toSorted((left, right) => left.start - right.start),
           transcriptCoverage: dur > 0 && tRanges ? calcRangeCoverage(tRanges, dur) : 0,
           transcribedRanges: tRanges,
+        }),
+        ...(analysis && !f.analysis && {
+          analysis,
+          analysisProgress: 100,
+          faceAnalysisStatus: analysis.faceAnalysis ? 'ready' as const : 'none' as const,
+          faceAnalysisProgress: analysis.faceAnalysis ? 100 : 0,
+        }),
+        ...(scenes && !f.sceneDescriptions?.length && {
+          sceneDescriptions: scenes,
+          sceneDescriptionStatus: 'ready' as const,
+          sceneDescriptionProgress: 100,
         }),
         ...(aRanges && f.analysisStatus !== 'ready' && {
           analysisStatus: 'ready' as const,

@@ -7,6 +7,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { createTextBoundsPathProperty, type Keyframe, type TextClipProperties } from '../../types';
 import { useTimelineStore } from '../../stores/timeline';
 import { googleFontsService, POPULAR_FONTS } from '../../services/googleFontsService';
+import { resolvePointerLockDragDeltaX } from '../common/pointerLockDragDelta';
 import {
   createTextBoundsFromRect,
   getTextBoundsPathValue,
@@ -34,6 +35,7 @@ interface CompactNumberDragState {
   accumulatedDelta: number;
   pointerLockRequested: boolean;
   pointerLockActive: boolean;
+  pointerLockHandoffPending: boolean;
   element: HTMLElement;
 }
 
@@ -45,21 +47,19 @@ function CompactNumber({ value, onChange, min = 0, max = 999, step = 1, unit = '
     if (!state) return 0;
 
     const isPointerLocked = state.pointerLockActive || document.pointerLockElement === state.element;
-    const movementX = Number.isFinite(event.movementX) ? event.movementX : 0;
-    if (isPointerLocked) return movementX;
-
-    const clientDx = event.clientX - state.lastClientX;
-    state.lastClientX = event.clientX;
-
-    if (
-      state.pointerLockRequested &&
-      movementX !== 0 &&
-      Math.abs(clientDx) > Math.abs(movementX) * 4 + 8
-    ) {
-      return movementX;
+    const result = resolvePointerLockDragDeltaX({
+      clientX: event.clientX,
+      lastClientX: state.lastClientX,
+      movementX: event.movementX,
+      pointerLockRequested: state.pointerLockRequested,
+      pointerLockActive: isPointerLocked,
+      pointerLockHandoffPending: state.pointerLockHandoffPending,
+    });
+    state.lastClientX = result.nextClientX;
+    if (result.pointerLockHandoffConsumed) {
+      state.pointerLockHandoffPending = false;
     }
-
-    return clientDx;
+    return result.deltaX;
   }, []);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -73,6 +73,7 @@ function CompactNumber({ value, onChange, min = 0, max = 999, step = 1, unit = '
       accumulatedDelta: 0,
       pointerLockRequested: false,
       pointerLockActive: false,
+      pointerLockHandoffPending: false,
       element,
     };
 
@@ -87,6 +88,7 @@ function CompactNumber({ value, onChange, min = 0, max = 999, step = 1, unit = '
 
     if (element.requestPointerLock) {
       dragStateRef.current.pointerLockRequested = true;
+      dragStateRef.current.pointerLockHandoffPending = true;
       try {
         const result = element.requestPointerLock();
         if (result && typeof result.then === 'function') {
@@ -100,6 +102,7 @@ function CompactNumber({ value, onChange, min = 0, max = 999, step = 1, unit = '
               if (state) {
                 state.pointerLockRequested = false;
                 state.pointerLockActive = false;
+                state.pointerLockHandoffPending = false;
               }
             },
           );
@@ -107,6 +110,7 @@ function CompactNumber({ value, onChange, min = 0, max = 999, step = 1, unit = '
       } catch {
         dragStateRef.current.pointerLockRequested = false;
         dragStateRef.current.pointerLockActive = false;
+        dragStateRef.current.pointerLockHandoffPending = false;
       }
     }
 

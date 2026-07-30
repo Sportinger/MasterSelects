@@ -9,6 +9,7 @@ import {
   type EditableDraggableNumberSettings,
   useEditableDraggableNumberSettingsRevision,
 } from './EditableDraggableNumberSettings';
+import { resolvePointerLockDragDeltaX } from './pointerLockDragDelta';
 
 interface PopoverPlacement {
   top: number;
@@ -105,6 +106,7 @@ export function EditableDraggableNumber({
   const dragStarted = useRef(false);
   const pointerLockRequested = useRef(false);
   const pointerLockActive = useRef(false);
+  const pointerLockHandoffPending = useRef(false);
   const [isEditing, setIsEditing] = useState(false);
   const [draftValue, setDraftValue] = useState(() => formatEditableValue(value, decimals));
   const [draftDefaultValue, setDraftDefaultValue] = useState('');
@@ -240,24 +242,19 @@ export function EditableDraggableNumber({
     const isPointerLocked =
       pointerLockActive.current ||
       (element !== null && document.pointerLockElement === element);
-    const movementX = Number.isFinite(event.movementX) ? event.movementX : 0;
-
-    if (isPointerLocked) {
-      return movementX;
+    const result = resolvePointerLockDragDeltaX({
+      clientX: event.clientX,
+      lastClientX: lastClientX.current,
+      movementX: event.movementX,
+      pointerLockRequested: pointerLockRequested.current,
+      pointerLockActive: isPointerLocked,
+      pointerLockHandoffPending: pointerLockHandoffPending.current,
+    });
+    lastClientX.current = result.nextClientX;
+    if (result.pointerLockHandoffConsumed) {
+      pointerLockHandoffPending.current = false;
     }
-
-    const clientDx = event.clientX - lastClientX.current;
-    lastClientX.current = event.clientX;
-
-    if (
-      pointerLockRequested.current &&
-      movementX !== 0 &&
-      Math.abs(clientDx) > Math.abs(movementX) * 4 + 8
-    ) {
-      return movementX;
-    }
-
-    return clientDx;
+    return result.deltaX;
   }, []);
 
   const beginEditing = useCallback(() => {
@@ -290,6 +287,7 @@ export function EditableDraggableNumber({
     dragStarted.current = false;
     pointerLockRequested.current = false;
     pointerLockActive.current = false;
+    pointerLockHandoffPending.current = false;
 
     const element = spanRef.current;
 
@@ -316,6 +314,7 @@ export function EditableDraggableNumber({
         onDragStart?.();
         if (element?.requestPointerLock) {
           pointerLockRequested.current = true;
+          pointerLockHandoffPending.current = true;
           try {
             const result = element.requestPointerLock();
             if (result && typeof result.then === 'function') {
@@ -326,12 +325,14 @@ export function EditableDraggableNumber({
                 () => {
                   pointerLockRequested.current = false;
                   pointerLockActive.current = false;
+                  pointerLockHandoffPending.current = false;
                 },
               );
             }
           } catch {
             pointerLockRequested.current = false;
             pointerLockActive.current = false;
+            pointerLockHandoffPending.current = false;
           }
         }
       }
@@ -367,6 +368,7 @@ export function EditableDraggableNumber({
       dragStarted.current = false;
       pointerLockRequested.current = false;
       pointerLockActive.current = false;
+      pointerLockHandoffPending.current = false;
     };
 
     window.addEventListener('mousemove', handleMouseMove);

@@ -9,6 +9,7 @@ import { projectFileService, type ProjectFolder, type ProjectMediaFile } from '.
 import type { LabelColor } from '../../../stores/mediaStore/types';
 import type {
   AnalysisStatus,
+  SceneSegment,
   TranscriptFusionArtifact,
   TranscriptStatus,
   TranscriptWord,
@@ -17,6 +18,7 @@ import { yieldToBrowser } from './loadProgress';
 import { calcRangeCoverage, projectMediaCanHaveAudio } from './loadMediaCacheHydration';
 import { hydrateProjectMediaRuntimeSources } from './loadMediaRuntimeSources';
 import { isCurrentSceneCutAnalysis } from '../../sceneCutDetection/sceneCutDetector';
+import { restoreCachedClipAnalysis } from '../../faceAnalysis/faceAnalysisPersistence';
 
 const log = Logger.create('ProjectSync');
 
@@ -91,11 +93,19 @@ export async function convertProjectMediaToStore(
 
     let analysisStatus: AnalysisStatus = 'none';
     let analysisCoverage = 0;
+    let analysis: MediaFile['analysis'];
+    let faceAnalysisStatus: MediaFile['faceAnalysisStatus'];
     if (!deferCacheChecks && projectFileService.isProjectOpen()) {
       try {
         const ranges = await projectFileService.getAnalysisRanges(pm.id);
         if (ranges.length > 0) {
           analysisStatus = 'ready';
+          const merged = await projectFileService.getAllAnalysisMerged(pm.id);
+          if (merged) {
+            const restored = restoreCachedClipAnalysis(merged);
+            analysis = restored.analysis;
+            faceAnalysisStatus = restored.hasFaces ? 'ready' : 'none';
+          }
           if (pm.duration && pm.duration > 0) {
             const parsed: [number, number][] = ranges.map(key => {
               const [s, e] = key.split('-').map(Number);
@@ -105,6 +115,13 @@ export async function convertProjectMediaToStore(
           }
         }
       } catch { /* no analysis file */ }
+    }
+    let sceneDescriptions: SceneSegment[] | undefined;
+    if (!deferCacheChecks && projectFileService.isProjectOpen()) {
+      try {
+        const savedScenes = await projectFileService.getSceneDescriptions(pm.id);
+        if (savedScenes?.length) sceneDescriptions = savedScenes as SceneSegment[];
+      } catch { /* no scene descriptions */ }
     }
 
     let proxyStatus: MediaFile['proxyStatus'] = 'none';
@@ -213,7 +230,14 @@ export async function convertProjectMediaToStore(
       transcriptCoverage,
       transcribedRanges,
       analysisStatus,
+      analysis,
+      analysisProgress: analysis ? 100 : undefined,
       analysisCoverage,
+      faceAnalysisStatus,
+      faceAnalysisProgress: faceAnalysisStatus === 'ready' ? 100 : undefined,
+      sceneDescriptions,
+      sceneDescriptionStatus: sceneDescriptions?.length ? 'ready' : undefined,
+      sceneDescriptionProgress: sceneDescriptions?.length ? 100 : undefined,
     });
 
     options.onProgress?.(files.length, total, pm.name);

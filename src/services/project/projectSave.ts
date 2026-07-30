@@ -57,6 +57,10 @@ import {
   withProjectStoreSyncGuard,
 } from './projectStoreSyncGuard';
 import { persistFlashBoardChatJournal } from './flashBoardChatProjectJournal';
+import {
+  collectLegacyMediaArtifactSeeds,
+  persistLegacyMediaArtifactSeeds,
+} from './load/loadMediaArtifactMigration';
 import type {
   ClipVideoState,
   SerializableClip,
@@ -124,6 +128,7 @@ function shouldPersistClipWaveform(clip: ProjectSaveClip): boolean {
 function convertCompositions(compositions: Composition[]): ProjectComposition[] {
   return compositions.map((comp) => {
     const timelineData = comp.timelineData;
+    const duration = timelineData?.duration ?? comp.duration;
 
     // Convert tracks
     const tracks: ProjectTrack[] = ((timelineData?.tracks || []) as ProjectSaveTrack[]).map((t) => ({
@@ -253,17 +258,8 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       // Motion design clip support
       motion: c.motion ? structuredClone(c.motion) : undefined,
       vectorAnimationSettings: c.source?.vectorAnimationSettings || c.vectorAnimationSettings || undefined,
-      // Transcript data
-      transcript: c.transcript || undefined,
-      transcriptStatus: c.transcriptStatus || undefined,
-      // Analysis data
-      analysis: c.analysis || undefined,
-      analysisStatus: c.analysisStatus || undefined,
-      faceAnalysisStatus: c.faceAnalysisStatus || undefined,
-      faceAnalysisMessage: c.faceAnalysisMessage || undefined,
-      // AI scene description data
-      sceneDescriptions: c.sceneDescriptions || undefined,
-      sceneDescriptionStatus: c.sceneDescriptionStatus || undefined,
+      // Transcript, visual analysis, face analysis, and scene descriptions are
+      // media-scoped artifacts. They must never be duplicated into compositions.
     }));
 
     const markers: ProjectMarker[] = ((timelineData?.markers || []) as SerializableMarker[]).map((marker) => ({
@@ -290,7 +286,8 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       width: comp.width,
       height: comp.height,
       frameRate: comp.frameRate,
-      duration: comp.duration,
+      duration,
+      durationLocked: timelineData?.durationLocked ?? false,
       backgroundColor: comp.backgroundColor,
       folderId: comp.parentId,
       labelColor: comp.labelColor && comp.labelColor !== 'none' ? comp.labelColor : undefined,
@@ -468,6 +465,20 @@ export async function syncStoresToProject(): Promise<void> {
     const mediaState = useMediaStore.getState();
     const timelineStore = useTimelineStore.getState();
 
+    // Source artifacts used to live on timeline clips. Persist every legacy
+    // copy before serializing the active timeline or stripping clip copies.
+    // A failed migration aborts the save so the only surviving copy cannot be
+    // overwritten by a smaller project.json.
+    const legacyArtifactSeeds = collectLegacyMediaArtifactSeeds({
+      media: mediaState.files,
+      compositions: mediaState.compositions.map(composition => ({
+        clips: composition.id === mediaState.activeCompositionId
+          ? timelineStore.clips
+          : composition.timelineData?.clips ?? [],
+      })),
+    });
+    await persistLegacyMediaArtifactSeeds(legacyArtifactSeeds);
+
     // Save current timeline to active composition first
     if (mediaState.activeCompositionId) {
       const activeCompositionId = mediaState.activeCompositionId;
@@ -475,7 +486,9 @@ export async function syncStoresToProject(): Promise<void> {
       useMediaStore.setState((state) => ({
         compositions: syncTransitionCompositionTimelineToParent(
           state.compositions.map((c) =>
-            c.id === activeCompositionId ? { ...c, timelineData } : c
+            c.id === activeCompositionId
+              ? { ...c, duration: timelineData.duration, timelineData }
+              : c
           ),
           activeCompositionId,
           timelineData,

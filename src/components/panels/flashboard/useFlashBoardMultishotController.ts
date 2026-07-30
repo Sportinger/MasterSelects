@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   addMultiPrompt,
   createDefaultMultiPrompts,
@@ -14,6 +14,7 @@ interface UseFlashBoardMultishotControllerOptions {
   duration: number;
   generateAudio: boolean;
   isAudioMode: boolean;
+  selectionKey: string;
   selectedEntryOutputType?: string;
   setGenerateAudio: Dispatch<SetStateAction<boolean>>;
   supportsAudio: boolean;
@@ -24,6 +25,7 @@ export function useFlashBoardMultishotController({
   duration,
   generateAudio,
   isAudioMode,
+  selectionKey,
   selectedEntryOutputType,
   setGenerateAudio,
   supportsAudio,
@@ -33,6 +35,9 @@ export function useFlashBoardMultishotController({
   const [renderMultiShotPanel, setRenderMultiShotPanel] = useState(false);
   const [isMultiShotPanelClosing, setIsMultiShotPanelClosing] = useState(false);
   const [multiPrompt, setMultiPrompt] = useState<FlashBoardMultishotPlannerPrompt[]>([]);
+  const audioBeforeMultiShotRef = useRef(generateAudio);
+  const previousSelectionKeyRef = useRef(selectionKey);
+  const selectionChanged = previousSelectionKeyRef.current !== selectionKey;
 
   const normalizedMultiPrompt = useMemo(
     () => rebalanceMultiPrompts(multiPrompt, duration),
@@ -43,6 +48,26 @@ export function useFlashBoardMultishotController({
     [normalizedMultiPrompt],
   );
   const canAddShot = multiShots && normalizedMultiPrompt.length < Math.min(MAX_MULTI_SHOTS, Math.max(1, duration));
+
+  useEffect(() => {
+    if (!selectionChanged) {
+      return;
+    }
+
+    previousSelectionKeyRef.current = selectionKey;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setMultiShots(false);
+      setRenderMultiShotPanel(false);
+      setIsMultiShotPanelClosing(false);
+      setMultiPrompt([]);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectionChanged, selectionKey]);
 
   useEffect(() => {
     if (selectedEntryOutputType === undefined) {
@@ -76,7 +101,7 @@ export function useFlashBoardMultishotController({
   ]);
 
   useEffect(() => {
-    if (!multiShots) {
+    if (!multiShots || selectionChanged) {
       return;
     }
 
@@ -98,9 +123,13 @@ export function useFlashBoardMultishotController({
     return () => {
       cancelled = true;
     };
-  }, [duration, generateAudio, multiShots, setGenerateAudio]);
+  }, [duration, generateAudio, multiShots, selectionChanged, setGenerateAudio]);
 
   useEffect(() => {
+    if (selectionChanged) {
+      return;
+    }
+
     let cancelled = false;
     let timeoutId: number | null = null;
 
@@ -132,7 +161,7 @@ export function useFlashBoardMultishotController({
         window.clearTimeout(timeoutId);
       }
     };
-  }, [multiShots, renderMultiShotPanel]);
+  }, [multiShots, renderMultiShotPanel, selectionChanged]);
 
   const handleMultiShotToggle = useCallback(() => {
     if (!supportsMultiShot) {
@@ -143,17 +172,20 @@ export function useFlashBoardMultishotController({
       const next = !current;
 
       if (next) {
+        audioBeforeMultiShotRef.current = generateAudio;
         setGenerateAudio(true);
         setMultiPrompt((existing) => (
           existing.length > 0
             ? rebalanceMultiPrompts(existing, duration)
             : createDefaultMultiPrompts(duration)
         ));
+      } else {
+        setGenerateAudio(audioBeforeMultiShotRef.current);
       }
 
       return next;
     });
-  }, [duration, setGenerateAudio, supportsMultiShot]);
+  }, [duration, generateAudio, setGenerateAudio, supportsMultiShot]);
 
   const handleShotPromptChange = useCallback((index: number, value: string) => {
     setMultiPrompt((current) => current.map((shot, shotIndex) => (

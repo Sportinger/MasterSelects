@@ -1,4 +1,11 @@
 import { flashBoardJobService } from '../../services/flashboard/FlashBoardJobService';
+import {
+  mergeFlashBoardVideoJobRecovery,
+  persistFlashBoardVideoJobRecovery,
+  readFlashBoardVideoJobRecovery,
+} from '../../services/flashboard/FlashBoardVideoJobRecovery';
+import { resolveFlashBoardJobStartedAt } from '../../services/flashboard/FlashBoardJobTiming';
+import { projectFileService } from '../../services/projectFileService';
 import { useFlashBoardStore } from './index';
 import { createDefaultFlashBoardComposer } from './defaults';
 import type {
@@ -18,6 +25,23 @@ import type {
 export type { FlashBoardActiveGenerationRecord } from './types';
 
 const MAX_FLASHBOARD_PROMPT_HISTORY = 200;
+
+function getCurrentProjectCreatedAt(): string | null {
+  return typeof projectFileService.getProjectData === 'function'
+    ? projectFileService.getProjectData()?.createdAt ?? null
+    : null;
+}
+
+function persistCurrentFlashBoardVideoJobs(): void {
+  persistFlashBoardVideoJobRecovery(
+    useFlashBoardStore.getState().activeGenerationRecords,
+    getCurrentProjectCreatedAt(),
+  );
+}
+
+function isVideoGenerationRequest(request: FlashBoardGenerationRequest): boolean {
+  return request.outputType !== 'audio' && request.outputType !== 'image';
+}
 
 function areActiveGenerationRecordsEqual(
   left: FlashBoardActiveGenerationRecord[],
@@ -48,6 +72,7 @@ function updateFlashBoardActiveGenerationRecord(
       record.id === recordId ? updater(record) : record
     ),
   }));
+  persistCurrentFlashBoardVideoJobs();
 }
 
 function removeFlashBoardActiveGenerationRecord(recordId: string): void {
@@ -55,6 +80,7 @@ function removeFlashBoardActiveGenerationRecord(recordId: string): void {
     activeGenerationRecords: state.activeGenerationRecords.filter((record) => record.id !== recordId),
     selectedActiveGenerationRecordIds: state.selectedActiveGenerationRecordIds.filter((id) => id !== recordId),
   }));
+  persistCurrentFlashBoardVideoJobs();
 }
 
 export function selectFlashBoardActiveGenerationRecords(
@@ -252,9 +278,12 @@ export function updateFlashBoardActiveGenerationJob(
     job: {
       ...record.job,
       ...patch,
-      startedAt: patch.status === 'processing' && record.job?.status !== 'processing'
-        ? now
-        : patch.startedAt ?? record.job?.startedAt,
+      startedAt: resolveFlashBoardJobStartedAt({
+        currentStartedAt: record.job?.startedAt,
+        nextStartedAt: patch.startedAt,
+        nextStatus: patch.status ?? record.job?.status ?? 'queued',
+        now,
+      }),
     } as FlashBoardJobState,
     updatedAt: now,
   }));
@@ -301,33 +330,57 @@ export function hydrateFlashBoardActiveGenerationRecords(
     chatMessages,
     hoveredComposerReference: null,
   });
+  persistCurrentFlashBoardVideoJobs();
+}
+
+export function restoreFlashBoardActiveGenerationRecordsFromRecovery(
+  projectCreatedAt: string | null = getCurrentProjectCreatedAt(),
+): void {
+  const recoveredRecords = readFlashBoardVideoJobRecovery(projectCreatedAt);
+  if (recoveredRecords.length === 0) return;
+
+  useFlashBoardStore.setState((state) => ({
+    activeGenerationRecords: mergeFlashBoardVideoJobRecovery(
+      state.activeGenerationRecords,
+      recoveredRecords,
+    ),
+  }));
+  persistCurrentFlashBoardVideoJobs();
 }
 
 export function submitFlashBoardActiveGenerationRequest(
   request: FlashBoardGenerationRequest,
 ): FlashBoardActiveGenerationRecord | null {
   const now = Date.now();
+  const recordId = crypto.randomUUID();
+  const durableRequest = isVideoGenerationRequest(request)
+    ? {
+        ...request,
+        idempotencyKey: request.idempotencyKey ?? `flashboard-video:${recordId}`,
+      }
+    : request;
   const record: FlashBoardActiveGenerationRecord = {
-    id: crypto.randomUUID(),
+    id: recordId,
     kind: 'generation',
     createdAt: now,
     updatedAt: now,
-    request,
+    request: durableRequest,
     job: { status: 'queued' },
   };
 
   useFlashBoardStore.setState((state) => ({
     activeGenerationRecords: [...state.activeGenerationRecords, record],
   }));
+  persistCurrentFlashBoardVideoJobs();
   const prompts = [
-    request.prompt,
-    ...(request.multiPrompt ?? []).map((shot) => shot.prompt),
+    durableRequest.prompt,
+    ...(durableRequest.multiPrompt ?? []).map((shot) => shot.prompt),
   ];
   for (let index = prompts.length - 1; index >= 0; index -= 1) {
     appendFlashBoardPromptHistoryEntry({ kind: 'generation', prompt: prompts[index] });
   }
 
-  flashBoardJobService.submit({ recordId: record.id, request });
+  flashBoardJobService.submit({ recordId: record.id, request: durableRequest });
 
   return getFlashBoardActiveGenerationRecord(record.id) ?? null;
 }

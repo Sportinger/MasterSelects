@@ -104,6 +104,7 @@ export function FlashBoardComposer({
   const initialModelSettings = initialEntry
     ? composer.modelSettingsByKey?.[`${initialEntry.service}:${initialEntry.providerId}`]
     : undefined;
+  const initialGenerateAudio = initialModelSettings?.generateAudio ?? false;
 
   const [activeModelCategory, setActiveModelCategory] = useState<FlashBoardModelCategoryId>(() => (
     getFlashBoardModelCategory(initialEntry)
@@ -143,7 +144,8 @@ export function FlashBoardComposer({
     chatProviderLabel, chatProviderOptions,
     copiedChatMessageId, handleChatButtonClick, handleChatInputKeyDown,
     handleChatMessageDoubleClick, handleChatProviderSelect, handleChatPromptChange,
-    handleClearChatHistory, handleClearChatPrompt, isChatting,
+    handleClearChatHistory, handleClearChatPrompt, handlePlanThreeToggle, isChatting,
+    planThreeEnabled,
     chatSystemPromptProvider, chatSystemPromptSendContext, showChatCloudActions,
   } = useFlashBoardChatController({
     aiProvider,
@@ -211,12 +213,12 @@ export function FlashBoardComposer({
   const [duration, setDuration] = useState(initialModelSettings?.duration ?? composer.duration ?? 5);
   const [aspectRatio, setAspectRatio] = useState(initialModelSettings?.aspectRatio ?? composer.aspectRatio ?? '16:9');
   const [imageSize, setImageSize] = useState(initialModelSettings?.imageSize ?? composer.imageSize ?? '1K');
-  const [generateAudio, setGenerateAudio] = useState(initialModelSettings?.generateAudio ?? composer.generateAudio ?? false);
+  const [generateAudio, setGenerateAudio] = useState(initialGenerateAudio);
   useFlashBoardInitialEntrySync({
     initialEntry,
     initialAspectRatio: initialModelSettings?.aspectRatio ?? composer.aspectRatio,
     initialDuration: initialModelSettings?.duration ?? composer.duration,
-    initialGenerateAudio: initialModelSettings?.generateAudio ?? composer.generateAudio,
+    initialGenerateAudio,
     initialImageSize: initialModelSettings?.imageSize ?? composer.imageSize,
     initialMode: initialModelSettings?.mode ?? composer.mode,
     initialVersion,
@@ -313,6 +315,7 @@ export function FlashBoardComposer({
     duration,
     generateAudio,
     isAudioMode,
+    selectionKey: `${service}:${providerId}`,
     selectedEntryOutputType: selectedEntry?.outputType,
     setGenerateAudio,
     supportsAudio,
@@ -816,7 +819,9 @@ export function FlashBoardComposer({
         actionStack={{
           canGenerate, chatButtonLabel, chatButtonTitle: chatChargeTitle ?? 'Send chat prompt',
           chatPanelOpen, generateButtonLabel, generateButtonTitle,
+          isChatting, planThreeEnabled,
           onChatButtonClick: handleChatButtonClick, onGenerate: handleGenerate,
+          onPlanThreeToggle: handlePlanThreeToggle,
         }}
       />
 

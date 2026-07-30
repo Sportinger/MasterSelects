@@ -118,6 +118,32 @@ describe('cloudAiService billing sync', () => {
     expect(useAccountStore.getState().billingSummary?.creditBalance).toBe(160);
   });
 
+  it('forwards the stable video idempotency key used for reload recovery', async () => {
+    createVideoMock.mockResolvedValue({
+      creditBalance: 160,
+      data: { taskId: 'task_123' },
+      kind: 'ai.video',
+      mode: 'hosted',
+      ok: true,
+      provider: 'cloud-kling',
+      requestId: 'req_1',
+      status: 'accepted',
+    });
+
+    await cloudAiService.createTextToVideo({
+      aspectRatio: '16:9',
+      duration: 5,
+      mode: 'std',
+      prompt: 'Sunset over the sea',
+      provider: 'cloud-kling',
+      version: 'latest',
+    }, 'flashboard-video:record-1');
+
+    expect(createVideoMock).toHaveBeenCalledWith(expect.objectContaining({
+      idempotencyKey: 'flashboard-video:record-1',
+    }));
+  });
+
   it('forwards Seedance reference media to hosted video creation', async () => {
     createVideoMock.mockResolvedValue({
       creditBalance: 140,

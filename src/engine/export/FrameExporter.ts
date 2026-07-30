@@ -52,6 +52,7 @@ import {
 import type { TimelineRuntimeAdmissionDecision } from '../../services/timeline/runtimeCoordinatorTypes';
 import { ExportPreviewPublisher } from './frameExporter/ExportPreviewPublisher';
 import { prepareTransitionCompositionsForExport } from './prepareTransitionCompositionsForExport';
+import { resolveRequestedExportMode } from './exportModeSelection';
 
 export class FrameExporter {
   // The export preview is informational; four updates per second are smooth
@@ -65,6 +66,7 @@ export class FrameExporter {
   private isCancelled = false;
   private frameTimes: number[] = [];
   private clipStates: Map<string, ExportClipState> = new Map();
+  private readonly requestedExportMode: ExportMode;
   private exportMode: ExportMode;
   private parallelDecoder: ParallelDecodeManager | null = null;
   private useParallelDecode = false;
@@ -75,7 +77,8 @@ export class FrameExporter {
 
   constructor(settings: FullExportSettings) {
     this.settings = settings;
-    this.exportMode = settings.exportMode ?? 'fast';
+    this.requestedExportMode = resolveRequestedExportMode(settings.exportMode);
+    this.exportMode = this.requestedExportMode;
     this.previewPublisher = new ExportPreviewPublisher(
       FrameExporter.PREVIEW_FRAME_INTERVAL_MS,
       () => this.activeExportRunId,
@@ -139,35 +142,9 @@ export class FrameExporter {
     this.renderSession = null;
   }
 
-  private shouldForcePreciseRendering(state: ReturnType<typeof useTimelineStore.getState>): boolean {
-    const clipsInRange = collectRenderableExportClipsInRange(
-      this.settings.startTime,
-      this.settings.endTime,
-      Array.isArray(state.tracks) ? state.tracks : [],
-      Array.isArray(state.clips) ? state.clips : [],
-    );
-
-    return clipsInRange.some((clip) =>
-      clip.source?.type === 'gaussian-splat' ||
-      (
-        clip.is3D === true &&
-        clip.source?.type !== 'video' &&
-        clip.source?.type !== 'camera' &&
-        clip.source?.type !== 'splat-effector'
-      )
-    );
-  }
-
   async export(onProgress: (progress: ExportProgress) => void): Promise<Blob | null> {
     const state = useTimelineStore.getState();
-    const forcePreciseRendering = this.shouldForcePreciseRendering(state);
-    const initialMode = forcePreciseRendering ? 'precise' : this.exportMode;
-
-    if (forcePreciseRendering && this.exportMode !== 'precise') {
-      log.info('Forcing PRECISE export mode for 3D and gaussian splat content');
-    }
-
-    this.exportMode = initialMode;
+    this.exportMode = this.requestedExportMode;
     this.resetAttemptState();
 
     try {

@@ -297,7 +297,9 @@ export function SlotGrid({ opacity }: SlotGridProps) {
         useMediaStore.setState({
           activeCompositionId: null,
           compositions: freshComps.map(c =>
-            c.id === compOnLayer ? { ...c, timelineData } : c
+            c.id === compOnLayer
+              ? { ...c, duration: timelineData.duration, timelineData }
+              : c
           ),
         });
       } else {

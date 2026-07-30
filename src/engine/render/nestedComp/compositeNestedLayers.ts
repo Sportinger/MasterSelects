@@ -8,6 +8,7 @@ import type { MaskTextureManager } from '../../texture/MaskTextureManager';
 import { getPixelParticleDisintegrateRenderer } from '../../particles/PixelParticleDisintegrateRenderer';
 import { splitLayerEffects } from '../layerEffectStack';
 import { Logger } from '../../../services/logger';
+import { calculateSourcePixelScale } from '../../../utils/sourcePixelScale';
 
 const log = Logger.create('NestedCompositor');
 const nestedMaskVersions = new Map<string, string>();
@@ -136,6 +137,12 @@ export function compositeNestedLayers(params: CompositeNestedLayersParams): GPUT
     const layer = data.layer;
     const uniformBuffer = compositorPipeline.getOrCreateUniformBuffer(`nested-${compositionId}-${layer.id}`);
     const sourceAspect = data.sourceWidth / data.sourceHeight;
+    const sourcePixelScale = calculateSourcePixelScale(
+      data.sourceWidth,
+      data.sourceHeight,
+      width,
+      height,
+    );
     const maskLookupId = layer.maskClipId || layer.id;
     syncNestedLayerMaskTexture(data, width, height, maskTextureManager);
     const maskInfo = maskTextureManager.getMaskInfo(maskLookupId);
@@ -160,7 +167,8 @@ export function compositeNestedLayers(params: CompositeNestedLayersParams): GPUT
       outputAspect,
       hasMask,
       uniformBuffer,
-      inlineEffects
+      inlineEffects,
+      sourcePixelScale,
     );
 
     let sourceTextureView = data.textureView;

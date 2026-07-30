@@ -6,6 +6,11 @@ import { Logger } from './logger';
 import { useTimelineStore } from '../stores/timeline';
 import { useMediaStore } from '../stores/mediaStore';
 import type { SceneSegment, SceneDescriptionStatus } from '../types';
+import { projectFileService } from './projectFileService';
+import {
+  getMediaSourceArtifactProjection,
+  hydrateAndProjectMediaSourceArtifacts,
+} from './mediaArtifacts/mediaSourceArtifacts';
 
 const log = Logger.create('SceneDescriber');
 
@@ -81,22 +86,40 @@ function updateClipSceneDescription(
   data: {
     status?: SceneDescriptionStatus;
     progress?: number;
-    segments?: SceneSegment[];
+    segments?: SceneSegment[] | null;
     message?: string;
   }
-): void {
+): string | undefined {
   const store = useTimelineStore.getState();
+  const source = store.clips.find(clip => clip.id === clipId);
+  const mediaFileId = source?.source?.mediaFileId || source?.mediaFileId;
+  const hasSegments = Object.prototype.hasOwnProperty.call(data, 'segments');
   const clips = store.clips.map(clip => {
-    if (clip.id !== clipId) return clip;
+    const candidateMediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
+    if (clip.id !== clipId && (!mediaFileId || candidateMediaFileId !== mediaFileId)) return clip;
     return {
       ...clip,
       sceneDescriptionStatus: data.status ?? clip.sceneDescriptionStatus,
       sceneDescriptionProgress: data.progress ?? clip.sceneDescriptionProgress,
-      sceneDescriptions: data.segments ?? clip.sceneDescriptions,
+      sceneDescriptions: hasSegments ? data.segments ?? undefined : clip.sceneDescriptions,
       sceneDescriptionMessage: data.message,
     };
   });
   useTimelineStore.setState({ clips });
+  if (mediaFileId) {
+    useMediaStore.setState(state => ({
+      files: state.files.map(file => file.id === mediaFileId
+        ? {
+            ...file,
+            sceneDescriptionStatus: data.status ?? file.sceneDescriptionStatus,
+            sceneDescriptionProgress: data.progress ?? file.sceneDescriptionProgress,
+            sceneDescriptions: hasSegments ? data.segments ?? undefined : file.sceneDescriptions,
+            sceneDescriptionMessage: data.message,
+          }
+        : file),
+    }));
+  }
+  return mediaFileId;
 }
 
 /**
@@ -108,8 +131,11 @@ export async function describeClip(clipId: string): Promise<void> {
     return;
   }
 
-  const store = useTimelineStore.getState();
-  const clip = store.clips.find(c => c.id === clipId);
+  const clip = useTimelineStore.getState().clips.find(c => c.id === clipId);
+  const mediaFileId = clip?.source?.mediaFileId || clip?.mediaFileId;
+  if (mediaFileId) {
+    await hydrateAndProjectMediaSourceArtifacts(mediaFileId);
+  }
 
   if (!clip || !clip.file) {
     log.warn('Clip not found or has no file', { clipId });
@@ -227,15 +253,28 @@ export async function describeClip(clipId: string): Promise<void> {
       end: Math.min(seg.end + inPoint, outPoint),
     }));
 
+    const existingSegments = mediaFileId
+      ? getMediaSourceArtifactProjection(mediaFileId).sceneDescriptions ?? []
+      : [];
+    const mergedSegments = [
+      ...existingSegments.filter(segment => segment.end <= inPoint || segment.start >= outPoint),
+      ...segments,
+    ].toSorted((left, right) => left.start - right.start || left.end - right.end);
+    if (mediaFileId && projectFileService.isProjectOpen()) {
+      const saved = await projectFileService.saveSceneDescriptions(mediaFileId, mergedSegments);
+      if (!saved) {
+        throw new Error('Scene descriptions could not be saved to the project.');
+      }
+    }
+
     updateClipSceneDescription(clipId, {
       status: 'ready',
       progress: 100,
-      segments,
+      segments: mergedSegments,
       message: undefined,
     });
 
     // Propagate analysis status + coverage to MediaFile for badge display
-    const mediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
     if (mediaFileId) {
       try {
         const mediaState = useMediaStore.getState();
@@ -285,7 +324,7 @@ export async function describeClip(clipId: string): Promise<void> {
       }).catch(() => {});
     }
 
-    log.info(`Scene description complete: ${segments.length} segments, ${data.elapsed_seconds}s server time`);
+    log.info(`Scene description complete: ${mergedSegments.length} source segments, ${data.elapsed_seconds}s server time`);
 
   } catch (error) {
     if (shouldCancel) {
@@ -323,10 +362,15 @@ export function cancelDescription(): void {
  * Clear scene descriptions from a clip
  */
 export function clearSceneDescriptions(clipId: string): void {
-  updateClipSceneDescription(clipId, {
+  const mediaFileId = updateClipSceneDescription(clipId, {
     status: 'none',
     progress: 0,
-    segments: undefined,
+    segments: null,
     message: undefined,
   });
+  if (mediaFileId && projectFileService.isProjectOpen()) {
+    void projectFileService.deleteSceneDescriptions(mediaFileId).catch(error => {
+      log.warn('Failed to delete media-scoped scene descriptions', error);
+    });
+  }
 }
