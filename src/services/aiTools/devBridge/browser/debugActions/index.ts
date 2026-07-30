@@ -22,6 +22,7 @@ import {
 } from './exportPanel';
 import { measureTimelineInteraction } from './interaction';
 import { probeMediaBitstream } from './mediaBitstream';
+import { probeMediaPipeline } from './mediaPipelineProbe';
 import {
   armMixerFaderRecording,
   clearMixerFaderRecording,
@@ -353,6 +354,8 @@ export async function runDebugAction(action: string, args: Record<string, unknow
       return probeVideoEncoderConfigs(args);
     case 'probe-media-bitstream':
       return probeMediaBitstream(args);
+    case 'probe-media-pipeline':
+      return probeMediaPipeline(args);
     case 'pause-playback': {
       timelineState.pause();
       return {

@@ -4,6 +4,7 @@ import { useTimelineStore } from '../../../../../stores/timeline';
 import type { ContainerFormat, VideoCodec } from '../../../../../engine/export';
 import type { ExportSettings } from '../../../../../stores/exportStore';
 import { exportDiagnostics } from '../../../../export/exportDiagnostics';
+import { exportGpuPhaseDiagnostics } from '../../../../export/exportGpuPhaseDiagnostics';
 
 const waitForExportProbe = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
@@ -138,6 +139,14 @@ export async function runExportPanelButtonProbe(args: Record<string, unknown> = 
   const bitrate = typeof args.bitrate === 'number' && Number.isFinite(args.bitrate)
     ? Math.max(1_000_000, Math.min(100_000_000, Math.round(args.bitrate)))
     : undefined;
+  const gpuPhaseBreakdown = args.gpuPhaseBreakdown === true;
+  const requestedRenderHostMode = args.renderHostMode === 'main'
+    ? 'main'
+    : args.renderHostMode === 'worker-only' || args.renderHostMode === 'worker-software'
+      ? args.renderHostMode
+      : null;
+  const renderHostModeStorageKey = 'masterselects.renderHostMode';
+  const originalRenderHostMode = window.localStorage.getItem(renderHostModeStorageKey);
   const rateControl = pickExportProbeValue<ExportSettings['rateControl']>(
     args.rateControl,
     ['vbr', 'cbr'],
@@ -161,6 +170,12 @@ export async function runExportPanelButtonProbe(args: Record<string, unknown> = 
   window.addEventListener('unhandledrejection', rejectionHandler);
 
   try {
+    if (requestedRenderHostMode) {
+      window.localStorage.setItem(renderHostModeStorageKey, requestedRenderHostMode);
+    }
+    if (gpuPhaseBreakdown) {
+      exportGpuPhaseDiagnostics.start();
+    }
     useDockStore.getState().activatePanelType('export');
     await waitForExportProbe(180);
 
@@ -251,6 +266,7 @@ export async function runExportPanelButtonProbe(args: Record<string, unknown> = 
           videoCodec,
           bitrate: bitrate ?? originalSettings.bitrate,
           rateControl,
+          renderHostMode: requestedRenderHostMode ?? originalRenderHostMode ?? 'default-main',
         },
         beforeClick,
         after: finalPanel,
@@ -261,10 +277,23 @@ export async function runExportPanelButtonProbe(args: Record<string, unknown> = 
           exportCurrentTime: exportAfter.exportCurrentTime,
         },
         exportDiagnostics: exportDiagnostics.snapshot(),
+        ...(gpuPhaseBreakdown
+          ? { exportGpuPhaseDiagnostics: exportGpuPhaseDiagnostics.snapshot() }
+          : {}),
         downloadAnchorCountDelta: document.querySelectorAll('a[download]').length - downloadClickCountBefore,
       },
     };
   } finally {
+    if (gpuPhaseBreakdown) {
+      exportGpuPhaseDiagnostics.stop();
+    }
+    if (requestedRenderHostMode) {
+      if (originalRenderHostMode === null) {
+        window.localStorage.removeItem(renderHostModeStorageKey);
+      } else {
+        window.localStorage.setItem(renderHostModeStorageKey, originalRenderHostMode);
+      }
+    }
     window.removeEventListener('error', windowErrorHandler);
     window.removeEventListener('unhandledrejection', rejectionHandler);
     timeline.endExport();

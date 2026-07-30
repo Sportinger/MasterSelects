@@ -515,10 +515,11 @@ describe('worker-first export render host port', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    localStorage.setItem('masterselects.renderHostMode', 'worker-software');
     vi.stubGlobal('OffscreenCanvas', FakeOffscreenCanvas);
   });
 
-  it('keeps the main export fallback cold while worker readback succeeds without preview dev mode', async () => {
+  it('keeps the main export fallback cold while explicit worker software readback succeeds', async () => {
     await expect(exportRenderHostPort.ensureReady()).resolves.toBe(true);
 
     expect(mockFactory.createBridge).toHaveBeenCalledTimes(1);
@@ -550,6 +551,27 @@ describe('worker-first export render host port', () => {
     expect(mockFactory.engine.render).not.toHaveBeenCalled();
     expect(mockFactory.engine.readPixels).not.toHaveBeenCalled();
     expect(mockFactory.engine.cleanupExportCanvas).not.toHaveBeenCalled();
+  });
+
+  it('uses the WebGPU main export host by default', async () => {
+    localStorage.removeItem('masterselects.renderHostMode');
+
+    await expect(exportRenderHostPort.ensureReady()).resolves.toBe(true);
+
+    exportRenderHostPort.setResolution(64, 36);
+    exportRenderHostPort.setExporting(true);
+    expect(exportRenderHostPort.initExportCanvas(64, 36, false)).toBe(true);
+
+    expect(mockFactory.createBridge).not.toHaveBeenCalled();
+    expect(mockFactory.engine.isDeviceValid).toHaveBeenCalled();
+    expect(mockFactory.engine.setResolution).toHaveBeenCalledWith(64, 36);
+    expect(mockFactory.engine.setExporting).toHaveBeenCalledWith(true);
+    expect(mockFactory.engine.initExportCanvas).toHaveBeenCalledWith(64, 36, false);
+    expect(exportRenderHostPort.getTelemetry()).toEqual({
+      mode: 'main',
+      presentationStrategy: 'main-host-fallback',
+      lifecycleOwner: 'exportRenderHostPort',
+    });
   });
 
   it('keeps explicit main render host mode on the main export fallback', async () => {

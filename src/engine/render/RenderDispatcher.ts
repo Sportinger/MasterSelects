@@ -20,6 +20,7 @@ import { useTimelineStore } from '../../stores/timeline';
 import { reportRenderTime } from '../../services/performanceMonitor';
 import { Logger } from '../../services/logger';
 import { scrubSettleState } from '../../services/scrubSettleState';
+import { exportGpuPhaseDiagnostics } from '../../services/export/exportGpuPhaseDiagnostics';
 import { flags } from '../featureFlags';
 import type { NativeSceneRenderer } from '../native3d/NativeSceneRenderer';
 import { collectActiveSceneSplatEffectors } from '../scene/SceneEffectorUtils';
@@ -507,14 +508,56 @@ export class RenderDispatcher {
       }
       : undefined;
 
-    this.outputRouter.routeCompositeFrame({
-      commandEncoder,
-      sourceView: result.finalView,
-      sampler: d.sampler,
-      snapshot: outputSnapshot,
-      targetIds: outputSnapshot?.activeCompositionTargetIds,
-      exportTarget,
-    });
+    const splitGpuPhases =
+      isExporting &&
+      exportGpuPhaseDiagnostics.isEnabled() &&
+      !!exportTarget;
+    let submitTime = 0;
+
+    if (splitGpuPhases) {
+      commandBuffers.push(commandEncoder.finish());
+      const submittedAt = performance.now();
+      try {
+        device.queue.submit(commandBuffers);
+      } catch (e) {
+        log.error('GPU composite submit failed', e);
+        return;
+      }
+      const compositeCompletion = device.queue.onSubmittedWorkDone();
+
+      const outputEncoder = device.createCommandEncoder();
+      this.outputRouter.routeCompositeFrame({
+        commandEncoder: outputEncoder,
+        sourceView: result.finalView,
+        sampler: d.sampler,
+        snapshot: outputSnapshot,
+        targetIds: outputSnapshot?.activeCompositionTargetIds,
+        exportTarget,
+      });
+      try {
+        device.queue.submit([outputEncoder.finish()]);
+      } catch (e) {
+        log.error('GPU output submit failed', e);
+        return;
+      }
+      const totalCompletion = device.queue.onSubmittedWorkDone();
+      submitTime = performance.now() - submittedAt;
+      exportGpuPhaseDiagnostics.trackFrame({
+        timelineTime: this.getEffectiveTimelineTime(),
+        submittedAt,
+        compositeCompletion,
+        totalCompletion,
+      });
+    } else {
+      this.outputRouter.routeCompositeFrame({
+        commandEncoder,
+        sourceView: result.finalView,
+        sampler: d.sampler,
+        snapshot: outputSnapshot,
+        targetIds: outputSnapshot?.activeCompositionTargetIds,
+        exportTarget,
+      });
+    }
 
     if (!skipCanvas) {
       if (d.previewContext) {
@@ -524,18 +567,21 @@ export class RenderDispatcher {
       }
     }
 
-    // Batch submit all command buffers in single call
-    commandBuffers.push(commandEncoder.finish());
-    const t3 = performance.now();
-    try {
-      device.queue.submit(commandBuffers);
-    } catch (e) {
-      // GPU submit failed - likely device lost or validation error
-      log.error('GPU submit failed', e);
-      return;
+    // Batch submit all command buffers in single call. Diagnostic exports split
+    // compositor and canvas output above so their queue completion can be timed.
+    if (!splitGpuPhases) {
+      commandBuffers.push(commandEncoder.finish());
+      const t3 = performance.now();
+      try {
+        device.queue.submit(commandBuffers);
+      } catch (e) {
+        // GPU submit failed - likely device lost or validation error
+        log.error('GPU submit failed', e);
+        return;
+      }
+      submitTime = performance.now() - t3;
     }
     this.lastCompositeView = result.finalView;
-    const submitTime = performance.now() - t3;
 
     // Cleanup after submit
     if (hasNestedComps) {

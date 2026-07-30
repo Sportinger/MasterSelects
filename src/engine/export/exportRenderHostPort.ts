@@ -167,7 +167,13 @@ function readRenderHostDevMode(): string | null {
 }
 
 function canUseWorkerSoftwareExport(): boolean {
-  return readRenderHostDevMode() !== 'main'
+  const mode = readRenderHostDevMode();
+  // The software worker snapshots every video frame to an ImageBitmap, paints
+  // it through Canvas2D, reads the full RGBA surface back, and transfers those
+  // pixels to the main thread. That path is useful for explicit worker testing,
+  // but it is substantially slower than the normal WebGPU zero-copy exporter
+  // at full resolution. Keep it opt-in until the worker owns a GPU/encoder path.
+  return (mode === 'worker-software' || mode === 'worker-only')
     && typeof OffscreenCanvas !== 'undefined'
     && isBrowserWorkerRenderHostRuntimeSupported();
 }
