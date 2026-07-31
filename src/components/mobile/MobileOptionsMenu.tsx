@@ -10,6 +10,7 @@ import {
 import { projectFileService } from '../../services/projectFileService';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useMediaStore } from '../../stores/mediaStore';
+import { resetStoryboardProjectState } from '../../stores/storyboardStore';
 import { ProjectNameDialog } from '../common/ProjectNameDialog';
 
 interface MobileOptionsMenuProps {
@@ -45,6 +46,7 @@ export function MobileOptionsMenu({ isOpen, onClose }: MobileOptionsMenuProps) {
     }
 
     newMediaProject();
+    resetStoryboardProjectState();
     setMediaProjectName(name);
     await syncStoresToProject();
     const saved = await projectFileService.saveProject();

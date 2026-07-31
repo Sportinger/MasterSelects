@@ -1,3 +1,8 @@
+import type {
+  ChatIntent,
+  DecisionPolicy,
+} from '../../../services/flashboard/FlashBoardChatService';
+
 interface FlashBoardActionStackProps {
   canGenerate: boolean;
   chatButtonLabel: string;
@@ -6,9 +11,13 @@ interface FlashBoardActionStackProps {
   generateButtonLabel: string;
   generateButtonTitle: string;
   isChatting: boolean;
+  chatIntent?: ChatIntent;
+  decisionPolicy?: DecisionPolicy;
   planThreeEnabled: boolean;
   onChatButtonClick: () => void | Promise<void>;
   onGenerate: () => void;
+  onChatIntentToggle?: () => void;
+  onDecisionPolicyChange?: (policy: DecisionPolicy) => void;
   onPlanThreeToggle: () => void;
 }
 
@@ -20,15 +29,43 @@ export function FlashBoardActionStack({
   generateButtonLabel,
   generateButtonTitle,
   isChatting,
+  chatIntent = 'execute',
+  decisionPolicy = 'automatic',
   planThreeEnabled,
   onChatButtonClick,
   onGenerate,
+  onChatIntentToggle,
+  onDecisionPolicyChange,
   onPlanThreeToggle,
 }: FlashBoardActionStackProps) {
   return (
     <div className="fb-action-stack">
       {chatPanelOpen ? (
         <div className={`fb-chat-split-button ${planThreeEnabled ? 'plan-three-on' : ''}`}>
+          <button
+            className={`fb-chat-intent-toggle ${chatIntent === 'plan' ? 'active' : ''}`}
+            type="button"
+            aria-pressed={chatIntent === 'plan'}
+            disabled={isChatting}
+            onClick={onChatIntentToggle}
+            title={chatIntent === 'plan'
+              ? 'Plan mode is on — real media and paid generation are protected.'
+              : 'Execute mode is on — verified editor tools may change media.'}
+          >
+            {chatIntent === 'plan' ? 'Plan' : 'Execute'}
+          </button>
+          <select
+            className="fb-chat-decision-policy"
+            aria-label="Decision policy"
+            disabled={isChatting}
+            value={decisionPolicy}
+            onChange={(event) => onDecisionPolicyChange?.(event.target.value as DecisionPolicy)}
+            title="Choose how often the AI pauses for a directing decision."
+          >
+            <option value="automatic">Auto</option>
+            <option value="milestones">Co-direct</option>
+            <option value="every-decision">Every choice</option>
+          </select>
           <button
             className={`fb-chat-plan-three-toggle ${planThreeEnabled ? 'active' : ''}`}
             type="button"

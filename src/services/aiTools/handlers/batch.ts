@@ -7,6 +7,7 @@ import { executeToolInternal } from './index';
 import { setStaggerBudget, consumeStaggerDelay } from '../executionState';
 import { checkToolAccess } from '../policy';
 import type { CallerContext } from '../policy';
+import type { AIToolExecutionMode } from '../policy';
 
 export interface BatchAction {
   tool: string;
@@ -57,10 +58,75 @@ export interface BatchExecutionHooks {
   afterAction?: (action: NormalizedBatchAction, result: BatchActionResult) => void | Promise<void>;
 }
 
+interface BatchResultReference {
+  $batchResult: {
+    action: number;
+    path?: string;
+  };
+}
+
 export interface ExecuteBatchCoreOptions extends AIToolExecutionOptions {
   callerContext?: CallerContext;
   executeTool?: BatchToolExecutor;
   hooks?: BatchExecutionHooks;
+}
+
+export function preflightBatchToolAccess(
+  value: unknown,
+  callerContext: CallerContext,
+  executionMode?: AIToolExecutionMode,
+  depth = 0,
+): ToolResult | null {
+  if (depth > 8) {
+    return {
+      success: false,
+      error: 'Batch rejected - nested batch depth exceeds the policy limit.',
+    };
+  }
+  if (!Array.isArray(value) || value.length === 0) {
+    return { success: false, error: 'actions must be a non-empty array' };
+  }
+  const disallowed: string[] = [];
+  for (const entry of value) {
+    if (
+      typeof entry !== 'object'
+      || entry === null
+      || Array.isArray(entry)
+      || typeof (entry as { tool?: unknown }).tool !== 'string'
+    ) {
+      disallowed.push('invalid batch action');
+      continue;
+    }
+    const tool = (entry as { tool: string }).tool;
+    const access = checkToolAccess(tool, callerContext, { executionMode });
+    if (!access.allowed) {
+      disallowed.push(`${tool}: ${access.reason}`);
+      continue;
+    }
+    if (tool === 'executeBatch') {
+      const record = entry as Record<string, unknown>;
+      const nestedArgs = record.args
+        && typeof record.args === 'object'
+        && !Array.isArray(record.args)
+        ? record.args as Record<string, unknown>
+        : record;
+      const nestedFailure = preflightBatchToolAccess(
+        nestedArgs.actions,
+        callerContext,
+        executionMode,
+        depth + 1,
+      );
+      if (nestedFailure) {
+        disallowed.push(`executeBatch: ${nestedFailure.error}`);
+      }
+    }
+  }
+  return disallowed.length > 0
+    ? {
+        success: false,
+        error: `Batch rejected - disallowed tools: ${disallowed.join('; ')}`,
+      }
+    : null;
 }
 
 /**
@@ -90,23 +156,12 @@ export async function executeBatchCore(
   const callerContext = options.callerContext ?? 'internal';
   const executeTool = options.executeTool ?? defaultBatchToolExecutor;
 
-  if (!actions || !Array.isArray(actions) || actions.length === 0) {
-    return { success: false, error: 'actions must be a non-empty array' };
-  }
-
-  const disallowed: string[] = [];
-  for (const action of actions) {
-    const access = checkToolAccess(action.tool, callerContext);
-    if (!access.allowed) {
-      disallowed.push(`${action.tool}: ${access.reason}`);
-    }
-  }
-  if (disallowed.length > 0) {
-    return {
-      success: false,
-      error: `Batch rejected - disallowed tools: ${disallowed.join('; ')}`,
-    };
-  }
+  const accessFailure = preflightBatchToolAccess(
+    actions,
+    callerContext,
+    options.executionMode,
+  );
+  if (accessFailure) return accessFailure;
 
   const budgetMs = options.staggerBudgetMs ?? (
     (args.staggerDelayMs as number | undefined) !== undefined
@@ -124,19 +179,22 @@ export async function executeBatchCore(
       continue;
     }
 
-    const toolArgs = normalizeBatchActionArgs(action);
-    const normalizedAction: NormalizedBatchAction = {
-      action,
-      args: toolArgs,
-      index: i,
-      tool: action.tool,
-    };
-
     if (options.signal?.aborted) {
       return createCancelledBatchResult(actions, results, i);
     }
 
     try {
+      const toolArgs = resolveBatchResultReferences(
+        normalizeBatchActionArgs(action),
+        results,
+        i,
+      ) as Record<string, unknown>;
+      const normalizedAction: NormalizedBatchAction = {
+        action,
+        args: toolArgs,
+        index: i,
+        tool: action.tool,
+      };
       await options.hooks?.beforeAction?.(normalizedAction);
       const result = await executeTool(action.tool, toolArgs, callerContext);
       const mutationMetadata = readMutationMetadata(result.data);
@@ -205,6 +263,92 @@ function normalizeBatchActionArgs(action: BatchAction): Record<string, unknown> 
 
   const { tool: _tool, args: _args, ...rest } = action;
   return rest as Record<string, unknown>;
+}
+
+function isBatchResultReference(value: unknown): value is BatchResultReference {
+  if (!isRecord(value) || !Object.hasOwn(value, '$batchResult')) return false;
+  const reference = value.$batchResult;
+  return isRecord(reference)
+    && Number.isInteger(reference.action)
+    && (reference.path === undefined || typeof reference.path === 'string');
+}
+
+function resolveBatchResultReferences(
+  value: unknown,
+  results: readonly BatchActionResult[],
+  currentActionIndex: number,
+): unknown {
+  if (isBatchResultReference(value)) {
+    const { action, path = '' } = value.$batchResult;
+    if (action < 0 || action >= currentActionIndex) {
+      throw new Error(
+        `Invalid $batchResult reference in action ${currentActionIndex}: action must target an earlier action`,
+      );
+    }
+    const sourceResult = results[action];
+    if (!sourceResult?.success) {
+      throw new Error(
+        `Invalid $batchResult reference in action ${currentActionIndex}: action ${action} did not succeed`,
+      );
+    }
+    return readBatchResultPath(sourceResult.data, path, currentActionIndex, action);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => resolveBatchResultReferences(entry, results, currentActionIndex));
+  }
+
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [
+        key,
+        resolveBatchResultReferences(entry, results, currentActionIndex),
+      ]),
+    );
+  }
+
+  return value;
+}
+
+function readBatchResultPath(
+  data: unknown,
+  path: string,
+  currentActionIndex: number,
+  sourceActionIndex: number,
+): unknown {
+  if (!path) return data;
+  const segments = path.split('.').filter(Boolean);
+  let cursor: unknown = data;
+
+  for (const segment of segments) {
+    if (
+      segment === '__proto__'
+      || segment === 'prototype'
+      || segment === 'constructor'
+    ) {
+      throw new Error(
+        `Invalid $batchResult path in action ${currentActionIndex}: unsafe segment "${segment}"`,
+      );
+    }
+    if (Array.isArray(cursor)) {
+      const index = Number(segment);
+      if (!Number.isInteger(index) || index < 0 || index >= cursor.length) {
+        throw new Error(
+          `Invalid $batchResult path in action ${currentActionIndex}: "${path}" was not found in action ${sourceActionIndex}`,
+        );
+      }
+      cursor = cursor[index];
+      continue;
+    }
+    if (!isRecord(cursor) || !Object.hasOwn(cursor, segment)) {
+      throw new Error(
+        `Invalid $batchResult path in action ${currentActionIndex}: "${path}" was not found in action ${sourceActionIndex}`,
+      );
+    }
+    cursor = cursor[segment];
+  }
+
+  return cursor;
 }
 
 function createCancelledBatchResult(

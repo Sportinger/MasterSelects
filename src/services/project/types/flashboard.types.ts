@@ -57,10 +57,13 @@ export interface ProjectFlashBoardChatExecutedToolCall {
 }
 
 export interface ProjectFlashBoardChatMessage {
+  /** Validated and field-whitelisted before it reaches the chat activity UI. */
+  activityEvents?: unknown[];
   createdAt?: string;
   id: string;
   role: 'user' | 'assistant';
   text: string;
+  decisionId?: string;
   editOptions?: ProjectFlashBoardChatEditOption[];
   isError?: boolean;
   isPending?: boolean;
@@ -171,6 +174,8 @@ export interface ProjectFlashBoardGenerationOutput {
   id: string;
   mediaType: ProjectFlashBoardMediaType;
   availability: 'preview' | 'completed';
+  importStatus?: 'pending' | 'importing' | 'completed' | 'failed';
+  importError?: string;
   artworkUrl?: string;
   downloadUrl?: string;
   duration?: number;

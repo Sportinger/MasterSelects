@@ -49,6 +49,16 @@ export interface ShapeDefinition {
 }
 
 export type AppearanceKind = 'color-fill' | 'stroke' | 'linear-gradient' | 'radial-gradient' | 'texture-fill';
+export const MOTION_APPEARANCE_BLEND_MODES = [
+  'normal',
+  'multiply',
+  'screen',
+  'add',
+  'overlay',
+  'difference',
+] as const satisfies readonly BlendMode[];
+export type MotionAppearanceBlendMode =
+  (typeof MOTION_APPEARANCE_BLEND_MODES)[number];
 
 export interface AppearanceItemBase {
   id: string;
@@ -112,6 +122,7 @@ export type AppearanceItem =
 
 export interface AppearanceStack {
   version: 1;
+  /** Render order is bottom-to-top: later items composite over earlier items. */
   items: AppearanceItem[];
   selectedItemId?: string;
 }
@@ -180,16 +191,37 @@ export interface ReplicatorFalloff {
 export type MotionShapeProperty =
   | 'shape.size.w'
   | 'shape.size.h'
-  | 'shape.cornerRadius';
+  | 'shape.cornerRadius'
+  | 'shape.polygon.points'
+  | 'shape.polygon.radius'
+  | 'shape.polygon.cornerRadius'
+  | 'shape.star.points'
+  | 'shape.star.outerRadius'
+  | 'shape.star.innerRadius'
+  | 'shape.star.cornerRadius';
 
 export type MotionAppearanceProperty =
   | `appearance.${string}.opacity`
+  | `appearance.${string}.visible`
+  | `appearance.${string}.blendMode`
   | `appearance.${string}.color.r`
   | `appearance.${string}.color.g`
   | `appearance.${string}.color.b`
   | `appearance.${string}.color.a`
   | `appearance.${string}.stroke.width`
-  | `appearance.${string}.stroke.alignment`;
+  | `appearance.${string}.stroke.alignment`
+  | `appearance.${string}.gradient.start.x`
+  | `appearance.${string}.gradient.start.y`
+  | `appearance.${string}.gradient.end.x`
+  | `appearance.${string}.gradient.end.y`
+  | `appearance.${string}.gradient.center.x`
+  | `appearance.${string}.gradient.center.y`
+  | `appearance.${string}.gradient.radius`
+  | `appearance.${string}.gradient.stop.${string}.offset`
+  | `appearance.${string}.gradient.stop.${string}.color.r`
+  | `appearance.${string}.gradient.stop.${string}.color.g`
+  | `appearance.${string}.gradient.stop.${string}.color.b`
+  | `appearance.${string}.gradient.stop.${string}.color.a`;
 
 export type MotionReplicatorProperty =
   | 'replicator.enabled'
@@ -241,6 +273,54 @@ export function createStrokeAppearance(
     color: { ...color },
     width: 4,
     alignment: 'center',
+  };
+}
+
+export function createLinearGradientAppearance(
+  colors: [MotionColor, MotionColor] = [
+    { r: 0.18, g: 0.42, b: 1, a: 1 },
+    { r: 0.75, g: 0.2, b: 0.95, a: 1 },
+  ],
+  id = createMotionAppearanceId('linear-gradient'),
+): LinearGradientAppearance {
+  return {
+    id,
+    kind: 'linear-gradient',
+    name: 'Linear Gradient',
+    visible: true,
+    opacity: 1,
+    blendMode: 'normal',
+    start: { x: 0, y: 0.5 },
+    end: { x: 1, y: 0.5 },
+    stops: colors.map((color, index) => ({
+      id: createMotionAppearanceId('stop'),
+      offset: index,
+      color: { ...color },
+    })),
+  };
+}
+
+export function createRadialGradientAppearance(
+  colors: [MotionColor, MotionColor] = [
+    { r: 1, g: 1, b: 1, a: 1 },
+    { r: 0.18, g: 0.42, b: 1, a: 1 },
+  ],
+  id = createMotionAppearanceId('radial-gradient'),
+): RadialGradientAppearance {
+  return {
+    id,
+    kind: 'radial-gradient',
+    name: 'Radial Gradient',
+    visible: true,
+    opacity: 1,
+    blendMode: 'normal',
+    center: { x: 0.5, y: 0.5 },
+    radius: 0.5,
+    stops: colors.map((color, index) => ({
+      id: createMotionAppearanceId('stop'),
+      offset: index,
+      color: { ...color },
+    })),
   };
 }
 
@@ -318,7 +398,8 @@ export function isMotionProperty(property: string): property is MotionProperty {
     property === 'shape.size.w' ||
     property === 'shape.size.h' ||
     property === 'shape.cornerRadius' ||
-    /^appearance\.[^.]+\.(opacity|color\.(r|g|b|a)|stroke\.(width|alignment))$/.test(property) ||
+    /^shape\.(polygon\.(points|radius|cornerRadius)|star\.(points|outerRadius|innerRadius|cornerRadius))$/.test(property) ||
+    /^appearance\.[^.]+\.(opacity|visible|blendMode|color\.(r|g|b|a)|stroke\.(width|alignment)|gradient\.(start\.(x|y)|end\.(x|y)|center\.(x|y)|radius|stop\.[^.]+\.(offset|color\.(r|g|b|a))))$/.test(property) ||
     /^replicator\.(enabled|layout\.mode|count\.(x|y)|spacing\.(x|y)|offset\.(position\.(x|y)|rotation|scale\.(x|y)|opacity))$/.test(property)
   );
 }

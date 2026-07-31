@@ -1,6 +1,10 @@
 import type { TimelineClip, TimelineTrack } from '../../../types';
 import { stripTimelineSourceRuntimeHandles } from '../sourceRuntimeSanitizer';
 import type { SplitAtTimesOperation, TimelineEditWarning } from './types';
+import {
+  cloneStoryboardClipProperties,
+  cloneStoryboardPropertiesForSplit,
+} from '../../../services/storyboard/core';
 
 const SPLIT_EPSILON = 0.001;
 
@@ -37,6 +41,11 @@ export function deepCloneClipProps(clip: TimelineClip): Partial<TimelineClip> {
     effects: clip.effects.map(e => structuredClone(e)),
     ...(clip.masks ? { masks: clip.masks.map(m => structuredClone(m)) } : {}),
     ...(clip.textProperties ? { textProperties: structuredClone(clip.textProperties) } : {}),
+      ...(clip.captionProperties ? { captionProperties: structuredClone(clip.captionProperties) } : {}),
+      ...(clip.captionLayerBinding ? { captionLayerBinding: structuredClone(clip.captionLayerBinding) } : {}),
+    ...(clip.storyboardProperties
+      ? { storyboardProperties: cloneStoryboardClipProperties(clip.storyboardProperties) }
+      : {}),
   };
 }
 
@@ -198,6 +207,7 @@ export function applySplitAtTimesOperation(
       duration: partDuration,
       inPoint: partInPoint,
       outPoint: partOutPoint,
+      storyboardProperties: cloneStoryboardPropertiesForSplit(clip.storyboardProperties, index),
       linkedClipId: linkedPartId,
       source: index === 0 ? getSourceForFirstSplitPart(clip) : cloneSourceForPart(clip),
       transitionIn: index === 0 ? clip.transitionIn : undefined,
@@ -214,6 +224,7 @@ export function applySplitAtTimesOperation(
         duration: partDuration,
         inPoint: linkedInPoint,
         outPoint: linkedInPoint + partDuration,
+        storyboardProperties: cloneStoryboardPropertiesForSplit(linkedClip.storyboardProperties, index),
         linkedClipId: partId,
         source: index === 0
           ? getSourceForFirstSplitPart(linkedClip)

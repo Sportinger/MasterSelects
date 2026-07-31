@@ -1,9 +1,9 @@
 import { BLEND_MODE_MAP } from '../../core/types';
 import type { Layer } from '../../core/types';
 
-export const COMPOSITOR_UNIFORM_SIZE = 116;
-export const COMPOSITOR_UNIFORM_FLOAT_COUNT = 29;
-export const COMPOSITOR_U32_INDICES: readonly number[] = [1, 10, 11, 16, 21, 22]; // blendMode, mask flags, inlineInvert, transitionType
+export const COMPOSITOR_UNIFORM_SIZE = 120;
+export const COMPOSITOR_UNIFORM_FLOAT_COUNT = 30;
+export const COMPOSITOR_U32_INDICES: readonly number[] = [1, 10, 11, 16, 21, 22, 29]; // blendMode, mask flags, inlineInvert, transitionType, source rotation
 
 export interface InlineEffectParams {
   brightness: number;  // Offset: 0 = no change, -1..1 range
@@ -123,6 +123,7 @@ export function writeLayerUniformData(
   uniformData[26] = layer.sourceRect?.y ?? 0;
   uniformData[27] = layer.sourceRect?.width ?? 1;
   uniformData[28] = layer.sourceRect?.height ?? 1;
+  uniformDataU32[29] = (layer.source?.videoRotation ?? 0) / 90;
 }
 
 export function shouldUpdateLayerUniforms(

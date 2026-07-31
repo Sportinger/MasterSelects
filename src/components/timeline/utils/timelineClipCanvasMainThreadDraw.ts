@@ -22,6 +22,7 @@ import { drawTimelineClipCanvasThumbnails } from './timelineClipCanvasThumbnailP
 import { getTimelineClipCanvasThumbnailMediaFileId } from './timelineClipCanvasThumbnailPreparation';
 import type { TimelineClipCanvasTrimGeometry } from './timelineClipCanvasTrimResource';
 import { drawTimelineClipCanvasAudioWaveform } from './timelineClipCanvasWaveformPainter';
+import { paintTimelineClipCanvasBody } from './timelineClipCanvasBodyPainter';
 import {
   getTimelineClipCanvasWaveformPyramidForClip,
   type TimelineClipCanvasWaveformPyramidMap,
@@ -31,6 +32,7 @@ export interface TimelineClipCanvasMainThreadDrawInput {
   ctx: CanvasRenderingContext2D;
   clips: readonly TimelinePaintSourceClip[];
   height: number;
+  dpr?: number;
   timeToPixel: (time: number) => number;
   selectedClipIds: ReadonlySet<string>;
   hoveredClipId?: string | null;
@@ -73,12 +75,6 @@ function withAlpha(color: string, alpha: number): string {
   return color;
 }
 
-function getTimelineClipCanvasSolidFill(clip: TimelinePaintSourceClip): string | undefined {
-  if (clip.source?.type !== 'solid') return undefined;
-  return (clip as TimelinePaintSourceClip & { solidColor?: string }).solidColor ??
-    (clip.source as { color?: string }).color;
-}
-
 export function drawTimelineClipCanvasMainThread(
   input: TimelineClipCanvasMainThreadDrawInput,
 ): TimelineCanvasDrawDiagnostics {
@@ -86,6 +82,7 @@ export function drawTimelineClipCanvasMainThread(
     ctx,
     clips,
     height,
+    dpr = 1,
     timeToPixel,
     selectedClipIds,
     hoveredClipId,
@@ -151,10 +148,8 @@ export function drawTimelineClipCanvasMainThread(
     const x = absoluteX - canvasOffsetX;
     const visibleX = visibleAbsLeft - canvasOffsetX;
     const w = absoluteW;
-    const clipBodyFill = getTimelineClipCanvasSolidFill(clip);
     if (w < lodBarPx) {
-      ctx.fillStyle = clipBodyFill ?? (selectedClipIds.has(clip.id) ? fillSelected : fill);
-      ctx.fillRect(x, 1, Math.max(1, w), height - 2);
+      paintTimelineClipCanvasBody({ ctx, clip, x, width: w, height, dpr, fill: selectedClipIds.has(clip.id) ? fillSelected : fill });
       continue;
     }
 
@@ -174,10 +169,7 @@ export function drawTimelineClipCanvasMainThread(
     const visibleStartRatio = Math.max(0, Math.min(1, (visibleAbsLeft - absoluteX) / Math.max(1, absoluteW)));
     const visibleEndRatio = Math.max(visibleStartRatio, Math.min(1, (visibleAbsRight - absoluteX) / Math.max(1, absoluteW)));
 
-    ctx.beginPath();
-    ctx.roundRect(x, top, w, h, radius);
-    ctx.fillStyle = clipBodyFill ?? (selected ? fillSelected : fill);
-    ctx.fill();
+    paintTimelineClipCanvasBody({ ctx, clip, x, width: w, height, dpr, fill: selected ? fillSelected : fill, radius });
 
     // Build the MIDI preview from the geometry-adjusted clip (live trim/drag
     // start/duration/in/out), not the raw stored clip. The preview's bar x =

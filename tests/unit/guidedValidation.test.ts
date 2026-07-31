@@ -14,7 +14,11 @@ describe('guided action validation', () => {
   beforeEach(() => {
     vi.useRealTimers();
     useTimelineStore.setState(initialTimelineState);
-    useMediaStore.setState(initialMediaState);
+    vi.mocked(useMediaStore.getState).mockReturnValue({
+      ...initialMediaState,
+      activeCompositionId: 'comp-1',
+      compositions: [{ id: 'comp-1', width: 1920, height: 1080 } as never],
+    });
   });
 
   it('validates selected clips and playhead position from timeline state', () => {
@@ -32,7 +36,7 @@ describe('guided action validation', () => {
     const clip = createClip({
       transform: {
         ...structuredClone(DEFAULT_TRANSFORM),
-        position: { x: 0.1, y: -0.1, z: 2 },
+        position: { x: 0.2, y: -0.2, z: 2 },
       },
     });
     useTimelineStore.setState({ clips: [clip] });
@@ -41,7 +45,7 @@ describe('guided action validation', () => {
       kind: 'clipTransformMatches',
       clipId: 'clip-1',
       property: 'position.x',
-      value: 0.1,
+      value: 0.2,
     }).success).toBe(true);
     expect(validateGuidedCheck({
       kind: 'clipTransformMatches',

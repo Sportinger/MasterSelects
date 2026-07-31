@@ -19,6 +19,9 @@ export interface MP4VideoTrack {
   timescale: number;
   nb_samples: number;
   video: { width: number; height: number };
+  matrix?: ArrayLike<number>;
+  track_width?: number;
+  track_height?: number;
 }
 
 export interface MP4ArrayBuffer extends ArrayBuffer {

@@ -28,6 +28,7 @@ import type {
 } from '../flashboardStore/types';
 import type { ExportStoreData } from '../exportStore';
 import type { HistoryTimelineEditState } from '../timeline/historyTimelineEditState';
+import type { StoryboardProjectState } from '../../services/storyboard/contracts';
 
 export interface StateSnapshot {
   timestamp: number;
@@ -71,6 +72,7 @@ export interface StateSnapshot {
     composer: FlashBoardComposerState;
     generationMetadataByMediaId: Record<string, FlashBoardGenerationMetadata>;
   };
+  storyboard?: StoryboardProjectState;
   export: ExportStoreData;
 }
 
@@ -180,6 +182,7 @@ export interface FlashBoardStoreSnapshot {
 }
 
 export type ExportStoreSnapshot = ExportStoreData;
+export type StoryboardStoreSnapshot = StoryboardProjectState;
 
 export interface HistoryStoreRefs {
   getTimelineState?: () => TimelineStoreState;
@@ -190,6 +193,8 @@ export interface HistoryStoreRefs {
   setDockState?: (state: Partial<DockStoreSnapshot>) => void;
   getFlashBoardState?: () => FlashBoardStoreSnapshot;
   setFlashBoardState?: (state: Partial<FlashBoardStoreSnapshot>) => void;
+  getStoryboardState?: () => StoryboardStoreSnapshot;
+  setStoryboardState?: (state: StoryboardStoreSnapshot) => void;
   getExportState?: () => ExportStoreSnapshot;
   setExportState?: (state: Partial<ExportStoreSnapshot>) => void;
 }
@@ -210,6 +215,10 @@ export interface HistoryStoreInitRefs {
   flashboard?: {
     getState: () => FlashBoardStoreSnapshot;
     setState: (state: Partial<FlashBoardStoreSnapshot>) => void;
+  };
+  storyboard?: {
+    getState: () => StoryboardStoreSnapshot;
+    setState: (state: StoryboardStoreSnapshot) => void;
   };
   export?: {
     getState: () => ExportStoreSnapshot;

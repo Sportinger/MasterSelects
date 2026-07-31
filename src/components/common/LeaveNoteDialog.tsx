@@ -7,6 +7,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 import { submitSupportNote } from '../../services/supportNoteService';
+import { useDraggableDialog } from './settings/useDraggableDialog';
 import './LeaveNoteDialog.css';
 
 interface LeaveNoteDialogProps {
@@ -27,6 +28,7 @@ export function LeaveNoteDialog({
   const [error, setError] = useState<string | null>(null);
   const [submitState, setSubmitState] = useState<SubmitState>('idle');
   const isSubmitting = submitState === 'submitting';
+  const { position, isDragging, handleMouseDown } = useDraggableDialog(dialogRef);
 
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null;
@@ -99,18 +101,15 @@ export function LeaveNoteDialog({
   };
 
   return (
-    <div
-      className="leave-note-backdrop"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !isSubmitting) onClose();
-      }}
-    >
+    <div className="leave-note-backdrop" role="presentation">
       <div
         ref={dialogRef}
-        className={`leave-note-dialog${submitState === 'success' ? ' is-success' : ''}`}
+        className={`leave-note-dialog${submitState === 'success' ? ' is-success' : ''}${isDragging ? ' is-dragging' : ''}`}
+        style={{
+          left: position.x,
+          top: position.y,
+        }}
         role="dialog"
-        aria-modal="true"
         aria-labelledby={titleId}
         onKeyDown={handleDialogKeyDown}
       >
@@ -123,7 +122,7 @@ export function LeaveNoteDialog({
         ) : (
           <>
             <div className="leave-note-accent" aria-hidden="true" />
-            <div className="leave-note-header">
+            <div className="leave-note-header" onMouseDown={handleMouseDown}>
               <h2 id={titleId}>Leave a note</h2>
               <button
                 type="button"
@@ -131,6 +130,7 @@ export function LeaveNoteDialog({
                 aria-label="Close note dialog"
                 disabled={isSubmitting}
                 onClick={onClose}
+                onMouseDown={(event) => event.stopPropagation()}
               >
                 ×
               </button>

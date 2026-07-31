@@ -1,0 +1,304 @@
+.tp-pattern__reveal-piece {
+  animation: tp-pattern-piece-reveal 1.95s cubic-bezier(0.4, 0, 0.2, 1) infinite both;
+  animation-delay: var(--tp-pattern-delay, 0s);
+  opacity: 0.84;
+  transform: scale(0.66);
+  transform-origin: center;
+}
+
+.tp-pattern__checker-cell {
+  animation-timing-function: steps(2, end);
+}
+
+.tp-pattern__random-block {
+  animation-duration: 2.05s;
+  animation-timing-function: steps(3, end);
+}
+
+.tp-pattern__splat-cloud {
+  animation: tp-pattern-splat 2s cubic-bezier(0.3, 0, 0.2, 1) infinite both;
+  opacity: 0.88;
+  transform: rotate(-3deg) scale(0.72);
+  transform-origin: center;
+}
+
+.tp-pattern__polka-dot {
+  animation: tp-pattern-dot-curtain 2s cubic-bezier(0.4, 0, 0.2, 1) infinite both;
+  animation-delay: var(--tp-pattern-delay, 0s);
+  transform: scale(0.72);
+  transform-origin: center;
+}
+
+.tp-pattern__doom-bar {
+  animation: tp-pattern-doom-bar 2.1s cubic-bezier(0.65, 0, 0.35, 1) infinite both;
+  animation-delay: var(--tp-pattern-delay, 0s);
+  transform: scaleY(0.48);
+  transform-origin: center bottom;
+}
+
+.tp-pattern__venetian-strip {
+  animation: tp-pattern-venetian-horizontal 1.9s cubic-bezier(0.65, 0, 0.35, 1) infinite both;
+  animation-delay: var(--tp-pattern-delay, 0s);
+  transform: scaleX(0.52);
+}
+
+.tp-pattern__venetian-strip--start {
+  transform-origin: left center;
+}
+
+.tp-pattern__venetian-strip--end {
+  transform-origin: right center;
+}
+
+.tp-pattern__vertical-strip {
+  animation: tp-pattern-venetian-vertical 1.9s cubic-bezier(0.65, 0, 0.35, 1) infinite both;
+  animation-delay: var(--tp-pattern-delay, 0s);
+  transform: scaleY(0.52);
+}
+
+.tp-pattern__vertical-strip--start {
+  transform-origin: center top;
+}
+
+.tp-pattern__vertical-strip--end {
+  transform-origin: center bottom;
+}
+
+.tp-pattern__zig-zag {
+  animation: tp-pattern-zig-zag 2s cubic-bezier(0.65, 0, 0.35, 1) infinite both;
+  transform: translateX(-34px);
+}
+
+.tp-pattern__puzzle-piece {
+  animation: tp-pattern-puzzle-piece 2.05s cubic-bezier(0.22, 1, 0.36, 1) infinite both;
+  animation-delay: var(--tp-pattern-delay, 0s);
+  transform: translate(var(--tp-puzzle-x), var(--tp-puzzle-y)) rotate(var(--tp-puzzle-r));
+  transform-origin: center;
+}
+
+.tp-pattern__glass-shard {
+  animation: tp-pattern-shatter 1.95s cubic-bezier(0.5, 0, 0.75, 0) infinite both;
+  animation-delay: var(--tp-pattern-delay, 0s);
+  opacity: 0.94;
+  transform:
+    translate(var(--tp-shard-mid-x), var(--tp-shard-mid-y))
+    rotate(var(--tp-shard-mid-r));
+  transform-origin: center;
+}
+
+.tp-pattern__magnetic-tile {
+  animation: tp-pattern-magnetic 2.05s cubic-bezier(0.16, 1, 0.3, 1) infinite both;
+  animation-delay: var(--tp-pattern-delay, 0s);
+  transform: translate(var(--tp-magnetic-x), var(--tp-magnetic-y)) scale(0.72);
+  transform-origin: center;
+}
+
+.tp-pattern__magnetic-core {
+  animation: tp-pattern-magnetic-core 2.05s ease-in-out infinite both;
+  transform-origin: center;
+}
+
+@keyframes tp-pattern-piece-reveal {
+  0%,
+  12% {
+    opacity: 0.84;
+    transform: scale(0.66);
+  }
+
+  62%,
+  82% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  82.01%,
+  100% {
+    opacity: 0.84;
+    transform: scale(0.66);
+  }
+}
+
+@keyframes tp-pattern-splat {
+  0%,
+  10% {
+    opacity: 0.88;
+    transform: rotate(-3deg) scale(0.72);
+  }
+
+  64%,
+  82% {
+    opacity: 1;
+    transform: rotate(2deg) scale(2.35);
+  }
+
+  82.01%,
+  100% {
+    opacity: 0.88;
+    transform: rotate(-3deg) scale(0.72);
+  }
+}
+
+@keyframes tp-pattern-dot-curtain {
+  0%,
+  10% {
+    transform: scale(0.72);
+  }
+
+  62%,
+  82% {
+    transform: scale(2.35);
+  }
+
+  82.01%,
+  100% {
+    transform: scale(0.72);
+  }
+}
+
+@keyframes tp-pattern-doom-bar {
+  0%,
+  10% {
+    transform: scaleY(0.48);
+  }
+
+  64%,
+  82% {
+    transform: scaleY(1);
+  }
+
+  82.01%,
+  100% {
+    transform: scaleY(0.48);
+  }
+}
+
+@keyframes tp-pattern-venetian-horizontal {
+  0%,
+  10% {
+    transform: scaleX(0.52);
+  }
+
+  64%,
+  82% {
+    transform: scaleX(1);
+  }
+
+  82.01%,
+  100% {
+    transform: scaleX(0.52);
+  }
+}
+
+@keyframes tp-pattern-venetian-vertical {
+  0%,
+  10% {
+    transform: scaleY(0.52);
+  }
+
+  64%,
+  82% {
+    transform: scaleY(1);
+  }
+
+  82.01%,
+  100% {
+    transform: scaleY(0.52);
+  }
+}
+
+@keyframes tp-pattern-zig-zag {
+  0%,
+  10% {
+    transform: translateX(-34px);
+  }
+
+  67%,
+  84% {
+    transform: translateX(0);
+  }
+
+  84.01%,
+  100% {
+    transform: translateX(-34px);
+  }
+}
+
+@keyframes tp-pattern-puzzle-piece {
+  0%,
+  12% {
+    transform: translate(var(--tp-puzzle-x), var(--tp-puzzle-y)) rotate(var(--tp-puzzle-r));
+  }
+
+  64%,
+  82% {
+    transform: translate(0, 0) rotate(0);
+  }
+
+  82.01%,
+  100% {
+    transform: translate(var(--tp-puzzle-x), var(--tp-puzzle-y)) rotate(var(--tp-puzzle-r));
+  }
+}
+
+@keyframes tp-pattern-shatter {
+  0%,
+  12% {
+    opacity: 0.94;
+    transform:
+      translate(var(--tp-shard-mid-x), var(--tp-shard-mid-y))
+      rotate(var(--tp-shard-mid-r));
+  }
+
+  66%,
+  82% {
+    opacity: 0;
+    transform:
+      translate(var(--tp-shard-end-x), var(--tp-shard-end-y))
+      rotate(var(--tp-shard-end-r));
+  }
+
+  82.01%,
+  100% {
+    opacity: 0.94;
+    transform:
+      translate(var(--tp-shard-mid-x), var(--tp-shard-mid-y))
+      rotate(var(--tp-shard-mid-r));
+  }
+}
+
+@keyframes tp-pattern-magnetic {
+  0%,
+  12% {
+    transform: translate(var(--tp-magnetic-x), var(--tp-magnetic-y)) scale(0.72);
+  }
+
+  64%,
+  82% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  82.01%,
+  100% {
+    transform: translate(var(--tp-magnetic-x), var(--tp-magnetic-y)) scale(0.72);
+  }
+}
+
+@keyframes tp-pattern-magnetic-core {
+  0%,
+  18% {
+    opacity: 0.72;
+    transform: scale(1);
+  }
+
+  58%,
+  82% {
+    opacity: 0;
+    transform: scale(1.8);
+  }
+
+  82.01%,
+  100% {
+    opacity: 0.72;
+    transform: scale(1);
+  }
+}

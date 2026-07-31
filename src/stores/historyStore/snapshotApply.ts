@@ -136,6 +136,10 @@ export function applyHistorySnapshot(
     deepClone(snapshot.flashboard?.generationMetadataByMediaId || {})
   );
 
+  if (refs.setStoryboardState && snapshot.storyboard) {
+    refs.setStoryboardState(deepClone(snapshot.storyboard));
+  }
+
   if (refs.setExportState) {
     refs.setExportState(deepClone(snapshot.export));
   }

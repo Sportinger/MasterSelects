@@ -5,6 +5,24 @@ import { getGaussianSplatGpuRenderer } from '../../../../engine/gaussian/core/Ga
 import { resolveSharedSplatSceneKey } from '../../../../engine/scene/runtime/SharedSplatRuntimeUtils';
 import { ensureRenderForDiagnostics } from '../renderOnce';
 import type { TimelineStore } from './runtime';
+import { useMediaStore } from '../../../../stores/mediaStore';
+import {
+  resolveClipPropertyAuthoringContext,
+  resolveTransformPositionUnitMode,
+} from '../../../properties/propertyAuthoring';
+
+function resolveClipInfoAuthoringContext(clipId: string, timelineStore: TimelineStore) {
+  const clip = timelineStore.clips.find((candidate) => candidate.id === clipId);
+  if (!clip) return null;
+  const media = useMediaStore.getState();
+  return resolveClipPropertyAuthoringContext({
+    clipId,
+    compositions: media.compositions,
+    activeCompositionId: media.activeCompositionId,
+    liveClipIds: timelineStore.clips.map((candidate) => candidate.id),
+    positionUnitMode: resolveTransformPositionUnitMode(clip),
+  });
+}
 
 export async function handleGetClipDetails(
   args: Record<string, unknown>,
@@ -16,6 +34,13 @@ export async function handleGetClipDetails(
     return { success: false, error: `Clip not found: ${clipId}` };
   }
   const track = timelineStore.tracks.find(t => t.id === clip.trackId);
+  const authoringContextResolution = resolveClipInfoAuthoringContext(clip.id, timelineStore);
+  if (!authoringContextResolution?.ok) {
+    return {
+      success: false,
+      error: `Cannot resolve property authoring context: ${authoringContextResolution?.reason ?? 'owner-not-found'}`,
+    };
+  }
   const gaussianRenderer = clip.source?.type === 'gaussian-splat'
     ? getGaussianSplatGpuRenderer()
     : null;
@@ -41,7 +66,7 @@ export async function handleGetClipDetails(
   return {
     success: true,
     data: {
-      ...formatClipInfo(clip, track),
+      ...formatClipInfo(clip, track, authoringContextResolution.context),
       source: clip.source
         ? {
             type: clip.source.type,
@@ -142,12 +167,29 @@ export async function handleGetClipsInTimeRange(
     return track?.type === trackType;
   });
 
+  const clipsWithContexts = filteredClips.map((clip) => ({
+    clip,
+    resolution: resolveClipInfoAuthoringContext(clip.id, timelineStore),
+  }));
+  const unresolved = clipsWithContexts.find(({ resolution }) => !resolution?.ok);
+  if (unresolved) {
+    const unresolvedResolution = unresolved.resolution;
+    const reason = !unresolvedResolution || unresolvedResolution.ok
+      ? 'owner-not-found'
+      : unresolvedResolution.reason;
+    return {
+      success: false,
+      error: `Cannot resolve property authoring context for ${unresolved.clip.id}: ${reason}`,
+    };
+  }
+
   return {
     success: true,
     data: {
-      clips: filteredClips.map(c => {
-        const track = tracks.find(t => t.id === c.trackId);
-        return formatClipInfo(c, track);
+      clips: clipsWithContexts.map(({ clip, resolution }) => {
+        const track = tracks.find(t => t.id === clip.trackId);
+        if (!resolution?.ok) throw new Error(`Missing authoring context for ${clip.id}`);
+        return formatClipInfo(clip, track, resolution.context);
       }),
       count: filteredClips.length,
     },

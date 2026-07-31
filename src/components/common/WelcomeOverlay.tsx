@@ -14,6 +14,7 @@ import { NativeHelperClient } from '../../services/nativeHelper/NativeHelperClie
 import { loadProjectToStores } from '../../services/project/projectLoad';
 import { syncStoresToProject } from '../../services/project/projectSave';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { resetStoryboardProjectState } from '../../stores/storyboardStore';
 
 type NativeStatus = 'checking' | 'available' | 'outdated' | 'unavailable';
 type DirectoryPickerWindow = Window & typeof globalThis & {
@@ -361,6 +362,7 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
 
       if (success) {
         setSelectedFolder('Untitled');
+        resetStoryboardProjectState();
         await syncStoresToProject();
         await projectFileService.saveProject();
 

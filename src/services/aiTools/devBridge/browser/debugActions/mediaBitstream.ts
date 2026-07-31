@@ -1,6 +1,7 @@
 import { useMediaStore } from '../../../../../stores/mediaStore';
 import { loadProxyVideoWithMP4Box } from '../../../../proxyGeneration/mp4Demuxer';
 import type { Sample } from '../../../../../engine/webCodecsTypes';
+import { getVideoTrackRotation } from '../../../../../engine/webcodecs/videoTrackOrientation';
 
 const silentLogger = {
   debug: () => undefined,
@@ -102,6 +103,9 @@ export async function probeMediaBitstream(args: Record<string, unknown> = {}) {
         codec: loaded.videoTrack.codec,
         width: loaded.videoTrack.video.width,
         height: loaded.videoTrack.video.height,
+        displayWidth: loaded.videoTrack.track_width ?? loaded.videoTrack.video.width,
+        displayHeight: loaded.videoTrack.track_height ?? loaded.videoTrack.video.height,
+        rotationDegrees: getVideoTrackRotation(loaded.videoTrack),
         durationSeconds: round(loaded.duration),
         frameRate: round(loaded.proxyFps),
         sampleCount: loaded.samples.length,

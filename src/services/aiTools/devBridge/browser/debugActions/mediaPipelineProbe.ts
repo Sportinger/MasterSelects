@@ -3,9 +3,9 @@ import type { Sample } from '../../../../../engine/webCodecsTypes';
 import { loadProxyVideoWithMP4Box } from '../../../../proxyGeneration/mp4Demuxer';
 import { createCompositorPipelineResources } from '../../../../../engine/pipeline/compositor/pipelineResources';
 import { COMPOSITOR_UNIFORM_SIZE } from '../../../../../engine/pipeline/compositor/uniforms';
-import { engine } from '../../../../../engine/WebGPUEngine';
 import { WebCodecsPlayer } from '../../../../../engine/WebCodecsPlayer';
 import { OutputPipeline } from '../../../../../engine/pipeline/OutputPipeline';
+import { renderHostPort } from '../../../../render/renderHostPort';
 
 type ProbeOperation =
   | 'none'
@@ -967,7 +967,7 @@ async function readGpuContext(mode: 'fresh' | 'engine'): Promise<{
 }> {
   if (mode === 'engine') {
     return {
-      device: engine.getDevice(),
+      device: renderHostPort.getDevice(),
       adapterInfo: { source: 'masterselects-engine-device' },
       owned: false,
     };

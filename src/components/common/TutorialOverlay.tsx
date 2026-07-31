@@ -143,37 +143,37 @@ const TIMELINE_STEPS: TimelineStep[] = [
   {
     selector: '.timeline-controls',
     title: 'Playback',
-    description: 'Play, Stop und Loop — steuere die Wiedergabe deiner Composition.',
+    description: 'Use Play, Stop, and Loop to control playback of your composition.',
     tooltipPosition: 'bottom',
   },
   {
     selector: '.timeline-time',
     title: 'Timecode',
-    description: 'Aktuelle Position und Gesamtdauer. Klicke auf die Dauer um sie zu ändern.',
+    description: 'View the current position and total duration. Click the duration to change it.',
     tooltipPosition: 'bottom',
   },
   {
     selector: '.timeline-zoom',
     title: 'Tools & Zoom',
-    description: 'Snapping, Cut-Tool, Zoom und Fit — kontrolliere die Timeline-Ansicht.',
+    description: 'Use Snapping, the Cut Tool, Zoom, and Fit to control the timeline view.',
     tooltipPosition: 'bottom',
   },
   {
     selector: '.timeline-inout-controls',
     title: 'In/Out Points',
-    description: 'Setze In- (I) und Out-Punkte (O) um den Export-Bereich festzulegen.',
+    description: 'Set In (I) and Out (O) points to define the export range.',
     tooltipPosition: 'bottom',
   },
   {
     selector: '.timeline-tracks-controls',
     title: 'Tracks',
-    description: 'Füge Video-, Audio- oder Text-Tracks hinzu.',
+    description: 'Add video, audio, or text tracks.',
     tooltipPosition: 'bottom',
   },
   {
     selector: '.timeline-navigator',
     title: 'Navigator',
-    description: 'Scrolle und zoome die Timeline. Ziehe die Kanten um hinein/herauszuzoomen.',
+    description: 'Scroll and zoom the timeline. Drag the edges to zoom in and out.',
     tooltipPosition: 'top',
   },
 ];

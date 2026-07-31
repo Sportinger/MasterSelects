@@ -9,6 +9,7 @@ import type { SerializableClip } from '../../../types';
 import { clonePersistedClipAudioState } from '../../../services/audio/clipAudioStatePersistence';
 import { sanitizePlayheadPosition } from '../../../services/layerBuilder/PlayheadState';
 import { cloneClipNodeGraph } from '../../../services/nodeGraph';
+import { cloneStoryboardClipProperties } from '../../../services/storyboard/core';
 import { normalizeTransitionInstanceParams } from '../../../transitions';
 import { useMediaStore } from '../../mediaStore';
 import { getDataOnlyTimelineSource } from '../sourceRuntimeSanitizer';
@@ -128,8 +129,17 @@ function createSerializableClip(
     preservesPitch: clip.preservesPitch === false ? false : undefined,
     freeRun: clip.freeRun || undefined,
     textProperties: clip.textProperties,
+    captionProperties: clip.captionProperties
+      ? structuredClone(clip.captionProperties)
+      : undefined,
+    captionLayerBinding: clip.captionLayerBinding
+      ? structuredClone(clip.captionLayerBinding)
+      : undefined,
     text3DProperties: clip.text3DProperties ?? dataOnlySource?.text3DProperties,
     solidColor: dataOnlySource?.type === 'solid' ? (clip.solidColor || clip.name.replace('Solid ', '')) : undefined,
+    storyboardProperties: dataOnlySource?.type === 'storyboard'
+      ? cloneStoryboardClipProperties(clip.storyboardProperties)
+      : undefined,
     transitionOverlay: dataOnlySource?.type === 'transition-overlay'
       ? structuredClone(clip.transitionOverlay ?? dataOnlySource.transitionOverlay)
       : undefined,

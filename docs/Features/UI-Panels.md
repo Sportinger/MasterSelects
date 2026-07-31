@@ -286,6 +286,11 @@ change-panel pickers.
 - Family cards show a variant count. Clicking a family expands the draggable
   leaf variants until the pointer leaves the panel; planned dev metadata shows
   a Planned badge and is not draggable.
+- All 74 runtime transition thumbnails have dedicated lightweight SVG
+  animations that communicate the transition's direction, mask, pattern,
+  light, distortion, or 3D motion. Animation runs only while the item is
+  hovered, resets to a representative static frame, and is disabled when the
+  operating system requests reduced motion.
 - Family-card assembly, sectioning, and search indexing live in focused
   transition panel helpers so the panel layout does not grow with each new
   transition definition.

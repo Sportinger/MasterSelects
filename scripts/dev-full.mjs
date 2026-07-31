@@ -122,6 +122,27 @@ function ensureLocalDevVars() {
     changed = true;
   }
 
+  if (!lines.some(line => getDevVarName(line) === 'KERNEL_ORIGIN')) {
+    lines.push(`KERNEL_ORIGIN=${quoteDevVarValue('http://127.0.0.1:8787')}`);
+    changed = true;
+  }
+
+  if (upsertDevVar(
+    lines,
+    'KERNEL_AUTH_TOKEN',
+    crypto.randomBytes(32).toString('base64url'),
+  )) {
+    changed = true;
+  }
+
+  if (upsertDevVar(
+    lines,
+    'KERNEL_SERVICE_ASSERTION_SECRET',
+    crypto.randomBytes(32).toString('base64url'),
+  )) {
+    changed = true;
+  }
+
   const syncedKeys = [];
 
   for (const key of localWorkerSecretKeys) {

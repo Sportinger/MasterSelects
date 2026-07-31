@@ -48,6 +48,10 @@ import type { TimelineRuntimeCoordinatorBridgeStats } from '../../timeline/runti
 import type { IndependentRenderSchedulerRuntimeSnapshot } from '../../renderScheduler';
 import type { WorkerFirstCacheRuntimeSnapshot } from '../../../engine/texture/ScrubbingCache';
 import type { WorkerFirstProviderRuntimeSnapshot } from '../../timeline/providerRuntimeDiagnostics';
+import {
+  buildMotionTimelineDiagnostics,
+  getMotionRendererDiagnostics,
+} from '../../../engine/motion/MotionDiagnostics';
 
 const DEFAULT_PLAYBACK_WINDOW_MS = 5000;
 const MAX_TRACE_WINDOW_MS = 120000;
@@ -338,6 +342,13 @@ function collectSnapshot(playbackWindowMs = DEFAULT_PLAYBACK_WINDOW_MS) {
       tracks: timelineState.tracks,
       clips: timelineState.clips,
     })),
+    motionDesign: {
+      timeline: buildMotionTimelineDiagnostics(
+        timelineState.clips,
+        timelineState.playheadPosition,
+      ),
+      renderer: getMotionRendererDiagnostics(),
+    },
     timelineRuntimeCoordinator: timelineRuntimeCoordinatorStats,
     independentRenderScheduler,
     slotDecks: slotDeckManager.getSnapshot(),

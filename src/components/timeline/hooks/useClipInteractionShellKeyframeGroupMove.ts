@@ -54,6 +54,19 @@ export function useClipInteractionShellKeyframeGroupMove({
       const shouldClearSession = existing?.clipId === context.clip.id &&
         keyframeIds.some((keyframeId) => existing.originalTimes.has(keyframeId));
       if (shouldClearSession) {
+        applyTimelineEditOperation({
+          id: `${existing.transactionId}:cancel:missing-target`,
+          type: 'keyframe-transaction-cancel',
+          transactionId: existing.transactionId,
+          historyBatchId: existing.historyBatchId,
+          source: 'ui',
+          phase: 'cancel',
+          clipId: existing.clipId,
+          property: existing.property,
+          keyframeIds: existing.keyframeIds,
+          restoreKeyframeIds: existing.keyframeIds,
+          discardKeyframeIds: [],
+        }, { source: 'ui', historyLabel: 'Cancel keyframe move' });
         keyframeTickTransactionRef.current = null;
       }
       if (shouldClearSession || phase !== 'update') {
@@ -111,6 +124,19 @@ export function useClipInteractionShellKeyframeGroupMove({
     const session = ensureSession();
     if (phase === 'begin') return;
     if (phase === 'commit' && !session.hasUpdate) {
+      applyTimelineEditOperation({
+        id: `${session.transactionId}:cancel:no-update`,
+        type: 'keyframe-transaction-cancel',
+        transactionId: session.transactionId,
+        historyBatchId: session.historyBatchId,
+        source: 'ui',
+        phase: 'cancel',
+        clipId: session.clipId,
+        property: session.property,
+        keyframeIds: session.keyframeIds,
+        restoreKeyframeIds: session.keyframeIds,
+        discardKeyframeIds: [],
+      }, { source: 'ui', historyLabel: 'Cancel keyframe move' });
       keyframeTickTransactionRef.current = null;
       return;
     }

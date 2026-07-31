@@ -16,6 +16,7 @@ const SYNC_RESTORED_SOURCE_TYPES = new Set([
   'camera',
   'light',
   'splat-effector',
+  'storyboard',
 ]);
 
 export function canPasteLiveInputInComposition(
@@ -111,6 +112,12 @@ export function createPastedClipSource(
   }
   if (clipData.sourceType === 'solid') {
     return { type: 'solid', mediaFileId: clipData.mediaFileId, naturalDuration: clipData.duration };
+  }
+  if (clipData.sourceType === 'storyboard') {
+    return {
+      type: 'storyboard',
+      naturalDuration: Number.MAX_SAFE_INTEGER,
+    };
   }
   if (clipData.sourceType === 'text') {
     return { type: 'text', mediaFileId: clipData.mediaFileId, naturalDuration: clipData.naturalDuration ?? clipData.duration };

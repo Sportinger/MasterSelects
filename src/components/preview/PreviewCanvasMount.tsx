@@ -22,6 +22,8 @@ import {
   PreviewPlaybackWaiter,
   PreviewSplatProgressOverlay,
 } from './PreviewStatusOverlays';
+import { StoryboardAnimaticPreviewOverlay } from './storyboard/StoryboardAnimaticPreviewOverlay';
+import { MotionPathOverlay, type MotionPathOverlayProps } from './MotionPathOverlay';
 
 interface PreviewCanvasMountProps {
   activeSharedSceneOverlayContent: boolean;
@@ -62,6 +64,7 @@ interface PreviewCanvasMountProps {
   maskEditMode: string;
   maskNavigationMode: boolean;
   maskPanelActive: boolean;
+  motionPathOverlayProps: Omit<MotionPathOverlayProps, 'width' | 'height'>;
   overlayRef: React.RefObject<HTMLCanvasElement | null>;
   playbackWaiterVideoCount: number;
   previewCameraOverride: SceneCameraConfig | null;
@@ -162,6 +165,7 @@ export function PreviewCanvasMount({
   maskEditMode,
   maskNavigationMode,
   maskPanelActive,
+  motionPathOverlayProps,
   overlayRef,
   playbackWaiterVideoCount,
   previewCameraOverride,
@@ -257,6 +261,13 @@ export function PreviewCanvasMount({
                   width: canvasSize.width,
                   height: canvasSize.height,
                 }}
+              />
+              <StoryboardAnimaticPreviewOverlay
+                displayedCompositionId={displayedCompId}
+                width={effectiveResolution.width}
+                height={effectiveResolution.height}
+                displayWidth={canvasSize.width}
+                displayHeight={canvasSize.height}
               />
               {isExporting && exportPreviewFrame && (
                 <canvas
@@ -377,6 +388,25 @@ export function PreviewCanvasMount({
               pointerEvents: 'auto',
             }}
           />
+        )}
+
+        {isEngineReady && motionPathOverlayProps.visible && (
+          <div
+            className="preview-motion-path-overlay-host"
+            style={{
+              ...viewTransform,
+              position: 'absolute',
+              inset: 0,
+              zIndex: 19,
+              pointerEvents: 'none',
+            }}
+          >
+            <MotionPathOverlay
+              width={canvasSize.width}
+              height={canvasSize.height}
+              {...motionPathOverlayProps}
+            />
+          </div>
         )}
 
         <PreviewEditHints

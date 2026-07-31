@@ -1,0 +1,75 @@
+.storyboard-properties {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.storyboard-properties-identities {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.storyboard-properties-identities div {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 8px;
+  font-size: 11px;
+}
+
+.storyboard-properties-identities span,
+.storyboard-properties-field > span {
+  color: #9fa4b4;
+}
+
+.storyboard-properties-identities code {
+  overflow: hidden;
+  color: #d7d9e2;
+  text-overflow: ellipsis;
+}
+
+.storyboard-properties-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.storyboard-properties-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  font-size: 11px;
+}
+
+.storyboard-properties-field input,
+.storyboard-properties-field textarea,
+.storyboard-properties-field select,
+.storyboard-properties-field output {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 28px;
+  padding: 5px 7px;
+  border: 1px solid #3c4050;
+  border-radius: 4px;
+  color: #f3f4f8;
+  background: #242630;
+  font: inherit;
+}
+
+.storyboard-properties-field textarea {
+  resize: vertical;
+}
+
+.storyboard-properties-field output {
+  display: flex;
+  align-items: center;
+  color: #b9bdca;
+}
+
+.storyboard-properties-empty {
+  padding: 16px;
+  color: #9fa4b4;
+}

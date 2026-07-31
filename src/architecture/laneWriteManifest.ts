@@ -1,6 +1,7 @@
 import type { CompleteRefactorLane } from './types';
+import { storyboardRefactorLanes } from './storyboardLaneWriteManifest';
 
-export const completeRefactorLanes = [
+const completeLegacyRefactorLanes = [
   {
     id: 'architecture-registry',
     name: 'Whole-Codebase Architecture Registry',
@@ -280,4 +281,9 @@ export const completeRefactorLanes = [
     ],
     exitGates: ['P8_ARCHITECTURE_GATE_SUITE'],
   },
+] as const satisfies readonly CompleteRefactorLane[];
+
+export const completeRefactorLanes = [
+  ...completeLegacyRefactorLanes,
+  ...storyboardRefactorLanes,
 ] as const satisfies readonly CompleteRefactorLane[];

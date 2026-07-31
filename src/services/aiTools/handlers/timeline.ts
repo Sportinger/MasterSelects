@@ -6,6 +6,10 @@ import { computeTimelineOccupancy } from '../../timeline/timelineOccupancy';
 import type { ToolResult } from '../types';
 import { formatTrackInfo } from '../utils';
 import { clipHasTranscript } from '../../transcription/clipTranscriptResolver';
+import {
+  getStoryboardProjectSnapshot,
+  projectStoryboardTimelineClips,
+} from '../../../stores/storyboardStore';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
@@ -26,6 +30,7 @@ export async function handleGetTimelineState(
     audioDisplayMode,
     audioFocusMode,
     audioRegionSelection,
+    timelineRangeSelection,
   } = timelineStore;
 
   const videoTracks = tracks.filter(t => t.type === 'video').map(t => formatTrackInfo(t, clips));
@@ -56,6 +61,10 @@ export async function handleGetTimelineState(
 
   const { activeCompositionId, compositions } = useMediaStore.getState();
   const activeComposition = compositions.find((c) => c.id === activeCompositionId);
+  const storyboard = projectStoryboardTimelineClips(
+    getStoryboardProjectSnapshot(),
+    clips,
+  );
 
   return {
     success: true,
@@ -71,6 +80,17 @@ export async function handleGetTimelineState(
       audioDisplayMode,
       audioFocusMode,
       audioRegionSelection,
+      storyboard,
+      timelineRangeSelection: timelineRangeSelection
+        ? {
+            startTime: timelineRangeSelection.startTime,
+            endTime: timelineRangeSelection.endTime,
+            trackIds: [...timelineRangeSelection.trackIds],
+            ...(timelineRangeSelection.anchorTrackId === undefined
+              ? {}
+              : { anchorTrackId: timelineRangeSelection.anchorTrackId }),
+          }
+        : null,
       totalClips: clips.length,
       // Selected clips info
       selectedClipIds: selectedClipIdsArray,
@@ -91,6 +111,28 @@ export async function handleGetTimelineState(
           clipCount,
         })),
       },
+    },
+  };
+}
+
+export async function handleGetTimelineRangeSelection(
+  _args: Record<string, unknown>,
+  timelineStore: TimelineStore,
+): Promise<ToolResult> {
+  const selection = timelineStore.timelineRangeSelection;
+  return {
+    success: true,
+    data: {
+      selection: selection
+        ? {
+            startTime: selection.startTime,
+            endTime: selection.endTime,
+            trackIds: [...selection.trackIds],
+            ...(selection.anchorTrackId === undefined
+              ? {}
+              : { anchorTrackId: selection.anchorTrackId }),
+          }
+        : null,
     },
   };
 }

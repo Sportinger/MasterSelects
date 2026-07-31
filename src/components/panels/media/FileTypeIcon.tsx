@@ -19,6 +19,7 @@ import {
   IconSparkles,
   IconSquare,
   IconStack,
+  IconSubtitles,
   IconTypography,
   IconVector,
   IconWaveSine,
@@ -39,6 +40,8 @@ const OUTLINE_FILE_TYPE_ICONS = {
   audio: IconWaveSine,
   image: IconPhoto,
   text: IconTypography,
+  caption: IconSubtitles,
+  storyboard: IconStack,
   solid: IconSquare,
   model: IconCube,
   camera: IconCamera,
@@ -55,7 +58,7 @@ const OUTLINE_FILE_TYPE_ICONS = {
   lottie: IconVector,
   rive: IconVector,
   composition: IconStack,
-} satisfies Record<TimelineSourceType | 'composition', Icon>;
+} satisfies Record<TimelineSourceType | 'composition' | 'caption', Icon>;
 
 export const FileTypeIcon = memo(({ type, large, outline, size }: FileTypeIconProps) => {
   const iconSize = size ?? (large ? 48 : 14);
@@ -129,6 +132,13 @@ export const FileTypeIcon = memo(({ type, large, outline, size }: FileTypeIconPr
         <svg style={style} viewBox="0 0 16 16" fill="none">
           <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#8a6a5a" stroke="#bb9a7a" strokeWidth="0.7"/>
           <text x="8" y="11.5" textAnchor="middle" fill="#eeddcc" fontSize="9" fontWeight="bold" fontFamily="sans-serif">T</text>
+        </svg>
+      );
+    case 'caption':
+      return (
+        <svg style={style} viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#685f38" stroke="#d5c15a" strokeWidth="0.7"/>
+          <text x="8" y="10.8" textAnchor="middle" fill="#fff2a3" fontSize="6" fontWeight="bold" fontFamily="sans-serif">CC</text>
         </svg>
       );
     case 'text-3d':

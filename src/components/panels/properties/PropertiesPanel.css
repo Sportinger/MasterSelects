@@ -205,6 +205,39 @@
   font-size: var(--font-md);
 }
 
+.properties-section .control-row .caption-compact-select {
+  flex: 0 1 220px;
+  min-width: 0;
+  max-width: 220px;
+}
+
+.properties-section .control-row .caption-source-select {
+  flex-basis: 280px;
+  max-width: 280px;
+}
+
+.properties-section .control-row .caption-color-value {
+  flex: 0 1 150px;
+  min-width: 80px;
+  height: 22px;
+  box-sizing: border-box;
+  padding: 2px 6px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  outline: none;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.properties-section .control-row .caption-color-value:focus {
+  border-color: var(--accent);
+}
+
+.properties-section .caption-number-row .multi-value-row {
+  flex: 0 1 150px;
+}
+
 .transition-properties-tab {
   display: flex;
   flex-direction: column;

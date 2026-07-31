@@ -1,0 +1,234 @@
+.tp-geometric-wipe .tp-geometric-center-reveal {
+  transform: scaleX(0.265);
+  transform-origin: center;
+  animation: tp-geometric-center-reveal 1.7s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+.tp-geometric-wipe .tp-geometric-center-sheen {
+  transform: scaleX(3);
+  transform-origin: center;
+  animation: tp-geometric-center-sheen 1.7s ease-in-out infinite;
+}
+
+.tp-geometric-wipe .tp-geometric-center-guides {
+  opacity: 0.82;
+  animation: tp-geometric-center-guides 1.7s ease-in-out infinite;
+}
+
+.tp-geometric-wipe .tp-geometric-clock-sweep {
+  animation: tp-geometric-clock-sweep 1.8s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+.tp-geometric-wipe .tp-geometric-clock-hand {
+  transform: rotate(90deg);
+  transform-box: view-box;
+  transform-origin: 40px 20px;
+  animation: tp-geometric-clock-hand 1.8s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+.tp-geometric-wipe .tp-geometric-door {
+  animation-duration: 1.75s;
+  animation-iteration-count: infinite;
+  animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+.tp-geometric-wipe .tp-geometric-door-left {
+  transform: translateX(-8px);
+  animation-name: tp-geometric-door-left;
+}
+
+.tp-geometric-wipe .tp-geometric-door-right {
+  transform: translateX(8px);
+  animation-name: tp-geometric-door-right;
+}
+
+.tp-geometric-wipe .tp-geometric-door-top {
+  transform: translateY(-5px);
+  animation-name: tp-geometric-door-top;
+}
+
+.tp-geometric-wipe .tp-geometric-door-bottom {
+  transform: translateY(5px);
+  animation-name: tp-geometric-door-bottom;
+}
+
+.tp-geometric-wipe .tp-geometric-door-glow {
+  animation: tp-geometric-door-glow 1.75s ease-in-out infinite;
+}
+
+@keyframes tp-geometric-center-reveal {
+  0%,
+  100% {
+    transform: scaleX(0.265);
+  }
+
+  12% {
+    transform: scaleX(0.035);
+  }
+
+  72%,
+  84% {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes tp-geometric-center-sheen {
+  0%,
+  100% {
+    opacity: 0.12;
+    transform: scaleX(3);
+  }
+
+  12% {
+    opacity: 0;
+    transform: scaleX(0.4);
+  }
+
+  66% {
+    opacity: 0.2;
+    transform: scaleX(10);
+  }
+
+  84% {
+    opacity: 0;
+    transform: scaleX(10);
+  }
+}
+
+@keyframes tp-geometric-center-guides {
+  0%,
+  100% {
+    opacity: 0.82;
+  }
+
+  12% {
+    opacity: 0.96;
+  }
+
+  70%,
+  84% {
+    opacity: 0;
+  }
+}
+
+@keyframes tp-geometric-clock-sweep {
+  0%,
+  100% {
+    stroke-dashoffset: 75;
+  }
+
+  12% {
+    stroke-dashoffset: 99.5;
+  }
+
+  74%,
+  84% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes tp-geometric-clock-hand {
+  0%,
+  100% {
+    opacity: 0.9;
+    transform: rotate(90deg);
+  }
+
+  12% {
+    opacity: 0.95;
+    transform: rotate(1.8deg);
+  }
+
+  74% {
+    opacity: 0.85;
+    transform: rotate(360deg);
+  }
+
+  84% {
+    opacity: 0;
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes tp-geometric-door-left {
+  0%,
+  100% {
+    transform: translateX(-8px);
+  }
+
+  12% {
+    transform: translateX(0);
+  }
+
+  72%,
+  84% {
+    transform: translateX(-34px);
+  }
+}
+
+@keyframes tp-geometric-door-right {
+  0%,
+  100% {
+    transform: translateX(8px);
+  }
+
+  12% {
+    transform: translateX(0);
+  }
+
+  72%,
+  84% {
+    transform: translateX(34px);
+  }
+}
+
+@keyframes tp-geometric-door-top {
+  0%,
+  100% {
+    transform: translateY(-5px);
+  }
+
+  12% {
+    transform: translateY(0);
+  }
+
+  72%,
+  84% {
+    transform: translateY(-14px);
+  }
+}
+
+@keyframes tp-geometric-door-bottom {
+  0%,
+  100% {
+    transform: translateY(5px);
+  }
+
+  12% {
+    transform: translateY(0);
+  }
+
+  72%,
+  84% {
+    transform: translateY(14px);
+  }
+}
+
+@keyframes tp-geometric-door-glow {
+  0%,
+  100% {
+    opacity: 0.13;
+  }
+
+  12% {
+    opacity: 0;
+  }
+
+  58% {
+    opacity: 0.2;
+  }
+
+  84% {
+    opacity: 0;
+  }
+}

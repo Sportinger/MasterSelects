@@ -40,13 +40,13 @@ export interface MotionClipGpuCache {
   height: number;
 }
 
-function getVisibleStroke(motion: MotionLayerDefinition): StrokeAppearance | undefined {
-  return motion.appearance?.items.find((item): item is StrokeAppearance => (
+function getVisibleStrokes(motion: MotionLayerDefinition): StrokeAppearance[] {
+  return motion.appearance?.items.filter((item): item is StrokeAppearance => (
     item.kind === 'stroke' &&
     item.visible !== false &&
     item.opacity > 0 &&
     item.width > 0
-  ));
+  )) ?? [];
 }
 
 function getStrokePadding(stroke: StrokeAppearance | undefined): number {
@@ -114,6 +114,35 @@ function getGridBounds(params: {
   };
 }
 
+export function getMotionShapeRenderBounds(
+  motion: MotionLayerDefinition | undefined,
+): { width: number; height: number } {
+  const shape = motion?.shape;
+  const width = Math.max(1, finiteOr(shape?.size.w, 1));
+  const height = Math.max(1, finiteOr(shape?.size.h, 1));
+  if (shape?.primitive === 'polygon') {
+    const diameter = Math.max(2, finiteOr(
+      shape.polygon?.radius,
+      Math.min(width, height) * 0.5,
+    ) * 2);
+    return {
+      width: Math.max(width, diameter),
+      height: Math.max(height, diameter),
+    };
+  }
+  if (shape?.primitive === 'star') {
+    const diameter = Math.max(2, finiteOr(
+      shape.star?.outerRadius,
+      Math.min(width, height) * 0.5,
+    ) * 2);
+    return {
+      width: Math.max(width, diameter),
+      height: Math.max(height, diameter),
+    };
+  }
+  return { width, height };
+}
+
 export function getMotionReplicatorRenderState(motion: MotionLayerDefinition | undefined): MotionReplicatorRenderState {
   const replicator = motion?.replicator;
   const layout = getGridLayout(replicator?.layout);
@@ -169,10 +198,15 @@ export function getMotionReplicatorRenderState(motion: MotionLayerDefinition | u
 }
 
 export function getMotionRenderSize(motion: MotionLayerDefinition | undefined): MotionRenderSize {
-  const shape = motion?.shape;
-  const width = Math.max(1, Math.ceil(shape?.size.w ?? 1));
-  const height = Math.max(1, Math.ceil(shape?.size.h ?? 1));
-  const strokePadding = getStrokePadding(motion ? getVisibleStroke(motion) : undefined);
+  const bounds = getMotionShapeRenderBounds(motion);
+  const width = Math.max(1, Math.ceil(bounds.width));
+  const height = Math.max(1, Math.ceil(bounds.height));
+  const strokePadding = motion
+    ? getVisibleStrokes(motion).reduce(
+        (maximum, stroke) => Math.max(maximum, getStrokePadding(stroke)),
+        0,
+      )
+    : 0;
   const replicator = getMotionReplicatorRenderState(motion);
   const replicatedWidth = Math.ceil(replicator.boundsWidth);
   const replicatedHeight = Math.ceil(replicator.boundsHeight);

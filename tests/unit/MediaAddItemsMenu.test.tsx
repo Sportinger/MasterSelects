@@ -15,9 +15,11 @@ function renderMenu(overrides: Partial<MediaAddItemsMenuComponentProps> = {}) {
     onNewFolder: vi.fn(),
     onNewText: vi.fn(),
     onNewSolid: vi.fn(),
+    onNewLiveInput: vi.fn(),
     onNewMesh: vi.fn(),
     onNewText3D: vi.fn(),
     onNewCamera: vi.fn(),
+    onNewLight: vi.fn(),
     onNewSplatEffector: vi.fn(),
     onImportGaussianSplat: vi.fn(),
     onNewMathScene: vi.fn(),
@@ -36,6 +38,19 @@ describe('MediaAddItemsMenu import surface', () => {
     fireEvent.click(screen.getByText('Import files...'));
 
     expect(props.onImport).toHaveBeenCalledTimes(1);
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('exposes all four rendered Motion Shape primitives', () => {
+    const props = renderMenu();
+
+    expect(screen.getByText('Rectangle')).toBeInTheDocument();
+    expect(screen.getByText('Ellipse')).toBeInTheDocument();
+    expect(screen.getByText('Polygon')).toBeInTheDocument();
+    expect(screen.getByText('Star')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Star'));
+    expect(props.onNewMotionShape).toHaveBeenCalledWith('star');
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
 });

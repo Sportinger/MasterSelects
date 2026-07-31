@@ -1,0 +1,424 @@
+.tp-light-preview .tp-light-flash-glow {
+  opacity: 0.76;
+  transform: scale(0.82);
+  transform-origin: center;
+  animation: tp-light-flash-glow 1.55s ease-in-out infinite;
+}
+
+.tp-light-preview .tp-light-flash-burst {
+  opacity: 0.92;
+  transform: scale(0.88);
+  transform-origin: center;
+  animation: tp-light-flash-burst 1.55s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+}
+
+.tp-light-preview .tp-light-leak-band {
+  transform: translateX(-7px);
+  animation: tp-light-leak-band 2s cubic-bezier(0.55, 0, 0.45, 1) infinite;
+}
+
+.tp-light-preview .tp-light-leak-ember {
+  animation: tp-light-leak-ember 2s ease-in-out infinite;
+}
+
+.tp-light-preview .tp-light-sweep-beam {
+  transform: translateX(-7px);
+  animation: tp-light-sweep-beam 1.8s cubic-bezier(0.55, 0, 0.45, 1) infinite;
+}
+
+.tp-light-chroma .tp-light-chroma-red,
+.tp-light-chroma .tp-light-chroma-cyan,
+.tp-light-chroma .tp-light-chroma-green {
+  mix-blend-mode: screen;
+  transform-origin: center;
+}
+
+.tp-light-chroma .tp-light-chroma-red {
+  transform: translateX(-3px);
+  animation: tp-light-chroma-red 1.95s ease-in-out infinite;
+}
+
+.tp-light-chroma .tp-light-chroma-cyan {
+  transform: translateX(3px);
+  animation: tp-light-chroma-cyan 1.95s ease-in-out infinite;
+}
+
+.tp-light-chroma .tp-light-chroma-green {
+  opacity: 0.66;
+  transform: translateY(2px);
+  animation: tp-light-chroma-green 1.95s ease-in-out infinite;
+}
+
+.tp-light-preview .tp-light-flare-system {
+  transform: translateX(3px);
+  transform-origin: center;
+  animation: tp-light-flare-system 2.1s cubic-bezier(0.55, 0, 0.45, 1) infinite;
+}
+
+.tp-light-preview .tp-light-burn-front {
+  transform: translateX(17px);
+  transform-origin: center;
+  animation: tp-light-burn-front 2.05s cubic-bezier(0.6, 0, 0.4, 1) infinite;
+}
+
+.tp-light-preview .tp-light-projector-frame {
+  transform: translateY(0.4px);
+  animation: tp-light-projector-frame 1.65s steps(1, end) infinite;
+}
+
+.tp-light-preview .tp-light-projector-flash {
+  opacity: 0.38;
+  animation: tp-light-projector-flash 1.65s steps(1, end) infinite;
+}
+
+.tp-light-preview .tp-light-projector-scratch {
+  transform: translateX(0);
+  animation: tp-light-projector-scratch 1.65s steps(1, end) infinite;
+}
+
+.tp-light-preview .tp-light-film-strip {
+  transform: translateY(-8px);
+  animation: tp-light-film-roll 1.85s linear infinite;
+}
+
+.tp-light-preview .tp-light-bloom-core {
+  opacity: 0.76;
+  transform: scale(0.78);
+  transform-origin: center;
+  animation: tp-light-bloom-core 2.15s ease-in-out infinite;
+}
+
+@keyframes tp-light-flash-glow {
+  0%,
+  100% {
+    opacity: 0.76;
+    transform: scale(0.82);
+  }
+
+  18% {
+    opacity: 0.08;
+    transform: scale(0.45);
+  }
+
+  46% {
+    opacity: 1;
+    transform: scale(1.45);
+  }
+
+  72% {
+    opacity: 0.12;
+    transform: scale(1.65);
+  }
+}
+
+@keyframes tp-light-flash-burst {
+  0%,
+  100% {
+    opacity: 0.92;
+    transform: scale(0.88);
+  }
+
+  18% {
+    opacity: 0.1;
+    transform: scale(0.45);
+  }
+
+  46% {
+    opacity: 1;
+    transform: scale(1.25);
+  }
+
+  72% {
+    opacity: 0;
+    transform: scale(1.45);
+  }
+}
+
+@keyframes tp-light-leak-band {
+  0%,
+  100% {
+    opacity: 0.92;
+    transform: translateX(-7px);
+  }
+
+  14% {
+    opacity: 0.35;
+    transform: translateX(-32px);
+  }
+
+  72% {
+    opacity: 1;
+    transform: translateX(62px);
+  }
+
+  86% {
+    opacity: 0;
+    transform: translateX(76px);
+  }
+}
+
+@keyframes tp-light-leak-ember {
+  0%,
+  100% {
+    opacity: 0.62;
+    transform: translateX(0) scale(1);
+  }
+
+  14% {
+    opacity: 0;
+    transform: translateX(-24px) scale(0.7);
+  }
+
+  72% {
+    opacity: 0.78;
+    transform: translateX(64px) scale(1.3);
+  }
+
+  86% {
+    opacity: 0;
+    transform: translateX(75px) scale(0.8);
+  }
+}
+
+@keyframes tp-light-sweep-beam {
+  0%,
+  100% {
+    opacity: 0.94;
+    transform: translateX(-7px);
+  }
+
+  12% {
+    opacity: 0;
+    transform: translateX(-45px);
+  }
+
+  72% {
+    opacity: 1;
+    transform: translateX(45px);
+  }
+
+  84% {
+    opacity: 0;
+    transform: translateX(58px);
+  }
+}
+
+@keyframes tp-light-chroma-red {
+  0%,
+  100% {
+    opacity: 0.88;
+    transform: translateX(-3px) scale(1);
+  }
+
+  26% {
+    opacity: 0.42;
+    transform: translateX(-14px) scale(0.86);
+  }
+
+  68% {
+    opacity: 0.95;
+    transform: translateX(9px) scale(1.15);
+  }
+}
+
+@keyframes tp-light-chroma-cyan {
+  0%,
+  100% {
+    opacity: 0.88;
+    transform: translateX(3px) scale(1);
+  }
+
+  26% {
+    opacity: 0.92;
+    transform: translateX(14px) scale(1.12);
+  }
+
+  68% {
+    opacity: 0.38;
+    transform: translateX(-9px) scale(0.84);
+  }
+}
+
+@keyframes tp-light-chroma-green {
+  0%,
+  100% {
+    opacity: 0.66;
+    transform: translateY(2px) scale(1);
+  }
+
+  42% {
+    opacity: 0.92;
+    transform: translateY(-5px) scale(1.18);
+  }
+
+  78% {
+    opacity: 0.34;
+    transform: translateY(6px) scale(0.82);
+  }
+}
+
+@keyframes tp-light-flare-system {
+  0%,
+  100% {
+    opacity: 0.94;
+    transform: translateX(3px) scale(1);
+  }
+
+  12% {
+    opacity: 0;
+    transform: translateX(-35px) scale(0.72);
+  }
+
+  70% {
+    opacity: 1;
+    transform: translateX(27px) scale(1.18);
+  }
+
+  84% {
+    opacity: 0;
+    transform: translateX(39px) scale(0.86);
+  }
+}
+
+@keyframes tp-light-burn-front {
+  0%,
+  100% {
+    opacity: 0.96;
+    transform: translateX(17px) scaleY(1);
+  }
+
+  12% {
+    opacity: 0;
+    transform: translateX(-25px) scaleY(0.92);
+  }
+
+  68% {
+    opacity: 1;
+    transform: translateX(67px) scaleY(1.08);
+  }
+
+  84% {
+    opacity: 0;
+    transform: translateX(85px) scaleY(0.96);
+  }
+}
+
+@keyframes tp-light-projector-frame {
+  0%,
+  100% {
+    opacity: 0.82;
+    transform: translateY(0.4px);
+  }
+
+  15% {
+    opacity: 0.98;
+    transform: translateY(-0.5px);
+  }
+
+  18% {
+    opacity: 0.48;
+    transform: translateY(0.8px);
+  }
+
+  36% {
+    opacity: 0.9;
+    transform: translateY(0);
+  }
+
+  39% {
+    opacity: 0.58;
+    transform: translateY(-0.7px);
+  }
+
+  67% {
+    opacity: 1;
+    transform: translateY(0.5px);
+  }
+
+  72% {
+    opacity: 0.64;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tp-light-projector-flash {
+  0%,
+  100% {
+    opacity: 0.38;
+  }
+
+  15% {
+    opacity: 0.62;
+  }
+
+  18% {
+    opacity: 0.08;
+  }
+
+  36% {
+    opacity: 0.46;
+  }
+
+  39% {
+    opacity: 0.12;
+  }
+
+  67% {
+    opacity: 0.7;
+  }
+
+  72% {
+    opacity: 0.22;
+  }
+}
+
+@keyframes tp-light-projector-scratch {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: translateX(0);
+  }
+
+  36% {
+    opacity: 0.16;
+    transform: translateX(-19px);
+  }
+
+  67% {
+    opacity: 0.62;
+    transform: translateX(8px);
+  }
+}
+
+@keyframes tp-light-film-roll {
+  0% {
+    transform: translateY(-8px);
+  }
+
+  100% {
+    transform: translateY(36px);
+  }
+}
+
+@keyframes tp-light-bloom-core {
+  0%,
+  100% {
+    opacity: 0.76;
+    transform: scale(0.78);
+  }
+
+  18% {
+    opacity: 0.38;
+    transform: scale(0.56);
+  }
+
+  62% {
+    opacity: 1;
+    transform: scale(1.34);
+  }
+
+  82% {
+    opacity: 0.72;
+    transform: scale(1.12);
+  }
+}

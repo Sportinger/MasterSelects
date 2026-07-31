@@ -3,6 +3,7 @@ import { WebCodecsExportMode } from '../WebCodecsExportMode';
 import type { ExportModePlayer } from '../WebCodecsExportMode';
 import { HtmlVideoFrameSource } from '../webcodecs/htmlVideoFrameSource';
 import { WebCodecsSampleTimeline } from '../webcodecs/sampleTimeline';
+import { getVideoTrackRotation, type VideoRotationDegrees } from '../webcodecs/videoTrackOrientation';
 import type { MP4File, MP4VideoTrack, Sample } from '../webCodecsTypes';
 import type { SeekPreviewMode, WebCodecsPlayerOptions } from './playerTypes';
 
@@ -174,6 +175,7 @@ export abstract class WebCodecsPlayerBase implements ExportModePlayer {
   getSampleIndex(): number { return this.sampleIndex; }
   setSampleIndex(index: number): void { this.sampleIndex = index; this.feedIndex = index; }
   getVideoTrackTimescale(): number | null { return this.videoTrack?.timescale ?? null; }
+  getSourceRotationDegrees(): VideoRotationDegrees { return getVideoTrackRotation(this.videoTrack); }
   getCodecConfig(): VideoDecoderConfig | null { return this.codecConfig; }
   getFrameRate(): number { return this.frameRate; }
   getCurrentFrame(): VideoFrame | null {

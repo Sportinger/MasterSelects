@@ -15,6 +15,9 @@ import type {
 export type { KernelProgressEvent } from '../kernelClient/runProgress';
 export type { KernelRunReport } from '../kernelClient/runReport';
 export type {
+  AgentActivityEvent,
+  ChatIntent,
+  DecisionPolicy,
   FlashBoardExecutedToolCall,
   FlashBoardChatModelOption,
   FlashBoardChatPromptVersion,
@@ -85,6 +88,13 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
         const resolver = findPreconditionResolver(precondition.kind);
         return resolver ? resolver.satisfy(context) : false;
       },
+      ...(request.intent === undefined ? {} : { intent: request.intent }),
+      ...(request.decisionPolicy === undefined
+        ? {}
+        : { decisionPolicy: request.decisionPolicy }),
+      ...(request.activeDecision === undefined
+        ? {}
+        : { activeDecision: request.activeDecision }),
       ...(request.idempotencyKey === undefined
         ? {}
         : { seed: request.idempotencyKey }),
@@ -94,6 +104,7 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
       ...(request.signal === undefined ? {} : { signal: request.signal }),
     });
     if (kernelResult.handled) {
+      if (kernelResult.decision) request.onKernelDecision?.(kernelResult.decision);
       const kernelRun = beginFlashBoardChatRun(
         { ...request, prompt },
         kernelResult.runId === undefined
@@ -114,7 +125,9 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
     );
   }
 
-  request.onPhase?.('provider');
+  request.onPhase?.(
+    request.provider === 'kie' && request.hostedAvailable ? 'kernel' : 'provider',
+  );
   const systemPrompt = buildFlashBoardChatSystemPrompt(request.systemPromptOverride, {
     includeContext: request.systemPromptIncludeContext !== false,
     includePlaybook: request.systemPromptIncludePlaybook,
@@ -125,11 +138,13 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
   const run = beginFlashBoardChatRun({ ...request, prompt }, systemPrompt);
   const tracedRequest: FlashBoardChatRequest = {
     ...request,
+    activityRunId: run.runId,
     prompt,
     onExecutedToolCalls: (toolCalls) => {
       executedToolCalls.push(...toolCalls);
       request.onExecutedToolCalls?.(toolCalls);
     },
+    onActivityEvent: request.onActivityEvent,
   };
 
   try {

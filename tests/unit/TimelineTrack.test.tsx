@@ -873,10 +873,16 @@ describe('TimelineTrack empty lane right mouse behavior', () => {
       fireEvent.mouseUp(document);
 
       expect(onMoveKeyframeGroup).not.toHaveBeenCalled();
-      expect(applyTimelineEditOperation).toHaveBeenCalledTimes(1);
+      expect(applyTimelineEditOperation).toHaveBeenCalledTimes(2);
       expect(applyTimelineEditOperation.mock.calls[0][0]).toMatchObject({
         type: 'keyframe-transaction-begin',
         phase: 'begin',
+        clipId: 'clip-video',
+        keyframeIds: ['kf-opacity'],
+      });
+      expect(applyTimelineEditOperation.mock.calls[1][0]).toMatchObject({
+        type: 'keyframe-transaction-cancel',
+        phase: 'cancel',
         clipId: 'clip-video',
         keyframeIds: ['kf-opacity'],
       });
@@ -915,331 +921,41 @@ describe('TimelineTrack empty lane right mouse behavior', () => {
     fireEvent.mouseDown(tick as HTMLElement, { button: 0, clientX: 20 });
     fireEvent.mouseUp(document);
 
-    expect(applyTimelineEditOperation).toHaveBeenCalledTimes(1);
+    expect(applyTimelineEditOperation).toHaveBeenCalledTimes(2);
     expect(applyTimelineEditOperation.mock.calls[0][0]).toMatchObject({
       type: 'keyframe-transaction-begin',
       phase: 'begin',
       clipId: 'clip-video',
       keyframeIds: ['kf-opacity'],
     });
+    expect(applyTimelineEditOperation.mock.calls[1][0]).toMatchObject({
+      type: 'keyframe-transaction-cancel',
+      phase: 'cancel',
+      clipId: 'clip-video',
+      keyframeIds: ['kf-opacity'],
+    });
   });
 
-  it('routes expanded curve-editor keyframe drags through typed move and value transactions', () => {
-    const onMoveKeyframe = vi.fn();
-    const applyTimelineEditOperation = vi.fn(() => ({ success: true, warnings: [] }));
-    const rectSpy = vi.spyOn(SVGElement.prototype, 'getBoundingClientRect').mockReturnValue({
-      x: 0,
-      y: 0,
-      width: 200,
-      height: 100,
-      top: 0,
-      right: 200,
-      bottom: 100,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect);
-
-    try {
-      const { container } = renderTimelineTrack({
-        clips: [createClip()],
-        isExpanded: true,
-        dynamicHeight: 220,
-        selectedClipIds: new Set(['clip-video']),
-        selectedKeyframeIds: new Set(['kf-opacity']),
-        expandedCurveProperties: new Map([['track-video', new Set(['opacity'])]]),
-        clipKeyframes: new Map([
-          [
-            'clip-video',
-            [
-              {
-                id: 'kf-opacity',
-                clipId: 'clip-video',
-                time: 1,
-                property: 'opacity',
-                value: 0.5,
-                easing: 'linear',
-              },
-              {
-                id: 'kf-opacity-right',
-                clipId: 'clip-video',
-                time: 3,
-                property: 'opacity',
-                value: 0.75,
-                easing: 'linear',
-              },
-            ],
-          ],
-        ]),
-        onMoveKeyframe,
-        applyTimelineEditOperation: applyTimelineEditOperation as never,
-      });
-
-      const curveKeyframe = container.querySelector<HTMLElement>('.curve-editor-keyframe');
-      expect(curveKeyframe).toBeTruthy();
-
-      fireEvent.mouseDown(curveKeyframe as HTMLElement, { button: 0, clientX: 30, clientY: 50, buttons: 1 });
-      fireEvent.mouseMove(window, { clientX: 40, clientY: 55, buttons: 1 });
-      fireEvent.mouseUp(window);
-
-      expect(onMoveKeyframe).not.toHaveBeenCalled();
-      expect(applyTimelineEditOperation).toHaveBeenCalledTimes(3);
-      expect(applyTimelineEditOperation.mock.calls[0][0]).toMatchObject({
-        type: 'keyframe-transaction-begin',
-        phase: 'begin',
+  it('keeps the legacy inline curve editor removed in favor of the global graph surface', () => {
+    const { container } = renderTimelineTrack({
+      clips: [createClip()],
+      isExpanded: true,
+      dynamicHeight: 220,
+      selectedClipIds: new Set(['clip-video']),
+      selectedKeyframeIds: new Set(['kf-opacity']),
+      expandedCurveProperties: new Map([['track-video', new Set(['opacity'])]]),
+      clipKeyframes: new Map([['clip-video', [{
+        id: 'kf-opacity',
         clipId: 'clip-video',
+        time: 1,
         property: 'opacity',
-        keyframeIds: ['kf-opacity'],
-        intent: 'curve-editor',
-      });
-      expect(applyTimelineEditOperation.mock.calls[1][0]).toMatchObject({
-        type: 'keyframe-transaction-update',
-        phase: 'update',
-        clipId: 'clip-video',
-        property: 'opacity',
-        keyframeIds: ['kf-opacity'],
-        operations: [
-          {
-            type: 'keyframe-move',
-            keyframeId: 'kf-opacity',
-            clipId: 'clip-video',
-            property: 'opacity',
-            originalTime: 1,
-            requestedTime: 2,
-            resolvedTime: 2,
-          },
-          {
-            type: 'keyframe-update-value',
-            keyframeId: 'kf-opacity',
-            clipId: 'clip-video',
-            property: 'opacity',
-            value: { value: expect.any(Number) },
-          },
-        ],
-      });
-      expect(applyTimelineEditOperation.mock.calls[1][1]).toMatchObject({
-        source: 'ui',
-        historyLabel: 'Edit curve keyframe',
-        deferHistoryCommit: true,
-      });
-      expect(applyTimelineEditOperation.mock.calls[2][0]).toMatchObject({
-        type: 'keyframe-transaction-commit',
-        phase: 'commit',
-        clipId: 'clip-video',
-        property: 'opacity',
-        keyframeIds: ['kf-opacity'],
-      });
-    } finally {
-      rectSpy.mockRestore();
-    }
-  });
+        value: 0.5,
+        easing: 'bezier',
+      }]]]),
+    });
 
-  it('does not fall back to legacy curve keyframe moves when typed drag targets go stale', () => {
-    const onMoveKeyframe = vi.fn();
-    const applyTimelineEditOperation = vi.fn(() => ({ success: true, warnings: [] }));
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const rectSpy = vi.spyOn(SVGElement.prototype, 'getBoundingClientRect').mockReturnValue({
-      x: 0,
-      y: 0,
-      width: 200,
-      height: 100,
-      top: 0,
-      right: 200,
-      bottom: 100,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect);
-
-    try {
-      const { container, props, rerender } = renderTimelineTrack({
-        clips: [createClip()],
-        isExpanded: true,
-        dynamicHeight: 220,
-        selectedClipIds: new Set(['clip-video']),
-        selectedKeyframeIds: new Set(['kf-opacity']),
-        expandedCurveProperties: new Map([['track-video', new Set(['opacity'])]]),
-        clipKeyframes: new Map([
-          [
-            'clip-video',
-            [
-              {
-                id: 'kf-opacity',
-                clipId: 'clip-video',
-                time: 1,
-                property: 'opacity',
-                value: 0.5,
-                easing: 'linear',
-              },
-              {
-                id: 'kf-opacity-right',
-                clipId: 'clip-video',
-                time: 3,
-                property: 'opacity',
-                value: 0.75,
-                easing: 'linear',
-              },
-            ],
-          ],
-        ]),
-        onMoveKeyframe,
-        applyTimelineEditOperation: applyTimelineEditOperation as never,
-      });
-
-      const curveKeyframe = container.querySelector<HTMLElement>('.curve-editor-keyframe');
-      expect(curveKeyframe).toBeTruthy();
-
-      fireEvent.mouseDown(curveKeyframe as HTMLElement, { button: 0, clientX: 30, clientY: 50, buttons: 1 });
-      expect(applyTimelineEditOperation).toHaveBeenCalledTimes(1);
-
-      rerender(
-        <TimelineTrack
-          {...props}
-          clipKeyframes={new Map([
-            [
-              'clip-video',
-              [
-                {
-                  id: 'kf-opacity-replacement',
-                  clipId: 'clip-video',
-                  time: 1.5,
-                  property: 'opacity',
-                  value: 0.65,
-                  easing: 'linear',
-                },
-                {
-                  id: 'kf-opacity-right',
-                  clipId: 'clip-video',
-                  time: 3,
-                  property: 'opacity',
-                  value: 0.75,
-                  easing: 'linear',
-                },
-              ],
-            ],
-          ])}
-          selectedKeyframeIds={new Set(['kf-opacity-replacement'])}
-        />
-      );
-
-      fireEvent.mouseMove(window, { clientX: 40, clientY: 55, buttons: 1 });
-      fireEvent.mouseUp(window);
-
-      expect(onMoveKeyframe).not.toHaveBeenCalled();
-      expect(applyTimelineEditOperation).toHaveBeenCalledTimes(1);
-      expect(applyTimelineEditOperation.mock.calls[0][0]).toMatchObject({
-        type: 'keyframe-transaction-begin',
-        phase: 'begin',
-        clipId: 'clip-video',
-        property: 'opacity',
-        keyframeIds: ['kf-opacity'],
-      });
-    } finally {
-      rectSpy.mockRestore();
-      warnSpy.mockRestore();
-    }
-  });
-
-  it('routes expanded curve-editor bezier handle drags through typed handle transactions', () => {
-    const onUpdateBezierHandle = vi.fn();
-    const applyTimelineEditOperation = vi.fn(() => ({ success: true, warnings: [] }));
-    const rectSpy = vi.spyOn(SVGElement.prototype, 'getBoundingClientRect').mockReturnValue({
-      x: 0,
-      y: 0,
-      width: 200,
-      height: 100,
-      top: 0,
-      right: 200,
-      bottom: 100,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect);
-
-    try {
-      const { container } = renderTimelineTrack({
-        clips: [createClip()],
-        isExpanded: true,
-        dynamicHeight: 220,
-        selectedClipIds: new Set(['clip-video']),
-        selectedKeyframeIds: new Set(['kf-opacity']),
-        expandedCurveProperties: new Map([['track-video', new Set(['opacity'])]]),
-        clipKeyframes: new Map([
-          [
-            'clip-video',
-            [
-              {
-                id: 'kf-opacity',
-                clipId: 'clip-video',
-                time: 1,
-                property: 'opacity',
-                value: 0.5,
-                easing: 'bezier',
-              },
-              {
-                id: 'kf-opacity-right',
-                clipId: 'clip-video',
-                time: 3,
-                property: 'opacity',
-                value: 0.75,
-                easing: 'linear',
-              },
-            ],
-          ],
-        ]),
-        onUpdateBezierHandle,
-        applyTimelineEditOperation: applyTimelineEditOperation as never,
-      });
-
-      const handle = container.querySelector<HTMLElement>('.curve-editor-handle');
-      expect(handle).toBeTruthy();
-
-      fireEvent.mouseDown(handle as HTMLElement, { button: 0, clientX: 36, clientY: 50, buttons: 1 });
-      fireEvent.mouseMove(window, { clientX: 50, clientY: 42, buttons: 1 });
-      fireEvent.mouseUp(window);
-
-      expect(onUpdateBezierHandle).not.toHaveBeenCalled();
-      expect(applyTimelineEditOperation).toHaveBeenCalledTimes(3);
-      expect(applyTimelineEditOperation.mock.calls[0][0]).toMatchObject({
-        type: 'keyframe-transaction-begin',
-        phase: 'begin',
-        clipId: 'clip-video',
-        property: 'opacity',
-        keyframeIds: ['kf-opacity'],
-        intent: 'curve-editor',
-      });
-      expect(applyTimelineEditOperation.mock.calls[1][0]).toMatchObject({
-        type: 'keyframe-transaction-update',
-        phase: 'update',
-        clipId: 'clip-video',
-        property: 'opacity',
-        keyframeIds: ['kf-opacity'],
-        operations: [
-          {
-            type: 'keyframe-update-bezier-handle',
-            keyframeId: 'kf-opacity',
-            clipId: 'clip-video',
-            property: 'opacity',
-            handle: 'out',
-            position: expect.objectContaining({
-              x: expect.any(Number),
-              y: expect.any(Number),
-            }),
-          },
-        ],
-      });
-      expect(applyTimelineEditOperation.mock.calls[1][1]).toMatchObject({
-        source: 'ui',
-        historyLabel: 'Edit bezier handle',
-        deferHistoryCommit: true,
-      });
-      expect(applyTimelineEditOperation.mock.calls[2][0]).toMatchObject({
-        type: 'keyframe-transaction-commit',
-        phase: 'commit',
-        clipId: 'clip-video',
-        property: 'opacity',
-        keyframeIds: ['kf-opacity'],
-      });
-    } finally {
-      rectSpy.mockRestore();
-    }
+    expect(container.querySelector('.curve-editor-keyframe')).toBeNull();
+    expect(container.querySelector('.curve-editor-handle')).toBeNull();
   });
 
   it('renders mixed keyframe and audio-region shell modules without the legacy overlay body', () => {

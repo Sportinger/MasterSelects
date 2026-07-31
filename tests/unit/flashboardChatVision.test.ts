@@ -109,19 +109,78 @@ describe('FlashBoard compact-chat vision follow-ups', () => {
     })]));
     expect(JSON.stringify(executedToolCalls)).not.toContain(DATA_URL);
 
-    const hostedFetch = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        ok: true,
-        data: {
-          output: [{ type: 'function_call', call_id: 'capture-1', name: 'captureFrame', arguments: '{"time":2}' }],
-        },
-      }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        ok: true,
-        data: {
-          output: [{ type: 'message', content: [{ type: 'output_text', text: 'A person enters the room.' }] }],
-        },
-      }), { status: 200 }));
+    let hostedTurnId = '';
+    const hostedSessionId = 'vision-session';
+    let replayCount = 0;
+    const hostedFetch = vi.fn(async (requestInfo: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(requestInfo);
+      if (url === '/api/kernel/hosted-agent/turns') {
+        const request = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        hostedTurnId = String(request.turnId);
+        return new Response(JSON.stringify({
+          acceptedHistoryFormatVersion: request.historyFormatVersion,
+          acceptedPromptVersion: request.promptVersion,
+          acceptedToolSchemaVersion: request.toolSchemaVersion,
+          eventsPath: `/api/kernel/hosted-agent/turns/${hostedTurnId}/events`,
+          maximumIterations: 400,
+          maximumSpendCredits: 500,
+          pageLease: {
+            expiresAt: '2026-07-31T12:05:00.000Z',
+            leaseToken: 'vision-lease',
+            sessionId: hostedSessionId,
+          },
+          protocolVersion: 'hosted-agent-k2-v1',
+          replayed: false,
+          route: 'fast-agent',
+          sessionId: hostedSessionId,
+          turnId: hostedTurnId,
+        }), { status: 202 });
+      }
+      if (url.endsWith('/tool-results')) {
+        return new Response(JSON.stringify({
+          accepted: true,
+          duplicate: false,
+          sequence: 0,
+          sessionId: hostedSessionId,
+          turnId: hostedTurnId,
+        }), { status: 200 });
+      }
+      replayCount += 1;
+      const events = replayCount === 1 ? [{
+        acceptedHistoryFormatVersion: 'flashboard-provider-history-v1',
+        acceptedPromptVersion: 'flashboard-chat-v2',
+        acceptedToolSchemaVersion: 'flashboard-chat-tools-v1',
+        eventId: '1',
+        kind: 'session-ready',
+        maximumIterations: 400,
+        maximumSpendCredits: 500,
+        sessionId: hostedSessionId,
+        turnId: hostedTurnId,
+      }, {
+        eventId: '2',
+        kind: 'tool-batch-request',
+        roundIndex: 0,
+        sequence: 0,
+        sessionId: hostedSessionId,
+        toolCalls: [{ args: { time: 2 }, toolCallId: 'capture-1', toolName: 'captureFrame' }],
+        toolSchemaVersion: 'flashboard-chat-tools-v1',
+        turnId: hostedTurnId,
+      }] : [{
+        creditsCharged: 1,
+        eventId: '3',
+        kind: 'turn-complete',
+        message: 'A person enters the room.',
+        rounds: 2,
+        sessionId: hostedSessionId,
+        turnId: hostedTurnId,
+      }];
+      return new Response(events.map(event => (
+        `id: ${event.eventId}\nevent: ${event.kind}\ndata: ${JSON.stringify(event)}\n\n`
+      )).join(''), {
+        headers: { 'Content-Type': 'text/event-stream' },
+        status: 200,
+      });
+    });
     vi.stubGlobal('fetch', hostedFetch);
 
     await sendFlashBoardChatMessage({
@@ -132,15 +191,24 @@ describe('FlashBoard compact-chat vision follow-ups', () => {
       temperature: 0.7,
     });
 
-    const hostedBody = JSON.parse(String(hostedFetch.mock.calls[1]?.[1]?.body));
-    expect(hostedBody.input).toEqual(expect.arrayContaining([expect.objectContaining({
+    const hostedToolBody = JSON.parse(String(hostedFetch.mock.calls[2]?.[1]?.body));
+    expect(hostedToolBody.results[0].modelContent).toContain(
+      '[image data omitted from compact chat context]',
+    );
+    expect(hostedToolBody.results[0].modelContent).not.toContain(DATA_URL);
+    expect(hostedToolBody.results[0].providerContent.openAiFollowupInput).toEqual([{
+      content: [
+        { text: 'Visual output from captureFrame:', type: 'input_text' },
+        { detail: 'high', image_url: DATA_URL, type: 'input_image' },
+      ],
       role: 'user',
-      content: expect.arrayContaining([{
-        type: 'input_image',
-        image_url: DATA_URL,
-        detail: 'high',
+    }]);
+    expect(hostedToolBody.results[0].providerContent.claudeToolResultContent).toEqual(
+      expect.arrayContaining([{
+        source: { data: 'iVBORw0KGgo=', media_type: 'image/png', type: 'base64' },
+        type: 'image',
       }]),
-    })]));
+    );
 
     const anthropicFetch = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({

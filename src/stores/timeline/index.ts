@@ -11,7 +11,9 @@ import { createDefaultTempoMap, createDefaultRulerLanes, getDefaultActiveRulerLa
 import { createTrackSlice } from './trackSlice';
 import { createClipSlice } from './clipSlice';
 import { createTextClipSlice } from './textClipSlice';
+import { createCaptionClipSlice } from './captionClipSlice';
 import { createSolidClipSlice } from './solidClipSlice';
+import { createStoryboardClipSlice } from './storyboardClipSlice';
 import { createMidiClipSlice } from './midiClipSlice';
 import { createMathSceneClipSlice } from './mathSceneClipSlice';
 import { createMotionClipSlice } from './motionClipSlice';
@@ -84,7 +86,9 @@ export const useTimelineStore = create<TimelineStore>()(
     const trackActions = createTrackSlice(set, get);
     const clipActions = createClipSlice(set, get);
     const textClipActions = createTextClipSlice(set, get);
+    const captionClipActions = createCaptionClipSlice(set, get);
     const solidClipActions = createSolidClipSlice(set, get);
+    const storyboardClipActions = createStoryboardClipSlice(set, get);
     const midiClipActions = createMidiClipSlice(set, get);
     const mathSceneClipActions = createMathSceneClipSlice(set, get);
     const motionClipActions = createMotionClipSlice(set, get);
@@ -396,7 +400,9 @@ export const useTimelineStore = create<TimelineStore>()(
       ...trackActions,
       ...clipActions,
       ...textClipActions,
+      ...captionClipActions,
       ...solidClipActions,
+      ...storyboardClipActions,
       ...midiClipActions,
       ...mathSceneClipActions,
       ...motionClipActions,

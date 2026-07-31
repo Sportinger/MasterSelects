@@ -14,6 +14,7 @@ import type {
   HistoryStoreRefs,
   MediaStoreState,
   StateSnapshot,
+  StoryboardStoreSnapshot,
   TimelineStoreState,
 } from './historyStoreTypes';
 export type {
@@ -87,6 +88,8 @@ let getDockState: (() => DockStoreSnapshot) | undefined;
 let setDockState: ((state: Partial<DockStoreSnapshot>) => void) | undefined;
 let getFlashBoardState: (() => FlashBoardStoreSnapshot) | undefined;
 let setFlashBoardState: ((state: Partial<FlashBoardStoreSnapshot>) => void) | undefined;
+let getStoryboardState: (() => StoryboardStoreSnapshot) | undefined;
+let setStoryboardState: ((state: StoryboardStoreSnapshot) => void) | undefined;
 let getExportState: (() => ExportStoreSnapshot) | undefined;
 let setExportState: ((state: Partial<ExportStoreSnapshot>) => void) | undefined;
 
@@ -100,6 +103,8 @@ export function initHistoryStoreRefs(stores: HistoryStoreInitRefs) {
   setDockState = stores.dock.setState;
   getFlashBoardState = stores.flashboard?.getState;
   setFlashBoardState = stores.flashboard?.setState;
+  getStoryboardState = stores.storyboard?.getState;
+  setStoryboardState = stores.storyboard?.setState;
   getExportState = stores.export?.getState;
   setExportState = stores.export?.setState;
 }
@@ -114,6 +119,8 @@ function getHistoryStoreRefs(): HistoryStoreRefs {
     setDockState,
     getFlashBoardState,
     setFlashBoardState,
+    getStoryboardState,
+    setStoryboardState,
     getExportState,
     setExportState,
   };

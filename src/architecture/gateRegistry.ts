@@ -1,6 +1,7 @@
 import type { CompleteArchitectureGate } from './types';
+import { storyboardArchitectureGates } from './storyboardGateRegistry';
 
-export const completeArchitectureGates = [
+const completeRefactorArchitectureGates = [
   {
     id: 'P0_BASELINE_CAPTURED',
     phase: 'P0',
@@ -270,6 +271,11 @@ export const completeArchitectureGates = [
     status: 'active',
     dependsOn: ['P0_COMPLETE_ARCHITECTURE_REGISTRY'],
   },
+] as const satisfies readonly CompleteArchitectureGate[];
+
+export const completeArchitectureGates = [
+  ...completeRefactorArchitectureGates,
+  ...storyboardArchitectureGates,
 ] as const satisfies readonly CompleteArchitectureGate[];
 
 export const completeArchitectureGateIds = completeArchitectureGates.map(

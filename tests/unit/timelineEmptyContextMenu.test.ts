@@ -63,4 +63,26 @@ describe('timeline empty context menu model', () => {
     expect(onEraseAllGaps).toHaveBeenCalledTimes(1);
     expect(onFitCompToWindow).toHaveBeenCalledTimes(1);
   });
+
+  it('offers and executes caption creation on video tracks', () => {
+    const onAddCaptionClip = vi.fn();
+    const model = createTimelineEmptyContextMenuModel({
+      time: 7.25,
+      trackId: 'video-track',
+      trackType: 'video',
+    });
+    const captionCommand = model.sceneCommands.find(
+      command => command.kind === 'add-caption-clip',
+    );
+
+    expect(captionCommand?.label).toBe('Add Caption Clip');
+    expect(executeTimelineEmptyContextMenuCommand(captionCommand!, {
+      onAddCaptionClip,
+      onEraseGap: vi.fn(),
+      onEraseLayerGaps: vi.fn(),
+      onEraseAllGaps: vi.fn(),
+      onFitCompToWindow: vi.fn(),
+    })).toBe(true);
+    expect(onAddCaptionClip).toHaveBeenCalledWith(7.25, 'video-track');
+  });
 });

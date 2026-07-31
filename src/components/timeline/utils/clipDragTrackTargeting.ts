@@ -24,6 +24,7 @@ const VISUAL_SOURCE_TYPES = new Set([
   'motion-shape',
   'motion-null',
   'motion-adjustment',
+  'storyboard',
 ]);
 
 export function getClipDragTrackRequirement(

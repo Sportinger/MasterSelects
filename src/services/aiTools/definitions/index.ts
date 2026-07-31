@@ -12,6 +12,7 @@ import { transformToolDefinitions } from './transform';
 import { effectToolDefinitions } from './effects';
 import { keyframeToolDefinitions } from './keyframes';
 import { textToolDefinitions } from './text';
+import { motionDesignToolDefinitions } from './motionDesign';
 import { playbackToolDefinitions } from './playback';
 import { transitionToolDefinitions } from './transitions';
 import { maskToolDefinitions } from './masks';
@@ -19,6 +20,7 @@ import { statsToolDefinitions } from './stats';
 import { nodeWorkspaceToolDefinitions } from './nodeWorkspace';
 import { workerFirstToolDefinitions } from './workerFirst';
 import { workerFirstRuntimeToolDefinitions } from './workerFirstRuntime';
+import { storyboardToolDefinitions } from './storyboard';
 
 // Combined tool definitions array (OpenAI function calling format)
 export const AI_TOOLS = [
@@ -34,6 +36,7 @@ export const AI_TOOLS = [
   ...effectToolDefinitions,
   ...keyframeToolDefinitions,
   ...textToolDefinitions,
+  ...motionDesignToolDefinitions,
   ...playbackToolDefinitions,
   ...transitionToolDefinitions,
   ...maskToolDefinitions,
@@ -41,6 +44,7 @@ export const AI_TOOLS = [
   ...workerFirstToolDefinitions,
   ...workerFirstRuntimeToolDefinitions,
   ...nodeWorkspaceToolDefinitions,
+  ...storyboardToolDefinitions,
 ];
 
 // Re-export individual definition sets for selective use
@@ -57,6 +61,7 @@ export {
   effectToolDefinitions,
   keyframeToolDefinitions,
   textToolDefinitions,
+  motionDesignToolDefinitions,
   playbackToolDefinitions,
   transitionToolDefinitions,
   maskToolDefinitions,
@@ -64,4 +69,5 @@ export {
   workerFirstToolDefinitions,
   workerFirstRuntimeToolDefinitions,
   nodeWorkspaceToolDefinitions,
+  storyboardToolDefinitions,
 };

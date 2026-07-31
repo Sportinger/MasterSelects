@@ -18,6 +18,12 @@ import type {
   TransitionSourceMap,
 } from '../../../types/timelineCore';
 import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
+import type { StoryboardClipProperties } from '../../../types/storyboard';
+import type {
+  CaptionClipProperties,
+  CaptionCompositionLink,
+  CaptionLayerBinding,
+} from '../../../types/caption';
 import type { MidiClipData, MidiClipAutomation, MidiInstrument } from '../../../types/midiClip';
 import type {
   ProjectClipAnalysis,
@@ -115,7 +121,7 @@ export interface ProjectClip {
   compositionId?: string;
 
   // Additional clip metadata (for restoration)
-  sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'light' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector' | 'math-scene' | 'transition-overlay' | 'motion-shape' | 'motion-null' | 'motion-adjustment' | 'lottie' | 'rive' | 'midi';
+  sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'light' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector' | 'math-scene' | 'transition-overlay' | 'motion-shape' | 'motion-null' | 'motion-adjustment' | 'storyboard' | 'lottie' | 'rive' | 'midi';
   // MIDI clip note data (issue #182); wired into save/load in the persistence phase
   midiData?: MidiClipData;
   // MIDI clip automation (issue #298): the four performed CC lanes as breakpoints
@@ -142,10 +148,15 @@ export interface ProjectClip {
 
   // Text clip support
   textProperties?: ProjectTextClipProperties;
+  captionProperties?: CaptionClipProperties;
+  captionLayerBinding?: CaptionLayerBinding;
   text3DProperties?: ProjectText3DProperties;
 
   // Solid clip support
   solidColor?: string;
+
+  // Storyboard scene-card projection
+  storyboardProperties?: StoryboardClipProperties;
 
   // Generated transition overlay clip support
   transitionOverlay?: TransitionOverlayClipDefinition;
@@ -185,6 +196,7 @@ export interface ProjectComposition {
   folderId: string | null;
   labelColor?: string;
   transitionComp?: TransitionCompositionLink;
+  captionComp?: CaptionCompositionLink;
 
   // Tracks and clips
   tracks: ProjectTrack[];

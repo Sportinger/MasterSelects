@@ -42,6 +42,11 @@ import {
   collectLegacyMediaArtifactSeeds,
   persistLegacyMediaArtifactSeeds,
 } from './load/loadMediaArtifactMigration';
+import { readStoryboardProjectState } from './storyboard';
+import {
+  hydrateStoryboardProjectState,
+  reconcileStoryboardTimelineClips,
+} from '../../stores/storyboardStore';
 
 export { setProjectLoadProgress } from './load/loadProgress';
 export { reloadNestedCompositionClips } from './load/loadTimelineHydration';
@@ -111,6 +116,7 @@ export async function loadProjectToStores(): Promise<void> {
       if (!parsedProject) return;
 
       const { projectData, hydrateFiles } = parsedProject;
+      hydrateStoryboardProjectState(readStoryboardProjectState(projectData).state);
       backgroundProjectData = projectData;
       backgroundHydrateFiles = hydrateFiles;
       const legacyArtifactSeeds = collectLegacyMediaArtifactSeeds(projectData);
@@ -196,6 +202,7 @@ export async function loadProjectToStores(): Promise<void> {
         mediaStateAfterNormalization.compositions,
         timelineStore,
       );
+      reconcileStoryboardTimelineClips(useTimelineStore.getState().clips);
 
       setProjectLoadProgress({ phase: 'ui', percent: 58, message: 'Restoring workspace', blocking: true });
       await hydrateDockFlashboardAndWorkspaceFromProject(projectData);

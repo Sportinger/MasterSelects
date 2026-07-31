@@ -76,6 +76,7 @@ export type ShortcutActionId =
   | 'history.redo'
   // Panels
   | 'panel.toggleHoveredFullscreen'
+  | 'view.toggleCurveMode'
   // Preview
   | 'preview.editMode'
   | 'preview.slot1'

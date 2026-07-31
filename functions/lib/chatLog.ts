@@ -1,4 +1,7 @@
-import { stringifyAiPayloadForStorage } from './aiAudit';
+import {
+  redactAiStorageText,
+  stringifyHostedChatPayloadForStorage,
+} from './aiAudit';
 import type { AppD1Database } from './env';
 
 export interface ChatLogRow {
@@ -136,9 +139,9 @@ export async function insertChatLog(
       input.requestId,
       input.idempotencyKey,
       input.model,
-      stringifyAiPayloadForStorage(input.messages),
-      stringifyAiPayloadForStorage(input.response),
-      toolCalls ? stringifyAiPayloadForStorage(toolCalls) : null,
+      stringifyHostedChatPayloadForStorage(input.messages),
+      stringifyHostedChatPayloadForStorage(input.response),
+      toolCalls ? stringifyHostedChatPayloadForStorage(toolCalls) : null,
       finishReason,
       tokensIn,
       tokensOut,
@@ -146,7 +149,7 @@ export async function insertChatLog(
       input.creditCost,
       input.durationMs,
       input.status,
-      input.errorMessage ?? null,
+      input.errorMessage ? redactAiStorageText(input.errorMessage) : null,
       new Date().toISOString(),
     )
     .run();

@@ -18,13 +18,107 @@ export interface AiAuditInput {
   userId: string;
 }
 
+const REDACTED = '[redacted]';
+const CONTENT_OMITTED = '[content omitted]';
+const SENSITIVE_KEY_PATTERN =
+  /^(?:authorization|cookie|password|passwd|secret|token|api[-_]?key|access[-_]?token|refresh[-_]?token|client[-_]?secret)$/i;
+const HOSTED_CHAT_CONTENT_KEY_PATTERN =
+  /^(?:system|instructions?|messages?|history|prompt|transcripts?|tool[-_]?results?|arguments|content|text|input|output|results?|response)$/i;
+const BINARY_KEY_PATTERN =
+  /^(?:base64|bytes|data|imageData|image_data|audioBase64|audio_base64|videoBase64|video_base64|fileData|file_data)$/i;
+const EXPLICIT_BINARY_KEY_PATTERN =
+  /^(?:base64|bytes|imageData|image_data|audioBase64|audio_base64|videoBase64|video_base64|fileData|file_data)$/i;
+const DATA_URL_PATTERN = /data:[^;,\s]+;base64,[a-z0-9+/_=\s-]+/gi;
+const BEARER_PATTERN = /\bBearer\s+[a-z0-9._~+/=-]+/gi;
+const API_KEY_ASSIGNMENT_PATTERN =
+  /\b(api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|secret|password)\s*[:=]\s*["']?[^\s"',;}]+/gi;
+const PROVIDER_KEY_PATTERN = /\b(?:sk|rk|pk|key)-[a-z0-9_-]{12,}\b/gi;
+
+export function redactAiStorageText(value: string): string {
+  return value
+    .replace(DATA_URL_PATTERN, (match) => (
+      /^data:image\//i.test(match) ? '[image data omitted]' : '[binary data omitted]'
+    ))
+    .replace(BEARER_PATTERN, `Bearer ${REDACTED}`)
+    .replace(API_KEY_ASSIGNMENT_PATTERN, (_match, label: string) => `${label}=${REDACTED}`)
+    .replace(PROVIDER_KEY_PATTERN, REDACTED);
+}
+
+function looksLikeBareBase64(value: string): boolean {
+  const compact = value.replace(/\s+/g, '');
+  return compact.length >= 64
+    && compact.length % 4 === 0
+    && /^[a-z0-9+/_=-]+$/i.test(compact);
+}
+
+function redactAiPayload(
+  value: unknown,
+  options: { omitHostedChatContent: boolean },
+  parentKey = '',
+  parentRecord?: Record<string, unknown>,
+): unknown {
+  if (typeof value === 'string') {
+    if (
+      EXPLICIT_BINARY_KEY_PATTERN.test(parentKey)
+      || (BINARY_KEY_PATTERN.test(parentKey)
+        && (parentRecord?.type === 'base64' || looksLikeBareBase64(value)))
+    ) {
+      return '[binary data omitted]';
+    }
+    return redactAiStorageText(value);
+  }
+
+  if (
+    value === null
+    || typeof value === 'number'
+    || typeof value === 'boolean'
+    || typeof value === 'undefined'
+  ) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => redactAiPayload(item, options, parentKey));
+  }
+
+  if (typeof value === 'object') {
+    const source = value as Record<string, unknown>;
+    const redacted: Record<string, unknown> = {};
+    for (const [key, nestedValue] of Object.entries(source)) {
+      if (SENSITIVE_KEY_PATTERN.test(key)) {
+        redacted[key] = REDACTED;
+      } else if (options.omitHostedChatContent && HOSTED_CHAT_CONTENT_KEY_PATTERN.test(key)) {
+        redacted[key] = CONTENT_OMITTED;
+      } else {
+        redacted[key] = redactAiPayload(nestedValue, options, key, source);
+      }
+    }
+    return redacted;
+  }
+
+  return redactAiStorageText(String(value));
+}
+
+export function redactAiPayloadForStorage(value: unknown): unknown {
+  return redactAiPayload(value, { omitHostedChatContent: false });
+}
+
+export function redactHostedChatPayloadForStorage(value: unknown): unknown {
+  return redactAiPayload(value, { omitHostedChatContent: true });
+}
+
 export function stringifyAiPayloadForStorage(value: unknown, maxLength?: number): string {
   try {
-    const serialized = JSON.stringify(value, (_key, nestedValue) => (
-      typeof nestedValue === 'string' && /^data:image\/[a-z0-9.+-]+;base64,/i.test(nestedValue)
-        ? '[image data omitted]'
-        : nestedValue
-    ));
+    const serialized = JSON.stringify(redactAiPayloadForStorage(value));
+    return typeof maxLength === 'number' ? serialized.slice(0, maxLength) : serialized;
+  } catch {
+    return '"[unserializable]"';
+  }
+}
+
+export function stringifyHostedChatPayloadForStorage(value: unknown, maxLength?: number): string {
+  try {
+    const serialized = JSON.stringify(redactHostedChatPayloadForStorage(value));
     return typeof maxLength === 'number' ? serialized.slice(0, maxLength) : serialized;
   } catch {
     return '"[unserializable]"';
@@ -73,9 +167,11 @@ export async function insertAiAuditEvent(context: AppContext, input: AiAuditInpu
       stringifyAiPayloadForStorage(input.moderation.categories, 24_000),
       input.providerTaskId ?? null,
       input.creditCost ?? 0,
-      input.errorMessage ?? input.moderation.errorMessage ?? null,
+      input.errorMessage || input.moderation.errorMessage
+        ? redactAiStorageText(input.errorMessage ?? input.moderation.errorMessage ?? '')
+        : null,
       ipHash,
-      (context.request.headers.get('user-agent') ?? '').slice(0, 300),
+      redactAiStorageText(context.request.headers.get('user-agent') ?? '').slice(0, 300),
       new Date().toISOString(),
     )
     .run();

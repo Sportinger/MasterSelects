@@ -62,7 +62,8 @@ The engine currently supports:
 ### Motion Shapes
 
 - `motion-shape` clips render through `src/engine/motion/MotionRenderer.ts`.
-- Rectangle and ellipse primitives are drawn with analytic WGSL SDFs into transparent `rgba8unorm` textures.
+- Rectangle, ellipse, polygon, and star primitives are drawn with analytic WGSL SDFs into transparent `rgba8unorm` textures.
+- A bounded uniform layout composites up to 8 ordered color-fill, stroke, linear-gradient, or radial-gradient appearances, with up to 8 stable stops per gradient and six shader blend modes.
 - Grid-replicated motion shapes use a per-shape instance buffer and instanced draws in the same shader path, capped at 100 instances for the current MVP.
 - The resulting texture view is composited through the normal `CompositorPipeline`, so masks, effects, blend mode, nested comps, preview targets, and export share the same downstream path.
 
@@ -166,7 +167,7 @@ Runtime flags are exposed on `window.__ENGINE_FLAGS__`.
 - `useLiveSlotTrigger` swaps slot-grid clicks from editor-open behavior to direct live triggering.
 - `useWarmSlotDecks` prepares reusable slot-owned live decks for faster layer adoption.
 - `use3DLayers` and `useGaussianSplat` are enabled in this branch.
-- `useMotionDesignSystem` exists for the motion-design rollout; current rectangle/ellipse render plumbing is additive for `motion-shape` clips.
+- Motion shape/appearance rendering and the Grid Replicator MVP are always part of the native layer path. The former `useMotionDesignSystem` and `useMotionReplicators` placeholders were retired because they never gated runtime behavior.
 
 ---
 

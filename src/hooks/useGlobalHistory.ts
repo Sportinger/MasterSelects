@@ -6,6 +6,12 @@ import { useMediaStore } from '../stores/mediaStore';
 import { useDockStore } from '../stores/dockStore';
 import { useFlashBoardStore } from '../stores/flashboardStore';
 import { useExportStore } from '../stores/exportStore';
+import {
+  getStoryboardProjectSnapshot,
+  hydrateStoryboardProjectState,
+  reconcileStoryboardTimelineClips,
+  useStoryboardStore,
+} from '../stores/storyboardStore';
 import type {
   FlashBoardActiveGenerationRecord,
   FlashBoardComposerState,
@@ -341,6 +347,10 @@ export function useGlobalHistory() {
         getState: useFlashBoardStore.getState,
         setState: useFlashBoardStore.setState,
       },
+      storyboard: {
+        getState: getStoryboardProjectSnapshot,
+        setState: hydrateStoryboardProjectState,
+      },
       export: {
         getState: useExportStore.getState,
         setState: useExportStore.setState,
@@ -438,6 +448,9 @@ export function useGlobalHistory() {
         masterAudioState: (state as { masterAudioState?: unknown }).masterAudioState,
       }),
       (curr, prev) => {
+        if (curr.clips !== prev.clips) {
+          reconcileStoryboardTimelineClips(curr.clips);
+        }
         if (isHistoryCaptureSuppressed()) return;
 
         // Skip captures during mask dragging — vertex updates fire at 60fps
@@ -572,6 +585,24 @@ export function useGlobalHistory() {
       { equalityFn: shallowEqual, fireImmediately: false }
     );
 
+    const unsubStoryboard = useStoryboardStore.subscribe((state, previous) => {
+      if (isHistoryCaptureSuppressed()) return;
+      if (
+        state.plans !== previous.plans
+        || state.scenes !== previous.scenes
+        || state.generationBriefs !== previous.generationBriefs
+        || state.candidates !== previous.candidates
+        || state.evidenceRefs !== previous.evidenceRefs
+        || state.coverageBySceneId !== previous.coverageBySceneId
+        || state.variantSets !== previous.variantSets
+        || state.variantOptions !== previous.variantOptions
+        || state.decisions !== previous.decisions
+        || state.templates !== previous.templates
+      ) {
+        debouncedCapture('Modify storyboard');
+      }
+    });
+
     const unsubExport = useExportStore.subscribe(
       (state) => ({
         settings: state.settings,
@@ -601,6 +632,7 @@ export function useGlobalHistory() {
       unsubMedia();
       unsubDock();
       unsubFlashBoard();
+      unsubStoryboard();
       unsubExport();
     };
   }, []);

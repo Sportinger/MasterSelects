@@ -28,6 +28,8 @@ import type {
 } from '../../../types/motionDesign';
 import type { Composition } from '../../mediaStore';
 import type { MeshPrimitiveType } from '../../mediaStore/types';
+import type { CaptionClipActions } from './captionClipActionTypes';
+import type { StoryboardClipActions } from './storyboardClipActionTypes';
 
 export interface TextClipActions {
   addTextClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => Promise<string | null>;
@@ -274,7 +276,9 @@ export interface CoreClipActions {
 export type ClipActions =
   CoreClipActions &
   TextClipActions &
+  CaptionClipActions &
   SolidClipActions &
+  StoryboardClipActions &
   MidiClipActions &
   MathSceneClipActions &
   MotionClipActions &

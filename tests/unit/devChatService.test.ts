@@ -12,6 +12,7 @@ import {
   clearStoredDevChatConversationId,
   fetchDevChatMessages,
   getStoredDevChatConversationId,
+  getStoredDevChatConversations,
   sendDevChatMessage,
   storeDevChatConversationId,
 } from '../../src/services/devChatService';
@@ -22,16 +23,54 @@ describe('developer chat service', () => {
     requestJsonMock.mockReset();
   });
 
-  it('keeps the conversation id in browser storage', () => {
+  it('keeps previous conversations in browser storage when the active chat is cleared', () => {
     expect(getStoredDevChatConversationId()).toBeUndefined();
 
-    storeDevChatConversationId('conversation-123');
+    storeDevChatConversationId('conversation-123', {
+      createdAt: '2026-07-29T18:00:00.000Z',
+      preview: 'Can you help?',
+    });
 
     expect(getStoredDevChatConversationId()).toBe('conversation-123');
+    expect(getStoredDevChatConversations()).toEqual([
+      expect.objectContaining({
+        createdAt: '2026-07-29T18:00:00.000Z',
+        id: 'conversation-123',
+        preview: 'Can you help?',
+      }),
+    ]);
 
     clearStoredDevChatConversationId();
 
     expect(getStoredDevChatConversationId()).toBeUndefined();
+    expect(getStoredDevChatConversations()).toEqual([
+      expect.objectContaining({
+        id: 'conversation-123',
+        preview: 'Can you help?',
+      }),
+    ]);
+  });
+
+  it('stores multiple conversations and makes a selected chat active again', () => {
+    storeDevChatConversationId('conversation-1', {
+      createdAt: '2026-07-29T18:00:00.000Z',
+      preview: 'First topic',
+    });
+    storeDevChatConversationId('conversation-2', {
+      createdAt: '2026-07-29T19:00:00.000Z',
+      preview: 'Second topic',
+    });
+
+    expect(getStoredDevChatConversations().map((conversation) => conversation.id))
+      .toEqual(['conversation-2', 'conversation-1']);
+
+    storeDevChatConversationId('conversation-1');
+
+    expect(getStoredDevChatConversationId()).toBe('conversation-1');
+    expect(getStoredDevChatConversations()[0]).toMatchObject({
+      id: 'conversation-1',
+      preview: 'First topic',
+    });
   });
 
   it('sends a new message using the public support-chat contract', async () => {

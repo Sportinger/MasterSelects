@@ -11,6 +11,20 @@ import {
   parseVectorAnimationStateProperty,
 } from '../../../types/vectorAnimation';
 
+export interface CurveValueRange {
+  min: number;
+  max: number;
+}
+
+export interface CurveValueRangeOptions {
+  fallback: CurveValueRange & { fallbackPad: number };
+  bounds?: {
+    min?: number;
+    max?: number;
+  };
+  paddingRatio?: number;
+}
+
 export function getPropertyDefaults(property: AnimatableProperty): { min: number; max: number; fallbackPad: number } {
   const maskProperty = parseMaskProperty(property);
   if (maskProperty?.property === 'path') {
@@ -69,6 +83,90 @@ export function niceStep(range: number, targetLines: number = 5): number {
   else nice = 10;
 
   return nice * magnitude;
+}
+
+export function computeCurveValueRange(
+  values: readonly number[],
+  options: CurveValueRangeOptions,
+): CurveValueRange {
+  const finiteValues = values.filter(Number.isFinite);
+  const boundedMin = Number.isFinite(options.bounds?.min)
+    ? options.bounds?.min
+    : undefined;
+  const boundedMax = Number.isFinite(options.bounds?.max)
+    ? options.bounds?.max
+    : undefined;
+
+  if (boundedMin !== undefined && boundedMax !== undefined && boundedMax > boundedMin) {
+    return { min: boundedMin, max: boundedMax };
+  }
+
+  if (finiteValues.length === 0) {
+    const fallbackMin = boundedMin ?? options.fallback.min;
+    const fallbackMax = boundedMax ?? options.fallback.max;
+    if (fallbackMax > fallbackMin) return { min: fallbackMin, max: fallbackMax };
+    return { min: fallbackMin - 1, max: fallbackMin + 1 };
+  }
+
+  let min = Math.min(...finiteValues);
+  let max = Math.max(...finiteValues);
+  const range = max - min;
+  if (range > 0) {
+    const pad = range * (options.paddingRatio ?? 0.1);
+    min -= pad;
+    max += pad;
+  } else {
+    const pad = Math.max(Math.abs(min) * 0.1, options.fallback.fallbackPad) || 1;
+    min -= pad;
+    max += pad;
+  }
+
+  if (boundedMin !== undefined) min = Math.max(boundedMin, min);
+  if (boundedMax !== undefined) max = Math.min(boundedMax, max);
+  if (max <= min) {
+    const pad = options.fallback.fallbackPad || 1;
+    if (boundedMin !== undefined) return { min: boundedMin, max: boundedMin + pad };
+    if (boundedMax !== undefined) return { min: boundedMax - pad, max: boundedMax };
+    return { min: min - pad, max: max + pad };
+  }
+  return { min, max };
+}
+
+export function curveValueToY(
+  value: number,
+  range: CurveValueRange,
+  height: number,
+  padding: { top: number; bottom: number },
+): number {
+  const drawableHeight = Math.max(1, height - padding.top - padding.bottom);
+  const span = Math.max(Number.EPSILON, range.max - range.min);
+  const normalized = (value - range.min) / span;
+  return height - padding.bottom - normalized * drawableHeight;
+}
+
+export function curveYToValue(
+  y: number,
+  range: CurveValueRange,
+  height: number,
+  padding: { top: number; bottom: number },
+): number {
+  const drawableHeight = Math.max(1, height - padding.top - padding.bottom);
+  const normalized = (height - padding.bottom - y) / drawableHeight;
+  return range.min + normalized * (range.max - range.min);
+}
+
+export function formatCurveAuthoringValue(
+  value: number,
+  unit?: string,
+  step?: number,
+): string {
+  if (unit === '%') return `${(value * 100).toFixed(0)}%`;
+  const precision = step !== undefined && step > 0
+    ? Math.min(6, Math.max(0, Math.ceil(-Math.log10(step))))
+    : Math.abs(value) >= 100 ? 0 : Math.abs(value) >= 10 ? 1 : 2;
+  const formatted = value.toFixed(precision);
+  if (unit === 'deg' || unit === 'degree' || unit === 'degrees') return `${formatted}°`;
+  return unit ? `${formatted} ${unit}` : formatted;
 }
 
 export function generateBezierPath(

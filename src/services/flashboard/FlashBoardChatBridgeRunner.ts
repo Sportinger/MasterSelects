@@ -5,6 +5,7 @@ import {
 } from '../../stores/flashboardStore';
 import { useSettingsStore, type AIProvider } from '../../stores/settingsStore';
 import { DEFAULT_LEMONADE_MODEL } from '../lemonadeProvider';
+import { createAgentActivityEvent } from './FlashBoardChatActivity';
 import {
   DEFAULT_FLASHBOARD_CHAT_MODEL,
   DEFAULT_FLASHBOARD_CHAT_TEMPERATURE,
@@ -18,6 +19,7 @@ import {
   type FlashBoardChatRunRecord,
 } from './FlashBoardChatService';
 import type {
+  AgentActivityEvent,
   FlashBoardChatPromptVersion,
   FlashBoardChatProvider,
   FlashBoardChatRunSource,
@@ -32,6 +34,7 @@ export interface FlashBoardBridgeChatTurnInput {
   includeHistory?: boolean;
   includePlaybook?: boolean;
   model?: string;
+  onActivityEvent?: (event: AgentActivityEvent) => void;
   onExecutedToolCalls?: (toolCalls: FlashBoardExecutedToolCall[]) => void;
   onKernelProgress?: import('../kernelClient/runProgress').KernelProgressReporter;
   onKernelReport?: (report: KernelRunReport) => void;
@@ -104,13 +107,30 @@ export async function runFlashBoardBridgeChatTurn(
       lemonadeContextSize: settings.lemonadeContextSize,
       lemonadeEndpoint: settings.lemonadeEndpoint,
       model,
+      onActivityEvent: (event) => {
+        if (messageIds) appendPendingActivity(messageIds.assistantId, event);
+        input.onActivityEvent?.(event);
+      },
       onExecutedToolCalls: (calls) => {
         toolCalls.push(...calls);
         input.onExecutedToolCalls?.(calls);
       },
-      ...(input.onKernelProgress === undefined
-        ? {}
-        : { onKernelProgress: input.onKernelProgress }),
+      onKernelProgress: (progress) => {
+        input.onKernelProgress?.(progress);
+        if (!messageIds) return;
+        updatePendingKernelProgress(messageIds.assistantId, progress);
+        appendPendingActivity(
+          messageIds.assistantId,
+          createAgentActivityEvent(messageIds.assistantId, {
+            kind: 'progress',
+            label: progress.detail
+              ? `${progress.label}: ${progress.detail}`
+              : progress.label,
+            ...(progress.current === undefined ? {} : { current: progress.current }),
+            ...(progress.total === undefined ? {} : { total: progress.total }),
+          }),
+        );
+      },
       // Without this a bridge-initiated kernel turn persists as a plain text
       // bubble, while the same turn from the UI renders as a run card.
       onKernelReport: (report) => {
@@ -249,6 +269,39 @@ function appendPendingMessages(
         ],
   }));
   return { assistantId, userId };
+}
+
+function appendPendingActivity(
+  assistantId: string,
+  event: AgentActivityEvent | null,
+): void {
+  if (!event) return;
+  useFlashBoardStore.setState((state) => ({
+    chatMessages: state.chatMessages.map((message): FlashBoardChatMessage => (
+      message.id === assistantId && message.isPending
+        ? {
+            ...message,
+            activityEvents: [
+              ...(message.activityEvents ?? []).filter((candidate) => candidate.id !== event.id),
+              event,
+            ].slice(-100),
+          }
+        : message
+    )),
+  }));
+}
+
+function updatePendingKernelProgress(
+  assistantId: string,
+  progress: import('../kernelClient/runProgress').KernelProgressEvent,
+): void {
+  useFlashBoardStore.setState((state) => ({
+    chatMessages: state.chatMessages.map((message): FlashBoardChatMessage => (
+      message.id === assistantId && message.isPending
+        ? { ...message, kernelProgress: progress, text: progress.label }
+        : message
+    )),
+  }));
 }
 
 function completePendingMessage(

@@ -98,23 +98,9 @@ export const CLOUD_AI_PRICE_ROWS: readonly CloudAiPriceRow[] = [
   },
   {
     category: 'Chat',
-    credits: 1,
-    name: 'OpenAI Cloud Chat',
-    note: 'mini and nano models',
-    unit: 'request',
-  },
-  {
-    category: 'Chat',
-    credits: 5,
-    name: 'OpenAI Cloud Chat',
-    note: 'standard hosted chat models',
-    unit: 'request',
-  },
-  {
-    category: 'Chat',
-    credits: 50,
-    name: 'OpenAI Cloud Chat',
-    note: 'deep reasoning upper tier',
-    unit: 'request',
+    credits: HOSTED_KIE_CREDIT_MULTIPLIER,
+    name: 'Hosted Agent Chat',
+    note: 'exact cumulative Kie.ai usage',
+    unit: 'Kie credit',
   },
 ];

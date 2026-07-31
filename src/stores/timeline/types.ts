@@ -59,12 +59,14 @@ export type {
 } from './editOperations/types';
 export type * from './storeTypes/audioActionTypes';
 export type * from './storeTypes/clipboardTypes';
+export type * from './storeTypes/captionClipActionTypes';
 export type * from './storeTypes/clipActionTypes';
 export type * from './storeTypes/feedbackTypes';
 export type * from './storeTypes/maskActionTypes';
 export type * from './storeTypes/playbackActionTypes';
 export type * from './storeTypes/regionTypes';
 export type * from './storeTypes/stemJobTypes';
+export type * from './storeTypes/storyboardClipActionTypes';
 export type * from './storeTypes/timelineStateTypes';
 export type * from './storeTypes/timelineStoreTypes';
 export type * from './storeTypes/toolTypes';

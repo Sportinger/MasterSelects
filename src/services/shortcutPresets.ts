@@ -83,6 +83,7 @@ export const ACTION_META: ShortcutActionMeta[] = [
   { id: 'history.redo', label: 'Redo', category: 'History' },
   // Panels
   { id: 'panel.toggleHoveredFullscreen', label: 'Toggle Hovered Tab Fullscreen', category: 'Panels' },
+  { id: 'view.toggleCurveMode', label: 'Toggle Timeline / Graph View', category: 'Panels' },
   // Preview
   { id: 'preview.editMode', label: 'Toggle Edit Mode', category: 'Preview' },
   { id: 'preview.slot1', label: 'Preview Slot 1', category: 'Preview' },
@@ -140,6 +141,7 @@ const BASE_MAP: ShortcutMap = {
   'history.redo': [{ key: 'z', ctrl: true, shift: true }, { key: 'y', ctrl: true }],
   // Panels
   'panel.toggleHoveredFullscreen': [{ key: 'ü' }],
+  'view.toggleCurveMode': [{ key: 'g' }],
   // Overridden per preset:
   'tool.select': [{ key: 'v' }],
   'tool.selectionGroup': [{ key: 'a' }],

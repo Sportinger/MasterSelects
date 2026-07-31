@@ -45,6 +45,10 @@
   overflow: hidden;
 }
 
+.fb-bubble.has-references.has-chat-panel {
+  overflow: visible;
+}
+
 .fb-bubble-main {
   display: flex;
   min-width: 0;

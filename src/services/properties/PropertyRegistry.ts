@@ -71,7 +71,7 @@ export class PropertyRegistry {
 
   getDescriptor(path: string, clip?: TimelineClip): PropertyDescriptor | undefined {
     const exact = this.descriptors.get(path);
-    if (exact) {
+    if (exact && (!clip || !exact.catalogOnly)) {
       return exact;
     }
 
@@ -82,11 +82,15 @@ export class PropertyRegistry {
       }
     }
 
-    return undefined;
+    return clip ? undefined : exact;
   }
 
   getAllDescriptors(clip?: TimelineClip): PropertyDescriptor[] {
-    const descriptors = new Map(this.descriptors);
+    const descriptors = new Map(
+      Array.from(this.descriptors.entries()).filter(([, descriptor]) => (
+        !clip || !descriptor.catalogOnly
+      )),
+    );
 
     if (clip) {
       for (const provider of this.providers.values()) {

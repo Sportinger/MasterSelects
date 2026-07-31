@@ -19,14 +19,16 @@ import { useTimelineCompositionSwitchState } from './hooks/useTimelineCompositio
 import { useTimelineRootStoreState } from './hooks/useTimelineRootStoreState';
 import { useTimelineRenderedTrackMetrics } from './hooks/useTimelineRenderedTrackMetrics';
 import { useTimelineHostRefs } from './hooks/useTimelineHostRefs';
-import { useTimelineToolbarChromeController } from './hooks/useTimelineToolbarChromeController';
+import { useTimelineToolbarHostController } from './hooks/useTimelineToolbarHostController';
 import { useTimelineRootChromeController } from './hooks/useTimelineRootChromeController';
 import { useTimelinePlaybackController } from './hooks/useTimelinePlaybackController';
 import { useTimelineInteractionController } from './hooks/useTimelineInteractionController';
 import { useTimelineSurfaceController } from './hooks/useTimelineSurfaceController';
 import { useTimelineTrackStackController } from './hooks/useTimelineTrackStackController';
+import { useTimelineGraphHostController } from './hooks/useTimelineGraphHostController';
 
 export function Timeline() {
+  const timelineRootState = useTimelineRootStoreState();
   const {
     activeComposition,
     activeTimelineToolId,
@@ -51,7 +53,6 @@ export function Timeline() {
     isExporting,
     isPlaying,
     isRamPreviewing,
-    loopPlayback,
     markers,
     mediaFiles,
     openCompositionTab,
@@ -66,7 +67,6 @@ export function Timeline() {
     scrollX,
     selectedClipIds,
     selectedKeyframeIds,
-    showAudioRegionEditMarkers,
     showInExplorer,
     slotGridProgress,
     snappingEnabled,
@@ -84,7 +84,7 @@ export function Timeline() {
     videoBakeRegions,
     waveformsEnabled,
     zoom,
-  } = useTimelineRootStoreState();
+  } = timelineRootState;
 
   const {
     actions: timelineActions,
@@ -140,6 +140,7 @@ export function Timeline() {
 
   // Time helpers - extracted to hook
   const compositionFrameRate = activeComposition?.frameRate ?? 30;
+  const timelineHelpers = useTimelineHelpers({ zoom, frameRate: compositionFrameRate, clips, getClipKeyframes: timelineActions.getClipKeyframes });
   const {
     timeToPixel,
     pixelToTime,
@@ -149,7 +150,7 @@ export function Timeline() {
     parseTime,
     getClipsAtTime,
     getSnapTargetTimes,
-  } = useTimelineHelpers({ zoom, frameRate: compositionFrameRate, clips, getClipKeyframes: timelineActions.getClipKeyframes });
+  } = timelineHelpers;
 
   const {
     activeJunction,
@@ -253,6 +254,34 @@ export function Timeline() {
     videoBakeRegionSelection,
   });
 
+  const timelineTrackStack = useTimelineTrackStackController({
+    audioDisplayMode,
+    audioFocusMode,
+    clipDrag,
+    clipKeyframes,
+    clips,
+    expandedCurveProperties,
+    externalDrag,
+    getExpandedTrackHeight: timelineActions.getExpandedTrackHeight,
+    getRenderedTrackBaseHeight,
+    isExporting,
+    isTrackExpandedForRender,
+    keyframeLayoutInputs,
+    propertiesSelection,
+    scrollWrapperRef,
+    selectedClipIds,
+    setTimelineSplitRatio: timelineActions.setTimelineSplitRatio,
+    setTrackFocusMode: timelineActions.setTrackFocusMode,
+    timelineBodyRef,
+    timelineRef,
+    timelineSplitRatio,
+    timelineViewTrackMap,
+    timelineViewTracks,
+    trackFocusMode,
+    trackHeaderWidth,
+    trackMap,
+    tracks,
+  });
   const {
     videoTracks,
     audioTracks,
@@ -293,33 +322,18 @@ export function Timeline() {
     setScrollY,
     handleSectionWheel,
     handleTrackHeightWheel,
-  } = useTimelineTrackStackController({
-    audioDisplayMode,
-    audioFocusMode,
-    clipDrag,
-    clipKeyframes,
-    clips,
-    expandedCurveProperties,
-    externalDrag,
-    getExpandedTrackHeight: timelineActions.getExpandedTrackHeight,
-    getRenderedTrackBaseHeight,
-    isExporting,
-    isTrackExpandedForRender,
-    keyframeLayoutInputs,
-    propertiesSelection,
-    scrollWrapperRef,
-    selectedClipIds,
-    setTimelineSplitRatio: timelineActions.setTimelineSplitRatio,
-    setTrackFocusMode: timelineActions.setTrackFocusMode,
-    timelineBodyRef,
-    timelineRef,
-    timelineSplitRatio,
-    timelineViewTrackMap,
-    timelineViewTracks,
-    trackFocusMode,
-    trackHeaderWidth,
-    trackMap,
-    tracks,
+  } = timelineTrackStack;
+
+  const {
+    globalCurveEditor,
+    openTimelineGraphForProperty,
+    timelineCurveMode,
+    toggleTimelineCurveMode,
+  } = useTimelineGraphHostController({
+    rootState: timelineRootState,
+    timelineActions,
+    timelineHelpers,
+    timelineTrackStack,
   });
 
   useTimelinePlaybackController({
@@ -350,6 +364,7 @@ export function Timeline() {
     selectedKeyframeIds,
     snappingEnabled,
     timelineActions,
+    toggleTimelineCurveMode,
     timelineRef,
     toolMode,
     tracks,
@@ -479,45 +494,17 @@ export function Timeline() {
   const {
     timelineControlsProps,
     timelineToolbarProps,
-  } = useTimelineToolbarChromeController({
-    isPlaying,
-    loopPlayback,
-    playheadPosition,
-    duration,
-    zoom,
-    snappingEnabled,
-    inPoint,
-    outPoint,
-    proxyEnabled,
-    currentlyGeneratingProxyId,
-    mediaFiles,
-    thumbnailsEnabled,
-    waveformsEnabled,
-    audioDisplayMode,
-    audioFocusMode,
-    showAudioRegionEditMarkers,
-    trackFocusMode,
-    toolMode,
-    onPlay: timelineActions.play,
-    onPause: timelineActions.pause,
-    onStop: timelineActions.stop,
-    onToggleLoop: timelineActions.toggleLoopPlayback,
-    onSetZoom: handleSetZoom,
-    onToggleSnapping: timelineActions.toggleSnapping,
-    onToggleThumbnails: timelineActions.toggleThumbnailsEnabled,
-    onToggleWaveforms: timelineActions.toggleWaveformsEnabled,
-    onSetAudioDisplayMode: timelineActions.setAudioDisplayMode,
-    onToggleAudioFocusMode: timelineActions.toggleAudioFocusMode,
-    onToggleAudioRegionEditMarkers: timelineActions.toggleAudioRegionEditMarkers,
-    onSetTrackFocusMode: timelineActions.setTrackFocusMode,
-    onToggleCutTool: timelineActions.toggleCutTool,
-    onFitToWindow: handleFitToWindow,
-    onToggleSlotGrid: handleToggleSlotGrid,
-    slotGridProgress,
+  } = useTimelineToolbarHostController({
     formatTime,
     frameRate: compositionFrameRate,
+    handleFitToWindow,
+    handleSetZoom,
+    handleToggleSlotGrid,
     parseTime,
-    setDuration: timelineActions.setDuration,
+    rootState: timelineRootState,
+    timelineActions,
+    timelineCurveMode,
+    toggleTimelineCurveMode,
   });
 
   const bodySurfaceProps = useTimelineSurfaceController({
@@ -618,7 +605,7 @@ export function Timeline() {
     onSplitDividerMouseDown: handleSplitDividerMouseDown,
     onTimelineMarkerContextMenu: handleTimelineMarkerContextMenu,
     onTimelineMarkerMouseDown: handleTimelineMarkerMouseDown,
-    onToggleCurveExpanded: timelineActions.toggleCurveExpanded,
+    onToggleCurveExpanded: openTimelineGraphForProperty,
     onToggleAudioLayerAdvancedMode: timelineActions.toggleAudioLayerAdvancedMode,
     onTrackDragEnter: handleTrackDragEnter,
     onTrackFocusStep: handleTrackFocusStep,
@@ -688,7 +675,11 @@ export function Timeline() {
     <TimelineRootShell {...rootShellProps}>
       <TimelineToolbarChrome {...timelineToolbarProps} />
       <TimelineSlotGridChrome {...slotGridChromeProps} />
-      <TimelineBodySurface {...bodySurfaceProps} />
+      <TimelineBodySurface
+        {...bodySurfaceProps}
+        timelineCurveMode={timelineCurveMode}
+        globalCurveEditor={globalCurveEditor}
+      />
 
       <TimelineNavigatorChrome {...navigatorChromeProps} />
 

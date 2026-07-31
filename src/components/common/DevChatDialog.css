@@ -3,16 +3,13 @@
     position: fixed;
     inset: 0;
     z-index: 10020;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    background: rgba(5, 8, 13, 0.72);
-    backdrop-filter: blur(7px);
-    animation: dev-chat-backdrop-in 140ms ease-out both;
+    pointer-events: none;
+    background: transparent;
+    backdrop-filter: none;
   }
 
   .dev-chat-dialog {
+    position: fixed;
     display: flex;
     width: min(460px, calc(100vw - 32px));
     max-height: min(640px, calc(100vh - 48px));
@@ -25,7 +22,13 @@
       var(--bg-secondary);
     color: var(--text-primary);
     box-shadow: 0 28px 80px rgba(0, 0, 0, 0.58);
+    pointer-events: auto;
     animation: dev-chat-dialog-in 160ms ease-out both;
+  }
+
+  .dev-chat-dialog.is-dragging {
+    cursor: grabbing;
+    user-select: none;
   }
 
   .dev-chat-accent {
@@ -39,6 +42,12 @@
     justify-content: space-between;
     padding: 18px 20px 14px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    cursor: grab;
+    user-select: none;
+  }
+
+  .dev-chat-dialog.is-dragging .dev-chat-header {
+    cursor: grabbing;
   }
 
   .dev-chat-header h2 {
@@ -70,6 +79,28 @@
     display: flex;
     align-items: center;
     gap: 5px;
+  }
+
+  .dev-chat-history select {
+    width: 148px;
+    height: 28px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 7px;
+    outline: none;
+    background: rgba(6, 8, 12, 0.32);
+    color: var(--text-secondary);
+    padding: 0 24px 0 8px;
+    font: inherit;
+    font-size: 9px;
+    cursor: pointer;
+    text-overflow: ellipsis;
+  }
+
+  .dev-chat-history select:hover:not(:disabled),
+  .dev-chat-history select:focus-visible {
+    border-color: rgba(216, 100, 100, 0.38);
+    background: rgba(6, 8, 12, 0.5);
+    color: var(--text-primary);
   }
 
   .dev-chat-new {
@@ -290,6 +321,7 @@
   }
 
   .dev-chat-send:disabled,
+  .dev-chat-history select:disabled,
   .dev-chat-new:disabled,
   .dev-chat-close:disabled {
     cursor: not-allowed;
@@ -317,13 +349,14 @@
     background: rgba(255, 255, 255, 0.82);
   }
 
+  [data-theme="light"] .dev-chat-history select {
+    border-color: rgba(0, 0, 0, 0.12);
+    background: rgba(255, 255, 255, 0.72);
+  }
+
   [data-theme="light"] .dev-chat-message.user p {
     border-color: rgba(0, 0, 0, 0.1);
     background: rgba(0, 0, 0, 0.045);
-  }
-
-  @keyframes dev-chat-backdrop-in {
-    from { opacity: 0; }
   }
 
   @keyframes dev-chat-dialog-in {
@@ -338,23 +371,21 @@
   }
 
   @media (max-width: 520px) {
-    .dev-chat-backdrop {
-      align-items: flex-end;
-      padding: 12px;
-    }
-
     .dev-chat-dialog {
-      width: 100%;
+      width: calc(100vw - 24px);
       max-height: calc(100vh - 24px);
     }
 
     .dev-chat-messages {
       min-height: 180px;
     }
+
+    .dev-chat-history select {
+      width: 112px;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .dev-chat-backdrop,
     .dev-chat-dialog,
     .dev-chat-spinner {
       animation: none;

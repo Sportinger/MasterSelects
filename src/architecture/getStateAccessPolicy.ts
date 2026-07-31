@@ -2,35 +2,7 @@
   path: string;
   maxCurrentHits: number;
 }
-export const allowedAdapterPaths = [
-  'src/services/aiTools/**',
-  'src/services/guidedActions/**',
-  'src/components/guidedActions/**',
-  'src/services/project/**',
-  'src/services/projectFileService.ts',
-  'src/stores/historyStore/**',
-  'src/stores/dockStore/**',
-  'src/services/midi/**',
-  'src/hooks/useMIDIRuntime.ts',
-  'src/services/sam2/**',
-  'src/services/matanyone/**',
-  'src/services/muscriptor/**',
-  'src/services/flashboard/**',
-  'src/services/mediaArtifacts/**',
-  'src/services/mediaRuntime/**',
-  'src/services/timeline/timelineRuntimeCoordinator.ts',
-  'src/services/timeline/runtimeCoordinatorTypes.ts',
-  'src/services/timeline/runtimeCoordinatorContracts.ts',
-  'src/services/timeline/timelineTransitionMediaDurations.ts',
-  'src/services/audio/AudioRecordingService.ts',
-  'src/services/audio/recording/commitRecording.ts',
-  'src/services/audio/timelineRecordingWorkflow.ts',
-  'src/services/capture/recording/commitRecording.ts',
-  'src/services/capture/recording/webCodecsBackend.ts',
-  'src/services/export/**',
-  'src/services/render/**',
-  'src/editorBoot.ts',
-] as const;
+export { allowedAdapterPaths } from './getStateAllowedAdapterPaths';
 export const classCHardTargets = [
   { path: 'src/components/common/MatAnyoneSetupDialog.tsx', maxCurrentHits: 4 },
   { path: 'src/components/common/Toolbar.tsx', maxCurrentHits: 2 },
@@ -115,6 +87,7 @@ export const classCHardTargets = [
   { path: 'src/components/timeline/hooks/useMidiClipDraw.ts', maxCurrentHits: 2 },
   { path: 'src/components/timeline/hooks/usePlaybackLoop.ts', maxCurrentHits: 4 },
   { path: 'src/components/timeline/hooks/useTimelineKeyboard.ts', maxCurrentHits: 9 },
+  { path: 'src/components/timeline/hooks/useTimelineGraphPanelResize.ts', maxCurrentHits: 2 },
   { path: 'src/components/timeline/hooks/useTimelinePlayheadDisplay.ts', maxCurrentHits: 1 },
   { path: 'src/components/timeline/hooks/useTimelineSourceMonitorDismiss.ts', maxCurrentHits: 1 },
   { path: 'src/components/timeline/hooks/useTimelineSplitDividerDrag.ts', maxCurrentHits: 2 },
@@ -262,6 +235,7 @@ export const classCHardTargets = [
   { path: 'src/stores/sliceStore.ts', maxCurrentHits: 5 },
   { path: 'src/stores/timeline/audioEdit/audioBakeActions.ts', maxCurrentHits: 2 },
   { path: 'src/stores/timeline/cameraClipSlice.ts', maxCurrentHits: 1 },
+  { path: 'src/stores/timeline/captionClipSlice.ts', maxCurrentHits: 3 },
   { path: 'src/stores/timeline/clip/addAudioClip.ts', maxCurrentHits: 2 },
   { path: 'src/stores/timeline/clip/addClipMediaSource.ts', maxCurrentHits: 1 },
   { path: 'src/stores/timeline/clip/addImageClip.ts', maxCurrentHits: 1 },
@@ -272,9 +246,11 @@ export const classCHardTargets = [
   { path: 'src/stores/timeline/clip/upgradeToNativeDecoder.ts', maxCurrentHits: 6 },
   { path: 'src/stores/timeline/clip/videoLinkedAudioLoader.ts', maxCurrentHits: 1 },
   { path: 'src/stores/timeline/clip/videoThumbnailLoader.ts', maxCurrentHits: 1 },
+  { path: 'src/stores/timeline/clipSlice.ts', maxCurrentHits: 1 },
   { path: 'src/stores/timeline/clipboardSlice.ts', maxCurrentHits: 1 },
   { path: 'src/stores/timeline/constants.ts', maxCurrentHits: 2 },
   { path: 'src/stores/timeline/editOperations/transitionCompositionMaintenance.ts', maxCurrentHits: 1 },
+  { path: 'src/stores/timeline/editOperations/keyframeTransactionOperations.ts', maxCurrentHits: 2 },
   { path: 'src/stores/timeline/keyframes/vectorAnimationKeyframeValues.ts', maxCurrentHits: 3 },
   { path: 'src/stores/timeline/mathSceneClipSlice.ts', maxCurrentHits: 1 },
   { path: 'src/stores/timeline/meshClipSlice.ts', maxCurrentHits: 1 },
@@ -293,7 +269,7 @@ export const classCHardTargets = [
 ] as const satisfies readonly GetStateClassCHardTarget[];
 
 export const getStateAccessPolicyBaselines = {
-  allowedAdapterPathCount: 27,
-  classCHardTargetFileCount: 245, // +3 classified landing-background workflow files
-  classCHardTargetMaxHits: 708, // +19 classified landing-background workflow accesses
+  allowedAdapterPathCount: 30,
+  classCHardTargetFileCount: 249,
+  classCHardTargetMaxHits: 716,
 } as const;

@@ -1,5 +1,6 @@
 import type { Layer, LayerRenderData } from '../../core/types';
 import type { LayerCollectorDeps } from '../LayerCollector';
+import { getOrientedVideoDimensions } from '../../webcodecs/videoTrackOrientation';
 
 export function collectNativeDecoderFrame(
   layer: Layer,
@@ -40,12 +41,18 @@ export function collectParallelVideoFrame(
     return null;
   }
 
+  const displaySize = getOrientedVideoDimensions(
+    frame.displayWidth,
+    frame.displayHeight,
+    layer.source?.videoRotation ?? 0,
+  );
+
   return {
     layer,
     isVideo: true,
     externalTexture: extTex,
     textureView: null,
-    sourceWidth: frame.displayWidth,
-    sourceHeight: frame.displayHeight,
+    sourceWidth: displaySize.width,
+    sourceHeight: displaySize.height,
   };
 }

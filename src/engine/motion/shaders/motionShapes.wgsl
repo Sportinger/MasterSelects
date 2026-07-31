@@ -1,3 +1,8 @@
+const MAX_APPEARANCES: u32 = 8u;
+const MAX_GRADIENT_STOPS: u32 = 8u;
+const MAX_REGULAR_VERTICES: u32 = 64u;
+const PI: f32 = 3.141592653589793;
+
 struct VertexOutput {
   @builtin(position) position: vec4f,
   @location(0) localPoint: vec2f,
@@ -7,31 +12,27 @@ struct VertexOutput {
 struct MotionUniforms {
   // shape width/height, output texture width/height
   data0: vec4f,
-  // corner radius, shape type, fill opacity, stroke opacity
+  // corner radius, shape type, appearance count, maximum stroke padding
   data1: vec4f,
-  fillColor: vec4f,
-  strokeColor: vec4f,
-  // stroke width, stroke visible, stroke alignment, unused
+  // polygon points/radius/corner radius, star points
   data2: vec4f,
+  // star outer radius/inner radius/corner radius, unused
+  data3: vec4f,
+  // kind, visible, opacity, blend mode
+  appearanceMeta: array<vec4f, 8>,
+  // stroke width/alignment, gradient stop count/radial radius
+  appearanceDetail: array<vec4f, 8>,
+  // linear start/end or radial center
+  appearanceGeometry: array<vec4f, 8>,
+  // solid fill/stroke colors
+  appearanceColor: array<vec4f, 8>,
+  // Eight colors per appearance.
+  gradientStopColors: array<vec4f, 64>,
+  // Four stop offsets per vec4.
+  gradientStopOffsets: array<vec4f, 16>,
 };
 
 @group(0) @binding(0) var<uniform> motion: MotionUniforms;
-
-fn strokePadding() -> f32 {
-  let strokeWidth = max(0.0, motion.data2.x);
-  let strokeVisible = motion.data2.y;
-  let strokeAlignment = motion.data2.z;
-  if (strokeVisible < 0.5) {
-    return 0.0;
-  }
-  if (strokeAlignment >= 1.5) {
-    return strokeWidth;
-  }
-  if (strokeAlignment > 0.5) {
-    return 0.0;
-  }
-  return strokeWidth * 0.5;
-}
 
 @vertex
 fn vertexMain(
@@ -50,7 +51,7 @@ fn vertexMain(
   let uv = uvs[vertexIndex];
   let shapeSize = max(motion.data0.xy, vec2f(1.0));
   let outputSize = max(motion.data0.zw, vec2f(1.0));
-  let drawSize = shapeSize + vec2f(strokePadding() * 2.0);
+  let drawSize = shapeSize + vec2f(max(0.0, motion.data1.w) * 2.0);
   let localPoint = (uv - vec2f(0.5)) * drawSize;
   let outputPoint = localPoint + instanceData.xy;
 
@@ -67,7 +68,7 @@ fn vertexMain(
 }
 
 fn sdRoundBox(point: vec2f, halfSize: vec2f, radius: f32) -> f32 {
-  let clampedRadius = min(radius, min(halfSize.x, halfSize.y));
+  let clampedRadius = min(max(radius, 0.0), min(halfSize.x, halfSize.y));
   let q = abs(point) - halfSize + vec2f(clampedRadius);
   return length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - clampedRadius;
 }
@@ -78,43 +79,304 @@ fn sdEllipse(point: vec2f, radius: vec2f) -> f32 {
   return (length(scaled) - 1.0) * min(safeRadius.x, safeRadius.y);
 }
 
-fn over(top: vec4f, bottom: vec4f) -> vec4f {
+fn regularVertex(
+  index: u32,
+  vertexCount: u32,
+  outerRadius: f32,
+  innerRadius: f32,
+  isStar: bool
+) -> vec2f {
+  let angle = -PI * 0.5 + (f32(index) / f32(vertexCount)) * PI * 2.0;
+  let useInner = isStar && index % 2u == 1u;
+  let radius = select(outerRadius, innerRadius, useInner);
+  return vec2f(cos(angle), sin(angle)) * radius;
+}
+
+fn sdRegularShape(
+  point: vec2f,
+  pointCountInput: f32,
+  outerRadiusInput: f32,
+  innerRadiusInput: f32,
+  cornerRadiusInput: f32,
+  isStar: bool
+) -> f32 {
+  let pointCount = u32(clamp(round(pointCountInput), 3.0, 32.0));
+  let vertexCount = select(pointCount, pointCount * 2u, isStar);
+  let cornerRadius = max(0.0, cornerRadiusInput);
+  let outerRadius = max(1.0, outerRadiusInput - cornerRadius);
+  let innerRadius = max(0.5, min(innerRadiusInput, outerRadiusInput) - cornerRadius);
+  var previous = regularVertex(
+    vertexCount - 1u,
+    vertexCount,
+    outerRadius,
+    innerRadius,
+    isStar
+  );
+  var minimumSquaredDistance = 1e20;
+  var inside = false;
+
+  for (var index = 0u; index < MAX_REGULAR_VERTICES; index += 1u) {
+    if (index < vertexCount) {
+      let current = regularVertex(
+        index,
+        vertexCount,
+        outerRadius,
+        innerRadius,
+        isStar
+      );
+      let edge = previous - current;
+      let toPoint = point - current;
+      let projected = toPoint - edge * clamp(
+        dot(toPoint, edge) / max(dot(edge, edge), 0.0001),
+        0.0,
+        1.0
+      );
+      minimumSquaredDistance = min(
+        minimumSquaredDistance,
+        dot(projected, projected)
+      );
+
+      let crosses = (current.y > point.y) != (previous.y > point.y);
+      if (crosses) {
+        let crossingX = (
+          (previous.x - current.x) * (point.y - current.y)
+          / (previous.y - current.y)
+        ) + current.x;
+        if (point.x < crossingX) {
+          inside = !inside;
+        }
+      }
+      previous = current;
+    }
+  }
+
+  let distance = sqrt(max(minimumSquaredDistance, 0.0));
+  return select(distance, -distance, inside) - cornerRadius;
+}
+
+fn shapeDistance(localPoint: vec2f) -> f32 {
+  let shapeSize = max(motion.data0.xy, vec2f(1.0));
+  let halfSize = shapeSize * 0.5;
+  let shapeType = motion.data1.y;
+  if (shapeType < 0.5) {
+    return sdRoundBox(localPoint, halfSize, motion.data1.x);
+  }
+  if (shapeType < 1.5) {
+    return sdEllipse(localPoint, halfSize);
+  }
+  if (shapeType < 2.5) {
+    return sdRegularShape(
+      localPoint,
+      motion.data2.x,
+      motion.data2.y,
+      motion.data2.y,
+      motion.data2.z,
+      false
+    );
+  }
+  return sdRegularShape(
+    localPoint,
+    motion.data2.w,
+    motion.data3.x,
+    motion.data3.y,
+    motion.data3.z,
+    true
+  );
+}
+
+fn gradientOffset(flatIndex: u32) -> f32 {
+  let packed = motion.gradientStopOffsets[flatIndex / 4u];
+  let component = flatIndex % 4u;
+  if (component == 0u) {
+    return packed.x;
+  }
+  if (component == 1u) {
+    return packed.y;
+  }
+  if (component == 2u) {
+    return packed.z;
+  }
+  return packed.w;
+}
+
+fn sampleGradient(appearanceIndex: u32, amountInput: f32) -> vec4f {
+  let stopCount = u32(clamp(
+    round(motion.appearanceDetail[appearanceIndex].z),
+    0.0,
+    f32(MAX_GRADIENT_STOPS)
+  ));
+  if (stopCount == 0u) {
+    return vec4f(0.0);
+  }
+
+  let baseIndex = appearanceIndex * MAX_GRADIENT_STOPS;
+  let amount = clamp(amountInput, 0.0, 1.0);
+  var previousOffset = gradientOffset(baseIndex);
+  var previousColor = motion.gradientStopColors[baseIndex];
+  var sampled = previousColor;
+  var resolved = amount <= previousOffset;
+
+  for (var stopIndex = 1u; stopIndex < MAX_GRADIENT_STOPS; stopIndex += 1u) {
+    if (stopIndex < stopCount) {
+      let flatIndex = baseIndex + stopIndex;
+      let currentOffset = gradientOffset(flatIndex);
+      let currentColor = motion.gradientStopColors[flatIndex];
+      if (!resolved && amount <= currentOffset) {
+        let span = max(currentOffset - previousOffset, 0.0001);
+        sampled = mix(
+          previousColor,
+          currentColor,
+          clamp((amount - previousOffset) / span, 0.0, 1.0)
+        );
+        resolved = true;
+      }
+      if (!resolved) {
+        sampled = currentColor;
+      }
+      previousOffset = currentOffset;
+      previousColor = currentColor;
+    }
+  }
+  return sampled;
+}
+
+fn strokeCoverage(distance: f32, width: f32, alignment: f32, aa: f32) -> f32 {
+  let centerBand = 1.0 - smoothstep(
+    width * 0.5 - aa,
+    width * 0.5 + aa,
+    abs(distance)
+  );
+  let fillCoverage = 1.0 - smoothstep(-aa, aa, distance);
+  let insideBand = fillCoverage * smoothstep(
+    -width - aa,
+    -width + aa,
+    distance
+  );
+  let outsideBand = smoothstep(-aa, aa, distance) * (
+    1.0 - smoothstep(width - aa, width + aa, distance)
+  );
+  if (alignment > 1.5) {
+    return outsideBand;
+  }
+  if (alignment > 0.5) {
+    return insideBand;
+  }
+  return centerBand;
+}
+
+fn sampleAppearance(
+  appearanceIndex: u32,
+  localPoint: vec2f,
+  signedDistance: f32,
+  aa: f32
+) -> vec4f {
+  let itemMeta = motion.appearanceMeta[appearanceIndex];
+  if (itemMeta.y < 0.5 || itemMeta.z <= 0.0) {
+    return vec4f(0.0);
+  }
+
+  let kind = itemMeta.x;
+  var coverage = 1.0 - smoothstep(-aa, aa, signedDistance);
+  var color = motion.appearanceColor[appearanceIndex];
+
+  if (kind > 0.5 && kind < 1.5) {
+    let detail = motion.appearanceDetail[appearanceIndex];
+    coverage = strokeCoverage(
+      signedDistance,
+      max(0.0, detail.x),
+      detail.y,
+      aa
+    );
+  } else if (kind > 1.5) {
+    let shapeSize = max(motion.data0.xy, vec2f(1.0));
+    let normalizedPoint = localPoint / shapeSize + vec2f(0.5);
+    let geometry = motion.appearanceGeometry[appearanceIndex];
+    var amount = 0.0;
+    if (kind < 2.5) {
+      let direction = geometry.zw - geometry.xy;
+      amount = dot(normalizedPoint - geometry.xy, direction)
+        / max(dot(direction, direction), 0.0001);
+    } else {
+      let radius = max(
+        motion.appearanceDetail[appearanceIndex].w,
+        0.0001
+      );
+      amount = distance(normalizedPoint, geometry.xy) / radius;
+    }
+    color = sampleGradient(appearanceIndex, amount);
+  }
+
+  return vec4f(
+    color.rgb,
+    coverage * color.a * clamp(itemMeta.z, 0.0, 1.0)
+  );
+}
+
+fn blendRgb(source: vec3f, backdrop: vec3f, mode: f32) -> vec3f {
+  if (mode < 0.5) {
+    return source;
+  }
+  if (mode < 1.5) {
+    return source * backdrop;
+  }
+  if (mode < 2.5) {
+    return vec3f(1.0) - (vec3f(1.0) - source) * (vec3f(1.0) - backdrop);
+  }
+  if (mode < 3.5) {
+    return min(vec3f(1.0), source + backdrop);
+  }
+  if (mode < 4.5) {
+    return select(
+      vec3f(1.0) - 2.0 * (vec3f(1.0) - backdrop) * (vec3f(1.0) - source),
+      2.0 * backdrop * source,
+      backdrop <= vec3f(0.5)
+    );
+  }
+  return abs(backdrop - source);
+}
+
+fn compositeAppearance(top: vec4f, bottom: vec4f, mode: f32) -> vec4f {
   let alpha = top.a + bottom.a * (1.0 - top.a);
-  let rgb = (top.rgb * top.a + bottom.rgb * bottom.a * (1.0 - top.a)) / max(alpha, 0.0001);
-  return vec4f(rgb, alpha);
+  if (alpha <= 0.0001) {
+    return vec4f(0.0);
+  }
+  let blended = blendRgb(top.rgb, bottom.rgb, mode);
+  let premultiplied = (
+    bottom.rgb * bottom.a * (1.0 - top.a)
+    + top.rgb * top.a * (1.0 - bottom.a)
+    + blended * top.a * bottom.a
+  );
+  return vec4f(premultiplied / alpha, alpha);
 }
 
 fn sampleShape(localPoint: vec2f, instanceOpacity: f32) -> vec4f {
-  let shapeSize = max(motion.data0.xy, vec2f(1.0));
-  let cornerRadius = motion.data1.x;
-  let shapeType = motion.data1.y;
-  let fillOpacity = motion.data1.z;
-  let strokeOpacity = motion.data1.w;
-  let strokeWidth = max(0.0, motion.data2.x);
-  let strokeVisible = motion.data2.y;
-  let strokeAlignment = motion.data2.z;
+  let distanceToShape = shapeDistance(localPoint);
+  let aa = max(fwidth(distanceToShape), 1.0);
+  let appearanceCount = u32(clamp(
+    round(motion.data1.z),
+    0.0,
+    f32(MAX_APPEARANCES)
+  ));
+  var result = vec4f(0.0);
 
-  let halfSize = shapeSize * 0.5;
-  let distance = select(
-    sdRoundBox(localPoint, halfSize, cornerRadius),
-    sdEllipse(localPoint, halfSize),
-    shapeType > 0.5
-  );
-  let aa = max(fwidth(distance), 1.0);
+  for (var index = 0u; index < MAX_APPEARANCES; index += 1u) {
+    if (index < appearanceCount) {
+      let appearance = sampleAppearance(
+        index,
+        localPoint,
+        distanceToShape,
+        aa
+      );
+      result = compositeAppearance(
+        appearance,
+        result,
+        motion.appearanceMeta[index].w
+      );
+    }
+  }
 
-  let fillCoverage = 1.0 - smoothstep(-aa, aa, distance);
-  let fillAlpha = fillCoverage * motion.fillColor.a * fillOpacity * instanceOpacity;
-  let fill = vec4f(motion.fillColor.rgb, fillAlpha);
-
-  let centerStroke = 1.0 - smoothstep(strokeWidth * 0.5 - aa, strokeWidth * 0.5 + aa, abs(distance));
-  let insideBand = fillCoverage * smoothstep(-strokeWidth - aa, -strokeWidth + aa, distance);
-  let outsideBand = smoothstep(-aa, aa, distance) * (1.0 - smoothstep(strokeWidth - aa, strokeWidth + aa, distance));
-  let alignedStroke = select(centerStroke, insideBand, strokeAlignment > 0.5 && strokeAlignment < 1.5);
-  let strokeCoverage = select(alignedStroke, outsideBand, strokeAlignment >= 1.5);
-  let strokeAlpha = strokeCoverage * motion.strokeColor.a * strokeOpacity * strokeVisible * instanceOpacity;
-  let stroke = vec4f(motion.strokeColor.rgb, strokeAlpha);
-
-  return over(stroke, fill);
+  result.a *= clamp(instanceOpacity, 0.0, 1.0);
+  return result;
 }
 
 @fragment

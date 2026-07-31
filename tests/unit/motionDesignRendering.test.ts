@@ -1,10 +1,22 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClipTransform, Keyframe, TimelineClip } from '../../src/types';
 import {
   createDefaultMotionLayerDefinition,
+  createLinearGradientAppearance,
+  createRadialGradientAppearance,
   createStrokeAppearance,
 } from '../../src/types/motionDesign';
-import { createMotionInstanceArray, createMotionUniformArray } from '../../src/engine/motion/MotionBuffers';
+import {
+  MOTION_UNIFORM_BYTE_SIZE,
+  createMotionInstanceArray,
+  createMotionUniformArray,
+} from '../../src/engine/motion/MotionBuffers';
+import {
+  buildMotionTimelineDiagnostics,
+  getMotionRendererDiagnostics,
+  resetMotionRendererDiagnostics,
+} from '../../src/engine/motion/MotionDiagnostics';
+import { MotionRenderer } from '../../src/engine/motion/MotionRenderer';
 import { getMotionRenderSize } from '../../src/engine/motion/MotionTypes';
 import { getInterpolatedMotionLayer } from '../../src/utils/motionInterpolation';
 import { createTestTimelineStore } from '../helpers/storeFactory';
@@ -38,6 +50,11 @@ function makeMotionClip(motion = createDefaultMotionLayerDefinition('shape')): T
 }
 
 describe('motion design rendering helpers', () => {
+  afterEach(() => {
+    resetMotionRendererDiagnostics();
+    vi.unstubAllGlobals();
+  });
+
   it('sizes motion render targets with outside stroke padding', () => {
     const motion = createDefaultMotionLayerDefinition('shape', {
       size: { w: 100, h: 50 },
@@ -71,9 +88,50 @@ describe('motion design rendering helpers', () => {
 
     const uniforms = createMotionUniformArray(motion, getMotionRenderSize(motion));
 
-    expect(Array.from(uniforms.slice(0, 6))).toEqual([100, 50, 108, 58, 0, 1]);
-    expect(Array.from(uniforms.slice(8, 12))).toEqual([0.25, 0.5, 0.75, 1]);
-    expect(Array.from(uniforms.slice(16, 19))).toEqual([8, 1, 0]);
+    expect(Array.from(uniforms.slice(0, 7))).toEqual([100, 50, 108, 58, 0, 1, 2]);
+    expect(Array.from(uniforms.slice(112, 116))).toEqual([0.25, 0.5, 0.75, 1]);
+    expect(Array.from(uniforms.slice(52, 55))).toEqual([8, 0, 0]);
+    expect(Array.from(uniforms.slice(116, 120))).toEqual([1, 0, 0, 1]);
+  });
+
+  it('packs polygon/star geometry and ordered gradient appearances', () => {
+    const motion = createDefaultMotionLayerDefinition('shape', {
+      primitive: 'star',
+      size: { w: 240, h: 240 },
+    });
+    motion.shape!.star = {
+      points: 7,
+      outerRadius: 110,
+      innerRadius: 46,
+      cornerRadius: 6,
+    };
+    const linear = createLinearGradientAppearance([
+      { r: 1, g: 0, b: 0, a: 1 },
+      { r: 0, g: 0, b: 1, a: 1 },
+    ]);
+    const radial = createRadialGradientAppearance([
+      { r: 1, g: 1, b: 1, a: 1 },
+      { r: 0, g: 0, b: 0, a: 0 },
+    ]);
+    radial.blendMode = 'screen';
+    motion.appearance!.items = [linear, radial];
+
+    const uniforms = createMotionUniformArray(motion, getMotionRenderSize(motion));
+
+    expect(Array.from(uniforms.slice(4, 7))).toEqual([0, 3, 2]);
+    expect(Array.from(uniforms.slice(11, 15))).toEqual([7, 110, 46, 6]);
+    expect(Array.from(uniforms.slice(16, 24))).toEqual([
+      2, 1, 1, 0,
+      3, 1, 1, 2,
+    ]);
+    expect(Array.from(uniforms.slice(48, 56))).toEqual([
+      0, 0, 2, 0,
+      0, 0, 2, 0.5,
+    ]);
+    expect(Array.from(uniforms.slice(80, 88))).toEqual([
+      0, 0.5, 1, 0.5,
+      0.5, 0.5, 0, 0,
+    ]);
   });
 
   it('sizes and packs grid replicator instances for motion shapes', () => {
@@ -194,5 +252,171 @@ describe('motion design rendering helpers', () => {
     expect(ellipse?.name).toBe('Motion Ellipse');
     expect(ellipse?.motion?.shape?.primitive).toBe('ellipse');
     expect(store.getState().clips).toHaveLength(2);
+  });
+
+  it('deep-clones the full appearance stack when a motion clip is split', () => {
+    const store = createTestTimelineStore();
+    const clipId = store.getState().addMotionShapeClip('video-1', 0, {
+      primitive: 'star',
+      duration: 6,
+    })!;
+    const gradient = createLinearGradientAppearance();
+    const stroke = {
+      ...createStrokeAppearance({ r: 1, g: 1, b: 1, a: 1 }),
+      visible: true,
+      width: 10,
+      alignment: 'outside' as const,
+    };
+    store.getState().updateMotionLayer(clipId, (motion) => ({
+      ...motion,
+      appearance: {
+        version: 1,
+        items: [gradient, stroke],
+        selectedItemId: gradient.id,
+      },
+    }));
+
+    store.getState().splitClip(clipId, 3);
+    const split = store.getState().clips
+      .filter((clip) => clip.source?.type === 'motion-shape')
+      .sort((left, right) => left.startTime - right.startTime);
+
+    expect(split).toHaveLength(2);
+    expect(split[0].motion).toEqual(split[1].motion);
+    expect(split[0].motion).not.toBe(split[1].motion);
+    expect(split[0].motion?.appearance).not.toBe(split[1].motion?.appearance);
+    expect(split[0].motion?.appearance?.items[0])
+      .not.toBe(split[1].motion?.appearance?.items[0]);
+
+    store.getState().updateMotionLayer(split[0].id, (motion) => ({
+      ...motion,
+      appearance: motion.appearance
+        ? {
+            ...motion.appearance,
+            items: motion.appearance.items.map((item, index) => (
+              index === 0 ? { ...item, opacity: 0.2 } : item
+            )),
+          }
+        : motion.appearance,
+    }));
+    expect(store.getState().clips.find((clip) => clip.id === split[1].id)
+      ?.motion?.appearance?.items[0].opacity).toBe(1);
+  });
+
+  it('reports timeline clip and effective instance counts', () => {
+    const rectangle = makeMotionClip(createDefaultMotionLayerDefinition('shape'));
+    const ellipse = {
+      ...makeMotionClip(createDefaultMotionLayerDefinition('shape', {
+        primitive: 'ellipse',
+      })),
+      id: 'motion-ellipse',
+      startTime: 8,
+    };
+    const polygon = {
+      ...makeMotionClip(createDefaultMotionLayerDefinition('shape', {
+        primitive: 'polygon',
+      })),
+      id: 'motion-polygon',
+      startTime: 12,
+    };
+    const star = {
+      ...makeMotionClip(createDefaultMotionLayerDefinition('shape', {
+        primitive: 'star',
+      })),
+      id: 'motion-star',
+      startTime: 16,
+    };
+    if (rectangle.motion?.replicator?.layout.mode === 'grid') {
+      rectangle.motion.replicator.enabled = true;
+      rectangle.motion.replicator.layout.count = { x: 3, y: 2 };
+    }
+
+    expect(buildMotionTimelineDiagnostics([rectangle, ellipse, polygon, star], 1)).toEqual({
+      totalClips: 4,
+      activeClips: 1,
+      renderableClips: 4,
+      unsupportedClips: 0,
+      rectangleClips: 1,
+      ellipseClips: 1,
+      polygonClips: 1,
+      starClips: 1,
+      replicatorClips: 1,
+      effectiveInstances: 9,
+      activeEffectiveInstances: 6,
+    });
+  });
+
+  it('records renderer instances, buffer uploads, cache count, and encoding time', () => {
+    vi.stubGlobal('GPUShaderStage', { VERTEX: 1, FRAGMENT: 2 });
+    vi.stubGlobal('GPUTextureUsage', {
+      RENDER_ATTACHMENT: 1,
+      TEXTURE_BINDING: 2,
+      COPY_SRC: 4,
+    });
+    vi.stubGlobal('GPUBufferUsage', {
+      UNIFORM: 1,
+      VERTEX: 2,
+      COPY_DST: 4,
+    });
+
+    const texture = {
+      createView: vi.fn(() => ({ kind: 'view' })),
+      destroy: vi.fn(),
+    };
+    const uniformBuffer = { kind: 'uniform', destroy: vi.fn() };
+    const instanceBuffer = { kind: 'instances', destroy: vi.fn() };
+    const writeBuffer = vi.fn();
+    const device = {
+      queue: { writeBuffer },
+      createBindGroupLayout: vi.fn(() => ({ kind: 'layout' })),
+      createShaderModule: vi.fn(() => ({ kind: 'shader' })),
+      createPipelineLayout: vi.fn(() => ({ kind: 'pipeline-layout' })),
+      createRenderPipeline: vi.fn(() => ({ kind: 'pipeline' })),
+      createTexture: vi.fn(() => texture),
+      createBuffer: vi.fn((descriptor: { label?: string }) => (
+        descriptor.label?.includes('instances') ? instanceBuffer : uniformBuffer
+      )),
+      createBindGroup: vi.fn(() => ({ kind: 'bind-group' })),
+    } as unknown as GPUDevice;
+    const pass = {
+      setPipeline: vi.fn(),
+      setBindGroup: vi.fn(),
+      setVertexBuffer: vi.fn(),
+      draw: vi.fn(),
+      end: vi.fn(),
+    };
+    const commandEncoder = {
+      beginRenderPass: vi.fn(() => pass),
+    } as unknown as GPUCommandEncoder;
+    const motion = createDefaultMotionLayerDefinition('shape');
+    if (motion.replicator?.layout.mode === 'grid') {
+      motion.replicator.enabled = true;
+      motion.replicator.layout.count = { x: 3, y: 2 };
+    }
+    const renderer = new MotionRenderer(device);
+
+    renderer.renderLayer({
+      id: 'preview-layer',
+      sourceClipId: 'motion-clip',
+      source: { type: 'motion', motion },
+    } as unknown as import('../../src/types').Layer, commandEncoder);
+
+    expect(writeBuffer).toHaveBeenCalledTimes(2);
+    expect(pass.draw).toHaveBeenCalledWith(6, 6);
+    expect(getMotionRendererDiagnostics()).toMatchObject({
+      renderCalls: 1,
+      cacheCount: 1,
+      bufferUploads: 2,
+      bufferUploadBytes: MOTION_UNIFORM_BYTE_SIZE + 6 * 4 * 4,
+      totalInstances: 6,
+      lastInstanceCount: 6,
+      peakInstanceCount: 6,
+      lastLayerId: 'preview-layer',
+      lastSourceClipId: 'motion-clip',
+    });
+    expect(getMotionRendererDiagnostics().lastEncodeTimeMs).toBeGreaterThanOrEqual(0);
+
+    renderer.destroy();
+    expect(getMotionRendererDiagnostics().cacheCount).toBe(0);
   });
 });

@@ -46,6 +46,12 @@
   border-color: var(--accent);
 }
 
+.tt-textarea:disabled {
+  color: var(--text-secondary);
+  cursor: default;
+  resize: none;
+}
+
 /* Full-width select */
 .tt-select-full {
   width: 100%;
@@ -62,6 +68,24 @@
 .tt-select-full:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+.tt--compact .tt-select-full {
+  width: min(240px, 100%);
+}
+
+.tt--compact .tt-row-2col,
+.tt--compact .tt-color-row {
+  max-width: 300px;
+}
+
+.tt--compact .tt-row-2col:has(.tt-select-full) {
+  max-width: 260px;
+}
+
+.tt--compact .tt-color-hex {
+  flex: 0 1 150px;
+  width: 150px;
 }
 
 /* Two-column row */

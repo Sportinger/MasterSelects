@@ -1,6 +1,9 @@
 import type { KernelRunReport } from '../kernelClient/runReport';
 import type { FlashBoardChatMessage } from '../../stores/flashboardStore/types';
 import { redactFlashBoardChatImageData } from '../flashboard/FlashBoardChatImageData';
+import { normalizeStoredAgentActivityEvents } from '../flashboard/FlashBoardChatActivity';
+import type { AgentActivityEvent } from '../flashboard/FlashBoardChatTypes';
+import { hasHostedAgentReloadSnapshot } from '../kernelClient/hostedAgent';
 import type { ProjectFlashBoardChatMessage } from './types/flashboard.types';
 
 /**
@@ -20,13 +23,59 @@ function isStoredKernelReport(value: unknown): value is KernelRunReport {
       || report.outcome === 'failed');
 }
 
+/**
+ * Rebuilds every event from its public fields. The normalizer rejects invalid
+ * variants; this second projection guarantees that user-edited project JSON
+ * cannot smuggle provider payloads or arbitrary properties into a saved run.
+ */
+function safeStoredActivityEvents(value: unknown): AgentActivityEvent[] | undefined {
+  return normalizeStoredAgentActivityEvents(value)?.map((event): AgentActivityEvent => {
+    if (event.kind === 'narration') {
+      return {
+        id: event.id,
+        runId: event.runId,
+        kind: 'narration',
+        source: 'model',
+        phase: event.phase,
+        roundIndex: event.roundIndex,
+        text: event.text,
+        createdAt: event.createdAt,
+      };
+    }
+    if (event.kind === 'operation') {
+      return {
+        id: event.id,
+        runId: event.runId,
+        kind: 'operation',
+        source: 'runtime',
+        phase: event.phase,
+        safeLabel: event.safeLabel,
+        ...(event.toolName === undefined ? {} : { toolName: event.toolName }),
+        createdAt: event.createdAt,
+      };
+    }
+    return {
+      id: event.id,
+      runId: event.runId,
+      kind: 'progress',
+      source: 'runtime',
+      label: event.label,
+      ...(event.current === undefined ? {} : { current: event.current }),
+      ...(event.total === undefined ? {} : { total: event.total }),
+      createdAt: event.createdAt,
+    };
+  });
+}
+
 export function serializeFlashBoardChatMessage(
   message: FlashBoardChatMessage,
 ): ProjectFlashBoardChatMessage {
   return {
+    activityEvents: safeStoredActivityEvents(message.activityEvents),
     id: message.id,
     role: message.role,
     text: message.text,
+    decisionId: message.decisionId,
     createdAt: message.createdAt ? new Date(message.createdAt).toISOString() : undefined,
     editOptions: message.editOptions,
     isError: message.isError,
@@ -48,15 +97,24 @@ export function normalizeFlashBoardChatMessage(
 
   const createdAt = message.createdAt ? new Date(message.createdAt).getTime() : undefined;
   const wasPending = message.isPending === true;
+  const messageId = typeof message.id === 'string' && message.id.trim()
+    ? message.id
+    : crypto.randomUUID();
+  const canResume = wasPending && hasHostedAgentReloadSnapshot(messageId);
   return {
-    id: typeof message.id === 'string' && message.id.trim() ? message.id : crypto.randomUUID(),
+    activityEvents: safeStoredActivityEvents(message.activityEvents),
+    id: messageId,
     role: message.role,
-    text: wasPending ? 'Chat interrupted by reload.' : message.text,
+    text: canResume
+      ? 'Reconnecting to kernel…'
+      : wasPending ? 'Chat interrupted by reload.' : message.text,
+    decisionId: typeof message.decisionId === 'string' && message.decisionId.trim()
+      ? message.decisionId
+      : undefined,
     createdAt: createdAt !== undefined && Number.isFinite(createdAt) ? createdAt : undefined,
     editOptions: Array.isArray(message.editOptions) ? message.editOptions : undefined,
-    isError: message.isError || wasPending || undefined,
-    isPending: false,
-    // A reload cannot resume a run, so only a settled report is restored.
+    isError: message.isError || (wasPending && !canResume) || undefined,
+    isPending: canResume,
     kernelReport: !wasPending && isStoredKernelReport(message.kernelReport)
       ? message.kernelReport
       : undefined,

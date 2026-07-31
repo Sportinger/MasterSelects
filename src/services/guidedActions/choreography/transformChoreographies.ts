@@ -115,7 +115,7 @@ function createTransformConfirmation(
       clipId,
       property: change.property,
       value: numericValue,
-      ...(isToolPixelTransformArg(change.arg) ? { valueSpace: 'toolPixels' as const } : {}),
+      ...(isToolPositionTransformArg(change.arg) ? { valueSpace: 'toolPixels' as const } : {}),
     },
     family: 'property-edit',
     label: `Confirm ${change.property}`,
@@ -127,6 +127,9 @@ function getTransformPropertyChanges(
   clipId: string | null,
 ): TransformPropertyChange[] {
   return TRANSFORM_ARG_PROPERTIES.flatMap(([arg, property]) => {
+    if (arg === 'rotation' && 'rotationZ' in args) {
+      return [];
+    }
     if (!(arg in args)) {
       return [];
     }
@@ -147,6 +150,6 @@ function isConfirmableTransformProperty(property: string): property is ClipTrans
   return CONFIRMABLE_TRANSFORM_PROPERTIES.has(property);
 }
 
-function isToolPixelTransformArg(arg: string): boolean {
-  return arg === 'x' || arg === 'y';
+function isToolPositionTransformArg(arg: string): boolean {
+  return arg === 'x' || arg === 'y' || arg === 'z';
 }

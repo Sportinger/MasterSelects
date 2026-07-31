@@ -38,6 +38,9 @@ import type {
   ExportBasicsTimeState,
   ExportBasicsVideoState,
 } from './panel/exportBasicsTypes';
+import { resolveStoryboardExportGuard } from '../../services/storyboard/animatic/exportPolicy';
+import type { StoryboardAnimaticRenderMode } from '../../services/storyboard/animatic/types';
+import { StoryboardExportModeControl } from './storyboard/StoryboardExportModeControl';
 
 const log = Logger.create('ExportPanel');
 
@@ -45,11 +48,16 @@ export function ExportPanel() {
   const panelRef = useRef<HTMLDivElement>(null);
   const summaryHighlightTimeoutsRef = useRef<Map<HTMLElement, number>>(new Map());
   const [setupStatus, setSetupStatus] = useState<string | null>(null);
-  const { duration, inPoint, outPoint, playheadPosition, startExport, setExportProgress, endExport } = useTimelineStore(useShallow(s => ({
+  const [storyboardExportMode, setStoryboardExportMode] = useState<
+    Exclude<StoryboardAnimaticRenderMode, 'preview'>
+  >('normal-export');
+  const { duration, inPoint, outPoint, playheadPosition, clips, tracks, startExport, setExportProgress, endExport } = useTimelineStore(useShallow(s => ({
     duration: s.duration,
     inPoint: s.inPoint,
     outPoint: s.outPoint,
     playheadPosition: s.playheadPosition,
+    clips: s.clips,
+    tracks: s.tracks,
     startExport: s.startExport,
     setExportProgress: s.setExportProgress,
     endExport: s.endExport,
@@ -119,6 +127,20 @@ export function ExportPanel() {
 
   // Compute actual start/end based on In/Out markers for display.
   const { startTime, endTime } = resolveExportRange({ duration, inPoint, outPoint }, useInOut);
+  const storyboardClips = clips ?? [];
+  const storyboardTracks = tracks ?? [];
+  const storyboardExportGuard = resolveStoryboardExportGuard({
+    mode: storyboardExportMode,
+    clips: storyboardClips,
+    tracks: storyboardTracks,
+    startTime,
+    endTime,
+  });
+  const hasStoryboardScenesInRange = storyboardClips.some(clip =>
+    clip.source?.type === 'storyboard' &&
+    clip.startTime < endTime &&
+    clip.startTime + clip.duration > startTime
+  );
 
   const formatTime = formatExportTime;
   const {
@@ -236,6 +258,7 @@ export function ExportPanel() {
     isImageSequenceMode,
     isGifMode,
     isWebCodecsEncoder,
+    storyboardExportMode: isVideoMode ? storyboardExportMode : 'normal-export',
   });
 
   const handleQuickResolutionPreset = useCallback((value: string) => {
@@ -543,11 +566,19 @@ export function ExportPanel() {
             summaryBadges={summaryBadges}
             primaryExportLabel={primaryExportLabel}
             estimatedSizeLabel={estimatedSizeLabel}
-            exportDisabled={exportDisabled}
+            exportDisabled={exportDisabled || (isVideoMode && storyboardExportGuard.blocked)}
             onPrimaryExport={handlePrimaryExport}
             onSyncComposition={syncCompositionSettings}
             onScrollToSummaryTarget={scrollToSummaryTarget}
           />
+
+          {isVideoMode && hasStoryboardScenesInRange && (
+            <StoryboardExportModeControl
+              mode={storyboardExportMode}
+              warnings={storyboardExportGuard.warnings}
+              onChange={setStoryboardExportMode}
+            />
+          )}
 
           <ExportPresetCommandSection
             presets={presets}

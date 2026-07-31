@@ -1002,7 +1002,7 @@ describe('timeline edit operations kernel', () => {
     expect(updated?.pathValue).not.toBe(replacementPathValue);
   });
 
-  it('warns for missing and locked keyframe transaction operations while applying valid ones', () => {
+  it('rejects missing and locked keyframe transaction targets before applying any writes', () => {
     useTimelineStore.setState({
       tracks: [
         createMockTrack({ id: 'video-1', type: 'video' }),
@@ -1060,10 +1060,10 @@ describe('timeline edit operations kernel', () => {
       ],
     }, { source: 'ui', historyLabel: 'Update keyframe transaction' });
 
-    expect(result.success).toBe(true);
-    expect(result.changedClipIds).toEqual(['clip-valid']);
+    expect(result.success).toBe(false);
+    expect(result.changedClipIds).toEqual([]);
     expect(result.warnings.map(warning => warning.code)).toEqual(['track-locked', 'keyframe-not-found']);
-    expect(useTimelineStore.getState().clipKeyframes.get('clip-valid')?.[0]?.time).toBe(2);
+    expect(useTimelineStore.getState().clipKeyframes.get('clip-valid')?.[0]?.time).toBe(1);
     expect(useTimelineStore.getState().clipKeyframes.get('clip-locked')?.[0]?.time).toBe(1);
   });
 

@@ -7,6 +7,7 @@ import type {
 } from '../../types';
 import type { ClipAudioState } from '../../types/audio';
 import type { MidiClipData } from '../../types/midiClip';
+import type { StoryboardClipProperties } from '../../types/storyboard';
 import type { VectorAnimationClipSettings } from '../../types/vectorAnimation';
 
 export interface TimelinePaintFadeCurveKeyframe {
@@ -61,6 +62,11 @@ export interface TimelinePaintSourceClip {
   audioState?: ClipAudioState;
   midiData?: MidiClipData;
   fade?: TimelinePaintFadeVisuals;
+  storyboardProperties?: StoryboardClipProperties;
+  captionProperties?: unknown;
+  captionLayerBinding?: {
+    role?: 'input' | 'text' | 'background';
+  };
   source?: {
     type?: string | null;
     mediaFileId?: string;

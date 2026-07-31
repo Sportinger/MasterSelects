@@ -3,6 +3,9 @@ import {
   clearFlashBoardActiveGenerationSelection,
   ensureFlashBoardActiveGenerationBoard,
   failFlashBoardActiveGenerationRecord,
+  getFlashBoardActiveGenerationRecord,
+  hasDurableFlashBoardProviderIdempotency,
+  isFlashBoardCancellationRequested,
   updateFlashBoardActiveGenerationJob,
   updateFlashBoardActiveGenerationOutputs,
   useFlashBoardActiveGenerationRecords,
@@ -12,6 +15,12 @@ import {
 } from '../../../stores/flashboardStore/activeGenerationRecords';
 import { flashBoardJobService } from '../../../services/flashboard/FlashBoardJobService';
 import { flashBoardMediaBridge } from '../../../services/flashboard/FlashBoardMediaBridge';
+import { reconcileStoryboardGenerationRecords } from '../../../services/storyboard/generation';
+import {
+  getStoryboardProjectSnapshot,
+  hydrateStoryboardProjectState,
+  useStoryboardStore,
+} from '../../../stores/storyboardStore';
 
 interface FlashBoardRuntimeOptions {
   enableKeyboardDelete?: boolean;
@@ -27,6 +36,7 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
   const { enableKeyboardDelete = true } = options;
   const hasGenerationBoard = useHasFlashBoardActiveGenerationBoard();
   const activeGenerationRecords = useFlashBoardActiveGenerationRecords();
+  const storyboardCandidates = useStoryboardStore((state) => state.candidates);
   const selectedRecordIds = useSelectedFlashBoardActiveGenerationRecordIds();
   const removeGenerationRecord = useRemoveFlashBoardActiveGenerationRecord();
   const refundDialogKeysRef = useRef<Set<string>>(new Set());
@@ -48,6 +58,12 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
     flashBoardJobService.setUpdateCallback((recordId, update) => {
       if (update.status === 'completed') {
         importingRecordIdsRef.current.add(recordId);
+        updateFlashBoardActiveGenerationJob(recordId, {
+          status: 'completed',
+          remoteTaskId: update.remoteTaskId,
+          progress: update.progress,
+          completedAt: Date.now(),
+        });
 
         if (update.outputs?.length) {
           updateFlashBoardActiveGenerationOutputs(recordId, update.outputs);
@@ -57,7 +73,11 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
           void flashBoardMediaBridge.importGeneratedAssets(recordId, update.assets)
             .catch((error) => {
               const message = error instanceof Error ? error.message : 'Failed to import generated media';
-              failFlashBoardActiveGenerationRecord(recordId, message);
+              const hasTerminalOutputFailure = getFlashBoardActiveGenerationRecord(recordId)
+                ?.outputs?.some((output) => output.importStatus === 'failed') === true;
+              if (!hasTerminalOutputFailure) {
+                failFlashBoardActiveGenerationRecord(recordId, message);
+              }
             })
             .finally(() => {
               importingRecordIdsRef.current.delete(recordId);
@@ -71,14 +91,31 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
           return;
         }
 
+        const outputId = update.outputs?.length === 1
+          ? update.outputs[0]?.id
+          : undefined;
         const importPromise = update.assetFile
-          ? flashBoardMediaBridge.importGeneratedFile(recordId, update.assetFile, update.mediaType)
-          : flashBoardMediaBridge.importGeneratedMedia(recordId, update.assetUrl as string, update.mediaType);
+          ? flashBoardMediaBridge.importGeneratedFile(
+              recordId,
+              update.assetFile,
+              update.mediaType,
+              outputId,
+            )
+          : flashBoardMediaBridge.importGeneratedMedia(
+              recordId,
+              update.assetUrl as string,
+              update.mediaType,
+              outputId,
+            );
 
         void importPromise
           .catch((error) => {
             const message = error instanceof Error ? error.message : 'Failed to import generated media';
-            failFlashBoardActiveGenerationRecord(recordId, message);
+            const hasTerminalOutputFailure = getFlashBoardActiveGenerationRecord(recordId)
+              ?.outputs?.some((output) => output.importStatus === 'failed') === true;
+            if (!hasTerminalOutputFailure) {
+              failFlashBoardActiveGenerationRecord(recordId, message);
+            }
           })
           .finally(() => {
             importingRecordIdsRef.current.delete(recordId);
@@ -119,6 +156,20 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
   }, []);
 
   useEffect(() => {
+    const current = getStoryboardProjectSnapshot();
+    const reconciled = reconcileStoryboardGenerationRecords(
+      current,
+      activeGenerationRecords,
+    ).state;
+    if (
+      JSON.stringify(reconciled.candidates) !== JSON.stringify(current.candidates)
+      || JSON.stringify(reconciled.scenes) !== JSON.stringify(current.scenes)
+    ) {
+      hydrateStoryboardProjectState(reconciled);
+    }
+  }, [activeGenerationRecords, storyboardCandidates]);
+
+  useEffect(() => {
     activeGenerationRecords.forEach((record) => {
       const request = record.request;
       const remoteTaskId = record.job?.remoteTaskId;
@@ -139,6 +190,17 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
         !flashBoardJobService.hasJob(record.id)
         && !recoverySubmissionIdsRef.current.has(record.id)
       ) {
+        const isStoryboardGeneration =
+          request.idempotencyKey?.startsWith('storyboard-generation:') === true;
+        if (
+          isStoryboardGeneration
+          && (
+            !hasDurableFlashBoardProviderIdempotency(request)
+            || isFlashBoardCancellationRequested(record)
+          )
+        ) {
+          return;
+        }
         recoverySubmissionIdsRef.current.add(record.id);
         flashBoardJobService.submit({
           recordId: record.id,

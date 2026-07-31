@@ -1,8 +1,22 @@
 import { getUserBillingSnapshot } from '../../lib/billing';
-import { insertAiAuditEvent } from '../../lib/aiAudit';
+import {
+  insertAiAuditEvent,
+  redactHostedChatPayloadForStorage,
+} from '../../lib/aiAudit';
 import { blocksAiRequest, moderateAiInput } from '../../lib/aiModeration';
+import {
+  authorizeHostedChatRound,
+  cancelHostedChatTurn,
+  completeHostedChatTurn,
+  failHostedChatTurn,
+  HostedChatBillingError,
+  replayHostedChatRound,
+  resolveHostedChatRoundIdentity,
+  resolveHostedChatRoundTerminalAction,
+  resolveHostedChatTurnAction,
+  settleHostedChatRound,
+} from '../../lib/chatBilling';
 import { insertChatLog } from '../../lib/chatLog';
-import { getCreditLedgerEntryBySource, spendCredits } from '../../lib/credits';
 import { getCurrentUser, json, methodNotAllowed, parseJson } from '../../lib/db';
 import {
   getKieChatCapabilities,
@@ -145,17 +159,24 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   const requestId = context.data.requestId ?? crypto.randomUUID();
   const rawBody = (await parseJson<Record<string, unknown>>(context.request)) ?? null;
   const request = normalizeHostedKieChatRequest(rawBody);
+  const turnAction = resolveHostedChatTurnAction(rawBody);
+  const actionOnly = turnAction === 'cancel' || (turnAction === 'complete' && !request);
   const idempotencyKey =
     typeof rawBody?.idempotencyKey === 'string' && rawBody.idempotencyKey.trim().length > 0
       ? rawBody.idempotencyKey.trim()
       : `${requestId}:ai.chat`;
+  const billingIdentity = resolveHostedChatRoundIdentity(rawBody, requestId);
 
-  if (!request) {
+  if (
+    (!request && !actionOnly)
+    || !billingIdentity
+    || (actionOnly && typeof rawBody?.billingTurnId !== 'string')
+  ) {
     return json(
       buildRouteEnvelope({
         error: createGatewayError(
           'invalid_request',
-          'Expected a supported Kie.ai chat model and protocol request body.',
+          'Expected a supported Kie.ai chat request or terminal action with a valid billing identity.',
           { requestId },
         ),
         ok: false,
@@ -166,11 +187,10 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     );
   }
 
-  if (request.stream === true) {
+  if (request?.stream === true) {
     return buildSsePayload(requestId, 'Hosted AI chat streaming is not enabled in phase 1.');
   }
 
-  const creditCost = getModelCreditCost(request.model);
   const hostedContext = await loadHostedContext(context);
 
   if (!hostedContext.user) {
@@ -216,31 +236,67 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     );
   }
 
-  const existingCharge = await getCreditLedgerEntryBySource(
-    context.env.DB,
-    hostedContext.user.id,
-    'hosted:ai_chat',
-    idempotencyKey,
-  );
+  if (actionOnly && turnAction) {
+    try {
+      const terminalTurn = turnAction === 'cancel'
+        ? await cancelHostedChatTurn(
+            context.env.DB,
+            hostedContext.user.id,
+            billingIdentity.turnId,
+          )
+        : await completeHostedChatTurn(
+            context.env.DB,
+            hostedContext.user.id,
+            billingIdentity.turnId,
+          );
+      return json(
+        buildRouteEnvelope({
+          creditBalance: hostedContext.billing.balance,
+          creditsCharged: 0,
+          data: {
+            billingTurnId: terminalTurn.id,
+            terminalReason: terminalTurn.terminal_reason,
+            terminalStatus: terminalTurn.status,
+          },
+          ok: true,
+          requestId,
+          session: {
+            authenticated: true,
+            email: hostedContext.user.email,
+            provider: 'cookie_session',
+          },
+          status: 'completed',
+        }),
+      );
+    } catch (error) {
+      const code = error instanceof HostedChatBillingError ? error.code : 'turn_conflict';
+      return json(
+        buildRouteEnvelope({
+          error: createGatewayError(
+            code,
+            error instanceof Error ? error.message : 'The hosted AI chat turn could not be closed.',
+            { billingTurnId: billingIdentity.turnId, requestId },
+          ),
+          ok: false,
+          requestId,
+          status: 'error',
+        }),
+        { status: 409 },
+      );
+    }
+  }
 
-  if (!existingCharge && (hostedContext.billing.balance ?? 0) < creditCost) {
+  if (!request) {
     return json(
       buildRouteEnvelope({
-        creditBalance: hostedContext.billing.balance,
-        error: createGatewayError('insufficient_credits', 'You need more credits to use hosted AI chat.', {
+        error: createGatewayError('invalid_request', 'A provider request body is required.', {
           requestId,
         }),
-        next: 'pricing',
         ok: false,
         requestId,
-        session: {
-          authenticated: true,
-          email: hostedContext.user.email,
-          provider: 'cookie_session',
-        },
-        status: 'requires_billing',
+        status: 'error',
       }),
-      { status: 402 },
+      { status: 400 },
     );
   }
 
@@ -251,7 +307,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       idempotencyKey,
       model: request.model,
       moderation,
-      prompt: request.auditInput,
+      prompt: redactHostedChatPayloadForStorage(request.auditInput),
       provider: 'kie.ai',
       requestId,
       status: 'blocked',
@@ -280,11 +336,108 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     );
   }
 
+  const billingAuthorization = await authorizeHostedChatRound(context.env.DB, {
+    idempotencyKey,
+    model: request.model,
+    protocol: request.protocol,
+    roundIndex: billingIdentity.roundIndex,
+    turnId: billingIdentity.turnId,
+    userId: hostedContext.user.id,
+  });
+
+  if (!billingAuthorization.ok) {
+    const requiresCredits = billingAuthorization.code === 'insufficient_credits';
+    return json(
+      buildRouteEnvelope({
+        creditBalance: billingAuthorization.balance,
+        error: createGatewayError(
+          billingAuthorization.code,
+          billingAuthorization.message,
+          {
+            billingRoundIndex: billingIdentity.roundIndex,
+            billingTurnId: billingIdentity.turnId,
+            requestId,
+          },
+        ),
+        next: requiresCredits ? 'pricing' : undefined,
+        ok: false,
+        requestId,
+        session: {
+          authenticated: true,
+          email: hostedContext.user.email,
+          provider: 'cookie_session',
+        },
+        status: requiresCredits ? 'requires_billing' : 'error',
+      }),
+      { status: requiresCredits ? 402 : 409 },
+    );
+  }
+
+  if (billingAuthorization.duplicateRound) {
+    if (billingAuthorization.duplicateRound.status === 'settled') {
+      try {
+        const replay = await replayHostedChatRound(
+          context.env.DB,
+          hostedContext.user.id,
+          billingAuthorization.duplicateRound,
+        );
+        return json(
+          buildRouteEnvelope({
+            creditBalance: replay.balance,
+            creditsCharged: 0,
+            data: replay.response,
+            ok: true,
+            requestId,
+            session: {
+              authenticated: true,
+              email: hostedContext.user.email,
+              provider: 'cookie_session',
+            },
+            status: 'completed',
+          }),
+        );
+      } catch {
+        // Fall through to a conflict instead of repeating a settled provider call.
+      }
+    }
+
+    const duplicateCode = billingAuthorization.duplicateRound.status === 'pending'
+      ? 'round_in_progress'
+      : 'round_already_processed';
+    return json(
+      buildRouteEnvelope({
+        creditBalance: billingAuthorization.balance,
+        error: createGatewayError(
+          duplicateCode,
+          duplicateCode === 'round_in_progress'
+            ? 'This hosted AI chat round is already in progress.'
+            : 'This hosted AI chat round was already processed and cannot be repeated.',
+          {
+            billingRoundIndex: billingIdentity.roundIndex,
+            billingTurnId: billingIdentity.turnId,
+            requestId,
+          },
+        ),
+        ok: false,
+        requestId,
+        session: {
+          authenticated: true,
+          email: hostedContext.user.email,
+          provider: 'cookie_session',
+        },
+        status: 'error',
+      }),
+      { status: 409 },
+    );
+  }
+
   await createUsageEvent(context.env.DB, {
-    creditCost: creditCost,
+    creditCost: 0,
     feature: 'hosted_ai_chat',
     idempotencyKey,
     metadata: {
+      billingRoundIndex: billingIdentity.roundIndex,
+      billingTurnId: billingIdentity.turnId,
       messageCount: request.messageCount,
       model: request.model,
       requestId,
@@ -301,59 +454,25 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   try {
     const payload = await runHostedKieChatCompletion(context.env, request);
     const durationMs = Date.now() - startTime;
-    const charge = await spendCredits(
+    const settlement = await settleHostedChatRound(
       context.env.DB,
-      hostedContext.user.id,
-      creditCost,
-      'hosted:ai_chat',
-      idempotencyKey,
-      'Hosted AI chat request',
       {
+        fallbackRoundCredits: getModelCreditCost(request.model),
+        idempotencyKey,
         model: request.model,
-        requestId,
+        payload,
+        roundIndex: billingIdentity.roundIndex,
+        terminalAction: resolveHostedChatRoundTerminalAction(rawBody),
+        turn: billingAuthorization.turn,
+        userId: hostedContext.user.id,
       },
     );
 
-    if (charge.insufficient) {
-      await completeUsageEvent(context.env.DB, idempotencyKey, { status: 'failed' });
-      context.waitUntil(
-        insertAiAuditEvent(context, {
-          errorMessage: 'insufficient_credits',
-          feature: 'hosted_ai_chat',
-          idempotencyKey,
-          model: request.model,
-          moderation,
-          prompt: request.auditInput,
-          provider: 'kie.ai',
-          requestId,
-          status: 'failed',
-          userId: hostedContext.user.id,
-        }).catch(() => {}),
-      );
-      return json(
-        buildRouteEnvelope({
-          creditBalance: charge.balance,
-          error: createGatewayError('insufficient_credits', 'You need more credits to use hosted AI chat.', {
-            requestId,
-          }),
-          next: 'pricing',
-          ok: false,
-          requestId,
-          session: {
-            authenticated: true,
-            email: hostedContext.user.email,
-            provider: 'cookie_session',
-          },
-          status: 'requires_billing',
-        }),
-        { status: 402 },
-      );
-    }
-
     await completeUsageEvent(context.env.DB, idempotencyKey, {
-      ledgerEntryId: charge.entry?.id ?? null,
+      creditCost: settlement.creditsCharged,
+      ledgerEntryId: settlement.ledgerEntryId,
       status: 'completed',
-    });
+    }).catch(() => {});
 
     // Update last AI model + app version on user record (non-blocking)
     const clientAppVersion = context.request.headers.get('X-App-Version') ?? null;
@@ -366,30 +485,29 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
         .catch(() => {}),
     );
 
-    // Log chat conversation (non-blocking)
-    context.waitUntil(
-      insertChatLog(context.env.DB, {
-        userId: hostedContext.user.id,
-        requestId,
-        idempotencyKey,
-        model: request.model,
-        messages: [request.auditInput],
-        response: payload,
-        creditCost: charge.charged ? creditCost : 0,
-        durationMs,
-        status: 'completed',
-      }).catch(() => {
-        // Chat logging is best-effort — never block the response
-      }),
-    );
+    // Human-facing logs are best-effort and redacted. Exact replay data was
+    // committed atomically with billing settlement in ai_chat_turn_rounds.
+    await insertChatLog(context.env.DB, {
+      userId: hostedContext.user.id,
+      requestId,
+      idempotencyKey,
+      model: request.model,
+      messages: [redactHostedChatPayloadForStorage(request.auditInput)],
+      response: payload,
+      creditCost: settlement.creditsCharged,
+      durationMs,
+      status: 'completed',
+    }).catch(() => {
+      // Chat logging is best-effort and never blocks the response.
+    });
     context.waitUntil(
       insertAiAuditEvent(context, {
-        creditCost: charge.charged ? creditCost : 0,
+        creditCost: settlement.creditsCharged,
         feature: 'hosted_ai_chat',
         idempotencyKey,
         model: request.model,
         moderation,
-        prompt: request.auditInput,
+        prompt: redactHostedChatPayloadForStorage(request.auditInput),
         provider: 'kie.ai',
         requestId,
         status: 'completed',
@@ -399,9 +517,9 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
 
     return json(
       buildRouteEnvelope({
-        creditBalance: charge.balance,
-        creditsCharged: charge.charged ? creditCost : 0,
-        data: payload,
+        creditBalance: settlement.balance,
+        creditsCharged: settlement.creditsCharged,
+        data: settlement.response,
         ok: true,
         requestId,
         session: {
@@ -414,7 +532,14 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     );
   } catch (error) {
     const durationMs = Date.now() - startTime;
-    await completeUsageEvent(context.env.DB, idempotencyKey, { status: 'failed' });
+    const billingError = error instanceof HostedChatBillingError ? error : null;
+    const persistedErrorCode = billingError?.code ?? 'provider_request_failed';
+    await completeUsageEvent(context.env.DB, idempotencyKey, { status: 'failed' }).catch(() => {});
+    await failHostedChatTurn(
+      context.env.DB,
+      hostedContext.user.id,
+      billingIdentity.turnId,
+    ).catch(() => {});
 
     // Log failed chat attempt (non-blocking)
     context.waitUntil(
@@ -423,24 +548,24 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
         requestId,
         idempotencyKey,
         model: request.model,
-        messages: [request.auditInput],
+        messages: [redactHostedChatPayloadForStorage(request.auditInput)],
         response: null,
         creditCost: 0,
         durationMs,
         status: 'failed',
-        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorMessage: persistedErrorCode,
       }).catch(() => {
         // Chat logging is best-effort
       }),
     );
     context.waitUntil(
       insertAiAuditEvent(context, {
-        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorMessage: persistedErrorCode,
         feature: 'hosted_ai_chat',
         idempotencyKey,
         model: request.model,
         moderation,
-        prompt: request.auditInput,
+        prompt: redactHostedChatPayloadForStorage(request.auditInput),
         provider: 'kie.ai',
         requestId,
         status: 'failed',
@@ -448,13 +573,15 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
       }).catch(() => {}),
     );
 
+    const requiresCredits = billingError?.code === 'insufficient_credits';
     return json(
       buildRouteEnvelope({
         error: createGatewayError(
-          'provider_request_failed',
+          billingError?.code ?? 'provider_request_failed',
           error instanceof Error ? error.message : 'Hosted AI chat request failed.',
           { requestId },
         ),
+        next: requiresCredits ? 'pricing' : undefined,
         ok: false,
         requestId,
         session: {
@@ -462,9 +589,9 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
           email: hostedContext.user.email,
           provider: 'cookie_session',
         },
-        status: 'error',
+        status: requiresCredits ? 'requires_billing' : 'error',
       }),
-      { status: 502 },
+      { status: requiresCredits ? 402 : billingError ? 409 : 502 },
     );
   }
 };

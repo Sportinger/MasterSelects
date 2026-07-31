@@ -161,9 +161,8 @@ export function getFlashBoardChatCreditCost(model: string): number {
   return FLASHBOARD_CHAT_MODEL_CREDIT_COSTS[model] ?? 5;
 }
 
-export function getFlashBoardChatCreditLabel(model: string): string {
-  const cost = getFlashBoardChatCreditCost(model);
-  return `${cost} cr`;
+export function getFlashBoardChatCreditLabel(_model: string): string {
+  return 'usage × 6';
 }
 
 export function clampTemperature(value: number): number {

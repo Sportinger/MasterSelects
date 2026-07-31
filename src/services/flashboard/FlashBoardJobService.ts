@@ -17,6 +17,20 @@ import {
 } from './FlashBoardProviderRunners';
 
 const log = Logger.create('FlashBoardJob');
+export const FLASHBOARD_CANCEL_REQUESTED_ERROR =
+  'Cancellation requested. Provider processing and billing may continue.';
+
+export type FlashBoardCancelDisposition =
+  | 'canceled-before-submission'
+  | 'cancel-requested'
+  | 'not-found';
+
+export interface FlashBoardCancelResult {
+  billingMayContinue: boolean;
+  disposition: FlashBoardCancelDisposition;
+  recordId: string;
+  remoteTaskId?: string;
+}
 
 function shouldUsePersonalApiKey(provider: 'piapi' | 'kieai' | 'evolink' | 'elevenlabs'): boolean {
   if (import.meta.env.PROD) {
@@ -131,6 +145,16 @@ class FlashBoardJobService {
   }
 
   submit(input: SubmitGenerationJobInput): SubmitGenerationJobResult | null {
+    const queued = this.queue.find((entry) => entry.recordId === input.recordId);
+    if (queued) return { recordId: queued.recordId };
+    const running = this.running.find((entry) => entry.recordId === input.recordId);
+    if (running) {
+      return {
+        recordId: running.recordId,
+        ...(running.remoteTaskId ? { remoteTaskId: running.remoteTaskId } : {}),
+      };
+    }
+
     const entry: QueueEntry = {
       recordId: input.recordId,
       request: input.request,
@@ -142,20 +166,39 @@ class FlashBoardJobService {
     return null;
   }
 
-  cancel(recordId: string): void {
+  cancel(recordId: string): FlashBoardCancelResult {
     const queueIdx = this.queue.findIndex(e => e.recordId === recordId);
     if (queueIdx >= 0) {
       this.queue.splice(queueIdx, 1);
       this.onUpdate?.(recordId, { status: 'canceled' });
-      return;
+      return {
+        billingMayContinue: false,
+        disposition: 'canceled-before-submission',
+        recordId,
+      };
     }
     const running = this.running.find(r => r.recordId === recordId);
     if (running) {
       running.abortController.abort();
       this.running = this.running.filter(r => r.recordId !== recordId);
-      this.onUpdate?.(recordId, { status: 'canceled' });
+      this.onUpdate?.(recordId, {
+        status: 'processing',
+        error: FLASHBOARD_CANCEL_REQUESTED_ERROR,
+        ...(running.remoteTaskId ? { remoteTaskId: running.remoteTaskId } : {}),
+      });
       this.processQueue();
+      return {
+        billingMayContinue: true,
+        disposition: 'cancel-requested',
+        recordId,
+        ...(running.remoteTaskId ? { remoteTaskId: running.remoteTaskId } : {}),
+      };
     }
+    return {
+      billingMayContinue: true,
+      disposition: 'not-found',
+      recordId,
+    };
   }
 
   hasJob(recordId: string): boolean {
@@ -385,10 +428,11 @@ class FlashBoardJobService {
       }
     } catch (err: unknown) {
       this.running = this.running.filter(r => r.recordId !== recordId);
-      if (abortController.signal.aborted) return;
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      log.error(`Job failed for record ${recordId}:`, message);
-      this.onUpdate?.(recordId, { status: 'failed', error: message });
+      if (!abortController.signal.aborted) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        log.error(`Job failed for record ${recordId}:`, message);
+        this.onUpdate?.(recordId, { status: 'failed', error: message });
+      }
     }
 
     this.processQueue();

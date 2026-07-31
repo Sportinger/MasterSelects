@@ -3,6 +3,7 @@ import { useMediaStore, type Composition } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { TimelineClip } from '../../../stores/timeline/types';
 import { cloneClipNodeGraph } from '../../nodeGraph';
+import { cloneStoryboardClipProperties } from '../../storyboard/core';
 import { normalizeTransitionInstanceParams } from '../../../transitions';
 import { fromProjectTransform } from '../transformSerialization';
 import { normalizeRulerLaneState } from '../../../timeline/tempo/rulerDefaults';
@@ -348,8 +349,15 @@ export function convertProjectCompositionToStore(
         isComposition: c.isComposition,
         compositionId: c.compositionId,
         textProperties: c.textProperties,
+        captionProperties: c.captionProperties
+          ? structuredClone(c.captionProperties)
+          : undefined,
+        captionLayerBinding: c.captionLayerBinding
+          ? structuredClone(c.captionLayerBinding)
+          : undefined,
         text3DProperties: c.text3DProperties,
         solidColor: c.solidColor,
+        storyboardProperties: cloneStoryboardClipProperties(c.storyboardProperties),
         transitionOverlay: c.transitionOverlay ? structuredClone(c.transitionOverlay) : undefined,
         mathScene: c.mathScene ? structuredClone(c.mathScene) : undefined,
         motion: c.motion ? structuredClone(c.motion) : undefined,
@@ -408,6 +416,7 @@ export function convertProjectCompositionToStore(
       duration,
       backgroundColor: pc.backgroundColor,
       transitionComp: pc.transitionComp ? structuredClone(pc.transitionComp) : undefined,
+      captionComp: pc.captionComp ? structuredClone(pc.captionComp) : undefined,
       timelineData,
     };
   });

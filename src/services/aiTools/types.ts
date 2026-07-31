@@ -1,7 +1,13 @@
 // AI Tools Types
 
 // Re-export policy types for convenience
-export type { RiskLevel, CallerContext, ToolPolicyEntry } from './policy/types';
+export type {
+  AIToolExecutionMode,
+  CallerContext,
+  RiskLevel,
+  ToolPolicyEntry,
+} from './policy/types';
+import type { AIToolExecutionMode } from './policy/types';
 
 export interface ToolResult {
   success: boolean;
@@ -42,6 +48,7 @@ export interface AIToolExecutionOptions {
   guidedReplayRemainingCalls?: number;
   guidedReplay?: boolean;
   guidedVisualizationMode?: 'off' | 'concise' | 'full';
+  executionMode?: AIToolExecutionMode;
 }
 
 // Tools that modify the timeline or media (need history tracking)
@@ -54,6 +61,10 @@ export const MODIFYING_TOOLS = new Set([
   'createComposition', 'importLocalFiles',
   'createStressTestProjectFixture',
   'executeBatch',
+  'addStoryboardScene', 'updateStoryboardScene',
+  'createTimelineVariantSet', 'addTimelineVariantOption',
+  'materializeTimelineVariantOption', 'commitTimelineVariantOption',
+  'archiveTimelineVariantSet',
   // Face-analysis corrections
   'mergeClipFacePeople', 'moveClipFaceAppearance', 'assignClipFaceReviewCandidate',
   // YouTube
@@ -66,6 +77,8 @@ export const MODIFYING_TOOLS = new Set([
   'addKeyframe', 'removeKeyframe',
   // Text
   'createTextClip', 'updateTextProperties', 'setTextBox', 'addTextBoundsKeyframe',
+  // Motion Design
+  'createMotionShapeClip', 'updateMotionProperties', 'updateMotionAppearances', 'configureMotionReplicator',
   // Speed & Playback
   'setClipSpeed',
   // Markers

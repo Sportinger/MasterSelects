@@ -22,9 +22,9 @@ import { createSerializableTimelineState } from './serialization/serializableTim
 import { createLoadStateGeneratedClip } from './serialization/loadStateGeneratedClipRestore';
 import { restoreLoadStateCompositionClip } from './serialization/loadStateCompositionClipRestore';
 import { restoreLoadStateMediaClip } from './serialization/loadStateMediaClipRestore';
+import { migrateRestoredCaptionClips } from './serialization/loadStateCaptionClipRestore';
 import { createDefaultRulerLaneState, normalizeRulerLaneState } from '../../timeline/tempo/rulerDefaults';
 import { CLEARED_TIMELINE_EDIT_PREVIEWS } from './serialization/transientTimelineState';
-
 function getDefaultExpandedTrackIds(tracks: readonly TimelineTrack[]): string[] {
   return tracks.map(track => track.id);
 }
@@ -256,6 +256,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
     }
 
     flushRestoredClipBuffer();
+    await migrateRestoredCaptionClips(get().clips, get().ensureCaptionTextClip);
     get().relinkClipStemSeparationJobsFromMediaLibrary();
     scheduleRestoredCompositionAudioWarmup();
     });

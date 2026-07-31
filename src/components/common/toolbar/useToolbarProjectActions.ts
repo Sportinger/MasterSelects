@@ -17,6 +17,7 @@ import type {
   ProjectNameDialogMode,
   ProjectNameDialogRequest,
 } from '../ProjectNameDialog';
+import { resetStoryboardProjectState } from '../../../stores/storyboardStore';
 
 const log = Logger.create('Toolbar');
 
@@ -218,6 +219,7 @@ export function useToolbarProjectActions({
         }
 
         resetMediaProject(name);
+        resetStoryboardProjectState();
         await syncStoresToProject();
         const saved = await projectFileService.saveProject();
         if (!saved) {

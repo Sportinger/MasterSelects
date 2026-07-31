@@ -13,6 +13,7 @@ import {
   createRestoredPrimitiveMeshClip,
 } from '../nestedRestore';
 import { applyCommonRestoredClipFields, createLoadStateLiveInputClip } from './loadStateCommonClipRestore';
+import { createLoadStateStoryboardClip } from './loadStateStoryboardClipRestore';
 
 const log = Logger.create('Timeline');
 type MediaStoreState = ReturnType<typeof useMediaStore.getState>;
@@ -32,6 +33,8 @@ export async function createLoadStateGeneratedClip(params: {
   const { serializedClip, mediaStore } = params;
   const liveInputClip = createLoadStateLiveInputClip(serializedClip);
   if (liveInputClip) return liveInputClip;
+  const storyboardClip = createLoadStateStoryboardClip(serializedClip);
+  if (storyboardClip) return storyboardClip;
 
   const motionClip = createRestoredMotionClip(serializedClip, serializedClip.id);
   if (motionClip) {
@@ -101,6 +104,12 @@ export async function createLoadStateGeneratedClip(params: {
         naturalDuration: serializedClip.duration,
       },
       textProperties,
+      captionProperties: serializedClip.captionProperties
+        ? structuredClone(serializedClip.captionProperties)
+        : undefined,
+      captionLayerBinding: serializedClip.captionLayerBinding
+        ? structuredClone(serializedClip.captionLayerBinding)
+        : undefined,
       ...applyCommonRestoredClipFields(serializedClip),
       isLoading: false,
     };

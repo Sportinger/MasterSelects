@@ -1,0 +1,131 @@
+.storyboard-decision-card {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent-color, #8b7dff) 45%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel-background, #17171c) 92%, #8b7dff);
+}
+
+.storyboard-decision-eyebrow {
+  margin-bottom: 6px;
+  color: var(--text-secondary, #aaa);
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.storyboard-decision-card fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.storyboard-decision-card legend {
+  padding: 0;
+  color: var(--text-primary, #fff);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.storyboard-decision-explanation,
+.storyboard-decision-option p,
+.storyboard-decision-option ul {
+  margin: 5px 0 0;
+  color: var(--text-secondary, #b4b4bd);
+  font-size: 11px;
+}
+
+.storyboard-decision-options {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.storyboard-decision-option {
+  padding: 7px;
+  border: 1px solid color-mix(in srgb, var(--text-secondary, #aaa) 24%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--panel-background, #17171c) 78%, #000);
+}
+
+.storyboard-decision-option.is-selected {
+  border-color: var(--accent-color, #8b7dff);
+}
+
+.storyboard-decision-option label {
+  display: flex;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.storyboard-decision-option label > span {
+  display: grid;
+  gap: 2px;
+}
+
+.storyboard-decision-option label span span {
+  color: var(--text-secondary, #aaa);
+  font-size: 11px;
+}
+
+.storyboard-decision-cost {
+  margin-top: 5px;
+  color: #e9c86c;
+  font-size: 10px;
+}
+
+.storyboard-decision-refine,
+.storyboard-decision-submit {
+  margin-top: 7px;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.storyboard-decision-refine {
+  padding: 4px 7px;
+  color: var(--text-secondary, #bbb);
+  background: color-mix(in srgb, var(--panel-background, #17171c) 70%, #fff);
+  font-size: 10px;
+}
+
+.storyboard-decision-submit {
+  width: 100%;
+  padding: 7px 9px;
+  color: #fff;
+  background: var(--accent-color, #6f5ee8);
+  font-weight: 600;
+}
+
+.storyboard-decision-refine:disabled,
+.storyboard-decision-submit:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+.storyboard-decision-freeform {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  color: var(--text-secondary, #aaa);
+  font-size: 10px;
+}
+
+.storyboard-decision-freeform textarea {
+  box-sizing: border-box;
+  width: 100%;
+  resize: vertical;
+  border: 1px solid color-mix(in srgb, var(--text-secondary, #aaa) 30%, transparent);
+  border-radius: 6px;
+  padding: 6px;
+  color: var(--text-primary, #fff);
+  background: color-mix(in srgb, var(--panel-background, #17171c) 82%, #000);
+  font: inherit;
+}
+
+.storyboard-decision-state {
+  margin-top: 7px;
+  color: var(--text-secondary, #bbb);
+  font-size: 11px;
+}

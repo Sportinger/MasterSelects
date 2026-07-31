@@ -102,6 +102,8 @@ export interface HistoryTimelineClipEditState {
   preservesPitch?: boolean;
   freeRun?: boolean;
   textProperties?: TimelineClip['textProperties'];
+  captionProperties?: TimelineClip['captionProperties'];
+  captionLayerBinding?: TimelineClip['captionLayerBinding'];
   text3DProperties?: TimelineClip['text3DProperties'];
   solidColor?: string;
   transitionOverlay?: TimelineClip['transitionOverlay'];
@@ -117,6 +119,7 @@ export interface HistoryTimelineClipEditState {
   is3D?: boolean;
   wireframe?: boolean;
   meshType?: TimelineClip['meshType'];
+  storyboardProperties?: TimelineClip['storyboardProperties'];
 }
 
 export interface HistoryTimelineLayerSourceRef {
@@ -330,7 +333,12 @@ export function createHistoryTimelineRuntimeRef(clip: TimelineClip): HistoryTime
     };
   }
 
-  if (sourceType === 'text' || sourceType === 'solid' || sourceType === 'midi') {
+  if (
+    sourceType === 'text' ||
+    sourceType === 'solid' ||
+    sourceType === 'midi' ||
+    sourceType === 'storyboard'
+  ) {
     return {
       kind: 'inline-data',
       sourceType,
@@ -510,6 +518,8 @@ export function toHistoryTimelineClipEditState(
     preservesPitch: clip.preservesPitch,
     freeRun: clip.freeRun,
     textProperties: clip.textProperties,
+    captionProperties: clip.captionProperties,
+    captionLayerBinding: clip.captionLayerBinding,
     text3DProperties: clip.text3DProperties ?? clip.source?.text3DProperties,
     solidColor: clip.solidColor,
     transitionOverlay: clip.transitionOverlay ?? clip.source?.transitionOverlay,
@@ -525,6 +535,7 @@ export function toHistoryTimelineClipEditState(
     is3D: clip.is3D,
     wireframe: clip.wireframe,
     meshType: clip.meshType ?? clip.source?.meshType,
+    storyboardProperties: clip.storyboardProperties,
   });
 }
 

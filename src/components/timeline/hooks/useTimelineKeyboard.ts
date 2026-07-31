@@ -55,6 +55,7 @@ interface UseTimelineKeyboardProps {
   setOutPointAtPlayhead: () => void;
   clearInOut: () => void;
   toggleLoopPlayback: () => void;
+  toggleTimelineCurveMode: () => void;
 
   // Selection
   selectedClipIds: Set<string>;
@@ -97,6 +98,7 @@ export function useTimelineKeyboard({
   setOutPointAtPlayhead,
   clearInOut,
   toggleLoopPlayback,
+  toggleTimelineCurveMode,
   selectedClipIds,
   selectedKeyframeIds,
   applyTimelineEditOperation,
@@ -146,6 +148,12 @@ export function useTimelineKeyboard({
             return;
           }
         }
+      }
+
+      if (registry.matches('view.toggleCurveMode', e)) {
+        if (!claimShortcut(e, 'view.toggleCurveMode')) return;
+        toggleTimelineCurveMode();
+        return;
       }
 
       // Play/Pause claims global ownership and releases stale control focus.
@@ -444,6 +452,7 @@ export function useTimelineKeyboard({
     setOutPointAtPlayhead,
     clearInOut,
     toggleLoopPlayback,
+    toggleTimelineCurveMode,
     selectedClipIds,
     selectedKeyframeIds,
     applyTimelineEditOperation,

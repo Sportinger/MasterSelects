@@ -57,6 +57,7 @@ export function TimelineSectionOverlayGroups({
         timeToPixel={timeToPixel}
         isTrackExpanded={isTrackExpanded}
         getExpandedTrackHeight={getExpandedTrackHeight}
+        getTrackBaseHeight={getTrackBaseHeight}
         getTrackHeight={getTrackHeight}
       />
 

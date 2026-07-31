@@ -16,6 +16,7 @@ import {
 } from './FlashBoardChatImageData';
 import type {
   AnthropicToolDefinition,
+  AgentActivityEventInput,
   FlashBoardChatCompletionMessage,
   FlashBoardChatToolExecutionMode,
   FlashBoardExecutedToolCall,
@@ -41,6 +42,12 @@ const FLASHBOARD_CHAT_PRIORITY_TOOL_NAMES = new Set([
   'updateTextProperties',
   'setTextBox',
   'addTextBoundsKeyframe',
+  'getMotionCapabilities',
+  'getMotionDesign',
+  'createMotionShapeClip',
+  'updateMotionProperties',
+  'updateMotionAppearances',
+  'configureMotionReplicator',
 ]);
 
 const eligibleFlashBoardChatTools = AI_TOOLS.filter((tool) => (
@@ -229,7 +236,10 @@ export async function executeFlashBoardToolCalls(
           args: entry.args,
         })),
         'chat',
-        { guidedReplayBudgetController },
+        {
+          executionMode: options.toolExecutionMode,
+          guidedReplayBudgetController,
+        },
       );
       for (const groupedResult of groupedResults) {
         if (groupedResult.id) {
@@ -270,10 +280,13 @@ export async function runChatCompletionToolLoop(
   onExecutedToolCalls?: (toolCalls: FlashBoardExecutedToolCall[]) => void,
   includeToolResultImages = false,
   toolExecutionMode: FlashBoardChatToolExecutionMode = 'normal',
+  onActivityEvent?: (event: AgentActivityEventInput) => void,
+  signal?: AbortSignal,
 ): Promise<string> {
   const executedToolCalls: FlashBoardExecutedToolCall[] = [];
 
   for (let iteration = 0; iteration < FLASHBOARD_CHAT_MAX_TOOL_ITERATIONS; iteration += 1) {
+    if (signal?.aborted) throw signal.reason ?? new DOMException('Chat stopped.', 'AbortError');
     const result = await complete(messages);
     const content = result.content?.trim() || null;
     if (result.toolCalls.length === 0) {
@@ -284,6 +297,22 @@ export async function runChatCompletionToolLoop(
       );
     }
 
+    if (content) {
+      onActivityEvent?.({
+        kind: 'narration',
+        phase: iteration === 0 ? 'inspecting' : 'acting',
+        roundIndex: iteration,
+        text: content,
+      });
+    }
+    for (const toolCall of result.toolCalls) {
+      onActivityEvent?.({
+        kind: 'operation',
+        phase: 'started',
+        safeLabel: toolCall.name,
+        toolName: toolCall.name,
+      });
+    }
     messages.push({
       role: 'assistant',
       content,
@@ -297,12 +326,21 @@ export async function runChatCompletionToolLoop(
       })),
     });
 
+    if (signal?.aborted) throw signal.reason ?? new DOMException('Chat stopped.', 'AbortError');
     const toolResults = await executeFlashBoardToolCalls(
       result.toolCalls,
       maxToolResultChars,
       { toolExecutionMode },
     );
     executedToolCalls.push(...toolResults);
+    for (const toolResult of toolResults) {
+      onActivityEvent?.({
+        kind: 'operation',
+        phase: toolResult.result.success ? 'completed' : 'failed',
+        safeLabel: toolResult.toolCall.name,
+        toolName: toolResult.toolCall.name,
+      });
+    }
     onExecutedToolCalls?.(prepareFlashBoardToolCallsForHistory(toolResults));
     for (const toolResult of toolResults) {
       messages.push({

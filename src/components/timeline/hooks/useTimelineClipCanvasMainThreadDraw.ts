@@ -123,6 +123,7 @@ export function useTimelineClipCanvasMainThreadDraw(input: TimelineClipCanvasMai
         ctx,
         clips,
         height,
+        dpr,
         timeToPixel,
         selectedClipIds,
         hoveredClipId,

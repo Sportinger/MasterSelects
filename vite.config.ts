@@ -392,6 +392,7 @@ export default defineConfig(({ command, mode }) => {
     '/api/ai/chat',
     '/api/ai/audio',
     '/api/ai/video',
+    '/api/kernel',
     '/api/visits',
     '/api/admin',
   ];

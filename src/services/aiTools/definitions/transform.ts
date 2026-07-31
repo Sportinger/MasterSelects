@@ -1,4 +1,5 @@
 import type { ToolDefinition } from '../types';
+import { BLEND_MODES } from '../../../types/blendMode';
 
 export const transformToolDefinitions: ToolDefinition[] = [
   {
@@ -10,9 +11,9 @@ export const transformToolDefinitions: ToolDefinition[] = [
         type: 'object',
         properties: {
           clipId: { type: 'string', description: 'The clip ID' },
-          x: { type: 'number', description: 'Horizontal position in pixels (0 = center, e.g. 100 = 100px right). Range depends on composition resolution.' },
-          y: { type: 'number', description: 'Vertical position in pixels (0 = center, e.g. -50 = 50px up). Range depends on composition resolution.' },
-          z: { type: 'number', description: '3D Z position in scene units. For camera clips this is orbit distance.' },
+          x: { type: 'number', description: 'Horizontal position. For 2D clips: centered composition pixels (0 = center). For effective-3D and camera clips: scene units.' },
+          y: { type: 'number', description: 'Vertical position. For 2D clips: centered composition pixels (0 = center, negative = up). For effective-3D and camera clips: scene units.' },
+          z: { type: 'number', description: 'Depth position. For 2D clips: centered composition pixels using the horizontal extent. For effective-3D and camera clips: scene units; for cameras this is orbit distance.' },
           scaleAll: { type: 'number', description: 'Uniform scale multiplier applied on top of axis scale (1 = 100%). For camera clips this is zoom.' },
           scaleX: { type: 'number', description: 'Horizontal scale (1 = 100%)' },
           scaleY: { type: 'number', description: 'Vertical scale (1 = 100%)' },
@@ -22,7 +23,7 @@ export const transformToolDefinitions: ToolDefinition[] = [
           rotationY: { type: 'number', description: 'Y-axis rotation in degrees. For camera clips this is yaw.' },
           rotationZ: { type: 'number', description: 'Z-axis rotation in degrees.' },
           opacity: { type: 'number', description: 'Opacity (0 = transparent, 1 = fully visible)' },
-          blendMode: { type: 'string', description: 'Blend mode: normal, multiply, screen, overlay, darken, lighten, colorDodge, colorBurn, hardLight, softLight, difference, exclusion' },
+          blendMode: { type: 'string', enum: BLEND_MODES, description: 'Clip compositing blend mode.' },
         },
         required: ['clipId'],
       },

@@ -107,6 +107,8 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         preservesPitch: clip.preservesPitch,
         freeRun: clip.freeRun,
         textProperties: clip.textProperties ? { ...clip.textProperties } : undefined,
+        captionProperties: clip.captionProperties ? structuredClone(clip.captionProperties) : undefined,
+        captionLayerBinding: clip.captionLayerBinding ? structuredClone(clip.captionLayerBinding) : undefined,
         text3DProperties: clip.text3DProperties
           ? { ...clip.text3DProperties }
           : clip.source?.text3DProperties
@@ -141,7 +143,6 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         wireframe: clip.wireframe,
       };
     });
-
     set({ clipboardData, clipboardKeyframes: null });
     log.info('Copied clips', { count: clipboardData.length, ids: clipboardData.map(c => c.id) });
   },

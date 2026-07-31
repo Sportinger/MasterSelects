@@ -7,6 +7,7 @@ import type { BlendMode, ClipTransform, Effect, RuntimeColorGrade, TextBoundsPat
 import type { VectorAnimationClipSettings } from '../../types/vectorAnimation';
 import type { LightClipSettings } from '../../types/light';
 import type { WebCodecsPlayer } from '../WebCodecsPlayer';
+import type { ExportRenderFrameDecorator } from './ExportRenderSessionImpl';
 
 // ============ VIDEO CODECS ============
 
@@ -39,6 +40,7 @@ export interface ExportSettings {
 
 export interface FullExportSettings extends ExportSettings {
   filename?: string;
+  frameDecorator?: ExportRenderFrameDecorator;
 }
 
 // ============ PROGRESS ============

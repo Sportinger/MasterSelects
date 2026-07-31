@@ -7,7 +7,7 @@ export const batchToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'executeBatch',
-      description: 'Execute multiple timeline/media actions in sequence with one undo point. This is not transactional: if one action fails, successful sibling actions remain applied, so inspect every returned result and repair only failures. Each action gets fresh state, so IDs created by earlier actions are available later. Use bare tool names such as splitClip, never namespaced names such as functions.splitClip.',
+      description: 'Execute multiple timeline/media actions in sequence with one undo point. This is not transactional: if one action fails, successful sibling actions remain applied, so inspect every returned result and repair only failures. Each action gets fresh state. To pass an earlier result into a later action, use {"$batchResult":{"action":0,"path":"clipId"}} as an argument value; action is the zero-based earlier action index and path is a dot path inside its data. Use bare tool names such as splitClip, never namespaced names such as functions.splitClip.',
       parameters: {
         type: 'object',
         properties: {
@@ -23,7 +23,7 @@ export const batchToolDefinitions: ToolDefinition[] = [
                 },
                 args: {
                   type: 'object',
-                  description: 'Arguments for the tool',
+                  description: 'Arguments for the tool. Any value may reference successful earlier action data with {"$batchResult":{"action":0,"path":"clipId"}}.',
                 },
               },
               required: ['tool', 'args'],

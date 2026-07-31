@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { handleGetTimelineState } from '../../src/services/aiTools/handlers/timeline';
+import {
+  handleGetTimelineRangeSelection,
+  handleGetTimelineState,
+} from '../../src/services/aiTools/handlers/timeline';
 import { useTimelineStore } from '../../src/stores/timeline';
 import type { TimelineClip, TimelineTrack } from '../../src/types/timeline';
 
@@ -50,11 +53,13 @@ describe('getTimelineState occupancy', () => {
       duration: number;
       totalClips: number;
       occupancy: unknown;
+      storyboard: { schemaVersion: number };
     };
 
     expect(result.success).toBe(true);
     expect(data.duration).toBe(12);
     expect(data.totalClips).toBe(2);
+    expect(data.storyboard.schemaVersion).toBe(1);
     expect(data.occupancy).toEqual({
       stateRevision: expect.any(Number),
       occupied: {
@@ -74,6 +79,41 @@ describe('getTimelineState occupancy', () => {
         },
         clipCount: 2,
       }],
+    });
+  });
+
+  it('serializes the exact painted time and track range', async () => {
+    useTimelineStore.setState({
+      timelineRangeSelection: {
+        startTime: 3.25,
+        endTime: 8.5,
+        trackIds: ['video-1', 'audio-1'],
+        anchorTrackId: 'video-1',
+      },
+    });
+
+    const result = await handleGetTimelineState({}, useTimelineStore.getState());
+
+    expect(result.data).toMatchObject({
+      timelineRangeSelection: {
+        startTime: 3.25,
+        endTime: 8.5,
+        trackIds: ['video-1', 'audio-1'],
+        anchorTrackId: 'video-1',
+      },
+    });
+    await expect(
+      handleGetTimelineRangeSelection({}, useTimelineStore.getState()),
+    ).resolves.toEqual({
+      success: true,
+      data: {
+        selection: {
+          startTime: 3.25,
+          endTime: 8.5,
+          trackIds: ['video-1', 'audio-1'],
+          anchorTrackId: 'video-1',
+        },
+      },
     });
   });
 });

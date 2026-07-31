@@ -12,6 +12,7 @@
  */
 
 import { Logger } from '../services/logger';
+import { getVideoTrackRotation, type VideoRotationDegrees } from './webcodecs/videoTrackOrientation';
 const log = Logger.create('ParallelDecode');
 
 import {
@@ -854,6 +855,10 @@ export class ParallelDecodeManager {
    */
   hasClip(clipId: string): boolean {
     return this.clipInfos.has(clipId);
+  }
+
+  getSourceRotationDegreesForClip(clipId: string): VideoRotationDegrees {
+    return getVideoTrackRotation(this.clipDecoders.get(clipId)?.videoTrack);
   }
 
   getRuntimeSnapshot(): ParallelDecodeRuntimeSnapshot {

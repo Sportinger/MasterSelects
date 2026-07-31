@@ -1,4 +1,7 @@
-import { flashBoardJobService } from '../../services/flashboard/FlashBoardJobService';
+import {
+  FLASHBOARD_CANCEL_REQUESTED_ERROR,
+  flashBoardJobService,
+} from '../../services/flashboard/FlashBoardJobService';
 import {
   mergeFlashBoardVideoJobRecovery,
   persistFlashBoardVideoJobRecovery,
@@ -25,6 +28,7 @@ import type {
 export type { FlashBoardActiveGenerationRecord } from './types';
 
 const MAX_FLASHBOARD_PROMPT_HISTORY = 200;
+export { FLASHBOARD_CANCEL_REQUESTED_ERROR };
 
 function getCurrentProjectCreatedAt(): string | null {
   return typeof projectFileService.getProjectData === 'function'
@@ -159,6 +163,33 @@ export function getFlashBoardActiveGenerationRecord(
   return getFlashBoardState().activeGenerationRecords.find((record) => record.id === recordId);
 }
 
+export function getFlashBoardActiveGenerationRecordByRequestKey(
+  idempotencyKey: string,
+): FlashBoardActiveGenerationRecord | undefined {
+  return getFlashBoardState().activeGenerationRecords.find(
+    (record) => record.request?.idempotencyKey === idempotencyKey,
+  );
+}
+
+/**
+ * Only hosted image/video generation currently replays an already-created
+ * remote task for a stable idempotency key. Audio and BYO routes fail closed
+ * because their provider call cannot yet be proven exactly-once after reload.
+ */
+export function hasDurableFlashBoardProviderIdempotency(
+  request: FlashBoardGenerationRequest,
+): boolean {
+  return request.service === 'cloud'
+    && Boolean(request.idempotencyKey)
+    && (request.outputType === 'image' || request.outputType === 'video' || !request.outputType);
+}
+
+export function isFlashBoardCancellationRequested(
+  record: FlashBoardActiveGenerationRecord,
+): boolean {
+  return record.job?.error === FLASHBOARD_CANCEL_REQUESTED_ERROR;
+}
+
 export function getFlashBoardPromptHistory(): FlashBoardPromptHistoryEntry[] {
   return getFlashBoardState().promptHistory;
 }
@@ -214,6 +245,8 @@ export function completeFlashBoardActiveGenerationRecord(
       return {
         ...output,
         availability: matchingResult ? 'completed' : output.availability,
+        importStatus: matchingResult ? 'completed' : output.importStatus,
+        importError: matchingResult ? undefined : output.importError,
         mediaFileId: matchingResult?.mediaFileId ?? output.mediaFileId,
       };
     }),
@@ -241,7 +274,14 @@ export function recordFlashBoardImportedGenerationResult(
     return {
       ...record,
       outputs: record.outputs?.map((output) => (
-        output.id === result.outputId ? { ...output, mediaFileId: result.mediaFileId } : output
+        output.id === result.outputId
+          ? {
+              ...output,
+              importError: undefined,
+              importStatus: 'completed',
+              mediaFileId: result.mediaFileId,
+            }
+          : output
       )),
       results: nextResults,
       updatedAt: now,
@@ -333,6 +373,28 @@ export function hydrateFlashBoardActiveGenerationRecords(
   persistCurrentFlashBoardVideoJobs();
 }
 
+export function markFlashBoardGenerationOutputImportFailed(
+  recordId: string,
+  outputId: string,
+  error: string,
+): void {
+  const safeError = error.trim().slice(0, 500) || 'Project media import failed.';
+  const now = Date.now();
+  updateFlashBoardActiveGenerationRecord(recordId, (record) => ({
+    ...record,
+    outputs: record.outputs?.map((output) => (
+      output.id === outputId
+        ? {
+            ...output,
+            importError: safeError,
+            importStatus: 'failed',
+          }
+        : output
+    )),
+    updatedAt: now,
+  }));
+}
+
 export function restoreFlashBoardActiveGenerationRecordsFromRecovery(
   projectCreatedAt: string | null = getCurrentProjectCreatedAt(),
 ): void {
@@ -348,9 +410,14 @@ export function restoreFlashBoardActiveGenerationRecordsFromRecovery(
   persistCurrentFlashBoardVideoJobs();
 }
 
-export function submitFlashBoardActiveGenerationRequest(
+export function prepareFlashBoardActiveGenerationRequest(
   request: FlashBoardGenerationRequest,
-): FlashBoardActiveGenerationRecord | null {
+): FlashBoardActiveGenerationRecord {
+  if (request.idempotencyKey) {
+    const existing = getFlashBoardActiveGenerationRecordByRequestKey(request.idempotencyKey);
+    if (existing) return existing;
+  }
+
   const now = Date.now();
   const recordId = crypto.randomUUID();
   const durableRequest = isVideoGenerationRequest(request)
@@ -365,7 +432,7 @@ export function submitFlashBoardActiveGenerationRequest(
     createdAt: now,
     updatedAt: now,
     request: durableRequest,
-    job: { status: 'queued' },
+    job: { status: 'draft' },
   };
 
   useFlashBoardStore.setState((state) => ({
@@ -380,7 +447,41 @@ export function submitFlashBoardActiveGenerationRequest(
     appendFlashBoardPromptHistoryEntry({ kind: 'generation', prompt: prompts[index] });
   }
 
-  flashBoardJobService.submit({ recordId: record.id, request: durableRequest });
+  return getFlashBoardActiveGenerationRecord(record.id) ?? record;
+}
 
-  return getFlashBoardActiveGenerationRecord(record.id) ?? null;
+export function startFlashBoardActiveGenerationRecord(
+  recordId: string,
+): FlashBoardActiveGenerationRecord {
+  const record = getFlashBoardActiveGenerationRecord(recordId);
+  if (!record?.request) {
+    throw new Error(`Cannot start unknown FlashBoard generation record: ${recordId}`);
+  }
+  if (
+    record.job?.status === 'completed'
+    || record.job?.status === 'failed'
+    || record.job?.status === 'canceled'
+  ) {
+    return record;
+  }
+  if (record.job?.status !== 'draft') {
+    if (
+      record.job?.status === 'queued'
+      && !flashBoardJobService.hasJob(record.id)
+      && hasDurableFlashBoardProviderIdempotency(record.request)
+    ) {
+      flashBoardJobService.submit({ recordId: record.id, request: record.request });
+    }
+    return getFlashBoardActiveGenerationRecord(record.id) ?? record;
+  }
+  updateFlashBoardActiveGenerationJob(record.id, { status: 'queued' });
+  flashBoardJobService.submit({ recordId: record.id, request: record.request });
+  return getFlashBoardActiveGenerationRecord(record.id) ?? record;
+}
+
+export function submitFlashBoardActiveGenerationRequest(
+  request: FlashBoardGenerationRequest,
+): FlashBoardActiveGenerationRecord | null {
+  const record = prepareFlashBoardActiveGenerationRequest(request);
+  return startFlashBoardActiveGenerationRecord(record.id);
 }

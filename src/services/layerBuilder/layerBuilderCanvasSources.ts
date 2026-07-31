@@ -1,12 +1,10 @@
 import type { Layer, TimelineClip } from '../../types';
 import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 import { mathSceneRenderer } from '../mathScene/MathSceneRenderer';
+import { renderCaptionTextClipFrame } from '../captions/captionTextRuntime';
 import { vectorAnimationRuntimeManager } from '../vectorAnimation/VectorAnimationRuntimeManager';
 import { getClipTimeInfo } from './FrameContext';
-import {
-  buildLayerBuilderTextLayer,
-  buildNestedTextSourceLayer,
-} from './layerBuilder2dSources';
+import { buildLayerBuilderTextLayer, buildNestedTextSourceLayer } from './layerBuilder2dSources';
 import type { TransformCache } from './TransformCache';
 import type { FrameContext } from './types';
 
@@ -35,6 +33,26 @@ function collectKnownClipIds(clips: TimelineClip[]): string[] {
 }
 
 export function syncLayerBuilderCanvasRuntimeSources(ctx: FrameContext): void {
+  for (const clip of ctx.clipsAtTime) {
+    if (!clip.captionProperties || clip.source?.type !== 'text' || !clip.textProperties) continue;
+    const timeInfo = getClipTimeInfo(ctx, clip);
+    const interpolatedTextBounds = ctx.getInterpolatedTextBounds(clip.id, timeInfo.clipLocalTime);
+    const hasBoundsKeyframes =
+      ctx.hasKeyframes(clip.id, 'textBounds.path') ||
+      ctx.hasKeyframes(clip.id, 'textBounds.position.x') ||
+      ctx.hasKeyframes(clip.id, 'textBounds.position.y');
+    renderCaptionTextClipFrame({
+      captionClip: clip,
+      clips: ctx.clips,
+      tracks: ctx.tracks,
+      timelineTime: ctx.playheadPosition,
+      resolveSourceTime: sourceClip => getClipTimeInfo(ctx, sourceClip).clipTime,
+      textPropertiesOverride: hasBoundsKeyframes && interpolatedTextBounds
+        ? { ...clip.textProperties, boxEnabled: true, textBounds: interpolatedTextBounds }
+        : undefined,
+    });
+  }
+
   for (const clip of ctx.clipsAtTime) {
     if (isVectorAnimationSourceType(clip.source?.type)) {
       vectorAnimationRuntimeManager.renderClipAtTime(

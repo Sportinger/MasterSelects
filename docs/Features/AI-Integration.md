@@ -164,7 +164,7 @@ The current generator stack is no longer best described as "PiAPI as one unified
 |---------|------------------|-------|
 | `Kie.ai` | Hosted and development-BYO FlashBoard media, compact chat, prompt refinement, and AI node authoring | Chat routes use `/codex/v1/responses` or `/claude/v1/messages`; media uses Kie Market jobs plus dedicated provider routes |
 | `EvoLink` | FlashBoard image generation | User-supplied key must be unlocked and marked as default; Nano Banana 2 uses EvoLink's async `gemini-3.1-flash-image-preview` task flow with up to 14 reference images |
-| `MasterSelects Cloud` | FlashBoard production and hosted development | Hosted credits/account flow; production uses Cloudflare secrets only. FlashBoard uses hosted Kie.ai chat/refinement through `/api/ai/chat`, Kie media through `/api/ai/video`, hosted ElevenLabs speech, OpenAI or Deepgram transcription, and Suno music through `/api/ai/audio` |
+| `MasterSelects Cloud` | FlashBoard production and hosted development | Hosted credits/account flow; production uses server secrets only. Managed Kie.ai editor chat enters the private kernel through `/api/kernel/hosted-agent/*` with an `auto` route preference; the kernel currently resolves that to its default fast-agent route because Story is disabled. Media remains on `/api/ai/video`, speech/transcription/music keep their existing hosted routes, and BYO Kie keys remain browser-side. |
 | `ElevenLabs` | FlashBoard audio generation in development/BYO flows | User-supplied keys are development-only when explicitly unlocked and marked as default; production text-to-speech uses the Cloudflare `ELEVENLABS_API_KEY` secret |
 | `Suno` | FlashBoard music and sound generation | Suno Music and Suno Sounds use the hosted Cloud path from the Media generator tray |
 | `OpenAI` | Hosted moderation and transcription only | `OPENAI_API_KEY` is no longer used for generative chat, prompt refinement, or AI node authoring |
@@ -333,12 +333,28 @@ The exported tool groups are:
 - Masks
 - Stats and debug
 - Node Workspace
+- Motion Design shapes, ordered appearances, gradients, and Grid Replicator
 
 The chat and bridge code call the shared dispatcher, so the same registry is used in-chat, through the Vite dev bridge, and through the Native Helper bridge. Approval behavior is enforced in the chat UI before execution, while the dispatcher policy is the actual execution gate.
+
+### Motion Design Tools
+
+- `getMotionCapabilities` reports only renderer-backed primitives, appearances,
+  blend modes, limits, and optional clip-specific property descriptors.
+- `getMotionDesign` returns the full editable Motion definition, ordered
+  appearances, stable appearance/gradient-stop ids, and effective Grid state.
+- `createMotionShapeClip` creates rectangle, ellipse, polygon, or star clips with
+  their primitive-specific dimensions.
+- `updateMotionAppearances` retains its compact primary fill/stroke patch and also
+  accepts atomic add, update, remove, move, duplicate, and visibility operations
+  for ordered fills, strokes, and linear/radial gradients.
+- `updateMotionProperties` animates registry-backed shape, appearance, gradient,
+  and Grid values; `configureMotionReplicator` owns the bounded Grid shortcut.
 
 ### Local File And Batch Workflows
 
 - `executeBatch` groups multiple actions under one undo point and shares a single visual stagger budget.
+- A later batch action can consume data returned by a successful earlier action with `{"$batchResult":{"action":0,"path":"clipId"}}`. References are backward-only, resolve recursively inside argument objects/arrays, reject missing or unsafe paths, and make create-then-edit constructions possible without model-invented ids.
 - Several clip tools default `withLinked: true`, so linked audio/video companions move, split, or delete together unless the caller opts out.
 - `addMaskPathKeyframe` stores full `mask.{maskId}.path` snapshots, preserving vertex IDs so individual mask vertices can animate between keyframed shapes.
 - Local filesystem tools such as `importLocalFiles` and `listLocalDirectory` run through the dev bridge in development or the Native Helper in production, and they still respect the file-access policy/allowed-root checks.

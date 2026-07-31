@@ -76,4 +76,88 @@ describe('AI tool batch core', () => {
     ]);
     expect(executeTool).toHaveBeenCalledTimes(1);
   });
+
+  it('resolves earlier action result values inside later arguments', async () => {
+    const executeTool = vi.fn<BatchToolExecutor>(async (tool, args) => ({
+      success: true,
+      data: tool === 'createMotionShapeClip'
+        ? {
+            clipId: 'motion-created',
+            primaryAppearanceIds: { fill: 'fill-created' },
+          }
+        : { tool, args },
+    }));
+
+    const result = await executeBatchCore({
+      actions: [
+        {
+          tool: 'createMotionShapeClip',
+          args: { primitive: 'rectangle' },
+        },
+        {
+          tool: 'updateMotionProperties',
+          args: {
+            clipId: { $batchResult: { action: 0, path: 'clipId' } },
+            updates: [{
+              path: {
+                $batchResult: {
+                  action: 0,
+                  path: 'primaryAppearanceIds.fill',
+                },
+              },
+              value: 0.5,
+            }],
+          },
+        },
+      ],
+    }, {
+      callerContext: 'internal',
+      executeTool,
+      staggerBudgetMs: 0,
+    });
+
+    expect(result.success).toBe(true);
+    expect(executeTool).toHaveBeenNthCalledWith(2, 'updateMotionProperties', {
+      clipId: 'motion-created',
+      updates: [{ path: 'fill-created', value: 0.5 }],
+    }, 'internal');
+  });
+
+  it('rejects missing and forward batch result references without invoking the action', async () => {
+    const executeTool = vi.fn<BatchToolExecutor>(async () => ({
+      success: true,
+      data: { clipId: 'created' },
+    }));
+
+    const result = await executeBatchCore({
+      actions: [
+        {
+          tool: 'createMotionShapeClip',
+          args: {
+            trackId: { $batchResult: { action: 1, path: 'trackId' } },
+          },
+        },
+        {
+          tool: 'setTransform',
+          args: {
+            clipId: { $batchResult: { action: 0, path: 'missing' } },
+          },
+        },
+      ],
+    }, {
+      callerContext: 'internal',
+      executeTool,
+      staggerBudgetMs: 0,
+    });
+    const data = result.data as {
+      failed: number;
+      results: Array<{ error?: string }>;
+    };
+
+    expect(result.success).toBe(false);
+    expect(data.failed).toBe(2);
+    expect(data.results[0]?.error).toContain('earlier action');
+    expect(data.results[1]?.error).toContain('did not succeed');
+    expect(executeTool).not.toHaveBeenCalled();
+  });
 });

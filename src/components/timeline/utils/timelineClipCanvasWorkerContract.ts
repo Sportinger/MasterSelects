@@ -1,4 +1,5 @@
 import type { TimelinePaintPacket, TimelinePaintResourceTable } from '../../../timeline';
+import type { StoryboardCardRenderPayload } from '../storyboard';
 
 export interface TimelineClipCanvasWorkerThumbnailStripResource {
   kind: 'thumbnail-strip';
@@ -99,6 +100,7 @@ export interface TimelineClipCanvasWorkerClip {
   id: string;
   paintPacket: TimelinePaintPacket;
   bodyFill?: string;
+  storyboardCard?: StoryboardCardRenderPayload;
 }
 
 export interface TimelineClipCanvasWorkerThumbnailStripPayload {

@@ -1,12 +1,40 @@
 // AI Tool Policy Registry
 // Classifies every tool by risk level, read-only status, and caller permissions
 
-import type { ToolPolicyEntry, CallerContext } from './types';
+import type {
+  CallerContext,
+  ToolAccessOptions,
+  ToolPolicyEntry,
+} from './types';
 
 const allCallers: CallerContext[] = ['chat', 'devBridge', 'nativeHelper', 'console', 'internal'];
 const localFileCallers: CallerContext[] = ['chat', 'devBridge', 'nativeHelper', 'console', 'internal'];
 const bridgeTelemetryCallers: CallerContext[] = ['chat', 'devBridge', 'console', 'internal'];
 const helperEditingCallers: CallerContext[] = ['chat', 'devBridge', 'nativeHelper', 'console', 'internal'];
+
+const PLAN_MODE_MUTATION_ALLOWLIST = new Set([
+  'executeBatch',
+  'createStoryboardPlan',
+  'addStoryboardScene',
+  'updateStoryboardScene',
+  'attachStoryboardEvidence',
+  'detachStoryboardEvidence',
+  'setStoryboardCoverage',
+  'createGenerationBriefRevision',
+  'prepareStoryboardGeneration',
+  'selectStoryboardCandidate',
+  'createStoryboardFromTemplate',
+  'resolveStoryboardDecision',
+  'createTimelineVariantSet',
+  'addTimelineVariantOption',
+  'archiveTimelineVariantSet',
+]);
+const PLAN_MODE_MUTATION_DENYLIST = new Set([
+  // These were historically tagged read-only for confirmation UX, but they
+  // restore prior snapshots and therefore mutate real timeline/media state.
+  'undo',
+  'redo',
+]);
 
 // Helper to build policy entries
 function readOnly(riskLevel: 'low' | 'medium' = 'low'): ToolPolicyEntry {
@@ -89,6 +117,7 @@ function devBridgeFixture(): ToolPolicyEntry {
 const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   // ── READ-ONLY (low risk) ──────────────────────────────────────────────
   ['getTimelineState', readOnly()],
+  ['getTimelineRangeSelection', readOnly()],
   ['verifyTimelineInvariants', {
     ...readOnly(),
     allowedCallers: ['chat', 'devBridge'],
@@ -105,6 +134,8 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['findLowQualitySections', readOnly()],
   ['getKeyframes', readOnly()],
   ['getTextProperties', readOnly()],
+  ['getMotionCapabilities', readOnly()],
+  ['getMotionDesign', readOnly()],
   ['getMarkers', readOnly()],
   ['getMasks', readOnly()],
   ['listEffects', readOnly()],
@@ -134,6 +165,8 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['setPlayhead', readOnly()],
   ['setInOutPoints', readOnly()],
   ['openComposition', readOnly()],
+  ['listStoryboardScenes', readOnly()],
+  ['listTimelineVariantOptions', readOnly()],
 
   // ── SENSITIVE (read-only but debug data) ──────────────────────────────
   ['getStats', bridgeTelemetry()],
@@ -456,6 +489,10 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['updateTextProperties', mutatingMedium()],
   ['setTextBox', mutatingMedium()],
   ['addTextBoundsKeyframe', mutatingMedium()],
+  ['createMotionShapeClip', mutatingMedium()],
+  ['updateMotionProperties', mutatingMedium()],
+  ['updateMotionAppearances', mutatingMedium()],
+  ['configureMotionReplicator', mutatingMedium()],
   ['setClipSpeed', mutatingMedium()],
   ['addTransition', mutatingMedium()],
   ['removeTransition', mutatingMedium()],
@@ -468,6 +505,13 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['addVertex', mutatingMedium()],
   ['removeVertex', mutatingMedium()],
   ['updateVertex', mutatingMedium()],
+  ['addStoryboardScene', mutatingMedium()],
+  ['updateStoryboardScene', mutatingMedium()],
+  ['createTimelineVariantSet', mutatingMedium()],
+  ['addTimelineVariantOption', mutatingMedium()],
+  ['materializeTimelineVariantOption', mutatingMedium()],
+  ['commitTimelineVariantOption', mutatingMedium()],
+  ['archiveTimelineVariantSet', mutatingMedium()],
   ['addClipSegment', mutatingMedium()],
   ['sendAINodePrompt', {
     ...mutatingMedium(),
@@ -530,6 +574,7 @@ export function getRegisteredToolPolicyNames(): string[] {
 export function checkToolAccess(
   toolName: string,
   caller: CallerContext,
+  options: ToolAccessOptions = {},
 ): { allowed: boolean; reason?: string } {
   const name = normalizeToolName(toolName);
   const policy = TOOL_POLICY_MAP.get(name);
@@ -538,6 +583,31 @@ export function checkToolAccess(
   }
   if (!policy.allowedCallers.includes(caller)) {
     return { allowed: false, reason: `Tool "${name}" is not allowed for caller "${caller}"` };
+  }
+  if (
+    options.executionMode === 'plan' &&
+    PLAN_MODE_MUTATION_DENYLIST.has(name)
+  ) {
+    return {
+      allowed: false,
+      reason: `Tool "${name}" cannot restore real editor state while Plan mode is active.`,
+    };
+  }
+  if (options.executionMode === 'read-only' && policy.readOnly !== true) {
+    return {
+      allowed: false,
+      reason: `Tool "${name}" is mutating and this run is read-only.`,
+    };
+  }
+  if (
+    options.executionMode === 'plan'
+    && policy.readOnly !== true
+    && !PLAN_MODE_MUTATION_ALLOWLIST.has(name)
+  ) {
+    return {
+      allowed: false,
+      reason: `Tool "${name}" cannot change real media while Plan mode is active.`,
+    };
   }
   return { allowed: true };
 }

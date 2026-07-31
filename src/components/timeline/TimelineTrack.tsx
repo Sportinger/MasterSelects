@@ -429,7 +429,11 @@ function TimelineTrackComponent({
   });
   const renamingClip = useMemo(
     () => clipRenameId
-      ? canvasClips.find((clip) => clip.id === clipRenameId && clip.trackId === track.id && clip.source?.type === 'midi')
+      ? canvasClips.find((clip) =>
+        clip.id === clipRenameId &&
+        clip.trackId === track.id &&
+        (clip.source?.type === 'midi' || clip.source?.type === 'storyboard')
+      )
       : undefined,
     [canvasClips, clipRenameId, track.id],
   );

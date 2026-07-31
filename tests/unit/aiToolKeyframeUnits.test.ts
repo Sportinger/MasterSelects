@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import {
@@ -17,6 +17,7 @@ import {
 const COMP_WIDTH = 1920;
 const COMP_HEIGHT = 1080;
 const CLIP_ID = 'clip-keyframe-units';
+const initialMediaState = useMediaStore.getState();
 
 function seedStores(): void {
   useTimelineStore.setState({
@@ -32,12 +33,14 @@ function seedStores(): void {
     clipKeyframes: new Map(),
   } as never);
 
-  useMediaStore.setState({
-    getActiveComposition: () => ({
+  vi.mocked(useMediaStore.getState).mockReturnValue({
+    ...initialMediaState,
+    activeCompositionId: 'comp-1',
+    compositions: [{
       id: 'comp-1',
       width: COMP_WIDTH,
       height: COMP_HEIGHT,
-    }),
+    } as never],
   } as never);
 }
 
@@ -101,5 +104,51 @@ describe('keyframe position units', () => {
     const opacity = storedKeyframes().find((kf) => kf.property === 'opacity');
     expect(scale?.value).toBe(1.8);
     expect(opacity?.value).toBe(0.5);
+  });
+
+  it('keeps 3D position keyframes in raw scene units', async () => {
+    useTimelineStore.setState({
+      clips: useTimelineStore.getState().clips.map((clip) => ({ ...clip, is3D: true })),
+    });
+
+    await handleAddKeyframe(
+      { clipId: CLIP_ID, property: 'position.x', value: 2.5, time: 0 },
+      useTimelineStore.getState(),
+    );
+
+    const stored = storedKeyframes().find((keyframe) => keyframe.property === 'position.x');
+    expect(stored?.value).toBe(2.5);
+  });
+
+  it('returns the exact inserted keyframe id even when it is not last in time order', async () => {
+    await handleAddKeyframe(
+      { clipId: CLIP_ID, property: 'opacity', value: 0.8, time: 4 },
+      useTimelineStore.getState(),
+    );
+    const result = await handleAddKeyframe(
+      { clipId: CLIP_ID, property: 'opacity', value: 0.2, time: 1 },
+      useTimelineStore.getState(),
+    );
+    const inserted = storedKeyframes().find((keyframe) => (
+      keyframe.property === 'opacity' && keyframe.time === 1
+    ));
+
+    expect(result.success).toBe(true);
+    expect((result.data as { keyframeId: string }).keyframeId).toBe(inserted?.id);
+  });
+
+  it('rejects unknown properties and invalid authoring values before writing', async () => {
+    const unknown = await handleAddKeyframe(
+      { clipId: CLIP_ID, property: 'missing.property', value: 1, time: 1 },
+      useTimelineStore.getState(),
+    );
+    const invalidOpacity = await handleAddKeyframe(
+      { clipId: CLIP_ID, property: 'opacity', value: 2, time: 1 },
+      useTimelineStore.getState(),
+    );
+
+    expect(unknown.success).toBe(false);
+    expect(invalidOpacity.success).toBe(false);
+    expect(storedKeyframes()).toHaveLength(0);
   });
 });

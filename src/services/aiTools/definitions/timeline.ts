@@ -18,6 +18,18 @@ export const timelineToolDefinitions: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'getTimelineRangeSelection',
+      description: 'Read the exact painted timeline time range and track scope. Returns null when no range is active.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'verifyTimelineInvariants',
       description: 'Read-only wrapper over the shared validation core from agent-kernel plan section 9.2. Verifies the live timeline against the default invariant set or caller-supplied checks without mutating timeline state.',
       parameters: {

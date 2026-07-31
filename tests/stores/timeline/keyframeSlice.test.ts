@@ -904,13 +904,13 @@ describe('keyframeSlice', () => {
     expect(height).toBe(60 + 2 * 18);
   });
 
-  it('getExpandedTrackHeight: adds curve editor height when curve is expanded', () => {
+  it('getExpandedTrackHeight: keeps global graph mode outside the track height', () => {
     store.getState().selectClip('clip-1');
     store.getState().addKeyframe('clip-1', 'opacity', 0.5, 1);
     store.getState().toggleCurveExpanded('video-1', 'opacity');
-    // 1 property row (18) + curve editor height (250)
+    // The global graph surface no longer expands an individual track.
     const height = store.getState().getExpandedTrackHeight('video-1', 60);
-    expect(height).toBe(60 + 18 + 250);
+    expect(height).toBe(60 + 18);
   });
 
   // ─── getInterpolatedTransform ──────────────────────────────────────

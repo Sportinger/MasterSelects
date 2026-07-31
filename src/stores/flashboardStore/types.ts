@@ -1,5 +1,6 @@
 import type { KernelProgressEvent } from '../../services/kernelClient/runProgress';
 import type { KernelRunReport } from '../../services/kernelClient/runReport';
+import type { AgentActivityEvent } from '../../services/flashboard/FlashBoardChatTypes';
 
 export interface FlashBoardStoreState {
   activeGenerationRecords: FlashBoardActiveGenerationRecord[];
@@ -95,10 +96,12 @@ export interface FlashBoardChatExecutedToolCall {
 }
 
 export interface FlashBoardChatMessage {
+  activityEvents?: AgentActivityEvent[];
   createdAt?: number;
   id: string;
   role: 'user' | 'assistant';
   text: string;
+  decisionId?: string;
   editOptions?: FlashBoardChatEditOption[];
   isError?: boolean;
   isPending?: boolean;
@@ -176,6 +179,8 @@ export interface FlashBoardGenerationOutput {
   id: string;
   mediaType: FlashBoardMediaType;
   availability: 'preview' | 'completed';
+  importStatus?: 'pending' | 'importing' | 'completed' | 'failed';
+  importError?: string;
   artworkUrl?: string;
   downloadUrl?: string;
   duration?: number;

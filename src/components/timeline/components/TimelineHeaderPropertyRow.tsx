@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import type { AnimatableProperty, ClipTransform, Keyframe, TimelineClip } from '../../../types';
+import type { AnimatableProperty, ClipTransform, TimelineClip } from '../../../types';
 import { parseMaskProperty } from '../../../types';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
@@ -7,7 +7,6 @@ import {
   getCameraLookRotationAxis,
   resolveCameraLookAtFixedEyeUpdates,
 } from '../../../engine/scene/CameraClipControlUtils';
-import { CurveEditorHeader } from '../CurveEditorHeader';
 import {
   formatHeaderPropertyValue,
   getHeaderPropertyCurrentValue,
@@ -268,7 +267,7 @@ export function TimelineHeaderPropertyRow({
         onMouseEnter={() => onKeyframeRowHover?.(trackId, prop as AnimatableProperty, true)}
         onMouseLeave={() => onKeyframeRowHover?.(trackId, prop as AnimatableProperty, false)}
         onDoubleClick={handleDoubleClick}
-        title="Double-click to toggle curve editor"
+        title="Double-click to open in Graph"
       >
         <span className="property-label">{getHeaderPropertyLabel(prop, clip, isAudioTrack)}</span>
         <div className="property-keyframe-controls">
@@ -311,13 +310,6 @@ export function TimelineHeaderPropertyRow({
             : '\u2014'}
         </span>
       </div>
-      {isCurveExpanded && (
-        <CurveEditorHeader
-          property={prop as AnimatableProperty}
-          keyframes={propKeyframes as Keyframe[]}
-          onClose={onToggleCurveExpanded}
-        />
-      )}
     </>
   );
 }

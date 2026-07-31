@@ -5,6 +5,7 @@ import { captureCurrentPreviewFrameFile } from '../previewFrameCapture';
 import {
   completeFlashBoardActiveGenerationRecord,
   getFlashBoardActiveGenerationRecord,
+  markFlashBoardGenerationOutputImportFailed,
   recordFlashBoardImportedGenerationResult,
   type FlashBoardActiveGenerationRecord,
 } from '../../stores/flashboardStore/activeGenerationRecords';
@@ -15,6 +16,7 @@ import type {
 } from '../../stores/flashboardStore/types';
 import type { MediaFile } from '../../stores/mediaStore';
 import { setExternalDragPayload, clearExternalDragPayload } from '../../components/timeline/utils/externalDragSession';
+import { recordStoryboardTelemetry } from '../storyboard/telemetry';
 
 const log = Logger.create('FlashBoardMedia');
 
@@ -211,12 +213,33 @@ class FlashBoardMediaBridge {
     recordId: string,
     file: File,
     mediaType: FlashBoardMediaType,
+    outputId?: string,
   ): Promise<FlashBoardResult> {
-    return this.runSingleRecordImport(recordId, async () => {
-      const result = await this.importGeneratedFileOnce(recordId, file, mediaType);
-      completeFlashBoardActiveGenerationRecord(recordId, result);
-      return result;
-    });
+    try {
+      return await this.runSingleRecordImport(recordId, async () => {
+        const result = await this.importGeneratedFileOnce(
+          recordId,
+          file,
+          mediaType,
+          outputId,
+        );
+        completeFlashBoardActiveGenerationRecord(recordId, result);
+        return result;
+      });
+    } catch (error) {
+      if (outputId) {
+        markFlashBoardGenerationOutputImportFailed(
+          recordId,
+          outputId,
+          error instanceof Error ? error.message : String(error),
+        );
+        recordStoryboardTelemetry('generation.import_failed', {
+          failedCount: 1,
+          reason: 'import',
+        });
+      }
+      throw error;
+    }
   }
 
   private async runSingleRecordImport(
@@ -286,13 +309,35 @@ class FlashBoardMediaBridge {
   async importGeneratedMedia(
     recordId: string,
     videoUrl: string,
-    mediaType: FlashBoardMediaType = 'video'
+    mediaType: FlashBoardMediaType = 'video',
+    outputId?: string,
   ): Promise<FlashBoardResult> {
-    return this.runSingleRecordImport(recordId, async () => {
-      const result = await this.importGeneratedMediaOnce(recordId, videoUrl, mediaType);
-      completeFlashBoardActiveGenerationRecord(recordId, result);
-      return result;
-    });
+    try {
+      return await this.runSingleRecordImport(recordId, async () => {
+        const result = await this.importGeneratedMediaOnce(
+          recordId,
+          videoUrl,
+          mediaType,
+          undefined,
+          outputId,
+        );
+        completeFlashBoardActiveGenerationRecord(recordId, result);
+        return result;
+      });
+    } catch (error) {
+      if (outputId) {
+        markFlashBoardGenerationOutputImportFailed(
+          recordId,
+          outputId,
+          error instanceof Error ? error.message : String(error),
+        );
+        recordStoryboardTelemetry('generation.import_failed', {
+          failedCount: 1,
+          reason: 'import',
+        });
+      }
+      throw error;
+    }
   }
 
   private async importGeneratedMediaOnce(
@@ -351,18 +396,36 @@ class FlashBoardMediaBridge {
         if (existing) continue;
 
         let result: FlashBoardResult;
-        if (asset.file) {
-          result = await this.importGeneratedFileOnce(recordId, asset.file, asset.mediaType, outputId);
-        } else if (asset.url) {
-          result = await this.importGeneratedMediaOnce(
+        try {
+          if (asset.file) {
+            result = await this.importGeneratedFileOnce(
+              recordId,
+              asset.file,
+              asset.mediaType,
+              outputId,
+            );
+          } else if (asset.url) {
+            result = await this.importGeneratedMediaOnce(
+              recordId,
+              asset.url,
+              asset.mediaType,
+              asset.title || outputId,
+              outputId,
+            );
+          } else {
+            throw new Error(`Generated output ${index + 1} has no importable media.`);
+          }
+        } catch (error) {
+          markFlashBoardGenerationOutputImportFailed(
             recordId,
-            asset.url,
-            asset.mediaType,
-            asset.title || outputId,
             outputId,
+            error instanceof Error ? error.message : String(error),
           );
-        } else {
-          throw new Error(`Generated output ${index + 1} has no importable media.`);
+          recordStoryboardTelemetry('generation.import_failed', {
+            failedCount: 1,
+            reason: 'import',
+          });
+          throw error;
         }
 
         results.push(result);

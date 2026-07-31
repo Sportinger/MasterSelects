@@ -1,4 +1,5 @@
 import type { TimelineClip } from '../../../types/timeline';
+import { cloneStoryboardClipProperties } from '../../../services/storyboard/core';
 import type { ClipboardClipData } from '../types';
 
 type ClipboardClipAnalysisMetadata = Pick<
@@ -9,6 +10,7 @@ type ClipboardClipAnalysisMetadata = Pick<
   | 'faceAnalysisStatus'
   | 'faceAnalysisProgress'
   | 'faceAnalysisMessage'
+  | 'storyboardProperties'
 >;
 
 /** Source-time cache metadata can be shared by pasted clip occurrences. */
@@ -22,5 +24,8 @@ export function createClipboardClipAnalysisMetadata(
     faceAnalysisStatus: clip.faceAnalysisStatus,
     faceAnalysisProgress: clip.faceAnalysisProgress,
     faceAnalysisMessage: clip.faceAnalysisMessage,
+    storyboardProperties: clip.source?.type === 'storyboard'
+      ? cloneStoryboardClipProperties(clip.storyboardProperties)
+      : undefined,
   };
 }

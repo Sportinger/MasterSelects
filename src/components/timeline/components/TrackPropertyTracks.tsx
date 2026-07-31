@@ -1,9 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { AnimatableProperty, Keyframe } from '../../../types';
-import { CurveEditor } from '../CurveEditor';
 import type { TimelineTrackProps } from '../types';
 import { buildTimelineKeyframeRowGeometries, type TimelineKeyframeRowGeometry } from '../../../timeline';
-import { useTrackPropertyCurveEditTransactions } from '../hooks/useTrackPropertyCurveEditTransactions';
 import {
   resolveTimelineTrackPenKeyframeValue,
   shouldHideTimelineTrack3DOnlyProperties,
@@ -34,13 +32,8 @@ export function TrackPropertyTracks({
   selectedClip,
   clipKeyframes,
   renderKeyframeDiamonds,
-  expandedCurveProperties,
   activeTimelineToolId,
   selectedKeyframeIds,
-  onSelectKeyframe,
-  onMoveKeyframe,
-  onUpdateBezierHandle,
-  applyTimelineEditOperation,
   addKeyframe,
   timeToPixel,
   pixelToTime,
@@ -71,16 +64,6 @@ export function TrackPropertyTracks({
     () => Math.max(0.001, timeToPixel(1) - timeToPixel(0)),
     [timeToPixel],
   );
-  const {
-    handleCurveBezierHandleUpdate,
-    handleCurveKeyframeMove,
-  } = useTrackPropertyCurveEditTransactions({
-    allKeyframes,
-    applyTimelineEditOperation,
-    onMoveKeyframe,
-    onUpdateBezierHandle,
-  });
-
   useEffect(() => {
     const updateWidth = () => {
       if (containerRef.current) {
@@ -119,8 +102,6 @@ export function TrackPropertyTracks({
     }).map((row) => [row.property, row]),
   );
 
-  const trackCurveProps = expandedCurveProperties.get(trackId);
-
   const handlePenKeyframeMouseDown = (
     event: React.MouseEvent<HTMLDivElement>,
     property: AnimatableProperty,
@@ -142,14 +123,13 @@ export function TrackPropertyTracks({
   return (
     <div className="track-property-tracks" ref={containerRef}>
       {sortedProperties.map((prop) => {
-        const isCurveExpanded = trackCurveProps?.has(prop) ?? false;
         const propKeyframes = allKeyframes.filter((kf) => kf.property === prop);
         const rowGeometry = keyframeRowGeometryByProperty.get(prop);
 
         return (
           <div
             key={prop}
-            className={`keyframe-track-row flat ${isCurveExpanded ? 'curve-expanded' : ''}`}
+            className="keyframe-track-row flat"
             data-track-id={trackId}
             data-keyframe-property={prop}
             data-geometry-row-id={rowGeometry?.id}
@@ -166,23 +146,6 @@ export function TrackPropertyTracks({
               <div className="keyframe-track-line" />
               {renderKeyframeDiamonds(trackId, prop)}
             </div>
-            {isCurveExpanded && (
-              <CurveEditor
-                trackId={trackId}
-                clipId={selectedClip.id}
-                property={prop}
-                keyframes={propKeyframes}
-                clipStartTime={selectedClip.startTime}
-                clipDuration={selectedClip.duration}
-                width={containerWidth}
-                selectedKeyframeIds={selectedKeyframeIds}
-                onSelectKeyframe={onSelectKeyframe}
-                onMoveKeyframe={handleCurveKeyframeMove}
-                onUpdateBezierHandle={handleCurveBezierHandleUpdate}
-                timeToPixel={timeToPixel}
-                pixelToTime={pixelToTime}
-              />
-            )}
           </div>
         );
       })}

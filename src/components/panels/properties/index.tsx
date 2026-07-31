@@ -27,7 +27,7 @@ import './TextTab.css';
 import './VolumeBlendshapeTabs.css';
 
 // Tab type
-type PropertiesTab = 'transform' | 'color' | 'effects' | 'audio-edits' | 'masks' | 'transcript' | 'analysis' | 'text' | '3d-text' | 'model-3d' | 'math' | 'motion' | 'blendshapes' | 'gaussian-splat' | 'camera' | 'light' | 'splat-effector' | 'lottie' | 'live' | 'slot-clip' | 'transition' | 'track-controls' | 'track-effects' | 'track-sends' | 'track-instrument' | 'master-controls' | 'master-effects';
+type PropertiesTab = 'storyboard' | 'transform' | 'color' | 'effects' | 'audio-edits' | 'masks' | 'transcript' | 'analysis' | 'text' | 'captions' | '3d-text' | 'model-3d' | 'math' | 'motion' | 'blendshapes' | 'gaussian-splat' | 'camera' | 'light' | 'splat-effector' | 'lottie' | 'live' | 'slot-clip' | 'transition' | 'track-controls' | 'track-effects' | 'track-sends' | 'track-instrument' | 'master-controls' | 'master-effects';
 
 // Lazy load tab components for code splitting
 const TransformTab = lazy(() => import('./TransformTab').then(m => ({ default: m.TransformTab })));
@@ -42,12 +42,16 @@ const LightTab = lazy(() => import('./LightTab').then(m => ({ default: m.LightTa
 const Model3DTab = lazy(() => import('./Model3DTab').then(m => ({ default: m.Model3DTab })));
 const SplatEffectorTab = lazy(() => import('./SplatEffectorTab').then(m => ({ default: m.SplatEffectorTab })));
 const ThreeDTextTab = lazy(() => import('./ThreeDTextTab').then(m => ({ default: m.ThreeDTextTab })));
+const CaptionTab = lazy(() => import('./CaptionTab').then(m => ({ default: m.CaptionTab })));
 const LottieTab = lazy(() => import('./LottieTab').then(m => ({ default: m.LottieTab })));
 const SlotClipTab = lazy(() => import('./SlotClipTab').then(m => ({ default: m.SlotClipTab })));
 const MathSceneTab = lazy(() => import('./MathSceneTab').then(m => ({ default: m.MathSceneTab })));
 const MotionShapeTab = lazy(() => import('./MotionShapeTab').then(m => ({ default: m.MotionShapeTab })));
 const TransitionTab = lazy(() => import('./TransitionTab').then(m => ({ default: m.TransitionTab })));
 const LiveInputTab = lazy(() => import('./LiveInputTab').then(m => ({ default: m.LiveInputTab })));
+const StoryboardPropertiesPanel = lazy(() =>
+  import('../../properties/storyboard').then(m => ({ default: m.StoryboardPropertiesPanel }))
+);
 
 // Tab loading fallback
 function TabLoading() {
@@ -133,10 +137,16 @@ export function PropertiesPanel() {
   // Check if it's an audio clip
   const selectedTrack = selectedClip ? tracks.find(t => t.id === selectedClip.trackId) : null;
   const isAudioClip = selectedTrack?.type === 'audio';
+  const isStoryboardClip =
+    selectedClip?.source?.type === 'storyboard' &&
+    Boolean(selectedClip.storyboardProperties);
   const selectedClipAudioEditCount = selectedClip?.audioState?.editStack?.length ?? 0;
 
   // Check if it's a text clip
-  const isTextClip = selectedClip?.source?.type === 'text';
+  const isCaptionClip = Boolean(
+    selectedClip?.captionProperties,
+  );
+  const isTextClip = selectedClip?.source?.type === 'text' && !isCaptionClip;
 
   // Check if it's a solid clip
   const isSolidClip = selectedClip?.source?.type === 'solid';
@@ -196,6 +206,12 @@ export function PropertiesPanel() {
   }, [activeTab, isCameraClip]);
 
   useEffect(() => {
+    if (isCaptionClip && activeTab === 'text') {
+      setActiveTab('captions');
+    }
+  }, [activeTab, isCaptionClip]);
+
+  useEffect(() => {
     if (reconnectRequiredCount > 0 && !selectionKey) setActiveTab('live');
   }, [reconnectRequiredCount, selectionKey]);
 
@@ -231,7 +247,9 @@ export function PropertiesPanel() {
       }
 
       // Set appropriate default tab based on clip type
-      if (isLiveInputClip) {
+      if (isStoryboardClip) {
+        setActiveTab('storyboard');
+      } else if (isLiveInputClip) {
         setActiveTab('live');
       } else if (isGaussianAvatar) {
         setActiveTab('blendshapes');
@@ -253,16 +271,21 @@ export function PropertiesPanel() {
         setActiveTab('transform');
       } else if (is3DTextClip) {
         setActiveTab('3d-text');
+      } else if (isCaptionClip) {
+        setActiveTab('captions');
       } else if (isTextClip) {
         setActiveTab('text');
-      } else if (isAudioClip && (activeTab === 'transform' || activeTab === 'color' || activeTab === 'masks' || activeTab === 'text' || activeTab === '3d-text' || activeTab === 'blendshapes')) {
+      } else if (isAudioClip && (activeTab === 'transform' || activeTab === 'color' || activeTab === 'masks' || activeTab === 'text' || activeTab === 'captions' || activeTab === '3d-text' || activeTab === 'blendshapes')) {
         setActiveTab(selectedClipAudioEditCount > 0 ? 'audio-edits' : 'effects');
       } else if (
         !isAudioClip &&
+        !isStoryboardClip &&
+        !isCaptionClip &&
         !isTextClip &&
         !is3DTextClip &&
         (
           activeTab === 'text' ||
+          activeTab === 'captions' ||
           activeTab === '3d-text' ||
           (!isMathSceneClip && activeTab === 'math') ||
           (!isMotionShapeClip && activeTab === 'motion') ||
@@ -279,7 +302,7 @@ export function PropertiesPanel() {
         setActiveTab('transform');
       }
     }
-  }, [selectionKey, selectedTransitionSelection, selectedPropertiesTrack, isMasterPropertiesSelected, isAudioClip, selectedClipAudioEditCount, isTextClip, is3DTextClip, isModelClip, isMathSceneClip, isMotionShapeClip, isSolidClip, isVectorAnimationClip, isGaussianAvatar, isGaussianSplat, isCameraClip, isLightClip, isSplatEffectorClip, isLiveInputClip, isSlotMode, lastSelectionKey, activeTab]);
+  }, [selectionKey, selectedTransitionSelection, selectedPropertiesTrack, isMasterPropertiesSelected, isAudioClip, isStoryboardClip, selectedClipAudioEditCount, isCaptionClip, isTextClip, is3DTextClip, isModelClip, isMathSceneClip, isMotionShapeClip, isSolidClip, isVectorAnimationClip, isGaussianAvatar, isGaussianSplat, isCameraClip, isLightClip, isSplatEffectorClip, isLiveInputClip, isSlotMode, lastSelectionKey, activeTab]);
 
   // Listen for external tab navigation requests (e.g. badge clicks in MediaPanel)
   useEffect(() => {
@@ -539,7 +562,14 @@ export function PropertiesPanel() {
       )}
 
       <PropertiesTabStrip>
-        {isAudioClip ? (
+        {isStoryboardClip ? (
+          <button
+            className={`tab-btn ${activeTab === 'storyboard' ? 'active' : ''}`}
+            onClick={() => setActiveTab('storyboard')}
+          >
+            Scene
+          </button>
+        ) : isAudioClip ? (
           <>
             <button className={`tab-btn ${activeTab === 'effects' ? 'active' : ''}`} onClick={() => setActiveTab('effects')}>
               Effects {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
@@ -576,6 +606,18 @@ export function PropertiesPanel() {
               Effects {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
             </button>
             <button className={`tab-btn ${activeTab === 'masks' ? 'active' : ''}`} {...getGuidedPropertiesTabAttributes('masks')} onClick={() => setActiveTab('masks')}>
+              Masks {selectedClip.masks && selectedClip.masks.length > 0 && <span className="badge">{selectedClip.masks.length}</span>}
+            </button>
+          </>
+        ) : isCaptionClip ? (
+          <>
+            <button className={`tab-btn ${activeTab === 'captions' ? 'active' : ''}`} onClick={() => setActiveTab('captions')}>Captions</button>
+            <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} onClick={() => setActiveTab('transform')}>Transform</button>
+            <button className={`tab-btn ${activeTab === 'color' ? 'active' : ''}`} onClick={() => setActiveTab('color')}>Color</button>
+            <button className={`tab-btn ${activeTab === 'effects' ? 'active' : ''}`} onClick={() => setActiveTab('effects')}>
+              Effects {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
+            </button>
+            <button className={`tab-btn ${activeTab === 'masks' ? 'active' : ''}`} onClick={() => setActiveTab('masks')}>
               Masks {selectedClip.masks && selectedClip.masks.length > 0 && <span className="badge">{selectedClip.masks.length}</span>}
             </button>
           </>
@@ -665,8 +707,11 @@ export function PropertiesPanel() {
 
       <div className={`properties-content ${activeTab === 'transcript' ? 'properties-content--transcript' : activeTab === 'analysis' ? 'properties-content--analysis' : ''}`}>
         <Suspense fallback={<TabLoading />}>
+          {activeTab === 'storyboard' && isStoryboardClip && (
+            <StoryboardPropertiesPanel clipId={selectedClip.id} />
+          )}
           {activeTab === 'live' && isLiveInputClip && <LiveInputTab clipId={selectedClip.id} />}
-          {activeTab === 'text' && isTextClip && selectedClip.textProperties && (
+          {activeTab === 'text' && isTextClip && selectedClip.source?.type === 'text' && selectedClip.textProperties && (
             <TextTab
               clipId={selectedClip.id}
               textProperties={selectedClip.textProperties}
@@ -674,6 +719,12 @@ export function PropertiesPanel() {
                 width: selectedClip.source?.textCanvas?.width ?? 1920,
                 height: selectedClip.source?.textCanvas?.height ?? 1080,
               }}
+            />
+          )}
+          {activeTab === 'captions' && isCaptionClip && selectedClip.captionProperties && (
+            <CaptionTab
+              clipId={selectedClip.id}
+              properties={selectedClip.captionProperties}
             />
           )}
           {activeTab === '3d-text' && is3DTextClip && selectedText3DProperties && (

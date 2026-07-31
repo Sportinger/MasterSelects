@@ -4,7 +4,7 @@ import { downloadBlob } from '../../engine/export';
 import type { AudioExportPipeline } from '../../engine/audio';
 import { getFFmpegBridge } from '../../engine/ffmpeg';
 import { ExportRenderSessionImpl } from '../../engine/export/ExportRenderSessionImpl';
-import type { Composition } from '../../stores/mediaStore';
+import { useMediaStore, type Composition } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { useExportStore } from '../../stores/exportStore';
 import type { FFmpegFrameRenderer } from './exportHelpers';
@@ -18,6 +18,9 @@ import { runImageSequenceExport } from './runners/imageSequenceExportRunner';
 import type { RunnerImageFormatOption } from './runners/runnerUtils';
 import { runStillImageExport } from './runners/stillImageExportRunner';
 import { runWebCodecsExport } from './runners/webCodecsExportRunner';
+import { createStoryboardAnimaticExportFrameDecorator } from '../../services/storyboard/animatic/exportFrameDecorator';
+import { resolveStoryboardExportGuard } from '../../services/storyboard/animatic/exportPolicy';
+import type { StoryboardAnimaticRenderMode } from '../../services/storyboard/animatic/types';
 
 const log = Logger.create('ExportRunController');
 
@@ -36,17 +39,22 @@ interface ExportRunControllerInput {
   isImageSequenceMode: boolean;
   isGifMode: boolean;
   isWebCodecsEncoder: boolean;
+  storyboardExportMode: Exclude<StoryboardAnimaticRenderMode, 'preview'>;
 }
 
 export function useExportRunController({
   exportState, playheadPosition, startExport, setExportProgress, endExport,
   getActiveComposition, selectedImageFormat, isXmlMode, isImageMode,
   isImageSequenceMode, isGifMode, isWebCodecsEncoder,
+  storyboardExportMode,
 }: ExportRunControllerInput) {
   const ffmpegFrameRendererRef = useRef<FFmpegFrameRenderer | null>(null);
   const ffmpegAudioPipelineRef = useRef<AudioExportPipeline | null>(null);
   const exportRenderSessionRef = useRef<ExportRenderSessionImpl | null>(null);
   const audioOnlyCancelledRef = useRef(false);
+  const storyboardClips = useTimelineStore((state) => state.clips);
+  const storyboardTracks = useTimelineStore((state) => state.tracks);
+  const storyboardMediaFiles = useMediaStore((state) => state.files);
 
   const {
     encoder, width, height, customWidth, customHeight, useCustomResolution,
@@ -73,6 +81,49 @@ export function useExportRunController({
     );
   }, []);
 
+  const createStoryboardFrameDecorator = useCallback((renderWidth: number, renderHeight: number) => {
+    if (storyboardExportMode !== 'animatic-export') return undefined;
+    return createStoryboardAnimaticExportFrameDecorator({
+      clips: storyboardClips,
+      tracks: storyboardTracks,
+      mediaFiles: storyboardMediaFiles,
+      width: renderWidth,
+      height: renderHeight,
+      cameraMove: 'push-in',
+      watermark: 'ANIMATIC',
+    });
+  }, [
+    storyboardClips,
+    storyboardExportMode,
+    storyboardMediaFiles,
+    storyboardTracks,
+  ]);
+
+  const ensureStoryboardVideoExportAllowed = useCallback((): boolean => {
+    if (storyboardExportMode !== 'normal-export') return true;
+    const range = getCurrentExportRange();
+    const guard = resolveStoryboardExportGuard({
+      mode: 'normal-export',
+      clips: storyboardClips,
+      tracks: storyboardTracks,
+      startTime: range.startTime,
+      endTime: range.endTime,
+    });
+    if (!guard.blocked) return true;
+    setError(
+      `Normal export blocked: ${guard.warnings.length} storyboard ` +
+      `${guard.warnings.length === 1 ? 'scene has' : 'scenes have'} no accepted media. ` +
+      'Choose Animatic export to render scene slates.',
+    );
+    return false;
+  }, [
+    getCurrentExportRange,
+    setError,
+    storyboardClips,
+    storyboardExportMode,
+    storyboardTracks,
+  ]);
+
   const handleWebCodecsExport = useCallback(async () => {
     if (isExporting) return;
 
@@ -96,6 +147,7 @@ export function useExportRunController({
         onExporter: setExporter,
         onProgress: setProgress,
         onTimelineProgress: setExportProgress,
+        frameDecorator: createStoryboardFrameDecorator(actualWidth, actualHeight),
       });
 
       if (result) {
@@ -109,7 +161,7 @@ export function useExportRunController({
       setExporter(null);
       endExport();
     }
-  }, [audioBitrate, audioSampleRate, bitrate, containerFormat, customFps, customHeight, customWidth, encoder, endExport, filename, fps, getCurrentExportRange, height, includeAudio, isExporting, normalizeAudio, rateControl, setError, setExportProgress, setExporter, setIsExporting, setProgress, stackedAlpha, startExport, useCustomFps, useCustomResolution, videoCodec, width]);
+  }, [audioBitrate, audioSampleRate, bitrate, containerFormat, createStoryboardFrameDecorator, customFps, customHeight, customWidth, encoder, endExport, filename, fps, getCurrentExportRange, height, includeAudio, isExporting, normalizeAudio, rateControl, setError, setExportProgress, setExporter, setIsExporting, setProgress, stackedAlpha, startExport, useCustomFps, useCustomResolution, videoCodec, width]);
 
   const handleCancel = useCallback(() => {
     if (!videoEnabled) {
@@ -153,7 +205,10 @@ export function useExportRunController({
         filename, gifColors, gifDither, gifLoop, gifLoopCount, gifPaletteMode, gifOptimize,
         gifTransparency, gifAlphaThreshold, gifBayerScale,
         frameRendererRef: ffmpegFrameRendererRef, renderSessionRef: exportRenderSessionRef,
-        createRenderSession: (options) => new ExportRenderSessionImpl(options),
+        createRenderSession: (options) => new ExportRenderSessionImpl({
+          ...options,
+          frameDecorator: createStoryboardFrameDecorator(options.width, options.height),
+        }),
         onProgress: setProgress, onTimelineProgress: setExportProgress,
       });
 
@@ -166,7 +221,7 @@ export function useExportRunController({
       setIsExporting(false);
       endExport();
     }
-  }, [customFps, customHeight, customWidth, encoder, endExport, filename, fps, getCurrentExportRange, gifAlphaThreshold, gifBayerScale, gifColors, gifDither, gifLoop, gifLoopCount, gifOptimize, gifPaletteMode, gifTransparency, height, isExporting, setError, setExportProgress, setIsExporting, setProgress, startExport, useCustomFps, useCustomResolution, width]);
+  }, [createStoryboardFrameDecorator, customFps, customHeight, customWidth, encoder, endExport, filename, fps, getCurrentExportRange, gifAlphaThreshold, gifBayerScale, gifColors, gifDither, gifLoop, gifLoopCount, gifOptimize, gifPaletteMode, gifTransparency, height, isExporting, setError, setExportProgress, setIsExporting, setProgress, startExport, useCustomFps, useCustomResolution, width]);
 
   const handleFFmpegExport = useCallback(async () => {
     if (isExporting) return;
@@ -200,7 +255,10 @@ export function useExportRunController({
         gifTransparency, gifAlphaThreshold, gifBayerScale,
         frameRendererRef: ffmpegFrameRendererRef, audioPipelineRef: ffmpegAudioPipelineRef,
         renderSessionRef: exportRenderSessionRef,
-        createRenderSession: (options) => new ExportRenderSessionImpl(options),
+        createRenderSession: (options) => new ExportRenderSessionImpl({
+          ...options,
+          frameDecorator: createStoryboardFrameDecorator(options.width, options.height),
+        }),
         onFfmpegProgress: setFfmpegProgress, onTimelineProgress: setExportProgress, onPhase: setExportPhase,
       });
 
@@ -222,7 +280,7 @@ export function useExportRunController({
       setExportPhase('idle');
       endExport();
     }
-  }, [audioBitrate, audioSampleRate, customFps, customHeight, customWidth, dnxhrProfile, endExport, ffmpegCodec, ffmpegContainer, ffmpegQuality, filename, fps, getCurrentExportRange, gifAlphaThreshold, gifBayerScale, gifColors, gifDither, gifLoop, gifLoopCount, gifOptimize, gifPaletteMode, gifTransparency, height, includeAudio, isExporting, isFFmpegReady, loadFFmpeg, normalizeAudio, proresProfile, setError, setExportPhase, setExportProgress, setFfmpegProgress, setIsExporting, startExport, useCustomFps, useCustomResolution, visualMode, width]);
+  }, [audioBitrate, audioSampleRate, createStoryboardFrameDecorator, customFps, customHeight, customWidth, dnxhrProfile, endExport, ffmpegCodec, ffmpegContainer, ffmpegQuality, filename, fps, getCurrentExportRange, gifAlphaThreshold, gifBayerScale, gifColors, gifDither, gifLoop, gifLoopCount, gifOptimize, gifPaletteMode, gifTransparency, height, includeAudio, isExporting, isFFmpegReady, loadFFmpeg, normalizeAudio, proresProfile, setError, setExportPhase, setExportProgress, setFfmpegProgress, setIsExporting, startExport, useCustomFps, useCustomResolution, visualMode, width]);
 
   const handleExportAudioOnly = useCallback(async () => {
     if (isExporting) return;
@@ -294,7 +352,10 @@ export function useExportRunController({
         width: actualWidth, height: actualHeight, fps: exportFps, exportTime,
         filename, imageFormat, imageQuality, selectedImageFormat,
         renderSessionRef: exportRenderSessionRef,
-        createRenderSession: (options) => new ExportRenderSessionImpl(options),
+        createRenderSession: (options) => new ExportRenderSessionImpl({
+          ...options,
+          frameDecorator: createStoryboardFrameDecorator(options.width, options.height),
+        }),
       });
 
       if (result) {
@@ -303,7 +364,7 @@ export function useExportRunController({
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Frame render failed');
     }
-  }, [customFps, customHeight, customWidth, filename, fps, height, imageFormat, imageQuality, isExporting, playheadPosition, selectedImageFormat, setError, useCustomFps, useCustomResolution, width]);
+  }, [createStoryboardFrameDecorator, customFps, customHeight, customWidth, filename, fps, height, imageFormat, imageQuality, isExporting, playheadPosition, selectedImageFormat, setError, useCustomFps, useCustomResolution, width]);
 
   const handleRenderImageSequence = useCallback(async () => {
     if (isExporting) return;
@@ -325,7 +386,10 @@ export function useExportRunController({
         exportMode: encoder === 'webcodecs' ? 'fast' : 'precise',
         filename, imageFormat, imageQuality, selectedImageFormat,
         frameRendererRef: ffmpegFrameRendererRef, renderSessionRef: exportRenderSessionRef,
-        createRenderSession: (options) => new ExportRenderSessionImpl(options),
+        createRenderSession: (options) => new ExportRenderSessionImpl({
+          ...options,
+          frameDecorator: createStoryboardFrameDecorator(options.width, options.height),
+        }),
         onTimelineStart: (rangeStart, rangeEnd) => {
           startExport(rangeStart, rangeEnd);
           timelineExportStarted = true;
@@ -345,7 +409,7 @@ export function useExportRunController({
         endExport();
       }
     }
-  }, [customFps, customHeight, customWidth, encoder, endExport, filename, fps, getCurrentExportRange, height, imageFormat, imageQuality, isExporting, selectedImageFormat, setError, setExportPhase, setExportProgress, setIsExporting, setProgress, startExport, useCustomFps, useCustomResolution, width]);
+  }, [createStoryboardFrameDecorator, customFps, customHeight, customWidth, encoder, endExport, filename, fps, getCurrentExportRange, height, imageFormat, imageQuality, isExporting, selectedImageFormat, setError, setExportPhase, setExportProgress, setIsExporting, setProgress, startExport, useCustomFps, useCustomResolution, width]);
 
   const handlePrimaryExport = useCallback(() => {
     if (isXmlMode) {
@@ -378,13 +442,15 @@ export function useExportRunController({
       return;
     }
 
+    if (!ensureStoryboardVideoExportAllowed()) return;
+
     if (isWebCodecsEncoder) {
       void handleWebCodecsExport();
       return;
     }
 
     void handleFFmpegExport();
-  }, [encoder, handleBrowserGifExport, handleExportAudioOnly, handleExportFCPXML, handleFFmpegExport, handleRenderFrame, handleRenderImageSequence, handleWebCodecsExport, includeAudio, isGifMode, isImageMode, isImageSequenceMode, isWebCodecsEncoder, isXmlMode, videoEnabled]);
+  }, [encoder, ensureStoryboardVideoExportAllowed, handleBrowserGifExport, handleExportAudioOnly, handleExportFCPXML, handleFFmpegExport, handleRenderFrame, handleRenderImageSequence, handleWebCodecsExport, includeAudio, isGifMode, isImageMode, isImageSequenceMode, isWebCodecsEncoder, isXmlMode, videoEnabled]);
 
   return {
     handleCancel,

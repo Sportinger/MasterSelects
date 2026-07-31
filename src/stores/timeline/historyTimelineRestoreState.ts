@@ -201,6 +201,8 @@ function createRestoredClip(
       preservesPitch: clip.preservesPitch,
       freeRun: clip.freeRun,
       textProperties: clonePlain(clip.textProperties),
+      captionProperties: clonePlain(clip.captionProperties),
+      captionLayerBinding: clonePlain(clip.captionLayerBinding),
       text3DProperties: clonePlain(clip.text3DProperties),
       solidColor: clip.solidColor,
       transitionOverlay: clonePlain(clip.transitionOverlay),
@@ -215,6 +217,7 @@ function createRestoredClip(
       is3D: clip.is3D,
       wireframe: clip.wireframe,
       meshType: clip.meshType,
+      storyboardProperties: clonePlain(clip.storyboardProperties),
       needsReload: !reusedRuntime && !(clip.liveInputId ?? clip.runtimeRef.liveInputId) && clip.runtimeRef.kind !== 'inline-data'
         ? true
         : clip.runtimeRef.needsReload,

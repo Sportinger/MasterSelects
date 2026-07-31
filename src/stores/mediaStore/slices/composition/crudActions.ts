@@ -46,13 +46,13 @@ function collectTransitionCompositionDescendantIds(
       }
     }
     for (const composition of compositions) {
-      if (
-        composition.transitionComp?.kind !== 'transition-comp' ||
-        composition.transitionComp.parentCompositionId !== parentId ||
-        ids.has(composition.id)
-      ) {
-        continue;
-      }
+      const isPrivateTransitionChild =
+        composition.transitionComp?.kind === 'transition-comp'
+        && composition.transitionComp.parentCompositionId === parentId;
+      const isPrivateCaptionChild =
+        composition.captionComp?.kind === 'caption-comp'
+        && composition.captionComp.parentCompositionId === parentId;
+      if ((!isPrivateTransitionChild && !isPrivateCaptionChild) || ids.has(composition.id)) continue;
       ids.add(composition.id);
       pending.push(composition.id);
     }
@@ -105,6 +105,7 @@ export const createCompositionCrudActions: MediaSliceCreator<Pick<
       backgroundColor: settings?.backgroundColor ?? '#000000',
       timelineData: settings?.timelineData ?? createDefaultCompositionTimelineData(duration),
       transitionComp: settings?.transitionComp ? structuredClone(settings.transitionComp) : undefined,
+      captionComp: settings?.captionComp ? structuredClone(settings.captionComp) : undefined,
     };
 
     set((state) => ({ compositions: [...state.compositions, comp] }));
@@ -114,7 +115,10 @@ export const createCompositionCrudActions: MediaSliceCreator<Pick<
   duplicateComposition: (id: string) => {
     const original = get().compositions.find((c) => c.id === id);
     if (!original) return null;
-    if (original.transitionComp?.kind === 'transition-comp') return null;
+    if (
+      original.transitionComp?.kind === 'transition-comp'
+      || original.captionComp?.kind === 'caption-comp'
+    ) return null;
 
     const duplicate: Composition = {
       ...original,
@@ -123,6 +127,7 @@ export const createCompositionCrudActions: MediaSliceCreator<Pick<
       createdAt: Date.now(),
       timelineData: stripTransitionCompositionIds(original.timelineData),
       transitionComp: undefined,
+      captionComp: undefined,
     };
 
     set((state) => ({ compositions: [...state.compositions, duplicate] }));

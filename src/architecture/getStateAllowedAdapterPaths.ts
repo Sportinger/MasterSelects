@@ -1,0 +1,36 @@
+/**
+ * Imperative store access is confined to these integration boundaries.
+ * Exact Storyboard entries intentionally avoid a broad feature-wide escape.
+ */
+export const allowedAdapterPaths = [
+  'src/services/aiTools/**',
+  'src/services/guidedActions/**',
+  'src/components/guidedActions/**',
+  'src/services/project/**',
+  'src/services/projectFileService.ts',
+  'src/stores/historyStore/**',
+  'src/stores/dockStore/**',
+  'src/services/midi/**',
+  'src/hooks/useMIDIRuntime.ts',
+  'src/services/sam2/**',
+  'src/services/matanyone/**',
+  'src/services/muscriptor/**',
+  'src/services/flashboard/**',
+  'src/services/mediaArtifacts/**',
+  'src/services/mediaRuntime/**',
+  'src/services/timeline/timelineRuntimeCoordinator.ts',
+  'src/services/timeline/runtimeCoordinatorTypes.ts',
+  'src/services/timeline/runtimeCoordinatorContracts.ts',
+  'src/services/timeline/timelineTransitionMediaDurations.ts',
+  'src/services/audio/AudioRecordingService.ts',
+  'src/services/audio/recording/commitRecording.ts',
+  'src/services/audio/timelineRecordingWorkflow.ts',
+  'src/services/capture/recording/commitRecording.ts',
+  'src/services/capture/recording/webCodecsBackend.ts',
+  'src/services/export/**',
+  'src/services/render/**',
+  'src/services/storyboard/variants/materializationRuntime.ts',
+  'src/services/storyboard/variants/rangeCommitRuntime.ts',
+  'src/stores/storyboardStore/index.ts',
+  'src/editorBoot.ts',
+] as const;

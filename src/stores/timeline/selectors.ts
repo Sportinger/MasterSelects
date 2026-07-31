@@ -200,6 +200,7 @@ export const selectClipActions = (state: TimelineStore) => ({
   addCompClip: state.addCompClip,
   addTextClip: state.addTextClip,
   addSolidClip: state.addSolidClip,
+  addStoryboardClip: state.addStoryboardClip,
   addMathSceneClip: state.addMathSceneClip,
   updateSolidColor: state.updateSolidColor,
   moveClip: state.moveClip,

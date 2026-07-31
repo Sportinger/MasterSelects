@@ -1,16 +1,19 @@
 ﻿import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { vi } from 'vitest';
 import { handleDeleteClip } from '../../src/services/aiTools/handlers/clips/delete';
 import { handleAddEffect } from '../../src/services/aiTools/handlers/effects';
 import { handleAddKeyframe } from '../../src/services/aiTools/handlers/keyframes';
 import { handleUpdateMask } from '../../src/services/aiTools/handlers/masks';
 import { handleSetTransform } from '../../src/services/aiTools/handlers/transform';
 import type { ToolResult } from '../../src/services/aiTools/types';
+import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 import type { ClipMask } from '../../src/types/masks';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 
 const initialTimelineState = useTimelineStore.getState();
+const initialMediaState = useMediaStore.getState();
 
 type EntityKind = 'clip' | 'effect' | 'keyframe' | 'mask' | 'transform';
 
@@ -27,11 +30,17 @@ interface MutationResultData {
 describe('AI tool mutation envelopes packet A', () => {
   beforeEach(() => {
     useTimelineStore.setState(initialTimelineState);
+    vi.mocked(useMediaStore.getState).mockReturnValue({
+      ...initialMediaState,
+      activeCompositionId: 'comp-1',
+      compositions: [{ id: 'comp-1', name: 'Composition 1', width: 1920, height: 1080 } as never],
+    } as ReturnType<typeof useMediaStore.getState>);
     seedTimeline();
   });
 
   afterEach(() => {
     useTimelineStore.setState(initialTimelineState);
+    vi.mocked(useMediaStore.getState).mockReturnValue(initialMediaState);
   });
 
   it('reports both video and linked-audio deletions', async () => {
@@ -138,7 +147,7 @@ function seedTimeline(): void {
 }
 
 function getMutationResultData(result: ToolResult): MutationResultData {
-  expect(result.success).toBe(true);
+  expect(result.success, result.error).toBe(true);
   return result.data as MutationResultData;
 }
 

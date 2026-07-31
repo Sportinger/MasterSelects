@@ -3,11 +3,14 @@
  * Inspired by After Effects / professional NLE text panels
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { createTextBoundsPathProperty, type Keyframe, type TextClipProperties } from '../../types';
+import { createContext, useState, useCallback, useContext, useEffect, useRef } from 'react';
+import { createTextBoundsPathProperty } from '../../types/animationProperties';
+import type { Keyframe } from '../../types/keyframes';
+import type { TextClipProperties } from '../../types/text';
 import { useTimelineStore } from '../../stores/timeline';
 import { googleFontsService, POPULAR_FONTS } from '../../services/googleFontsService';
 import { resolvePointerLockDragDeltaX } from '../common/pointerLockDragDelta';
+import { LabeledValue } from './properties/transformTab/ValueControls';
 import {
   createTextBoundsFromRect,
   getTextBoundsPathValue,
@@ -16,6 +19,24 @@ import {
 } from '../../services/textLayout';
 
 const EMPTY_KEYFRAMES: Keyframe[] = [];
+const SharedTextNumberControlContext = createContext(false);
+
+function getCompactNumberLabel(title: string): string {
+  const labels: Record<string, string> = {
+    'Font Size': 'Size',
+    'Line Height': 'Line',
+    'Letter Spacing': 'Track',
+    'Stroke Width': 'Width',
+    'Box X': 'X',
+    'Box Y': 'Y',
+    'Box Width': 'W',
+    'Box Height': 'H',
+    'Shadow Offset X': 'X',
+    'Shadow Offset Y': 'Y',
+    'Shadow Blur': 'Blur',
+  };
+  return labels[title] ?? title;
+}
 
 // Compact draggable number with icon label
 interface CompactNumberProps {
@@ -27,6 +48,7 @@ interface CompactNumberProps {
   unit?: string;
   icon: React.ReactNode;
   title: string;
+  defaultValue?: number;
 }
 
 interface CompactNumberDragState {
@@ -39,7 +61,8 @@ interface CompactNumberDragState {
   element: HTMLElement;
 }
 
-function CompactNumber({ value, onChange, min = 0, max = 999, step = 1, unit = 'px', icon, title }: CompactNumberProps) {
+function CompactNumber({ value, onChange, min = 0, max = 999, step = 1, unit = 'px', icon, title, defaultValue }: CompactNumberProps) {
+  const useSharedControl = useContext(SharedTextNumberControlContext);
   const dragStateRef = useRef<CompactNumberDragState | null>(null);
 
   const readDragDeltaX = useCallback((event: MouseEvent) => {
@@ -142,6 +165,21 @@ function CompactNumber({ value, onChange, min = 0, max = 999, step = 1, unit = '
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
   }, [value, readDragDeltaX, onChange, min, max, step]);
+
+  if (useSharedControl) {
+    return (
+      <LabeledValue
+        label={getCompactNumberLabel(title)}
+        value={value}
+        onChange={onChange}
+        min={min}
+        max={max}
+        decimals={step < 1 ? 1 : 0}
+        suffix={unit}
+        defaultValue={defaultValue}
+      />
+    );
+  }
 
   return (
     <div className="tt-compact-num" title={title} onMouseDown={handleMouseDown}>
@@ -307,9 +345,19 @@ interface TextTabProps {
   clipId: string;
   textProperties: TextClipProperties;
   canvasSize?: { width: number; height: number };
+  liveText?: boolean;
+  hideContent?: boolean;
+  compact?: boolean;
 }
 
-export function TextTab({ clipId, textProperties, canvasSize = { width: 1920, height: 1080 } }: TextTabProps) {
+export function TextTab({
+  clipId,
+  textProperties,
+  canvasSize = { width: 1920, height: 1080 },
+  liveText = false,
+  hideContent = false,
+  compact = false,
+}: TextTabProps) {
   const { updateTextProperties } = useTimelineStore();
   const [localText, setLocalText] = useState(textProperties.text);
 
@@ -320,13 +368,14 @@ export function TextTab({ clipId, textProperties, canvasSize = { width: 1920, he
 
   // Debounced text update - 50ms for near-instant preview
   useEffect(() => {
+    if (liveText) return;
     const timer = setTimeout(() => {
       if (localText !== textProperties.text) {
         updateTextProperties(clipId, { text: localText });
       }
     }, 50);
     return () => clearTimeout(timer);
-  }, [localText, clipId, textProperties.text, updateTextProperties]);
+  }, [liveText, localText, clipId, textProperties.text, updateTextProperties]);
 
   // Load font when component mounts
   useEffect(() => {
@@ -397,17 +446,21 @@ export function TextTab({ clipId, textProperties, canvasSize = { width: 1920, he
   }, [canvasHeight, canvasWidth, clipId, textProperties, updateTextProperties]);
 
   return (
-    <div className="tt">
-      {/* Text Content */}
-      <div className="tt-section">
-        <textarea
-          className="tt-textarea"
-          value={localText}
-          onChange={handleTextChange}
-          placeholder="Enter text..."
-          rows={2}
-        />
-      </div>
+    <SharedTextNumberControlContext.Provider value={compact}>
+      <div className={`tt ${compact ? 'tt--compact' : ''}`}>
+      {!hideContent && (
+        <div className="tt-section">
+          <textarea
+            className="tt-textarea"
+            value={liveText ? 'Live from transcript' : localText}
+            onChange={handleTextChange}
+            placeholder={liveText ? undefined : 'Enter text...'}
+            aria-label={liveText ? 'Caption text is supplied live from the transcript' : 'Text content'}
+            disabled={liveText}
+            rows={2}
+          />
+        </div>
+      )}
 
       {/* Font */}
       <div className="tt-section">
@@ -477,6 +530,7 @@ export function TextTab({ clipId, textProperties, canvasSize = { width: 1920, he
             min={8}
             max={500}
             unit="px"
+            defaultValue={64}
           />
           <CompactNumber
             icon={<IconLineHeight />}
@@ -487,6 +541,7 @@ export function TextTab({ clipId, textProperties, canvasSize = { width: 1920, he
             max={3}
             step={0.1}
             unit=""
+            defaultValue={1.12}
           />
         </div>
 
@@ -500,6 +555,7 @@ export function TextTab({ clipId, textProperties, canvasSize = { width: 1920, he
             min={-10}
             max={50}
             unit="px"
+            defaultValue={0}
           />
           <div className="tt-compact-num" style={{ visibility: 'hidden' }} />
         </div>
@@ -550,6 +606,7 @@ export function TextTab({ clipId, textProperties, canvasSize = { width: 1920, he
               max={20}
               step={0.5}
               unit="px"
+              defaultValue={4}
             />
           )}
         </div>
@@ -668,16 +725,17 @@ export function TextTab({ clipId, textProperties, canvasSize = { width: 1920, he
               <span className="tt-color-label">Color</span>
             </div>
             <div className="tt-row-2col">
-              <CompactNumber icon={<span style={{ fontSize: 9 }}>X</span>} title="Shadow Offset X" value={textProperties.shadowOffsetX} onChange={(v) => updateProp('shadowOffsetX', v)} min={-50} max={50} unit="px" />
-              <CompactNumber icon={<span style={{ fontSize: 9 }}>Y</span>} title="Shadow Offset Y" value={textProperties.shadowOffsetY} onChange={(v) => updateProp('shadowOffsetY', v)} min={-50} max={50} unit="px" />
+              <CompactNumber icon={<span style={{ fontSize: 9 }}>X</span>} title="Shadow Offset X" value={textProperties.shadowOffsetX} onChange={(v) => updateProp('shadowOffsetX', v)} min={-50} max={50} unit="px" defaultValue={0} />
+              <CompactNumber icon={<span style={{ fontSize: 9 }}>Y</span>} title="Shadow Offset Y" value={textProperties.shadowOffsetY} onChange={(v) => updateProp('shadowOffsetY', v)} min={-50} max={50} unit="px" defaultValue={0} />
             </div>
             <div className="tt-row-2col">
-              <CompactNumber icon={<span style={{ fontSize: 9 }}>B</span>} title="Shadow Blur" value={textProperties.shadowBlur} onChange={(v) => updateProp('shadowBlur', v)} min={0} max={50} unit="px" />
+              <CompactNumber icon={<span style={{ fontSize: 9 }}>B</span>} title="Shadow Blur" value={textProperties.shadowBlur} onChange={(v) => updateProp('shadowBlur', v)} min={0} max={50} unit="px" defaultValue={0} />
               <div className="tt-compact-num" style={{ visibility: 'hidden' }} />
             </div>
           </>
         )}
       </div>
-    </div>
+      </div>
+    </SharedTextNumberControlContext.Provider>
   );
 }

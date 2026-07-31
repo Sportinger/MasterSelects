@@ -62,7 +62,6 @@ export const createKeyframeViewStateActions: SliceCreator<KeyframeViewStateActio
   getExpandedTrackHeight: (trackId, baseHeight) => {
     const {
       expandedTracks,
-      expandedCurveProperties,
       clips,
       selectedClipIds,
       clipKeyframes,
@@ -93,17 +92,7 @@ export const createKeyframeViewStateActions: SliceCreator<KeyframeViewStateActio
       uniqueProperties.delete('scale.z');
     }
 
-    let extraHeight = uniqueProperties.size * PROPERTY_ROW_HEIGHT;
-    const trackCurveProps = expandedCurveProperties.get(trackId);
-    if (trackCurveProps) {
-      trackCurveProps.forEach(prop => {
-        if (uniqueProperties.has(prop)) {
-          extraHeight += get().curveEditorHeight;
-        }
-      });
-    }
-
-    return baseHeight + extraHeight;
+    return baseHeight + uniqueProperties.size * PROPERTY_ROW_HEIGHT;
   },
 
   trackHasKeyframes: (trackId) => {

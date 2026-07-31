@@ -13,6 +13,7 @@ import { normalizeToolName } from '../policy';
 
 // Import handlers by category
 import {
+  handleGetTimelineRangeSelection,
   handleGetTimelineState,
   handleSetPlayhead,
   handleSetInOutPoints,
@@ -207,6 +208,14 @@ import {
 } from './nodeWorkspace';
 import { handleGetTimelineAnalysis } from './agentTimeline';
 import { timelineHandlers } from './timelineHandlerRegistry';
+import {
+  handleAddTimelineVariantOption,
+  handleArchiveTimelineVariantSet,
+  handleCommitTimelineVariantOption,
+  handleCreateTimelineVariantSet,
+  handleListTimelineVariantOptions,
+  handleMaterializeTimelineVariantOption,
+} from './storyboardVariants';
 
 const mediaHandlers: Record<string, (args: Record<string, unknown>, store: ReturnType<typeof useMediaStore.getState>, callerContext?: CallerContext) => Promise<ToolResult>> = {
   getMediaItems: handleGetMediaItems,
@@ -222,6 +231,12 @@ const mediaHandlers: Record<string, (args: Record<string, unknown>, store: Retur
 
 // Self-contained handlers (no store dependency, or fetch own stores)
 const selfContainedHandlers: Record<string, (args: Record<string, unknown>, callerContext?: CallerContext) => Promise<ToolResult>> = {
+  createTimelineVariantSet: handleCreateTimelineVariantSet,
+  addTimelineVariantOption: handleAddTimelineVariantOption,
+  materializeTimelineVariantOption: handleMaterializeTimelineVariantOption,
+  listTimelineVariantOptions: handleListTimelineVariantOptions,
+  commitTimelineVariantOption: handleCommitTimelineVariantOption,
+  archiveTimelineVariantSet: handleArchiveTimelineVariantSet,
   listLocalFiles: handleListLocalFiles,
   addClipSegment: handleAddClipSegment,
   listEffects: handleListEffects,
@@ -548,6 +563,7 @@ export async function executeToolInternal(
 // Re-export individual handlers for direct use if needed
 export {
   // Timeline
+  handleGetTimelineRangeSelection,
   handleGetTimelineState,
   handleSetPlayhead,
   handleSetInOutPoints,

@@ -31,6 +31,7 @@ import {
   type RestoredRuntimePatch,
 } from './vectorRuntimeRestore';
 import { collectNestedClipKeyframes, mergeNestedClipKeyframes } from './nestedComposition/nestedCompositionKeyframes';
+import { appendNestedTextClip } from './nestedComposition/nestedCompositionTextClip';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('NestedCompositionLoader');
@@ -252,6 +253,8 @@ async function loadSubNestedClips(
       result.push(motionClip);
       continue;
     }
+
+    if (await appendNestedTextClip(result, sc, clipId, { width: composition.width, height: composition.height })) continue;
 
     const mediaFile = mediaStore.files.find(f => f.id === sc.mediaFileId);
     if (!mediaFile) {
@@ -486,6 +489,8 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
       nestedClips.push(motionClip);
       continue;
     }
+
+    if (await appendNestedTextClip(nestedClips, serializedClip, nestedClipId, { width: composition.width, height: composition.height })) continue;
 
     const mediaFile = mediaStore.files.find(f => f.id === serializedClip.mediaFileId);
     if (!mediaFile) {

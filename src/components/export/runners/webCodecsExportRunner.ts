@@ -1,5 +1,6 @@
 import { FrameExporter } from '../../../engine/export';
 import type { ContainerFormat, ExportProgress, VideoCodec } from '../../../engine/export';
+import type { ExportRenderFrameDecorator } from '../../../engine/export/ExportRenderSessionImpl';
 
 export interface WebCodecsExportRunnerInput {
   width: number;
@@ -21,6 +22,7 @@ export interface WebCodecsExportRunnerInput {
   onExporter: (exporter: FrameExporter) => void;
   onProgress: (progress: ExportProgress) => void;
   onTimelineProgress: (percent: number, currentTime: number) => void;
+  frameDecorator?: ExportRenderFrameDecorator;
 }
 
 export interface WebCodecsExportRunnerResult {
@@ -47,6 +49,7 @@ export async function runWebCodecsExport(
     audioBitrate: input.audioBitrate,
     normalizeAudio: input.normalizeAudio,
     exportMode: input.exportMode,
+    frameDecorator: input.frameDecorator,
   });
   input.onExporter(exporter);
 

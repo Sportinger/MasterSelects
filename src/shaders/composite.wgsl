@@ -62,6 +62,7 @@ struct LayerUniforms {
   sourceRectY: f32,
   sourceRectWidth: f32,
   sourceRectHeight: f32,
+  videoRotation: u32,
 };
 
 @group(0) @binding(0) var texSampler: sampler;
@@ -677,6 +678,19 @@ fn blendLuminosity(base: vec3f, blend: vec3f) -> vec3f {
   return hslToRgb(vec3f(baseHsl.x, baseHsl.y, blendHsl.z));
 }
 
+fn orientSourceUv(uv: vec2f) -> vec2f {
+  if (layer.videoRotation == 1u) {
+    return vec2f(uv.y, 1.0 - uv.x);
+  }
+  if (layer.videoRotation == 2u) {
+    return vec2f(1.0 - uv.x, 1.0 - uv.y);
+  }
+  if (layer.videoRotation == 3u) {
+    return vec2f(1.0 - uv.y, uv.x);
+  }
+  return uv;
+}
+
 // ============ Fragment Shader ============
 
 @fragment
@@ -759,8 +773,9 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   // Clamp UV to valid range for sampling
   let clampedUV = clamp(uv, vec2f(0.0), vec2f(1.0));
   let transitionUV = getTransitionUv(clampedUV);
-  let sourceUV = vec2f(layer.sourceRectX, layer.sourceRectY) +
+  let displaySourceUV = vec2f(layer.sourceRectX, layer.sourceRectY) +
     transitionUV * vec2f(layer.sourceRectWidth, layer.sourceRectHeight);
+  let sourceUV = orientSourceUv(displaySourceUV);
 
   // Sample both textures in uniform control flow
   let baseColor = textureSample(baseTexture, texSampler, input.uv);

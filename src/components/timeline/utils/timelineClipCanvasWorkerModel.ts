@@ -33,6 +33,7 @@ import {
   type TimelinePaintResourceKind,
   type TimelinePaintResourceRef,
 } from '../../../timeline';
+import { createStoryboardCardRenderPayload } from '../storyboard';
 
 export type {
   TimelineClipCanvasWorkerPaintClipInput,
@@ -593,6 +594,19 @@ export function buildTimelineClipCanvasWorkerDrawMessage(
       id: clip.id,
       paintPacket: paint.paintPacket,
       bodyFill: clip.bodyFill,
+      storyboardCard: createStoryboardCardRenderPayload({
+        clip: {
+          id: clip.id,
+          duration: clip.duration,
+          source: { type: clip.dataSourceType },
+          storyboardProperties: clip.storyboardProperties,
+        },
+        x,
+        y: 1,
+        width,
+        height: Math.max(0, input.height - 2),
+        dpr: input.dpr,
+      }) ?? undefined,
     };
     workerClips.push(workerClip);
   }

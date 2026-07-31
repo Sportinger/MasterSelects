@@ -196,6 +196,12 @@ export class SnapshotManager {
       compositionId: clip.compositionId,
       masks: clip.masks?.map(m => ({ ...m, vertices: m.vertices.map(v => ({ ...v, handleIn: { ...v.handleIn }, handleOut: { ...v.handleOut } })) })),
       textProperties: clip.textProperties ? { ...clip.textProperties } : undefined,
+      captionProperties: clip.captionProperties
+        ? structuredClone(clip.captionProperties)
+        : undefined,
+      captionLayerBinding: clip.captionLayerBinding
+        ? structuredClone(clip.captionLayerBinding)
+        : undefined,
       solidColor: clip.solidColor,
       transitionOverlay: clip.transitionOverlay ? structuredClone(clip.transitionOverlay) : undefined,
       transitionIn: clip.transitionIn ? { ...clip.transitionIn } : undefined,

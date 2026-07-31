@@ -19,6 +19,7 @@ function KeyboardHarness({
   duration = 10,
   setPlayheadPosition = vi.fn(),
   play = vi.fn(),
+  toggleTimelineCurveMode = vi.fn(),
   applyTimelineEditOperation,
 }: {
   selectedClipIds?: Set<string>;
@@ -29,6 +30,7 @@ function KeyboardHarness({
   duration?: number;
   setPlayheadPosition?: (time: number) => void;
   play?: () => void;
+  toggleTimelineCurveMode?: () => void;
   applyTimelineEditOperation: TimelineEditOperationActions['applyTimelineEditOperation'];
 }) {
   usePointerFocusHandoff();
@@ -42,6 +44,7 @@ function KeyboardHarness({
     setOutPointAtPlayhead: vi.fn(),
     clearInOut: vi.fn(),
     toggleLoopPlayback: vi.fn(),
+    toggleTimelineCurveMode,
     selectedClipIds,
     selectedKeyframeIds,
     applyTimelineEditOperation,
@@ -116,6 +119,22 @@ describe('useTimelineKeyboard edit operation routing', () => {
       source: 'shortcut',
       historyLabel: 'Delete keyframes',
     });
+  });
+
+  it('toggles the universal Timeline/Graph view with G outside text entry', () => {
+    const toggleTimelineCurveMode = vi.fn();
+    const { getByTestId } = render(
+      <KeyboardHarness
+        toggleTimelineCurveMode={toggleTimelineCurveMode}
+        applyTimelineEditOperation={applyTimelineEditOperation}
+      />,
+    );
+
+    fireEvent.keyDown(window, { key: 'g' });
+    expect(toggleTimelineCurveMode).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(getByTestId('text-input'), { key: 'g' });
+    expect(toggleTimelineCurveMode).toHaveBeenCalledTimes(1);
   });
 
   it('routes delete to transition removal when a transition is selected', () => {

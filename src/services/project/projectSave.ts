@@ -25,6 +25,7 @@ import { createCurrentAudioArtifactStore } from '../audio/timelineWaveformPyrami
 import { clonePersistedClipAudioState } from '../audio/clipAudioStatePersistence';
 import { flashBoardMediaBridge } from '../flashboard/FlashBoardMediaBridge';
 import { cloneClipNodeGraph } from '../nodeGraph';
+import { cloneStoryboardClipProperties } from '../storyboard/core';
 import { normalizeTransitionInstanceParams } from '../../transitions';
 import { syncTransitionCompositionTimelineToParent } from '../../stores/mediaStore/slices/composition/transitionCompositionSync';
 import type {
@@ -57,6 +58,10 @@ import {
   withProjectStoreSyncGuard,
 } from './projectStoreSyncGuard';
 import { persistFlashBoardChatJournal } from './flashBoardChatProjectJournal';
+import {
+  getStoryboardProjectSnapshot,
+  reconcileStoryboardTimelineClips,
+} from '../../stores/storyboardStore';
 import {
   collectLegacyMediaArtifactSeeds,
   persistLegacyMediaArtifactSeeds,
@@ -247,8 +252,15 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       compositionId: c.compositionId || undefined,
       // Text clip support
       textProperties: c.textProperties || undefined,
+      captionProperties: c.captionProperties
+        ? structuredClone(c.captionProperties)
+        : undefined,
+      captionLayerBinding: c.captionLayerBinding
+        ? structuredClone(c.captionLayerBinding)
+        : undefined,
       // Solid clip support
       solidColor: c.solidColor || undefined,
+      storyboardProperties: cloneStoryboardClipProperties(c.storyboardProperties),
       // Generated transition overlay support
       transitionOverlay: c.transitionOverlay || c.source?.transitionOverlay
         ? structuredClone(c.transitionOverlay ?? c.source?.transitionOverlay)
@@ -292,6 +304,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       folderId: comp.parentId,
       labelColor: comp.labelColor && comp.labelColor !== 'none' ? comp.labelColor : undefined,
       transitionComp: comp.transitionComp ? structuredClone(comp.transitionComp) : undefined,
+      captionComp: comp.captionComp ? structuredClone(comp.captionComp) : undefined,
       tracks,
       clips,
       videoBakeRegions: timelineData?.videoBakeRegions
@@ -673,6 +686,8 @@ export async function syncStoresToProject(): Promise<void> {
         getFlashBoardPromptHistory(),
         getFlashBoardChatMessages(),
       );
+      reconcileStoryboardTimelineClips(useTimelineStore.getState().clips);
+      projectData.storyboard = getStoryboardProjectSnapshot();
 
       if (!await persistFlashBoardChatJournal(getFlashBoardChatMessages())) {
         log.warn(' Chat journal could not be mirrored to the project folder');

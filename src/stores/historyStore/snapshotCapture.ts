@@ -139,6 +139,11 @@ function createExportSnapshot(refs: HistoryStoreRefs): StateSnapshot['export'] {
   return deepClone(getExportStoreData(refs.getExportState?.() || createDefaultExportStoreData()));
 }
 
+function createStoryboardSnapshot(refs: HistoryStoreRefs): StateSnapshot['storyboard'] {
+  const storyboard = refs.getStoryboardState?.();
+  return storyboard ? deepClone(storyboard) : undefined;
+}
+
 export function createHistorySnapshot(
   label: string,
   refs: HistoryStoreRefs,
@@ -156,6 +161,7 @@ export function createHistorySnapshot(
     media: createMediaSnapshot(refs),
     dock: createDockSnapshot(refs),
     flashboard: createFlashBoardSnapshot(refs),
+    storyboard: createStoryboardSnapshot(refs),
     export: createExportSnapshot(refs),
   };
 }

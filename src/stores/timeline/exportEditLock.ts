@@ -78,12 +78,17 @@ const EXPORT_LOCKED_ACTION_NAMES = new Set<string>([
   'clearClipStemSeparation',
 
   'addTextClip',
+  'addCaptionClip',
+  'ensureCaptionTextClip',
   'updateTextProperties',
+  'updateCaptionProperties',
   'updateTextBounds',
   'updateTextBoundsVertex',
   'updateTextBoundsVertices',
   'addSolidClip',
   'updateSolidColor',
+  'addStoryboardClip',
+  'updateStoryboardScene',
   'commitMidiTranscription',
   'addMathSceneClip',
   'updateMathScene',
@@ -224,9 +229,9 @@ const EXPORT_LOCKED_ACTION_NAMES = new Set<string>([
   'clearTimeline',
 ]);
 
-const ASYNC_NULL_ACTION_NAMES = new Set<string>(['addTextClip', 'bakeClipAudioEditStack', 'applyRoomToneFill', 'startClipStemSeparation']);
+const ASYNC_NULL_ACTION_NAMES = new Set<string>(['addTextClip', 'addCaptionClip', 'bakeClipAudioEditStack', 'applyRoomToneFill', 'startClipStemSeparation']);
 const ASYNC_ARRAY_ACTION_NAMES = new Set<string>(['applyDetectedSilenceRemoval', 'applyDetectedTransientSoftening']);
-const ASYNC_FALSE_ACTION_NAMES = new Set<string>(['bakeCompositionVideoBakeRegion', 'bakeClipVideoBakeRegion']);
+const ASYNC_FALSE_ACTION_NAMES = new Set<string>(['bakeCompositionVideoBakeRegion', 'bakeClipVideoBakeRegion', 'ensureCaptionTextClip']);
 const ASYNC_VOID_ACTION_NAMES = new Set<string>(['addClip', 'addCompClip', 'completeDownload', 'loadState']);
 const STRING_FALLBACK_ACTION_NAMES = new Set<string>([
   'addTrack',

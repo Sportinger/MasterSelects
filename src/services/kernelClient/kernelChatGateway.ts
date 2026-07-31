@@ -42,12 +42,19 @@ import {
 import type {
   KernelCompileAbortReason,
   KernelCompileCompiledResponse,
+  KernelCompileDecisionResponse,
   KernelCompileResponse,
   KernelResolvedCall,
   KernelRunCompleteResponse,
   KernelMissingPrecondition,
   KernelSilenceRange,
 } from './types';
+import {
+  parseKernelStoryboardResponse,
+  type KernelActiveDecision,
+  type KernelConversationTurn,
+  type KernelDecisionPrompt,
+} from '../storyboard/contracts';
 
 const KERNEL_ENABLED_KEY = 'ms.kernel.enabled';
 const KERNEL_TOKEN_KEY = 'ms.kernel.token';
@@ -62,7 +69,13 @@ const log = Logger.create('KernelGateway');
  */
 export type KernelChatGatewayResult =
   | { handled: false }
-  | { handled: true; message: string; runId?: string; report?: KernelRunReport };
+  | {
+      handled: true;
+      message: string;
+      runId?: string;
+      report?: KernelRunReport;
+      decision?: KernelDecisionPrompt;
+    };
 
 type ExecuteToolCalls = typeof executeAIToolCalls;
 
@@ -88,6 +101,11 @@ export interface KernelChatGatewayDependencies {
   autoApprove?: boolean;
   /** Reports the local stage the run is in, so the chat can show progress. */
   onProgress?: KernelProgressReporter;
+  intent?: 'execute' | 'plan';
+  decisionPolicy?: 'automatic' | 'milestones' | 'every-decision';
+  conversation?: KernelConversationTurn[];
+  activeDecision?: KernelActiveDecision;
+  activeVariantSetId?: string;
   seed?: string;
   /**
    * Cancels the run. Checked before every mutating step and before the commit,
@@ -201,6 +219,9 @@ const KERNEL_ABORT_REASONS: readonly KernelCompileAbortReason[] = [
   'storyPathNeedsProvider',
   'storyPathNeedsMoments',
   'storyOnlyModeActive',
+  'staleDecision',
+  'staleVariant',
+  'policyDeclined',
 ];
 
 function parseAbortReason(value: unknown): KernelCompileAbortReason | undefined {
@@ -234,6 +255,34 @@ function parseCompileResponse(value: unknown): KernelCompileResponse | undefined
       ...(reason === undefined ? {} : { reason }),
       ...(missingPrecondition === undefined ? {} : { missingPrecondition }),
     };
+  }
+
+  if (status === 'planned') {
+    if (!Array.isArray(value.resolvedCalls)) return undefined;
+    const resolvedCalls = value.resolvedCalls.map(parseResolvedCall);
+    const message = readString(value.message);
+    if (!message || resolvedCalls.some((call) => call === undefined)) return undefined;
+    return {
+      runId,
+      status: 'planned',
+      message,
+      resolvedCalls: resolvedCalls as KernelResolvedCall[],
+      ...(value.expectedFingerprint === undefined
+        ? {}
+        : { expectedFingerprint: value.expectedFingerprint }),
+      ...(value.planSummary === undefined ? {} : { planSummary: value.planSummary }),
+    };
+  }
+
+  if (status === 'awaiting-decision') {
+    try {
+      const parsed = parseKernelStoryboardResponse(value);
+      return parsed.status === 'awaiting-decision'
+        ? parsed as KernelCompileDecisionResponse
+        : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   if (status !== 'compiled'
@@ -509,6 +558,15 @@ export async function tryKernelFirst(
     const compileResult = await client.compile({
       request,
       snapshot,
+      ...(deps.intent === undefined ? {} : { intent: deps.intent }),
+      ...(deps.decisionPolicy === undefined
+        ? {}
+        : { decisionPolicy: deps.decisionPolicy }),
+      ...(deps.conversation === undefined ? {} : { conversation: deps.conversation }),
+      ...(deps.activeDecision === undefined ? {} : { activeDecision: deps.activeDecision }),
+      ...(deps.activeVariantSetId === undefined
+        ? {}
+        : { activeVariantSetId: deps.activeVariantSetId }),
       ...(deps.seed === undefined ? {} : { seed: deps.seed }),
       ...(moments.length === 0
         ? {}
@@ -598,6 +656,15 @@ export async function tryKernelFirst(
           const compileResult = await client.compile({
             request,
             snapshot,
+            ...(deps.intent === undefined ? {} : { intent: deps.intent }),
+            ...(deps.decisionPolicy === undefined
+              ? {}
+              : { decisionPolicy: deps.decisionPolicy }),
+            ...(deps.conversation === undefined ? {} : { conversation: deps.conversation }),
+            ...(deps.activeDecision === undefined ? {} : { activeDecision: deps.activeDecision }),
+            ...(deps.activeVariantSetId === undefined
+              ? {}
+              : { activeVariantSetId: deps.activeVariantSetId }),
             ...(deps.seed === undefined ? {} : { seed: deps.seed }),
             ...(moments.length === 0
               ? {}
@@ -635,7 +702,24 @@ export async function tryKernelFirst(
     }
   }
 
-  if (compiled.status !== 'compiled') {
+  if (compiled.status === 'planned' && compiled.resolvedCalls.length === 0) {
+    return {
+      handled: true,
+      message: compiled.message,
+      runId: compiled.runId,
+    };
+  }
+
+  if (compiled.status === 'awaiting-decision') {
+    return {
+      handled: true,
+      message: compiled.message,
+      runId: compiled.runId,
+      decision: compiled.decision,
+    };
+  }
+
+  if (compiled.status !== 'compiled' && compiled.status !== 'planned') {
     if (compiled.status === 'aborted') {
       log.info('kernel declined the task', {
         reason: compiled.reason,
@@ -663,7 +747,18 @@ export async function tryKernelFirst(
     );
   }
 
-  const compiledPlan: KernelCompileCompiledResponse = compiled;
+  const compiledPlan: KernelCompileCompiledResponse = compiled.status === 'planned'
+    ? {
+        runId: compiled.runId,
+        status: 'compiled',
+        mode: 'story',
+        taskContract: { intent: 'plan' },
+        plan: compiled.planSummary,
+        resolvedCalls: compiled.resolvedCalls,
+        expectedFingerprint: compiled.expectedFingerprint,
+        summary: compiled.message,
+      }
+    : compiled;
   const transaction = transactionAdapter(deps.transaction);
   let agentTransaction: AgentTransaction | undefined;
   let setupCompositionId: string | undefined;
@@ -714,6 +809,7 @@ export async function tryKernelFirst(
   ): Promise<void> => {
     try {
       const [execution] = await executeToolCalls([{ id, tool, args }], 'chat', {
+        ...(deps.intent === 'plan' ? { executionMode: 'plan' as const } : {}),
         guidedReplay: false,
         suppressHistory: true,
       });
@@ -782,6 +878,7 @@ export async function tryKernelFirst(
         args: setupCall.args,
       };
       const setupResults = await executeToolCalls([setupExecution], 'chat', {
+        ...(deps.intent === 'plan' ? { executionMode: 'plan' as const } : {}),
         guidedReplay: false,
         suppressHistory: true,
       });
@@ -826,6 +923,7 @@ export async function tryKernelFirst(
         args: await binding.bindArgs(call.tool, call.args),
       };
       const results = await executeToolCalls([execution], 'chat', {
+        ...(deps.intent === 'plan' ? { executionMode: 'plan' as const } : {}),
         guidedReplay: false,
         suppressHistory: true,
       });

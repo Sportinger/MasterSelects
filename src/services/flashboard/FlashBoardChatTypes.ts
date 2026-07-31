@@ -1,11 +1,54 @@
 import type { ToolDefinition, ToolResult } from '../aiTools';
+import type {
+  KernelActiveDecision,
+  KernelDecisionPrompt,
+} from '../storyboard/contracts';
 
 export type FlashBoardChatProvider = 'kernel' | 'kie' | 'lemonade';
 export type FlashBoardKieChatProtocol = 'claude-messages' | 'openai-responses';
 export type FlashBoardOpenAiReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh';
 export type FlashBoardChatPromptVersion = 'v2' | 'legacy-v1';
 export type FlashBoardChatRunSource = 'ui' | 'bridge' | 'mcp' | 'test';
-export type FlashBoardChatToolExecutionMode = 'normal' | 'read-only';
+export type FlashBoardChatToolExecutionMode = 'normal' | 'plan' | 'read-only';
+export type ChatIntent = 'plan' | 'execute';
+export type DecisionPolicy = 'automatic' | 'milestones' | 'every-decision';
+
+export type AgentActivityEvent =
+  | {
+      id: string;
+      runId: string;
+      kind: 'narration';
+      source: 'model';
+      phase: 'inspecting' | 'planning' | 'acting' | 'verifying';
+      roundIndex: number;
+      text: string;
+      createdAt: number;
+    }
+  | {
+      id: string;
+      runId: string;
+      kind: 'operation';
+      source: 'runtime';
+      phase: 'started' | 'completed' | 'failed';
+      safeLabel: string;
+      toolName?: string;
+      createdAt: number;
+    }
+  | {
+      id: string;
+      runId: string;
+      kind: 'progress';
+      source: 'runtime';
+      label: string;
+      current?: number;
+      total?: number;
+      createdAt: number;
+    };
+
+export type AgentActivityEventInput =
+  | Omit<Extract<AgentActivityEvent, { kind: 'narration' }>, 'id' | 'runId' | 'createdAt' | 'source'>
+  | Omit<Extract<AgentActivityEvent, { kind: 'operation' }>, 'id' | 'runId' | 'createdAt' | 'source'>
+  | Omit<Extract<AgentActivityEvent, { kind: 'progress' }>, 'id' | 'runId' | 'createdAt' | 'source'>;
 
 export interface FlashBoardChatProviderOption {
   id: FlashBoardChatProvider;
@@ -24,17 +67,25 @@ export interface FlashBoardChatModelOption {
 }
 
 export interface FlashBoardChatRequest {
+  /** Internal run binding used to correlate provider activity with the chat audit. */
+  activityRunId?: string;
+  activeDecision?: KernelActiveDecision;
   hostedAvailable?: boolean;
   idempotencyKey?: string;
+  intent?: ChatIntent;
+  decisionPolicy?: DecisionPolicy;
   kieAiApiKey?: string;
   lemonadeContextSize?: number;
   lemonadeEndpoint?: string;
   model: string;
+  onActivityEvent?: (event: AgentActivityEvent) => void;
   onExecutedToolCalls?: (toolCalls: FlashBoardExecutedToolCall[]) => void;
   /** Live stage updates while the kernel works the turn. */
   onKernelProgress?: import('../kernelClient/runProgress').KernelProgressReporter;
   /** Structured record of a kernel-handled turn, for the run card. */
   onKernelReport?: (report: import('../kernelClient/runReport').KernelRunReport) => void;
+  /** Durable directing decision returned without implicit mutation. */
+  onKernelDecision?: (decision: KernelDecisionPrompt) => void;
   /** Reports which explicitly selected engine is working on the turn. */
   onPhase?: (phase: 'kernel' | 'provider') => void;
   onRunCompleted?: (run: import('./FlashBoardChatRunAudit').FlashBoardChatRunRecord) => void;
@@ -43,6 +94,8 @@ export interface FlashBoardChatRequest {
   prompt: string;
   promptVersion?: FlashBoardChatPromptVersion;
   provider: FlashBoardChatProvider;
+  /** Pending assistant bubble that may reconnect to a hosted turn after reload. */
+  resumeMessageId?: string;
   runSource?: FlashBoardChatRunSource;
   signal?: AbortSignal;
   systemPromptIncludeContext?: boolean;

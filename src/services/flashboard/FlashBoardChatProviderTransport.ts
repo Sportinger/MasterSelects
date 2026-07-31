@@ -34,7 +34,13 @@ import {
   prepareFlashBoardToolCallsForHistory,
   runChatCompletionToolLoop,
 } from './FlashBoardChatTools';
+import {
+  emitAgentActivity,
+  inferNarrationPhase,
+  safeToolActivityLabel,
+} from './FlashBoardChatActivity';
 import type { AnthropicMessage, AnthropicToolResultBlock, FlashBoardChatCompletionMessage, FlashBoardChatRequest, FlashBoardExecutedToolCall } from './FlashBoardChatTypes';
+import { sendHostedKieAgentChat } from './FlashBoardHostedAgentTransport';
 
 const FLASHBOARD_LEMONADE_TOOL_NAMES = new Set([
   'getTimelineState',
@@ -75,10 +81,11 @@ const FLASHBOARD_LEMONADE_TOOLS = FLASHBOARD_CHAT_TOOLS.filter((tool) => (
 ));
 function createHostedChatRoundIdempotencyKey(
   request: FlashBoardChatRequest,
-  roundKey: string,
+  protocol: 'claude-messages' | 'openai-responses',
+  roundIndex: number,
 ): string {
   return request.idempotencyKey
-    ? `${request.idempotencyKey}:${roundKey}`
+    ? `${request.idempotencyKey}:${protocol}:${roundIndex}`
     : `flashboard-chat:${Date.now()}:${crypto.randomUUID()}`;
 }
 
@@ -87,20 +94,36 @@ async function requestKieChatRound(
   endpoint: KieChatEndpoint,
   protocol: 'claude-messages' | 'openai-responses',
   providerBody: Record<string, unknown>,
-  roundKey: string,
+  roundIndex: number,
 ): Promise<unknown> {
+  if (request.signal?.aborted) {
+    throw request.signal.reason ?? new DOMException('Chat stopped.', 'AbortError');
+  }
   if (request.hostedAvailable) {
     return cloudAiService.createChatCompletion({
       ...providerBody,
-      idempotencyKey: createHostedChatRoundIdempotencyKey(request, roundKey),
+      billingRoundIndex: roundIndex,
+      billingTurnId: request.idempotencyKey,
+      billingTurnAction: 'continue',
+      idempotencyKey: createHostedChatRoundIdempotencyKey(request, protocol, roundIndex),
       protocol,
-    });
+    }, request.signal);
   }
   return requestKieChatByo({
     apiKey: request.kieAiApiKey ?? '',
     body: providerBody,
     endpoint,
     signal: request.signal,
+  });
+}
+
+async function completeHostedChatTurn(request: FlashBoardChatRequest): Promise<void> {
+  if (!request.hostedAvailable || !request.idempotencyKey) return;
+  await cloudAiService.createChatCompletion({
+    billingRoundIndex: 0,
+    billingTurnAction: 'complete',
+    billingTurnId: request.idempotencyKey,
+    idempotencyKey: `${request.idempotencyKey}:terminal:complete`,
   });
 }
 
@@ -134,24 +157,54 @@ async function sendKieResponsesChat(request: FlashBoardChatRequest, systemPrompt
       '/codex/v1/responses',
       'openai-responses',
       body,
-      `openai-responses:${iteration}`,
+      iteration,
     );
 
     const toolCalls = parseOpenAiResponsesToolCalls(data);
     if (toolCalls.length === 0) {
-      return readOpenAiResponseText(data) || (
+      const response = readOpenAiResponseText(data) || (
         executedToolCalls.length > 0
           ? formatToolFollowupFallback(executedToolCalls)
           : 'Kie.ai returned an empty response.'
       );
+      await completeHostedChatTurn(request);
+      return response;
     }
 
+    const narration = readOpenAiResponseText(data);
+    if (narration) {
+      emitAgentActivity(request, {
+        kind: 'narration',
+        phase: inferNarrationPhase(iteration, narration),
+        roundIndex: iteration,
+        text: narration,
+      });
+    }
+    for (const toolCall of toolCalls) {
+      emitAgentActivity(request, {
+        kind: 'operation',
+        phase: 'started',
+        safeLabel: safeToolActivityLabel(toolCall.name),
+        toolName: toolCall.name,
+      });
+    }
     input.push(...getOpenAiResponsesOutput(data));
+    if (request.signal?.aborted) {
+      throw request.signal.reason ?? new DOMException('Chat stopped.', 'AbortError');
+    }
     const toolResults = await executeFlashBoardToolCalls(
       toolCalls,
       FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS,
       { toolExecutionMode: request.toolExecutionMode },
     );
+    for (const toolResult of toolResults) {
+      emitAgentActivity(request, {
+        kind: 'operation',
+        phase: toolResult.result.success ? 'completed' : 'failed',
+        safeLabel: safeToolActivityLabel(toolResult.toolCall.name),
+        toolName: toolResult.toolCall.name,
+      });
+    }
     executedToolCalls.push(...toolResults);
     request.onExecutedToolCalls?.(prepareFlashBoardToolCallsForHistory(toolResults));
     for (const toolResult of toolResults) {
@@ -175,6 +228,7 @@ async function sendKieResponsesChat(request: FlashBoardChatRequest, systemPrompt
     }
   }
 
+  await completeHostedChatTurn(request);
   return formatToolFollowupFallback(executedToolCalls) || 'Stopped after too many tool iterations.';
 }
 
@@ -203,27 +257,58 @@ async function sendKieClaudeChat(
       '/claude/v1/messages',
       'claude-messages',
       body,
-      `claude-messages:${iteration}`,
+      iteration,
     );
 
     const parsed = parseAnthropicToolCalls(data);
     if (!supportsTools) {
-      return parsed.text || 'Kie.ai Fable returned an empty chat response.';
+      const response = parsed.text || 'Kie.ai Fable returned an empty chat response.';
+      await completeHostedChatTurn(request);
+      return response;
     }
     if (parsed.toolCalls.length === 0) {
-      return parsed.text || (
+      const response = parsed.text || (
         executedToolCalls.length > 0
           ? formatToolFollowupFallback(executedToolCalls)
           : 'Kie.ai returned an empty response.'
       );
+      await completeHostedChatTurn(request);
+      return response;
     }
 
+    if (parsed.text) {
+      emitAgentActivity(request, {
+        kind: 'narration',
+        phase: inferNarrationPhase(iteration, parsed.text),
+        roundIndex: iteration,
+        text: parsed.text,
+      });
+    }
+    for (const toolCall of parsed.toolCalls) {
+      emitAgentActivity(request, {
+        kind: 'operation',
+        phase: 'started',
+        safeLabel: safeToolActivityLabel(toolCall.name),
+        toolName: toolCall.name,
+      });
+    }
     messages.push({ role: 'assistant', content: parsed.contentBlocks });
+    if (request.signal?.aborted) {
+      throw request.signal.reason ?? new DOMException('Chat stopped.', 'AbortError');
+    }
     const toolResults = await executeFlashBoardToolCalls(
       parsed.toolCalls,
       FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS,
       { toolExecutionMode: request.toolExecutionMode },
     );
+    for (const toolResult of toolResults) {
+      emitAgentActivity(request, {
+        kind: 'operation',
+        phase: toolResult.result.success ? 'completed' : 'failed',
+        safeLabel: safeToolActivityLabel(toolResult.toolCall.name),
+        toolName: toolResult.toolCall.name,
+      });
+    }
     executedToolCalls.push(...toolResults);
     request.onExecutedToolCalls?.(prepareFlashBoardToolCallsForHistory(toolResults));
     messages.push({
@@ -245,17 +330,32 @@ async function sendKieClaudeChat(
     });
   }
 
+  await completeHostedChatTurn(request);
   return formatToolFollowupFallback(executedToolCalls) || 'Stopped after too many tool iterations.';
 }
 
 export async function sendKieChat(request: FlashBoardChatRequest, systemPrompt: string): Promise<string> {
-  const model = FLASHBOARD_CHAT_MODEL_OPTIONS.kie.find((candidate) => candidate.id === request.model);
+  const turnRequest = request.hostedAvailable && !request.idempotencyKey
+    ? {
+        ...request,
+        idempotencyKey: `flashboard-chat-turn:${Date.now()}:${crypto.randomUUID()}`,
+      }
+    : request;
+  const model = FLASHBOARD_CHAT_MODEL_OPTIONS.kie.find((candidate) => candidate.id === turnRequest.model);
   if (!model?.kieProtocol) {
-    throw new Error(`Unsupported Kie.ai chat model: ${request.model}`);
+    throw new Error(`Unsupported Kie.ai chat model: ${turnRequest.model}`);
+  }
+  if (turnRequest.hostedAvailable) {
+    return sendHostedKieAgentChat({
+      protocol: model.kieProtocol,
+      request: turnRequest,
+      supportsTools: model.supportsTools,
+      systemPrompt,
+    });
   }
   return model.kieProtocol === 'openai-responses'
-    ? sendKieResponsesChat(request, systemPrompt)
-    : sendKieClaudeChat(request, systemPrompt, model.supportsTools);
+    ? sendKieResponsesChat(turnRequest, systemPrompt)
+    : sendKieClaudeChat(turnRequest, systemPrompt, model.supportsTools);
 }
 
 export async function sendLemonadeChat(request: FlashBoardChatRequest, systemPrompt: string): Promise<string> {
@@ -284,5 +384,21 @@ export async function sendLemonadeChat(request: FlashBoardChatRequest, systemPro
       timeoutMs: FLASHBOARD_LEMONADE_INITIAL_RESPONSE_TIMEOUT_MS,
       streamIdleTimeoutMs: FLASHBOARD_LEMONADE_STREAM_IDLE_TIMEOUT_MS,
     })
-  ), 'Lemonade', FLASHBOARD_LEMONADE_MAX_TOOL_RESULT_CHARS, request.onExecutedToolCalls, false, request.toolExecutionMode);
+  ), 'Lemonade', FLASHBOARD_LEMONADE_MAX_TOOL_RESULT_CHARS, request.onExecutedToolCalls, false, request.toolExecutionMode, (event) => {
+    if (event.kind === 'narration') {
+      emitAgentActivity(request, {
+        ...event,
+        phase: inferNarrationPhase(event.roundIndex, event.text),
+      });
+      return;
+    }
+    if (event.kind === 'operation') {
+      emitAgentActivity(request, {
+        ...event,
+        safeLabel: safeToolActivityLabel(event.toolName ?? event.safeLabel),
+      });
+      return;
+    }
+    emitAgentActivity(request, event);
+  }, request.signal);
 }

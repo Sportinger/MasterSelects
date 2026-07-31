@@ -46,6 +46,8 @@ export class WebCodecsExportMode {
   // Keep the rolling window below the usual surface limit so FAST export can
   // use hardware decode without deadlocking.
   private static readonly TARGET_LOOKAHEAD_SAMPLES = 4;
+  private static readonly INITIAL_FRAME_SEARCH_SAMPLES = 32;
+  private static readonly RECOVERY_FRAME_SEARCH_SAMPLES = 32;
   private static readonly DECODE_LOOKAHEAD_SAMPLES = 4;
   private static readonly KEEP_FRAMES_BEHIND = 1;
   // Start the background decode-ahead while the buffer is still half full, so it
@@ -370,16 +372,44 @@ export class WebCodecsExportMode {
     this.decodeCursorIndex = keyframeIndex;
     this.player.setSampleIndex(keyframeIndex);
 
-    const endIndexExclusive = Math.min(
+    let endIndexExclusive = Math.min(
       samples.length,
       targetSampleIndex + WebCodecsExportMode.TARGET_LOOKAHEAD_SAMPLES
     );
+    const targetCtsUs = this.getNormalizedSampleTimestampUs(targetSample);
 
     await this.decodeWindowDiscardingDistantPreroll(
       keyframeIndex,
       endIndexExclusive,
-      this.getNormalizedSampleTimestampUs(targetSample)
+      targetCtsUs
     );
+
+    // Four samples are normally enough to make the target frame available, but
+    // B-frame-heavy H.264/H.265 streams can retain it until more future samples
+    // have been submitted. Grow the recovery window in bounded chunks instead
+    // of returning with an empty buffer after the keyframe reset.
+    const recoverySearchEnd = Math.min(
+      samples.length,
+      targetSampleIndex + WebCodecsExportMode.RECOVERY_FRAME_SEARCH_SAMPLES
+    );
+    while (
+      this.findBufferedFrameIndex(targetCtsUs, this.getFrameToleranceUs()) < 0 &&
+      endIndexExclusive < recoverySearchEnd
+    ) {
+      const nextEndIndexExclusive = Math.min(
+        recoverySearchEnd,
+        endIndexExclusive + WebCodecsExportMode.DECODE_LOOKAHEAD_SAMPLES
+      );
+      log.debug(
+        `Recovery target still pending; extending decode window to sample ${nextEndIndexExclusive}`
+      );
+      await this.decodeWindowDiscardingDistantPreroll(
+        endIndexExclusive,
+        nextEndIndexExclusive,
+        targetCtsUs
+      );
+      endIndexExclusive = nextEndIndexExclusive;
+    }
   }
 
   /**
@@ -467,10 +497,11 @@ export class WebCodecsExportMode {
 
     const keyframeIndex = findKeyframeBefore(allSamples, startSampleIndex);
     const startSample = allSamples[startSampleIndex];
-    const decodeEnd = Math.min(
+    let decodeEnd = Math.min(
       allSamples.length,
       startSampleIndex + WebCodecsExportMode.TARGET_LOOKAHEAD_SAMPLES
     );
+    const startCtsUs = this.getNormalizedSampleTimestampUs(startSample);
 
     await this.reconfigureDecoderForExport('prepareForSequentialExport');
     this.decodeCursorIndex = keyframeIndex;
@@ -484,12 +515,30 @@ export class WebCodecsExportMode {
     await this.decodeWindowDiscardingDistantPreroll(
       keyframeIndex,
       decodeEnd,
-      this.getNormalizedSampleTimestampUs(startSample)
+      startCtsUs
     );
     endDecode();
 
+    // Some H.264/H.265 streams reorder more than four frames before emitting
+    // the first presentation frame. Grow the initial window in small chunks so
+    // FAST export does not fail merely because the decoder is still holding its
+    // startup frames. The cap keeps a genuinely broken decoder bounded.
+    const initialSearchEnd = Math.min(
+      allSamples.length,
+      startSampleIndex + WebCodecsExportMode.INITIAL_FRAME_SEARCH_SAMPLES
+    );
+    while (this.exportFramesCts.length === 0 && decodeEnd < initialSearchEnd) {
+      const nextDecodeEnd = Math.min(
+        initialSearchEnd,
+        decodeEnd + WebCodecsExportMode.DECODE_LOOKAHEAD_SAMPLES
+      );
+      log.debug(`Initial frame still pending; extending decode window to sample ${nextDecodeEnd}`);
+      await this.decodeWindowDiscardingDistantPreroll(decodeEnd, nextDecodeEnd, startCtsUs);
+      decodeEnd = nextDecodeEnd;
+    }
+
     const startFrameIndex = this.findBufferedFrameIndex(
-      this.getNormalizedSampleTimestampUs(startSample),
+      startCtsUs,
       this.getFrameToleranceUs(3)
     );
 
@@ -498,7 +547,7 @@ export class WebCodecsExportMode {
       this.player.setCurrentFrame(this.exportFrameBuffer.get(startCts) || null);
       this.exportCurrentIndex = startFrameIndex;
     } else if (this.exportFramesCts.length > 0) {
-      const fallbackIndex = findClosestFrameIndex(this.exportFramesCts, this.getNormalizedSampleTimestampUs(startSample));
+      const fallbackIndex = findClosestFrameIndex(this.exportFramesCts, startCtsUs);
       const fallbackCts = this.exportFramesCts[Math.max(0, fallbackIndex)];
       this.player.setCurrentFrame(this.exportFrameBuffer.get(fallbackCts) || null);
       this.exportCurrentIndex = Math.max(0, fallbackIndex);
@@ -607,12 +656,24 @@ export class WebCodecsExportMode {
       return;
     }
 
-    const targetCts = timeSeconds * 1_000_000;
+    const requestedTargetCts = timeSeconds * 1_000_000;
+    const samples = this.player.getSamples();
     const targetSampleIndex = findClosestSampleIndex(
-      this.player.getSamples(),
+      samples,
       timeSeconds,
       this.presentationOffsetUs
     );
+    const targetSample = samples[targetSampleIndex];
+    // Export times are sampled at the composition frame rate, but VFR media can
+    // have substantially larger gaps between encoded presentation timestamps.
+    // findClosestSampleIndex() already resolves the requested time to the frame
+    // that should be shown, so buffer matching must use that sample's real CTS.
+    // Matching the raw request time can reject the correct buffered frame, clear
+    // it during an unnecessary keyframe restart, and leave reordered codecs with
+    // no output at all.
+    const targetCts = targetSample
+      ? this.getNormalizedSampleTimestampUs(targetSample)
+      : requestedTargetCts;
 
     let bestIndex = this.findBufferedFrameIndex(targetCts, this.getFrameToleranceUs());
     if (bestIndex >= 0 && bestIndex < this.exportFramesCts.length) {
@@ -646,7 +707,7 @@ export class WebCodecsExportMode {
       : 0;
 
     log.warn(
-      `Frame not in buffer: target=${targetCts.toFixed(0)}, range=[${minCtsInBuffer.toFixed(0)}-${maxCtsInBuffer.toFixed(0)}], bufferSize=${this.exportFramesCts.length}`
+      `Frame not in buffer: requested=${requestedTargetCts.toFixed(0)}, sample=${targetCts.toFixed(0)}, range=[${minCtsInBuffer.toFixed(0)}-${maxCtsInBuffer.toFixed(0)}], bufferSize=${this.exportFramesCts.length}`
     );
 
     if (this.pendingWarmBuffer) {

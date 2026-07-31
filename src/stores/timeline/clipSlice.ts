@@ -30,6 +30,7 @@ function isVisualClipSourceType(sourceType: string | undefined): boolean {
     sourceType === 'motion-shape' ||
     sourceType === 'motion-null' ||
     sourceType === 'motion-adjustment' ||
+    sourceType === 'storyboard' ||
     isVectorAnimationSourceType(sourceType);
 }
 
@@ -51,6 +52,9 @@ function deepCloneClipProps(clip: TimelineClip): Partial<TimelineClip> {
     ...(clip.nodeGraph ? { nodeGraph: cloneClipNodeGraph(clip.nodeGraph) } : {}),
     ...(clip.masks ? { masks: clip.masks.map(m => structuredClone(m)) } : {}),
     ...(clip.textProperties ? { textProperties: structuredClone(clip.textProperties) } : {}),
+      ...(clip.captionProperties ? { captionProperties: structuredClone(clip.captionProperties) } : {}),
+      ...(clip.captionLayerBinding ? { captionLayerBinding: structuredClone(clip.captionLayerBinding) } : {}),
+    ...(clip.motion ? { motion: structuredClone(clip.motion) } : {}),
     ...(clip.transitionIn ? { transitionIn: structuredClone(clip.transitionIn) } : {}),
     ...(clip.transitionOut ? { transitionOut: structuredClone(clip.transitionOut) } : {}),
   };
@@ -89,12 +93,14 @@ import {
   getSourceForFirstSplitPart,
   remapTransitionLinksForSplitReplacements,
 } from './editOperations/splitBatchOperations';
+import { cloneStoryboardPropertiesForSplit } from '../../services/storyboard/core';
 import {
   clearTransitionsLinkedToRemovedClips,
   ensureTransitionCompositionsForChangedClips,
   setClipsAndCleanupTransitionComps,
 } from './editOperations/transitionCompositionMaintenance';
 import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
+import { useMediaStore } from '../mediaStore';
 
 export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
   addClip: (...args) => applyAddClipAction({ set, get }, ...args),
@@ -137,6 +143,21 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       clips: updatedClips,
       selectedClipIds: newSelectedIds,
     });
+    const referencedCompositionIds = new Set(
+      updatedClips.map(clip => clip.compositionId).filter(Boolean),
+    );
+    const mediaState = useMediaStore.getState();
+    for (const removedClip of clips.filter(clip => idsToRemove.has(clip.id))) {
+      const compositionId = removedClip.compositionId;
+      if (!compositionId || referencedCompositionIds.has(compositionId)) continue;
+      const composition = mediaState.compositions.find(candidate => candidate.id === compositionId);
+      if (
+        composition?.captionComp?.kind === 'caption-comp'
+        && composition.captionComp.parentCaptionClipId === removedClip.id
+      ) {
+        mediaState.removeComposition(compositionId);
+      }
+    }
     updateDuration();
     invalidateCache();
   },
@@ -360,6 +381,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       linkedClipId: undefined,
       source: getSourceForFirstSplitPart(clip),
       transitionOut: undefined,
+      storyboardProperties: cloneStoryboardPropertiesForSplit(clip.storyboardProperties, 0),
     };
 
     const secondClip: TimelineClip = {
@@ -372,6 +394,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       linkedClipId: undefined,
       source: secondClipSource,
       transitionIn: undefined,
+      storyboardProperties: cloneStoryboardPropertiesForSplit(clip.storyboardProperties, 1),
     };
 
     const newClips: TimelineClip[] = clips.filter(c => c.id !== clipId && c.id !== clip.linkedClipId);
@@ -392,6 +415,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
           outPoint: linkedClip.inPoint + firstPartDuration,
           linkedClipId: firstClip.id,
           source: getSourceForFirstSplitPart(linkedClip),
+          storyboardProperties: cloneStoryboardPropertiesForSplit(linkedClip.storyboardProperties, 0),
         };
         linkedSecondClip = {
           ...linkedClip,
@@ -402,6 +426,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
           inPoint: linkedClip.inPoint + firstPartDuration,
           linkedClipId: secondClip.id,
           source: linkedSecondSource,
+          storyboardProperties: cloneStoryboardPropertiesForSplit(linkedClip.storyboardProperties, 1),
         };
         firstClip.linkedClipId = linkedFirstClip.id;
         secondClip.linkedClipId = linkedSecondClip.id;

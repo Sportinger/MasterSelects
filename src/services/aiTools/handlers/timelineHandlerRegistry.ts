@@ -2,6 +2,7 @@ import type { useTimelineStore } from '../../../stores/timeline';
 import type { CallerContext } from '../policy';
 import type { ToolResult } from '../types';
 import {
+  handleGetTimelineRangeSelection,
   handleGetTimelineState,
   handleSetInOutPoints,
   handleSetPlayhead,
@@ -71,6 +72,14 @@ import {
   handleUpdateTextProperties,
 } from './text';
 import {
+  handleConfigureMotionReplicator,
+  handleCreateMotionShapeClip,
+  handleGetMotionCapabilities,
+  handleGetMotionDesign,
+  handleUpdateMotionAppearances,
+  handleUpdateMotionProperties,
+} from './motionDesign';
+import {
   handleAddMarker,
   handleGetMarkers,
   handleMonitorManualPause,
@@ -100,6 +109,11 @@ import {
   handleUpdateMask,
   handleUpdateVertex,
 } from './masks';
+import {
+  handleAddStoryboardScene,
+  handleListStoryboardScenes,
+  handleUpdateStoryboardScene,
+} from './storyboard';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 type TimelineHandler = (
@@ -110,6 +124,7 @@ type TimelineHandler = (
 
 /** Handlers that operate on the caller's single fresh timeline-store snapshot. */
 export const timelineHandlers: Readonly<Record<string, TimelineHandler>> = {
+  getTimelineRangeSelection: handleGetTimelineRangeSelection,
   getTimelineState: handleGetTimelineState,
   setPlayhead: handleSetPlayhead,
   setInOutPoints: handleSetInOutPoints,
@@ -159,6 +174,12 @@ export const timelineHandlers: Readonly<Record<string, TimelineHandler>> = {
   updateTextProperties: handleUpdateTextProperties,
   setTextBox: handleSetTextBox,
   addTextBoundsKeyframe: handleAddTextBoundsKeyframe,
+  getMotionCapabilities: handleGetMotionCapabilities,
+  getMotionDesign: handleGetMotionDesign,
+  createMotionShapeClip: handleCreateMotionShapeClip,
+  updateMotionProperties: handleUpdateMotionProperties,
+  updateMotionAppearances: handleUpdateMotionAppearances,
+  configureMotionReplicator: handleConfigureMotionReplicator,
   play: handlePlay,
   pause: handlePause,
   monitorManualPause: handleMonitorManualPause,
@@ -183,4 +204,7 @@ export const timelineHandlers: Readonly<Record<string, TimelineHandler>> = {
   removeVertex: handleRemoveVertex,
   updateVertex: handleUpdateVertex,
   addMaskPathKeyframe: handleAddMaskPathKeyframe,
+  addStoryboardScene: handleAddStoryboardScene,
+  updateStoryboardScene: handleUpdateStoryboardScene,
+  listStoryboardScenes: handleListStoryboardScenes,
 };

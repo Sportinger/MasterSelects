@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
+import { useTimelineStore } from '../../stores/timeline';
 import type { TimelineEmptyContextMenuState } from './types';
 import {
   createTimelineEmptyContextMenuModel,
@@ -14,6 +15,8 @@ interface TimelineEmptyContextMenuProps {
   onEraseLayerGaps: (time: number, trackId: string) => void;
   onEraseAllGaps: () => void;
   onFitCompToWindow: () => void;
+  onAddStoryboardScene?: (time: number, trackId: string) => void;
+  onAddCaptionClip?: (time: number, trackId: string) => void;
 }
 
 export function TimelineEmptyContextMenu({
@@ -23,8 +26,13 @@ export function TimelineEmptyContextMenu({
   onEraseLayerGaps,
   onEraseAllGaps,
   onFitCompToWindow,
+  onAddStoryboardScene,
+  onAddCaptionClip,
 }: TimelineEmptyContextMenuProps) {
   const { menuRef, adjustedPosition } = useContextMenuPosition(menu);
+  const trackType = useTimelineStore(state =>
+    menu ? state.tracks.find(track => track.id === menu.trackId)?.type : undefined
+  );
 
   useEffect(() => {
     if (!menu) return;
@@ -55,6 +63,7 @@ export function TimelineEmptyContextMenu({
   const contextMenuModel = createTimelineEmptyContextMenuModel({
     time: menu.time,
     trackId: menu.trackId,
+    trackType,
   });
   const runCommand = (command: TimelineEmptyContextMenuCommand) => {
     const executed = executeTimelineEmptyContextMenuCommand(command, {
@@ -62,6 +71,8 @@ export function TimelineEmptyContextMenu({
       onEraseLayerGaps,
       onEraseAllGaps,
       onFitCompToWindow,
+      onAddStoryboardScene,
+      onAddCaptionClip,
     });
     if (executed) {
       onClose();
@@ -82,6 +93,18 @@ export function TimelineEmptyContextMenu({
       onMouseDown={(event) => event.stopPropagation()}
       onContextMenu={(event) => event.stopPropagation()}
     >
+      {contextMenuModel.sceneCommands.map(command => (
+        <div
+          key={command.key}
+          className="context-menu-item"
+          onClick={() => runCommand(command)}
+        >
+          {command.label}
+        </div>
+      ))}
+      {contextMenuModel.sceneCommands.length > 0 && (
+        <div className="context-menu-separator" />
+      )}
       {contextMenuModel.gapCommands.map(command => (
         <div
           key={command.key}

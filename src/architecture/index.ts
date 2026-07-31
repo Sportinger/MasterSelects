@@ -6,5 +6,7 @@ export * from './getStateAccessPolicy';
 export * from './highConflictOwnership';
 export * from './laneWriteManifest';
 export * from './retiredPathLedger';
+export * from './storyboardGateRegistry';
+export * from './storyboardLaneWriteManifest';
 export * from './testMigrationLedger';
 export * from './types';

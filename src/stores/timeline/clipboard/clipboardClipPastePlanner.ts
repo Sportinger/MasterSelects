@@ -1,6 +1,7 @@
 import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
 import { remapClipNodeGraphEffectIds } from '../../../services/nodeGraph';
 import type { ClipboardClipData, Keyframe } from '../types';
+import { cloneStoryboardClipProperties } from '../../../services/storyboard/core';
 import {
   clipRequiresAsyncMediaLoad,
   createPastedClipSource as createPastedClipSourceImpl,
@@ -88,8 +89,30 @@ export function createPastedClipboardClipsPlan(
       preservesPitch: clipData.preservesPitch,
       freeRun: clipData.freeRun,
       textProperties: clipData.textProperties ? { ...clipData.textProperties } : undefined,
+      captionProperties: clipData.captionProperties
+        ? {
+            ...structuredClone(clipData.captionProperties),
+            sourceClipId: clipData.captionProperties.sourceClipId
+              ? idMapping.get(clipData.captionProperties.sourceClipId)
+                ?? clipData.captionProperties.sourceClipId
+              : null,
+        }
+        : undefined,
+      captionLayerBinding: clipData.captionLayerBinding
+        ? {
+            ...structuredClone(clipData.captionLayerBinding),
+            inputClipId: idMapping.get(clipData.captionLayerBinding.inputClipId)
+              ?? clipData.captionLayerBinding.inputClipId,
+            textClipId: clipData.captionLayerBinding.textClipId
+              ? idMapping.get(clipData.captionLayerBinding.textClipId)
+                ?? clipData.captionLayerBinding.textClipId
+              : undefined,
+          }
+        : undefined,
       text3DProperties,
       solidColor: clipData.solidColor,
+      // Copy/paste gives the clip a new id but deliberately retains sceneId.
+      storyboardProperties: cloneStoryboardClipProperties(clipData.storyboardProperties),
       transitionOverlay: clipData.transitionOverlay ? structuredClone(clipData.transitionOverlay) : undefined,
       mathScene: clipData.mathScene ? structuredClone(clipData.mathScene) : undefined,
       motion: clipData.motion ? structuredClone(clipData.motion) : undefined,

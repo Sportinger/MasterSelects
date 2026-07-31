@@ -31,6 +31,7 @@ import {
   drawWorkerWaveformCenterLine,
   drawWorkerWaveformResource,
 } from './timelineClipCanvasWorkerWaveformPainter';
+import { paintStoryboardCardWorker } from '../storyboard';
 
 const LOD_BAR_PX = TIMELINE_CLIP_CANVAS_LOD_BAR_PX;
 
@@ -582,8 +583,12 @@ function draw(msg: DrawMessage): DrawnMessage {
     const isSel = clip.paintPacket.state.selected;
     const isHovered = clip.paintPacket.state.hovered;
     if (w < LOD_BAR_PX) {
-      ctx.fillStyle = clip.bodyFill ?? (isSel ? fillSelected : fill);
-      ctx.fillRect(x, 1, Math.max(1, w), height - 2);
+      if (clip.storyboardCard) {
+        paintStoryboardCardWorker(ctx, clip.storyboardCard);
+      } else {
+        ctx.fillStyle = clip.bodyFill ?? (isSel ? fillSelected : fill);
+        ctx.fillRect(x, 1, Math.max(1, w), height - 2);
+      }
       continue;
     }
     const top = 1;
@@ -592,6 +597,9 @@ function draw(msg: DrawMessage): DrawnMessage {
     ctx.roundRect(x, top, w, h, radius);
     ctx.fillStyle = clip.bodyFill ?? (isSel ? fillSelected : fill);
     ctx.fill();
+    if (clip.storyboardCard) {
+      paintStoryboardCardWorker(ctx, clip.storyboardCard);
+    }
     if (workerClipPaintResourceId(clip, 'thumbnail-strip', paintResourceById, 'thumbnail-bitmap')) {
       thumbnailClipCount += 1;
       thumbnailDrawCount += drawClipThumbnailStrip(ctx, clip, top, paintResourceById, thumbnailPayloadByResourceId);

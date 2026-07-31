@@ -57,6 +57,7 @@ describe('timeline clip canvas main-thread draw', () => {
       { ...createClip(), id: 'transition', source: { type: 'transition-overlay' } },
       { ...createClip(), id: 'null', source: { type: 'motion-null' } },
       { ...createClip(), id: 'adjustment', source: { type: 'motion-adjustment' } },
+      { ...createClip(), id: 'captions', source: { type: 'text' }, captionProperties: {} },
       { ...createClip(), id: 'unknown', source: null, trackType: 'audio' as const },
     ];
     const overlays = createTimelineClipCanvasChromeOverlays({
@@ -77,6 +78,7 @@ describe('timeline clip canvas main-thread draw', () => {
       'transition-overlay',
       'motion-null',
       'motion-adjustment',
+      'caption',
       'audio',
     ]);
     // Invariant: clip types that canvas-draw their own body preview (midi note

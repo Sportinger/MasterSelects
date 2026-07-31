@@ -7,6 +7,38 @@ export interface KernelRunRequest {
   seed?: number;
 }
 
+type KernelJsonPrimitive = string | number | boolean | null;
+type KernelJsonValue =
+  | KernelJsonPrimitive
+  | { [key: string]: KernelJsonValue }
+  | KernelJsonValue[];
+
+/**
+ * Transport-local shape of the decision wire payload. The kernel transport
+ * must remain reusable without importing the editor's storyboard domain.
+ */
+export interface KernelDecisionPrompt {
+  id: string;
+  kind: 'story' | 'evidence' | 'generation' | 'cut' | 'variant' | 'duration';
+  question: string;
+  baseFingerprint: {
+    schemaVersion: 1;
+    algorithm: 'sha-256';
+    value: string;
+  };
+  options: Array<{
+    id: string;
+    title: string;
+    summary: string;
+    rationale?: string;
+    tradeoffs?: string[];
+    estimatedCredits?: number;
+    preview?: KernelJsonValue;
+  }>;
+  allowMultiple?: boolean;
+  allowFreeform?: boolean;
+}
+
 export interface KernelRunResponse {
   [key: string]: unknown;
 }
@@ -55,10 +87,31 @@ export interface KernelSilenceRange {
 export interface KernelCompileRequest {
   request: string;
   snapshot: unknown;
+  intent?: 'execute' | 'plan';
+  decisionPolicy?: 'automatic' | 'milestones' | 'every-decision';
+  conversation?: Array<{ role: 'user' | 'assistant'; text: string }>;
+  activeDecision?: { decisionId: string; optionIds: string[]; freeform?: string };
+  activeVariantSetId?: string;
   seed?: string;
   moments?: KernelTranscriptMoment[];
   indexVersion?: string;
   silentRanges?: KernelSilenceRange[];
+}
+
+export interface KernelCompilePlannedResponse {
+  runId: string;
+  status: 'planned';
+  message: string;
+  resolvedCalls: KernelResolvedCall[];
+  expectedFingerprint?: unknown;
+  planSummary?: unknown;
+}
+
+export interface KernelCompileDecisionResponse {
+  runId: string;
+  status: 'awaiting-decision';
+  message: string;
+  decision: KernelDecisionPrompt;
 }
 
 export interface KernelCompileSetup {
@@ -88,7 +141,10 @@ export type KernelCompileAbortReason =
   | 'storyPathNeedsProvider'
   | 'storyPathNeedsMoments'
   /** Story-only calibration parked the mechanical families. */
-  | 'storyOnlyModeActive';
+  | 'storyOnlyModeActive'
+  | 'staleDecision'
+  | 'staleVariant'
+  | 'policyDeclined';
 
 export interface KernelMissingPrecondition {
   kind: 'transcript';
@@ -104,6 +160,8 @@ export interface KernelCompileStoppedResponse {
 
 export type KernelCompileResponse =
   | KernelCompileCompiledResponse
+  | KernelCompileDecisionResponse
+  | KernelCompilePlannedResponse
   | KernelCompileStoppedResponse;
 
 export interface KernelRunCompleteRequest {

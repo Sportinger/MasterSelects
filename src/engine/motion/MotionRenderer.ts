@@ -1,6 +1,10 @@
 import type { Layer } from '../core/types';
 import type { MotionLayerDefinition } from '../../types/motionDesign';
-import { createMotionInstanceArray, createMotionUniformArray } from './MotionBuffers';
+import {
+  MOTION_UNIFORM_BYTE_SIZE,
+  createMotionInstanceArray,
+  createMotionUniformArray,
+} from './MotionBuffers';
 import {
   getMotionRenderSize,
   MOTION_RENDER_TEXTURE_FORMAT,
@@ -8,10 +12,20 @@ import {
   type MotionRenderResult,
 } from './MotionTypes';
 import { MotionPipeline } from './MotionPipeline';
+import {
+  recordMotionRender,
+  setMotionRendererCacheCount,
+} from './MotionDiagnostics';
 
 function isRenderableMotionShape(motion: MotionLayerDefinition | undefined): motion is MotionLayerDefinition {
   const primitive = motion?.shape?.primitive;
-  return motion?.kind === 'shape' && (primitive === 'rectangle' || primitive === 'ellipse');
+  return motion?.kind === 'shape'
+    && (
+      primitive === 'rectangle'
+      || primitive === 'ellipse'
+      || primitive === 'polygon'
+      || primitive === 'star'
+    );
 }
 
 export class MotionRenderer {
@@ -30,6 +44,7 @@ export class MotionRenderer {
       return null;
     }
 
+    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const size = getMotionRenderSize(motion);
     const cache = this.getOrCreateCache(layer, size.width, size.height);
     const uniforms = createMotionUniformArray(motion, size);
@@ -51,6 +66,16 @@ export class MotionRenderer {
     pass.setVertexBuffer(0, cache.instanceBuffer);
     pass.draw(6, size.replicator.instanceCount);
     pass.end();
+    const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    recordMotionRender({
+      layerId: layer.id,
+      sourceClipId: layer.sourceClipId,
+      instanceCount: size.replicator.instanceCount,
+      bufferUploads: 2,
+      bufferUploadBytes: uniforms.byteLength + instances.byteLength,
+      encodeTimeMs: finishedAt - startedAt,
+      renderedAt: Date.now(),
+    });
 
     return {
       ...size,
@@ -65,6 +90,7 @@ export class MotionRenderer {
       cache.instanceBuffer.destroy();
     }
     this.caches.clear();
+    setMotionRendererCacheCount(0);
   }
 
   private getCacheKey(layer: Layer): string {
@@ -94,7 +120,7 @@ export class MotionRenderer {
     const view = texture.createView();
     const uniformBuffer = this.device.createBuffer({
       label: `motion-shape-uniforms-${key}`,
-      size: 20 * 4,
+      size: MOTION_UNIFORM_BYTE_SIZE,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
     const instanceBuffer = this.device.createBuffer({
@@ -113,6 +139,7 @@ export class MotionRenderer {
 
     const cache = { texture, view, uniformBuffer, instanceBuffer, bindGroup, width, height };
     this.caches.set(key, cache);
+    setMotionRendererCacheCount(this.caches.size);
     return cache;
   }
 }

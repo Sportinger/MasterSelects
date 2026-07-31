@@ -124,6 +124,8 @@ export interface LayerSource {
     | import('../engine/WebCodecsPlayer').WebCodecsPlayer
     | import('../services/mediaRuntime/types').RuntimeFrameProvider;
   videoFrame?: VideoFrame;
+  /** Container track orientation for raw WebCodecs frames. HTML video applies this itself. */
+  videoRotation?: import('../engine/webcodecs/videoTrackOrientation').VideoRotationDegrees;
   // Native Helper decoder for ProRes/DNxHD (turbo mode)
   nativeDecoder?: import('../services/nativeHelper').NativeDecoder;
   // Path to original file (for native helper to access directly)

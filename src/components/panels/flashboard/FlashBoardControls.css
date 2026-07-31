@@ -11,9 +11,11 @@
 }
 
 .fb-bubble-bar.is-chat-mode {
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas: "controls generate";
-  min-height: 32px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "controls"
+    "generate";
+  min-height: 68px;
 }
 
 .fb-control-stack {
@@ -88,6 +90,10 @@
   justify-self: end;
   gap: 5px;
   min-width: 0;
+}
+
+.fb-bubble-bar.is-chat-mode .fb-action-stack {
+  max-width: 100%;
 }
 
 .fb-bubble-bar.has-inline-submenu {

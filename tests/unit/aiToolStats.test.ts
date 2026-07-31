@@ -12,7 +12,9 @@ import {
 } from '../../src/services/aiTools/handlers/stats';
 import { summarizeWorkerGpuOnlyPlaybackPaths } from '../../src/services/playbackDebugStats';
 import { useMediaStore } from '../../src/stores/mediaStore';
+import { useTimelineStore } from '../../src/stores/timeline';
 import { DEFAULT_COMPOSITION } from '../../src/stores/mediaStore/constants';
+import { createDefaultMotionLayerDefinition } from '../../src/types/motionDesign';
 import type { FrameFingerprint } from '../../src/services/aiTools/frameFingerprint';
 import {
   clearWorkerFirstProofCapturesForTests,
@@ -176,6 +178,7 @@ function readWorkerFirstRendererStats(data: unknown): Record<string, unknown> {
 
 describe('AI stats timeline runtime coordinator bridge field', () => {
   let previousEngineStats: ReturnType<typeof useEngineStore.getState>['engineStats'];
+  let previousTimelineState: ReturnType<typeof useTimelineStore.getState>;
   const enginePatchKeys = [
     'getLayerCollector',
     'getRenderLoop',
@@ -188,6 +191,7 @@ describe('AI stats timeline runtime coordinator bridge field', () => {
 
   beforeEach(() => {
     previousEngineStats = useEngineStore.getState().engineStats;
+    previousTimelineState = useTimelineStore.getState();
     previousEngineDescriptors = Object.fromEntries(
       enginePatchKeys.map((key) => [key, Object.getOwnPropertyDescriptor(engine, key)]),
     ) as Record<typeof enginePatchKeys[number], PropertyDescriptor | undefined>;
@@ -214,6 +218,7 @@ describe('AI stats timeline runtime coordinator bridge field', () => {
 
   afterEach(() => {
     useEngineStore.getState().setEngineStats(previousEngineStats);
+    useTimelineStore.setState(previousTimelineState);
     clearWorkerFirstProofCapturesForTests();
     clearWorkerFirstCounterSourcesForTests();
     timelineRuntimeCoordinator.clearResources();
@@ -257,6 +262,54 @@ describe('AI stats timeline runtime coordinator bridge field', () => {
       activeComposition: {
         id: activeComposition.id,
         frameRate: 30,
+      },
+    });
+  });
+
+  it('includes Motion Design timeline and renderer diagnostics', async () => {
+    const motion = createDefaultMotionLayerDefinition('shape');
+    if (motion.replicator?.layout.mode === 'grid') {
+      motion.replicator.enabled = true;
+      motion.replicator.layout.count = { x: 4, y: 3 };
+    }
+    useTimelineStore.setState({
+      playheadPosition: 1,
+      clips: [{
+        id: 'stats-motion',
+        trackId: 'video-1',
+        name: 'Stats Motion',
+        file: new File([], 'stats-motion.msmotion'),
+        startTime: 0,
+        duration: 5,
+        inPoint: 0,
+        outPoint: 5,
+        source: { type: 'motion-shape', naturalDuration: 5 },
+        motion,
+        transform: {},
+        effects: [],
+      }],
+    });
+
+    const result = await handleGetStats();
+
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({
+      motionDesign: {
+        timeline: {
+          totalClips: 1,
+          activeClips: 1,
+          renderableClips: 1,
+          replicatorClips: 1,
+          effectiveInstances: 12,
+          activeEffectiveInstances: 12,
+        },
+        renderer: {
+          renderCalls: expect.any(Number),
+          cacheCount: expect.any(Number),
+          bufferUploads: expect.any(Number),
+          bufferUploadBytes: expect.any(Number),
+          lastEncodeTimeMs: expect.any(Number),
+        },
       },
     });
   });

@@ -7,6 +7,9 @@ import { renderHostPort } from '../render/renderHostPort';
 import type { TimelineClip, TimelineTrack } from '../../stores/timeline/types';
 import { clipHasTranscript } from '../transcription/clipTranscriptResolver';
 import type { ToolResult } from './types';
+import type { PropertyAuthoringContext } from '../../types/propertyRegistry';
+import { propertyRegistry } from '../properties';
+import { propertyValueFromStorage } from '../properties/propertyAuthoring';
 import {
   captureRenderHostFrame,
   type PreviewCaptureMode,
@@ -150,7 +153,28 @@ export async function captureFrameGrid(
 }
 
 // Helper to format clip info for AI
-export function formatClipInfo(clip: TimelineClip, track: TimelineTrack | undefined) {
+export function formatClipInfo(
+  clip: TimelineClip,
+  track: TimelineTrack | undefined,
+  authoringContext: PropertyAuthoringContext,
+) {
+  const authoringPosition = Object.fromEntries(
+    (['x', 'y', 'z'] as const).map((axis) => {
+      const path = `position.${axis}`;
+      const descriptor = propertyRegistry.getDescriptor(path, clip);
+      if (!descriptor) throw new Error(`Property not found for clip: ${path}`);
+      const value = propertyValueFromStorage(
+        descriptor,
+        clip.transform.position[axis],
+        authoringContext,
+      );
+      if (typeof value !== 'number') {
+        throw new Error(`${path} did not resolve to a numeric authoring value`);
+      }
+      return [axis, value];
+    }),
+  ) as TimelineClip['transform']['position'];
+
   return {
     id: clip.id,
     name: clip.name,
@@ -179,7 +203,23 @@ export function formatClipInfo(clip: TimelineClip, track: TimelineTrack | undefi
     faceObservationCount: clip.analysis?.faceAnalysis?.observationCount ?? 0,
     hasTranscript: clipHasTranscript(clip),
     // Transform info
-    transform: clip.transform,
+    transform: {
+      ...structuredClone(clip.transform),
+      position: authoringPosition,
+    },
+    storedTransform: structuredClone(clip.transform),
+    transformAuthoring: {
+      compositionId: authoringContext.compositionId,
+      positionUnit: authoringContext.positionUnitMode === 'composition-pixels'
+        ? 'px'
+        : 'scene-unit',
+      positionStorageUnit: authoringContext.positionUnitMode === 'composition-pixels'
+        ? 'normalized-half-extent'
+        : 'scene-unit',
+      coordinateSpace: authoringContext.positionUnitMode === 'composition-pixels'
+        ? 'composition-center'
+        : 'scene',
+    },
     // Effects count
     effectsCount: clip.effects?.length || 0,
   };

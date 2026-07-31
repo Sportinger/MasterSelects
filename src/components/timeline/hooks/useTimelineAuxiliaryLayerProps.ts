@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import type { TimelineAuxiliaryLayerProps } from '../components/TimelineAuxiliaryLayer';
 import { createSubcompositionFromSelection } from '../../../services/timelineSubcomposition';
+import { useTimelineStore } from '../../../stores/timeline';
 
 type TimelineContextMenuProps = TimelineAuxiliaryLayerProps['timelineContextMenuProps'];
 type EmptyContextMenuProps = TimelineAuxiliaryLayerProps['emptyContextMenuProps'];
@@ -49,6 +50,8 @@ export function useTimelineAuxiliaryLayerProps({
   updateMarker,
   ...timelineContextMenuProps
 }: UseTimelineAuxiliaryLayerPropsArgs): TimelineAuxiliaryLayerProps {
+  const addStoryboardClip = useTimelineStore(state => state.addStoryboardClip);
+  const addCaptionClip = useTimelineStore(state => state.addCaptionClip);
   const handleCreateSubcompositionFromSelection = useCallback((clipId: string) => {
     void createSubcompositionFromSelection(clipId);
   }, []);
@@ -75,6 +78,18 @@ export function useTimelineAuxiliaryLayerProps({
     deleteAllGaps();
   }, [deleteAllGaps]);
 
+  const handleAddStoryboardScene = useCallback<
+    NonNullable<EmptyContextMenuProps['onAddStoryboardScene']>
+  >((time, trackId) => {
+    addStoryboardClip(trackId, time);
+  }, [addStoryboardClip]);
+
+  const handleAddCaptionClip = useCallback<
+    NonNullable<EmptyContextMenuProps['onAddCaptionClip']>
+  >((time, trackId) => {
+    void addCaptionClip(trackId, time);
+  }, [addCaptionClip]);
+
   const handleCloseTrackContextMenu = useCallback(() => {
     setTrackContextMenu(null);
   }, [setTrackContextMenu]);
@@ -99,6 +114,8 @@ export function useTimelineAuxiliaryLayerProps({
       onEraseLayerGaps: handleEraseLayerGaps,
       onEraseAllGaps: handleEraseAllGaps,
       onFitCompToWindow: handleFitToWindow,
+      onAddStoryboardScene: handleAddStoryboardScene,
+      onAddCaptionClip: handleAddCaptionClip,
     },
     inOutContextMenuProps: {
       menu: inOutContextMenu,
@@ -136,6 +153,8 @@ export function useTimelineAuxiliaryLayerProps({
     handleCreateSubcompositionFromSelection,
     handleDeleteInOutPoint,
     handleEraseAllGaps,
+    handleAddCaptionClip,
+    handleAddStoryboardScene,
     handleEraseGap,
     handleEraseLayerGaps,
     handleFitToWindow,

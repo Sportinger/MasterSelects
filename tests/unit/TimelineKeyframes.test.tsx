@@ -180,7 +180,7 @@ describe('TimelineKeyframes', () => {
     expect(onMoveKeyframe).toHaveBeenLastCalledWith('kf-left', 4);
   });
 
-  it('toggles the curve editor on left double-clicking a keyframe', () => {
+  it('requests the shared Graph on left double-clicking a keyframe', () => {
     const onToggleCurveExpanded = vi.fn();
     const { container } = renderKeyframes({ onToggleCurveExpanded });
     const diamond = container.querySelector('.keyframe-diamond') as HTMLElement;

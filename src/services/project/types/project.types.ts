@@ -31,6 +31,7 @@ import type {
 } from './schema.types';
 import type { ProjectExportStoreData } from './export.types';
 import type { ProjectFlashBoardState } from './flashboard.types';
+import type { StoryboardProjectState } from '../../storyboard/contracts';
 
 export type {
   ProjectMediaBoardGroupOffsets,
@@ -157,6 +158,9 @@ export interface ProjectFile {
 
   // FlashBoard AI workspace state
   flashboard?: ProjectFlashBoardState;
+
+  // Normalized storyboard, candidates, decisions, variants, and templates
+  storyboard?: StoryboardProjectState;
 
   // Generated media items
   textItems?: ProjectTextItem[];

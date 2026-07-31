@@ -190,6 +190,9 @@ export interface CloudAiChatMessage {
 }
 
 export interface CloudAiChatRequest {
+  billingRoundIndex?: number;
+  billingTurnAction?: 'cancel' | 'complete' | 'continue';
+  billingTurnId?: string;
   max_completion_tokens?: number;
   idempotencyKey?: string;
   include?: unknown;

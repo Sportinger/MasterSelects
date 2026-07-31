@@ -22,6 +22,7 @@ export interface ExportRenderSessionOptions {
   readonly stackedAlpha: boolean;
   readonly preferZeroCopy: boolean;
   readonly host?: ExportRenderHostPort;
+  readonly frameDecorator?: ExportRenderFrameDecorator;
 }
 
 export interface ExportRenderSessionFrameMetrics {
@@ -34,6 +35,11 @@ export interface ExportRenderSessionFrameMetrics {
 export type ExportRenderSessionFrameCapture = ExportFrameCapture & {
   readonly metrics: ExportRenderSessionFrameMetrics;
 };
+
+export type ExportRenderFrameDecorator = (
+  capture: ExportRenderSessionFrameCapture,
+  input: ExportRenderFrameInput,
+) => ExportRenderSessionFrameCapture | Promise<ExportRenderSessionFrameCapture>;
 
 export class ExportFrameCaptureUnavailableError extends Error {
   readonly captureKind: ExportFrameCapture['kind'];
@@ -174,6 +180,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
   private readonly stackedAlpha: boolean;
   private readonly preferZeroCopy: boolean;
   private readonly host: ExportRenderHostPort;
+  private readonly frameDecorator?: ExportRenderFrameDecorator;
   private originalDimensions: { width: number; height: number } | null = null;
   private disposed = false;
   private useZeroCopy = false;
@@ -185,6 +192,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
     this.stackedAlpha = options.stackedAlpha;
     this.preferZeroCopy = options.preferZeroCopy;
     this.host = options.host ?? exportRenderHostPort;
+    this.frameDecorator = options.frameDecorator;
     this.signal = this.abortController.signal;
   }
 
@@ -265,7 +273,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
         throw new ExportFrameCaptureUnavailableError('video-frame');
       }
 
-      return {
+      const capture: ExportRenderSessionFrameCapture = {
         kind: 'video-frame',
         frame: videoFrame,
         width: videoFrame.displayWidth || videoFrame.codedWidth,
@@ -274,6 +282,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
         durationMicros: input.durationMicros,
         metrics: { maskSyncMs, ensureLayersMs, renderMs, captureMs },
       };
+      return this.decorateFrame(capture, input);
     }
 
     const readbackCapture = await this.capturePixels(input, {
@@ -284,7 +293,14 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
     if (!readbackCapture) {
       throw new ExportFrameCaptureUnavailableError('rgba-pixels');
     }
-    return readbackCapture;
+    return this.decorateFrame(readbackCapture, input);
+  }
+
+  private decorateFrame(
+    capture: ExportRenderSessionFrameCapture,
+    input: ExportRenderFrameInput,
+  ): ExportRenderSessionFrameCapture | Promise<ExportRenderSessionFrameCapture> {
+    return this.frameDecorator ? this.frameDecorator(capture, input) : capture;
   }
 
   private async capturePixels(

@@ -95,7 +95,7 @@ export function buildFlashBoardChatOptionsState({
     activeChatModelId,
     chatButtonLabel: isChatting ? 'Stop' : 'Chat',
     chatChargeTitle: chatCreditLabel
-      ? `${chatCreditLabel} per hosted model round. Tool follow-up rounds are charged separately.`
+      ? `${chatCreditLabel} of actual Kie.ai usage across the complete agent turn. An active turn can finish if the balance runs out; starting a new turn then requires credits.`
       : undefined,
     chatCreditLabel,
     chatModelOptions,

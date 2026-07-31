@@ -13,6 +13,8 @@ import type {
   TimelineClip,
   TransitionOverlayClipDefinition,
 } from '../../../types';
+import type { CaptionClipProperties, CaptionLayerBinding } from '../../../types/caption';
+import type { StoryboardClipProperties } from '../../../types/storyboard';
 import type { MotionLayerDefinition } from '../../../types/motionDesign';
 import type { LightClipSettings } from '../../../types/light';
 import type { ModelMaterialSettings } from '../../../types/modelMaterial';
@@ -47,8 +49,11 @@ export interface ClipboardClipData {
   preservesPitch?: boolean;
   freeRun?: boolean;
   textProperties?: import('../../../types').TextClipProperties;
+  captionProperties?: CaptionClipProperties;
+  captionLayerBinding?: CaptionLayerBinding;
   text3DProperties?: import('../../../types').Text3DProperties;
   solidColor?: string;
+  storyboardProperties?: StoryboardClipProperties;
   transitionOverlay?: TransitionOverlayClipDefinition;
   mathScene?: MathSceneDefinition;
   motion?: MotionLayerDefinition;

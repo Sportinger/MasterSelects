@@ -6,6 +6,8 @@ import {
   findHistoryStateBoundaryViolations,
   toHistoryTimelineClipEditState,
 } from '../../src/stores/timeline/historyTimelineEditState';
+import { createHistoryTimelineRestoreState } from '../../src/stores/timeline/historyTimelineRestoreState';
+import { cloneDefaultCaptionProperties } from '../../src/services/captions/captionDefaults';
 import type { HistoryRuntimeRehydrationAdapter } from '../../src/stores/timeline/historyTimelineContracts';
 
 function makeTransform(): TimelineClip['transform'] {
@@ -184,6 +186,53 @@ describe('HistoryTimelineEditState contracts', () => {
     expect(keys.has('mixdownBuffer')).toBe(false);
     expect(keys.has('nestedClips')).toBe(false);
     expect(keys.has('nestedTracks')).toBe(false);
+  });
+
+  it('round-trips caption styling through undo history', () => {
+    const clip = makeRuntimeClip();
+    clip.captionProperties = {
+      ...cloneDefaultCaptionProperties(),
+      fontSize: 72,
+      highlight: {
+        ...cloneDefaultCaptionProperties().highlight,
+        mode: 'spoken-words',
+      },
+    };
+    clip.captionLayerBinding = {
+      schemaVersion: 1,
+      role: 'text',
+      inputClipId: 'caption-input',
+    };
+    const history = createHistoryTimelineEditState({
+      id: 'caption-history',
+      label: 'Update captions',
+      timestamp: 12346,
+      tracks: [makeTrack()],
+      clips: [clip],
+      selectedClipIds: new Set([clip.id]),
+      zoom: 50,
+      scrollX: 0,
+    });
+
+    clip.captionProperties.fontSize = 99;
+    clip.captionLayerBinding.inputClipId = 'changed-input';
+    const restored = createHistoryTimelineRestoreState(history, { clips: [clip] });
+
+    expect(restored.state.clips[0].captionProperties).toEqual({
+      ...cloneDefaultCaptionProperties(),
+      fontSize: 72,
+      highlight: {
+        ...cloneDefaultCaptionProperties().highlight,
+        mode: 'spoken-words',
+      },
+    });
+    expect(restored.state.clips[0].captionProperties).not.toBe(clip.captionProperties);
+    expect(restored.state.clips[0].captionLayerBinding).toEqual({
+      schemaVersion: 1,
+      role: 'text',
+      inputClipId: 'caption-input',
+    });
+    expect(restored.state.clips[0].captionLayerBinding).not.toBe(clip.captionLayerBinding);
   });
 
   it('rejects manual history state objects with runtime payload keys', () => {

@@ -331,7 +331,7 @@ export interface KeyframeTransactionBaseOperation extends TimelineEditTransactio
 export interface KeyframeTransactionBeginOperation extends KeyframeTransactionBaseOperation {
   type: 'keyframe-transaction-begin';
   phase: 'begin';
-  intent: 'drag-diamond' | 'curve-editor' | 'marquee' | 'property-row' | 'keyboard' | 'timeline-tool';
+  intent: 'drag-diamond' | 'curve-editor' | 'viewport-motion-path' | 'marquee' | 'property-row' | 'keyboard' | 'timeline-tool';
 }
 
 export interface KeyframeTransactionUpdateOperation extends KeyframeTransactionBaseOperation {

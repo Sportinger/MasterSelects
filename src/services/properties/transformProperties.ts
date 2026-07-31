@@ -1,6 +1,10 @@
 
 import type { TimelineClip } from '../../types/timeline';
-import type { PropertyDescriptor } from '../../types/propertyRegistry';
+import { BLEND_MODES, type BlendMode } from '../../types/blendMode';
+import type {
+  PropertyAuthoringMetadata,
+  PropertyDescriptor,
+} from '../../types/propertyRegistry';
 import type { PropertyRegistry } from './PropertyRegistry';
 
 type TransformPatch = Omit<Partial<TimelineClip['transform']>, 'position' | 'scale' | 'rotation'> & {
@@ -32,6 +36,7 @@ function createTransformDescriptor(
   read: (clip: TimelineClip) => number,
   write: (clip: TimelineClip, value: number) => TimelineClip,
   ui: NonNullable<PropertyDescriptor['ui']> = {},
+  authoring?: PropertyAuthoringMetadata,
 ): PropertyDescriptor<number> {
   return {
     path,
@@ -41,6 +46,7 @@ function createTransformDescriptor(
     animatable: true,
     defaultValue,
     ui,
+    authoring,
     read,
     write: (clip, value) => write(clip, value as number),
   };
@@ -56,6 +62,20 @@ export function registerTransformProperties(registry: PropertyRegistry): void {
       (clip, value) => updateTransform(clip, { opacity: value }),
       { min: 0, max: 1, step: 0.01, aliases: ['alpha', 'transparency'] },
     ),
+    {
+      path: 'blendMode',
+      label: 'Blend Mode',
+      group: 'Transform',
+      valueType: 'enum',
+      animatable: false,
+      defaultValue: 'normal',
+      ui: {
+        options: BLEND_MODES.map((value) => ({ value, label: value })),
+        aliases: ['compositing mode'],
+      },
+      read: (clip) => clip.transform.blendMode,
+      write: (clip, value) => updateTransform(clip, { blendMode: value as BlendMode }),
+    },
     createTransformDescriptor(
       'position.x',
       'Position X',
@@ -63,6 +83,10 @@ export function registerTransformProperties(registry: PropertyRegistry): void {
       (clip) => clip.transform.position.x,
       (clip, value) => updateTransform(clip, { position: { x: value } }),
       { step: 1, aliases: ['x'] },
+      {
+        axis: 'x',
+        codec: 'transform-position',
+      },
     ),
     createTransformDescriptor(
       'position.y',
@@ -71,6 +95,10 @@ export function registerTransformProperties(registry: PropertyRegistry): void {
       (clip) => clip.transform.position.y,
       (clip, value) => updateTransform(clip, { position: { y: value } }),
       { step: 1, aliases: ['y'] },
+      {
+        axis: 'y',
+        codec: 'transform-position',
+      },
     ),
     createTransformDescriptor(
       'position.z',
@@ -79,6 +107,10 @@ export function registerTransformProperties(registry: PropertyRegistry): void {
       (clip) => clip.transform.position.z,
       (clip, value) => updateTransform(clip, { position: { z: value } }),
       { step: 1, aliases: ['z', 'depth'] },
+      {
+        axis: 'z',
+        codec: 'transform-position',
+      },
     ),
     createTransformDescriptor(
       'scale.all',

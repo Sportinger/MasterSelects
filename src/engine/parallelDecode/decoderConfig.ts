@@ -1,11 +1,5 @@
-export interface MP4VideoTrack {
-  id: number;
-  codec: string;
-  duration: number;
-  timescale: number;
-  nb_samples: number;
-  video: { width: number; height: number };
-}
+export type { MP4VideoTrack } from '../webCodecsTypes';
+import type { MP4VideoTrack } from '../webCodecsTypes';
 
 export interface CodecConfigurationBox {
   write: (stream: { buffer: ArrayBuffer; position?: number }) => void;

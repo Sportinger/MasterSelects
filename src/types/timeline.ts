@@ -39,6 +39,8 @@ import type {
 import type { TimelineSourceType } from './timelineSource';
 import type { TransitionOverlayPattern } from '../transitions';
 import type { VectorAnimationClipSettings } from './vectorAnimation';
+import type { StoryboardClipProperties } from './storyboard';
+import type { CaptionClipProperties, CaptionLayerBinding } from './caption';
 
 export interface TransitionOverlayClipDefinition {
   pattern: TransitionOverlayPattern;
@@ -166,9 +168,15 @@ export interface TimelineClip {
   sceneDescriptionMessage?: string;   // Status message during description
   // Text clip support
   textProperties?: TextClipProperties;
+  // Transcript-driven dynamic caption clip support
+  captionProperties?: CaptionClipProperties;
+  // Optional live input role for ordinary layers inside a caption design comp
+  captionLayerBinding?: CaptionLayerBinding;
   text3DProperties?: Text3DProperties;
   // Solid clip support
   solidColor?: string;
+  // Storyboard scene-card projection
+  storyboardProperties?: StoryboardClipProperties;
   // Generated transition overlay support
   transitionOverlay?: TransitionOverlayClipDefinition;
   // MIDI clip support (issue #182): note data; instrument lives on the track
@@ -276,9 +284,13 @@ export interface SerializableClip {
   freeRun?: boolean;
   // Text clip support
   textProperties?: TextClipProperties;
+  captionProperties?: CaptionClipProperties;
+  captionLayerBinding?: CaptionLayerBinding;
   text3DProperties?: Text3DProperties;
   // Solid clip support
   solidColor?: string;
+  // Storyboard scene-card projection
+  storyboardProperties?: StoryboardClipProperties;
   // Generated transition overlay support
   transitionOverlay?: TransitionOverlayClipDefinition;
   // MIDI clip support (issue #182)

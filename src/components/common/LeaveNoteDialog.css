@@ -3,16 +3,13 @@
     position: fixed;
     inset: 0;
     z-index: 10020;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    background: rgba(5, 8, 13, 0.72);
-    backdrop-filter: blur(7px);
-    animation: leave-note-backdrop-in 140ms ease-out both;
+    pointer-events: none;
+    background: transparent;
+    backdrop-filter: none;
   }
 
   .leave-note-dialog {
+    position: fixed;
     width: min(420px, calc(100vw - 32px));
     overflow: hidden;
     border: 1px solid rgba(216, 100, 100, 0.34);
@@ -22,7 +19,13 @@
       var(--bg-secondary);
     color: var(--text-primary);
     box-shadow: 0 28px 80px rgba(0, 0, 0, 0.58);
+    pointer-events: auto;
     animation: leave-note-dialog-in 160ms ease-out both;
+  }
+
+  .leave-note-dialog.is-dragging {
+    cursor: grabbing;
+    user-select: none;
   }
 
   .leave-note-accent {
@@ -35,6 +38,12 @@
     align-items: center;
     justify-content: space-between;
     padding: 20px 22px 14px;
+    cursor: grab;
+    user-select: none;
+  }
+
+  .leave-note-dialog.is-dragging .leave-note-header {
+    cursor: grabbing;
   }
 
   .leave-note-header h2 {
@@ -226,10 +235,6 @@
     background: rgba(255, 255, 255, 0.82);
   }
 
-  @keyframes leave-note-backdrop-in {
-    from { opacity: 0; }
-  }
-
   @keyframes leave-note-dialog-in {
     from {
       opacity: 0;
@@ -249,19 +254,13 @@
   }
 
   @media (max-width: 520px) {
-    .leave-note-backdrop {
-      align-items: flex-end;
-      padding: 12px;
-    }
-
     .leave-note-dialog,
     .leave-note-dialog.is-success {
-      width: 100%;
+      width: calc(100vw - 24px);
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .leave-note-backdrop,
     .leave-note-dialog,
     .leave-note-spinner,
     .leave-note-thanks {

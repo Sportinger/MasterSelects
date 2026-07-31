@@ -14,7 +14,7 @@ import {
   setActiveTransitionDragData,
   TRANSITION_MIME_TYPE,
 } from '../timeline/transitionDragData';
-import { TransitionPreview } from './transitions/TransitionPreview';
+import { AnimatedTransitionPreview } from './transitions/AnimatedTransitionPreview';
 import {
   filterTransitionPanelItems,
   groupTransitionPanelItems,
@@ -130,7 +130,7 @@ function TransitionItem({
       aria-disabled={isPlanned || undefined}
     >
       <div className="transition-item-preview">
-        <TransitionPreview type={transition.id} />
+        <AnimatedTransitionPreview type={transition.id} />
       </div>
       <span className="transition-item-name">{label}</span>
       {variantCount !== undefined ? (

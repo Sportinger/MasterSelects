@@ -9,7 +9,12 @@ const log = Logger.create('AITool');
 import { flags } from '../../engine/featureFlags';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { startBatch, endBatch, useHistoryStore } from '../../stores/historyStore';
+import {
+  cancelHistoryBatch,
+  endBatch,
+  startBatch,
+  useHistoryStore,
+} from '../../stores/historyStore';
 import type {
   AIToolCallExecution,
   AIToolCallExecutionResult,
@@ -18,7 +23,10 @@ import type {
 } from './types';
 import { MODIFYING_TOOLS } from './types';
 import { executeToolInternal } from './handlers';
-import { handleExecuteBatch } from './handlers/batch';
+import {
+  handleExecuteBatch,
+  preflightBatchToolAccess,
+} from './handlers/batch';
 import { setAIExecutionActive, setStaggerBudget } from './executionState';
 import { checkToolAccess } from './policy';
 import type { CallerContext } from './policy';
@@ -28,6 +36,36 @@ import {
   commitAgentTransaction, completeAgentToolAudit, completeOrDeferAgentToolAudit,
   createAgentTransactionRollbackReason, createGroupedPartialFailureInfo, createGroupedRollbackReason, type AgentToolAuditCompletion,
 } from './agentTransaction';
+
+// These handlers open, verify, and cancel their own history batch when invoked
+// standalone. They remain in MODIFYING_TOOLS so grouped calls are wrapped and
+// rolled back atomically by the outer agent transaction.
+const SELF_MANAGED_HISTORY_TOOLS = new Set([
+  'commitTimelineVariantOption',
+]);
+
+function startOwnedHistoryBatch(label: string): number | null {
+  const batch = startBatch(label);
+  return batch.opened ? batch.batchId : null;
+}
+
+function endOwnedHistoryBatch(batchId: number | null): void {
+  if (batchId === null) return;
+  if (useHistoryStore.getState().batchId === batchId) {
+    endBatch();
+    return;
+  }
+  log.warn('Skipped closing AI history batch after ownership changed', { batchId });
+}
+
+function cancelOwnedHistoryBatch(batchId: number | null): void {
+  if (batchId === null) return;
+  if (useHistoryStore.getState().batchId === batchId) {
+    cancelHistoryBatch();
+    return;
+  }
+  log.warn('Skipped cancelling AI history batch after ownership changed', { batchId });
+}
 import {
   compileGuidedToolCall,
   compileGuidedToolCalls,
@@ -70,8 +108,10 @@ export {
   effectToolDefinitions,
   keyframeToolDefinitions,
   textToolDefinitions,
+  motionDesignToolDefinitions,
   playbackToolDefinitions,
   transitionToolDefinitions,
+  storyboardToolDefinitions,
 } from './definitions';
 
 // Re-export utilities
@@ -108,7 +148,9 @@ async function executeAIToolWithDeferredAudit(
     tool: toolName,
   });
   // Policy gate: check if caller is allowed to execute this tool
-  const access = checkToolAccess(toolName, callerContext);
+  const access = checkToolAccess(toolName, callerContext, {
+    executionMode: options.executionMode,
+  });
   if (!access.allowed) {
     log.warn(`Policy denied: ${toolName} from ${callerContext} — ${access.reason}`);
     const result = { success: false, error: access.reason };
@@ -157,12 +199,22 @@ export async function executeAIToolCalls(
       tool: toolCall.tool,
     });
     auditCallIds.set(toolCall, audit.callId);
-    const access = checkToolAccess(toolCall.tool, callerContext);
-    if (!access.allowed) {
-      log.warn(`Policy denied: ${toolCall.tool} from ${callerContext} â€” ${access.reason}`);
-      const result = { success: false, error: access.reason };
+    const access = checkToolAccess(toolCall.tool, callerContext, {
+      executionMode: options.executionMode,
+    });
+    const batchAccessFailure = access.allowed && toolCall.tool === 'executeBatch'
+      ? preflightBatchToolAccess(
+          toolCall.args.actions,
+          callerContext,
+          options.executionMode,
+        )
+      : null;
+    if (!access.allowed || batchAccessFailure) {
+      const reason = access.reason ?? batchAccessFailure?.error;
+      log.warn(`Policy denied: ${toolCall.tool} from ${callerContext} â€” ${reason}`);
+      const result = { success: false, error: reason };
       policyResults.set(getToolCallResultKey(toolCall), result);
-      completeAIToolAudit(audit.callId, result, access.reason, 'denied');
+      completeAIToolAudit(audit.callId, result, reason, 'denied');
     } else {
       allowedCalls.push(toolCall);
     }
@@ -247,26 +299,19 @@ async function _executeAIToolInternal(
 
   // Special-case: executeBatch wraps all sub-actions in a single undo group
   if (toolName === 'executeBatch') {
-    const ownsBatch = !options.suppressHistory
-      && useHistoryStore.getState().batchId === null;
-    if (ownsBatch) {
-      startBatch('AI: batch');
-    }
+    const ownedBatchId = options.suppressHistory
+      ? null
+      : startOwnedHistoryBatch('AI: batch');
     try {
-      const result = await handleExecuteBatch(args, callerContext, options);
-      if (ownsBatch) {
-        endBatch();
-      }
-      return result;
+      return await handleExecuteBatch(args, callerContext, options);
     } catch (error) {
-      if (ownsBatch) {
-        endBatch();
-      }
       log.error('Error executing batch', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
       };
+    } finally {
+      endOwnedHistoryBatch(ownedBatchId);
     }
   }
 
@@ -274,10 +319,12 @@ async function _executeAIToolInternal(
   const mediaStore = useMediaStore.getState();
 
   // Track history for modifying operations
-  const isModifying = MODIFYING_TOOLS.has(toolName) && !options.suppressHistory;
-  if (isModifying) {
-    startBatch(`AI: ${toolName}`);
-  }
+  const isModifying = MODIFYING_TOOLS.has(toolName)
+    && !SELF_MANAGED_HISTORY_TOOLS.has(toolName)
+    && !options.suppressHistory;
+  const ownedBatchId = isModifying
+    ? startOwnedHistoryBatch(`AI: ${toolName}`)
+    : null;
 
   // Set fresh 3s stagger budget for standalone tool calls
   // (batch handler sets its own budget before calling tools)
@@ -292,20 +339,15 @@ async function _executeAIToolInternal(
     const result = await executeToolInternal(toolName, args, timelineStore, mediaStore, callerContext);
 
 
-    if (isModifying) {
-      endBatch();
-    }
-
     return result;
   } catch (error) {
-    if (isModifying) {
-      endBatch();
-    }
     log.error(`Error executing ${toolName}`, error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred',
     };
+  } finally {
+    endOwnedHistoryBatch(ownedBatchId);
   }
 }
 
@@ -327,9 +369,16 @@ async function executeGuidedAITool(
   options: AIToolExecutionOptions,
 ): Promise<ToolResult> {
   const inlineBatchExecution = toolName === 'executeBatch';
-  const ownsInlineBatch = inlineBatchExecution
-    && !options.suppressHistory
-    && useHistoryStore.getState().batchId === null;
+  if (inlineBatchExecution) {
+    const accessFailure = preflightBatchToolAccess(
+      args.actions,
+      callerContext,
+      options.executionMode,
+    );
+    if (accessFailure) return accessFailure;
+  }
+  const shouldManageGuidedHistory = !options.suppressHistory
+    && (inlineBatchExecution || MODIFYING_TOOLS.has(toolName));
   const compiled = compileGuidedToolCall({
     tool: toolName,
     args,
@@ -342,7 +391,7 @@ async function executeGuidedAITool(
     executeTool: (tool, toolArgs, nestedCallerContext, nestedOptions) => (
       _executeAIToolInternal(tool, toolArgs, nestedCallerContext, {
         ...nestedOptions,
-        suppressHistory: inlineBatchExecution
+        suppressHistory: shouldManageGuidedHistory
           || options.suppressHistory
           || nestedOptions?.suppressHistory,
       })
@@ -354,10 +403,11 @@ async function executeGuidedAITool(
     legacyFeedback: getGuidedLegacyFeedback(options),
   }));
 
+  const ownedBatchId = shouldManageGuidedHistory
+    ? startOwnedHistoryBatch(inlineBatchExecution ? 'AI: batch' : `AI: ${toolName}`)
+    : null;
+  let guidedCompleted = false;
   try {
-    if (ownsInlineBatch) {
-      startBatch('AI: batch');
-    }
     const result = await runtime.startSession({
       actions: compiled.actions,
       animationBudget: getGuidedAnimationBudget(options),
@@ -372,14 +422,14 @@ async function executeGuidedAITool(
       playbackMode: 'aiReplay',
       visualizationMode: getGuidedVisualizationMode(options),
     });
+    guidedCompleted = result.status === 'completed';
     consumeGuidedReplayBudget(options, result);
     return inlineBatchExecution
       ? batchToolResultFromGuidedSession(args, result)
       : toolResultFromGuidedSession(toolName, result);
   } finally {
-    if (ownsInlineBatch) {
-      endBatch();
-    }
+    if (guidedCompleted) endOwnedHistoryBatch(ownedBatchId);
+    else cancelOwnedHistoryBatch(ownedBatchId);
     unregisterHandlers();
   }
 }
@@ -587,7 +637,17 @@ function toolResultFromGuidedSession(
 
   const primaryToolResult = result.toolResults[0];
   if (primaryToolResult) {
-    return primaryToolResult;
+    if (result.status === 'completed') return primaryToolResult;
+    return {
+      success: false,
+      error: result.error ?? `Guided AI execution ${result.status}`,
+      data: {
+        guidedSessionId: result.sessionId,
+        status: result.status,
+        tool: toolName,
+        toolResult: primaryToolResult,
+      },
+    };
   }
 
   if (result.status === 'completed') {

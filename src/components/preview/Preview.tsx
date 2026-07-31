@@ -36,6 +36,15 @@ import { usePreviewViewport } from './usePreviewViewport';
 import { usePreviewWheelHandler } from './usePreviewWheelHandler';
 import { usePreviewInitialEditCameraView } from './usePreviewInitialEditCameraView';
 import { createPreviewEditorCameraClip } from './usePreviewEditCameraConfig';
+import {
+  createMotionPathProjectionContext,
+  findMotionPathLayer,
+} from './motionPathGeometry';
+import { useMotionPathEditing } from './useMotionPathEditing';
+import {
+  readStoredMotionPathOnionFrameDistance,
+  readStoredMotionPathOnionSkinVisible,
+} from '../../stores/timeline/viewPreferences';
 import type { SceneCameraConfig } from '../../engine/scene/types';
 import type { Layer } from '../../types/layers';
 const SCENE_OBJECT_INTERACTION_SELECTOR = [
@@ -608,6 +617,44 @@ export function Preview({ panelId, source, showTransparencyGrid, initialEdit }: 
       calculateLayerBounds, findLayerAtPosition, findHandleAtPosition,
     });
 
+  const motionPathLayer = useMemo(
+    () => findMotionPathLayer(layers, selectedLayerId, selectedClip?.id ?? null),
+    [layers, selectedClip?.id, selectedLayerId],
+  );
+  const motionPathProjection = useMemo(() => motionPathLayer
+    ? createMotionPathProjectionContext({
+        layer: motionPathLayer,
+        projectionTransform: getLayerProjectionTransform(motionPathLayer),
+        effectiveResolution: renderResolution,
+        canvasSize,
+      })
+    : null, [canvasSize, getLayerProjectionTransform, motionPathLayer, renderResolution]);
+  const [motionPathOnionVisible] = useState(
+    () => readStoredMotionPathOnionSkinVisible(true),
+  );
+  const [motionPathOnionFrameOffset] = useState(
+    () => readStoredMotionPathOnionFrameDistance(1),
+  );
+  const { overlayProps: rawMotionPathOverlayProps } = useMotionPathEditing({
+    enabled: layerTransformMode,
+    clip: selectedClip,
+    projection: motionPathProjection,
+    editableSource: isEditableSource,
+    sourceMonitorActive,
+    playbackActive: isPlaying || Boolean(playbackWarmup) || isExporting,
+    maskModeActive: maskPanelActive || maskEditMode !== 'none',
+    textModeActive: textPreviewEditorEnabled || textClipEditMode || textTypingActive,
+    trackLocked: Boolean(tracks.find((track) => track.id === selectedClip?.trackId)?.locked),
+    playheadPosition,
+    frameRate: compositions.find((composition) => composition.id === displayedCompId)?.frameRate ?? 30,
+    viewZoom,
+    onionFrameOffset: motionPathOnionFrameOffset,
+  });
+  const motionPathOverlayProps = useMemo(() => ({
+    ...rawMotionPathOverlayProps,
+    onionPositions: motionPathOnionVisible ? rawMotionPathOverlayProps.onionPositions : [],
+  }), [motionPathOnionVisible, rawMotionPathOverlayProps]);
+
   const previewCanvasMountProps = {
     activeSharedSceneOverlayContent, activeSplatLoadProgress, canvasInContainer, canvasRef,
     canvasSize, canvasWrapperRef, clips, closeSourceMonitor, containerSize, displayedCompId,
@@ -620,6 +667,7 @@ export function Preview({ panelId, source, showTransparencyGrid, initialEdit }: 
     liveFeedbackCompositionId: stableRenderSource.type === 'layer-index' ? null : displayedCompId,
     maskEditMode, maskNavigationMode,
     maskPanelActive, overlayRef, playbackWaiterVideoCount, previewCameraOverride,
+    motionPathOverlayProps,
     previewQuality, qualityDropdownRef, qualityOpen, sam2Active, sceneGizmoToolbarTarget,
     sceneNavClipId, sceneNavEnabled, sceneObjectOverlaySelectedClipId, selectClip,
     selectedClip, selectedTextBounds, selectedTextLayer, setPropertyValue, setPreviewQuality,

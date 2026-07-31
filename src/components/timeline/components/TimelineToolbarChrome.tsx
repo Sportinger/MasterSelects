@@ -7,6 +7,7 @@ import type {
 import { TimelineControls } from '../TimelineControls';
 import type { TimelineControlsProps } from '../types';
 import { useLegacyTransitionCompositionUpgrade } from '../hooks/useLegacyTransitionCompositionUpgrade';
+import type { TimelineCurveMode } from '../../../stores/timeline/viewPreferences';
 
 interface TimelineToolbarChromeProps {
   duration: number;
@@ -19,6 +20,7 @@ interface TimelineToolbarChromeProps {
   onTimelineDurationKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
   onTimelineDurationSubmit: () => void;
   onTimelineTimeDoubleClick: (event: MouseEvent<HTMLSpanElement>) => void;
+  onToggleTimelineCurveMode: () => void;
   slotGridProgress: number;
   timelineControlsProps: Omit<TimelineControlsProps, 'variant'>;
   timelineCurrentFrame: number;
@@ -28,6 +30,7 @@ interface TimelineToolbarChromeProps {
   timelineRulerCurrentTime: number;
   timelineTimeDisplayMode: 'time' | 'frames';
   timelineTotalFrames: number;
+  timelineCurveMode: TimelineCurveMode;
 }
 
 export function TimelineToolbarChrome({
@@ -41,6 +44,7 @@ export function TimelineToolbarChrome({
   onTimelineDurationKeyDown,
   onTimelineDurationSubmit,
   onTimelineTimeDoubleClick,
+  onToggleTimelineCurveMode,
   slotGridProgress,
   timelineControlsProps,
   timelineCurrentFrame,
@@ -50,6 +54,7 @@ export function TimelineToolbarChrome({
   timelineRulerCurrentTime,
   timelineTimeDisplayMode,
   timelineTotalFrames,
+  timelineCurveMode,
 }: TimelineToolbarChromeProps) {
   const upgradeLegacyTransitionComposition = useLegacyTransitionCompositionUpgrade();
   const toolbarStyle = slotGridProgress > 0 ? {
@@ -117,6 +122,17 @@ export function TimelineToolbarChrome({
         <TimelineControls variant="transport" {...timelineControlsProps} />
         <TimelineControls variant="utility" {...timelineControlsProps} />
         <TimelineControls variant="zoom" {...timelineControlsProps} />
+        <button
+          aria-label="Toggle Timeline and Graph view"
+          aria-pressed={timelineCurveMode === 'graph'}
+          className={`timeline-curve-mode-toggle${timelineCurveMode === 'graph' ? ' active' : ''}`}
+          type="button"
+          onClick={onToggleTimelineCurveMode}
+          title="Toggle Timeline / Graph view (G)"
+        >
+          <span>{timelineCurveMode === 'graph' ? 'Graph' : 'Timeline'}</span>
+          <kbd>G</kbd>
+        </button>
         {upgradeLegacyTransitionComposition && (
           <button
             className="timeline-ruler-duration"

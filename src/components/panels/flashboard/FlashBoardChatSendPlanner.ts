@@ -2,6 +2,8 @@ import type {
   FlashBoardChatProvider,
   FlashBoardChatRequest,
   FlashBoardOpenAiReasoningEffort,
+  ChatIntent,
+  DecisionPolicy,
 } from '../../../services/flashboard/FlashBoardChatService';
 import { buildFlashBoardChatRequestPrompt } from '../../../services/flashboard/FlashBoardChatHistory';
 import type { FlashBoardChatMessage } from './FlashBoardChatOutput';
@@ -20,6 +22,8 @@ interface BuildFlashBoardChatSendPlanInput {
   planThreeEnabled: boolean;
   chatProvider: FlashBoardChatProvider;
   chatTemperature: number;
+  chatIntent?: ChatIntent;
+  decisionPolicy?: DecisionPolicy;
   effectiveChatPrompt: string;
   hasHostedSession: boolean;
   hostedAIEnabled: boolean;
@@ -41,8 +45,23 @@ export type FlashBoardChatSendPlan =
 export function buildFlashBoardPlanThreePrompt(
   userPrompt: string,
   planThreeEnabled: boolean,
+  intent: ChatIntent = 'execute',
 ): string {
   if (!planThreeEnabled) return userPrompt;
+
+  if (intent === 'plan') {
+    return `[PLAN 3 MODE]
+Develop exactly three separate storyboard or range-variant options without materializing real compositions or changing real media.
+
+- Option 1 — Balanced: the clearest, most faithful interpretation of the brief.
+- Option 2 — Dynamic: a tighter, more energetic alternative.
+- Option 3 — Alternative: a distinctly different creative interpretation that still respects the brief.
+- Keep all three options independently identifiable, explain their trade-offs, and prepare only local/non-paid briefs.
+- Do not submit generation jobs, import media, export, or claim that an option is already playable.
+
+Original request:
+${userPrompt}`;
+  }
 
   return `[PLAN 3 MODE]
 Carry out the request as exactly three separate, new, user-visible compositions. Preserve all existing compositions.
@@ -57,6 +76,28 @@ Original request:
 ${userPrompt}`;
 }
 
+export function buildFlashBoardChatIntentPrompt(
+  userPrompt: string,
+  intent: ChatIntent,
+  decisionPolicy: DecisionPolicy,
+): string {
+  if (intent === 'execute' && decisionPolicy === 'automatic') return userPrompt;
+  const policyInstruction = decisionPolicy === 'every-decision'
+    ? 'Pause for every material creative decision and present explicit options.'
+    : decisionPolicy === 'milestones'
+      ? 'Pause at meaningful creative or spending milestones and present explicit options.'
+      : 'Proceed automatically within the active safety and spending gates.';
+  const intentInstruction = intent === 'plan'
+    ? 'Work only on storyboard, decisions, templates, evidence, coverage, and generation preparation. Do not mutate real media, submit a provider job, export, or imply that those actions happened.'
+    : 'Execute through the verified editor tools, while respecting every approval and decision gate.';
+  return `[DIRECTING MODE: ${intent.toUpperCase()}]
+${intentInstruction}
+${policyInstruction}
+
+User request:
+${userPrompt}`;
+}
+
 export function buildFlashBoardChatSendPlan({
   activeChatModelId,
   canUseByoChat,
@@ -66,6 +107,8 @@ export function buildFlashBoardChatSendPlan({
   planThreeEnabled,
   chatProvider,
   chatTemperature,
+  chatIntent = 'execute',
+  decisionPolicy = 'automatic',
   effectiveChatPrompt,
   hasHostedSession,
   hostedAIEnabled,
@@ -101,7 +144,11 @@ export function buildFlashBoardChatSendPlan({
     };
   }
 
-  const executionPrompt = buildFlashBoardPlanThreePrompt(effectiveChatPrompt, planThreeEnabled);
+  const executionPrompt = buildFlashBoardChatIntentPrompt(
+    buildFlashBoardPlanThreePrompt(effectiveChatPrompt, planThreeEnabled, chatIntent),
+    chatIntent,
+    decisionPolicy,
+  );
 
   return {
     action: 'send',
@@ -111,11 +158,14 @@ export function buildFlashBoardChatSendPlan({
       lemonadeContextSize: chatProvider === 'lemonade' ? lemonadeContextSize : undefined,
       lemonadeEndpoint,
       model: activeChatModelId,
+      intent: chatIntent,
+      decisionPolicy,
       openAiReasoningEffort,
       playbookPrompt: executionPrompt,
       prompt: buildFlashBoardChatRequestPrompt(chatMessages, executionPrompt),
       provider: chatProvider,
       temperature: chatTemperature,
+      toolExecutionMode: chatIntent === 'plan' ? 'plan' : 'normal',
     },
   };
 }
@@ -143,6 +193,7 @@ export function buildFlashBoardChatCompletionMessages(
   editOptions: FlashBoardChatMessage['editOptions'] = undefined,
   toolCalls: FlashBoardChatMessage['toolCalls'] = undefined,
   kernelReport: FlashBoardChatMessage['kernelReport'] = undefined,
+  decisionId: FlashBoardChatMessage['decisionId'] = undefined,
 ): FlashBoardChatMessage[] {
   return messages.map((message) => (
     message.id === assistantMessageId
@@ -152,6 +203,7 @@ export function buildFlashBoardChatCompletionMessages(
           editOptions,
           toolCalls,
           kernelReport,
+          decisionId,
           kernelProgress: undefined,
           isPending: false,
         }

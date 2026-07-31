@@ -5,7 +5,7 @@ const KIEAI_BASE_URL = 'https://api.kie.ai';
 const KIEAI_UPLOAD_URL = 'https://kieai.redpandaai.co/api/file-stream-upload';
 const DEFAULT_SUNO_CALLBACK_URL = 'https://www.masterselects.com/api/ai/suno/callback';
 // Hosted customer credits are priced at 6x vendor Kie credits to keep margin after VAT, Stripe, and FX.
-const HOSTED_KIE_CREDIT_MULTIPLIER = 6;
+export const HOSTED_KIE_CREDIT_MULTIPLIER = 6;
 const KIEAI_USD_PER_CREDIT = 0.005;
 const HOSTED_SUNO_VENDOR_CREDITS = 12;
 const SEEDANCE_2_PROVIDER_ID = 'bytedance/seedance-2';

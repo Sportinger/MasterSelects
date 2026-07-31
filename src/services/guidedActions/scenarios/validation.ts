@@ -1,6 +1,12 @@
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { TimelineClip } from '../../../types';
+import { propertyRegistry } from '../../properties';
+import {
+  propertyValueToStorage,
+  resolveClipPropertyAuthoringContext,
+  resolveTransformPositionUnitMode,
+} from '../../properties/propertyAuthoring';
 import { isWithinValidationTolerance } from '../../validationCore';
 import type { GuidedTargetRef, ValidationCheck } from '../types';
 
@@ -39,8 +45,6 @@ const DEFAULT_VALUE_TOLERANCE = 0.001;
 const DEFAULT_TIME_TOLERANCE_SECONDS = 0.01;
 const DEFAULT_VALIDATION_TIMEOUT_MS = 10000;
 const DEFAULT_VALIDATION_POLL_INTERVAL_MS = 100;
-const DEFAULT_COMPOSITION_WIDTH = 1920;
-const DEFAULT_COMPOSITION_HEIGHT = 1080;
 
 const defaultClock: GuidedValidationClock = {
   now: () => Date.now(),
@@ -178,7 +182,12 @@ function validateClipTransformMatches(
   }
 
   const actual = getTransformValue(clip, check.property);
-  const expected = normalizeExpectedTransformValue(check, media);
+  let expected: number;
+  try {
+    expected = normalizeExpectedTransformValue(check, clip, timeline, media);
+  } catch (error) {
+    return fail(check, error instanceof Error ? error.message : String(error));
+  }
   const tolerance = check.tolerance ?? DEFAULT_VALUE_TOLERANCE;
 
   return isWithinValidationTolerance(actual, expected, tolerance)
@@ -357,28 +366,40 @@ function getTransformValue(clip: TimelineClip, property: Extract<ValidationCheck
 
 function normalizeExpectedTransformValue(
   check: Extract<ValidationCheck, { kind: 'clipTransformMatches' }>,
+  clip: TimelineClip,
+  timeline: TimelineSnapshot,
   media: MediaSnapshot,
 ): number {
   if (check.valueSpace !== 'toolPixels') {
     return check.value;
   }
 
-  const dimensions = getActiveCompositionDimensions(media);
-  if (check.property === 'position.x') {
-    return check.value / dimensions.width;
+  const descriptor = propertyRegistry.getDescriptor(check.property, clip);
+  if (!descriptor) {
+    throw new Error(`Unknown transform property: ${check.property}`);
   }
-  if (check.property === 'position.y') {
-    return check.value / dimensions.height;
+  const needsPositionContext = descriptor.authoring?.codec === 'transform-position';
+  const contextResolution = needsPositionContext
+    ? resolveClipPropertyAuthoringContext({
+        clipId: clip.id,
+        compositions: media.compositions,
+        activeCompositionId: media.activeCompositionId,
+        liveClipIds: timeline.clips.map((candidate) => candidate.id),
+        positionUnitMode: resolveTransformPositionUnitMode(clip),
+      })
+    : null;
+  if (contextResolution && !contextResolution.ok) {
+    throw new Error(`Cannot resolve property authoring context: ${contextResolution.reason}`);
   }
-  return check.value;
-}
-
-function getActiveCompositionDimensions(media: MediaSnapshot): { width: number; height: number } {
-  const composition = media.getActiveComposition();
-  return {
-    width: composition?.width || DEFAULT_COMPOSITION_WIDTH,
-    height: composition?.height || DEFAULT_COMPOSITION_HEIGHT,
-  };
+  const storedValue = propertyValueToStorage(
+    descriptor,
+    check.value,
+    contextResolution?.ok ? contextResolution.context : undefined,
+  );
+  if (typeof storedValue !== 'number') {
+    throw new Error(`${check.property} did not resolve to a numeric transform value`);
+  }
+  return storedValue;
 }
 
 function getAllMediaItems(media: MediaSnapshot): Array<{ id: string; name: string }> {

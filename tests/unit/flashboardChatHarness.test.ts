@@ -66,6 +66,12 @@ describe('FlashBoard chat v2 prompt harness', () => {
   it('selects transcript and face guidance without injecting every recipe', () => {
     expect(selectFlashBoardChatPlaybooks('Use the transcript to keep only Person 2 speaking'))
       .toEqual(expect.arrayContaining(['transcript', 'face']));
+    expect(selectFlashBoardChatPlaybooks('please cut out all parts where no one speaks'))
+      .toEqual(expect.arrayContaining(['transcript', 'silence']));
+    expect(selectFlashBoardChatPlaybooks('Schneide alle Stellen, wo niemand spricht, heraus'))
+      .toEqual(expect.arrayContaining(['transcript', 'silence']));
+    expect(selectFlashBoardChatPlaybooks('Create a three-scene storyboard in Plan mode'))
+      .toEqual(expect.arrayContaining(['storyboard', 'visual']));
     expect(selectFlashBoardChatPlaybooks('Set opacity to 50 percent')).toEqual([]);
   });
 

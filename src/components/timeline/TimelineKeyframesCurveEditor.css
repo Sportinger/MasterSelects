@@ -139,4 +139,95 @@
   height: 18px;
   flex-shrink: 0;
 }
+
+.global-curve-editor {
+  position: relative;
+  overflow: hidden;
+  min-height: 120px;
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.global-curve-editor.empty {
+  display: grid;
+  place-items: center;
+  border-top: 1px solid var(--border-color);
+  font-size: 12px;
+}
+
+.global-curve-editor-legend {
+  position: absolute;
+  z-index: 2;
+  top: 4px;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.global-curve-editor-legend button {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 5px;
+  max-width: 240px;
+  padding: 3px 7px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.45);
+  font-size: 10px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.global-curve-editor-legend button.active {
+  border-color: var(--border-focus);
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+.global-curve-editor-swatch {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+.global-curve-editor-svg {
+  border-top: 0;
+}
+
+.global-curve-editor-background {
+  fill: var(--bg-tertiary);
+}
+
+.global-curve-editor-series {
+  opacity: 0.62;
+}
+
+.global-curve-editor-series.active {
+  opacity: 1;
+}
+
+.global-curve-editor-curve {
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.global-curve-editor-keyframe {
+  pointer-events: all;
+}
+
+.global-curve-editor-limit {
+  position: absolute;
+  right: 8px;
+  bottom: 4px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.65);
+  font-size: 9px;
+}
 }

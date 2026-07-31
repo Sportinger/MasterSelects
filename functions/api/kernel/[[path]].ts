@@ -1,5 +1,6 @@
 import { json, methodNotAllowed } from '../../lib/db';
 import type { AppContext, AppRouteHandler } from '../../lib/env';
+import { tryHandleHostedAgent } from '../../lib/hostedAgent/route';
 
 const DEFAULT_KERNEL_ORIGIN = 'https://fassandra.de';
 // Story compiles include provider planning rounds plus the director run.
@@ -19,14 +20,26 @@ const ALLOWED_ROUTES: AllowedRoute[] = [
 
 function resolvePath(context: AppContext): string {
   const raw = (context.params as Record<string, unknown>).path;
+  const decodeSegment = (value: unknown): string => {
+    const text = String(value);
+    try {
+      return decodeURIComponent(text);
+    } catch {
+      return text;
+    }
+  };
   if (Array.isArray(raw)) {
-    return raw.map(String).join('/');
+    return raw.map(decodeSegment).join('/');
   }
-  return typeof raw === 'string' ? raw : '';
+  return typeof raw === 'string' ? decodeSegment(raw) : '';
 }
 
 export const onRequest: AppRouteHandler = async (context: AppContext): Promise<Response> => {
   const path = resolvePath(context);
+  const hostedAgentResponse = await tryHandleHostedAgent(context, path);
+  if (hostedAgentResponse) {
+    return hostedAgentResponse;
+  }
   const route = ALLOWED_ROUTES.find((candidate) => candidate.pattern.test(path));
   if (!route) {
     return json({ error: 'Unknown kernel route.' }, { status: 404 });

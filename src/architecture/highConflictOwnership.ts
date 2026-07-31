@@ -22,6 +22,15 @@ export const completeHighConflictTargets = [
   'src/components/preview/**',
   'src/components/export/**',
   'src/services/aiTools/**',
+  'functions/api/ai/chat.ts',
+  'functions/lib/chatBilling.ts',
+  'src/services/cloudAiService.ts',
+  'src/services/flashboard/FlashBoardChatProviderTransport.ts',
+  'src/services/flashboard/FlashBoardChatTypes.ts',
+  'src/services/flashboard/FlashBoardChatTools.ts',
+  'src/components/panels/flashboard/FlashBoardChatOutput.tsx',
+  'src/components/panels/flashboard/useFlashBoardChatController.ts',
+  'src/stores/flashboardStore/types.ts',
 ] as const;
 
 export const completeHighConflictOwnership = [
@@ -45,4 +54,13 @@ export const completeHighConflictOwnership = [
   { path: 'src/components/preview/**', laneId: 'preview-export-render' },
   { path: 'src/components/export/**', laneId: 'preview-export-render' },
   { path: 'src/services/aiTools/**', laneId: 'ai-tools-smokes' },
+  { path: 'functions/api/ai/chat.ts', laneId: 'storyboard-contract-integration' },
+  { path: 'functions/lib/chatBilling.ts', laneId: 'storyboard-contract-integration' },
+  { path: 'src/services/cloudAiService.ts', laneId: 'storyboard-contract-integration' },
+  { path: 'src/services/flashboard/FlashBoardChatProviderTransport.ts', laneId: 'storyboard-chat-decisions' },
+  { path: 'src/services/flashboard/FlashBoardChatTypes.ts', laneId: 'storyboard-chat-decisions' },
+  { path: 'src/services/flashboard/FlashBoardChatTools.ts', laneId: 'storyboard-chat-decisions' },
+  { path: 'src/components/panels/flashboard/FlashBoardChatOutput.tsx', laneId: 'storyboard-chat-decisions' },
+  { path: 'src/components/panels/flashboard/useFlashBoardChatController.ts', laneId: 'storyboard-chat-decisions' },
+  { path: 'src/stores/flashboardStore/types.ts', laneId: 'storyboard-chat-decisions' },
 ] as const satisfies readonly CompleteHighConflictOwnership[];

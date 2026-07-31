@@ -42,6 +42,7 @@ export function buildVideoLayer(
             type: 'video',
             ...(video ? { videoElement: video } : {}),
             videoFrame: videoFrame,
+            videoRotation: parallelDecoder.getSourceRotationDegreesForClip?.(clip.id) ?? 0,
             mediaTime: sourceMediaTime,
           },
         };
@@ -60,6 +61,7 @@ export function buildVideoLayer(
           type: 'video',
           ...(video ? { videoElement: video } : {}),
           videoFrame,
+          videoRotation: clipState.webCodecsPlayer.getSourceRotationDegrees?.() ?? 0,
           webCodecsPlayer: clipState.webCodecsPlayer,
           mediaTime: sourceMediaTime,
         },
@@ -123,6 +125,7 @@ export function buildNestedVideoLayer(
             type: 'video',
             ...(exportVideo ? { videoElement: exportVideo } : {}),
             videoFrame,
+            videoRotation: parallelDecoder.getSourceRotationDegreesForClip?.(sourceClipId) ?? 0,
             mediaTime: sourceMediaTime,
           },
         };
@@ -141,6 +144,7 @@ export function buildNestedVideoLayer(
           type: 'video',
           ...(exportVideo ? { videoElement: exportVideo } : {}),
           videoFrame,
+          videoRotation: nestedClipState.webCodecsPlayer.getSourceRotationDegrees?.() ?? 0,
           webCodecsPlayer: nestedClipState.webCodecsPlayer,
           mediaTime: sourceMediaTime,
         },

@@ -1,0 +1,456 @@
+.transition-preview-dissolve-dip .tp-dd-animated {
+  animation-play-state: var(--transition-preview-play-state, paused);
+  transform-origin: center;
+}
+
+.transition-preview-dissolve-dip .tp-dd-frame-sheen,
+.transition-preview-dissolve-dip .tp-dd-frame-outline {
+  pointer-events: none;
+}
+
+.transition-preview-crossfade .tp-dd-cross-glow {
+  opacity: 0.72;
+}
+
+.transition-preview-crossfade .tp-dd-cross-weave {
+  opacity: 0.92;
+}
+
+.transition-preview-crossfade .tp-dd-cross-out {
+  animation: tp-dd-cross-out 1.65s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.transition-preview-crossfade .tp-dd-cross-in {
+  animation: tp-dd-cross-in 1.65s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.transition-preview-crossfade .tp-dd-cross-glow {
+  animation: tp-dd-cross-glow 1.65s ease-in-out infinite;
+}
+
+.transition-preview-crossfade .tp-dd-cross-weave {
+  animation: tp-dd-cross-weave 1.65s ease-in-out infinite;
+}
+
+@keyframes tp-dd-cross-out {
+  0%,
+  100% {
+    opacity: 0.7;
+  }
+  16% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  84% {
+    opacity: 0.08;
+  }
+}
+
+@keyframes tp-dd-cross-in {
+  0%,
+  100% {
+    opacity: 0.58;
+  }
+  16% {
+    opacity: 0.06;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  84% {
+    opacity: 1;
+  }
+}
+
+@keyframes tp-dd-cross-glow {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: scaleX(1);
+  }
+  16%,
+  84% {
+    opacity: 0.16;
+    transform: scaleX(0.72);
+  }
+  50% {
+    opacity: 0.86;
+    transform: scaleX(1.08);
+  }
+}
+
+@keyframes tp-dd-cross-weave {
+  0%,
+  100% {
+    opacity: 0.92;
+    transform: translateX(0);
+  }
+  16% {
+    opacity: 0.12;
+    transform: translateX(-5px);
+  }
+  50% {
+    opacity: 0.82;
+    transform: translateX(0);
+  }
+  84% {
+    opacity: 0.12;
+    transform: translateX(5px);
+  }
+}
+
+.transition-preview-blur-dissolve .tp-dd-blur-out {
+  animation: tp-dd-blur-out 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.transition-preview-blur-dissolve .tp-dd-blur-in {
+  animation: tp-dd-blur-in 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.transition-preview-blur-dissolve .tp-dd-blur-ribbon {
+  animation: tp-dd-blur-ribbon 1.8s ease-in-out infinite;
+}
+
+@keyframes tp-dd-blur-out {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: translateX(0) scale(1.04);
+  }
+  16% {
+    opacity: 1;
+    transform: translateX(3px) scale(1);
+  }
+  50% {
+    opacity: 0.56;
+    transform: translateX(7px) scale(1.11);
+  }
+  84% {
+    opacity: 0.08;
+    transform: translateX(12px) scale(1.18);
+  }
+}
+
+@keyframes tp-dd-blur-in {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: translateX(0) scale(1.04);
+  }
+  16% {
+    opacity: 0.08;
+    transform: translateX(-12px) scale(1.18);
+  }
+  50% {
+    opacity: 0.56;
+    transform: translateX(-7px) scale(1.11);
+  }
+  84% {
+    opacity: 1;
+    transform: translateX(-3px) scale(1);
+  }
+}
+
+@keyframes tp-dd-blur-ribbon {
+  0%,
+  100% {
+    opacity: 0.62;
+    transform: translateX(0) scaleX(1);
+  }
+  16%,
+  84% {
+    opacity: 0.12;
+    transform: translateX(0) scaleX(0.65);
+  }
+  50% {
+    opacity: 0.88;
+    transform: translateX(2px) scaleX(1.16);
+  }
+}
+
+.transition-preview-additive-dissolve .tp-dd-add-out {
+  animation: tp-dd-add-out 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.transition-preview-additive-dissolve .tp-dd-add-in {
+  animation: tp-dd-add-in 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.transition-preview-additive-dissolve .tp-dd-add-glow {
+  animation: tp-dd-add-glow 1.6s ease-in-out infinite;
+}
+
+.transition-preview-additive-dissolve .tp-dd-add-spark {
+  animation: tp-dd-add-spark 1.6s ease-in-out infinite;
+}
+
+@keyframes tp-dd-add-out {
+  0%,
+  100% {
+    opacity: 0.82;
+    transform: translateX(0);
+  }
+  16% {
+    opacity: 1;
+    transform: translateX(3px);
+  }
+  50% {
+    opacity: 0.9;
+    transform: translateX(6px) scale(1.04);
+  }
+  84% {
+    opacity: 0.06;
+    transform: translateX(9px);
+  }
+}
+
+@keyframes tp-dd-add-in {
+  0%,
+  100% {
+    opacity: 0.82;
+    transform: translateX(0);
+  }
+  16% {
+    opacity: 0.06;
+    transform: translateX(-9px);
+  }
+  50% {
+    opacity: 0.9;
+    transform: translateX(-6px) scale(1.04);
+  }
+  84% {
+    opacity: 1;
+    transform: translateX(-3px);
+  }
+}
+
+@keyframes tp-dd-add-glow {
+  0%,
+  100% {
+    opacity: 0.78;
+    transform: scale(1);
+  }
+  16%,
+  84% {
+    opacity: 0.08;
+    transform: scale(0.64);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.18);
+  }
+}
+
+@keyframes tp-dd-add-spark {
+  0%,
+  100% {
+    opacity: 0.74;
+    transform: rotate(0deg) scale(1);
+  }
+  16%,
+  84% {
+    opacity: 0;
+    transform: rotate(-10deg) scale(0.55);
+  }
+  50% {
+    opacity: 0.98;
+    transform: rotate(12deg) scale(1.16);
+  }
+}
+
+.transition-preview-non-additive-dissolve .tp-dd-dark-out {
+  animation: tp-dd-dark-out 1.72s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.transition-preview-non-additive-dissolve .tp-dd-dark-in {
+  animation: tp-dd-dark-in 1.72s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.transition-preview-non-additive-dissolve .tp-dd-dark-shade {
+  animation: tp-dd-dark-shade 1.72s ease-in-out infinite;
+}
+
+.transition-preview-non-additive-dissolve .tp-dd-dark-pulse {
+  animation: tp-dd-dark-pulse 1.72s ease-in-out infinite;
+}
+
+@keyframes tp-dd-dark-out {
+  0%,
+  100% {
+    opacity: 0.72;
+  }
+  16% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.42;
+  }
+  84% {
+    opacity: 0.04;
+  }
+}
+
+@keyframes tp-dd-dark-in {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  16% {
+    opacity: 0.03;
+  }
+  50% {
+    opacity: 0.52;
+  }
+  84% {
+    opacity: 0.96;
+  }
+}
+
+@keyframes tp-dd-dark-shade {
+  0%,
+  100% {
+    opacity: 0.82;
+    transform: scaleX(1);
+  }
+  16%,
+  84% {
+    opacity: 0.12;
+    transform: scaleX(0.74);
+  }
+  50% {
+    opacity: 0.98;
+    transform: scaleX(1.18);
+  }
+}
+
+@keyframes tp-dd-dark-pulse {
+  0%,
+  100% {
+    opacity: 0.42;
+    transform: scaleX(1);
+  }
+  16%,
+  84% {
+    opacity: 0.12;
+    transform: scaleX(0.72);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scaleX(0.92);
+  }
+}
+
+.transition-preview-dip-to-color .tp-dd-dip-out,
+.transition-preview-dip-to-black .tp-dd-dip-out,
+.transition-preview-dip-to-white .tp-dd-dip-out {
+  animation: tp-dd-dip-out 1.9s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.transition-preview-dip-to-color .tp-dd-dip-in,
+.transition-preview-dip-to-black .tp-dd-dip-in,
+.transition-preview-dip-to-white .tp-dd-dip-in {
+  animation: tp-dd-dip-in 1.9s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.transition-preview-dip-to-color .tp-dd-dip-color,
+.transition-preview-dip-to-black .tp-dd-dip-color,
+.transition-preview-dip-to-white .tp-dd-dip-color {
+  animation: tp-dd-dip-color 1.9s ease-in-out infinite;
+}
+
+.transition-preview-dip-to-color .tp-dd-dip-lustre,
+.transition-preview-dip-to-black .tp-dd-dip-lustre,
+.transition-preview-dip-to-white .tp-dd-dip-lustre {
+  animation: tp-dd-dip-lustre 1.9s ease-in-out infinite;
+}
+
+.transition-preview-dip-to-color .tp-dd-dip-symbol,
+.transition-preview-dip-to-black .tp-dd-dip-symbol,
+.transition-preview-dip-to-white .tp-dd-dip-symbol {
+  animation: tp-dd-dip-symbol 1.9s ease-in-out infinite;
+}
+
+@keyframes tp-dd-dip-out {
+  0%,
+  100% {
+    opacity: 0.56;
+  }
+  14%,
+  36% {
+    opacity: 1;
+  }
+  50%,
+  86% {
+    opacity: 0;
+  }
+}
+
+@keyframes tp-dd-dip-in {
+  0%,
+  100% {
+    opacity: 0.44;
+  }
+  14%,
+  50% {
+    opacity: 0;
+  }
+  64%,
+  86% {
+    opacity: 1;
+  }
+}
+
+@keyframes tp-dd-dip-color {
+  0%,
+  100% {
+    opacity: 0.74;
+  }
+  14%,
+  32%,
+  68%,
+  86% {
+    opacity: 0;
+  }
+  48%,
+  52% {
+    opacity: 1;
+  }
+}
+
+@keyframes tp-dd-dip-lustre {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: translateX(0);
+  }
+  14%,
+  86% {
+    opacity: 0.12;
+    transform: translateX(0);
+  }
+  50% {
+    opacity: 0.86;
+    transform: translateX(4px);
+  }
+}
+
+@keyframes tp-dd-dip-symbol {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: scale(1);
+  }
+  14%,
+  32%,
+  68%,
+  86% {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+  50% {
+    opacity: 0.88;
+    transform: scale(1.08);
+  }
+}

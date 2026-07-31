@@ -1,17 +1,40 @@
-import { endBatch, startBatch } from '../../historyStore';
-import { getKeyframeAtTime } from '../../../utils/keyframeInterpolation';
-import type { TimelineEditOperationApplyContext } from './editOperationContext';
-import { isClipTrackLocked, resultFromWarnings } from './editOperationResults';
 import {
-  applyKeyframeSelection,
+  cancelHistoryBatch,
+  endBatch,
+  startBatch,
+  useHistoryStore,
+} from '../../historyStore';
+import type { TimelineEditOperationApplyContext } from './editOperationContext';
+import { resultFromWarnings } from './editOperationResults';
+import {
   changedKeyframeClipIds,
-  clonePathKeyframeValue,
-  createPathValueKeyframeId,
-  findKeyframeOwner,
   keyframeSnapshot,
 } from './keyframeTransactionHelpers';
+import { applyKeyframeTransactionMutations } from './keyframeTransactionMutationOperations';
+import {
+  collectKeyframeIds,
+  preflightKeyframeTransaction,
+  recordCreatedKeyframeIds,
+  rememberKeyframeTransactionTargets,
+  restoreKeyframeTransactionTargets,
+  type KeyframeTransactionTargetSnapshot,
+} from './keyframeTransactionPlanning';
 import type { KeyframeTransactionOperation } from './transactionTypes';
 import type { TimelineEditOperation, TimelineEditResult, TimelineEditWarning } from './types';
+
+type KeyframeTransactionSession = KeyframeTransactionTargetSnapshot & {
+  transactionId: string;
+  historyBatchId: string;
+  originalSelection: Set<string>;
+  ownedHistoryBatchId: number | null;
+  attachedHistoryBatchId: number | null;
+  historyBatchResolved: boolean;
+  changedClipIds: Set<string>;
+  hasContentMutation: boolean;
+  hasSelectionMutation: boolean;
+};
+
+const activeKeyframeTransactions = new Map<string, KeyframeTransactionSession>();
 
 export function isKeyframeTransactionOperation(operation: TimelineEditOperation): operation is KeyframeTransactionOperation {
   return (
@@ -22,30 +45,144 @@ export function isKeyframeTransactionOperation(operation: TimelineEditOperation)
   );
 }
 
+function createTransactionSession(
+  operation: KeyframeTransactionOperation,
+  context: TimelineEditOperationApplyContext,
+): KeyframeTransactionSession {
+  const session: KeyframeTransactionSession = {
+    transactionId: operation.transactionId,
+    historyBatchId: operation.historyBatchId,
+    originalSelection: new Set(context.get().selectedKeyframeIds),
+    keyframesById: new Map(),
+    createdKeyframeIds: new Set(),
+    ownedHistoryBatchId: null,
+    attachedHistoryBatchId: null,
+    historyBatchResolved: false,
+    changedClipIds: new Set(),
+    hasContentMutation: false,
+    hasSelectionMutation: false,
+  };
+  rememberKeyframeTransactionTargets(session, operation, context.get().clipKeyframes);
+  activeKeyframeTransactions.set(operation.transactionId, session);
+  return session;
+}
+
+function getKnownTransactionKeyframeIds(session: KeyframeTransactionSession | undefined): Set<string> {
+  return new Set([
+    ...(session?.keyframesById.keys() ?? []),
+    ...(session?.createdKeyframeIds ?? []),
+  ]);
+}
+
+function resolveHistoryBatch(
+  session: KeyframeTransactionSession,
+  historyLabel: string,
+): void {
+  if (session.historyBatchResolved) return;
+
+  const historyBatch = startBatch(historyLabel);
+  session.historyBatchResolved = true;
+  session.attachedHistoryBatchId = historyBatch.batchId;
+  session.ownedHistoryBatchId = historyBatch.opened ? historyBatch.batchId : null;
+}
+
+function ownsActiveHistoryBatch(session: KeyframeTransactionSession): boolean {
+  return session.ownedHistoryBatchId !== null
+    && useHistoryStore.getState().batchId === session.ownedHistoryBatchId;
+}
+
+function lostAttachedHistoryBatch(session: KeyframeTransactionSession): boolean {
+  return session.historyBatchResolved
+    && useHistoryStore.getState().batchId !== session.attachedHistoryBatchId;
+}
+
+function rollbackTransactionSession(
+  context: TimelineEditOperationApplyContext,
+  session: KeyframeTransactionSession,
+  discardKeyframeIds: readonly string[] = [],
+): string[] {
+  const beforeKeyframes = keyframeSnapshot(context.get().clipKeyframes);
+
+  if (ownsActiveHistoryBatch(session)) {
+    cancelHistoryBatch();
+  }
+
+  context.set({
+    clipKeyframes: restoreKeyframeTransactionTargets(
+      session,
+      context.get().clipKeyframes,
+      discardKeyframeIds,
+    ),
+    selectedKeyframeIds: new Set(session.originalSelection),
+  });
+  context.get().invalidateCache();
+
+  activeKeyframeTransactions.delete(session.transactionId);
+  return changedKeyframeClipIds(beforeKeyframes, context.get().clipKeyframes);
+}
+
+function finalizeTransactionSession(
+  session: KeyframeTransactionSession,
+): void {
+  if (ownsActiveHistoryBatch(session)) {
+    if (session.hasContentMutation || session.hasSelectionMutation) {
+      endBatch();
+    } else {
+      cancelHistoryBatch();
+    }
+  }
+  activeKeyframeTransactions.delete(session.transactionId);
+}
+
 export function applyKeyframeTransactionOperation(
   operation: KeyframeTransactionOperation,
   context: TimelineEditOperationApplyContext,
 ): TimelineEditResult {
-  const { get, options, set } = context;
+  const { get, options } = context;
   const operationId = operation.id;
-  const clip = get().clips.find(candidate => candidate.id === operation.clipId);
-  if (!clip) {
+  const existingSession = activeKeyframeTransactions.get(operation.transactionId);
+  const isImplicitUpdate = operation.type === 'keyframe-transaction-update'
+    && existingSession === undefined;
+
+  if (existingSession && existingSession.historyBatchId !== operation.historyBatchId) {
+    rollbackTransactionSession(context, existingSession);
     return resultFromWarnings(operationId, [{
-      code: 'clip-not-found',
-      message: `Keyframe transaction clip not found: ${operation.clipId}`,
+      code: 'unsupported',
+      message: `Keyframe transaction history batch changed during ${operation.transactionId}.`,
       clipId: operation.clipId,
-    }]);
-  }
-  if (isClipTrackLocked(get().clips, get().tracks, operation.clipId)) {
-    return resultFromWarnings(operationId, [{
-      code: 'track-locked',
-      message: `Keyframe transaction clip is on a locked track: ${operation.clipId}`,
-      clipId: operation.clipId,
-      trackId: clip.trackId,
     }]);
   }
 
+  if (existingSession
+    && operation.type !== 'keyframe-transaction-cancel'
+    && lostAttachedHistoryBatch(existingSession)) {
+    rollbackTransactionSession(context, existingSession);
+    return resultFromWarnings(operationId, [{
+      code: 'unsupported',
+      message: `Keyframe transaction lost its attached history batch during ${operation.transactionId}.`,
+      clipId: operation.clipId,
+    }]);
+  }
+
+  const preflightWarnings = preflightKeyframeTransaction(
+    operation,
+    {
+      clips: get().clips,
+      tracks: get().tracks,
+      clipKeyframes: get().clipKeyframes,
+    },
+    getKnownTransactionKeyframeIds(existingSession),
+  );
+  if (preflightWarnings.length > 0) {
+    if (existingSession) {
+      rollbackTransactionSession(context, existingSession);
+    }
+    return resultFromWarnings(operationId, preflightWarnings);
+  }
+
   if (operation.type === 'keyframe-transaction-begin') {
+    const session = existingSession ?? createTransactionSession(operation, context);
+    rememberKeyframeTransactionTargets(session, operation, get().clipKeyframes);
     return {
       success: true,
       operationId,
@@ -54,162 +191,89 @@ export function applyKeyframeTransactionOperation(
     };
   }
 
-  const beforeKeyframes = keyframeSnapshot(get().clipKeyframes);
-  const beforeSelection = new Set(get().selectedKeyframeIds);
-  const warnings: TimelineEditWarning[] = [];
-  const deferHistoryCommit = operation.type === 'keyframe-transaction-update' && options.deferHistoryCommit === true;
-
-  startBatch(options.historyLabel ?? 'Edit keyframes');
-  try {
-    const operations = operation.type === 'keyframe-transaction-cancel'
-      ? operation.discardKeyframeIds.map(keyframeId => ({
-          type: 'keyframe-remove' as const,
-          keyframeId,
-          clipId: operation.clipId,
-          property: operation.property ?? 'opacity',
-        }))
-      : operation.operations;
-
-    for (const keyframeOperation of operations) {
-      if (keyframeOperation.type === 'keyframe-create') {
-        const targetClip = get().clips.find(candidate => candidate.id === keyframeOperation.clipId);
-        if (!targetClip) {
-          warnings.push({
-            code: 'clip-not-found',
-            message: `Keyframe create clip not found: ${keyframeOperation.clipId}`,
-            clipId: keyframeOperation.clipId,
-          });
-          continue;
-        }
-        if (isClipTrackLocked(get().clips, get().tracks, keyframeOperation.clipId)) {
-          warnings.push({
-            code: 'track-locked',
-            message: `Keyframe create clip is on a locked track: ${keyframeOperation.clipId}`,
-            clipId: keyframeOperation.clipId,
-            trackId: targetClip.trackId,
-          });
-          continue;
-        }
-        if (typeof keyframeOperation.value.value === 'number') {
-          get().addKeyframe(
-            keyframeOperation.clipId,
-            keyframeOperation.property,
-            keyframeOperation.value.value,
-            keyframeOperation.time,
-            keyframeOperation.easing,
-          );
-          continue;
-        }
-        if (keyframeOperation.value.pathValue) {
-          const clampedTime = Math.max(0, Math.min(keyframeOperation.time, targetClip.duration));
-          const existingKeyframes = get().clipKeyframes.get(keyframeOperation.clipId) ?? [];
-          const existingAtTime = getKeyframeAtTime(
-            existingKeyframes,
-            keyframeOperation.property,
-            clampedTime,
-          );
-          const pathValue = clonePathKeyframeValue(keyframeOperation.value.pathValue);
-          const nextKeyframes = existingAtTime
-            ? existingKeyframes.map((keyframe) => (
-                keyframe.id === existingAtTime.id
-                  ? {
-                      ...keyframe,
-                      value: 0,
-                      pathValue,
-                      easing: keyframeOperation.easing,
-                    }
-                  : keyframe
-              ))
-            : [
-                ...existingKeyframes,
-                {
-                  id: createPathValueKeyframeId(),
-                  clipId: keyframeOperation.clipId,
-                  time: clampedTime,
-                  property: keyframeOperation.property,
-                  value: 0,
-                  pathValue,
-                  easing: keyframeOperation.easing,
-                },
-              ].sort((left, right) => left.time - right.time);
-          const nextMap = new Map(get().clipKeyframes);
-          nextMap.set(keyframeOperation.clipId, nextKeyframes);
-          set({ clipKeyframes: nextMap });
-          get().invalidateCache();
-          continue;
-        }
-        warnings.push({
-          code: 'unsupported',
-          message: 'Keyframe create operation did not include a supported value payload.',
-          clipId: keyframeOperation.clipId,
-        });
-        continue;
-      }
-
-      if (keyframeOperation.type === 'keyframe-select') {
-        set({
-          selectedKeyframeIds: applyKeyframeSelection(
-            get().selectedKeyframeIds,
-            keyframeOperation.selectedKeyframeIds,
-            keyframeOperation.mode,
-          ),
-        });
-        continue;
-      }
-
-      const owner = findKeyframeOwner(get().clipKeyframes, keyframeOperation.keyframeId);
-      if (!owner) {
-        warnings.push({
-          code: 'keyframe-not-found',
-          message: `Keyframe not found: ${keyframeOperation.keyframeId}`,
-        });
-        continue;
-      }
-      if (isClipTrackLocked(get().clips, get().tracks, owner.clipId)) {
-        const ownerClip = get().clips.find(candidate => candidate.id === owner.clipId);
-        warnings.push({
-          code: 'track-locked',
-          message: `Keyframe ${keyframeOperation.keyframeId} clip is on a locked track: ${owner.clipId}`,
-          clipId: owner.clipId,
-          trackId: ownerClip?.trackId,
-        });
-        continue;
-      }
-
-      if (keyframeOperation.type === 'keyframe-move') {
-        get().moveKeyframe(keyframeOperation.keyframeId, keyframeOperation.resolvedTime);
-      } else if (keyframeOperation.type === 'keyframe-update-value') {
-        if (typeof keyframeOperation.value.value === 'number') {
-          get().updateKeyframe(keyframeOperation.keyframeId, { value: keyframeOperation.value.value });
-        } else if (keyframeOperation.value.pathValue) {
-          get().updateKeyframe(keyframeOperation.keyframeId, { pathValue: keyframeOperation.value.pathValue });
-        } else {
-          warnings.push({
-            code: 'unsupported',
-            message: `Keyframe ${keyframeOperation.keyframeId} update-value operation did not include a supported value payload.`,
-            clipId: owner.clipId,
-          });
-        }
-      } else if (keyframeOperation.type === 'keyframe-remove') {
-        get().removeKeyframe(keyframeOperation.keyframeId);
-      } else if (keyframeOperation.type === 'keyframe-update-easing') {
-        get().updateKeyframe(keyframeOperation.keyframeId, { easing: keyframeOperation.easing });
-      } else if (keyframeOperation.type === 'keyframe-update-bezier-handle') {
-        get().updateBezierHandle(keyframeOperation.keyframeId, keyframeOperation.handle, keyframeOperation.position);
-      } else if (keyframeOperation.type === 'keyframe-update-rotation-interpolation') {
-        get().updateKeyframe(keyframeOperation.keyframeId, {
-          rotationInterpolation: keyframeOperation.rotationInterpolation,
-        });
-      }
+  if (operation.type === 'keyframe-transaction-cancel') {
+    if (!existingSession) {
+      return resultFromWarnings(operationId, [{
+        code: 'no-op',
+        message: `Keyframe transaction is not active: ${operation.transactionId}.`,
+        clipId: operation.clipId,
+      }]);
     }
-  } finally {
-    if (!deferHistoryCommit) endBatch();
+    const session = existingSession;
+    const knownSessionKeyframeIds = getKnownTransactionKeyframeIds(session);
+    const outOfScopeKeyframeIds = [
+      ...operation.restoreKeyframeIds,
+      ...operation.discardKeyframeIds,
+    ].filter((keyframeId) => !knownSessionKeyframeIds.has(keyframeId));
+    if (outOfScopeKeyframeIds.length > 0) {
+      rollbackTransactionSession(context, session);
+      return resultFromWarnings(operationId, [{
+        code: 'unsupported',
+        message: `Keyframe cancel referenced targets outside transaction scope: ${[...new Set(outOfScopeKeyframeIds)].join(', ')}.`,
+        clipId: operation.clipId,
+      }]);
+    }
+    rememberKeyframeTransactionTargets(session, operation, get().clipKeyframes);
+    const changedClipIds = rollbackTransactionSession(
+      context,
+      session,
+      operation.discardKeyframeIds,
+    );
+    return {
+      success: true,
+      operationId,
+      changedClipIds,
+      warnings: [],
+    };
   }
 
-  const changedClipIds = changedKeyframeClipIds(beforeKeyframes, get().clipKeyframes);
+  const session = existingSession ?? createTransactionSession(operation, context);
+  rememberKeyframeTransactionTargets(session, operation, get().clipKeyframes);
+  const hasContentOperation = operation.operations.some(
+    (editOperation) => editOperation.type !== 'keyframe-select',
+  );
+  if (hasContentOperation) {
+    resolveHistoryBatch(session, options.historyLabel ?? 'Edit keyframes');
+  }
+
+  const beforeKeyframes = keyframeSnapshot(get().clipKeyframes);
+  const beforeSelection = new Set(get().selectedKeyframeIds);
+  const beforeIds = collectKeyframeIds(get().clipKeyframes);
+  const warnings: TimelineEditWarning[] = [];
+
+  applyKeyframeTransactionMutations(operation.operations, context, warnings);
+  recordCreatedKeyframeIds(session, beforeIds, get().clipKeyframes);
+
+  if (warnings.length > 0) {
+    rollbackTransactionSession(context, session);
+    return resultFromWarnings(operationId, warnings);
+  }
+
+  const phaseChangedClipIds = changedKeyframeClipIds(beforeKeyframes, get().clipKeyframes);
+  phaseChangedClipIds.forEach((clipId) => session.changedClipIds.add(clipId));
+  if (phaseChangedClipIds.length > 0) {
+    session.hasContentMutation = true;
+  }
   const selectionChanged = JSON.stringify([...beforeSelection].sort()) !== JSON.stringify([...get().selectedKeyframeIds].sort());
-  if (changedClipIds.length === 0 && !selectionChanged) {
-    return resultFromWarnings(operationId, warnings.length > 0 ? warnings : [{
+  if (selectionChanged) {
+    session.hasSelectionMutation = true;
+  }
+
+  // Some motion-path actions intentionally send a fresh deferred update inside
+  // an outer history batch. Without a prior begin there can be no later phase
+  // to finalize this session, so treat that protocol as a one-shot operation.
+  const shouldFinalize = operation.type === 'keyframe-transaction-commit'
+    || (operation.type === 'keyframe-transaction-update'
+      && (options.deferHistoryCommit !== true || isImplicitUpdate));
+  const accumulatedChangedClipIds = [...session.changedClipIds];
+  const hadContentMutation = session.hasContentMutation;
+  const hadSelectionMutation = session.hasSelectionMutation;
+  if (shouldFinalize) {
+    finalizeTransactionSession(session);
+  }
+
+  if (!hadContentMutation && !hadSelectionMutation) {
+    return resultFromWarnings(operationId, [{
       code: 'no-op',
       message: 'No keyframes changed.',
     }]);
@@ -218,7 +282,7 @@ export function applyKeyframeTransactionOperation(
   return {
     success: true,
     operationId,
-    changedClipIds,
-    warnings,
+    changedClipIds: accumulatedChangedClipIds,
+    warnings: [],
   };
 }

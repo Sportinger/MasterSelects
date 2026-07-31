@@ -17,5 +17,6 @@ export type TimelineSourceType =
   | 'motion-shape'
   | 'motion-null'
   | 'motion-adjustment'
+  | 'storyboard'
   | 'midi'
   | VectorAnimationProvider;

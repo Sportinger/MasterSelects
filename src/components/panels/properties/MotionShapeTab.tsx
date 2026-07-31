@@ -2,15 +2,13 @@ import { useCallback } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { AnimatableProperty } from '../../../types';
 import type {
-  AppearanceItem,
-  ColorFillAppearance,
-  MotionColor,
   ReplicatorLayout,
   ShapePrimitive,
-  StrokeAppearance,
 } from '../../../types/motionDesign';
-import { createColorFillAppearance, createDefaultReplicatorDefinition, createStrokeAppearance } from '../../../types/motionDesign';
+import { createDefaultReplicatorDefinition } from '../../../types/motionDesign';
 import { DraggableNumber, KeyframeToggle } from './shared';
+import { MotionAppearanceStackEditor } from './MotionAppearanceStackEditor';
+import { MotionPropertyBrowser } from './MotionPropertyBrowser';
 
 interface MotionShapeTabProps {
   clipId: string;
@@ -18,29 +16,6 @@ interface MotionShapeTabProps {
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
-}
-
-function componentToHex(value: number): string {
-  return Math.round(clamp01(value) * 255).toString(16).padStart(2, '0');
-}
-
-function colorToHex(color: MotionColor | undefined, fallback = '#ffffff'): string {
-  if (!color) return fallback;
-  return `#${componentToHex(color.r)}${componentToHex(color.g)}${componentToHex(color.b)}`;
-}
-
-function hexToColor(hex: string, alpha: number): MotionColor {
-  const normalized = hex.replace('#', '');
-  const value = normalized.length === 3
-    ? normalized.split('').map((part) => part + part).join('')
-    : normalized.padEnd(6, '0').slice(0, 6);
-
-  return {
-    r: parseInt(value.slice(0, 2), 16) / 255,
-    g: parseInt(value.slice(2, 4), 16) / 255,
-    b: parseInt(value.slice(4, 6), 16) / 255,
-    a: alpha,
-  };
 }
 
 function NumberRow({
@@ -80,14 +55,6 @@ function NumberRow({
   );
 }
 
-function updateAppearanceItem<T extends AppearanceItem>(
-  items: AppearanceItem[],
-  itemId: string,
-  updater: (item: T) => T,
-): AppearanceItem[] {
-  return items.map((item) => item.id === itemId ? updater(item as T) : item);
-}
-
 function getGridLayout(layout: ReplicatorLayout | undefined): Extract<ReplicatorLayout, { mode: 'grid' }> {
   if (layout?.mode === 'grid') return layout;
   return createDefaultReplicatorDefinition().layout as Extract<ReplicatorLayout, { mode: 'grid' }>;
@@ -100,9 +67,6 @@ export function MotionShapeTab({ clipId }: MotionShapeTabProps) {
 
   const motion = clip?.motion;
   const shape = motion?.shape;
-  const appearanceItems = motion?.appearance?.items ?? [];
-  const fill = appearanceItems.find((item): item is ColorFillAppearance => item.kind === 'color-fill');
-  const stroke = appearanceItems.find((item): item is StrokeAppearance => item.kind === 'stroke');
   const replicator = motion?.replicator ?? createDefaultReplicatorDefinition();
   const gridLayout = getGridLayout(replicator.layout);
 
@@ -118,86 +82,6 @@ export function MotionShapeTab({ clipId }: MotionShapeTabProps) {
         : current.shape,
     }));
   }, [clipId, updateMotionLayer]);
-
-  const updateFillColor = useCallback((hex: string) => {
-    if (!fill) {
-      updateMotionLayer(clipId, (current) => {
-        const currentAppearance = current.appearance ?? { version: 1 as const, items: [] };
-        return {
-          ...current,
-          appearance: {
-            version: currentAppearance.version,
-            items: [
-              ...currentAppearance.items,
-              createColorFillAppearance(hexToColor(hex, 1)),
-            ],
-          },
-        };
-      });
-      return;
-    }
-
-    const nextColor = hexToColor(hex, fill.color.a);
-    setPropertyValue(clipId, `appearance.${fill.id}.color.r` as AnimatableProperty, nextColor.r);
-    setPropertyValue(clipId, `appearance.${fill.id}.color.g` as AnimatableProperty, nextColor.g);
-    setPropertyValue(clipId, `appearance.${fill.id}.color.b` as AnimatableProperty, nextColor.b);
-  }, [clipId, fill, setPropertyValue, updateMotionLayer]);
-
-  const updateStrokeColor = useCallback((hex: string) => {
-    if (!stroke) return;
-    const nextColor = hexToColor(hex, stroke.color.a);
-    setPropertyValue(clipId, `appearance.${stroke.id}.color.r` as AnimatableProperty, nextColor.r);
-    setPropertyValue(clipId, `appearance.${stroke.id}.color.g` as AnimatableProperty, nextColor.g);
-    setPropertyValue(clipId, `appearance.${stroke.id}.color.b` as AnimatableProperty, nextColor.b);
-  }, [clipId, setPropertyValue, stroke]);
-
-  const setStrokeVisible = useCallback((visible: boolean) => {
-    updateMotionLayer(clipId, (current) => {
-      const appearance = current.appearance ?? { version: 1 as const, items: [] };
-      const existingStroke = appearance.items.find((item): item is StrokeAppearance => item.kind === 'stroke');
-      if (!existingStroke) {
-        return {
-          ...current,
-          appearance: {
-            ...appearance,
-            items: [
-              ...appearance.items,
-              { ...createStrokeAppearance(), visible },
-            ],
-          },
-        };
-      }
-
-      return {
-        ...current,
-        appearance: {
-          ...appearance,
-          items: updateAppearanceItem<StrokeAppearance>(
-            appearance.items,
-            existingStroke.id,
-            (item) => ({ ...item, visible }),
-          ),
-        },
-      };
-    });
-  }, [clipId, updateMotionLayer]);
-
-  const updateStrokeAlignment = useCallback((alignment: StrokeAppearance['alignment']) => {
-    if (!stroke) return;
-    updateMotionLayer(clipId, (current) => current.appearance
-      ? {
-          ...current,
-          appearance: {
-            ...current.appearance,
-            items: updateAppearanceItem<StrokeAppearance>(
-              current.appearance.items,
-              stroke.id,
-              (item) => ({ ...item, alignment }),
-            ),
-          },
-        }
-      : current);
-  }, [clipId, stroke, updateMotionLayer]);
 
   const setReplicatorEnabled = useCallback((enabled: boolean) => {
     updateMotionLayer(clipId, (current) => {
@@ -219,15 +103,20 @@ export function MotionShapeTab({ clipId }: MotionShapeTabProps) {
 
   return (
     <div className="properties-tab-content transform-tab-compact">
+      <MotionPropertyBrowser clipId={clipId} />
+
       <div className="properties-section">
         <div className="control-row">
           <label className="prop-label">Shape</label>
           <select
+            aria-label="Motion shape primitive"
             value={shape.primitive}
             onChange={(event) => updatePrimitive(event.target.value as ShapePrimitive)}
           >
             <option value="rectangle">Rectangle</option>
             <option value="ellipse">Ellipse</option>
+            <option value="polygon">Polygon</option>
+            <option value="star">Star</option>
           </select>
         </div>
 
@@ -260,76 +149,81 @@ export function MotionShapeTab({ clipId }: MotionShapeTabProps) {
             defaultValue={0}
           />
         )}
-      </div>
-
-      <div className="properties-section">
-        <div className="control-row">
-          {fill && (
-            <KeyframeToggle
+        {shape.primitive === 'polygon' && (
+          <>
+            <NumberRow
               clipId={clipId}
-              property={`appearance.${fill.id}.opacity` as AnimatableProperty}
-              value={fill.opacity}
+              label="Points"
+              property="shape.polygon.points"
+              value={shape.polygon?.points ?? 6}
+              min={3}
+              max={32}
+              defaultValue={6}
             />
-          )}
-          <label className="prop-label">Fill</label>
-          <input
-            type="color"
-            value={colorToHex(fill?.color)}
-            onChange={(event) => updateFillColor(event.target.value)}
-          />
-          {fill && (
-            <DraggableNumber
-              value={Math.round(fill.opacity * 100)}
-              onChange={(value) => setPropertyValue(clipId, `appearance.${fill.id}.opacity` as AnimatableProperty, clamp01(value / 100))}
+            <NumberRow
+              clipId={clipId}
+              label="Radius"
+              property="shape.polygon.radius"
+              value={shape.polygon?.radius ?? Math.min(shape.size.w, shape.size.h) / 2}
+              min={1}
+              suffix="px"
+              defaultValue={90}
+            />
+            <NumberRow
+              clipId={clipId}
+              label="Corner"
+              property="shape.polygon.cornerRadius"
+              value={shape.polygon?.cornerRadius ?? 0}
               min={0}
-              max={100}
-              suffix="%"
-              defaultValue={100}
+              suffix="px"
+              defaultValue={0}
             />
-          )}
-        </div>
-      </div>
-
-      <div className="properties-section">
-        <div className="control-row">
-          <label className="prop-label">Stroke</label>
-          <input
-            type="checkbox"
-            checked={stroke?.visible ?? false}
-            onChange={(event) => setStrokeVisible(event.target.checked)}
-          />
-          {stroke && (
-            <>
-              <input
-                type="color"
-                value={colorToHex(stroke.color, '#000000')}
-                onChange={(event) => updateStrokeColor(event.target.value)}
-                disabled={!stroke.visible}
-              />
-              <select
-                value={stroke.alignment}
-                onChange={(event) => updateStrokeAlignment(event.target.value as StrokeAppearance['alignment'])}
-                disabled={!stroke.visible}
-              >
-                <option value="center">Center</option>
-                <option value="inside">Inside</option>
-                <option value="outside">Outside</option>
-              </select>
-            </>
-          )}
-        </div>
-        {stroke && (
-          <NumberRow
-            clipId={clipId}
-            label="Width"
-            property={`appearance.${stroke.id}.stroke.width` as AnimatableProperty}
-            value={stroke.width}
-            min={0}
-            suffix="px"
-            defaultValue={4}
-          />
+          </>
+        )}
+        {shape.primitive === 'star' && (
+          <>
+            <NumberRow
+              clipId={clipId}
+              label="Points"
+              property="shape.star.points"
+              value={shape.star?.points ?? 5}
+              min={3}
+              max={32}
+              defaultValue={5}
+            />
+            <NumberRow
+              clipId={clipId}
+              label="Outer"
+              property="shape.star.outerRadius"
+              value={shape.star?.outerRadius ?? Math.min(shape.size.w, shape.size.h) / 2}
+              min={shape.star?.innerRadius ?? 1}
+              suffix="px"
+              defaultValue={90}
+            />
+            <NumberRow
+              clipId={clipId}
+              label="Inner"
+              property="shape.star.innerRadius"
+              value={shape.star?.innerRadius ?? Math.min(shape.size.w, shape.size.h) / 4}
+              min={0.5}
+              max={shape.star?.outerRadius ?? Math.min(shape.size.w, shape.size.h) / 2}
+              suffix="px"
+              defaultValue={45}
+            />
+            <NumberRow
+              clipId={clipId}
+              label="Corner"
+              property="shape.star.cornerRadius"
+              value={shape.star?.cornerRadius ?? 0}
+              min={0}
+              suffix="px"
+              defaultValue={0}
+            />
+          </>
         )}
       </div>
+
+      <MotionAppearanceStackEditor clipId={clipId} />
 
       <div className="properties-section">
         <div className="control-row">

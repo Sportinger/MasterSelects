@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleSetTransform } from '../../src/services/aiTools/handlers/transform';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { DEFAULT_TRANSFORM, useTimelineStore } from '../../src/stores/timeline';
@@ -27,7 +27,11 @@ function createClip(overrides: Partial<TimelineClip> = {}): TimelineClip {
 describe('AI tool setTransform', () => {
   beforeEach(() => {
     useTimelineStore.setState(initialTimelineState);
-    useMediaStore.setState(initialMediaState);
+    vi.mocked(useMediaStore.getState).mockReturnValue({
+      ...initialMediaState,
+      activeCompositionId: 'comp-1',
+      compositions: [{ id: 'comp-1', width: 1920, height: 1080 } as never],
+    });
   });
 
   it('updates 3D position, scale, and rotation fields', async () => {
@@ -47,7 +51,9 @@ describe('AI tool setTransform', () => {
 
     const updated = useTimelineStore.getState().clips.find((entry) => entry.id === clip.id)!;
     expect(result.success).toBe(true);
-    expect(updated.transform.position).toEqual({ x: 0.1, y: -0.1, z: -0.5 });
+    expect(updated.transform.position.x).toBeCloseTo(0.2);
+    expect(updated.transform.position.y).toBeCloseTo(-0.2);
+    expect(updated.transform.position.z).toBeCloseTo(-0.5 / (1920 / 2));
     expect(updated.transform.scale).toEqual({ x: 1, y: 1, z: 2 });
     expect(updated.transform.rotation).toEqual({ x: 10, y: 20, z: 30 });
   });
@@ -68,5 +74,38 @@ describe('AI tool setTransform', () => {
 
     const updated = useTimelineStore.getState().clips.find((entry) => entry.id === clip.id)!;
     expect(updated.transform.rotation).toEqual({ x: 8, y: -12, z: 45 });
+  });
+
+  it('rejects an invalid blend mode without applying sibling transform writes', async () => {
+    const clip = createClip();
+    useTimelineStore.setState({ clips: [clip] });
+
+    const result = await handleSetTransform({
+      clipId: clip.id,
+      x: 192,
+      blendMode: 'not-a-blend-mode',
+    }, useTimelineStore.getState());
+
+    const updated = useTimelineStore.getState().clips.find((entry) => entry.id === clip.id)!;
+    expect(result.success).toBe(false);
+    expect(updated.transform).toEqual(clip.transform);
+  });
+
+  it.each([
+    ['3D clip', createClip({ is3D: true })],
+    ['camera clip', createClip({ source: { type: 'camera' } })],
+  ])('keeps %s position values in scene units', async (_label, clip) => {
+    useTimelineStore.setState({ clips: [clip] });
+
+    const result = await handleSetTransform({
+      clipId: clip.id,
+      x: 2,
+      y: -3,
+      z: 4,
+    }, useTimelineStore.getState());
+
+    const updated = useTimelineStore.getState().clips.find((entry) => entry.id === clip.id)!;
+    expect(result.success).toBe(true);
+    expect(updated.transform.position).toEqual({ x: 2, y: -3, z: 4 });
   });
 });

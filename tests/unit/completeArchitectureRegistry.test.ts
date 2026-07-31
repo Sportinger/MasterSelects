@@ -11,6 +11,8 @@ import {
   completeRefactorLanes,
   completeRetiredPathLedger,
   completeTestMigrationLedger,
+  storyboardArchitectureGates,
+  storyboardRefactorLanes,
 } from '../../src/architecture';
 
 const repoRoot = process.cwd();
@@ -131,6 +133,58 @@ describe('complete architecture registry', () => {
       expect(debt.writeSet.length, `${debt.id} has no write set`).toBeGreaterThan(0);
       expect(ids.has(debt.deleteBy), `${debt.id}.deleteBy is unknown`).toBe(true);
       expectGateRefsToResolve(`${debt.id}.acceptanceTests`, debt.acceptanceTests, ids);
+    }
+  });
+
+  it('registers conflict-free Storyboard Plan Mode gates and lane ownership', () => {
+    const storyboardGateIds = new Set(storyboardArchitectureGates.map((gate) => gate.id));
+    expect(storyboardGateIds).toEqual(new Set([
+      'SB_F0_HOSTED_CHAT_SAFETY',
+      'SB_N0_NARRATED_NORMAL_AI',
+      'SB_C0_CONTRACT_FREEZE',
+      'SB_K0_HOSTED_AGENT_FEASIBILITY',
+      'SB_K1_HOSTED_AGENT_PARITY',
+      'SB_K2_HOSTED_AGENT_RELIABILITY',
+      'SB_K3_HOSTED_AGENT_CUTOVER',
+      'SB_G1_FOUNDATION',
+      'SB_G2_SAFE_DIRECTING',
+      'SB_G3_COMPARISON',
+      'SB_G4_COMMIT',
+      'SB_G5_RELEASE',
+    ]));
+
+    const storyboardLanesById = new Map(
+      storyboardRefactorLanes.map((lane) => [lane.id, lane]),
+    );
+    expect([...storyboardLanesById.keys()]).toEqual([
+      'storyboard-contract-integration',
+      'storyboard-core-animatic',
+      'storyboard-chat-decisions',
+      'storyboard-generation',
+      'storyboard-variants-commit',
+      'storyboard-release-verification',
+    ]);
+
+    const integrationLane = storyboardLanesById.get('storyboard-contract-integration');
+    const chatLane = storyboardLanesById.get('storyboard-chat-decisions');
+    expect(integrationLane?.exitGates).toContain('SB_F0_HOSTED_CHAT_SAFETY');
+    expect(chatLane?.exitGates).toContain('SB_N0_NARRATED_NORMAL_AI');
+    expect(chatLane?.highConflictFiles).toContain(
+      'src/services/flashboard/FlashBoardChatProviderTransport.ts',
+    );
+    expect(integrationLane?.writeSet).not.toContain(
+      'src/services/flashboard/FlashBoardChatProviderTransport.ts',
+    );
+
+    const exactWriteOwners = new Map<string, string>();
+    for (const lane of storyboardRefactorLanes) {
+      for (const writeTarget of lane.writeSet) {
+        expect(
+          exactWriteOwners.has(writeTarget),
+          `${writeTarget} is written by both ${exactWriteOwners.get(writeTarget)} and ${lane.id}`,
+        ).toBe(false);
+        exactWriteOwners.set(writeTarget, lane.id);
+      }
     }
   });
 

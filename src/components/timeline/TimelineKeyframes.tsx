@@ -497,7 +497,7 @@ function TimelineKeyframesComponent({
             onMouseEnter={() => onKeyframeRowHover?.(trackId, property, true)}
             onMouseLeave={() => onKeyframeRowHover?.(trackId, property, false)}
             onContextMenu={(e) => handleContextMenu(e, kf)}
-            title={`${property}: ${kf.value.toFixed(3)} @ ${absTime.toFixed(2)}s\nEasing: ${easing}${rotationTitle}\nDrag to move (Shift snaps to clip keyframes)\nRight-click to change segment options`}
+            title={`${property}: ${kf.value.toFixed(3)} @ ${absTime.toFixed(2)}s\nEasing: ${easing}${rotationTitle}\nDrag to move (Shift snaps to clip keyframes)\nDouble-click to open Graph\nRight-click to change segment options`}
           >
             {rotationPathLabel && (
               <span className="keyframe-rotation-path-label" aria-hidden="true">

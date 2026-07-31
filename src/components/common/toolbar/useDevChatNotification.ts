@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   fetchDevChatMessages,
-  getStoredDevChatConversationId,
+  getStoredDevChatConversations,
   type DevChatMessage,
   type FetchDevChatMessagesResponse,
 } from '../../../services/devChatService';
 
 const BACKGROUND_POLL_INTERVAL_MS = 10_000;
+const DEV_CHAT_NOTIFICATION_STATE_STORAGE_KEY = 'masterselects.devChat.notificationState';
 
 interface UseDevChatNotificationOptions {
-  enabled: boolean;
   paused: boolean;
   fetchMessages?: (
     conversationId: string,
@@ -19,7 +19,6 @@ interface UseDevChatNotificationOptions {
 }
 
 interface DevChatNotificationState {
-  markAllRead: () => void;
   markMessagesSeen: (
     conversationId: string,
     messages: DevChatMessage[],
@@ -28,27 +27,132 @@ interface DevChatNotificationState {
   unreadCount: number;
 }
 
+interface StoredConversationNotificationState {
+  cursor: number;
+  lastSeenDeveloperMessageId: number;
+}
+
+interface StoredDevChatNotificationState {
+  conversations: Record<string, StoredConversationNotificationState>;
+  version: 2;
+}
+
+interface ConversationNotificationRuntime extends StoredConversationNotificationState {
+  unreadDeveloperMessageIds: Set<number>;
+}
+
+function normalizeStoredConversationNotificationState(
+  value: unknown,
+): StoredConversationNotificationState | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const state = value as Partial<StoredConversationNotificationState>;
+  if (
+    typeof state.cursor !== 'number'
+    || !Number.isSafeInteger(state.cursor)
+    || state.cursor < 0
+    || typeof state.lastSeenDeveloperMessageId !== 'number'
+    || !Number.isSafeInteger(state.lastSeenDeveloperMessageId)
+    || state.lastSeenDeveloperMessageId < 0
+  ) {
+    return undefined;
+  }
+  return {
+    cursor: state.cursor,
+    lastSeenDeveloperMessageId: state.lastSeenDeveloperMessageId,
+  };
+}
+
+function readStoredNotificationStates(): Record<
+  string,
+  StoredConversationNotificationState
+> {
+  try {
+    const rawState = window.localStorage.getItem(DEV_CHAT_NOTIFICATION_STATE_STORAGE_KEY);
+    if (!rawState) return {};
+
+    const state = JSON.parse(rawState) as Partial<StoredDevChatNotificationState> & {
+      conversationId?: unknown;
+      cursor?: unknown;
+      lastSeenDeveloperMessageId?: unknown;
+    };
+    const normalizedStates: Record<string, StoredConversationNotificationState> = {};
+
+    if (state.version === 2 && state.conversations && typeof state.conversations === 'object') {
+      for (const [conversationId, conversationState] of Object.entries(state.conversations)) {
+        const normalizedState = normalizeStoredConversationNotificationState(conversationState);
+        if (conversationId && normalizedState) {
+          normalizedStates[conversationId] = normalizedState;
+        }
+      }
+      return normalizedStates;
+    }
+
+    const legacyState = normalizeStoredConversationNotificationState(state);
+    if (
+      typeof state.conversationId === 'string'
+      && state.conversationId
+      && legacyState
+    ) {
+      normalizedStates[state.conversationId] = legacyState;
+    }
+    return normalizedStates;
+  } catch {
+    return {};
+  }
+}
+
+function storeNotificationState(
+  conversationId: string,
+  cursor: number,
+  lastSeenDeveloperMessageId: number,
+): void {
+  try {
+    const conversations = readStoredNotificationStates();
+    conversations[conversationId] = {
+      cursor,
+      lastSeenDeveloperMessageId,
+    };
+    window.localStorage.setItem(
+      DEV_CHAT_NOTIFICATION_STATE_STORAGE_KEY,
+      JSON.stringify({
+        conversations,
+        version: 2,
+      } satisfies StoredDevChatNotificationState),
+    );
+  } catch {
+    // Notifications keep working for the current page session without storage.
+  }
+}
+
 export function useDevChatNotification({
-  enabled,
   paused,
   fetchMessages = fetchDevChatMessages,
 }: UseDevChatNotificationOptions): DevChatNotificationState {
   const [unreadCount, setUnreadCount] = useState(0);
-  const conversationIdRef = useRef<string | undefined>(undefined);
-  const cursorRef = useRef(0);
-  const latestDeveloperMessageIdRef = useRef(0);
-  const lastSeenDeveloperMessageIdRef = useRef(0);
-  const unreadDeveloperMessageIdsRef = useRef(new Set<number>());
+  const conversationStatesRef = useRef(
+    new Map<string, ConversationNotificationRuntime>(),
+  );
 
-  const switchConversation = useCallback((conversationId: string) => {
-    if (conversationIdRef.current === conversationId) return;
+  const updateUnreadCount = useCallback(() => {
+    let totalUnreadCount = 0;
+    for (const state of conversationStatesRef.current.values()) {
+      totalUnreadCount += state.unreadDeveloperMessageIds.size;
+    }
+    setUnreadCount(totalUnreadCount);
+  }, []);
 
-    conversationIdRef.current = conversationId;
-    cursorRef.current = 0;
-    latestDeveloperMessageIdRef.current = 0;
-    lastSeenDeveloperMessageIdRef.current = 0;
-    unreadDeveloperMessageIdsRef.current.clear();
-    setUnreadCount(0);
+  const getConversationState = useCallback((conversationId: string) => {
+    const existingState = conversationStatesRef.current.get(conversationId);
+    if (existingState) return existingState;
+
+    const storedState = readStoredNotificationStates()[conversationId];
+    const state: ConversationNotificationRuntime = {
+      cursor: storedState?.cursor ?? 0,
+      lastSeenDeveloperMessageId: storedState?.lastSeenDeveloperMessageId ?? 0,
+      unreadDeveloperMessageIds: new Set<number>(),
+    };
+    conversationStatesRef.current.set(conversationId, state);
+    return state;
   }, []);
 
   const markMessagesSeen = useCallback((
@@ -56,93 +160,89 @@ export function useDevChatNotification({
     messages: DevChatMessage[],
     cursor: number,
   ) => {
-    switchConversation(conversationId);
-    cursorRef.current = Math.max(cursorRef.current, cursor);
+    const state = getConversationState(conversationId);
+    state.cursor = Math.max(state.cursor, cursor);
 
-    let latestSeenDeveloperMessageId = lastSeenDeveloperMessageIdRef.current;
+    let latestSeenDeveloperMessageId = state.lastSeenDeveloperMessageId;
     for (const message of messages) {
       if (message.sender !== 'developer') continue;
       latestSeenDeveloperMessageId = Math.max(latestSeenDeveloperMessageId, message.id);
-      latestDeveloperMessageIdRef.current = Math.max(
-        latestDeveloperMessageIdRef.current,
-        message.id,
-      );
     }
 
-    lastSeenDeveloperMessageIdRef.current = latestSeenDeveloperMessageId;
-    for (const messageId of unreadDeveloperMessageIdsRef.current) {
+    state.lastSeenDeveloperMessageId = latestSeenDeveloperMessageId;
+    for (const messageId of state.unreadDeveloperMessageIds) {
       if (messageId <= latestSeenDeveloperMessageId) {
-        unreadDeveloperMessageIdsRef.current.delete(messageId);
+        state.unreadDeveloperMessageIds.delete(messageId);
       }
     }
-    setUnreadCount(unreadDeveloperMessageIdsRef.current.size);
-  }, [switchConversation]);
-
-  const markAllRead = useCallback(() => {
-    lastSeenDeveloperMessageIdRef.current = Math.max(
-      lastSeenDeveloperMessageIdRef.current,
-      latestDeveloperMessageIdRef.current,
+    storeNotificationState(
+      conversationId,
+      state.cursor,
+      state.lastSeenDeveloperMessageId,
     );
-    unreadDeveloperMessageIdsRef.current.clear();
-    setUnreadCount(0);
-  }, []);
+    updateUnreadCount();
+  }, [getConversationState, updateUnreadCount]);
 
   useEffect(() => {
-    if (!enabled || paused) return;
+    if (paused) return;
 
-    const conversationId = getStoredDevChatConversationId();
-    if (!conversationId) {
-      conversationIdRef.current = undefined;
-      cursorRef.current = 0;
-      latestDeveloperMessageIdRef.current = 0;
-      lastSeenDeveloperMessageIdRef.current = 0;
-      unreadDeveloperMessageIdsRef.current.clear();
+    const conversationIds = getStoredDevChatConversations().map(
+      (conversation) => conversation.id,
+    );
+    if (conversationIds.length === 0) {
+      conversationStatesRef.current.clear();
       setUnreadCount(0);
       return;
     }
 
-    switchConversation(conversationId);
+    for (const conversationId of conversationIds) {
+      getConversationState(conversationId);
+    }
     const controller = new AbortController();
     let active = true;
-    let pollInFlight = false;
+    const pollsInFlight = new Set<string>();
 
-    const poll = async () => {
-      if (!active || pollInFlight || document.visibilityState === 'hidden') return;
-      pollInFlight = true;
+    const pollConversation = async (conversationId: string) => {
+      if (!active || pollsInFlight.has(conversationId)) return;
+      pollsInFlight.add(conversationId);
+      const state = getConversationState(conversationId);
 
       try {
         const response = await fetchMessages(
           conversationId,
-          cursorRef.current,
+          state.cursor,
           controller.signal,
         );
         if (!active || controller.signal.aborted) return;
 
-        cursorRef.current = Math.max(cursorRef.current, response.cursor);
+        state.cursor = Math.max(state.cursor, response.cursor);
         for (const message of response.messages) {
           if (message.sender !== 'developer') continue;
-          latestDeveloperMessageIdRef.current = Math.max(
-            latestDeveloperMessageIdRef.current,
-            message.id,
-          );
-          if (message.id > lastSeenDeveloperMessageIdRef.current) {
-            unreadDeveloperMessageIdsRef.current.add(message.id);
+          if (message.id > state.lastSeenDeveloperMessageId) {
+            state.unreadDeveloperMessageIds.add(message.id);
           }
         }
-        setUnreadCount(unreadDeveloperMessageIdsRef.current.size);
+        updateUnreadCount();
       } catch {
         // This is a quiet background check. The open chat keeps its visible error handling.
       } finally {
-        pollInFlight = false;
+        pollsInFlight.delete(conversationId);
+      }
+    };
+
+    const poll = () => {
+      if (!active || document.visibilityState === 'hidden') return;
+      for (const conversationId of conversationIds) {
+        void pollConversation(conversationId);
       }
     };
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') void poll();
+      if (document.visibilityState === 'visible') poll();
     };
 
-    void poll();
-    const interval = window.setInterval(() => void poll(), BACKGROUND_POLL_INTERVAL_MS);
+    poll();
+    const interval = window.setInterval(poll, BACKGROUND_POLL_INTERVAL_MS);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
@@ -151,10 +251,9 @@ export function useDevChatNotification({
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [enabled, fetchMessages, paused, switchConversation]);
+  }, [fetchMessages, getConversationState, paused, updateUnreadCount]);
 
   return {
-    markAllRead,
     markMessagesSeen,
     unreadCount,
   };

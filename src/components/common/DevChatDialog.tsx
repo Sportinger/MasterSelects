@@ -10,13 +10,16 @@ import {
   clearStoredDevChatConversationId,
   fetchDevChatMessages,
   getStoredDevChatConversationId,
+  getStoredDevChatConversations,
   MAX_DEV_CHAT_PENDING_IDS_PER_REQUEST,
   sendDevChatMessage,
   storeDevChatConversationId,
   type DevChatMessage,
   type FetchDevChatMessagesResponse,
   type SendDevChatMessageResponse,
+  type StoredDevChatConversation,
 } from '../../services/devChatService';
+import { useDraggableDialog } from './settings/useDraggableDialog';
 import './DevChatDialog.css';
 
 const POLL_INTERVAL_MS = 3_000;
@@ -98,6 +101,21 @@ function formatMessageTime(createdAt: string): string {
   }).format(date);
 }
 
+function formatConversationLabel(conversation: StoredDevChatConversation): string {
+  const createdAt = new Date(conversation.createdAt);
+  const dateLabel = Number.isNaN(createdAt.getTime())
+    ? 'Saved chat'
+    : new Intl.DateTimeFormat(undefined, {
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      month: 'short',
+    }).format(createdAt);
+  return conversation.preview
+    ? `${dateLabel} — ${conversation.preview}`
+    : dateLabel;
+}
+
 export function DevChatDialog({
   onClose,
   onMessagesSeen,
@@ -111,12 +129,16 @@ export function DevChatDialog({
   const pollGenerationRef = useRef(0);
   const pendingClientMessageRef = useRef<PendingClientMessage | null>(null);
   const [conversationId, setConversationId] = useState(getStoredDevChatConversationId);
+  const [storedConversations, setStoredConversations] = useState(
+    getStoredDevChatConversations,
+  );
   const [messages, setMessages] = useState<DevChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [pollError, setPollError] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(conversationId));
   const [isSending, setIsSending] = useState(false);
+  const { position, isDragging, handleMouseDown } = useDraggableDialog(dialogRef);
   const visibleError = sendError ?? pollError;
 
   useEffect(() => {
@@ -193,8 +215,19 @@ export function DevChatDialog({
         setMessages((current) => mergeMessages(current, response.messages));
         setPollError(null);
 
+        if (response.messages.length > 0) {
+          const firstMessage = response.messages[0];
+          const firstUserMessage = response.messages.find(
+            (message) => message.sender === 'user',
+          );
+          storeDevChatConversationId(response.conversationId, {
+            createdAt: firstMessage.createdAt,
+            preview: firstUserMessage?.message,
+          });
+          setStoredConversations(getStoredDevChatConversations());
+        }
+
         if (response.conversationId !== conversationId) {
-          storeDevChatConversationId(response.conversationId);
           setConversationId(response.conversationId);
         }
       } catch (pollError) {
@@ -249,12 +282,33 @@ export function DevChatDialog({
     pollGenerationRef.current += 1;
     pendingClientMessageRef.current = null;
     clearStoredDevChatConversationId();
+    setStoredConversations(getStoredDevChatConversations());
     setConversationId(undefined);
     setMessages([]);
     setDraft('');
     setPollError(null);
     setSendError(null);
     setIsLoading(false);
+    window.requestAnimationFrame(() => textareaRef.current?.focus());
+  };
+
+  const handleSelectConversation = (nextConversationId: string) => {
+    if (!nextConversationId) {
+      handleNewConversation();
+      return;
+    }
+    if (nextConversationId === conversationId) return;
+
+    pollGenerationRef.current += 1;
+    pendingClientMessageRef.current = null;
+    storeDevChatConversationId(nextConversationId);
+    setStoredConversations(getStoredDevChatConversations());
+    setConversationId(nextConversationId);
+    setMessages([]);
+    setDraft('');
+    setPollError(null);
+    setSendError(null);
+    setIsLoading(true);
     window.requestAnimationFrame(() => textareaRef.current?.focus());
   };
 
@@ -279,7 +333,11 @@ export function DevChatDialog({
       pendingClientMessageRef.current = { clientMessageId, draft };
       const response = await sendMessage(message, conversationId, clientMessageId);
       pendingClientMessageRef.current = null;
-      storeDevChatConversationId(response.conversationId);
+      storeDevChatConversationId(response.conversationId, {
+        createdAt: response.message.createdAt,
+        preview: message,
+      });
+      setStoredConversations(getStoredDevChatConversations());
       setMessages((current) => mergeMessages(current, [response.message]));
       setDraft('');
 
@@ -298,28 +356,48 @@ export function DevChatDialog({
   };
 
   return (
-    <div
-      className="dev-chat-backdrop"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !isSending) onClose();
-      }}
-    >
+    <div className="dev-chat-backdrop" role="presentation">
       <div
         ref={dialogRef}
-        className="dev-chat-dialog"
+        className={`dev-chat-dialog${isDragging ? ' is-dragging' : ''}`}
+        style={{
+          left: position.x,
+          top: position.y,
+        }}
         role="dialog"
-        aria-modal="true"
         aria-labelledby={titleId}
         onKeyDown={handleDialogKeyDown}
       >
         <div className="dev-chat-accent" aria-hidden="true" />
-        <div className="dev-chat-header">
+        <div className="dev-chat-header" onMouseDown={handleMouseDown}>
           <div>
             <h2 id={titleId}>Chat with dev</h2>
             <p><span aria-hidden="true" /> Replies appear here automatically</p>
           </div>
           <div className="dev-chat-header-actions">
+            {storedConversations.length > 0 && (
+              <label className="dev-chat-history">
+                <span className="sr-only">Saved chats</span>
+                <select
+                  aria-label="Saved chats"
+                  value={conversationId ?? ''}
+                  disabled={isSending}
+                  title="Open an earlier conversation"
+                  onChange={(event) => handleSelectConversation(event.target.value)}
+                  onMouseDown={(event) => event.stopPropagation()}
+                >
+                  <option value="">New chat</option>
+                  {storedConversations.map((storedConversation) => (
+                    <option
+                      key={storedConversation.id}
+                      value={storedConversation.id}
+                    >
+                      {formatConversationLabel(storedConversation)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             {conversationId && (
               <button
                 type="button"
@@ -327,6 +405,7 @@ export function DevChatDialog({
                 disabled={isSending}
                 title="Forget this conversation on this device and start a new one"
                 onClick={handleNewConversation}
+                onMouseDown={(event) => event.stopPropagation()}
               >
                 New conversation
               </button>
@@ -337,6 +416,7 @@ export function DevChatDialog({
               aria-label="Close developer chat"
               disabled={isSending}
               onClick={onClose}
+              onMouseDown={(event) => event.stopPropagation()}
             >
               ×
             </button>

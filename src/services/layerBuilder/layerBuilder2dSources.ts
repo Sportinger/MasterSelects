@@ -101,7 +101,7 @@ export function buildLayerBuilderTextLayer(
   const interpolatedTextBounds = params.clip.textProperties
     ? params.ctx.getInterpolatedTextBounds(params.clip.id, timeInfo.clipLocalTime)
     : undefined;
-  if (params.clip.textProperties && interpolatedTextBounds && textCanvas) {
+  if (!params.clip.captionProperties && params.clip.textProperties && interpolatedTextBounds && textCanvas) {
     const hasBoundsKeyframes =
       params.ctx.hasKeyframes(params.clip.id, 'textBounds.path') ||
       params.ctx.hasKeyframes(params.clip.id, 'textBounds.position.x') ||

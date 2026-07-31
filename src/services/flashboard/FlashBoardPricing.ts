@@ -9,6 +9,7 @@ export const KIEAI_USD_PER_CREDIT = 0.005;
 // Hosted customer credits are priced at 6x vendor Kie credits to keep margin after VAT, Stripe, and FX.
 export const HOSTED_KIE_CREDIT_MULTIPLIER = 6;
 export const KIEAI_SUNO_VENDOR_CREDITS = 12;
+export const FLASHBOARD_PRICING_VERSION = 'flashboard-pricing-2026-07-30-v1';
 
 export const KIEAI_IMAGE_USD_PRICING: Record<string, Record<string, number>> = {
   'nano-banana-2': {
@@ -23,6 +24,19 @@ type PricingService = CatalogEntry['service'];
 export interface FlashBoardPriceEstimate {
   compactLabel: string;
   fullLabel: string;
+}
+
+export type FlashBoardPriceUnit = 'hosted-credit' | 'kie-credit' | 'usd';
+
+/**
+ * Machine-readable pricing used by approval gates. UI labels remain a
+ * presentation concern and must never be parsed to recover spend limits.
+ */
+export interface FlashBoardPriceQuote {
+  amount: number;
+  exact: true;
+  pricingVersion: string;
+  unit: FlashBoardPriceUnit;
 }
 
 export interface FlashBoardPricingInput {
@@ -64,11 +78,28 @@ function resolveEffectiveAudio(input: FlashBoardPricingInput): boolean {
   return Boolean(input.generateAudio) || Boolean(input.multiShots);
 }
 
-function buildHostedKlingEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate {
+function quote(
+  amount: number,
+  unit: FlashBoardPriceUnit,
+  pricingVersion = FLASHBOARD_PRICING_VERSION,
+): FlashBoardPriceQuote {
+  return {
+    amount,
+    exact: true,
+    pricingVersion,
+    unit,
+  };
+}
+
+function calculateHostedKlingAmount(input: FlashBoardPricingInput): number {
   const duration = normalizeVideoDuration(input.duration);
   const mode = normalizeMode(input.mode);
   const kieCredits = calculateKieAiCost('kling-3.0', mode, duration, resolveEffectiveAudio(input));
-  const hostedCredits = kieCredits * HOSTED_KIE_CREDIT_MULTIPLIER;
+  return kieCredits * HOSTED_KIE_CREDIT_MULTIPLIER;
+}
+
+function buildHostedKlingEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate {
+  const hostedCredits = calculateHostedKlingAmount(input);
 
   return {
     compactLabel: `${hostedCredits} cr`,
@@ -76,16 +107,17 @@ function buildHostedKlingEstimate(input: FlashBoardPricingInput): FlashBoardPric
   };
 }
 
-function buildHostedImageEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate | null {
+function calculateHostedImageAmount(input: FlashBoardPricingInput): number | null {
   const size = input.imageSize ?? '1K';
   const usd = KIEAI_IMAGE_USD_PRICING[input.providerId]?.[size];
-
-  if (usd == null) {
-    return null;
-  }
-
+  if (usd == null) return null;
   const kieCredits = Math.round(usd / KIEAI_USD_PER_CREDIT);
-  const hostedCredits = kieCredits * HOSTED_KIE_CREDIT_MULTIPLIER;
+  return kieCredits * HOSTED_KIE_CREDIT_MULTIPLIER;
+}
+
+function buildHostedImageEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate | null {
+  const hostedCredits = calculateHostedImageAmount(input);
+  if (hostedCredits == null) return null;
 
   return {
     compactLabel: `${hostedCredits} cr`,
@@ -111,12 +143,16 @@ function buildHostedElevenLabsEstimate(input: FlashBoardPricingInput): FlashBoar
   };
 }
 
-function buildHostedSeedanceEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate {
+function calculateHostedSeedanceAmount(input: FlashBoardPricingInput): number {
   const duration = normalizeVideoDuration(input.duration, 4);
   const kieCredits = calculateKieAiCost(input.providerId, input.mode ?? '720p', duration, false, {
     hasVideoInput: input.hasVideoInput,
   });
-  const hostedCredits = Math.ceil(kieCredits * HOSTED_KIE_CREDIT_MULTIPLIER);
+  return Math.ceil(kieCredits * HOSTED_KIE_CREDIT_MULTIPLIER);
+}
+
+function buildHostedSeedanceEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate {
+  const hostedCredits = calculateHostedSeedanceAmount(input);
 
   return {
     compactLabel: `${hostedCredits} cr`,
@@ -140,30 +176,38 @@ function buildKieSunoEstimate(): FlashBoardPriceEstimate {
   };
 }
 
-function buildKieVideoEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate {
+function calculateKieVideoAmount(input: FlashBoardPricingInput): number {
   const isSeedance2 = input.providerId.includes('seedance-2');
   const duration = normalizeVideoDuration(input.duration, isSeedance2 ? 4 : 3);
   const mode = normalizeMode(input.mode);
   const effectiveMode = isSeedance2 ? input.mode ?? '720p' : mode;
-  const kieCredits = calculateKieAiCost(input.providerId, effectiveMode, duration, resolveEffectiveAudio(input), {
-    hasVideoInput: input.hasVideoInput,
-  });
+  return calculateKieAiCost(
+    input.providerId,
+    effectiveMode,
+    duration,
+    resolveEffectiveAudio(input),
+    { hasVideoInput: input.hasVideoInput },
+  );
+}
+
+function buildKieVideoEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate {
+  const kieCredits = calculateKieVideoAmount(input);
 
   return {
     compactLabel: `${kieCredits} cr`,
     fullLabel: `${kieCredits} Kie credits`,
   };
+}
+
+function calculateKieImageAmount(input: FlashBoardPricingInput): number | null {
+  const size = input.imageSize ?? '1K';
+  const usd = KIEAI_IMAGE_USD_PRICING[input.providerId]?.[size];
+  return usd == null ? null : Math.round(usd / KIEAI_USD_PER_CREDIT);
 }
 
 function buildKieImageEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate | null {
-  const size = input.imageSize ?? '1K';
-  const usd = KIEAI_IMAGE_USD_PRICING[input.providerId]?.[size];
-
-  if (usd == null) {
-    return null;
-  }
-
-  const kieCredits = Math.round(usd / KIEAI_USD_PER_CREDIT);
+  const kieCredits = calculateKieImageAmount(input);
+  if (kieCredits == null) return null;
 
   return {
     compactLabel: `${kieCredits} cr`,
@@ -171,15 +215,48 @@ function buildKieImageEstimate(input: FlashBoardPricingInput): FlashBoardPriceEs
   };
 }
 
-function buildPiApiEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate {
+function calculatePiApiAmount(input: FlashBoardPricingInput): number {
   const duration = input.duration && input.duration > 0 ? input.duration : 5;
   const mode = normalizeMode(input.mode);
-  const usd = calculatePiApiCost(input.providerId, mode, duration);
+  return calculatePiApiCost(input.providerId, mode, duration);
+}
+
+function buildPiApiEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate {
+  const usd = calculatePiApiAmount(input);
 
   return {
     compactLabel: formatUsd(usd),
     fullLabel: formatUsd(usd),
   };
+}
+
+export function getFlashBoardPriceQuote(
+  input: FlashBoardPricingInput,
+): FlashBoardPriceQuote | null {
+  if (input.outputType === 'audio') {
+    // Hosted speech can charge a provider-reported character count and hosted
+    // Suno does not yet replay task creation safely. Keep both outside the
+    // exact approval API until those server contracts are durable.
+    return null;
+  }
+
+  if (input.service === 'cloud') {
+    if (input.outputType === 'image' || input.providerId === 'nano-banana-2') {
+      if (input.providerId !== 'nano-banana-2') return null;
+      const amount = calculateHostedImageAmount(input);
+      return amount == null ? null : quote(amount, 'hosted-credit');
+    }
+    if (input.providerId.includes('seedance-2')) {
+      return quote(calculateHostedSeedanceAmount(input), 'hosted-credit');
+    }
+    return input.providerId === 'cloud-kling'
+      ? quote(calculateHostedKlingAmount(input), 'hosted-credit')
+      : null;
+  }
+
+  // BYO prices remain estimates from vendor tables. They stay available as UI
+  // labels, but not as an exact max-spend approval quote.
+  return null;
 }
 
 export function getFlashBoardPriceEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate | null {

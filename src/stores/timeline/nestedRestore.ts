@@ -93,6 +93,9 @@ function createRestoredNestedClipCommon(
     is3D: serializedClip.is3D,
     meshType: serializedClip.meshType,
     text3DProperties,
+    captionLayerBinding: serializedClip.captionLayerBinding
+      ? structuredClone(serializedClip.captionLayerBinding)
+      : undefined,
     transitionOverlay: serializedClip.transitionOverlay ? structuredClone(serializedClip.transitionOverlay) : undefined,
     isLoading: options.isLoading,
     needsReload: options.needsReload,

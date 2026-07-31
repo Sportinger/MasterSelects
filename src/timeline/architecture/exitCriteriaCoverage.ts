@@ -239,7 +239,7 @@ export const timelineExitCriteriaCoverage = [
   {
     gateId: 'P4_IMPORTER_LEGACY_QUARANTINE',
     criteria: ['old project compatibility is isolated at import boundaries'],
-    evidence: [{ kind: 'test', path: 'src/stores/timeline/serialization/{loadStateMediaClipRestore,loadStateCompositionClipRestore,loadStateGeneratedClipRestore}.ts; src/services/timeline/timelineMediaSourceRuntimeRestore.ts; tests/unit/timelineArchitectureRegistry.test.ts; tests/unit/timelineMediaSourceRuntimeRestore.test.ts', note: 'old-project load-state media, composition, generated, vector, spatial, and object-url compatibility is quarantined in importer helpers and timeline runtime services' }],
+    evidence: [{ kind: 'test', path: 'src/stores/timeline/serialization/{loadStateMediaClipRestore,loadStateCompositionClipRestore,loadStateGeneratedClipRestore,loadStateStoryboardClipRestore}.ts; src/services/timeline/timelineMediaSourceRuntimeRestore.ts; tests/unit/timelineArchitectureRegistry.test.ts; tests/unit/timelineMediaSourceRuntimeRestore.test.ts', note: 'old-project load-state media, composition, generated, storyboard, vector, spatial, and object-url compatibility is quarantined in importer helpers and timeline runtime services' }],
   },
   {
     gateId: 'P4_SERIALIZATION_RUNTIME_FREE_EDITOR_PATH',

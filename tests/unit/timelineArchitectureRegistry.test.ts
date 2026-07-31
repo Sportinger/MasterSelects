@@ -272,6 +272,8 @@ describe('timeline architecture registry', () => {
       'src/components/timeline/hooks/useTimelineLineOpacity.ts',
       'src/components/timeline/hooks/useTimelineControlsProps.ts',
       'src/components/timeline/hooks/useTimelineToolbarChromeController.ts',
+      'src/components/timeline/hooks/useTimelineToolbarHostController.ts',
+      'src/components/timeline/hooks/useTimelineGraphHostController.tsx',
       'src/components/timeline/hooks/useTimelineSurfaceController.ts',
       'src/components/timeline/hooks/useTimelineBodySurfaceController.ts',
       'src/components/timeline/hooks/useTimelineBodySurfaceProps.ts',
@@ -405,7 +407,7 @@ describe('timeline architecture registry', () => {
     expect(timelineSource).not.toContain("from './hooks/useTimelineClipMediaLookup'");
     expect(timelineSource).not.toContain("from './hooks/useTimelineLineOpacity'");
     expect(timelineSource).not.toContain("from './hooks/useTimelineControlsProps'");
-    expect(timelineSource).toContain("from './hooks/useTimelineToolbarChromeController'");
+    expect(timelineSource).toContain("from './hooks/useTimelineToolbarHostController'");
     expect(timelineSource).toContain("from './hooks/useTimelineSurfaceController'");
     expect(timelineSource).not.toContain("from './hooks/useTimelineBodySurfaceController'");
     expect(timelineSource).not.toContain("from './hooks/useTimelineBodySurfaceProps'");
@@ -1035,10 +1037,10 @@ describe('timeline architecture registry', () => {
     expect(lineCount(proxyFrameSource)).toBeLessThanOrEqual(280);
   });
 
-  it('keeps TimelineTrack property rows and curve transactions out of the track host', () => {
+  it('keeps TimelineTrack property rows out of the track host and mounts only the global graph editor', () => {
     const trackSource = readRepoFile('src/components/timeline/TimelineTrack.tsx');
     const propertyRowsSource = readRepoFile('src/components/timeline/components/TrackPropertyTracks.tsx');
-    const curveTransactionsSource = readRepoFile('src/components/timeline/hooks/useTrackPropertyCurveEditTransactions.ts');
+    const globalCurveSurfaceSource = readRepoFile('src/components/timeline/TimelineGlobalCurveSurface.tsx');
     const propertyRowsUtilSource = readRepoFile('src/components/timeline/utils/timelineTrackPropertyRows.ts');
 
     expect(trackSource).toContain("from './components/TrackPropertyTracks'");
@@ -1049,18 +1051,18 @@ describe('timeline architecture registry', () => {
     expect(trackSource).not.toContain('curveKeyframeTransactionRef');
     expect(trackSource).not.toContain('curveBezierTransactionRef');
     expect(trackSource).not.toContain('parseVectorAnimationInputProperty');
-    expect(propertyRowsSource).toContain("from '../CurveEditor'");
+    expect(propertyRowsSource).not.toContain("from '../CurveEditor'");
+    expect(propertyRowsSource).not.toContain('<CurveEditor');
     expect(propertyRowsSource).toContain('buildTimelineKeyframeRowGeometries');
-    expect(propertyRowsSource).toContain('useTrackPropertyCurveEditTransactions');
+    expect(propertyRowsSource).not.toContain('useTrackPropertyCurveEditTransactions');
     expect(propertyRowsSource).toContain('resolveTimelineTrackPenKeyframeValue');
-    expect(curveTransactionsSource).toContain('keyframe-transaction-begin');
-    expect(curveTransactionsSource).toContain('keyframe-update-bezier-handle');
-    expect(curveTransactionsSource).toContain("Logger.create('TrackPropertyCurveEditTransactions')");
+    expect(globalCurveSurfaceSource).toContain('<GlobalCurveEditor');
+    expect(globalCurveSurfaceSource).toContain('timeline-global-curve-sidebar');
+    expect(globalCurveSurfaceSource).toContain('toggleSeriesVisibility');
     expect(propertyRowsUtilSource).toContain('sortTimelineTrackPropertyRows');
     expect(propertyRowsUtilSource).toContain('parseVectorAnimationInputProperty');
     expect(lineCount(trackSource)).toBeLessThanOrEqual(1800);
     expect(lineCount(propertyRowsSource)).toBeLessThanOrEqual(240);
-    expect(lineCount(curveTransactionsSource)).toBeLessThanOrEqual(340);
     expect(lineCount(propertyRowsUtilSource)).toBeLessThanOrEqual(120);
   });
 
@@ -1140,7 +1142,8 @@ describe('timeline architecture registry', () => {
     expect(propertyLabelsHostSource).toContain('TimelineHeaderPropertyRow');
     expect(propertyLabelsHostSource).toContain('sortTimelineHeaderProperties');
     expect(propertyLabelsHostSource).toContain('createEffectProperty');
-    expect(propertyRowSource).toContain('CurveEditorHeader');
+    expect(propertyRowSource).not.toContain('CurveEditorHeader');
+    expect(propertyRowSource).toContain('Double-click to open in Graph');
     expect(propertyRowSource).toContain('getHeaderPropertyCurrentValue');
     expect(propertyRowSource).toContain('getHeaderPropertySensitivity');
     expect(propertyRowSource).toContain('getHeaderPropertyDefaultValue');
@@ -1624,6 +1627,7 @@ describe('timeline architecture registry', () => {
     const canvasSource = readRepoFile('src/components/timeline/TimelineClipCanvas.tsx');
     const hookSource = readRepoFile('src/components/timeline/hooks/useTimelineClipCanvasMainThreadDraw.ts');
     const drawSource = readRepoFile('src/components/timeline/utils/timelineClipCanvasMainThreadDraw.ts');
+    const bodyPainterSource = readRepoFile('src/components/timeline/utils/timelineClipCanvasBodyPainter.ts');
 
     expect(canvasSource).toContain("from './hooks/useTimelineClipCanvasMainThreadDraw'");
     expect(canvasSource).toContain('useTimelineClipCanvasMainThreadDraw({');
@@ -1638,9 +1642,12 @@ describe('timeline architecture registry', () => {
     expect(hookSource).toContain('drawTimelineClipCanvasMainThread({');
     expect(drawSource).toContain('export function drawTimelineClipCanvasMainThread');
     expect(drawSource).toContain('for (const clip of clips)');
+    expect(drawSource).toContain("from './timelineClipCanvasBodyPainter'");
+    expect(bodyPainterSource).toContain('paintStoryboardCardMainThread');
     expect(lineCount(canvasSource)).toBeLessThanOrEqual(435);
     expect(lineCount(hookSource)).toBeLessThanOrEqual(220);
     expect(lineCount(drawSource)).toBeLessThanOrEqual(340);
+    expect(lineCount(bodyPainterSource)).toBeLessThanOrEqual(100);
   });
 
   it('keeps TimelineClipCanvas worker runtime orchestration out of the canvas host', () => {
@@ -2727,6 +2734,7 @@ describe('timeline architecture registry', () => {
     const serializationSource = readRepoFile('src/stores/timeline/serializationUtils.ts');
     const serializableStateSource = readRepoFile('src/stores/timeline/serialization/serializableTimelineState.ts');
     const generatedRestoreSource = readRepoFile('src/stores/timeline/serialization/loadStateGeneratedClipRestore.ts');
+    const storyboardRestoreSource = readRepoFile('src/stores/timeline/serialization/loadStateStoryboardClipRestore.ts');
     const compositionRestoreSource = readRepoFile('src/stores/timeline/serialization/loadStateCompositionClipRestore.ts');
     const mediaRestoreSource = readRepoFile('src/stores/timeline/serialization/loadStateMediaClipRestore.ts');
 
@@ -2745,6 +2753,8 @@ describe('timeline architecture registry', () => {
     expect(serializableStateSource).toContain('createSerializableTimelineState');
     expect(serializableStateSource).toContain('getDataOnlyTimelineSource');
     expect(generatedRestoreSource).toContain('createLoadStateGeneratedClip');
+    expect(generatedRestoreSource).toContain("from './loadStateStoryboardClipRestore'");
+    expect(storyboardRestoreSource).toContain('createLoadStateStoryboardClip');
     expect(compositionRestoreSource).toContain('restoreLoadStateCompositionClip');
     expect(mediaRestoreSource).toContain('restoreLoadStateMediaClip');
     expect(mediaRestoreSource).toContain('resolveLoadStateMediaRuntimeReference');
@@ -2752,6 +2762,7 @@ describe('timeline architecture registry', () => {
     expect(lineCount(serializationSource)).toBeLessThanOrEqual(320);
     expect(lineCount(serializableStateSource)).toBeLessThanOrEqual(200);
     expect(lineCount(generatedRestoreSource)).toBeLessThanOrEqual(300);
+    expect(lineCount(storyboardRestoreSource)).toBeLessThanOrEqual(100);
     expect(lineCount(compositionRestoreSource)).toBeLessThanOrEqual(300);
     expect(lineCount(mediaRestoreSource)).toBeLessThanOrEqual(380);
   });
@@ -2849,6 +2860,7 @@ describe('timeline architecture registry', () => {
       'playbackActionTypes',
       'regionTypes',
       'stemJobTypes',
+      'storyboardClipActionTypes',
       'timelineStateTypes',
       'timelineStoreTypes',
       'toolTypes',

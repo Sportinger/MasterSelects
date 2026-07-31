@@ -112,6 +112,38 @@ describe('guided action compiler', () => {
     }));
   });
 
+  it('validates 2D z in authoring space and lets rotationZ override the legacy alias', () => {
+    const compiled = compileGuidedToolCall({
+      tool: 'setTransform',
+      args: {
+        clipId: 'clip-1',
+        z: 96,
+        rotation: 10,
+        rotationZ: 20,
+      },
+    });
+    const confirmations = compiled.actions.filter((action) => action.type === 'confirmState');
+
+    expect(confirmations).toContainEqual(expect.objectContaining({
+      check: {
+        kind: 'clipTransformMatches',
+        clipId: 'clip-1',
+        property: 'position.z',
+        value: 96,
+        valueSpace: 'toolPixels',
+      },
+    }));
+    expect(confirmations.filter((action) => (
+      action.type === 'confirmState'
+      && action.check.kind === 'clipTransformMatches'
+      && action.check.property === 'rotation.z'
+    ))).toEqual([
+      expect.objectContaining({
+        check: expect.objectContaining({ value: 20 }),
+      }),
+    ]);
+  });
+
   it('compiles splitClip into timeline choreography', () => {
     const toolCall: GuidedToolCall = {
       tool: 'splitClip',

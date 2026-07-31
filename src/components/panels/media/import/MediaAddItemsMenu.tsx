@@ -141,6 +141,12 @@ export function MediaAddItemsMenu({
           <div className={itemClass} onClick={() => run(() => onNewMotionShape('ellipse'))}>
             <span>Ellipse</span>
           </div>
+          <div className={itemClass} onClick={() => run(() => onNewMotionShape('polygon'))}>
+            <span>Polygon</span>
+          </div>
+          <div className={itemClass} onClick={() => run(() => onNewMotionShape('star'))}>
+            <span>Star</span>
+          </div>
         </div>
       </div>
       <div className={separatorClass} />

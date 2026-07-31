@@ -145,7 +145,8 @@ export function FlashBoardComposer({
     copiedChatMessageId, handleChatButtonClick, handleChatInputKeyDown,
     handleChatMessageDoubleClick, handleChatProviderSelect, handleChatPromptChange,
     handleClearChatHistory, handleClearChatPrompt, handlePlanThreeToggle, isChatting,
-    planThreeEnabled,
+    planThreeEnabled, chatIntent, decisionPolicy, handleChatIntentToggle,
+    handleDecisionPolicyChange, handleStoryboardDecisionSubmit,
     chatSystemPromptProvider, chatSystemPromptSendContext, showChatCloudActions,
   } = useFlashBoardChatController({
     aiProvider,
@@ -669,7 +670,8 @@ export function FlashBoardComposer({
         showMultiShotPanel={Boolean(!chatPanelOpen && !isAudioMode && renderMultiShotPanel)}
         chatOutput={{
           chatError, chatHistoryRef, copiedChatMessageId, messages: chatMessages,
-          showChatCloudActions, onAuthClick: openAuthDialog,
+          isChatting, showChatCloudActions, onAuthClick: openAuthDialog,
+          onDecisionSubmit: handleStoryboardDecisionSubmit,
           onMessageDoubleClick: handleChatMessageDoubleClick, onPricingClick: openPricingDialog,
         }}
         referenceStrip={{
@@ -819,9 +821,11 @@ export function FlashBoardComposer({
         actionStack={{
           canGenerate, chatButtonLabel, chatButtonTitle: chatChargeTitle ?? 'Send chat prompt',
           chatPanelOpen, generateButtonLabel, generateButtonTitle,
-          isChatting, planThreeEnabled,
+          isChatting, planThreeEnabled, chatIntent, decisionPolicy,
           onChatButtonClick: handleChatButtonClick, onGenerate: handleGenerate,
           onPlanThreeToggle: handlePlanThreeToggle,
+          onChatIntentToggle: handleChatIntentToggle,
+          onDecisionPolicyChange: handleDecisionPolicyChange,
         }}
       />
 

@@ -283,7 +283,13 @@ export function SlotGrid({ opacity }: SlotGridProps) {
 
         // Stop editor playback and pause all video/audio elements in timeline clips
         // so the deactivated comp doesn't keep playing in the preview
-        useTimelineStore.setState({ isPlaying: false });
+        useTimelineStore.setState({
+          isPlaying: false,
+          selectedClipIds: new Set(),
+          primarySelectedClipId: null,
+          propertiesSelection: null,
+          selectedKeyframeIds: new Set(),
+        });
         for (const clip of ts.clips) {
           if (clip.source?.videoElement && !clip.source.videoElement.paused) {
             clip.source.videoElement.pause();

@@ -538,15 +538,18 @@ async function runImageJob({
     visualReferenceMediaFileIds.map((mediaFileId) => resolveReferenceImage(mediaFileId))
   )).filter((imageUrl): imageUrl is string => Boolean(imageUrl));
 
-  const remoteTaskId = await imageProvider.createTextToImage({
+  const imageParams = {
     provider: request.providerId,
     prompt: request.prompt,
     negativePrompt: request.negativePrompt,
     aspectRatio: request.aspectRatio,
     resolution: request.imageSize,
-    outputFormat: 'png',
+    outputFormat: 'png' as const,
     imageInputs: referenceImageInputs.length > 0 ? referenceImageInputs : undefined,
-  });
+  };
+  const remoteTaskId = request.service === 'cloud'
+    ? await cloudAiService.createTextToImage(imageParams, request.idempotencyKey)
+    : await imageProvider.createTextToImage(imageParams);
 
   registerRunningJob(remoteTaskId);
   onProcessing({ status: 'processing', remoteTaskId });

@@ -132,7 +132,6 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [showInfoDialog, setShowInfoDialog] = useState(false);
   const [showDevChatDialog, setShowDevChatDialog] = useState(false);
-  const [devChatNotificationsEnabled, setDevChatNotificationsEnabled] = useState(false);
   const [showLeaveNoteDialog, setShowLeaveNoteDialog] = useState(false);
   const [showLegalDialog, setShowLegalDialog] = useState<LegalPage | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -145,19 +144,15 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isRenamingRef = useRef(false);
   const {
-    markAllRead: markDevChatRead,
     markMessagesSeen: markDevChatMessagesSeen,
     unreadCount: devChatUnreadCount,
   } = useDevChatNotification({
-    enabled: devChatNotificationsEnabled,
     paused: showDevChatDialog,
   });
 
   const openDevChat = useCallback(() => {
-    setDevChatNotificationsEnabled(true);
-    markDevChatRead();
     setShowDevChatDialog(true);
-  }, [markDevChatRead]);
+  }, []);
 
   useEffect(() => {
     return screenCaptureService.subscribe(snapshot => setCapturePhase(snapshot.phase));

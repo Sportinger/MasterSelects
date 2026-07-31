@@ -7,6 +7,15 @@ import { textRenderer } from '../../../services/textRenderer';
 import type { Layer } from '../../../types/layers';
 import type { BaseLayerPropsLike, FrameContextLike } from './contracts';
 import { getVectorAnimationSettingsForExport } from './sourceLookup';
+import { renderCaptionTextClipFrame } from '../../../services/captions/captionTextRuntime';
+import { getClipSourceWindowTime } from './timing';
+
+function hasTextBoundsKeyframes(clipId: string): boolean {
+  const state = useTimelineStore.getState();
+  return state.hasKeyframes(clipId, 'textBounds.path')
+    || state.hasKeyframes(clipId, 'textBounds.position.x')
+    || state.hasKeyframes(clipId, 'textBounds.position.y');
+}
 
 export function isTextLikeClipSource(clip: TimelineClip): boolean {
   return (
@@ -38,6 +47,25 @@ export function buildTextLikeLayer(
   } else if (clip.source?.type === 'math-scene') {
     mathSceneRenderer.renderClip(clip, clipLocalTime);
     textCanvas = clip.source.textCanvas;
+  } else if (clip.captionProperties && clip.source?.textCanvas) {
+    const interpolatedTextBounds = options.ctx?.getInterpolatedTextBounds(clip.id, clipLocalTime);
+    const hasBoundsKeyframes = hasTextBoundsKeyframes(clip.id);
+    textCanvas = renderCaptionTextClipFrame({
+      captionClip: clip,
+      clips: options.ctx?.renderClipsAtTime ?? options.ctx?.clipsAtTime ?? [clip],
+      tracks: options.ctx ? [...options.ctx.trackMap.values()] : [],
+      timelineTime: renderTime,
+      resolveSourceTime: options.ctx
+        ? sourceClip => getClipSourceWindowTime(
+            sourceClip,
+            renderTime - sourceClip.startTime,
+            options.ctx!,
+          )
+        : undefined,
+      textPropertiesOverride: hasBoundsKeyframes && interpolatedTextBounds && clip.textProperties
+        ? { ...clip.textProperties, boxEnabled: true, textBounds: interpolatedTextBounds }
+        : undefined,
+    }).canvas ?? undefined;
   } else if (clip.source?.textCanvas) {
     textCanvas = clip.source.type === 'text' && options.interpolateTextBounds
       ? getTextCanvasForExport(clip, clipLocalTime, options.ctx)
@@ -64,11 +92,7 @@ function getTextCanvasForExport(
     return sourceCanvas;
   }
 
-  const state = useTimelineStore.getState();
-  const hasBoundsKeyframes =
-    state.hasKeyframes(clip.id, 'textBounds.path') ||
-    state.hasKeyframes(clip.id, 'textBounds.position.x') ||
-    state.hasKeyframes(clip.id, 'textBounds.position.y');
+  const hasBoundsKeyframes = hasTextBoundsKeyframes(clip.id);
   if (!hasBoundsKeyframes) {
     return sourceCanvas;
   }

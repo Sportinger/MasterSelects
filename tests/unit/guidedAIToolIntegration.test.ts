@@ -1,10 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, type Mock } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { flags } from '../../src/engine/featureFlags';
 import { createGuidedReplayBudgetController, executeAITool, executeAIToolCalls } from '../../src/services/aiTools';
 import { useGuidedActionStore } from '../../src/stores/guidedActionStore';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useSettingsStore } from '../../src/stores/settingsStore';
 import { DEFAULT_TRANSFORM, useTimelineStore } from '../../src/stores/timeline';
+import { useHistoryStore } from '../../src/stores/historyStore';
 import type { TimelineClip } from '../../src/types';
 
 const initialTimelineState = useTimelineStore.getState();
@@ -12,15 +13,25 @@ const initialMediaState = useMediaStore.getState();
 
 describe('guided AI tool integration', () => {
   beforeEach(() => {
+    if (useHistoryStore.getState().batchId !== null) {
+      useHistoryStore.getState().cancelBatch();
+    }
     flags.guidedActionsRuntime = false;
     flags.guidedActionsAIReplay = false;
     resetGuidedActionStore();
     resetGuidedReplaySettings();
     useTimelineStore.setState(initialTimelineState);
-    useMediaStore.setState(initialMediaState);
+    vi.mocked(useMediaStore.getState).mockReturnValue({
+      ...initialMediaState,
+      activeCompositionId: 'comp-1',
+      compositions: [{ id: 'comp-1', width: 1920, height: 1080 } as never],
+    });
   });
 
   afterEach(() => {
+    if (useHistoryStore.getState().batchId !== null) {
+      useHistoryStore.getState().cancelBatch();
+    }
     flags.guidedActionsRuntime = false;
     flags.guidedActionsAIReplay = false;
     resetGuidedActionStore();
@@ -45,13 +56,32 @@ describe('guided AI tool integration', () => {
 
     expect(result.success).toBe(true);
     expect(result.data).toEqual(expect.objectContaining({ clipId: clip.id }));
-    expect(updated?.transform.position.x).toBe(0.1);
+    expect(updated?.transform.position.x).toBe(0.2);
     expect(guidedSession).toEqual(expect.objectContaining({
       label: 'AI: setTransform',
       status: 'completed',
     }));
     expect(guidedSession?.context.animationBudget.disabled).toBe(true);
     expect(guidedSession?.metadata?.toolName).toBe('setTransform');
+  });
+
+  it('confirms 2D z through the same authoring-space codec', async () => {
+    flags.guidedActionsRuntime = true;
+    flags.guidedActionsAIReplay = true;
+    const clip = createClip();
+    useTimelineStore.setState({ clips: [clip] });
+
+    const result = await executeAITool('setTransform', {
+      clipId: clip.id,
+      z: 96,
+    }, 'chat', {
+      guidedAnimationBudgetMs: 0,
+    });
+
+    const updated = useTimelineStore.getState().clips.find((entry) => entry.id === clip.id);
+    expect(result.success).toBe(true);
+    expect(updated?.transform.position.z).toBeCloseTo(0.1);
+    expect(useGuidedActionStore.getState().activeSession?.status).toBe('completed');
   });
 
   it('uses guided replay settings as the chat default', async () => {
@@ -146,8 +176,8 @@ describe('guided AI tool integration', () => {
       expect.objectContaining({ id: 'call-x', result: expect.objectContaining({ success: true }) }),
       expect.objectContaining({ id: 'call-y', result: expect.objectContaining({ success: true }) }),
     ]);
-    expect(updated?.transform.position.x).toBe(0.1);
-    expect(updated?.transform.position.y).toBe(-0.1);
+    expect(updated?.transform.position.x).toBe(0.2);
+    expect(updated?.transform.position.y).toBe(-0.2);
     expect(sessionStarts).toHaveLength(1);
     expect(state.activeSession).toEqual(expect.objectContaining({
       label: 'AI: setTransform x2',
@@ -172,8 +202,30 @@ describe('guided AI tool integration', () => {
     const updated = useTimelineStore.getState().clips.find((entry) => entry.id === clip.id);
 
     expect(result.success).toBe(true);
-    expect(updated?.transform.position.y).toBe(-0.1);
+    expect(updated?.transform.position.y).toBe(-0.2);
     expect(useGuidedActionStore.getState().activeSession).toBeNull();
+  });
+
+  it('does not close a foreign outer history batch for direct or guided modifying tools', async () => {
+    const outer = useHistoryStore.getState().startBatch('Outer workflow');
+    const clip = createClip();
+    useTimelineStore.setState({ clips: [clip] });
+
+    const direct = await executeAITool('setTransform', {
+      clipId: clip.id,
+      x: 192,
+    }, 'devBridge');
+    const guided = await executeAITool('setTransform', {
+      clipId: clip.id,
+      y: -108,
+    }, 'devBridge', {
+      guidedReplay: true,
+      guidedAnimationBudgetMs: 0,
+    });
+
+    expect(direct.success).toBe(true);
+    expect(guided.success).toBe(true);
+    expect(useHistoryStore.getState().batchId).toBe(outer.batchId);
   });
 
   it('allows devBridge to opt into guided replay explicitly without chat rollout flags', async () => {
@@ -192,7 +244,7 @@ describe('guided AI tool integration', () => {
     const guidedSession = useGuidedActionStore.getState().activeSession;
 
     expect(result.success).toBe(true);
-    expect(updated?.transform.position.x).toBe(0.1);
+    expect(updated?.transform.position.x).toBe(0.2);
     expect(guidedSession).toEqual(expect.objectContaining({
       label: 'AI: setTransform',
       status: 'completed',
@@ -227,8 +279,8 @@ describe('guided AI tool integration', () => {
       'setTransform',
       'setTransform',
     ]);
-    expect(updated?.transform.position.x).toBe(0.1);
-    expect(updated?.transform.position.y).toBe(-0.1);
+    expect(updated?.transform.position.x).toBe(0.2);
+    expect(updated?.transform.position.y).toBe(-0.2);
     expect(useGuidedActionStore.getState().activeSession).toEqual(expect.objectContaining({
       label: 'AI: executeBatch',
       status: 'completed',

@@ -27,6 +27,7 @@ interface TransitionOverlaysProps {
   timeToPixel: (time: number) => number;
   isTrackExpanded: (trackId: string) => boolean;
   getExpandedTrackHeight: (trackId: string, baseHeight: number) => number;
+  getTrackBaseHeight?: (track: TimelineTrack) => number;
   getTrackHeight?: (track: TimelineTrack) => number;
 }
 
@@ -39,6 +40,7 @@ export function TransitionOverlays({
   timeToPixel,
   isTrackExpanded,
   getExpandedTrackHeight,
+  getTrackBaseHeight,
   getTrackHeight,
 }: TransitionOverlaysProps) {
   const selectTransitionProperties = useTimelineStore(state => state.selectTransitionProperties);
@@ -56,6 +58,9 @@ export function TransitionOverlays({
     : isTrackExpanded(track.id)
       ? getExpandedTrackHeight(track.id, track.height)
       : track.height;
+  const resolveClipLaneHeight = (track: TimelineTrack) => getTrackBaseHeight
+    ? getTrackBaseHeight(track)
+    : track.height;
   const getTrackTop = (track: TimelineTrack) => {
     const trackIndex = tracks.indexOf(track);
     return tracks
@@ -360,7 +365,7 @@ export function TransitionOverlays({
         if (!track) return null;
 
         const trackTop = getTrackTop(track);
-        const trackHeight = resolveTrackHeight(track);
+        const clipLaneHeight = resolveClipLaneHeight(track);
 
         return (
           <div
@@ -370,7 +375,7 @@ export function TransitionOverlays({
               left: timeToPixel(activeJunction.junctionTime) - 15,
               width: 30,
               top: trackTop + 4,
-              height: Math.max(1, trackHeight - 8),
+              height: Math.max(1, clipLaneHeight - 8),
               background: 'linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.4), transparent)',
               pointerEvents: 'none',
               zIndex: 30,
@@ -408,7 +413,7 @@ export function TransitionOverlays({
 
         // Calculate track position
         const trackTop = getTrackTop(track);
-        const trackHeight = resolveTrackHeight(track);
+        const clipLaneHeight = resolveClipLaneHeight(track);
 
         const transitionDefinition = getRuntimeTransition(clipA.transitionOut.type);
         const transitionName = transitionDefinition?.name ?? clipA.transitionOut.type;
@@ -436,11 +441,15 @@ export function TransitionOverlays({
         const transitionLeft = timeToPixel(transitionStart);
         const transitionWidth = timeToPixel(bodyEnd) - transitionLeft;
         const displayedTransitionWidth = Math.max(transitionWidth, 20);
+        // Keep the minimum-size visual centered on the real transition range.
+        // Otherwise, zooming out grows the overlay only to the right and makes
+        // the transition appear to drift away from its timeline position.
+        const displayedTransitionLeft = transitionLeft - ((displayedTransitionWidth - transitionWidth) / 2);
         const transitionLabelFontSize = Math.max(
           10,
           Math.min(
             22,
-            Math.max(10, trackHeight - 14),
+            Math.max(10, clipLaneHeight - 14),
             Math.max(10, (displayedTransitionWidth - 18) / Math.max(transitionName.length * 0.58, 1)),
           ),
         );
@@ -474,10 +483,10 @@ export function TransitionOverlays({
             }}
             style={{
               position: 'absolute',
-              left: transitionLeft,
+              left: displayedTransitionLeft,
               top: trackTop,
               width: displayedTransitionWidth,
-              height: trackHeight,
+              height: clipLaneHeight,
               pointerEvents: 'auto',
               zIndex: 50,
               cursor: 'pointer',

@@ -70,6 +70,20 @@ export function useTrackPropertyCurveEditTransactions({
     if (!target) {
       const clearedSession = curveKeyframeTransactionRef.current?.keyframeId === keyframeId;
       if (curveKeyframeTransactionRef.current?.keyframeId === keyframeId) {
+        const session = curveKeyframeTransactionRef.current;
+        applyTimelineEditOperation({
+          id: `${session.transactionId}:cancel:missing-target`,
+          type: 'keyframe-transaction-cancel',
+          transactionId: session.transactionId,
+          historyBatchId: session.historyBatchId,
+          source: 'ui',
+          phase: 'cancel',
+          clipId: session.clipId,
+          property: session.property,
+          keyframeIds: [session.keyframeId],
+          restoreKeyframeIds: [session.keyframeId],
+          discardKeyframeIds: [],
+        }, { source: 'ui', historyLabel: 'Cancel curve keyframe edit' });
         curveKeyframeTransactionRef.current = null;
       }
       if (clearedSession || phase !== 'update') {
@@ -118,6 +132,19 @@ export function useTrackPropertyCurveEditTransactions({
     const session = ensureSession();
     if (phase === 'begin') return;
     if (phase === 'commit' && !session.hasUpdate) {
+      applyTimelineEditOperation({
+        id: `${session.transactionId}:cancel:no-update`,
+        type: 'keyframe-transaction-cancel',
+        transactionId: session.transactionId,
+        historyBatchId: session.historyBatchId,
+        source: 'ui',
+        phase: 'cancel',
+        clipId: session.clipId,
+        property: session.property,
+        keyframeIds: [session.keyframeId],
+        restoreKeyframeIds: [session.keyframeId],
+        discardKeyframeIds: [],
+      }, { source: 'ui', historyLabel: 'Cancel curve keyframe edit' });
       curveKeyframeTransactionRef.current = null;
       return;
     }
@@ -197,6 +224,19 @@ export function useTrackPropertyCurveEditTransactions({
       const existing = curveBezierTransactionRef.current;
       const clearedSession = existing?.keyframeId === keyframeId && existing.handle === handle;
       if (existing?.keyframeId === keyframeId && existing.handle === handle) {
+        applyTimelineEditOperation({
+          id: `${existing.transactionId}:cancel:missing-target`,
+          type: 'keyframe-transaction-cancel',
+          transactionId: existing.transactionId,
+          historyBatchId: existing.historyBatchId,
+          source: 'ui',
+          phase: 'cancel',
+          clipId: existing.clipId,
+          property: existing.property,
+          keyframeIds: [existing.keyframeId],
+          restoreKeyframeIds: [existing.keyframeId],
+          discardKeyframeIds: [],
+        }, { source: 'ui', historyLabel: 'Cancel bezier handle edit' });
         curveBezierTransactionRef.current = null;
       }
       if (clearedSession || phase !== 'update') {
@@ -282,6 +322,19 @@ export function useTrackPropertyCurveEditTransactions({
     const session = ensureSession();
     if (phase === 'begin') return;
     if (phase === 'commit' && !session.hasUpdate) {
+      applyTimelineEditOperation({
+        id: `${session.transactionId}:cancel:no-update`,
+        type: 'keyframe-transaction-cancel',
+        transactionId: session.transactionId,
+        historyBatchId: session.historyBatchId,
+        source: 'ui',
+        phase: 'cancel',
+        clipId: session.clipId,
+        property: session.property,
+        keyframeIds: [session.keyframeId],
+        restoreKeyframeIds: [session.keyframeId],
+        discardKeyframeIds: [],
+      }, { source: 'ui', historyLabel: 'Cancel bezier handle edit' });
       curveBezierTransactionRef.current = null;
       return;
     }

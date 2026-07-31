@@ -1,0 +1,113 @@
+.tp-iris {
+  --tp-iris-mid-scale: 0.8;
+  --tp-iris-open-scale: 3.2;
+}
+
+.tp-iris--circle {
+  --tp-iris-mid-scale: 0.8;
+  --tp-iris-open-scale: 3.2;
+}
+
+.tp-iris--oval {
+  --tp-iris-mid-scale: 0.65;
+  --tp-iris-open-scale: 2.6;
+}
+
+.tp-iris--diamond {
+  --tp-iris-mid-scale: 0.8125;
+  --tp-iris-open-scale: 3.25;
+}
+
+.tp-iris--square {
+  --tp-iris-mid-scale: 0.6625;
+  --tp-iris-open-scale: 2.65;
+}
+
+.tp-iris--triangle {
+  --tp-iris-mid-scale: 0.9;
+  --tp-iris-open-scale: 4.9;
+}
+
+.tp-iris--cross {
+  --tp-iris-mid-scale: 0.925;
+  --tp-iris-open-scale: 3.7;
+}
+
+.tp-iris--star {
+  --tp-iris-mid-scale: 1.25;
+  --tp-iris-open-scale: 5;
+}
+
+.tp-iris__aperture,
+.tp-iris__rim {
+  animation-delay: -0.6845s;
+  animation-duration: 1.85s;
+  animation-fill-mode: both;
+  animation-iteration-count: infinite;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transform: scale(var(--tp-iris-mid-scale));
+  transform-origin: center;
+}
+
+.tp-iris__aperture {
+  animation-name: tp-iris-expand;
+}
+
+.tp-iris__rim {
+  animation-name: tp-iris-rim-expand;
+  opacity: 0.82;
+}
+
+@keyframes tp-iris-expand {
+  0%,
+  8% {
+    transform: scale(0.03);
+  }
+
+  37% {
+    transform: scale(var(--tp-iris-mid-scale));
+  }
+
+  70%,
+  84% {
+    transform: scale(var(--tp-iris-open-scale));
+  }
+
+  84.01%,
+  100% {
+    transform: scale(0.03);
+  }
+}
+
+@keyframes tp-iris-rim-expand {
+  0%,
+  8% {
+    opacity: 0;
+    transform: scale(0.03);
+  }
+
+  13% {
+    opacity: 0.82;
+  }
+
+  37% {
+    opacity: 0.82;
+    transform: scale(var(--tp-iris-mid-scale));
+  }
+
+  66% {
+    opacity: 0.72;
+  }
+
+  70%,
+  84% {
+    opacity: 0;
+    transform: scale(var(--tp-iris-open-scale));
+  }
+
+  84.01%,
+  100% {
+    opacity: 0;
+    transform: scale(0.03);
+  }
+}

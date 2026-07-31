@@ -2,8 +2,10 @@ export type FlashBoardChatPlaybookId =
   | 'analysis'
   | 'face'
   | 'montage'
+  | 'motion'
   | 'quality'
   | 'silence'
+  | 'storyboard'
   | 'text'
   | 'transcript'
   | 'visual';
@@ -15,6 +17,26 @@ interface FlashBoardChatPlaybook {
 }
 
 const PLAYBOOKS: FlashBoardChatPlaybook[] = [
+  {
+    id: 'storyboard',
+    matches: /\b(?:storyboard|story board|scene card|scene plan|shot list|animatic|co-?direct|director|directing|plan mode|planung|szenenplan|drehplan|regie|animatik)\b/i,
+    text: `STORYBOARD / DIRECTING
+- In Plan mode, inspect the current timeline and storyboard first, then create or revise only storyboard plans, scene cards, evidence, coverage, decisions, templates, and generation briefs.
+- Keep scene identity stable. Use the storyboard semantic tools instead of ordinary timeline/media mutation tools.
+- Preparing a generation brief is allowed; submitting a provider job, importing paid output, editing real media, or exporting is not. Describe prepared work honestly as planned, never completed.
+- When the decision policy requires a pause, present durable alternatives with the evidence, expected trade-off, and affected base fingerprint. Do not choose or replay an old option implicitly.
+- Verify the resulting storyboard state and report blocked or incomplete scenes explicitly.`,
+  },
+  {
+    id: 'motion',
+    matches: /\b(?:motion design|motion graphics?|shape|replicator|lower third|title card|bauchbinde|grafik(?:en)?|formen?)\b/i,
+    text: `MOTION DESIGN
+- Inspect getMotionCapabilities before assuming a primitive, appearance, property, layout, or instance limit is available. Read getMotionDesign before using clip-specific appearance ids.
+- Use createMotionShapeClip for native editable rectangle/ellipse plates, updateMotionAppearances for the primary fill/stroke, updateMotionProperties for returned property paths, and configureMotionReplicator only for the currently supported Grid layout.
+- Use the existing text tools for editable words layered with motion shapes. Creation returns stable clip/appearance ids needed by dependent calls.
+- Author animation with one atomic addKeyframe sequence: entrance = off-frame/transparent to settled; exit = reverse near clip end; overshoot = start, pass the target, then settle; stagger sibling clips by 0.05-0.15s; hold a value by repeating it at two different times before the change.
+- Group construction with executeBatch. Later actions can consume an earlier action result with {"$batchResult":{"action":0,"path":"clipId"}}; then verify representative frames. Never claim polygon/star, gradients, texture fills, modifiers, falloffs, nulls, groups, or adjustment layers before their capability response says they are supported.`,
+  },
   {
     id: 'text',
     matches: /\b(?:text|title|typography|kinetic|schrift|titel|textanimation|bauchbinde|lower third)\b/i,
@@ -35,7 +57,7 @@ const PLAYBOOKS: FlashBoardChatPlaybook[] = [
   },
   {
     id: 'transcript',
-    matches: /\b(?:transcript|subtitle|speech|sentence|word|phrase|dialog|untertitel|transkript|satz|w[oö]rter?)\b/i,
+    matches: /\b(?:transcript|subtitle|speech|speak(?:s|ing)?|talk(?:s|ing)?|sentence|word|phrase|dialog|untertitel|transkript|spricht|satz|w[oö]rter?)\b/i,
     text: `TRANSCRIPT
 - Read long transcripts in bounded source-time windows with getClipTranscript(sourceStart, sourceEnd, offset, limit); follow nextOffset while hasMore is true.
 - Transcript timestamps are source time. Use getClipDetails before converting them for timeline editing.
@@ -51,9 +73,11 @@ const PLAYBOOKS: FlashBoardChatPlaybook[] = [
   },
   {
     id: 'silence',
-    matches: /\b(?:silence|silent|pause|dead air|stille|pausen?)\b/i,
+    matches: /\b(?:silence|silent|pauses?|dead air|(?:no one|nobody)(?: is)? (?:speak(?:s|ing)?|talk(?:s|ing)?)|not (?:speaking|talking)|non-speaking|no (?:dialogue|dialog|speech)|without (?:dialogue|dialog|speech)|stille|pausen?|(?:wo|wenn) niemand spricht|ohne (?:sprache|dialog))\b/i,
     text: `SILENCE
-- Call findSilentSections once, inspect its mapped timeline ranges, then remove all accepted ranges with one cutRangesFromClip call.
+- For "nobody speaking" or speech-gap requests, use getClipTranscript (paginate if needed) plus getClipDetails to derive the non-speech timeline gaps. Prefer this route when background sound may continue under the gaps.
+- For audio-level silence or dead-air requests, call findSilentSections once and inspect its mapped timeline ranges.
+- Remove all accepted ranges with one cutRangesFromClip call.
 - Preserve linked audio unless the user explicitly wants only one side changed.`,
   },
   {

@@ -1,5 +1,11 @@
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
+import { propertyRegistry } from '../../properties';
+import {
+  resolveClipPropertyAuthoringContext,
+  resolveTransformPositionUnitMode,
+  writePropertyAuthoringValue,
+} from '../../properties/propertyAuthoring';
 import type { ToolResult } from '../types';
 import {
   captureMutationEntitySnapshot,
@@ -19,10 +25,6 @@ export async function handleSetTransform(
   }
 
   // Get composition resolution for pixel → normalized conversion
-  const activeComp = useMediaStore.getState().getActiveComposition();
-  const compWidth = activeComp?.width ?? 1920;
-  const compHeight = activeComp?.height ?? 1080;
-
   const updates: Record<string, unknown> = {};
   const hasPosition = args.x !== undefined || args.y !== undefined || args.z !== undefined;
   const hasScale =
@@ -36,45 +38,72 @@ export async function handleSetTransform(
     args.rotationY !== undefined ||
     args.rotationZ !== undefined;
 
-  if (hasPosition) {
-    const currentPos = clip.transform?.position || { x: 0, y: 0, z: 0 };
-    updates.position = {
-      x: args.x !== undefined ? (args.x as number) / compWidth : currentPos.x,
-      y: args.y !== undefined ? (args.y as number) / compHeight : currentPos.y,
-      z: args.z !== undefined ? args.z as number : currentPos.z,
-    };
-  }
-  if (hasScale) {
-    const currentScale = clip.transform?.scale || { x: 1, y: 1 };
-    updates.scale = {
-      ...(args.scaleAll !== undefined || currentScale.all !== undefined
-        ? { all: args.scaleAll !== undefined ? args.scaleAll as number : currentScale.all }
-        : {}),
-      x: args.scaleX !== undefined ? args.scaleX as number : currentScale.x,
-      y: args.scaleY !== undefined ? args.scaleY as number : currentScale.y,
-      ...(args.scaleZ !== undefined || currentScale.z !== undefined
-        ? { z: args.scaleZ !== undefined ? args.scaleZ as number : currentScale.z }
-        : {}),
-    };
-  }
-  if (hasRotation) {
-    const currentRot = clip.transform?.rotation || { x: 0, y: 0, z: 0 };
-    updates.rotation = {
-      x: args.rotationX !== undefined ? args.rotationX as number : currentRot.x,
-      y: args.rotationY !== undefined ? args.rotationY as number : currentRot.y,
-      z: args.rotationZ !== undefined
-        ? args.rotationZ as number
-        : args.rotation !== undefined
-          ? args.rotation as number
-          : currentRot.z,
-    };
-  }
-  if (args.opacity !== undefined) updates.opacity = args.opacity as number;
-  if (args.blendMode !== undefined) updates.blendMode = args.blendMode as string;
-
-  if (Object.keys(updates).length === 0) {
+  if (!hasPosition && !hasScale && !hasRotation
+    && args.opacity === undefined && args.blendMode === undefined) {
     return { success: false, error: 'No transform properties provided' };
   }
+
+  const media = useMediaStore.getState();
+  const contextResolution = hasPosition
+    ? resolveClipPropertyAuthoringContext({
+        clipId,
+        compositions: media.compositions,
+        activeCompositionId: media.activeCompositionId,
+        liveClipIds: timelineStore.clips.map((candidate) => candidate.id),
+        positionUnitMode: resolveTransformPositionUnitMode(clip),
+      })
+    : null;
+  if (contextResolution && !contextResolution.ok) {
+    const ownerDetails = contextResolution.compositionIds.length > 0
+      ? ` (${contextResolution.compositionIds.join(', ')})`
+      : '';
+    return {
+      success: false,
+      error: `Cannot resolve property authoring context: ${contextResolution.reason}${ownerDetails}`,
+    };
+  }
+  const authoringContext = contextResolution?.ok
+    ? contextResolution.context
+    : undefined;
+  const propertyInputs: Array<[string, unknown]> = [
+    ['position.x', args.x],
+    ['position.y', args.y],
+    ['position.z', args.z],
+    ['scale.all', args.scaleAll],
+    ['scale.x', args.scaleX],
+    ['scale.y', args.scaleY],
+    ['scale.z', args.scaleZ],
+    ['rotation.x', args.rotationX],
+    ['rotation.y', args.rotationY],
+    ['rotation.z', args.rotationZ ?? args.rotation],
+    ['opacity', args.opacity],
+    ['blendMode', args.blendMode],
+  ];
+
+  let workingClip = clip;
+  try {
+    for (const [path, value] of propertyInputs) {
+      if (value === undefined) continue;
+      workingClip = writePropertyAuthoringValue(
+        propertyRegistry,
+        workingClip,
+        path,
+        value,
+        authoringContext,
+      );
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  if (hasPosition) updates.position = workingClip.transform.position;
+  if (hasScale) updates.scale = workingClip.transform.scale;
+  if (hasRotation) updates.rotation = workingClip.transform.rotation;
+  if (args.opacity !== undefined) updates.opacity = workingClip.transform.opacity;
+  if (args.blendMode !== undefined) updates.blendMode = workingClip.transform.blendMode;
 
   const mutationSnapshot = captureMutationEntitySnapshot('transform', [clip]);
   const { updateClipTransform, invalidateCache } = useTimelineStore.getState();

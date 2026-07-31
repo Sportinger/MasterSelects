@@ -74,6 +74,54 @@ describe('FlashBoardChatService', () => {
     expect(onPhase).not.toHaveBeenCalledWith('provider');
   });
 
+  it('forwards an active decision and exposes a returned durable decision', async () => {
+    const returnedDecision = {
+      id: 'decision-next',
+      kind: 'cut' as const,
+      question: 'Which ending?',
+      baseFingerprint: {
+        schemaVersion: 1 as const,
+        algorithm: 'sha-256' as const,
+        value: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      },
+      options: [{
+        id: 'hold',
+        title: 'Hold',
+        summary: 'Let the final image breathe.',
+      }],
+    };
+    kernelGatewayMocks.tryKernelFirst.mockResolvedValue({
+      handled: true,
+      message: 'Choose the ending.',
+      runId: 'decision-next-run',
+      decision: returnedDecision,
+    });
+    const onKernelDecision = vi.fn();
+
+    await expect(sendFlashBoardChatMessage({
+      activeDecision: {
+        decisionId: 'decision-current',
+        optionIds: ['dynamic'],
+      },
+      model: 'masterselects-ai',
+      onKernelDecision,
+      prompt: 'Continue with Dynamic.',
+      provider: 'kernel',
+      temperature: 0.7,
+    })).resolves.toBe('Choose the ending.');
+
+    expect(kernelGatewayMocks.tryKernelFirst).toHaveBeenCalledWith(
+      'Continue with Dynamic.',
+      expect.objectContaining({
+        activeDecision: {
+          decisionId: 'decision-current',
+          optionIds: ['dynamic'],
+        },
+      }),
+    );
+    expect(onKernelDecision).toHaveBeenCalledWith(returnedDecision);
+  });
+
   it('sends Kie.ai GPT chat through Responses with reasoning effort', async () => {
     let completedRun: import('../../src/services/flashboard/FlashBoardChatService').FlashBoardChatRunRecord | null = null;
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
@@ -137,26 +185,61 @@ describe('FlashBoardChatService', () => {
     ]));
   });
 
-  it('uses hosted Kie.ai chat when a signed-in cloud session is available', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      kind: 'ai.chat',
-      mode: 'hosted',
-      ok: true,
-      provider: 'kie.ai',
-      requestId: 'req-1',
-      status: 'completed',
-      data: {
-        output: [{
-          type: 'message',
-          content: [{ type: 'output_text', text: 'Use softer backlight.' }],
-        }],
-      },
-    }), { status: 200 }));
+  it('uses the kernel fast-agent when a signed-in cloud session is available', async () => {
+    let turnId = '';
+    const sessionId = 'ha_test_session';
+    const fetchMock = vi.fn(async (requestInfo: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(requestInfo);
+      if (url === '/api/kernel/hosted-agent/turns') {
+        const request = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        turnId = String(request.turnId);
+        return new Response(JSON.stringify({
+          acceptedHistoryFormatVersion: request.historyFormatVersion,
+          acceptedPromptVersion: request.promptVersion,
+          acceptedToolSchemaVersion: request.toolSchemaVersion,
+          eventsPath: `/api/kernel/hosted-agent/turns/${turnId}/events`,
+          maximumIterations: 400,
+          maximumSpendCredits: 100,
+          pageLease: {
+            expiresAt: '2026-07-30T12:05:00.000Z',
+            leaseToken: 'lease-test',
+            sessionId,
+          },
+          protocolVersion: 'hosted-agent-k2-v1',
+          replayed: false,
+          route: 'fast-agent',
+          sessionId,
+          turnId,
+        }), { headers: { 'Content-Type': 'application/json' }, status: 202 });
+      }
+      const events = [
+        `id: 1\nevent: session-ready\ndata: ${JSON.stringify({
+          eventId: '1', kind: 'session-ready', sessionId, turnId,
+          acceptedPromptVersion: 'flashboard-chat-v2',
+          acceptedHistoryFormatVersion: 'flashboard-provider-history-v1',
+          acceptedToolSchemaVersion: 'flashboard-chat-tools-v1',
+          maximumIterations: 400, maximumSpendCredits: 100,
+        })}\n\n`,
+        `id: 2\nevent: turn-complete\ndata: ${JSON.stringify({
+          eventId: '2', kind: 'turn-complete', sessionId, turnId,
+          creditsCharged: 6, message: 'Use softer backlight.', rounds: 1,
+        })}\n\n`,
+      ].join('');
+      return new Response(events, {
+        headers: {
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'X-MasterSelects-Event-Cursor': '2',
+        },
+        status: 200,
+      });
+    });
     vi.stubGlobal('fetch', fetchMock);
+    const onPhase = vi.fn();
 
     const response = await sendFlashBoardChatMessage({
       hostedAvailable: true,
       model: 'gpt-5-6-luna',
+      onPhase,
       openAiReasoningEffort: 'low',
       prompt: 'Suggest lighting',
       provider: 'kie',
@@ -164,19 +247,23 @@ describe('FlashBoardChatService', () => {
     });
 
     expect(response).toBe('Use softer backlight.');
-    expect(fetchMock).toHaveBeenCalledWith('/api/ai/chat', expect.objectContaining({
+    expect(onPhase).toHaveBeenCalledWith('kernel');
+    expect(onPhase).toHaveBeenCalledWith('provider');
+    expect(fetchMock).toHaveBeenCalledWith('/api/kernel/hosted-agent/turns', expect.objectContaining({
       method: 'POST',
     }));
 
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(body).toMatchObject({
-      idempotencyKey: expect.stringMatching(/^flashboard-chat:/),
-      input: [{ role: 'user', content: 'Suggest lighting' }],
-      max_output_tokens: FLASHBOARD_CHAT_MAX_OUTPUT_TOKENS,
+      maximumOutputTokens: FLASHBOARD_CHAT_MAX_OUTPUT_TOKENS,
       model: 'gpt-5-6-luna',
-      protocol: 'openai-responses',
-      reasoning: { effort: 'low' },
+      reasoningEffort: 'low',
+      routePreference: 'auto',
+      toolExecutionMode: 'normal',
     });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[1]?.[0]))
+      .toContain(`/hosted-agent/turns/${encodeURIComponent(turnId)}/events`);
   });
 
   it('validates Kie.ai protocol and model at the hosted boundary', () => {
@@ -251,11 +338,11 @@ describe('FlashBoardChatService', () => {
     });
   });
 
-  it('labels hosted compact-chat credit prices per Kie.ai model round', () => {
+  it('labels hosted chat as exact usage-based billing', () => {
     expect(getFlashBoardChatCreditCost('gpt-5-6-luna')).toBe(3);
-    expect(getFlashBoardChatCreditLabel('gpt-5-6-sol')).toBe('8 cr');
+    expect(getFlashBoardChatCreditLabel('gpt-5-6-sol')).toBe('usage × 6');
     expect(getFlashBoardChatCreditCost('claude-fable-5')).toBe(10);
-    expect(getFlashBoardChatCreditLabel('unknown-chat-model')).toBe('5 cr');
+    expect(getFlashBoardChatCreditLabel('unknown-chat-model')).toBe('usage × 6');
   });
 
   it('uses Kie.ai Messages for tool-capable Claude models', async () => {

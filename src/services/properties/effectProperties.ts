@@ -34,6 +34,7 @@ function createEffectDescriptor(
     valueType: mapEffectParamType(param),
     animatable: isEffectParamAnimatable(param),
     defaultValue: param.default,
+    catalogOnly: effect === undefined,
     ui: {
       min: param.min,
       max: param.max,

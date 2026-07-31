@@ -16,7 +16,6 @@ export function calculateSyncedPlayhead(
 
   const currentPlayhead = timelineStore.playheadPosition;
   const currentClips = timelineStore.clips;
-
   const nestedClip = currentClips.find(
     (c) => c.isComposition && c.compositionId === toCompId,
   );

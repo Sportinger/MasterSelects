@@ -80,6 +80,8 @@ describe('compositor uniforms', () => {
       externalShader,
       'getTransitionUv',
     );
+    const normalOrientationBody = extractFunctionBody(normalShader, 'orientSourceUv');
+    const externalOrientationBody = extractFunctionBody(externalShader, 'orientSourceUv');
 
     expect(extractTransitionTypes(normalBody)).toEqual(EXPECTED_COMPOSITOR_TRANSITION_TYPES);
     expect(extractTransitionTypes(externalBody)).toEqual(EXPECTED_COMPOSITOR_TRANSITION_TYPES);
@@ -87,7 +89,8 @@ describe('compositor uniforms', () => {
     expect(extractTransitionTypes(normalUvBody)).toEqual(EXPECTED_COMPOSITOR_DISTORTION_TYPES);
     expect(extractTransitionTypes(externalUvBody)).toEqual(EXPECTED_COMPOSITOR_DISTORTION_TYPES);
     expect(normalizeWgsl(externalUvBody)).toBe(normalizeWgsl(normalUvBody));
-    for (const field of ['sourceRectX', 'sourceRectY', 'sourceRectWidth', 'sourceRectHeight']) {
+    expect(normalizeWgsl(externalOrientationBody)).toBe(normalizeWgsl(normalOrientationBody));
+    for (const field of ['sourceRectX', 'sourceRectY', 'sourceRectWidth', 'sourceRectHeight', 'videoRotation']) {
       expect(normalShader).toContain(field);
       expect(externalShader).toContain(field);
     }
@@ -125,6 +128,18 @@ describe('compositor uniforms', () => {
     expect(floats[26]).toBeCloseTo(0.5);
     expect(floats[27]).toBeCloseTo(0.125);
     expect(floats[28]).toBeCloseTo(0.25);
+  });
+
+  it('encodes raw WebCodecs source rotation as quarter turns', () => {
+    const buffer = new ArrayBuffer(COMPOSITOR_UNIFORM_FLOAT_COUNT * 4);
+    const floats = new Float32Array(buffer);
+    const u32 = new Uint32Array(buffer);
+
+    writeLayerUniformData(createLayer({
+      source: { type: 'video', videoRotation: 270 },
+    }), 1, 1, false, floats, u32);
+
+    expect(u32[29]).toBe(3);
   });
 
   it('converts stored 100 percent scale to native source pixels', () => {

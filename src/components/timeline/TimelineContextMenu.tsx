@@ -217,6 +217,7 @@ export function TimelineContextMenu({
     showColorClipboardInEffects,
     showColorClipboardTopLevel,
   } = menuModel;
+  const isStoryboard = clip?.source?.type === 'storyboard';
   const isVideoMedia = mediaFile?.type === 'video' || isVideo;
   const hasFaceRanges = Boolean(clip?.analysis?.faceAnalysis?.people.some((person) =>
     person.appearances.some((appearance) => appearance.end >= appearance.start),
@@ -347,7 +348,7 @@ export function TimelineContextMenu({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-      {isMidi && clip && (
+      {(isMidi || isStoryboard) && clip && (
         <>
           <div
             className="context-menu-item"

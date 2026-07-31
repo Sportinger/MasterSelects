@@ -315,6 +315,7 @@ export interface Composition extends MediaItem {
   timelineData?: CompositionTimelineData;
   camera?: CompositionCamera;
   transitionComp?: TransitionCompositionLink;
+  captionComp?: import('../../types/caption').CaptionCompositionLink;
 }
 
 // Folder for organization

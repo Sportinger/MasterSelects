@@ -4,13 +4,14 @@ import { Logger } from '../../../services/logger';
 import { useDockStore } from '../../../stores/dockStore';
 import { requestMediaSourceReveal } from '../../../services/mediaSourceReveal';
 import { openPianoRoll } from '../../pianoRoll/PianoRollBoot';
+import { useTimelineStore } from '../../../stores/timeline';
 
 const log = Logger.create('useClipDoubleClick');
 
 interface UseClipDoubleClickProps {
   clipMap: Map<string, TimelineClip>;
   tracks: TimelineTrack[];
-  openCompositionTab: (compositionId: string) => void;
+  openCompositionTab: (compositionId: string) => void | Promise<void>;
 }
 
 export function useClipDoubleClick({
@@ -18,6 +19,9 @@ export function useClipDoubleClick({
   tracks,
   openCompositionTab,
 }: UseClipDoubleClickProps): (e: React.MouseEvent, clipId: string) => void {
+  const setClipRenameId = useTimelineStore((state) => state.setClipRenameId);
+  const ensureCaptionTextClip = useTimelineStore((state) => state.ensureCaptionTextClip);
+
   return useCallback(
     (e: React.MouseEvent, clipId: string) => {
       e.stopPropagation();
@@ -25,6 +29,21 @@ export function useClipDoubleClick({
 
       const clip = clipMap.get(clipId);
       if (!clip) return;
+
+      if (clip.captionProperties) {
+        void ensureCaptionTextClip(clip.id).then(migrated => {
+          if (!migrated) return;
+          window.dispatchEvent(new CustomEvent('openPropertiesTab', {
+            detail: { tab: 'captions' },
+          }));
+        });
+        return;
+      }
+
+      if (clip.source?.type === 'storyboard') {
+        setClipRenameId(clip.id);
+        return;
+      }
 
       if (clip.source?.type === 'midi') {
         openPianoRoll(clip.id);
@@ -51,6 +70,6 @@ export function useClipDoubleClick({
         requestMediaSourceReveal(mediaFileId, 'timeline');
       }
     },
-    [clipMap, openCompositionTab, tracks],
+    [clipMap, ensureCaptionTextClip, openCompositionTab, setClipRenameId, tracks],
   );
 }

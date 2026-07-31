@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DevChatDialog } from '../../src/components/common/DevChatDialog';
+import { storeDevChatConversationId } from '../../src/services/devChatService';
 
 const STORAGE_KEY = 'masterselects.devChat.conversationId';
 const TEST_CONVERSATION_ID = 'conversation-123';
@@ -12,6 +13,44 @@ describe('DevChatDialog', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('renders as a non-modal floating window and moves from its header', () => {
+    render(
+      <DevChatDialog
+        onClose={vi.fn()}
+        fetchMessages={vi.fn()}
+        sendMessage={vi.fn()}
+      />,
+    );
+
+    const dialog = screen.getByRole('dialog');
+    const heading = screen.getByRole('heading', { name: 'Chat with dev' });
+    const header = heading.closest('.dev-chat-header');
+    expect(header).not.toBeNull();
+    expect(dialog).not.toHaveAttribute('aria-modal');
+
+    Object.defineProperty(dialog, 'offsetWidth', { configurable: true, value: 460 });
+    Object.defineProperty(dialog, 'offsetHeight', { configurable: true, value: 400 });
+    vi.spyOn(dialog, 'getBoundingClientRect').mockReturnValue({
+      bottom: 500,
+      height: 400,
+      left: 200,
+      right: 660,
+      top: 100,
+      width: 460,
+      x: 200,
+      y: 100,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.mouseDown(header!, { clientX: 220, clientY: 120 });
+    expect(dialog).toHaveClass('is-dragging');
+    fireEvent.mouseMove(document, { clientX: 320, clientY: 220 });
+    fireEvent.mouseUp(document);
+
+    expect(dialog).toHaveStyle({ left: '300px', top: '200px' });
+    expect(dialog).not.toHaveClass('is-dragging');
   });
 
   it('sends a trimmed message and persists the returned conversation', async () => {
@@ -466,7 +505,7 @@ describe('DevChatDialog', () => {
     expect(observedSignal?.aborted).toBe(true);
   });
 
-  it('starts a new conversation, clears storage, and ignores a late old poll', async () => {
+  it('starts a new conversation without losing the old chat and ignores a late old poll', async () => {
     window.localStorage.setItem(STORAGE_KEY, 'old-conversation');
     let resolveOldPoll: ((value: {
       conversationId: string;
@@ -506,6 +545,10 @@ describe('DevChatDialog', () => {
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
     expect(screen.getByText('Start a conversation')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'New conversation' })).not.toBeInTheDocument();
+    expect(
+      [...screen.getByRole<HTMLSelectElement>('combobox', { name: 'Saved chats' }).options]
+        .map((option) => option.value),
+    ).toContain('old-conversation');
 
     await act(async () => {
       resolveOldPoll?.({
@@ -524,6 +567,66 @@ describe('DevChatDialog', () => {
 
     expect(screen.queryByText('Late reply from the old conversation')).not.toBeInTheDocument();
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it('switches between saved conversations in the same dialog', async () => {
+    storeDevChatConversationId('first-conversation', {
+      createdAt: '2026-07-29T18:00:00.000Z',
+      preview: 'First topic',
+    });
+    storeDevChatConversationId('second-conversation', {
+      createdAt: '2026-07-29T19:00:00.000Z',
+      preview: 'Second topic',
+    });
+    const fetchMessages = vi.fn(async (conversationId: string) => ({
+      conversationId,
+      cursor: conversationId === 'first-conversation' ? 1 : 2,
+      messages: [{
+        createdAt: conversationId === 'first-conversation'
+          ? '2026-07-29T18:00:00.000Z'
+          : '2026-07-29T19:00:00.000Z',
+        deliveryStatus: 'delivered' as const,
+        id: conversationId === 'first-conversation' ? 1 : 2,
+        message: conversationId === 'first-conversation'
+          ? 'First topic'
+          : 'Second topic',
+        sender: 'user' as const,
+      }],
+    }));
+
+    render(
+      <DevChatDialog
+        onClose={vi.fn()}
+        fetchMessages={fetchMessages}
+        sendMessage={vi.fn()}
+      />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText('Second topic', { selector: '.dev-chat-message p' }))
+      .toBeInTheDocument();
+
+    fireEvent.change(
+      screen.getByRole('combobox', { name: 'Saved chats' }),
+      { target: { value: 'first-conversation' } },
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe('first-conversation');
+    expect(fetchMessages).toHaveBeenLastCalledWith(
+      'first-conversation',
+      0,
+      expect.any(AbortSignal),
+      [],
+    );
+    expect(screen.getByText('First topic', { selector: '.dev-chat-message p' }))
+      .toBeInTheDocument();
+    expect(screen.queryByText('Second topic', { selector: '.dev-chat-message p' }))
+      .not.toBeInTheDocument();
   });
 
   it('keeps a send error visible when an overlapping poll succeeds', async () => {

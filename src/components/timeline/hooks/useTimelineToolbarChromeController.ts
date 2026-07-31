@@ -3,14 +3,17 @@ import type { ComponentProps } from 'react';
 import { TimelineToolbarChrome } from '../components/TimelineToolbarChrome';
 import { useTimelineControlsProps } from './useTimelineControlsProps';
 import { useTimelineDurationEditor } from './useTimelineDurationEditor';
+import type { TimelineCurveMode } from '../../../stores/timeline/viewPreferences';
 
 type TimelineToolbarProps = ComponentProps<typeof TimelineToolbarChrome>;
 type TimelineControlsParams = Parameters<typeof useTimelineControlsProps>[0];
 
 interface UseTimelineToolbarChromeControllerParams extends TimelineControlsParams {
   frameRate: number;
+  onToggleTimelineCurveMode: () => void;
   parseTime: (value: string) => number | null;
   setDuration: (duration: number) => void;
+  timelineCurveMode: TimelineCurveMode;
 }
 
 export function useTimelineToolbarChromeController({
@@ -24,6 +27,7 @@ export function useTimelineToolbarChromeController({
   isPlaying,
   loopPlayback,
   mediaFiles,
+  onToggleTimelineCurveMode,
   onFitToWindow,
   onPause,
   onPlay,
@@ -50,6 +54,7 @@ export function useTimelineToolbarChromeController({
   thumbnailsEnabled,
   toolMode,
   trackFocusMode,
+  timelineCurveMode,
   waveformsEnabled,
   zoom,
 }: UseTimelineToolbarChromeControllerParams) {
@@ -129,6 +134,7 @@ export function useTimelineToolbarChromeController({
     onTimelineDurationKeyDown: handleTimelineDurationKeyDown,
     onTimelineDurationSubmit: handleTimelineDurationSubmit,
     onTimelineTimeDoubleClick: handleTimelineTimeDoubleClick,
+    onToggleTimelineCurveMode,
     slotGridProgress,
     timelineControlsProps,
     timelineCurrentFrame,
@@ -138,6 +144,7 @@ export function useTimelineToolbarChromeController({
     timelineRulerCurrentTime,
     timelineTimeDisplayMode,
     timelineTotalFrames,
+    timelineCurveMode,
   };
 
   return {

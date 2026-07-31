@@ -9,15 +9,33 @@ import {
 import {
   DEFAULT_FLASHBOARD_CHAT_MODEL,
   DEFAULT_FLASHBOARD_CHAT_TEMPERATURE,
+  DEFAULT_FLASHBOARD_KERNEL_MODEL,
   DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT,
   sendFlashBoardChatMessage,
+  type AgentActivityEvent,
   type FlashBoardExecutedToolCall,
   type FlashBoardChatProvider,
   type FlashBoardOpenAiReasoningEffort,
+  type ChatIntent,
+  type DecisionPolicy,
   type KernelRunReport,
 } from '../../../services/flashboard/FlashBoardChatService';
+import { createAgentActivityEvent } from '../../../services/flashboard/FlashBoardChatActivity';
+import { resumeHostedKieAgentChat } from '../../../services/flashboard/FlashBoardHostedAgentTransport';
+import { hasHostedAgentReloadSnapshot } from '../../../services/kernelClient/hostedAgent';
 import { useFlashBoardStore } from '../../../stores/flashboardStore';
+import { useStoryboardStore } from '../../../stores/storyboardStore';
 import { appendFlashBoardPromptHistoryEntry } from '../../../stores/flashboardStore/activeGenerationRecords';
+import {
+  buildStoryboardDecisionContinuationPrompt,
+  createStoryboardDecisionRecord,
+  validateStoryboardDecisionSelection,
+  type StoryboardDecisionSelection,
+} from '../../../services/storyboard/decisions';
+import type {
+  KernelActiveDecision,
+  KernelDecisionPrompt,
+} from '../../../services/storyboard/contracts';
 import type { AIProvider } from '../../../stores/settingsStore';
 import {
   checkLemonadeHealth,
@@ -32,6 +50,7 @@ import {
   buildFlashBoardChatReasoningFallback,
 } from './FlashBoardChatOptionsPlanner';
 import type { FlashBoardChatMessage } from './FlashBoardChatOutput';
+import { canCopyFlashBoardChatMessage } from './FlashBoardChatMessageCopy';
 import {
   buildFlashBoardChatCompletionMessages,
   buildFlashBoardChatErrorMessages,
@@ -62,6 +81,12 @@ interface UseFlashBoardChatControllerInput {
   useKieAiKeyByDefault: boolean;
 }
 
+interface SubmitChatPromptOptions {
+  activeDecision?: KernelActiveDecision;
+  decisionSelection?: StoryboardDecisionSelection;
+  prompt?: string;
+}
+
 function createFlashBoardChatMessageId(role: FlashBoardChatMessage['role']): string {
   return `${role}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -89,6 +114,7 @@ export function useFlashBoardChatController({
   useKieAiKeyByDefault,
 }: UseFlashBoardChatControllerInput) {
   const chatAbortRef = useRef<AbortController | null>(null);
+  const resumedHostedTurnIdsRef = useRef(new Set<string>());
   const copiedChatResetTimeoutRef = useRef<number | null>(null);
   const [chatPanelOpen, setChatPanelOpen] = useState(initialMode === 'chat');
   const [chatPrompt, setChatPrompt] = useState(initialChatPrompt ?? '');
@@ -103,7 +129,17 @@ export function useFlashBoardChatController({
     DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT,
   );
   const [planThreeEnabled, setPlanThreeEnabled] = useState(false);
+  const [chatIntent, setChatIntent] = useState<ChatIntent>('execute');
+  const [decisionPolicy, setDecisionPolicy] = useState<DecisionPolicy>('milestones');
   const chatMessages = useFlashBoardStore((state) => state.chatMessages);
+  const storyboardDecisions = useStoryboardStore((state) => state.decisions);
+  const markStoryboardDecisionStale = useStoryboardStore(
+    (state) => state.markDecisionStale,
+  );
+  const putStoryboardDecision = useStoryboardStore((state) => state.putDecision);
+  const resolveStoryboardDecision = useStoryboardStore(
+    (state) => state.resolveDecision,
+  );
   const setChatMessages = useCallback((
     updater: FlashBoardChatMessage[] | ((current: FlashBoardChatMessage[]) => FlashBoardChatMessage[]),
   ) => {
@@ -228,6 +264,18 @@ export function useFlashBoardChatController({
     setChatError(null);
   }, [closePopover, isChatting]);
 
+  const handleChatIntentToggle = useCallback(() => {
+    if (isChatting) return;
+    setChatIntent((current) => current === 'plan' ? 'execute' : 'plan');
+    setChatError(null);
+  }, [isChatting]);
+
+  const handleDecisionPolicyChange = useCallback((policy: DecisionPolicy) => {
+    if (isChatting) return;
+    setDecisionPolicy(policy);
+    setChatError(null);
+  }, [isChatting]);
+
   useEffect(() => {
     const fallbackProvider = buildFlashBoardChatProviderFallback({ chatProvider, chatProviderOptions });
     if (fallbackProvider) {
@@ -235,19 +283,24 @@ export function useFlashBoardChatController({
     }
   }, [chatProvider, chatProviderOptions, handleChatProviderSelect]);
 
-  const submitChatPrompt = useCallback(async () => {
+  const submitChatPrompt = useCallback(async (options?: SubmitChatPromptOptions) => {
     closePopover();
 
-    const effectiveChatPrompt = chatPrompt.trim();
+    const effectiveChatPrompt = options?.prompt?.trim() ?? chatPrompt.trim();
+    const effectiveChatProvider = options?.activeDecision ? 'kernel' : chatProvider;
     const chatSendPlan = buildFlashBoardChatSendPlan({
-      activeChatModelId,
+      activeChatModelId: options?.activeDecision
+        ? DEFAULT_FLASHBOARD_KERNEL_MODEL
+        : activeChatModelId,
       canUseByoChat,
       canUseHostedChat,
       chatMessages,
       chatPanelOpen,
       planThreeEnabled,
-      chatProvider,
+      chatProvider: effectiveChatProvider,
       chatTemperature,
+      chatIntent,
+      decisionPolicy,
       effectiveChatPrompt,
       hasHostedSession,
       hostedAIEnabled,
@@ -302,6 +355,7 @@ export function useFlashBoardChatController({
     try {
       const executedToolCalls: FlashBoardExecutedToolCall[] = [];
       let kernelReport: KernelRunReport | undefined;
+      let kernelDecision: KernelDecisionPrompt | undefined;
       const updatePending = (patch: Partial<FlashBoardChatMessage>) => {
         setChatMessages((current) => current.map((message) => (
           message.id === assistantMessageId && message.isPending
@@ -309,14 +363,52 @@ export function useFlashBoardChatController({
             : message
         )));
       };
+      const appendActivity = (event: AgentActivityEvent | null) => {
+        if (!event) return;
+        setChatMessages((current) => current.map((message) => (
+          message.id === assistantMessageId && message.isPending
+            ? {
+                ...message,
+                activityEvents: [
+                  ...(message.activityEvents ?? []).filter((candidate) => candidate.id !== event.id),
+                  event,
+                ].slice(-100),
+              }
+            : message
+        )));
+      };
       const response = await sendFlashBoardChatMessage({
         ...chatSendPlan.request,
-        onExecutedToolCalls: (toolCalls) => executedToolCalls.push(...toolCalls),
+        ...(chatSendPlan.request.provider === 'kie' && chatSendPlan.request.hostedAvailable
+          ? {
+              idempotencyKey: `flashboard-chat-turn:${assistantMessageId}`,
+              resumeMessageId: assistantMessageId,
+            }
+          : {}),
+        ...(options?.activeDecision === undefined
+          ? {}
+          : { activeDecision: options.activeDecision }),
+        onActivityEvent: appendActivity,
+        onExecutedToolCalls: (toolCalls) => {
+          executedToolCalls.push(...toolCalls);
+          updatePending({ toolCalls: [...executedToolCalls] });
+        },
         onKernelProgress: (progress) => {
           updatePending({ kernelProgress: progress, text: progress.label });
+          appendActivity(createAgentActivityEvent(assistantMessageId, {
+            kind: 'progress',
+            label: progress.detail
+              ? `${progress.label}: ${progress.detail}`
+              : progress.label,
+            ...(progress.current === undefined ? {} : { current: progress.current }),
+            ...(progress.total === undefined ? {} : { total: progress.total }),
+          }));
         },
         onKernelReport: (report) => {
           kernelReport = report;
+        },
+        onKernelDecision: (decision) => {
+          kernelDecision = decision;
         },
         onPhase: (phase) => {
           updatePending(phase === 'kernel'
@@ -327,6 +419,34 @@ export function useFlashBoardChatController({
         systemPromptIncludeContext: chatSystemPromptSendContext,
         systemPromptOverride: chatSystemPromptOverride,
       });
+      if (options?.decisionSelection) {
+        if (kernelReport?.decline?.reason === 'staleDecision') {
+          markStoryboardDecisionStale(
+            options.decisionSelection.decisionId,
+          );
+        } else if (
+          kernelReport?.outcome !== 'declined'
+          && kernelReport?.outcome !== 'failed'
+        ) {
+          try {
+            resolveStoryboardDecision(options.decisionSelection);
+          } catch {
+            markStoryboardDecisionStale(
+              options.decisionSelection.decisionId,
+            );
+          }
+        }
+      }
+      let decisionId: string | undefined;
+      if (kernelDecision) {
+        const decision = createStoryboardDecisionRecord(kernelDecision, {
+          ...(options?.decisionSelection === undefined
+            ? {}
+            : { parentDecisionId: options.decisionSelection.decisionId }),
+        });
+        putStoryboardDecision(decision);
+        decisionId = decision.id;
+      }
       setChatMessages((current) => buildFlashBoardChatCompletionMessages(
         current,
         assistantMessageId,
@@ -334,6 +454,7 @@ export function useFlashBoardChatController({
         undefined,
         executedToolCalls,
         kernelReport,
+        decisionId,
       ));
     } catch (error) {
       const errorMessage = abortController.signal.aborted
@@ -356,6 +477,8 @@ export function useFlashBoardChatController({
     planThreeEnabled,
     chatProvider,
     chatTemperature,
+    chatIntent,
+    decisionPolicy,
     closePopover,
     canUseByoChat,
     canUseHostedChat,
@@ -365,13 +488,157 @@ export function useFlashBoardChatController({
     isChatting,
     lemonadeContextSize,
     lemonadeEndpoint,
+    markStoryboardDecisionStale,
     openAiReasoningEffort,
     openAuthDialog,
     openPricingDialog,
     openSettings,
+    putStoryboardDecision,
+    resolveStoryboardDecision,
     shouldUseHostedChat,
     setChatMessages,
     useHostedProductionProviders,
+  ]);
+
+  useEffect(() => {
+    if (isChatting || !canUseHostedChat) return;
+    const pendingMessage = chatMessages.find((message) => (
+      message.role === 'assistant'
+      && message.isPending === true
+      && hasHostedAgentReloadSnapshot(message.id)
+      && !resumedHostedTurnIdsRef.current.has(message.id)
+    ));
+    if (!pendingMessage) return;
+
+    resumedHostedTurnIdsRef.current.add(pendingMessage.id);
+    const abortController = new AbortController();
+    chatAbortRef.current = abortController;
+    const executedToolCalls: FlashBoardExecutedToolCall[] = [
+      ...(pendingMessage.toolCalls ?? []),
+    ];
+    const updatePending = (patch: Partial<FlashBoardChatMessage>) => {
+      setChatMessages((current) => current.map((message) => (
+        message.id === pendingMessage.id && message.isPending
+          ? { ...message, ...patch }
+          : message
+      )));
+    };
+    const appendActivity = (event: AgentActivityEvent | null) => {
+      if (!event) return;
+      setChatMessages((current) => current.map((message) => (
+        message.id === pendingMessage.id && message.isPending
+          ? {
+              ...message,
+              activityEvents: [
+                ...(message.activityEvents ?? []).filter((candidate) => candidate.id !== event.id),
+                event,
+              ].slice(-100),
+            }
+          : message
+      )));
+    };
+
+    setIsChatting(true);
+    setChatError(null);
+    updatePending({ isError: undefined, text: 'Reconnecting to kernel…' });
+
+    void resumeHostedKieAgentChat({
+      assistantMessageId: pendingMessage.id,
+      request: {
+        activityRunId: pendingMessage.id,
+        hostedAvailable: true,
+        model: activeChatModelId,
+        onActivityEvent: appendActivity,
+        onExecutedToolCalls: (toolCalls) => {
+          executedToolCalls.push(...toolCalls);
+          updatePending({ toolCalls: [...executedToolCalls] });
+        },
+        onPhase: (phase) => {
+          updatePending({
+            kernelProgress: undefined,
+            text: phase === 'kernel' ? 'Reconnecting to kernel…' : 'AI thinking…',
+          });
+        },
+        prompt: 'Resume the active hosted-agent turn.',
+        provider: 'kie',
+        resumeMessageId: pendingMessage.id,
+        signal: abortController.signal,
+        temperature: chatTemperature,
+        toolExecutionMode: 'normal',
+      },
+    }).then((response) => {
+      if (response === null) {
+        throw new Error('The hosted-agent turn can no longer be resumed.');
+      }
+      setChatMessages((current) => buildFlashBoardChatCompletionMessages(
+        current,
+        pendingMessage.id,
+        response,
+        undefined,
+        executedToolCalls,
+      ));
+    }).catch((error) => {
+      const errorMessage = abortController.signal.aborted
+        ? 'Chat stopped.'
+        : error instanceof Error ? error.message : 'Chat resume failed.';
+      setChatMessages((current) => buildFlashBoardChatErrorMessages(
+        current,
+        pendingMessage.id,
+        errorMessage,
+      ));
+    }).finally(() => {
+      if (chatAbortRef.current === abortController) {
+        chatAbortRef.current = null;
+      }
+      setIsChatting(false);
+    });
+  }, [
+    activeChatModelId,
+    canUseHostedChat,
+    chatMessages,
+    chatTemperature,
+    isChatting,
+    setChatMessages,
+  ]);
+
+  const handleStoryboardDecisionSubmit = useCallback((
+    selection: StoryboardDecisionSelection,
+  ) => {
+    if (isChatting) return;
+    const decision = storyboardDecisions[selection.decisionId];
+    if (!decision) {
+      setChatError('This decision is no longer available.');
+      return;
+    }
+    const validation = validateStoryboardDecisionSelection(decision, selection);
+    if (!validation.ok) {
+      if (validation.stale) {
+        markStoryboardDecisionStale(decision.id);
+      }
+      setChatError(validation.reason);
+      return;
+    }
+
+    setChatError(null);
+    void submitChatPrompt({
+      activeDecision: {
+        decisionId: validation.selection.decisionId,
+        optionIds: validation.selection.optionIds,
+        ...(validation.selection.freeform === undefined
+          ? {}
+          : { freeform: validation.selection.freeform }),
+      },
+      decisionSelection: validation.selection,
+      prompt: buildStoryboardDecisionContinuationPrompt(
+        decision,
+        validation.selection,
+      ),
+    });
+  }, [
+    isChatting,
+    markStoryboardDecisionStale,
+    storyboardDecisions,
+    submitChatPrompt,
   ]);
 
   const handleChatButtonClick = useCallback(async () => {
@@ -394,7 +661,7 @@ export function useFlashBoardChatController({
   }, [closePopover, setChatMessages]);
 
   const handleChatMessageDoubleClick = useCallback((message: FlashBoardChatMessage) => {
-    if (message.role !== 'assistant' || message.isPending || !message.text.trim()) {
+    if (!canCopyFlashBoardChatMessage(message)) {
       return;
     }
 
@@ -413,7 +680,7 @@ export function useFlashBoardChatController({
         copiedChatResetTimeoutRef.current = null;
       }, 1100);
     }).catch(() => {
-      setChatError('Could not copy response.');
+      setChatError('Could not copy message.');
     });
   }, []);
 
@@ -462,17 +729,22 @@ export function useFlashBoardChatController({
     clearChatError,
     copiedChatMessageId,
     handleChatButtonClick,
+    handleChatIntentToggle,
     handleChatInputKeyDown,
     handleChatMessageDoubleClick,
     handlePlanThreeToggle,
+    handleDecisionPolicyChange,
     handleChatProviderSelect,
     handleChatPromptChange,
+    handleStoryboardDecisionSubmit,
     handleClearChatHistory,
     handleClearChatPrompt,
     isChatting,
     lemonadeStatus,
     openAiReasoningEffort,
     planThreeEnabled,
+    chatIntent,
+    decisionPolicy,
     chatSystemPromptProvider,
     chatSystemPromptSendContext,
     setChatModel: handleChatModelSelect,

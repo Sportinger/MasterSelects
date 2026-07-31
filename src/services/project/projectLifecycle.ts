@@ -21,6 +21,10 @@ import { projectFileService } from '../projectFileService';
 import { isProjectStoreSyncInProgress, syncStoresToProject, saveCurrentProject } from './projectSave';
 import { loadProjectToStores } from './projectLoad';
 import { persistFlashBoardChatJournal } from './flashBoardChatProjectJournal';
+import {
+  resetStoryboardProjectState,
+  useStoryboardStore,
+} from '../../stores/storyboardStore';
 
 const log = Logger.create('ProjectSync');
 
@@ -267,6 +271,7 @@ export async function openExistingProject(): Promise<boolean> {
 export function closeCurrentProject(): void {
   projectFileService.closeProject();
   resetFlashBoardActiveGenerationState();
+  resetStoryboardProjectState();
   useExportStore.getState().reset();
   useMediaStore.getState().newProject();
 }
@@ -343,6 +348,22 @@ export function setupAutoSync(): void {
   registerAutoSyncDisposer(subscribeFlashBoardChatMessages(() => {
     markProjectDirtyAndMaybeSave();
     void persistFlashBoardChatJournal(getFlashBoardChatMessages());
+  }));
+  registerAutoSyncDisposer(useStoryboardStore.subscribe((state, previous) => {
+    if (
+      state.plans !== previous.plans
+      || state.scenes !== previous.scenes
+      || state.generationBriefs !== previous.generationBriefs
+      || state.candidates !== previous.candidates
+      || state.evidenceRefs !== previous.evidenceRefs
+      || state.coverageBySceneId !== previous.coverageBySceneId
+      || state.variantSets !== previous.variantSets
+      || state.variantOptions !== previous.variantOptions
+      || state.decisions !== previous.decisions
+      || state.templates !== previous.templates
+    ) {
+      markProjectDirtyAndMaybeSave();
+    }
   }));
 
   registerAutoSyncDisposer(useExportStore.subscribe(

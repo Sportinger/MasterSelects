@@ -1,4 +1,6 @@
 export type TimelineEmptyContextMenuCommandKind =
+  | 'add-storyboard-scene'
+  | 'add-caption-clip'
   | 'erase-gap'
   | 'erase-layer-gaps'
   | 'erase-all-gaps'
@@ -15,6 +17,7 @@ export interface TimelineEmptyContextMenuCommand {
 }
 
 export interface TimelineEmptyContextMenuModel {
+  sceneCommands: TimelineEmptyContextMenuCommand[];
   gapCommands: TimelineEmptyContextMenuCommand[];
   viewCommands: TimelineEmptyContextMenuCommand[];
 }
@@ -22,6 +25,7 @@ export interface TimelineEmptyContextMenuModel {
 export interface CreateTimelineEmptyContextMenuModelInput {
   time: number;
   trackId: string;
+  trackType?: 'video' | 'audio' | 'midi';
 }
 
 export interface ExecuteTimelineEmptyContextMenuCommandInput {
@@ -29,12 +33,30 @@ export interface ExecuteTimelineEmptyContextMenuCommandInput {
   onEraseLayerGaps: (time: number, trackId: string) => void;
   onEraseAllGaps: () => void;
   onFitCompToWindow: () => void;
+  onAddStoryboardScene?: (time: number, trackId: string) => void;
+  onAddCaptionClip?: (time: number, trackId: string) => void;
 }
 
 export function createTimelineEmptyContextMenuModel(
   input: CreateTimelineEmptyContextMenuModelInput,
 ): TimelineEmptyContextMenuModel {
   return {
+    sceneCommands: input.trackType === 'video'
+      ? [
+        {
+          key: 'add-caption-clip',
+          label: 'Add Caption Clip',
+          kind: 'add-caption-clip',
+          payload: { time: input.time, trackId: input.trackId },
+        },
+        {
+          key: 'add-storyboard-scene',
+          label: 'Add Scene Card',
+          kind: 'add-storyboard-scene',
+          payload: { time: input.time, trackId: input.trackId },
+        },
+      ]
+      : [],
     gapCommands: [
       {
         key: 'erase-gap',
@@ -69,6 +91,14 @@ export function executeTimelineEmptyContextMenuCommand(
   input: ExecuteTimelineEmptyContextMenuCommandInput,
 ): boolean {
   switch (command.kind) {
+    case 'add-caption-clip':
+      if (!command.payload || !input.onAddCaptionClip) return false;
+      input.onAddCaptionClip(command.payload.time, command.payload.trackId);
+      return true;
+    case 'add-storyboard-scene':
+      if (!command.payload || !input.onAddStoryboardScene) return false;
+      input.onAddStoryboardScene(command.payload.time, command.payload.trackId);
+      return true;
     case 'erase-gap':
       if (!command.payload) return false;
       input.onEraseGap(command.payload.time, command.payload.trackId);

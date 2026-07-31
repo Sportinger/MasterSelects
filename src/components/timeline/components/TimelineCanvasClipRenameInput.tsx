@@ -2,11 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useTimelineStore } from '../../../stores/timeline';
 import type { ClipInteractionShellGeometry } from '../interactionShell';
+import type { StoryboardClipProperties } from '../../../types/storyboard';
 
 type TimelineCanvasClipRenameInputProps = {
   clip: {
     id: string;
     name: string;
+    source?: { type?: string | null } | null;
+    storyboardProperties?: Pick<StoryboardClipProperties, 'sceneId'>;
   };
   geometry: ClipInteractionShellGeometry;
 };
@@ -16,6 +19,7 @@ export function TimelineCanvasClipRenameInput({
   geometry,
 }: TimelineCanvasClipRenameInputProps) {
   const renameMidiClip = useTimelineStore((state) => state.renameMidiClip);
+  const updateStoryboardScene = useTimelineStore((state) => state.updateStoryboardScene);
   const setClipRenameId = useTimelineStore((state) => state.setClipRenameId);
   const inputRef = useRef<HTMLInputElement>(null);
   const cancelledRef = useRef(false);
@@ -32,10 +36,18 @@ export function TimelineCanvasClipRenameInput({
     if (cancelledRef.current) return;
     const nextName = value.trim();
     if (nextName && nextName !== clip.name) {
-      renameMidiClip(clip.id, nextName);
+      if (clip.source?.type === 'storyboard' && clip.storyboardProperties) {
+        updateStoryboardScene(
+          clip.storyboardProperties.sceneId,
+          { title: nextName },
+          { historyLabel: 'Rename storyboard scene' },
+        );
+      } else {
+        renameMidiClip(clip.id, nextName);
+      }
     }
     setClipRenameId(null);
-  }, [clip.id, clip.name, renameMidiClip, setClipRenameId, value]);
+  }, [clip, renameMidiClip, setClipRenameId, updateStoryboardScene, value]);
 
   const cancel = useCallback(() => {
     cancelledRef.current = true;
