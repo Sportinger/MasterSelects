@@ -25,6 +25,10 @@ lerna-debug.log*
 
 # Testing
 coverage
+!src/components/properties/storyboard/coverage/
+!src/components/properties/storyboard/coverage/**
+!src/services/storyboard/coverage/
+!src/services/storyboard/coverage/**
 *.lcov
 
 # Editor directories and files
