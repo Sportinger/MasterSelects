@@ -16,7 +16,6 @@ import {
   type FlashBoardExecutedToolCall,
   type FlashBoardChatProvider,
   type FlashBoardOpenAiReasoningEffort,
-  type ChatIntent,
   type DecisionPolicy,
   type KernelRunReport,
 } from '../../../services/flashboard/FlashBoardChatService';
@@ -129,7 +128,7 @@ export function useFlashBoardChatController({
     DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT,
   );
   const [planThreeEnabled, setPlanThreeEnabled] = useState(false);
-  const [chatIntent, setChatIntent] = useState<ChatIntent>('execute');
+  const chatIntent = 'execute' as const;
   const [decisionPolicy, setDecisionPolicy] = useState<DecisionPolicy>('milestones');
   const chatMessages = useFlashBoardStore((state) => state.chatMessages);
   const storyboardDecisions = useStoryboardStore((state) => state.decisions);
@@ -263,12 +262,6 @@ export function useFlashBoardChatController({
     setPlanThreeEnabled((enabled) => !enabled);
     setChatError(null);
   }, [closePopover, isChatting]);
-
-  const handleChatIntentToggle = useCallback(() => {
-    if (isChatting) return;
-    setChatIntent((current) => current === 'plan' ? 'execute' : 'plan');
-    setChatError(null);
-  }, [isChatting]);
 
   const handleDecisionPolicyChange = useCallback((policy: DecisionPolicy) => {
     if (isChatting) return;
@@ -729,7 +722,6 @@ export function useFlashBoardChatController({
     clearChatError,
     copiedChatMessageId,
     handleChatButtonClick,
-    handleChatIntentToggle,
     handleChatInputKeyDown,
     handleChatMessageDoubleClick,
     handlePlanThreeToggle,
@@ -743,7 +735,6 @@ export function useFlashBoardChatController({
     lemonadeStatus,
     openAiReasoningEffort,
     planThreeEnabled,
-    chatIntent,
     decisionPolicy,
     chatSystemPromptProvider,
     chatSystemPromptSendContext,

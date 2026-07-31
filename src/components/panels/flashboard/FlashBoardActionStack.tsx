@@ -1,5 +1,4 @@
 import type {
-  ChatIntent,
   DecisionPolicy,
 } from '../../../services/flashboard/FlashBoardChatService';
 
@@ -11,12 +10,10 @@ interface FlashBoardActionStackProps {
   generateButtonLabel: string;
   generateButtonTitle: string;
   isChatting: boolean;
-  chatIntent?: ChatIntent;
   decisionPolicy?: DecisionPolicy;
   planThreeEnabled: boolean;
   onChatButtonClick: () => void | Promise<void>;
   onGenerate: () => void;
-  onChatIntentToggle?: () => void;
   onDecisionPolicyChange?: (policy: DecisionPolicy) => void;
   onPlanThreeToggle: () => void;
 }
@@ -29,12 +26,10 @@ export function FlashBoardActionStack({
   generateButtonLabel,
   generateButtonTitle,
   isChatting,
-  chatIntent = 'execute',
   decisionPolicy = 'automatic',
   planThreeEnabled,
   onChatButtonClick,
   onGenerate,
-  onChatIntentToggle,
   onDecisionPolicyChange,
   onPlanThreeToggle,
 }: FlashBoardActionStackProps) {
@@ -42,18 +37,6 @@ export function FlashBoardActionStack({
     <div className="fb-action-stack">
       {chatPanelOpen ? (
         <div className={`fb-chat-split-button ${planThreeEnabled ? 'plan-three-on' : ''}`}>
-          <button
-            className={`fb-chat-intent-toggle ${chatIntent === 'plan' ? 'active' : ''}`}
-            type="button"
-            aria-pressed={chatIntent === 'plan'}
-            disabled={isChatting}
-            onClick={onChatIntentToggle}
-            title={chatIntent === 'plan'
-              ? 'Plan mode is on — real media and paid generation are protected.'
-              : 'Execute mode is on — verified editor tools may change media.'}
-          >
-            {chatIntent === 'plan' ? 'Plan' : 'Execute'}
-          </button>
           <select
             className="fb-chat-decision-policy"
             aria-label="Decision policy"

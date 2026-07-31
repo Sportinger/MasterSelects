@@ -4,31 +4,27 @@ import { FlashBoardActionStack } from '../../src/components/panels/flashboard/Fl
 import { buildFlashBoardChatSendPlan } from '../../src/components/panels/flashboard/FlashBoardChatSendPlanner';
 
 describe('Storyboard directing controls', () => {
-  it('renders an accessible Plan chip and decision-policy control', () => {
-    const onChatIntentToggle = vi.fn();
+  it('keeps the legacy Plan toggle hidden while retaining decision policy and Plan 3', () => {
     const onDecisionPolicyChange = vi.fn();
     render(<FlashBoardActionStack
       canGenerate
       chatButtonLabel="Send"
       chatButtonTitle="Send prompt"
-      chatIntent="plan"
       chatPanelOpen
       decisionPolicy="milestones"
       generateButtonLabel="Generate"
       generateButtonTitle="Generate"
       isChatting={false}
       onChatButtonClick={vi.fn()}
-      onChatIntentToggle={onChatIntentToggle}
       onDecisionPolicyChange={onDecisionPolicyChange}
       onGenerate={vi.fn()}
       onPlanThreeToggle={vi.fn()}
       planThreeEnabled={false}
     />);
 
-    const plan = screen.getByRole('button', { name: 'Plan' });
-    expect(plan).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(plan);
-    expect(onChatIntentToggle).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'Plan' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Execute' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Plan 3' })).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole('combobox', { name: 'Decision policy' }), {
       target: { value: 'every-decision' },

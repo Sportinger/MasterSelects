@@ -145,7 +145,7 @@ export function FlashBoardComposer({
     copiedChatMessageId, handleChatButtonClick, handleChatInputKeyDown,
     handleChatMessageDoubleClick, handleChatProviderSelect, handleChatPromptChange,
     handleClearChatHistory, handleClearChatPrompt, handlePlanThreeToggle, isChatting,
-    planThreeEnabled, chatIntent, decisionPolicy, handleChatIntentToggle,
+    planThreeEnabled, decisionPolicy,
     handleDecisionPolicyChange, handleStoryboardDecisionSubmit,
     chatSystemPromptProvider, chatSystemPromptSendContext, showChatCloudActions,
   } = useFlashBoardChatController({
@@ -821,10 +821,9 @@ export function FlashBoardComposer({
         actionStack={{
           canGenerate, chatButtonLabel, chatButtonTitle: chatChargeTitle ?? 'Send chat prompt',
           chatPanelOpen, generateButtonLabel, generateButtonTitle,
-          isChatting, planThreeEnabled, chatIntent, decisionPolicy,
+          isChatting, planThreeEnabled, decisionPolicy,
           onChatButtonClick: handleChatButtonClick, onGenerate: handleGenerate,
           onPlanThreeToggle: handlePlanThreeToggle,
-          onChatIntentToggle: handleChatIntentToggle,
           onDecisionPolicyChange: handleDecisionPolicyChange,
         }}
       />
