@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, type MouseEvent as ReactMouseEvent } from 'react';
 import { useGuidedActionStore } from '../../stores/guidedActionStore';
 import {
   getGuidedActionRuntime,
@@ -14,6 +14,8 @@ import { GuidedCursor } from './GuidedCursor';
 import { GuidedSpotlight } from './GuidedSpotlight';
 import { GuidedStepHud } from './GuidedStepHud';
 import { GuidedTargetHighlight } from './GuidedTargetHighlight';
+import { ClippyMascot } from '../common/tutorial/ClippyMascot';
+import { requestTutorialNavigation } from '../common/tutorial/tutorialNavigationController';
 import './GuidedActionOverlay.css';
 
 export function GuidedActionOverlay() {
@@ -154,8 +156,12 @@ export function GuidedActionOverlay() {
     }
     return getResolvedRect(spotlight, targetResolutions);
   }, [spotlight, targetResolutions]);
+  const calloutTargetRect = useMemo(() => {
+    if (!callout?.target) return null;
+    return getResolvedRect(callout.target, targetResolutions);
+  }, [callout, targetResolutions]);
 
-  if (!activeSession || activeSession.status === 'completed' || activeSession.status === 'cancelled' || activeSession.status === 'skipped') {
+  if (!activeSession || (activeSession.status !== 'running' && activeSession.status !== 'cancelling')) {
     return null;
   }
 
@@ -170,10 +176,29 @@ export function GuidedActionOverlay() {
       .map((target) => getResolvedRect(target, targetResolutions))
       .filter((rect): rect is GuidedRect => rect !== null)
     : [];
+  const presentation = typeof activeSession.metadata?.presentation === 'string'
+    ? activeSession.metadata.presentation
+    : undefined;
+  const isTutorialSession = activeSession.context.playbackMode === 'tutorialDemo';
+  const showPanelOverviewChrome = presentation === 'panel-overview';
+  const calloutClusterPosition = getCalloutClusterPosition(
+    calloutTargetRect,
+    showPanelOverviewChrome,
+  );
 
   return (
-    <div className="guided-action-overlay" data-input-lock={inputLock.mode}>
-      {locked && <div className="guided-input-shield" />}
+    <div
+      className="guided-action-overlay"
+      data-input-lock={inputLock.mode}
+      data-presentation={presentation}
+    >
+      {locked && (
+        <div
+          className="guided-input-shield"
+          onClick={showPanelOverviewChrome ? dispatchTutorialNext : undefined}
+          onContextMenu={showPanelOverviewChrome ? dispatchTutorialPrevious : undefined}
+        />
+      )}
       {targetOnlyRects.length > 0 && <GuidedTargetOnlyShield allowedRects={targetOnlyRects} />}
 
       {spotlight && <GuidedSpotlight rect={spotlightRect} />}
@@ -205,14 +230,30 @@ export function GuidedActionOverlay() {
       )}
 
       {callout && (
-        <GuidedCallout
-          body={callout.body}
-          title={callout.title}
-        />
+        <div className="guided-callout-cluster" style={calloutClusterPosition}>
+          <GuidedCallout
+            key={`${callout.title}:${callout.body ?? ''}`}
+            body={callout.body}
+            header={showPanelOverviewChrome ? (
+              <GuidedStepHud
+                currentStep={currentStep}
+                embedded
+                session={activeSession}
+              />
+            ) : undefined}
+            title={callout.title}
+          />
+          {showPanelOverviewChrome && (
+            <div className="guided-clippy-wrapper" aria-hidden="true">
+              <ClippyMascot isClosing={activeSession.status === 'cancelling'} />
+            </div>
+          )}
+        </div>
       )}
 
       <GuidedCursor
         clicking={cursor.clicking}
+        dragging={cursor.dragging}
         inputGesture={cursor.inputGesture}
         position={cursor.position}
         transitionMs={cursor.transitionMs}
@@ -227,28 +268,36 @@ export function GuidedActionOverlay() {
         />
       )}
 
-      <GuidedStepHud currentStep={currentStep} session={activeSession} />
+      {!showPanelOverviewChrome && (
+        <GuidedStepHud currentStep={currentStep} session={activeSession} />
+      )}
 
       {(locked || inputLock.mode === 'targetOnly') && (
         <div className="guided-control-strip">
           <button
             type="button"
-            className="guided-control-btn"
-            title="Cancel guided action"
-            aria-label="Cancel guided action"
-            onClick={() => getGuidedActionRuntime().cancelSession(activeSession.id, 'Cancelled by user')}
+            className={`guided-control-btn ${isTutorialSession ? 'guided-control-btn--tutorial-exit' : ''}`}
+            title={isTutorialSession ? 'End walkthrough' : 'Cancel guided action'}
+            aria-label={isTutorialSession ? 'End walkthrough' : 'Cancel guided action'}
+            onClick={() => getGuidedActionRuntime().cancelSession(
+              activeSession.id,
+              isTutorialSession ? 'Walkthrough ended by user' : 'Cancelled by user',
+            )}
           >
-            x
+            <span aria-hidden="true">×</span>
+            {isTutorialSession && <span>End walkthrough</span>}
           </button>
-          <button
-            type="button"
-            className="guided-control-btn"
-            title="Skip guided action"
-            aria-label="Skip guided action"
-            onClick={() => getGuidedActionRuntime().skipSession(activeSession.id, 'Skipped by user')}
-          >
-            &gt;&gt;
-          </button>
+          {!isTutorialSession && (
+            <button
+              type="button"
+              className="guided-control-btn"
+              title="Skip guided action"
+              aria-label="Skip guided action"
+              onClick={() => getGuidedActionRuntime().skipSession(activeSession.id, 'Skipped by user')}
+            >
+              &gt;&gt;
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -266,7 +315,11 @@ function GuidedDragGhost({
 }) {
   return (
     <div
-      className={`guided-drag-ghost${ghost.thumbnailUrl ? ' guided-drag-ghost--thumbnail' : ''}`}
+      className={[
+        'guided-drag-ghost',
+        ghost.thumbnailUrl ? 'guided-drag-ghost--thumbnail' : '',
+        ghost.mediaType === 'Panel' ? 'guided-drag-ghost--panel' : '',
+      ].filter(Boolean).join(' ')}
       style={{
         transform: `translate3d(${position.x + 18}px, ${position.y + 16}px, 0)`,
         transitionDuration: `${Math.max(0, transitionMs ?? 420)}ms`,
@@ -453,4 +506,87 @@ function shouldTrackUserPointer(session: GuidedSessionSnapshot): boolean {
     || action.type === 'doubleClickVisual'
     || action.type === 'showInputGesture'
   ));
+}
+
+function getCalloutClusterPosition(
+  targetRect: GuidedRect | null,
+  followsTarget: boolean,
+): { left: number; top: number; width: number } {
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+  const margin = 24;
+  const preferredWidth = Math.min(620, Math.max(280, viewportWidth - margin * 2));
+  const estimatedHeight = 230;
+  const minimumTop = followsTarget ? 62 : 78;
+
+  if (!followsTarget || !targetRect) {
+    return {
+      left: Math.max(margin, (viewportWidth - preferredWidth) / 2),
+      top: Math.max(78, viewportHeight - estimatedHeight - margin),
+      width: preferredWidth,
+    };
+  }
+
+  const gap = 24;
+  const targetRight = targetRect.x + targetRect.width;
+  const targetBottom = targetRect.y + targetRect.height;
+  const availableLeft = targetRect.x - gap - margin;
+  const availableRight = viewportWidth - targetRight - gap - margin;
+  const minimumSideWidth = 220;
+  const bestSideWidth = Math.max(availableLeft, availableRight);
+  const targetUsesMostOfViewport = targetRect.width >= viewportWidth * 0.5;
+
+  // Keep the explanation beside the highlighted panel whenever a useful
+  // text column fits there. This prevents the callout from hiding the exact
+  // workspace area it is teaching.
+  if (!targetUsesMostOfViewport && bestSideWidth >= minimumSideWidth) {
+    const placeRight = availableRight >= availableLeft;
+    const width = Math.min(preferredWidth, bestSideWidth);
+    const left = placeRight
+      ? targetRight + gap
+      : targetRect.x - gap - width;
+    return {
+      left: clamp(left, margin, Math.max(margin, viewportWidth - width - margin)),
+      top: clamp(
+        targetRect.y + targetRect.height / 2 - estimatedHeight / 2,
+        minimumTop,
+        Math.max(minimumTop, viewportHeight - estimatedHeight - margin),
+      ),
+      width,
+    };
+  }
+
+  const spaceAbove = targetRect.y - minimumTop - gap;
+  const spaceBelow = viewportHeight - targetBottom - margin - gap;
+  const placeBelow = spaceBelow > spaceAbove;
+  const width = preferredWidth;
+  return {
+    left: clamp(
+      targetRect.x + targetRect.width / 2 - width / 2,
+      margin,
+      Math.max(margin, viewportWidth - width - margin),
+    ),
+    top: clamp(
+      placeBelow ? targetBottom + gap : targetRect.y - estimatedHeight - gap,
+      minimumTop,
+      Math.max(minimumTop, viewportHeight - estimatedHeight - margin),
+    ),
+    width,
+  };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function dispatchTutorialNext(event: ReactMouseEvent<HTMLDivElement>): void {
+  event.preventDefault();
+  event.stopPropagation();
+  requestTutorialNavigation('next');
+}
+
+function dispatchTutorialPrevious(event: ReactMouseEvent<HTMLDivElement>): void {
+  event.preventDefault();
+  event.stopPropagation();
+  requestTutorialNavigation('previous');
 }

@@ -10,7 +10,11 @@ export const devBridgeRoot = path.resolve(path.dirname(fileURLToPath(import.meta
 // Follow-up: keep the existing per Vite server/config start token rotation;
 // coordinated overlap handling for concurrent dev servers is tracked separately.
 export const bridgeToken = crypto.randomUUID()
-export const tokenFilePath = path.resolve(devBridgeRoot, '.ai-bridge-token')
+const configuredTokenFile = process.env.MASTERSELECTS_BRIDGE_TOKEN_FILE?.trim()
+export const bridgeTokenFileIsExplicit = Boolean(configuredTokenFile)
+export const tokenFilePath = configuredTokenFile
+  ? path.resolve(devBridgeRoot, configuredTokenFile)
+  : path.resolve(devBridgeRoot, '.ai-bridge-token')
 export const allowedFileRoots = buildAllowedFileRoots()
 
 type AllowedPathKind = 'file' | 'directory'

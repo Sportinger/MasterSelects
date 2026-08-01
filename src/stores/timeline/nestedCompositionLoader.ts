@@ -22,6 +22,7 @@ import {
   createRestoredNestedCompositionClip,
   createRestoredNestedMediaClip,
   createRestoredPrimitiveMeshClip,
+  createRestoredSolidClip,
   createRestoredTransitionOverlayClip,
   isRestoredSpatialSourceType,
   patchNestedClipInCompositionClip,
@@ -151,6 +152,7 @@ export interface NestedCompositionRestoreHooks {
 export interface NestedCompositionMediaState {
   files: MediaFile[];
   compositions: Composition[];
+  activeCompositionId?: string | null;
 }
 
 export type NestedCompositionMediaGet = () => NestedCompositionMediaState;
@@ -170,6 +172,8 @@ export interface LoadNestedClipsParams {
   isCurrentTimelineSession?: () => boolean;
   applySpatialFieldsWhenSourceMissing?: boolean;
   restoreHooks?: NestedCompositionRestoreHooks;
+  /** Composition IDs above `composition` in the current nesting chain. */
+  compositionPath?: readonly string[];
 }
 
 function patchNestedClipInStore(
@@ -256,8 +260,21 @@ async function loadSubNestedClips(
   applyNestedRuntimePatch?: (nestedClipId: string, patch: RestoredRuntimePatch) => void,
   applySpatialFieldsWhenSourceMissing = true,
   restoreHooks?: NestedCompositionRestoreHooks,
+  compositionPath: readonly string[] = [],
 ): Promise<TimelineClip[]> {
   if (depth >= MAX_NESTING_DEPTH || !composition.timelineData) return [];
+
+  if (compositionPath.includes(composition.id)) {
+    log.warn('Cyclic nested composition reference skipped', {
+      compositionId: composition.id,
+      compositionName: composition.name,
+      compositionPath: [...compositionPath, composition.id],
+      depth,
+    });
+    return [];
+  }
+
+  const nextCompositionPath = [...compositionPath, composition.id];
 
   const mediaStore = getMediaState();
   const result: TimelineClip[] = [];
@@ -280,6 +297,7 @@ async function loadSubNestedClips(
         applyNestedRuntimePatch,
         applySpatialFieldsWhenSourceMissing,
         restoreHooks,
+        nextCompositionPath,
       );
 
       result.push(createRestoredNestedCompositionClip(sc, {
@@ -310,6 +328,15 @@ async function loadSubNestedClips(
     }
 
     const clipId = generateNestedClipId(parentClipId, sc.id);
+    const solidClip = createRestoredSolidClip(sc, clipId, {
+      width: composition.width,
+      height: composition.height,
+    });
+    if (solidClip) {
+      result.push(solidClip);
+      continue;
+    }
+
     const motionClip = createRestoredMotionClip(sc, clipId);
     if (motionClip) {
       result.push(motionClip);
@@ -448,6 +475,7 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
     isCurrentTimelineSession,
     applySpatialFieldsWhenSourceMissing = true,
     restoreHooks,
+    compositionPath: paramsCompositionPath,
   } = params;
 
   if (depth >= MAX_NESTING_DEPTH) {
@@ -459,12 +487,29 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
 
   const getMediaState = paramsGetMediaState ?? await getDefaultNestedCompositionMediaState();
   const mediaStore = getMediaState();
+  const compositionPath = paramsCompositionPath ?? (
+    mediaStore.activeCompositionId
+      ? [mediaStore.activeCompositionId]
+      : []
+  );
+  if (compositionPath.includes(composition.id)) {
+    log.warn('Cyclic root composition reference skipped', {
+      compClipId,
+      compositionId: composition.id,
+      compositionName: composition.name,
+      compositionPath: [...compositionPath, composition.id],
+      depth,
+    });
+    return [];
+  }
+  const nextCompositionPath = [...compositionPath, composition.id];
   const nestedClips: TimelineClip[] = [];
   const nestedKeyframes = collectNestedClipKeyframes({
     parentClipId: compClipId,
     serializedClips: composition.timelineData.clips,
     compositions: mediaStore.compositions,
     depth,
+    compositionPath: nextCompositionPath,
   });
 
   log.info('loadNestedClips', {
@@ -520,6 +565,7 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
         },
         applySpatialFieldsWhenSourceMissing,
         restoreHooks,
+        nextCompositionPath,
       );
 
       nestedClip.nestedClips = subNestedClips;
@@ -553,6 +599,15 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
     }
 
     const nestedClipId = generateNestedClipId(compClipId, serializedClip.id);
+    const solidClip = createRestoredSolidClip(serializedClip, nestedClipId, {
+      width: composition.width,
+      height: composition.height,
+    });
+    if (solidClip) {
+      nestedClips.push(solidClip);
+      continue;
+    }
+
     const motionClip = createRestoredMotionClip(serializedClip, nestedClipId);
     if (motionClip) {
       nestedClips.push(motionClip);

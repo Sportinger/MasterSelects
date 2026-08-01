@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "templateId": "nested-super-project-v1",
+  "name": "Playwright Reference - Super Project v1",
+  "description": "Captured two-level nested-composition project with split nested clips, a masked 60 fps layer, animated mask paths, animated feather, opacity keyframes, linked nested audio, and a real-media montage.",
+  "projectFile": "project.json",
+  "source": {
+    "kind": "user-authored-reference-project",
+    "capturedFrom": "Super Project",
+    "capturePolicy": "History, workspace-only state, waveforms, analysis artifacts, unused media, and dangling linked-clip references are removed. Timeline content and stable IDs are retained."
+  },
+  "mediaLinks": [
+    {
+      "role": "dynamic-landscape",
+      "projectMediaId": "1785598241974-dz9f8g0rn",
+      "target": "Raw/Betaflight  FPV Freestyle.mp4"
+    },
+    {
+      "role": "high-frequency-60fps",
+      "projectMediaId": "1785598241974-oyqxfzmkg",
+      "target": "Raw/streifen - Kopie.mp4"
+    },
+    {
+      "role": "longform-landscape",
+      "projectMediaId": "1785598241974-b7tsq6mu0",
+      "target": "Raw/X-Rays Are Completely Safe.mp4"
+    }
+  ],
+  "compositions": {
+    "main": {
+      "id": "1785600190545-glca9lhks",
+      "name": "ÜberComp",
+      "width": 1920,
+      "height": 1080,
+      "frameRate": 30,
+      "duration": 550,
+      "splitTime": 0.8727257702515707,
+      "nestedVideoClipIds": [
+        "clip-1785603624558-wbaee-a",
+        "clip-1785603624558-wbaee-b"
+      ]
+    },
+    "level2": {
+      "id": "comp-1785598221282",
+      "name": "Nested Comp lvl 2",
+      "width": 1920,
+      "height": 1080,
+      "frameRate": 60,
+      "duration": 540,
+      "splitTime": 2.766666666666639,
+      "nestedVideoClipIds": [
+        "clip-1785601685538-jpi0q-a",
+        "clip-1785601685538-jpi0q-b"
+      ],
+      "animatedNestedClipId": "clip-1785601685538-jpi0q-b",
+      "expectedMaskCount": 1,
+      "expectedKeyframeCount": 11
+    },
+    "level1": {
+      "id": "1785598255557-ykoeb486m",
+      "name": "Nested Comp lvl 1",
+      "width": 1920,
+      "height": 1080,
+      "frameRate": 60,
+      "duration": 300,
+      "solidClipId": "clip-solid-1785601357890-1-1hkjn",
+      "stripedClipId": "clip-1785601399121-1-j8x8u",
+      "expectedSolidKeyframeCount": 6,
+      "expectedStripedMaskCount": 1,
+      "expectedStripedKeyframeCount": 5
+    }
+  },
+  "review": {
+    "initialComposition": "main",
+    "initialTime": 0.75,
+    "sampleTimes": [0.25, 0.75, 0.9, 2.7, 2.82, 4.1]
+  }
+}

@@ -15,6 +15,7 @@ export function MaskModeSegmented({ activeMask, clipId, updateMask }: MaskModeSe
           key={mode.value}
           type="button"
           className={activeMask.mode === mode.value ? 'active' : ''}
+          aria-pressed={activeMask.mode === mode.value}
           onClick={() => updateMask(clipId, activeMask.id, { mode: mode.value })}
         >
           {mode.label}

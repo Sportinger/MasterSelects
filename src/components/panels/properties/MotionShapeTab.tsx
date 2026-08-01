@@ -15,8 +15,10 @@ import {
 } from '../../../services/motionDesign/replicator/semanticOperations';
 import { DraggableNumber, KeyframeToggle } from './shared';
 import { MotionAppearanceStackEditor } from './MotionAppearanceStackEditor';
+import { MotionExpressionsSection } from './MotionExpressionsSection';
 import { MotionPropertyBrowser } from './MotionPropertyBrowser';
 import { MotionModifiersSection } from './MotionModifiersSection';
+import { MotionTemplatesSection } from './MotionTemplatesSection';
 
 interface MotionShapeTabProps {
   clipId: string;
@@ -332,6 +334,8 @@ export function MotionShapeTab({ clipId }: MotionShapeTabProps) {
 
       <MotionAppearanceStackEditor clipId={clipId} />
 
+      <MotionTemplatesSection clipId={clipId} />
+
       <div className="properties-section">
         <div className="control-row">
           <label className="prop-label">Replicator</label>
@@ -449,6 +453,7 @@ export function MotionShapeTab({ clipId }: MotionShapeTabProps) {
         )}
       </div>
 
+      <MotionExpressionsSection clipId={clipId} />
       <MotionModifiersSection clipId={clipId} motion={motion} />
     </div>
   );

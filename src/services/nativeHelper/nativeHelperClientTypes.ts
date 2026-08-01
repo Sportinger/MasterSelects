@@ -35,9 +35,6 @@ export type JsonObject = Record<string, unknown>;
 export type NativeHelperJsonMessage = JsonObject & {
   id?: string;
   type?: string;
-  request_id?: string;
-  tool?: string;
-  args?: Record<string, unknown>;
 };
 
 export type ProgressLikeResponse = Response & {

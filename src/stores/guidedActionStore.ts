@@ -19,6 +19,7 @@ export interface GuidedCursorState {
   visible: boolean;
   position: GuidedPoint | null;
   clicking: boolean;
+  dragging?: boolean;
   inputGesture: GuidedInputGesture | null;
   toolId: TimelineToolId | null;
   transitionMs?: number;
@@ -89,6 +90,7 @@ interface GuidedActionStoreState {
   recordTargetResolution: (resolution: GuidedTargetResolution) => void;
   appendDiagnostic: (sessionId: string, message: string, data?: Record<string, unknown>) => void;
   appendEvent: (event: GuidedRuntimeEvent) => void;
+  updateSessionMetadata: (sessionId: string, metadata: Record<string, unknown>) => void;
   markSessionCancelling: (sessionId: string) => void;
   finishSession: (sessionId: string, status: Exclude<GuidedSessionStatus, 'idle' | 'running' | 'cancelling'>, error?: string) => void;
   clearSession: () => void;
@@ -98,6 +100,7 @@ const INITIAL_CURSOR: GuidedCursorState = {
   visible: false,
   position: null,
   clicking: false,
+  dragging: false,
   inputGesture: null,
   toolId: null,
 };
@@ -128,6 +131,7 @@ export const useGuidedActionStore = create<GuidedActionStoreState>()(
               visible: true,
               position: previousPosition,
               clicking: false,
+              dragging: false,
               inputGesture: null,
               toolId: null,
               transitionMs: 0,
@@ -152,7 +156,7 @@ export const useGuidedActionStore = create<GuidedActionStoreState>()(
     },
 
     completeCurrentStep: () => {
-      set({ currentStep: null, cursor: { ...get().cursor, clicking: false, inputGesture: null } });
+      set({ currentStep: null, cursor: { ...get().cursor, clicking: false, dragging: false, inputGesture: null } });
     },
 
     setCursor: (cursor) => {
@@ -247,6 +251,23 @@ export const useGuidedActionStore = create<GuidedActionStoreState>()(
       }));
     },
 
+    updateSessionMetadata: (sessionId, metadata) => {
+      set((state) => {
+        if (!state.activeSession || state.activeSession.id !== sessionId) {
+          return {};
+        }
+        return {
+          activeSession: {
+            ...state.activeSession,
+            metadata: {
+              ...state.activeSession.metadata,
+              ...metadata,
+            },
+          },
+        };
+      });
+    },
+
     markSessionCancelling: (sessionId) => {
       set((state) => {
         if (!state.activeSession || state.activeSession.id !== sessionId) {
@@ -284,6 +305,8 @@ export const useGuidedActionStore = create<GuidedActionStoreState>()(
           dragGhost: null,
           spotlight: null,
           callout: null,
+          highlights: [],
+          previewPaths: [],
         };
       });
     },

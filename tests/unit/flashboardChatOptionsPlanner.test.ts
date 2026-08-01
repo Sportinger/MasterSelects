@@ -15,10 +15,9 @@ import {
 } from '../../src/services/flashboard/FlashBoardChatService';
 
 describe('FlashBoard chat options planner', () => {
-  it('offers AI and Local AI with AI as the default', () => {
+  it('offers only hosted AI with AI as the default', () => {
     expect(FLASHBOARD_CHAT_PROVIDERS).toEqual([
       { id: 'kie', label: 'AI' },
-      { id: 'lemonade', label: 'Local AI' },
     ]);
     expect(DEFAULT_FLASHBOARD_CHAT_PROVIDER).toBe('kie');
     expect(DEFAULT_FLASHBOARD_CHAT_MODEL).toBe('gpt-5-6-terra');
@@ -32,7 +31,6 @@ describe('FlashBoard chat options planner', () => {
     expect(buildFlashBoardChatModelOptions({
       chatModel: 'masterselects-ai',
       chatProvider: 'kernel',
-      lemonadeModels: [],
     })).toEqual([
       expect.objectContaining({
         id: 'masterselects-ai',
@@ -45,23 +43,15 @@ describe('FlashBoard chat options planner', () => {
     })).toBe('kie');
   });
 
-  it('falls back from the stale Lemonade default when discovered models are available', () => {
+  it('falls back from a stale hosted model to the current default', () => {
     const options = buildFlashBoardChatModelOptions({
-      chatModel: 'gemma4-it-e2b-FLM',
-      chatProvider: 'lemonade',
-      lemonadeModels: [
-        { id: 'AMD-OLMo-1B-SFT-DPO-Hybrid' },
-        { id: 'Bonsai-1.7B-gguf' },
-      ],
+      chatProvider: 'kie',
     });
 
-    expect(options.map((option) => option.id)).toEqual([
-      'AMD-OLMo-1B-SFT-DPO-Hybrid',
-      'Bonsai-1.7B-gguf',
-    ]);
+    expect(options.map((option) => option.id)).toContain(DEFAULT_FLASHBOARD_CHAT_MODEL);
     expect(buildFlashBoardChatModelFallback({
-      chatModel: 'gemma4-it-e2b-FLM',
+      chatModel: 'retired-model',
       chatModelOptions: options,
-    })).toBe('AMD-OLMo-1B-SFT-DPO-Hybrid');
+    })).toBe(DEFAULT_FLASHBOARD_CHAT_MODEL);
   });
 });

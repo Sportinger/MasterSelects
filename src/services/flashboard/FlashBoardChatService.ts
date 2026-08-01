@@ -1,6 +1,6 @@
 import { tryKernelFirst } from '../kernelClient/kernelChatGateway';
 import { buildFlashBoardChatSystemPrompt } from './FlashBoardChatPrompt';
-import { sendKieChat, sendLemonadeChat } from './FlashBoardChatProviderTransport';
+import { sendKieChat } from './FlashBoardChatProviderTransport';
 import {
   appendFlashBoardChatRunToolCalls,
   beginFlashBoardChatRun,
@@ -19,6 +19,7 @@ export type {
   AgentActivityEvent,
   ChatIntent,
   DecisionPolicy,
+  FlashBoardChatExecutionProfile,
   FlashBoardExecutedToolCall,
   FlashBoardChatModelOption,
   FlashBoardChatPromptVersion,
@@ -46,14 +47,9 @@ export {
 } from './FlashBoardChatConfig';
 export {
   buildFlashBoardChatSystemPrompt,
-  FLASHBOARD_CHAT_LEGACY_SYSTEM_PROMPT,
   FLASHBOARD_CHAT_SYSTEM_PROMPT,
 } from './FlashBoardChatPrompt';
-export {
-  getFlashBoardChatRun,
-  listFlashBoardChatRuns,
-  type FlashBoardChatRunRecord,
-} from './FlashBoardChatRunAudit';
+export type { FlashBoardChatRunRecord } from './FlashBoardChatRunAudit';
 
 /**
  * Projects kernel run steps into the executed-tool-call shape the chat run
@@ -107,12 +103,7 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
     });
     if (kernelResult.handled) {
       if (kernelResult.decision) request.onKernelDecision?.(kernelResult.decision);
-      const kernelRun = beginFlashBoardChatRun(
-        { ...request, prompt },
-        kernelResult.runId === undefined
-          ? 'agent-kernel: selected MasterSelectsAI run'
-          : `agent-kernel: selected MasterSelectsAI run ${kernelResult.runId}`,
-      );
+      const kernelRun = beginFlashBoardChatRun({ ...request, prompt });
       const completed = completeFlashBoardChatRun(kernelRun.runId, {
         executedToolCalls: kernelExecutedToolCalls(kernelResult.report),
         response: kernelResult.message,
@@ -130,15 +121,13 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
   request.onPhase?.(
     request.provider === 'kie' && request.hostedAvailable ? 'kernel' : 'provider',
   );
-  const systemPrompt = buildFlashBoardChatSystemPrompt(request.systemPromptOverride, {
-    includeContext: request.systemPromptIncludeContext !== false,
-    includePlaybook: request.systemPromptIncludePlaybook,
-    promptVersion: request.promptVersion,
+  const systemPrompt = buildFlashBoardChatSystemPrompt({
+    includeContext: true,
     userPrompt: request.playbookPrompt ?? prompt,
     visualReferences: request.visualReferences,
   });
   const executedToolCalls: Parameters<typeof completeFlashBoardChatRun>[1]['executedToolCalls'] = [];
-  const run = beginFlashBoardChatRun({ ...request, prompt }, systemPrompt);
+  const run = beginFlashBoardChatRun({ ...request, prompt });
   const tracedRequest: FlashBoardChatRequest = {
     ...request,
     activityRunId: run.runId,
@@ -152,9 +141,7 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
   };
 
   try {
-    const response = request.provider === 'lemonade'
-      ? await sendLemonadeChat(tracedRequest, systemPrompt)
-      : await sendKieChat(tracedRequest, systemPrompt);
+    const response = await sendKieChat(tracedRequest, systemPrompt);
     const completed = completeFlashBoardChatRun(run.runId, {
       executedToolCalls,
       response,

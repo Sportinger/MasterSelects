@@ -52,8 +52,8 @@ getTrackChildren()  // Query child tracks
   canvas-draws its own preview MUST NOT also render a type-icon pictogram overlay
   on top of it — the overlay is redundant clutter that hurts legibility.
   Currently this suppresses the icon for `midi` and `audio` clips (see
-  `showIcon` in `timelineClipCanvasChromeOverlays.ts`); extend the same rule to
-  any future clip type that gains a body preview. Do not add badges, icons, or
+  `showIcon` in `timelineClipCanvasChromeOverlays.ts`). This rule applies to
+  any clip type with a body preview. Do not add badges, icons, or
   chrome that sit over the previsualization area.
 - A single resolver, `getTimelineTrackColor()` (`src/components/timeline/trackColor.ts`),
   is the source of truth for a track's color. Precedence: a user-picked
@@ -66,10 +66,9 @@ getTrackChildren()  // Query child tracks
   in `TimelineTracks.css`). Keep header and clip in sync from these two anchors.
 - **Pitfall (issue #259 / #228 fallout):** clip **bodies** are painted by the
   **canvas** renderer (`TimelineClipCanvas`) using the color from
-  `getTimelineTrackColor()`. They are **not** styled by `.timeline-clip.*` CSS
-  anymore — that DOM path is dead for clip bodies. So any per-type clip color
-  (like MIDI's) must live in `getTimelineTrackColor()`, not in CSS, or it will be
-  silently lost the next time clip rendering is touched.
+  `getTimelineTrackColor()`. Per-type clip colors are resolved through
+  `getTimelineTrackColor()` rather than `.timeline-clip.*` CSS. Any per-type
+  clip color (like MIDI's) must live in `getTimelineTrackColor()`.
 
 ---
 
@@ -184,11 +183,11 @@ getTrackChildren()  // Query child tracks
 
 ### Timeline Tool Palette
 - The ruler/header strip contains a compact grouped timeline tool palette.
-- UX: the palette is always visible. It no longer hides behind a single tools-icon "hub" that fanned the buttons out on hover; that reveal/collapse animation was removed so every tool button sits in place at full size like a normal toolbar (issue #256). The hold-to-open grouped-tool flyout is unaffected.
+- UX: the palette is always visible, with every tool button in place at full size like a normal toolbar (issue #256). The hold-to-open grouped-tool flyout is available.
 - Root groups are Selection, Cut, Trim, Placement, and Navigation/Marking.
 - Clicking a root button activates the last enabled child tool for that group.
 - UX press-drag-release (issue #256): the whole root button is one target — there is no chevron/edge hit-zone. A short click just activates the group's current tool. Pressing and holding past `HOLD_TO_OPEN_MS` (200ms, pointer still down) opens the unclipped portal flyout; the pointer is captured so the user can slide off the small button onto the items and release over the desired tool to select it in one continuous gesture. Releasing back on the root button activates the current tool (a hold-and-release without choosing never swallows the click); releasing over empty space cancels. Right-click and the keyboard (`ArrowDown`) open a sticky, click-to-pick flyout instead (no held pointer to drag with).
-- The first enabled tools are Select, Track Select Forward/Backward/Forward All Tracks, Range Selection, Blade, Blade All Tracks, Split at Playhead, Split All at Playhead, Trim Start/End to Playhead, Ripple Trim Start/End to Playhead, Ripple Delete, Delete Gap, Edge Trim, Ripple Trim, Rolling Edit, Slip, Slide, Rate Stretch, Position/Overwrite, Hand/Pan, Zoom, Marker, In Point, Out Point, and Pen/Keyframe. Planned tools are visible but disabled until their operation-kernel migration exists.
+- Enabled tools are Select, Track Select Forward/Backward/Forward All Tracks, Range Selection, Blade, Blade All Tracks, Split at Playhead, Split All at Playhead, Trim Start/End to Playhead, Ripple Trim Start/End to Playhead, Ripple Delete, Delete Gap, Edge Trim, Ripple Trim, Rolling Edit, Slip, Slide, Rate Stretch, Position/Overwrite, Hand/Pan, Zoom, Marker, In Point, Out Point, and Pen/Keyframe.
 - Track Select Forward, Track Select Backward, and Track Select Forward All Tracks are enabled selection subtools; their clip clicks route through the shared pointer dispatcher and `select-clips-from-time` operation.
 - Range Selection is an enabled selection mode. Dragging on timeline space stores a timeline range with the affected unlocked visible track IDs and leaves a persistent range overlay for later lift/extract/copy commands.
 - Shared tool previews render through `TimelineToolOverlayLayer` for section-scrolled overlays such as Track Select highlights, Blade All Tracks cut lines, and blocked tool messages.
@@ -211,7 +210,7 @@ getTrackChildren()  // Query child tracks
 - Edge Trim, Ripple Trim, Rolling Edit, and Rate Stretch reuse the existing trim handles, but commit through `applyTimelineEditOperation` instead of direct clip mutations.
 - Edge-trimming a linked video/audio clip resizes the linked partner live in the canvas preview, including the source-extension ghost; holding `Alt` keeps the partner independent.
 - Slip and Slide are available as registered operation-kernel modes. Dragging a clip body with either tool previews the slip/slide and commits through `applyTimelineEditOperation`; `Alt` slips independently from linked audio/video.
-- Trim mode activation owns the edge handles before legacy clip drag, fade, and cut behaviors, so Blade/Hand/Zoom/Range clicks are no longer swallowed by trim/fade handles.
+- Trim mode activation gives Blade, Hand, Zoom, and Range clicks priority over trim/fade handles.
 
 ### Placement Tools
 - Position/Overwrite is an enabled Placement mode. Dropping media in this mode uses the shared `place-timeline-range` operation to clear the target range before the new clip is created.
@@ -289,7 +288,7 @@ getTrackChildren()  // Query child tracks
 - Double-clicking a transition body opens its linked transition composition. Mapped-v3 has exactly one full-duration outgoing source clip and one incoming source clip; panels and generated layers may remain additional editable layers. Legacy segmented compositions prompt for an explicit upgrade and are otherwise opened unchanged. See [Transition Compositions](./Transition-Compositions.md) for mapped timing, template versions, parity, and the backup lifecycle.
 
 ### Multicam
-- The old clip context-menu Combine Multicam entry has been replaced by Sync via Audio for selected audio/video pairs.
+- Sync via Audio is available for selected audio/video pairs.
 - Linked group movement preserves offsets so sync timing stays intact.
 
 ### Pick Whip Parenting
@@ -325,7 +324,7 @@ Audio and MIDI tracks share one audible solo group: soloing a MIDI track silence
 
 ## Playback and Zoom
 
-The toolbar and wheel gestures still drive playback and navigation:
+The toolbar and wheel gestures drive playback and navigation:
 
 - Space toggles play/pause.
 - `J`, `K`, `L` shuttle reverse, pause, and forward.
@@ -337,7 +336,7 @@ The toolbar and wheel gestures still drive playback and navigation:
 - Markers can be turned into `Stop Marker`s that automatically pause playback when crossed.
 - Marker MIDI bindings support `Jump To Marker`, `Play From Marker`, and `Jump To Marker And Stop`.
 - Left/Right arrows step frame by frame.
-- The ruler is a stack of independent **ruler lanes** (Time / Timecode / Frames / Bars+Beats) toggled from the **Rulers** checklist next to the View dropdown; each lane keeps a fixed format and only its tick density adapts to zoom (no frame↔time crossfade). Bars+Beats is projected through a per-composition TempoMap. Clicking a lane marks it active (highlighted) as the future snap target. See [Timeline Rulers](./Timeline-Rulers.md).
+- The ruler is a stack of independent **ruler lanes** (Time / Timecode / Frames / Bars+Beats) toggled from the **Rulers** checklist next to the View dropdown; each lane keeps a fixed format and only its tick density adapts to zoom (no frame↔time crossfade). Bars+Beats is projected through a per-composition TempoMap. Clicking a lane marks it active (highlighted). See [Timeline Rulers](./Timeline-Rulers.md).
 - The timeline **body** lane grid (behind clips, distinct from the ruler) still uses the active composition frame rate at deep zoom: the base time grid crossfades out while frame-accurate grid lines fade in with zoom.
 - Unselected clips keep persistent white edge brackets: each vertical edge has short top and bottom caps that fade inward, so adjacent clips form a visible `][` cut marker without obscuring thumbnails or waveforms. Selected clips retain the complete white outline.
 - `Alt+Scroll` or `Ctrl+Scroll` zooms the timeline around the mouse pointer by default; Preferences -> General -> Timeline can switch the zoom anchor to the playhead. While zooming in near either lane edge, a magnetic 48 px edge zone preserves the corresponding visible time boundary so the nearby beginning or end is not pushed offscreen. Timeline zoom remains contained behind the dedicated navigator instead of exposing a second native panel scrollbar. Faster wheel gestures use larger zoom steps.
@@ -355,7 +354,7 @@ The timeline navigator below the tracks provides the same scroll and zoom contro
 
 - Thumbnails, waveforms, and transcript markers can each be toggled from the toolbar.
 - RAM preview caches 30 fps frames.
-- Composition video bake regions render a compressed preview proxy through the export pipeline and use it as a single layer during editor preview playback. Clip-scoped video bake regions still use the transient RAM preview path until per-layer alpha-capable bake artifacts are added.
+- Composition video bake regions render a compressed preview proxy through the export pipeline and use it as a single layer during editor preview playback. Clip-scoped video bake regions use the transient RAM preview path.
 - Video bake proxy artifacts are runtime-only; project persistence keeps the region marks and resets volatile bake status after reload or timeline cache invalidation.
 - Proxy caching keeps proxy frame ranges warm in the background.
 - Export progress is shown directly on the timeline.

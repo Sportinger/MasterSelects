@@ -10,13 +10,11 @@ import {
   type FlashBoardChatProviderOption,
   type FlashBoardOpenAiReasoningEffort,
 } from '../../../services/flashboard/FlashBoardChatService';
-import { DEFAULT_LEMONADE_MODEL, type LemonadeModelInfo } from '../../../services/lemonadeProvider';
 
 interface BuildFlashBoardChatOptionsStateInput {
   chatModel: string;
   chatProvider: FlashBoardChatProvider;
   isChatting: boolean;
-  lemonadeModels: LemonadeModelInfo[];
 }
 
 export interface FlashBoardChatOptionsState {
@@ -34,47 +32,17 @@ export interface FlashBoardChatOptionsState {
 }
 
 export function buildFlashBoardChatModelOptions({
-  chatModel,
   chatProvider,
-  lemonadeModels,
-}: Pick<BuildFlashBoardChatOptionsStateInput, 'chatModel' | 'chatProvider' | 'lemonadeModels'>): FlashBoardChatModelOption[] {
-  if (chatProvider !== 'lemonade') {
-    return FLASHBOARD_CHAT_MODEL_OPTIONS[chatProvider];
-  }
-
-  const discoveredModels = lemonadeModels.map((model) => ({
-    id: model.id,
-    label: model.name || model.id,
-    provider: 'lemonade' as const,
-    supportsTemperature: true,
-    supportsTools: true,
-  }));
-  const fallbackModels = FLASHBOARD_CHAT_MODEL_OPTIONS.lemonade;
-  const mergedModels = discoveredModels.length > 0 ? discoveredModels : fallbackModels;
-
-  if (discoveredModels.length === 0 && chatModel && !mergedModels.some((model) => model.id === chatModel)) {
-    return [
-      ...mergedModels,
-      {
-        id: chatModel,
-        label: chatModel === DEFAULT_LEMONADE_MODEL ? 'Lemonade' : chatModel,
-        provider: 'lemonade',
-        supportsTemperature: true,
-        supportsTools: true,
-      },
-    ];
-  }
-
-  return mergedModels;
+}: Pick<BuildFlashBoardChatOptionsStateInput, 'chatProvider'>): FlashBoardChatModelOption[] {
+  return FLASHBOARD_CHAT_MODEL_OPTIONS[chatProvider];
 }
 
 export function buildFlashBoardChatOptionsState({
   chatModel,
   chatProvider,
   isChatting,
-  lemonadeModels,
 }: BuildFlashBoardChatOptionsStateInput): FlashBoardChatOptionsState {
-  const chatModelOptions = buildFlashBoardChatModelOptions({ chatModel, chatProvider, lemonadeModels });
+  const chatModelOptions = buildFlashBoardChatModelOptions({ chatProvider });
   const activeChatModel = chatModelOptions.find((model) => model.id === chatModel) ?? chatModelOptions[0];
   const activeChatModelId = activeChatModel?.id ?? chatModel;
   const chatTemperatureSupported = activeChatModel?.supportsTemperature ?? chatProvider !== 'kie';
@@ -105,11 +73,8 @@ export function buildFlashBoardChatOptionsState({
 
 export function buildFlashBoardChatProviderDefaultModel(
   provider: FlashBoardChatProvider,
-  lemonadeModels: LemonadeModelInfo[],
 ): string | undefined {
-  return provider === 'lemonade'
-    ? lemonadeModels[0]?.id ?? FLASHBOARD_CHAT_MODEL_OPTIONS.lemonade[0]?.id
-    : FLASHBOARD_CHAT_MODEL_OPTIONS[provider][0]?.id;
+  return FLASHBOARD_CHAT_MODEL_OPTIONS[provider][0]?.id;
 }
 
 export function buildFlashBoardChatProviderFallback({

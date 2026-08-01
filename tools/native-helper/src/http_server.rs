@@ -1,23 +1,12 @@
-//! Local HTTP file and AI bridge server routes.
+//! Local HTTP file server routes.
 
-use futures_util::SinkExt;
-use serde::Deserialize;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
-use tokio_tungstenite::tungstenite::protocol::Message;
 use tracing::{info, warn};
 use warp::Filter;
 
 use crate::session::AppState;
 use crate::utils;
-
-#[derive(Debug, Deserialize)]
-struct AiToolHttpRequest {
-    tool: String,
-    #[serde(default)]
-    args: serde_json::Value,
-}
 
 fn with_state(
     state: Arc<AppState>,
@@ -107,37 +96,7 @@ pub(super) async fn run(port: u16, state: Arc<AppState>, allowed_origins: Arc<Ve
         .and(warp::get())
         .and_then(get_project_root);
 
-    let state_for_status = state.clone();
-    let state_for_api_status = state.clone();
-    let state_for_post = state.clone();
-    let state_for_api_post = state.clone();
     let state_for_startup_token = state.clone();
-
-    // GET /ai-tools and /api/ai-tools â€” status for external AI bridge (NO AUTH - safe metadata)
-    let ai_tools_status_route = warp::path("ai-tools")
-        .and(warp::get())
-        .and(with_state(state_for_status))
-        .and_then(get_ai_tools_status);
-    let api_ai_tools_status_route = warp::path!("api" / "ai-tools")
-        .and(warp::get())
-        .and(with_state(state_for_api_status))
-        .and_then(get_ai_tools_status);
-
-    // POST /ai-tools and /api/ai-tools â€” forward a tool call (AUTH REQUIRED)
-    let require_auth_ai = require_auth.clone();
-    let ai_tools_route = warp::path("ai-tools")
-        .and(warp::post())
-        .and(require_auth_ai)
-        .and(warp::body::json::<AiToolHttpRequest>())
-        .and(with_state(state_for_post))
-        .and_then(handle_ai_tools_request);
-    let require_auth_api_ai = require_auth.clone();
-    let api_ai_tools_route = warp::path!("api" / "ai-tools")
-        .and(warp::post())
-        .and(require_auth_api_ai)
-        .and(warp::body::json::<AiToolHttpRequest>())
-        .and(with_state(state_for_api_post))
-        .and_then(handle_ai_tools_request);
 
     // GET /startup-token â€” returns the auth token for local discovery (localhost only, no auth)
     let startup_token_route = warp::path("startup-token")
@@ -148,10 +107,6 @@ pub(super) async fn run(port: u16, state: Arc<AppState>, allowed_origins: Arc<Ve
     let routes = file_route
         .or(upload_route)
         .or(project_root_route)
-        .or(ai_tools_status_route)
-        .or(api_ai_tools_status_route)
-        .or(ai_tools_route)
-        .or(api_ai_tools_route)
         .or(startup_token_route)
         .recover(handle_rejection)
         .with(cors);
@@ -200,83 +155,6 @@ async fn get_startup_token(state: Arc<AppState>) -> Result<impl warp::Reply, war
             "token": null,
             "auth_disabled": true,
         }))),
-    }
-}
-
-async fn get_ai_tools_status(state: Arc<AppState>) -> Result<impl warp::Reply, warp::Rejection> {
-    let editor = state.get_editor_client().await;
-    let pending = state.pending_ai_request_count().await;
-
-    Ok(warp::reply::json(&serde_json::json!({
-        "ok": true,
-        "editor_connected": editor.is_some(),
-        "pending": pending,
-        "editor": editor.as_ref().map(|client| serde_json::json!({
-            "role": client.role,
-            "session_name": client.session_name,
-            "app_version": client.app_version,
-            "capabilities": client.capabilities,
-        })),
-    })))
-}
-
-async fn handle_ai_tools_request(
-    body: AiToolHttpRequest,
-    state: Arc<AppState>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let editor = match state.get_editor_client().await {
-        Some(client) => client,
-        None => {
-            return Ok(warp::reply::json(&serde_json::json!({
-                "success": false,
-                "error": "No editor session connected to Native Helper"
-            })));
-        }
-    };
-
-    let args = if body.args.is_null() {
-        serde_json::json!({})
-    } else {
-        body.args
-    };
-
-    let request_id = format!("ai-{}", uuid::Uuid::new_v4().simple());
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    state.add_ai_request(request_id.clone(), tx).await;
-
-    let payload = serde_json::json!({
-        "type": "ai_tool_request",
-        "request_id": request_id,
-        "tool": body.tool,
-        "args": args,
-    });
-
-    let send_result = {
-        let mut sender = editor.sender.lock().await;
-        sender.send(Message::Text(payload.to_string())).await
-    };
-
-    if send_result.is_err() {
-        state.remove_ai_request(&request_id).await;
-        return Ok(warp::reply::json(&serde_json::json!({
-            "success": false,
-            "error": "Failed to forward request to editor session"
-        })));
-    }
-
-    match tokio::time::timeout(Duration::from_secs(30), rx).await {
-        Ok(Ok(result)) => Ok(warp::reply::json(&result)),
-        Ok(Err(_)) => Ok(warp::reply::json(&serde_json::json!({
-            "success": false,
-            "error": "Editor session disconnected while handling AI request"
-        }))),
-        Err(_) => {
-            state.remove_ai_request(&request_id).await;
-            Ok(warp::reply::json(&serde_json::json!({
-                "success": false,
-                "error": "Timeout: editor did not respond within 30s"
-            })))
-        }
     }
 }
 

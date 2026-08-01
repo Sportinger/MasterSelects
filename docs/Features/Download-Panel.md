@@ -8,11 +8,12 @@ Paste and queue online video downloads through the Media panel, Native Helper, a
 
 ## Overview
 
-Downloads are no longer a standalone dock tab. The old `download` and `youtube` panel types are saved-layout migration targets; the active surface is the Downloads prompt at the bottom of the Media panel. The surface supports:
+The Downloads prompt at the bottom of the Media panel is the active download surface. The surface supports:
 
 - direct URL paste for YouTube and other `yt-dlp`-supported sites
 - one-item format selection before queueing, including video recommendations and YouTube MP3 audio
 - progress cards in the same Media tray queue used by AI generations
+- up to two downloads running in parallel
 - automatic import into Media once a download completes
 - existing-download detection inside the current project before re-downloading
 
@@ -32,9 +33,10 @@ The workflow detects common platforms up front and otherwise falls back to a gen
 | Reddit | `reddit.com` | `Downloads/Reddit/` |
 | Vimeo | `vimeo.com` | `Downloads/Vimeo/` |
 | Twitch | `twitch.tv` | `Downloads/Twitch/` |
+| Dailymotion | `dailymotion.com` | `Downloads/Other/` |
 | Other | any other HTTP(S) URL | `Downloads/Other/` |
 
-Any site that `yt-dlp` can fetch can still be downloaded even if it is not listed in the table above.
+Any site that `yt-dlp` can fetch can be downloaded even if it is not listed in the table above.
 
 ---
 
@@ -43,13 +45,12 @@ Any site that `yt-dlp` can fetch can still be downloaded even if it is not liste
 ### URL Paste
 
 - Pasting one video URL in the Media panel prompt loads available helper recommendations before queueing
-- The prompt shows the source title/uploader, resolution choices, video codec, audio handling, and whether the helper will merge streams
-- YouTube URLs use the oEmbed metadata path first
-- Pasting a non-YouTube URL asks the Native Helper for format/info metadata
+- The prompt shows the source title/uploader, resolution choices, video codec, audio handling, and whether the helper merges streams
+- The prompt asks the Native Helper for format/info metadata for every URL; queue processing also tries YouTube oEmbed metadata before falling back to the helper
 
 ### YouTube Search Compatibility
 
-- AI tools can still search YouTube and persist results in the legacy `youtubeStore` project payload
+- AI tools can search YouTube and keep results in the legacy in-memory `youtubeStore` for the current session
 - The visible user workflow is URL-first from the Media panel Downloads prompt
 
 ---
@@ -84,7 +85,7 @@ Each queue card can show:
 - progress bar
 - retry for failed downloads
 
-When a File System Access project is open, the queue checks whether `Downloads/<Platform>/<SanitizedTitle>.<extension>` already exists and imports that file instead of downloading it again. Native Helper projects do not currently use the same download-folder existence check; their completed helper downloads are copied back through normal media import.
+When a File System Access project is open, the queue checks whether `Downloads/<Platform>/<SanitizedTitle>.<extension>` already exists and imports that file instead of downloading it again. Native Helper projects copy completed helper downloads back through normal media import.
 
 ---
 
@@ -107,9 +108,9 @@ The Media panel prompt imports completed downloads into the Media panel. Drag th
 
 ### Pending Clip Flow
 
-AI tools can still use a direct download-and-import timeline flow. That path does not wait for the final file before showing something in the editor.
+AI tools can use a direct download-and-import timeline flow. That path does not wait for the final file before showing something in the editor.
 
-1. A pending download clip is inserted on the first video track at the current playhead
+1. A pending download clip is inserted on the first video track at the requested time, or at the end of existing timeline content by default
 2. The clip stores the source title, thumbnail, duration estimate, and download status
 3. Progress updates stream into that pending clip while the helper is downloading
 4. Once the file arrives, the pending clip is converted into a normal playable media clip
@@ -119,22 +120,15 @@ AI tools can still use a direct download-and-import timeline flow. That path doe
 
 ## Format Selection
 
-The Media panel prompt lists the helper's recommended formats for one pasted URL before the item enters the queue. Each option shows resolution, video codec, audio handling, and whether `yt-dlp` will merge separate streams. Audio-only recommendations are shown as `Audio only` when the helper can find `ffmpeg`; they use the source's best audio stream converted to MP3. The selected recommendation's `formatId` is stored on the queue job and passed through to the helper download command.
+The Media panel prompt lists the helper's recommended formats for one pasted URL before the item enters the queue. Each option shows resolution, video codec, audio handling, and whether `yt-dlp` merges separate streams. Audio-only recommendations are shown as `Audio only` when the helper can find `ffmpeg`; they use the source's best audio stream converted to MP3. The selected recommendation's `formatId` is stored on the queue job and passed through to the helper download command.
 
-AI tools can still call `listVideoFormats` and pass a specific `formatId` to `downloadAndImportVideo`.
+AI tools can call `listVideoFormats` and pass a specific `formatId` to `downloadAndImportVideo`.
 
-The recommended order is:
+The helper recommends up to six non-AV1 video formats, ordered by available resolution and preferring H.264 within a resolution. It adds an MP3 audio option only when an audio stream and `ffmpeg` are available. The download command merges video downloads to MP4.
 
-| Priority | Codec | Container | Reason |
-|----------|-------|-----------|--------|
-| 1 | H.264 | MP4 | best browser/export compatibility |
-| 2 | VP9 | WebM | good fallback quality |
-| 3 | AV1 | WebM | compression-efficient but more compatibility-sensitive |
-| 4 | MP3 audio | MP3 | audio-only import/download |
+If no recommendations are available, the prompt can queue the helper default.
 
-If no recommendations are available, the prompt can still queue the helper default.
-
-When a specific format is selected, the queue re-downloads the source instead of importing an existing title-matched project file, so a previous lower-resolution download is not reused for a new format choice.
+When a specific format is selected, the queue downloads the source instead of importing an existing title-matched project file, so the selected format is preserved.
 
 If YouTube blocks anonymous extraction, the helper retries with Chrome cookies before failing.
 
@@ -168,7 +162,7 @@ For Native Helper-backed project persistence, completed downloads are fetched fr
 
 - The helper is required for the actual download path
 - Non-YouTube metadata lookup also depends on the helper
-- Search without a YouTube API key is limited to pasted URLs/IDs
+- YouTube AI search requires a configured YouTube Data API key; the visible download flow accepts pasted HTTP(S) URLs
 - Duplicate detection is filename/title based inside the File System Access project download folders; it is not a remote content hash
 
 ---

@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useId, useRef } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
-import { createMaskNumericProperty } from '../../types/animationProperties';
 import type { ClipMask } from '../../types/masks';
 import type { TimelineClip } from '../../types/timeline';
-import { endBatch, startBatch } from '../../stores/historyStore';
+import { startBatch } from '../../stores/historyStore';
+import { commitWholeMaskDrag } from './maskPathDragPreview';
 
 interface MaskDragState {
   isDragging: boolean;
@@ -162,22 +162,20 @@ export function useMaskDrag(
       const finalState = maskDragState.current;
       if (finalState.didDrag) {
         const batch = startBatch('Move mask');
-        try {
-          const store = useTimelineStore.getState();
-          store.setPropertyValue(
-            selectedClip.id,
-            createMaskNumericProperty(activeMask.id, 'position.x'),
-            finalState.latestPositionX,
-          );
-          store.setPropertyValue(
-            selectedClip.id,
-            createMaskNumericProperty(activeMask.id, 'position.y'),
-            finalState.latestPositionY,
-          );
-          store.invalidateCache();
-        } finally {
-          if (batch.opened) endBatch();
-        }
+        commitWholeMaskDrag(
+          useTimelineStore.getState(),
+          selectedClip.id,
+          activeMask,
+          {
+            x: finalState.startPositionX,
+            y: finalState.startPositionY,
+          },
+          {
+            x: finalState.latestPositionX,
+            y: finalState.latestPositionY,
+          },
+          batch,
+        );
       }
 
       clearOwnedMaskPreview();

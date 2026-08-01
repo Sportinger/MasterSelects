@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "caseId": "linked-generated-identity-plan-v1",
+  "expectedStateFingerprint": "sha256:22f6927c8e2acae42597b4b7306894c32621e10259c803c84333ea0502ad39c0",
+  "initialTimeline": {
+    "tracks": [
+      { "id": "video-track", "type": "video" },
+      { "id": "audio-track", "type": "audio" }
+    ],
+    "clips": [
+      {
+        "id": "video-source",
+        "trackId": "video-track",
+        "type": "video",
+        "startTime": 0,
+        "duration": 15,
+        "inPoint": 0,
+        "outPoint": 15,
+        "linkedClipId": "audio-source",
+        "sourceId": "source-1"
+      },
+      {
+        "id": "audio-source",
+        "trackId": "audio-track",
+        "type": "audio",
+        "startTime": 0,
+        "duration": 15,
+        "inPoint": 0,
+        "outPoint": 15,
+        "linkedClipId": "video-source",
+        "sourceId": "source-1"
+      }
+    ]
+  },
+  "compiledSteps": [
+    {
+      "arguments": {
+        "clipId": "video-source",
+        "times": [3.25, 5.5, 9.75, 12],
+        "withLinked": true
+      },
+      "operationId": "timeline.segment.split.v1",
+      "sequence": 1,
+      "stepId": "step-1"
+    },
+    {
+      "arguments": {
+        "clipIds": [
+          {
+            "$result": {
+              "path": ["data", "segments", "videoClipIds", 1],
+              "stepId": "step-1"
+            }
+          },
+          {
+            "$result": {
+              "path": ["data", "segments", "videoClipIds", 3],
+              "stepId": "step-1"
+            }
+          }
+        ],
+        "withLinked": true
+      },
+      "operationId": "timeline.segment.delete-many.v1",
+      "sequence": 2,
+      "stepId": "step-2"
+    }
+  ],
+  "expectedCanonicalTimeline": [
+    ["audio:0", "audio", 0, 3.25, 0, 3.25, 3],
+    ["audio:0", "audio", 5.5, 4.25, 5.5, 9.75, 4],
+    ["audio:0", "audio", 12, 3, 12, 15, 5],
+    ["video:0", "video", 0, 3.25, 0, 3.25, 0],
+    ["video:0", "video", 5.5, 4.25, 5.5, 9.75, 1],
+    ["video:0", "video", 12, 3, 12, 15, 2]
+  ]
+}

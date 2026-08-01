@@ -5,11 +5,17 @@ import type {
   HostedAgentK2PageLease,
   HostedAgentK2SessionStatus,
   HostedAgentK1ToolBatchResult,
+  HostedAgentK2OperationResultPost,
+  HostedAgentK2OperationSettlementPost,
 } from './contracts';
 import {
   HostedAgentK2InPageLedger,
   type HostedAgentK2BatchExecutor,
 } from './k2Ledger';
+import {
+  KernelOperationRoundTripV1,
+} from '../wp1Spike/operationRoundTrip';
+import type { KernelOperationSessionDescriptorV1 } from '../wp1Spike/operationSessionAuthority';
 
 type ToolBatchEvent = Extract<HostedAgentEvent, { kind: 'tool-batch-request' }>;
 
@@ -19,6 +25,10 @@ export interface HostedAgentK2ClientTransport {
   postToolResults(input: HostedAgentK2BoundRequest & {
     batch: Awaited<ReturnType<HostedAgentK2InPageLedger['executeOnce']>>;
   }): Promise<HostedAgentK2BatchPostResponse>;
+  postOperationResult(input: HostedAgentK2BoundRequest & HostedAgentK2OperationResultPost):
+    Promise<HostedAgentK2BatchPostResponse>;
+  postOperationSettlement(input: HostedAgentK2BoundRequest & HostedAgentK2OperationSettlementPost):
+    Promise<HostedAgentK2BatchPostResponse>;
   replayEvents(input: HostedAgentK2BoundRequest & {
     afterEventId: string | null;
     signal?: AbortSignal;
@@ -42,6 +52,10 @@ export interface HostedAgentK2ClientPersistedState {
   cursor: string | null;
   status: HostedAgentK2SessionStatus;
 }
+
+export type HostedAgentK2OperationRoundTripFactory = (
+  descriptor: KernelOperationSessionDescriptorV1,
+) => KernelOperationRoundTripV1;
 
 export class HostedAgentK2ReconnectableError extends Error {
   constructor(message: string) {
@@ -103,6 +117,7 @@ async function retryPause(
 export class HostedAgentK2ClientSession {
   private closed = false;
   private cursor: string | null = null;
+  private readonly operationAbortController = new AbortController();
   private readonly input: {
     clientInstanceId: string;
     lease: HostedAgentK2PageLease;
@@ -112,6 +127,7 @@ export class HostedAgentK2ClientSession {
     turnId: string;
   };
   private terminalStatus: Exclude<HostedAgentK2SessionStatus, 'active'> | null = null;
+  private operationRoundTrip: KernelOperationRoundTripV1 | null = null;
 
   readonly ledger: HostedAgentK2InPageLedger;
 
@@ -164,6 +180,13 @@ export class HostedAgentK2ClientSession {
     });
   }
 
+  private abortLocalOperations(reason: unknown): void {
+    if (!this.operationAbortController.signal.aborted) {
+      this.operationAbortController.abort(reason);
+    }
+    this.operationRoundTrip?.abortPending();
+  }
+
   private assertReplayBinding(replay: HostedAgentK2EventReplay): void {
     if (
       replay.sessionId !== this.input.lease.sessionId
@@ -178,6 +201,7 @@ export class HostedAgentK2ClientSession {
     execute: HostedAgentK2BatchExecutor,
     onEvent?: (event: HostedAgentEvent) => void,
     signal?: AbortSignal,
+    createOperationRoundTrip?: HostedAgentK2OperationRoundTripFactory,
   ): Promise<void> {
     if (
       event.sessionId !== this.input.lease.sessionId
@@ -195,7 +219,45 @@ export class HostedAgentK2ClientSession {
       throw new Error('The hosted-agent event stream skipped or reordered an event.');
     }
 
-    if (event.kind === 'tool-batch-request') {
+    if (event.kind === 'operation-session-ready') {
+      if (this.operationRoundTrip !== null || !createOperationRoundTrip) {
+        throw new Error('The hosted-agent operation session is duplicated or unsupported.');
+      }
+      this.operationRoundTrip = createOperationRoundTrip(event.descriptor);
+    } else if (event.kind === 'operation-plan-request') {
+      if (!this.operationRoundTrip) {
+        throw new Error('The hosted-agent operation plan has no authenticated session authority.');
+      }
+      const operationSignal = this.operationAbortController.signal;
+      const result = await this.operationRoundTrip.execute(
+        event.request,
+        Date.now(),
+        operationSignal,
+      );
+      this.persistState();
+      if (operationSignal.aborted && result.status !== 'committed') {
+        this.operationRoundTrip.abortPending();
+        throw abortError(operationSignal);
+      }
+      await this.input.transport.postOperationResult({
+        ...this.boundRequest(),
+        result,
+      });
+    } else if (event.kind === 'operation-plan-settlement') {
+      if (!this.operationRoundTrip) {
+        throw new Error('The hosted-agent operation settlement has no prepared execution.');
+      }
+      if (this.operationAbortController.signal.aborted) {
+        this.operationRoundTrip.abortPending();
+        throw abortError(this.operationAbortController.signal);
+      }
+      const receipt = await this.operationRoundTrip.settle(event.settlement);
+      this.persistState();
+      await this.input.transport.postOperationSettlement({
+        ...this.boundRequest(),
+        receipt,
+      });
+    } else if (event.kind === 'tool-batch-request') {
       const batch = await this.ledger.executeOnce(event as ToolBatchEvent, execute);
       // Persist the complete result before posting it. If the page reloads
       // during the acknowledgement, the next page reposts this same batch
@@ -212,6 +274,7 @@ export class HostedAgentK2ClientSession {
     onEvent?.(event);
     this.cursor = event.eventId;
     if (isTerminalEvent(event)) {
+      this.operationRoundTrip?.abortPending();
       this.terminalStatus = statusForTerminalEvent(event);
       this.closed = true;
     }
@@ -219,6 +282,7 @@ export class HostedAgentK2ClientSession {
   }
 
   async runUntilTerminal(input: {
+    createOperationRoundTrip?: HostedAgentK2OperationRoundTripFactory;
     execute: HostedAgentK2BatchExecutor;
     maximumReconnects?: number;
     onEvent?: (event: HostedAgentEvent) => void;
@@ -227,6 +291,12 @@ export class HostedAgentK2ClientSession {
   }): Promise<HostedAgentK2ClientRunResult> {
     const maximumReconnects = input.maximumReconnects ?? 32;
     let reconnects = 0;
+    if (input.signal) {
+      const externalSignal = input.signal;
+      const abortOperations = () => this.abortLocalOperations(abortError(externalSignal));
+      if (externalSignal.aborted) abortOperations();
+      else externalSignal.addEventListener('abort', abortOperations, { once: true });
+    }
     while (!this.closed) {
       if (input.signal?.aborted) {
         await this.cancelAndDrainAccounting(input.onEvent);
@@ -240,7 +310,13 @@ export class HostedAgentK2ClientSession {
         this.assertReplayBinding(replay);
         for (const event of replay.events) {
           if (this.closed) break;
-          await this.acceptEvent(event, input.execute, input.onEvent, input.signal);
+          await this.acceptEvent(
+            event,
+            input.execute,
+            input.onEvent,
+            input.signal,
+            input.createOperationRoundTrip,
+          );
           if (this.closed) {
             break;
           }
@@ -302,6 +378,7 @@ export class HostedAgentK2ClientSession {
     }
     this.closed = true;
     this.terminalStatus = 'cancelled';
+    this.abortLocalOperations(new DOMException('Hosted-agent turn was canceled.', 'AbortError'));
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 1_500);
     try {
@@ -362,17 +439,28 @@ export class HostedAgentK2ClientSession {
     }
     this.closed = true;
     this.terminalStatus = 'cancelled';
+    this.abortLocalOperations(new DOMException('Hosted-agent turn was canceled.', 'AbortError'));
     await this.input.transport.cancel(this.boundRequest());
   }
 
   /**
-   * Detaches this page without changing the server-side turn. A freshly
-   * loaded page can renew the lease and resume from the persisted cursor.
+   * Legacy tool-batch turns remain resumable from their persisted ledger.
+   * A live operation round trip owns an in-memory editor transaction and is
+   * therefore terminal on full-page detach: abort locally, discard resumable
+   * state, and best-effort interrupt the server with the short lease as the
+   * orphan fallback.
    */
   detachForReload(): void {
     if (this.closed) return;
     this.closed = true;
     this.terminalStatus = 'interrupted';
+    this.abortLocalOperations(new DOMException('Hosted-agent page detached.', 'AbortError'));
+    if (this.operationRoundTrip) {
+      this.persistState();
+      void this.input.transport.interrupt(this.boundRequest()).catch(() => {
+        // Page-unload delivery is best effort; lease expiry is authoritative.
+      });
+    }
   }
 
   /**
@@ -385,6 +473,7 @@ export class HostedAgentK2ClientSession {
     }
     this.closed = true;
     this.terminalStatus = 'interrupted';
+    this.abortLocalOperations(new DOMException('Hosted-agent page reloaded.', 'AbortError'));
     try {
       await this.input.transport.interrupt(this.boundRequest());
     } catch {

@@ -192,6 +192,7 @@ export function inferGuidedActionFamily(action: GuidedAction): GuidedActionFamil
       return inferToolFamily(action.tool);
     case 'confirmState':
     case 'waitForUserAction':
+    case 'waitForTutorialNavigation':
     case 'resolveTarget':
       return 'validation';
     case 'focusPanel':
@@ -281,6 +282,7 @@ export function getNaturalActionDurationMs(action: GuidedAction): number {
     case 'executeTool':
     case 'confirmState':
     case 'waitForUserAction':
+    case 'waitForTutorialNavigation':
       return 0;
   }
 }
@@ -347,6 +349,7 @@ function isCompressibleAction(action: GuidedAction): boolean {
     && action.type !== 'drawMaskPath'
     && action.type !== 'confirmState'
     && action.type !== 'waitForUserAction'
+    && action.type !== 'waitForTutorialNavigation'
     && action.type !== 'resolveTarget';
 }
 
@@ -419,6 +422,7 @@ function getPrimaryTarget(action: GuidedAction): GuidedTargetRef | null {
     case 'executeTool':
     case 'confirmState':
     case 'waitForUserAction':
+    case 'waitForTutorialNavigation':
     case 'resolveTarget':
       return null;
   }

@@ -16,8 +16,8 @@ describe('FlashBoardMediaBridge audio imports', () => {
         updatedAt: 1,
         job: { status: 'processing' },
         request: {
-          service: 'elevenlabs',
-          providerId: 'elevenlabs-tts',
+          service: 'cloud',
+          providerId: 'cloud-elevenlabs-tts',
           version: 'eleven_multilingual_v2',
           outputType: 'audio',
           prompt: 'Hello board',
@@ -95,7 +95,7 @@ describe('FlashBoardMediaBridge audio imports', () => {
       mediaType: 'audio',
     });
     expect(flashBoardMediaBridge.getMetadata('media-audio')).toMatchObject({
-      service: 'elevenlabs',
+      service: 'cloud',
       outputType: 'audio',
       mediaType: 'audio',
       voiceId: 'voice-1',

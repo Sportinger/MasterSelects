@@ -594,27 +594,29 @@ const interactiveCampaignsCompat: TutorialCampaign[] = INTERACTIVE_CAMPAIGNS.map
   })),
 }));
 
-export const TUTORIAL_CAMPAIGNS: TutorialCampaign[] = [
-  // Basics (interactive first)
-  ...(flags.guidedActionsTutorials ? interactiveCampaignsCompat : []),
+const legacyCampaigns: TutorialCampaign[] = [
   interfaceOverview,
   timelineControls,
   previewPlayback,
-  // Editing
   mediaImport,
   clipEditing,
   audioMixing,
   downloadPanel,
-  // Creative
   keyframesAnimation,
   effectsColor,
   textTitles,
   masksCompositing,
-  // Output
   exportDelivery,
   videoScopes,
   slotGrid,
 ];
+
+// The guided rollout and the legacy tours are deliberately separate chains.
+// Keeping the old definitions here provides a feature-flag fallback without
+// exposing half-migrated campaigns in the new tutorial picker.
+export const TUTORIAL_CAMPAIGNS: TutorialCampaign[] = flags.guidedActionsTutorials
+  ? interactiveCampaignsCompat
+  : legacyCampaigns;
 
 export function getCampaignById(id: string): TutorialCampaign | undefined {
   return TUTORIAL_CAMPAIGNS.find(c => c.id === id);

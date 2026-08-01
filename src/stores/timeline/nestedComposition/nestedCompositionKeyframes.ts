@@ -15,6 +15,7 @@ export interface CollectNestedClipKeyframesParams {
   serializedClips: readonly SerializableClip[];
   compositions: readonly { id: string; timelineData?: { clips?: SerializableClip[] } }[];
   depth?: number;
+  compositionPath?: readonly string[];
 }
 
 export function collectNestedClipKeyframes(params: CollectNestedClipKeyframesParams): Map<string, Keyframe[]> {
@@ -23,6 +24,7 @@ export function collectNestedClipKeyframes(params: CollectNestedClipKeyframesPar
     serializedClips,
     compositions,
     depth = 0,
+    compositionPath = [],
   } = params;
   const keyframesByClipId = new Map<string, Keyframe[]>();
 
@@ -50,12 +52,16 @@ export function collectNestedClipKeyframes(params: CollectNestedClipKeyframesPar
 
     if (serializedClip.isComposition && serializedClip.compositionId) {
       const nestedComposition = compositions.find(composition => composition.id === serializedClip.compositionId);
-      if (nestedComposition?.timelineData?.clips?.length) {
+      if (
+        nestedComposition?.timelineData?.clips?.length &&
+        !compositionPath.includes(nestedComposition.id)
+      ) {
         merge(collectNestedClipKeyframes({
           parentClipId: nestedClipId,
           serializedClips: nestedComposition.timelineData.clips,
           compositions,
           depth: depth + 1,
+          compositionPath: [...compositionPath, nestedComposition.id],
         }));
       }
     }

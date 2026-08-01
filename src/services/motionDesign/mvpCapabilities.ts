@@ -216,11 +216,10 @@ export function getMotionMvpCapabilities(clip?: TimelineClip): MotionMvpCapabili
       ],
     },
     unsupportedUntilLaterPhases: [
-      'texture appearances',
-      'replicator modifiers and falloffs',
-      // Null (createMotionNull/setMotionParent) and Adjustment
-      // (editMotionAdjustment) authoring shipped with MD6/MD7. Motion groups
-      // are deliberately outside 1.0 (MOTION_PARENT_GROUPS_SUPPORTED = false).
+      // Modifier/falloff authoring shipped with MD4 (editMotionModifier, the
+      // Modifiers panel section, and runtime plan consumption). Null and
+      // Adjustment authoring shipped with MD6/MD7. Motion groups are
+      // deliberately outside 1.0 (MOTION_PARENT_GROUPS_SUPPORTED = false).
       'motion group authoring',
     ],
     ...(clip ? { properties: getMotionPropertyViews(clip) } : {}),

@@ -271,6 +271,38 @@ describe('ExportRenderSessionImpl', () => {
     expect(host.readPixels).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps retrying a deeply nested frame beyond the old three-turn limit', async () => {
+    const host = createInjectedHost();
+    let attempts = 0;
+    vi.mocked(host.render).mockImplementation(() => {
+      attempts += 1;
+      if (attempts <= 6) {
+        throw new Error('Export frame deferred because a nested composition was not ready');
+      }
+    });
+    const session = new ExportRenderSessionImpl({
+      runId: 'export-run-deep-nested-retry',
+      compositionId: 'composition-deep-nested',
+      width: 320,
+      height: 180,
+      stackedAlpha: false,
+      preferZeroCopy: false,
+      host,
+    });
+    await session.begin();
+
+    const capture = await session.renderFrame({
+      time: 5,
+      layers,
+      timestampMicros: 500000,
+      durationMicros: 33333,
+    });
+
+    expect(capture.kind).toBe('rgba-pixels');
+    expect(host.render).toHaveBeenCalledTimes(7);
+    expect(host.ensureExportLayersReady).toHaveBeenCalledTimes(7);
+  });
+
   it('revalidates the export host once before rendering a frame', async () => {
     let valid = false;
     const host = createInjectedHost();

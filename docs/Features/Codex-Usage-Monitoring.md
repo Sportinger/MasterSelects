@@ -26,13 +26,13 @@ Continuous watcher:
 npm run codex:usage:watch
 ```
 
-Stop the hidden watcher started by the desktop launcher:
+Stop a watcher started with the provided PowerShell launcher:
 
 ```bash
 npm run codex:usage:stop
 ```
 
-Generated files:
+Monitor output:
 
 ```text
 .codex-usage/turns.jsonl
@@ -40,20 +40,28 @@ Generated files:
 .codex-usage/sessions.json
 .codex-usage/report.md
 .codex-usage/state.json
+```
+
+When using `scripts/start-codex-usage-watch.ps1`, it also creates:
+
+```text
 .codex-usage/watcher.pid
+.codex-usage/watcher-launch.json
 .codex-usage/watcher.out.log
 .codex-usage/watcher.err.log
 ```
 
 `.codex-usage/` is ignored by Git because it contains local conversation metadata.
 
+The monitor also accepts `--repo`, `--sessions-root`, `--out`, `--poll-ms`, and `--stale-minutes`; use `--include-answer-text` only when storing full visible assistant text locally is appropriate.
+
 ## Token Model
 
 Codex logs token usage per model call in `event_msg` entries with `payload.type = "token_count"`.
 
-The monitor groups all `last_token_usage` entries after a user message until the next user message or task completion. That grouped sum is the turn cost.
+The monitor groups all `last_token_usage` entries after a user message until the next user message or end of the session file. It marks the turn completed on `task_complete` or a `final_answer`, but continues recording later token events for that current turn until the next user message.
 
-Codex rollout/resume logs can replay older turns into later session files. The monitor keeps raw turns in `turns.jsonl`, marks duplicate replay turns with `dedupe`, and writes representative turns to `turns.deduped.jsonl`. `report.md` uses the deduped data by default and shows the raw inflation separately.
+The monitor deduplicates turns with the same question, answer preview, model-call count, and token totals. It keeps raw turns in `turns.jsonl`, marks duplicates with `dedupe`, and writes representative turns to `turns.deduped.jsonl`. `report.md` uses the deduped data by default and shows the raw inflation separately.
 
 Important fields:
 
@@ -78,13 +86,9 @@ The watcher stores Git snapshots in `.codex-usage/state.json`:
 - HEAD commit
 - commit subject and timestamp
 - dirty status and short status output
-- first and last observation time per turn
+- first observation and last recorded change time per turn
 
-For future sessions, keep `npm run codex:usage:watch` running while Codex works. That makes commit attribution meaningful across long goals, stale runs, and multiple-hour tasks.
-
-The desktop shortcut `C:\Users\admin\Desktop\masterselects-spalts.lnk` starts `C:\Users\admin\Documents\project-launcher.ps1`, which calls `scripts/start-codex-usage-watch.ps1` when this repository opens. The start script uses `.codex-usage/watcher.pid` to avoid duplicate hidden watcher processes.
-
-For historical sessions parsed after the fact, the monitor can only attach the Git state first observed during report generation. It cannot reconstruct the exact historical HEAD unless the session itself contains enough Git command output.
+`scripts/start-codex-usage-watch.ps1` starts a hidden watcher, writes `.codex-usage/watcher.pid`, and avoids starting a second process when that PID belongs to `codex-session-monitor.mjs`. It also records launcher status in `.codex-usage/watcher-launch.json`.
 
 ## Reading The Report
 

@@ -10,6 +10,7 @@ interface UseTimelineKeyframeDiamondsRendererProps {
   clipKeyframes: TimelineKeyframesProps['clipKeyframes'];
   clips: TimelineKeyframesProps['clips'];
   onMoveKeyframe: TimelineKeyframesProps['onMoveKeyframe'];
+  onDeleteKeyframes: TimelineKeyframesProps['onDeleteKeyframes'];
   onSelectKeyframe: TimelineKeyframesProps['onSelectKeyframe'];
   onToggleCurveExpanded: TimelineKeyframesProps['onToggleCurveExpanded'];
   onUpdateKeyframe: TimelineKeyframesProps['onUpdateKeyframe'];
@@ -25,6 +26,7 @@ export function useTimelineKeyframeDiamondsRenderer({
   clipKeyframes,
   clips,
   onMoveKeyframe,
+  onDeleteKeyframes,
   onSelectKeyframe,
   onToggleCurveExpanded,
   onUpdateKeyframe,
@@ -68,6 +70,7 @@ export function useTimelineKeyframeDiamondsRenderer({
           timelineRef={timelineRef}
           onSelectKeyframe={onSelectKeyframe}
           onMoveKeyframe={onMoveKeyframe}
+          onDeleteKeyframes={onDeleteKeyframes}
           onUpdateKeyframe={onUpdateKeyframe}
           onToggleCurveExpanded={onToggleCurveExpanded}
           timeToPixel={timeToPixel}
@@ -77,7 +80,7 @@ export function useTimelineKeyframeDiamondsRenderer({
         />
       );
     },
-    [clips, selectedKeyframeIds, clipKeyframes, clipDrag, scrollX, timelineRef, onSelectKeyframe, onMoveKeyframe, onUpdateKeyframe, onToggleCurveExpanded, timeToPixel, pixelToTime, hoveredKeyframeRow, handleKeyframeRowHover]
+    [clips, selectedKeyframeIds, clipKeyframes, clipDrag, scrollX, timelineRef, onSelectKeyframe, onMoveKeyframe, onDeleteKeyframes, onUpdateKeyframe, onToggleCurveExpanded, timeToPixel, pixelToTime, hoveredKeyframeRow, handleKeyframeRowHover]
   );
 
   return {

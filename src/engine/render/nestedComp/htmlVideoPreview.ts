@@ -333,7 +333,8 @@ export function tryCollectHtmlVideoPreview(
         scrubbingCache,
         targetTime,
         ownerId,
-        captureOwnerId
+        captureOwnerId,
+        true,
       );
       if (copiedFrame) {
         clearHtmlHold(htmlHoldUntil, layerReuseKey);
@@ -394,7 +395,8 @@ export function tryCollectHtmlVideoPreview(
           scrubbingCache,
           targetTime,
           ownerId,
-          captureOwnerId
+          captureOwnerId,
+          true,
         );
         if (copiedFrame) {
           clearHtmlHold(htmlHoldUntil, layerReuseKey);

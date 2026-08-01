@@ -2,16 +2,16 @@
 
 # Landing Page
 
-Current state: dev-only minimal chat entry implemented as the built-in `START`
-dock layout.
+The `START` dock layout is implemented, and the `/landing` and
+`landing.localhost` routes resolve the landing entry experience. These routes
+load the editor; `START` remains available as a factory favorite.
 
 ---
 
 ## Goal
 
-Keep the working editor directly reachable while testing a radically simple
-front-facing surface: one welcoming chat pill, a small Open action, and no
-surrounding website chrome.
+Keep the working editor directly reachable through a minimal, layout-based
+front-facing surface with AI chat, project-media handling, and an Open action.
 
 ---
 
@@ -20,8 +20,8 @@ surrounding website chrome.
 | URL | Behavior |
 |---|---|
 | `http://localhost:5173/` | Editor using the last active layout |
-| `http://landing.localhost:5173/` | Opens the editor directly in `START` |
-| `http://localhost:5173/landing` | Same `START` layout when the subdomain is unavailable |
+| `http://landing.localhost:5173/` | Resolves the landing entry experience and loads the editor bundle |
+| `http://localhost:5173/landing` | Same landing entry experience when the subdomain is unavailable |
 
 ---
 
@@ -31,18 +31,21 @@ surrounding website chrome.
   the right of `3D EDIT`.
 - The layout is one full-size, layout-only panel; it is intentionally hidden
   from the generic panel pickers and has no tab strip or editor toolbar.
-- Landing entry selection loads the editor bundle and activates `START` before
-  the first visible paint. There is no second page layered over the editor.
-- The visible controls are a responsive chat pill and a small top-right Open
-  action.
+- Landing entry selection loads the editor bundle. The landing surface itself
+  is the `start` dock panel; there is no separate page layered over the editor.
+- When `START` is active, the visible controls are a responsive AI chat pill,
+  a small top-right Open action, project-file previews, and a finished-video
+  preview when an output is present. Files can be dropped anywhere on the
+  surface for import.
 - Open loads the factory `VIDEO EDIT` layout in place and reuses the existing
   dock transition with a three-second duration. Media, Preview, the right-side
   tools, and Timeline enter as four distinct overlapping stages; the toolbar
   joins from the top.
 - Before the panels enter, the chat pill contracts symmetrically along the
   x-axis and fades away. This 480 ms exit is included in the three-second total.
-- The staged reveal animates the live panel surfaces without the puzzle
-  overshoot or a final clone-to-live swap, avoiding a visible end jolt.
+- The staged reveal uses the dock layout transition in sequence mode. Media,
+  Preview, and Timeline are eligible for live-surface animation; other layout
+  elements may use transition clones.
 - The light Start surface remains fixed underneath the whole sequence. Loading
   `START` from the favorite bar runs the same sequence in reverse: the gray
   editor panes leave stage by stage and reveal the light surface.
@@ -57,8 +60,13 @@ surrounding website chrome.
 - Startup dialogs stay paused during the transition so they cannot cover the
   layout reveal.
 - Enter submits; Shift+Enter keeps multiline input available. Focus, disabled, loading, and screen-reader feedback states are built in.
-- The debug route does not call an AI provider, require authentication, or spend credits. `LandingPage` exposes an optional prompt-submit boundary for the later production chat connection.
-- Desktop places the pill in the visual center; narrow mobile screens dock it above the safe area for thumb reach.
-- Hosted Pages requests outside the editor, landing, and credit-claim entry paths return `404` instead of loading the editor fallback.
-- This remains a staging entry surface; the dock-layout model itself is now the
-  canonical implementation.
+- Submitting the chat starts a resumable background job: it prepares a single
+  source video when available, runs a FlashBoard AI chat turn, and renders the
+  current timeline. Hosted AI chat can require authentication and credits.
+- Desktop centers the landing content. Narrow screens retain the centered
+  layout with safe-area padding; they do not dock the pill above the safe area.
+- Hosted Pages requests outside the supported editor, landing, admin,
+  credit-claim, and legal paths return `404` instead of loading the editor
+  fallback.
+- The dock-layout model is the implementation. Routing selects the landing
+  experience.

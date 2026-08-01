@@ -11,7 +11,7 @@ describe('managed Kie.ai boundary', () => {
     const credentialHeader = ['x-kieai', '-api-key'].join('');
     const clientSources = [
       'src/stores/settings/settingsOptions.ts',
-      'src/components/common/settings/ApiKeysSettings.tsx',
+      'src/components/common/settings/IntegrationCredentialsSettings.tsx',
       'src/services/flashboard/FlashBoardChatTypes.ts',
       'src/services/flashboard/FlashBoardChatProviderTransport.ts',
       'vite.config.ts',
@@ -25,11 +25,11 @@ describe('managed Kie.ai boundary', () => {
   });
 
   it('removes stale encrypted Kie.ai records during the IndexedDB upgrade', () => {
-    const managerSource = source('src/services/apiKeyManager.ts');
+    const managerSource = source('src/services/youtubeCredentialManager.ts');
 
-    expect(managerSource).toContain("const DB_VERSION = 2");
-    expect(managerSource).toContain("DEPRECATED_KIEAI_KEY_ID = 'kieai-api-key'");
-    expect(managerSource).toContain('store?.delete(DEPRECATED_KIEAI_KEY_ID)');
+    expect(managerSource).toContain('const DB_VERSION = 3');
+    expect(managerSource).toContain("'kieai-api-key'");
+    expect(managerSource).toContain('store?.delete(id)');
   });
 
   it('keeps removed provider ids only at the old-project migration boundary', () => {
@@ -41,7 +41,7 @@ describe('managed Kie.ai boundary', () => {
     expect(runtimeTypes).not.toMatch(/FlashBoardService[^;]*['"]suno['"]/);
     expect(projectTypes).toContain("| 'kieai'");
     expect(projectTypes).toContain("| 'suno'");
-    expect(hydration).toContain("value === 'kieai' || value === 'suno'");
+    expect(hydration).toContain("return 'cloud';");
   });
 });
 

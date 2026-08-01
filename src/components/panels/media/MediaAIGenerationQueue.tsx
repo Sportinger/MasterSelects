@@ -51,18 +51,8 @@ function getStatusLabel(
 }
 
 function getServiceLabel(request: FlashBoardGenerationRequest): string {
-  switch (request.service) {
-    case 'cloud':
-      return 'Cloud';
-    case 'elevenlabs':
-      return 'ElevenLabs';
-    case 'evolink':
-      return 'EvoLink';
-    case 'piapi':
-      return 'PiAPI';
-    default:
-      return request.service;
-  }
+  void request;
+  return 'Cloud';
 }
 
 function getPlatformLabel(platform: string): string {
@@ -94,7 +84,7 @@ function getOutputLabel(request: FlashBoardGenerationRequest): string {
   if (request.outputType === 'image') {
     return 'Image';
   }
-  if (request.outputType === 'audio' || request.service === 'elevenlabs') {
+  if (request.outputType === 'audio') {
     return 'Audio';
   }
   return 'Video';
@@ -110,7 +100,7 @@ function getModeLabel(request: FlashBoardGenerationRequest): string | undefined 
 }
 
 function getPreviewAspectRatio(request: FlashBoardGenerationRequest): string {
-  if (request.outputType === 'audio' || request.service === 'elevenlabs') {
+  if (request.outputType === 'audio') {
     return '2.4 / 1';
   }
 

@@ -5,6 +5,7 @@ import type { CSSProperties } from 'react';
 
 interface GuidedCursorProps {
   clicking: boolean;
+  dragging?: boolean;
   inputGesture: GuidedInputGesture | null;
   position: GuidedPoint | null;
   toolId?: TimelineToolId | null;
@@ -12,7 +13,7 @@ interface GuidedCursorProps {
   visible: boolean;
 }
 
-export function GuidedCursor({ clicking, inputGesture, position, toolId, transitionMs, visible }: GuidedCursorProps) {
+export function GuidedCursor({ clicking, dragging = false, inputGesture, position, toolId, transitionMs, visible }: GuidedCursorProps) {
   if (!visible || !position) {
     return null;
   }
@@ -34,6 +35,7 @@ export function GuidedCursor({ clicking, inputGesture, position, toolId, transit
       className={[
         'guided-cursor',
         clicking ? 'guided-cursor--clicking' : '',
+        dragging ? 'guided-cursor--dragging' : '',
         cursorIcon ? 'guided-cursor--tool' : '',
         toolId ? `guided-cursor--tool-${toolId}` : '',
       ].filter(Boolean).join(' ')}
@@ -61,6 +63,7 @@ export function GuidedCursor({ clicking, inputGesture, position, toolId, transit
         </svg>
       )}
       {clicking && <span className="guided-click-ripple" />}
+      {dragging && <span className="guided-drag-hold-ring" />}
       {inputGesture && (
         <span className={`guided-cursor-gesture guided-cursor-gesture--${inputGesture.kind}`}>
           <span className="guided-cursor-gesture-label">{inputGesture.label}</span>

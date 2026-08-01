@@ -1,6 +1,5 @@
 import { APP_VERSION } from '../../version';
 import { useMediaStore } from '../../stores/mediaStore';
-import { sanitizeAuditValue } from '../aiTools/audit';
 import { hasHostedAgentReloadSnapshot } from '../kernelClient/hostedAgent/reloadResume';
 import type {
   FlashBoardChatPromptVersion,
@@ -13,10 +12,14 @@ import type {
 } from './FlashBoardChatTypes';
 
 const CHAT_RUN_DB_NAME = 'masterselects-ai-chat-runs';
-const CHAT_RUN_DB_VERSION = 1;
+// v2 purges the old full-content audit records. Durable records now contain
+// only operational metadata plus the completed response required for local
+// idempotent UI recovery; prompts and tool payloads are never persisted.
+const CHAT_RUN_DB_VERSION = 2;
 const CHAT_RUN_STORE_NAME = 'runs';
-const CHAT_RUN_MEMORY_LIMIT = 500;
-const CHAT_RUN_DATABASE_LIMIT = 2_000;
+const CHAT_RUN_MEMORY_LIMIT = 100;
+const CHAT_RUN_DATABASE_LIMIT = 100;
+const CHAT_RUN_RETENTION_MS = 24 * 60 * 60 * 1_000;
 const TAB_ID_SESSION_KEY = 'masterselects.aiBridgeTabId';
 const HOSTED_TURN_IDEMPOTENCY_PREFIX = 'flashboard-chat-turn:';
 const ORPHANED_RUN_ERROR = 'The browser session ended before the chat run completed.';
@@ -28,7 +31,7 @@ export interface FlashBoardChatRunRecord {
   appVersion: string;
   durationMs?: number;
   error?: string;
-  executedToolCalls: FlashBoardExecutedToolCall[];
+  executedToolCallCount: number;
   finishedAt?: number;
   hostedAvailable: boolean;
   idempotencyKey?: string;
@@ -36,8 +39,7 @@ export interface FlashBoardChatRunRecord {
   openAiReasoningEffort?: FlashBoardOpenAiReasoningEffort;
   projectId: string | null;
   projectName: string;
-  prompt: string;
-  promptVersion: FlashBoardChatPromptVersion | 'custom';
+  promptVersion: FlashBoardChatPromptVersion;
   provider: FlashBoardChatProvider;
   response?: string;
   runId: string;
@@ -45,8 +47,6 @@ export interface FlashBoardChatRunRecord {
   source: FlashBoardChatRunSource;
   startedAt: number;
   status: FlashBoardChatRunStatus;
-  systemPrompt: string;
-  systemPromptIncludeContext: boolean;
   temperature: number;
   toolExecutionMode: FlashBoardChatToolExecutionMode;
 }
@@ -56,48 +56,43 @@ interface ChatRunRuntime {
   databasePromise?: Promise<IDBDatabase | null>;
   order: string[];
   persistenceQueue?: Promise<void>;
-  persistedWrites: number;
   runs: Map<string, FlashBoardChatRunRecord>;
+  schemaVersion: 2;
 }
 
 const runtimeGlobal = globalThis as typeof globalThis & {
   __MASTERSELECTS_CHAT_RUN_AUDIT__?: ChatRunRuntime;
 };
-const runtime = runtimeGlobal.__MASTERSELECTS_CHAT_RUN_AUDIT__ ?? {
+const previousRuntime = runtimeGlobal.__MASTERSELECTS_CHAT_RUN_AUDIT__;
+const runtime: ChatRunRuntime = previousRuntime?.schemaVersion === 2 ? previousRuntime : {
   activeRunIds: new Set<string>(),
   order: [],
-  persistedWrites: 0,
   runs: new Map<string, FlashBoardChatRunRecord>(),
+  schemaVersion: 2,
 };
 runtime.activeRunIds ??= new Set<string>();
 runtimeGlobal.__MASTERSELECTS_CHAT_RUN_AUDIT__ = runtime;
 
 export function beginFlashBoardChatRun(
   request: FlashBoardChatRequest,
-  systemPrompt: string,
 ): FlashBoardChatRunRecord {
   const media = useMediaStore.getState();
   const record: FlashBoardChatRunRecord = {
     appVersion: APP_VERSION,
-    executedToolCalls: [],
+    executedToolCallCount: 0,
     hostedAvailable: request.hostedAvailable === true,
     idempotencyKey: request.idempotencyKey,
     model: request.model,
     openAiReasoningEffort: request.openAiReasoningEffort,
     projectId: media.currentProjectId,
     projectName: media.currentProjectName,
-    prompt: request.prompt,
-    promptVersion: request.systemPromptOverride?.trim()
-      ? 'custom'
-      : request.promptVersion ?? 'v2',
+    promptVersion: 'v2',
     provider: request.provider,
     runId: createChatRunId(),
     sessionId: readBridgeSessionId(),
     source: request.runSource ?? 'ui',
     startedAt: Date.now(),
     status: 'running',
-    systemPrompt,
-    systemPromptIncludeContext: request.systemPromptIncludeContext !== false,
     temperature: request.temperature,
     toolExecutionMode: request.toolExecutionMode ?? 'normal',
   };
@@ -129,7 +124,7 @@ export function completeFlashBoardChatRun(
     ...current,
     durationMs: Math.max(0, finishedAt - current.startedAt),
     error,
-    executedToolCalls: sanitizeAuditValue(input.executedToolCalls) as FlashBoardExecutedToolCall[],
+    executedToolCallCount: Math.max(current.executedToolCallCount, input.executedToolCalls.length),
     finishedAt,
     response: input.response,
     status: error
@@ -149,10 +144,7 @@ export function appendFlashBoardChatRunToolCalls(
   if (!current || current.status !== 'running' || toolCalls.length === 0) return current ?? null;
   const record: FlashBoardChatRunRecord = {
     ...current,
-    executedToolCalls: [
-      ...current.executedToolCalls,
-      ...sanitizeAuditValue(toolCalls) as FlashBoardExecutedToolCall[],
-    ],
+    executedToolCallCount: current.executedToolCallCount + toolCalls.length,
   };
   remember(record);
   enqueuePersist(record);
@@ -172,7 +164,7 @@ export async function reactivateFlashBoardChatRunByIdempotencyKey(
   return record;
 }
 
-export async function listFlashBoardChatRuns(input: {
+async function listFlashBoardChatRuns(input: {
   limit?: number;
   source?: FlashBoardChatRunSource;
 } = {}): Promise<FlashBoardChatRunRecord[]> {
@@ -186,23 +178,6 @@ export async function listFlashBoardChatRuns(input: {
     .filter((record) => !input.source || record.source === input.source)
     .toSorted((left, right) => right.startedAt - left.startedAt)
     .slice(0, limit);
-}
-
-export async function getFlashBoardChatRun(runId: string): Promise<FlashBoardChatRunRecord | null> {
-  const current = runtime.runs.get(runId);
-  if (current) return current;
-  const database = await openDatabase();
-  if (!database) return null;
-
-  return new Promise((resolve) => {
-    const request = database.transaction(CHAT_RUN_STORE_NAME, 'readonly')
-      .objectStore(CHAT_RUN_STORE_NAME)
-      .get(runId);
-    request.onsuccess = () => resolve(request.result
-      ? reconcileOrphanedRunningRecord(request.result as FlashBoardChatRunRecord)
-      : null);
-    request.onerror = () => resolve(null);
-  });
 }
 
 export async function findFlashBoardChatRunByIdempotencyKey(
@@ -258,8 +233,11 @@ function openDatabase(): Promise<IDBDatabase | null> {
   if (typeof indexedDB === 'undefined') return Promise.resolve(null);
   runtime.databasePromise ??= new Promise((resolve) => {
     const request = indexedDB.open(CHAT_RUN_DB_NAME, CHAT_RUN_DB_VERSION);
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const database = request.result;
+      if (event.oldVersion < 2 && database.objectStoreNames.contains(CHAT_RUN_STORE_NAME)) {
+        database.deleteObjectStore(CHAT_RUN_STORE_NAME);
+      }
       if (!database.objectStoreNames.contains(CHAT_RUN_STORE_NAME)) {
         const store = database.createObjectStore(CHAT_RUN_STORE_NAME, { keyPath: 'runId' });
         store.createIndex('startedAt', 'startedAt');
@@ -282,8 +260,7 @@ async function persist(record: FlashBoardChatRunRecord): Promise<void> {
     transaction.onerror = () => resolve();
   });
 
-  runtime.persistedWrites += 1;
-  if (runtime.persistedWrites % 100 === 0) void trimDatabase(database);
+  await trimDatabase(database);
 }
 
 function readPersistedRuns(limit: number): Promise<FlashBoardChatRunRecord[]> {
@@ -291,13 +268,14 @@ function readPersistedRuns(limit: number): Promise<FlashBoardChatRunRecord[]> {
     if (!database) return [];
     return new Promise((resolve) => {
       const records: FlashBoardChatRunRecord[] = [];
+      const minimumStartedAt = Date.now() - CHAT_RUN_RETENTION_MS;
       const transaction = database.transaction(CHAT_RUN_STORE_NAME, 'readonly');
       const request = transaction.objectStore(CHAT_RUN_STORE_NAME)
         .index('startedAt')
         .openCursor(null, 'prev');
       request.onsuccess = () => {
         const cursor = request.result;
-        if (!cursor || records.length >= limit) {
+        if (!cursor || records.length >= limit || cursor.value.startedAt < minimumStartedAt) {
           resolve(records);
           return;
         }
@@ -316,11 +294,12 @@ function trimDatabase(database: IDBDatabase): Promise<void> {
       .index('startedAt')
       .openCursor(null, 'prev');
     let seen = 0;
+    const minimumStartedAt = Date.now() - CHAT_RUN_RETENTION_MS;
     request.onsuccess = () => {
       const cursor = request.result;
       if (!cursor) return;
       seen += 1;
-      if (seen > CHAT_RUN_DATABASE_LIMIT) cursor.delete();
+      if (seen > CHAT_RUN_DATABASE_LIMIT || cursor.value.startedAt < minimumStartedAt) cursor.delete();
       cursor.continue();
     };
     transaction.oncomplete = () => resolve();

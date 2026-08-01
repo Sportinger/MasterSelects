@@ -2,32 +2,29 @@
 
 [Back to Index](./README.md)
 
-**Read this before adding or refactoring anything that renders to a `<canvas>`,
-an `OffscreenCanvas`, or a WebGPU surface.** This is the single most common
-source of "works on Windows, blank on Linux" regressions in this project.
+**Read this before adding or refactoring a `<canvas>`, `OffscreenCanvas`, or
+WebGPU presentation path.** Linux fallback policy is shared across timeline
+canvases, worker presentation, capture transforms, composition feedback, and
+proxy scene-cut analysis. This remains a common source of "works on Windows,
+blank on Linux" regressions.
 
 ---
 
 ## Why this keeps happening
 
-MasterSelects is developed and smoke-tested primarily on Windows with
-proprietary GPU drivers. A large share of our Linux users run the **open-source
-Mesa stack** (RADV / radeonsi for AMD, NVK for NVIDIA, llvmpipe for software),
-often on hybrid laptops (AMD Renoir iGPU + discrete NVIDIA). Mesa's WebGPU
-(Vulkan via Dawn) and GPU-accelerated 2D canvas paths are **stricter and fail
-more silently** than the drivers we develop against.
+MasterSelects is developed and smoke-tested primarily on Windows. On Linux,
+the code treats the open-source Mesa stack and hybrid-GPU configurations as
+requiring conservative canvas and WebGPU fallbacks. The shared platform gate
+identifies Linux (excluding Android) from browser platform data.
 
-Combined with the project's "everything becomes a GPU signal" architecture —
-which pushes video, audio, images, and timeline chrome through WebGPU and
-GPU-accelerated canvases — every new GPU/canvas feature can independently
-rediscover the same Mesa limits. The fix is not to special-case bugs one by one
-after they ship, but to **design canvas/GPU code against the constraints below
-from the start**, and route platform decisions through the shared helpers.
+Timeline chrome uses a viewport-bounded 2D canvas with worker rendering where
+eligible; preview and output rendering use WebGPU. New canvas and GPU paths
+must be designed against the constraints below and must use the shared fallback
+policy where applicable.
 
-The defining property of these failures: **no exception is thrown, nothing
-returns null, diagnostics report success.** The draw calls "work"; the pixels
-just never reach the screen. Do not rely on try/catch or return values to detect
-them.
+These failures can be silent: successful draw calls or populated canvas
+diagnostics do not prove that pixels were composited on screen. Do not rely
+only on try/catch or return values when diagnosing them.
 
 ---
 
@@ -35,10 +32,10 @@ them.
 
 | # | Symptom | Mechanism | Mitigation in code |
 |---|---------|-----------|--------------------|
-| 1 | A `<canvas>` goes **blank** past a certain size / when zoomed | An over-sized GPU-accelerated canvas (backing store beyond what the driver will composite) renders nothing. `MAX_TEXTURE_SIZE` (often 16384) is *not* a safe target on Mesa. | Size canvases to the **visible viewport + overscan**, never the full content width. Cap the backing store well below the hardware max. See `TimelineClipCanvas.tsx`. |
+| 1 | A `<canvas>` goes **blank** past a certain size / when zoomed | An oversized canvas backing store can fail to composite on Linux. The timeline guard does not use the WebGPU texture limit as its canvas limit. | Size canvases to the **visible viewport + overscan**, never the full content width. The timeline backing store is capped at 8192 device pixels. See `useTimelineClipCanvasViewport.ts`. |
 | 2 | A worker-driven `OffscreenCanvas` shows for **short** lanes but not **taller** ones | `transferControlToOffscreen()` + a worker 2D context fails to composite the placeholder element for larger surfaces. | Prefer the main-thread renderer on Linux. See `useTimelineClipCanvasWorkerRuntime.ts`. |
-| 3 | Canvas content **disappears on minimize/restore**, returning only on hover/interaction | The GPU discards the accelerated canvas backing on visibility change; nothing triggers a repaint. | Use a **software raster** (`getContext('2d', { willReadFrequently: true })`) on Linux — CPU-backed surfaces survive visibility changes and composite like any bitmap. See `useTimelineClipCanvasMainThreadDraw.ts`. |
-| 4 | Video preview is **black**, render loop stalls, then device lost | `device.importExternalTexture({ source })` returns an *invalid-but-not-null* `GPUExternalTexture` on Mesa (Dawn `ImportMemory` size mismatch), or `vkAllocateMemory` OOM on hybrid GPUs. See issue #46. | WebGPU video path; separate from the canvas issues above. Treat external textures as suspect on Linux. |
+| 3 | Canvas content **disappears on minimize/restore**, returning only on hover/interaction | GPU-backed canvas composition can be unreliable after visibility changes. | The Linux main-thread timeline path requests a 2D context with `willReadFrequently: true`; it is also used as the fallback after worker failure. See `timelineClipCanvasMainThreadSurface.ts`. |
+| 4 | Video preview is **black**, render loop stalls, then device lost | `device.importExternalTexture({ source })` can return an invalid-but-not-null external texture on open-source Mesa drivers (issue #46). | WebGPU video path; separate from the canvas issues above. Treat external textures as suspect on Linux and retain the engine's adapter/device recovery paths. |
 | 5 | Spurious `requestAdapter/requestDevice timed out after Nms` warnings even when WebGPU works | `WebGPUContext.withTimeout` does not clear its `setTimeout` when the real promise resolves first, so the timeout logs regardless. | Cosmetic log noise; `engineReady` is the source of truth. |
 
 ---
@@ -55,32 +52,27 @@ them.
 3. **Be cautious with worker `OffscreenCanvas`.** It is an optimization, not a
    baseline. Gate it off where compositing is unreliable (Linux) and keep a
    first-class main-thread fallback that is exercised, not just theoretical.
-4. **Prefer software raster on Linux** for long-lived 2D canvases
-   (`willReadFrequently: true`). It avoids the size-blank, the worker-composite,
-   and the minimize/restore failure modes at once.
-5. **Route platform decisions through one helper.** Use
-   `prefersSoftwareTimelineCanvas()` (`src/components/timeline/utils/timelineCanvasPlatform.ts`),
-   which mirrors `WebGPUContext.shouldUseLowPowerFallback()`. Do not scatter ad
-   hoc `navigator.platform` checks.
+4. **Prefer the shared Linux software fallback** for long-lived 2D canvases
+   (`willReadFrequently: true`) where a canvas is used for pixel processing or
+   presentation.
+5. **Route canvas fallback decisions through one helper.** Use
+   `prefersSoftwareTimelineCanvas()` from `src/utils/canvasPlatform.ts` (the
+   timeline utility is a compatibility re-export). The WebGPU context retains
+   its separate Linux low-power adapter fallback.
 6. **Never trust silent success.** Draw calls completing, diagnostics reporting
    N clips drawn, or `getImageData` showing pixels do **not** prove the canvas
    is on screen. Compositing is a separate step the page cannot observe.
 7. **Keep the main-thread path at parity with the worker path.** Because the
-   worker is gated off on Linux (rule 3), the main-thread renderer is the *only*
-   path Linux users see — a divergence there ships exclusively to them. Fold the
-   same live interaction geometry (drag/trim start/duration/in/out) into both.
-   Example regression (issue #275): the main-thread MIDI preview built its note
-   bars from the raw stored clip while drawing at the live trimmed width, so
-   resizing a MIDI clip stretched the notes until commit; the worker path was
-   correct because it folds trim geometry into its `resourceClip`. Windows users
-   never saw it.
+   timeline worker is gated off on Linux, the main-thread renderer is the only
+   timeline clip-canvas path Linux users see. Fold the same live interaction
+   geometry (drag/trim start/duration/in/out) into both paths; the current
+   main-thread MIDI preview explicitly builds from geometry-adjusted clips.
 
 ---
 
 ## How to diagnose (no console access required)
 
-These bugs were diagnosed entirely through the AI debug bridge (see
-[Debugging](./Debugging.md)):
+Use the AI debug bridge (see [Debugging](./Debugging.md)):
 
 - `getStats` → `timelineCanvas` diagnostics report per-track `workerMode`,
   `drawnClipCount`, and `workerError`. "All drawn, no errors, nothing visible"
@@ -94,15 +86,19 @@ These bugs were diagnosed entirely through the AI debug bridge (see
 
 ## Where the gates live
 
-- `src/components/timeline/utils/timelineCanvasPlatform.ts` — the
-  `prefersSoftwareTimelineCanvas()` Linux gate.
-- `src/components/timeline/TimelineClipCanvas.tsx` — viewport-size cap (rules 1–2).
+- `src/utils/canvasPlatform.ts` — the shared
+  `prefersSoftwareTimelineCanvas()` Linux gate; `src/components/timeline/utils/timelineCanvasPlatform.ts`
+  re-exports it for timeline callers.
+- `src/components/timeline/hooks/useTimelineClipCanvasViewport.ts` —
+  viewport-window sizing and the 8192-device-pixel backing-store cap (rules 1–2).
 - `src/components/timeline/hooks/useTimelineClipCanvasWorkerRuntime.ts` — worker
   disabled on Linux (rule 3).
-- `src/components/timeline/hooks/useTimelineClipCanvasMainThreadDraw.ts` —
+- `src/components/timeline/utils/timelineClipCanvasMainThreadSurface.ts` —
   `willReadFrequently` software raster on Linux (rule 4).
 - `src/engine/core/WebGPUContext.ts` — `shouldUseLowPowerFallback()`,
   hybrid-GPU recovery, and the timeout warnings (modes 4–5).
-
-History: issue #259 (timeline lanes blank on Linux after the #228 GPU clip-canvas
-refactor) and issue #46 (`importExternalTexture` silent failure on Mesa).
+- `src/services/render/renderHostPort.ts`,
+  `src/services/capture/recording/frameTransform.ts`,
+  `src/services/mediaRuntime/liveInputRuntime.ts`, and
+  `src/services/sceneCutDetection/proxySceneCutAnalyzer.ts` — additional
+  shipped consumers of the shared Linux canvas policy.

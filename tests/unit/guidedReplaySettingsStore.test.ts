@@ -1,30 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const emptyKeys = {
-  openai: '',
-  anthropic: '',
-  assemblyai: '',
-  deepgram: '',
-  piapi: '',
-  kieai: '',
-  evolink: '',
-  elevenlabs: '',
-  youtube: '',
-  klingAccessKey: '',
-  klingSecretKey: '',
-};
-
 async function importSettingsStoreWithMocks() {
   vi.resetModules();
   vi.doUnmock('../../src/stores/settingsStore');
   localStorage.clear();
 
-  vi.doMock('../../src/services/apiKeyManager', () => ({
-    apiKeyManager: {
-      storeKeyByType: vi.fn(async () => undefined),
-      getAllKeys: vi.fn(async () => emptyKeys),
-    },
-  }));
   vi.doMock('../../src/services/project/ProjectFileService', () => ({
     projectFileService: {
       isProjectOpen: vi.fn(() => false),
@@ -40,11 +20,6 @@ async function importSettingsStoreWithMocks() {
       useFullWebCodecsPlayback: false,
       disableHtmlPreviewFallback: false,
     },
-  }));
-  vi.doMock('../../src/services/lemonadeProvider', () => ({
-    DEFAULT_LEMONADE_ENDPOINT: 'http://localhost:13305/api/v1',
-    DEFAULT_LEMONADE_CONTEXT_SIZE: -1,
-    DEFAULT_LEMONADE_MODEL: 'local-model',
   }));
   vi.doMock('../../src/services/logger', () => ({
     Logger: {

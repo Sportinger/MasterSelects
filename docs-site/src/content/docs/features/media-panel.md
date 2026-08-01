@@ -1,0 +1,669 @@
+---
+title: "Media Panel"
+---
+
+[← Back to Index](/features/readme/)
+
+Import, organize, and manage media assets with folder structure, proxy generation, and three view modes.
+
+---
+
+## Table of Contents
+
+- [Importing Media](#importing-media)
+- [View Modes](#view-modes)
+- [AI Generator Tray](#ai-generator-tray)
+- [Source Thumbnail Cache](#source-thumbnail-cache)
+- [Folder Organization](#folder-organization)
+- [Deleting Media](#deleting-media)
+- [Compositions](#compositions)
+- [Proxy Generation](#proxy-generation)
+- [Selection](#selection)
+- [Context Menu](#context-menu)
+- [Media Properties](#media-properties)
+- [Drag to Timeline](#drag-to-timeline)
+- [Project Integration](#project-integration)
+- [Media Relinking](#media-relinking)
+
+---
+
+## Importing Media
+
+### Supported Formats
+
+| Type | Formats |
+|------|---------|
+| **Video** | MP4, WebM, MOV, AVI, MKV, WMV, M4V, FLV |
+| **Audio** | WAV, MP3, OGG, FLAC, AAC, M4A, WMA, AIFF, OPUS |
+| **Image** | PNG, JPG/JPEG, GIF, WebP, BMP, SVG |
+| **Vector Animation** | `.lottie`, `.riv`, Lottie JSON (`.json`, content-sniffed) |
+| **Premiere Pro project** | `.prproj` (gzip or plain Premiere XML) |
+| **Signal Assets** | CSV as table signals; any other unknown file as a binary signal |
+
+The panel also accepts a few specialized asset types that flow into the timeline as 3D clips:
+
+- `model` files: OBJ, glTF/GLB
+- `gaussian-splat` files: PLY, compressed PLY, SPLAT, KSPLAT, SPZ, SOG, LCC, and SOG-style ZIP payloads
+
+Lottie and Rive imports are treated as first-class media items. `.json` files are accepted when their contents match Lottie structure.
+
+Other files are routed through the universal Signal IR importer. Signal assets can be organized, renamed, labeled, deleted, saved, loaded, and dragged to video tracks. The timeline renderer dispatcher uses real 3D clip paths for renderable model and point-cloud artifacts, while data/document/binary signals use text-summary clips. Source signal metadata is preserved on every materialized clip.
+
+### Import Methods
+
+#### Import Button
+Click the **Import** button in the panel header. Uses the File System Access API when available (Chrome/Edge) for native file picker with persistent handles, or falls back to a standard file input.
+
+#### Add Dropdown
+Click the **+ Add** button for creating new items:
+- **Composition** - New composition (uses active comp's output resolution)
+- **Folder** - New folder for organization
+- **Text** - New text item (placed in auto-created "Text" folder)
+- **Solid** - New solid color item (placed in auto-created "Solids" folder)
+- **Live Input...** - Create a camera, display, or composition-feedback input
+- **3D** submenu - Mesh primitives, 3D Text, Camera, Light, 3D Effector, and Gaussian Splat import
+  - Mesh primitives: Cube, Sphere, Plane, Cylinder, Torus, Cone (placed in auto-created "Meshes" folder)
+  - 3D Effectors are placed in an auto-created "Effectors" folder
+- **Motion Null** - Creates a motion null on a video track
+- **Adjustment Layer** - Creates an adjustment clip on a video track
+- **Math Scene** - New math scene item (placed in auto-created "Math Scenes" folder)
+- **Motion Shape** - Rectangle, Ellipse, Polygon, or Star (placed in auto-created "Motion Shapes" folder)
+
+#### Drag and Drop
+- Drag files directly from the OS file explorer into the Media Panel
+- Paste clipboard images or files with `Ctrl+V` while the Media Panel is hovered
+- Drag folders directly into the panel; nested folders are recreated inside the project
+- Multiple files supported
+- Attempts to acquire file handles via `getAsFileSystemHandle` for persistence
+- Uses directory-entry walking where needed
+- Falls back to standard File objects when handles are unavailable
+
+#### Premiere Pro Projects
+
+Dropping or selecting a `.prproj` creates one import folder and converts every Premiere sequence into a MasterSelects composition. The importer preserves video/audio track layout, cuts, trims, clip speed, nested composition references, and static Motion/Opacity values. Video tracks are reversed into MasterSelects' top-to-bottom compositing order.
+
+Media already present in the current MasterSelects project is reused by normalized path and filename. Sources that cannot be identified uniquely are added as missing media with their Premiere path and flow through the normal Relink dialog.
+
+### Import Pipeline
+
+Media imports use a two-phase approach:
+
+1. **Phase 1 (instant):** A placeholder entry appears immediately in the panel with `isImporting: true`, showing file name and size
+2. **Phase 2 (background):** Full processing runs in the background:
+   - Media info extraction (dimensions, duration, FPS, codec, bitrate, audio detection)
+   - Gaussian-splat stats extraction (container, file size, per-file splat count, and sequence totals)
+   - Thumbnail generation (for video and image files)
+   - File hash calculation (for deduplication and proxy matching)
+   - Copy to project RAW folder when `copyMediaToProject` is enabled, or when the import is forced
+   - Existing proxy detection (by file hash)
+
+**Deduplication:** Files with matching name + size are automatically skipped.
+
+**Batch processing:** When importing multiple files, up to 3 files are processed in parallel.
+
+If a project-local `Raw/` copy is created, that copy becomes the canonical source for the imported asset. The store promotes the copied handle, and reloads and exports use the project copy.
+
+Signal imports use the universal import orchestrator. CSV files emit `table`, `metadata`, and `binary` refs; unknown files emit `binary` and `metadata` refs. When a project is open, their binary artifacts are persisted content-addressed under `Cache/artifacts/` and referenced from `project.json`. Without an open File System Access project, the same artifact store persists bytes in IndexedDB so SignalAssets are not metadata-only session objects.
+
+### File System Access API
+When supported (Chrome/Edge):
+- Native file picker via `showOpenFilePicker`
+- Persistent file handles stored in IndexedDB
+- Path information preserved
+- Handles from drag-and-drop also captured when available
+- If the same media is also copied into the project `Raw/` folder, that project copy is preferred on reload
+
+### Large File Handling
+| Size | Behavior |
+|------|----------|
+| < 500MB | Full thumbnails generated |
+| > 500MB | Thumbnail generation skipped |
+
+### Solid Color Items
+- Created via Add dropdown or context menu
+- Uses active composition dimensions (fallback: 1920x1080)
+- Default duration: 5 seconds
+- Color picker for customization via Solid Settings dialog
+- Placed in auto-created "Solids" folder
+- Drag to timeline to create solid color clips
+
+### Text Items
+- Created via Add dropdown
+- Default text: "New Text", font: Arial 48px white
+- Default duration: 5 seconds
+- Placed in auto-created "Text" folder
+- Drag to timeline to create text clips
+- **Note:** These are defaults for Media Panel text items (Arial, 48px). Timeline text clips use Arial, 72px (from `DEFAULT_TEXT_PROPERTIES` in `stores/timeline/constants.ts`).
+- See [Text Clips](/features/text-clips/) for full details
+
+---
+
+## View Modes
+
+The panel supports three view modes through the header mode control. The selected mode is persisted in `localStorage`.
+When **Wooden media panel theme** is enabled in Appearance settings, the Classic, Icons, Board, and Media generator tray chrome use the same wood/leather/brass skin family as the Audio Mixer; the setting defaults off and turning it off keeps the standard dark panel styling.
+Image and video-capable media items show a cursor-following preview tooltip only after the pointer rests on the item for 400ms; images use the existing thumbnail/image URL, while videos loop muted at 2x speed from their proxy or source URL. The tooltip fades in/out over 100ms.
+
+### Classic View (default)
+- Table layout with sortable, reorderable columns
+- Nested folder tree with expand/collapse arrows
+- Column headers for sorting and drag-to-reorder
+- Resizable name column (120px - 500px range, saved to localStorage)
+- Metadata columns keep a stable header set but show type-specific values. Audio files reuse the visual columns for waveform state, stem label, audio codec, and audio proxy state; still images show still/raster/image labels; Signal assets show signal kinds, provider, artifact count, file type, and diagnostics count.
+
+### Icons View
+- Thumbnail grid with file names below each item
+- Folder navigation via breadcrumb bar
+- Double-click folders to navigate into them
+- Breadcrumb shows full path from root, each segment is clickable
+- Hover tooltip shows detailed metadata (resolution, duration, codec, bitrate, file size)
+- Duration badge overlay on video and composition thumbnails
+- Item count badge on folder thumbnails
+
+### Board View
+- Board canvas grouped by Media Panel folders; every folder appears as a group, including empty folders
+- The root area contains top-level folders instead of rendering them beside root as separate peers
+- Mouse wheel zooms around the cursor; left-dragging the board, a node, or a folder group pans the board, with the background grid moving at a subtle parallax offset
+- Folder groups grow and shrink dynamically with their contents
+- Growing folder groups push sibling groups out of the way so board groups do not overlap
+- Double-clicking a folder group name starts inline rename for that folder
+- Items inside each folder wrap into dynamic rows sized from the media aspect ratio instead of fixed slots
+- Right-dragging nodes reorders the selected items in the target folder; nearby items make space during drag hover to preview the exact insertion point
+- Right-dragging a folder group moves the group and its contents as a spatial unit; nested folder groups move along with their parent folder
+- Folder groups accept dropped items and folders from the other Media Panel views, while drops outside the root area are ignored
+- Ctrl/right-drag starts a marquee selection; right-clicking opens the normal Media Panel context menu
+- Media, compositions, text, solids, meshes, cameras, lights, 3D effectors, math scenes, and motion shapes appear as board nodes with hover-only name and metadata overlays
+- Board annotations can be added from the Board context menu, then edited, resized, and stored locally
+- Video board nodes request missing thumbnails lazily like images, use a middle-frame thumbnail as the poster frame, and skim while hovered: horizontal mouse position maps to video time with a full-height white scrub indicator line like editor thumbnail scrubbing instead of always starting playback at 0:00; the board also loads a capped set of visible video nodes as poster fallbacks, including in the zoomed-out overview canvas mode, so missing or black cached thumbnails do not leave the board blank
+- Board zoom supports deep inspection up to 6400%; from 250% zoom upward, board UI text, badges, and metadata overlays counter-scale so they stop growing while media content keeps magnifying
+- At 400% zoom and higher, the image node closest to the viewport center is promoted from its thumbnail to the original source URL; other nodes stay on thumbnails so high-resolution files are lazy-loaded one at a time
+- During deep board zoom, the focused node's existing name, metadata, and duration overlays stay visible and slide inward when their normal positions would run beyond the Media Panel edges; the collapsed Chat/Generate/Downloads launcher is hidden so it does not cover the inspected media
+- Board order, folder group offsets, and viewport are saved into the project UI state, with `localStorage` as the live-session fallback
+- Drag files or folders from the OS onto a group to import directly into that folder
+- OS file drops on the Board canvas place the imported top-level files at the drop point instead of waiting for auto-pack placement
+- Drag existing Media Panel items onto groups to move them between folders
+- Context-menu Add actions in Board view place new compositions, folders, text, solids, meshes, cameras, splat effectors, math scenes, and motion shapes at the clicked canvas point
+- Cropped image results are placed beside their original Board node when the Board is open
+- Switching to or from Board view morphs folder groups from/to their Classic rows or Icons thumbnails using the same 500ms view transition as media items
+- The board uses the same Add dropdown and context menu as Classic view; new folders appear immediately in Classic, Icons, and Board view
+- The **Generate** board action expands the Media Panel's bottom-right AI generator tray; generated results still import through the normal Media Store path
+
+### AI Generator Tray
+- A compact **Generate** pill is available at the bottom right of the Media Panel without changing the current Classic, Icons, or Board view
+- Expanding the pill opens only the compact FlashBoard prompt composer: prompt field, model controls, ordered reference media cards, multi-shot controls, and the generate button
+- Image, video, and audio files can be referenced from Classic, Icons, or Board view by right-clicking and choosing **Reference in AI Prompt**; the same menu changes to **Unreference from AI Prompt** when all selected media are already linked
+- Dragging a media-panel image, video, or audio item onto the expanded prompt composer appends it to the ordered reference strip without moving it between folders
+- Queued and running generations appear above the prompt as compact preview cards with output type, status, elapsed timer, prompt, provider metadata, progress when available, and dismiss controls for failed/canceled jobs
+- Generation starts from Media, and results land back in the Media Pool under the normal AI Gen folders
+
+Board pan and reorder previews use imperative CSS transforms and commit final order only on mouse-up/drop. This avoids re-rendering the Media Panel and writing `localStorage` on every pointer move, which keeps board interaction responsive while heavy preview scenes or splat renders are active.
+
+---
+
+## Source Thumbnail Cache
+
+Video thumbnails are generated per source media file, not per clip instance.
+
+- Generation runs at roughly **1 thumbnail per second of source media**
+- Split and trimmed clips reuse the same source thumbnail set instead of regenerating thumbnails
+- Thumbnails are cached in IndexedDB and promoted into an in-memory URL cache on load
+- The cache can also be reused by file hash when the same source is imported again
+- Large files above the thumbnail threshold skip this generation path entirely
+
+---
+
+## Folder Organization
+
+### Creating Folders
+1. Add dropdown -> Folder
+2. Or right-click -> New Folder
+3. Folders are created expanded by default
+
+### Folder Features
+- **Nested folders** supported
+- **Drag-and-drop** items into folders (single or multi-select)
+- **Expand/collapse** tree view (list mode) or navigate into (grid mode)
+- **Cycle detection** prevents dropping a folder into itself or its descendants
+- **Label colors** assignable to folders
+
+### Operations
+```typescript
+createFolder(name, parentId?)     // Create folder (returns MediaFolder)
+removeFolder(id)                  // Delete (reparents files, compositions, and Signal assets)
+renameFolder(id, name)            // Rename
+toggleFolderExpanded(id)          // Toggle expand/collapse
+moveToFolder(itemIds[], folderId) // Move items (null = root)
+```
+
+---
+
+## Deleting Media
+
+Deleting imported media files from the Media Panel performs a project-wide cleanup:
+
+- If the media is used by clips in any composition, a confirmation dialog reports that those clips will be removed from all compositions.
+- Project-local source files in `Raw/` are deleted when no remaining media item references the same project path.
+- Derived project files are deleted: `Proxy/` folders, `Analysis/*.json`, `Transcripts/*.json`, `Cache/waveforms/*.waveform`, `Cache/thumbnails/*.jpg`, gaussian-splat runtime caches, and referenced audio-analysis artifacts.
+- IndexedDB mirrors are cleaned up as well: media records, proxy frames, analysis cache, source thumbnails, thumbnails, file handles, and audio artifacts.
+- Hash-based artifacts such as proxies and thumbnails are preserved when another remaining media item still shares the same file hash.
+
+---
+
+## Compositions
+
+### Creating Compositions
+1. Add dropdown -> Composition
+2. Created with settings from `settingsStore.outputResolution`
+3. Default duration: 60 seconds, frame rate: 30 fps
+4. Starts with two Video tracks and one Audio track
+
+### Composition Settings Dialog
+Edit via right-click -> Composition Settings:
+- Width and height
+- Frame rate
+- Duration
+- Resizing adjusts clip transforms to maintain pixel positions
+
+The active composition's `frameRate` is the playback/timeline source of truth:
+timeline ruler labels, dynamic preview target FPS diagnostics, and the Media
+Panel FPS column read this value. Export-panel FPS overrides are export-only.
+
+### Composition Operations
+```typescript
+createComposition(name, settings?)   // Create with optional overrides
+duplicateComposition(id)             // Creates "Name Copy"
+removeComposition(id)                // Delete
+updateComposition(id, updates)       // Update settings
+openCompositionTab(id, options?)     // Edit in timeline (with animation)
+closeCompositionTab(id)              // Close tab
+reorderCompositionTabs(from, to)     // Drag to reorder tabs
+setActiveComposition(id)             // Switch active composition
+getActiveComposition()               // Get current composition
+getOpenCompositions()                // List open tabs
+```
+
+### Tab System
+- Compositions open as tabs in the timeline
+- Creating a composition from the Media Panel opens it immediately in the timeline
+- Tab switching saves current timeline state and loads the new composition's state
+- Animated transitions (exit/enter) when switching between compositions
+- Synced playhead when navigating into/out of nested compositions
+
+### Nested Compositions
+- Drag composition to timeline to create a nested comp clip
+- Double-click composition clip to navigate into it
+- Playhead position syncs between parent and nested compositions
+- Changes in nested comp reflect in parent timeline
+
+### Source Monitor
+- Double-click a video or image file to open it in the source monitor
+- Image source monitor sessions include a `CROP` button. Applying a crop imports a new image beside the source, prefixed as `CROP <original name>`; in Board view the new node is placed beside the original node.
+- Locked-aspect image crop resizing keeps the opposite corner anchored while dragging a corner handle.
+- Sets `sourceMonitorFileId` in the store
+
+---
+
+## Proxy Generation
+
+### Project-Based Proxy System
+Proxies require an open project (via `projectFileService`). For large video files:
+1. Right-click video -> Generate Proxy
+2. Proxy frames are generated and stored in the project folder
+
+### How It Works
+- Video is decoded frame-by-frame using `proxyGenerator`
+- Frames are saved individually to the project's proxy storage via `projectFileService`
+- Audio is extracted separately in the background (non-blocking)
+- Generation can be cancelled; partial proxies are preserved
+- Resumed automatically if a partial proxy exists on disk
+
+### Proxy Settings
+```typescript
+FPS: min(30, source FPS)  // 30 FPS fallback when source FPS is unavailable
+```
+
+### Proxy Completion
+A proxy is considered complete when >= 98% of expected frames are available:
+```typescript
+frameCount >= Math.ceil(duration * PROXY_FPS) * 0.98
+```
+
+### Progress Tracking
+```typescript
+interface MediaFile {
+  proxyStatus: 'none' | 'generating' | 'ready' | 'error';
+  proxyProgress: number;      // 0-100
+  proxyFrameCount?: number;   // Total frames generated
+  proxyFps?: number;          // At most 30; may match a lower source FPS
+  hasProxyAudio?: boolean;    // Audio proxy extracted
+}
+```
+
+### Proxy Mode
+Toggle proxy playback mode via `proxyEnabled` / `toggleProxyEnabled()`:
+- When enabled, mutes all video elements in the timeline
+- Uses proxy frames instead of original video for playback
+
+### Visual Indicators
+| Badge | Meaning |
+|-------|---------|
+| **P** (blue) | Proxy ready |
+| **P** (filling animation) + **X%** | Generating, with progress |
+
+---
+
+## Selection
+
+### Click Selection
+- **Click** - Select single item
+- **Ctrl/Cmd + Click** - Toggle item in selection
+- **Shift + Click** - Add to selection
+
+### Marquee Selection
+- Click and drag on empty space in the item list to draw a selection rectangle
+- 4px movement threshold before marquee activates
+- Hold **Ctrl/Cmd** while marquee selecting to add to existing selection
+- Works in Classic and Icons view modes
+
+### Label Colors
+16 AE-style label colors assignable to any item (files, folders, compositions, text, solids):
+
+`none`, `red`, `yellow`, `blue`, `green`, `purple`, `orange`, `pink`, `cyan`, `brown`, `lavender`, `peach`, `seafoam`, `fuchsia`, `tan`, `aqua`
+
+Click the label dot in the list view to open the color picker. When multiple items are selected, the color is applied to all selected items.
+
+---
+
+## Context Menu
+
+Right-click on items or empty space for context options.
+
+### Always Available
+- Import Media...
+- New Composition
+- New Folder
+- New Text
+- New Solid
+- **3D** submenu: Mesh (Cube, Sphere, Plane, Cylinder, Torus, Cone), 3D Text, Camera, Light, 3D Effector, Gaussian Splat
+- Live Input..., Motion Null, Adjustment Layer, Math Scene, Motion Shape
+
+### Single/Multi Selection
+- **Reference in AI Prompt** / **Unreference from AI Prompt** for selected image, video, and audio files
+- **Rename** (single selection only)
+- **Download** (single file selection, saves through the browser from the retained file/blob URL)
+- **Crop** (single image selection, opens the source monitor directly in crop mode)
+- **Create Comp** (single image/video selection, creates a composition at the media resolution, opens it, and places the media at time 0)
+- **Extract First Frame** / **Extract Last Frame** (single video selection, imports the extracted PNG beside the source media)
+- **Move to Folder** submenu (shows available folders + "Root")
+- **Delete** (shows count for multi-selection)
+
+### Video Files (single selection)
+- **Extract First Frame** / **Extract Last Frame** imports a PNG still from the selected source video into the same Media Panel folder and selects it after import
+- **Regenerate** submenu: Proxy / Stop Proxy Generation (X%), Scene Cuts, Thumbnails, and (when audio is available) WAV Audio Proxy, Waveform, and Spectral
+- **Show in Explorer** submenu:
+  - Raw (downloads file if no native path)
+  - Proxy (disabled if no proxy)
+- **Set Proxy Folder...**
+
+### Compositions (single selection)
+- **Composition Settings...** (opens settings dialog)
+
+### Solid Items (single selection)
+- **Solid Settings...** (opens color/dimension editor)
+
+---
+
+## Media Properties
+
+### Column Display (Classic View)
+The media list displays items in a table with the following columns:
+
+| Column | Description | Example |
+|--------|-------------|---------|
+| **Name** | File name with AE-style file type icon | Video.mp4 |
+| **Label** | Colored dot indicator (clickable) | colored circle |
+| **Duration** | Clip length (m:ss) | 4:02 |
+| **Resolution** | Width x Height, or splat count / sequence total for gaussian splats | 1920x1080, 3f / 12.4M splats |
+| **FPS** | Frame rate (video) or composition frame rate | 25 |
+| **Container** | File container format | MP4, MKV, WebM, PLY Seq |
+| **Codec** | Video codec or splat runtime family | H.264, VP9, Splat Seq |
+| **Audio** | Has audio track? | Yes / No |
+| **Bitrate** | Data rate | 12.5 Mbps |
+| **Size** | File size | 125.4 MB |
+
+### Column Customization
+
+**Sortable Columns:**
+- Click column header to sort ascending
+- Click again for descending
+- Click a third time to remove sort
+- Folders always sort separately (stay at top)
+
+**Reorderable Columns:**
+- Drag column headers to rearrange order
+- Order is saved in localStorage (`media-panel-column-order`)
+
+**Resize Name Column:**
+- Drag the vertical resize handle on the right edge of the Name column
+- Width range: 120px - 500px
+- Width saved in localStorage (`media-panel-name-width`)
+
+### Status Badges (in Name column)
+| Badge | Meaning |
+|-------|---------|
+| **P** (blue) | Proxy ready |
+| **P** (filling) + % | Proxy generating |
+| **T** (green) | Fully transcribed - click to open transcript |
+| **T** (filling) | Partially transcribed - shows coverage % |
+| **A** (orange) | Fully analyzed - click to open analysis |
+| **A** (filling) | Partially analyzed - shows coverage % |
+
+Clicking transcript or analysis badges selects the corresponding clip in the timeline and opens the clip properties panel.
+
+### Metadata Interface
+```typescript
+interface MediaFile {
+  id: string;
+  name: string;
+  type: 'video' | 'audio' | 'image' | 'model' | 'gaussian-avatar' | 'gaussian-splat' | 'lottie' | 'rive';
+  file?: File;               // Undefined when needs reload
+  url: string;
+  parentId: string | null;
+  createdAt: number;
+  duration?: number;
+  width?: number;
+  height?: number;
+  fps?: number;              // Frame rate (video)
+  codec?: string;            // H.264, VP9, AV1, ProRes, etc.
+  audioCodec?: string;       // AAC, AC-3, Opus, etc.
+  container?: string;        // MP4, MKV, WebM, etc.
+  fileSize?: number;         // File size in bytes
+  bitrate?: number;          // Bits per second
+  hasAudio?: boolean;        // Whether video has audio tracks
+  splatCount?: number;       // First/only gaussian-splat frame count
+  totalSplatCount?: number;  // Sequence total, abbreviated in UI as K/M/B
+  splatFrameCount?: number;  // Gaussian-splat sequence frame count
+  thumbnailUrl?: string;
+  fileHash?: string;         // For dedup and proxy matching
+  labelColor?: LabelColor;   // 16-color label system
+  isImporting?: boolean;     // True during background import
+  // Proxy
+  proxyStatus?: ProxyStatus;
+  proxyProgress?: number;
+  proxyVideoUrl?: string;        // URL to proxy video
+  proxyFrameCount?: number;
+  proxyFps?: number;
+  proxyFormat?: 'jpeg-sequence' | 'mp4-all-intra';
+  hasProxyAudio?: boolean;
+  audioProxyStatus?: ProxyStatus;
+  audioProxyProgress?: number;
+  waveformStatus?: 'idle' | 'generating' | 'ready' | 'skipped' | 'error';
+  sceneCutStatus?: SceneCutAnalysisStatus;
+  // Transcript
+  transcriptStatus?: TranscriptStatus;
+  transcript?: TranscriptWord[];
+  transcriptCoverage?: number;
+  transcribedRanges?: [number, number][]; // Time ranges that have been transcribed
+  // Analysis
+  analysisStatus?: AnalysisStatus;
+  analysisCoverage?: number;
+  vectorAnimation?: VectorAnimationMetadata;
+  // File System Access API
+  hasFileHandle?: boolean;
+  filePath?: string;
+  absolutePath?: string;
+  projectPath?: string;      // Path within project RAW folder
+}
+```
+
+---
+
+## Drag to Timeline
+
+### Process
+1. Select media in panel
+2. Drag to timeline
+3. Drop on appropriate track
+
+### Drag Types
+| Item Type | Drag Payload Kind | Data Transfer Key |
+|-----------|-------------------|-------------------|
+| Media file (video/image/lottie/rive) | `media-file` | `application/x-media-file-id` |
+| Media file (audio) | `media-file` (marked as audio) | `application/x-media-file-id` |
+| Composition | `composition` | `application/x-composition-id` |
+| Text item | `text` | `application/x-text-item-id` |
+| Solid item | `solid` | `application/x-solid-item-id` |
+| Mesh item | `mesh` | `application/x-mesh-item-id` |
+| Folder | Internal move only (no timeline drop) | — |
+
+### Drop Behavior
+- Creates clip from media source
+- Uses actual media duration
+- Audio-only files restricted to audio tracks
+- Files still importing or missing cannot be dragged to timeline
+- Compositions cannot be dragged into themselves (active comp check)
+- Mesh items create 3D clips with `is3D: true` and `meshType` (rendered via the shared 3D scene)
+- Signal assets create timeline clips through renderer adapters: OBJ/glTF/GLB mesh or geometry artifacts become `model` clips, PLY/SPLAT-family point-cloud or geometry artifacts become `gaussian-splat` clips, and other Signal refs become text-summary clips.
+
+### Track Type Enforcement
+| Media Type | Allowed Tracks |
+|------------|----------------|
+| Video/Image/Lottie/Rive/Composition/Text/Solid/Mesh | Video tracks only |
+| Audio | Audio tracks only |
+
+---
+
+## Project Integration
+
+### Auto-Save
+Media references are saved with the project file, while IndexedDB keeps the handle cache and other reload helpers:
+- File metadata (name, type, dimensions, duration, codec, etc.)
+- File handles (for reload on next session)
+- Folder structure
+- Media Panel view mode, Board viewport, Board folder group offsets, and Board slot order
+- Composition state with timeline data
+- Text, solid, mesh, camera, light, 3D-effector, math-scene, and motion-shape items saved in project data
+- When present, `projectPath` points at the copied `Raw/<name>` file and is used for automatic relinking
+
+### Restoration
+On project load:
+- Project-local `Raw/` copies are tried first and become the canonical source when available
+- Media metadata restored from IndexedDB and project JSON
+- File handles used to restore file access when no `Raw/` copy is available
+- Thumbnails restored from `Cache/thumbnails` by file hash
+- Existing proxies detected automatically
+- Existing transcripts and analysis data loaded from the project folder
+- Dead blob/object URLs are regenerated for available files
+- If a retained `File` object is still present, image/video thumbnails are rebuilt when needed after refresh
+- Project load is marked ready after relink and UI hydration; thumbnail, metadata, proxy, transcript, and analysis cache checks continue in an idle window so preview playback after refresh is not blocked by media-panel cache work.
+- Folder structure, expansion state, dock layout, and per-composition view state restored
+
+### Media File IDs
+- Each media has a unique timestamp-based ID
+- Clips reference media by `mediaFileId`
+- Survives project reload
+- File hash used for proxy and thumbnail deduplication across reimports
+
+---
+
+## Media Relinking
+
+### Relink Dialog
+When media files lose access (e.g., after browser restart):
+1. **Automatic detection** - Panel shows "Relink (N)" button when files need reload
+2. **Relink dialog** - Click the button to open the relink interface
+3. Files dimmed in list with `no-file` styling when unavailable
+
+### Reload Strategy
+Files are reloaded in priority order:
+1. **Project RAW folder** - If the asset was copied into the project and the project is open
+2. **Project folder scan** - Recursively scans the opened project folder and all subfolders, keeping `Raw/` matches first when duplicate names exist
+3. **Stored file handle** - Re-access the original file location, including permission re-checks
+
+On project load and in the Relink dialog, missing files are matched case-insensitively by expected filenames. Recursive scans preserve relative subfolder paths and all duplicate basenames; path suffixes disambiguate matches such as `Folder A/1.mp4` versus `Folder B/1.mp4`. A basename-only collision stays unresolved for manual selection instead of silently linking the wrong file. Sequence assets match their frame filenames (`.glb`, `.ply`, `.splat`) instead of the media-panel display name.
+
+### Double-Click Reload
+Double-clicking a file that has lost access triggers a single-file reload attempt with permission request.
+
+### Visual Indicators
+| State | Appearance |
+|-------|------------|
+| File missing/needs reload | Row dimmed, `no-file` class |
+| File importing | `importing` class with loading state |
+| Proxy available | Blue "P" badge |
+
+---
+
+## Store Architecture
+
+The media store is split into modular slices:
+
+| Slice | File | Responsibility |
+|-------|------|----------------|
+| **fileImportSlice** | `slices/fileImportSlice.ts` | Import via picker, drag-drop, handles |
+| **fileManageSlice** | `slices/fileManageSlice.ts` | Remove, rename, reload files |
+| **compositionSlice** | `slices/compositionSlice.ts` | CRUD, tabs, active composition switching |
+| **slotSlice** | `slices/slotSlice.ts` | Resolume-style slot grid assignments |
+| **multiLayerSlice** | `slices/multiLayerSlice.ts` | Multi-layer playback activation |
+| **folderSlice** | `slices/folderSlice.ts` | Folder CRUD and expand/collapse |
+| **selectionSlice** | `slices/selectionSlice.ts` | Selection, move-to-folder, label colors |
+| **duplicateSlice** | `slices/duplicateSlice.ts` | Copy, paste, and duplicate Media Panel items |
+| **proxySlice** | `slices/proxySlice.ts` | Proxy generation, cancellation, progress |
+| **projectSlice** | `slices/projectSlice.ts` | Save, load, init from DB |
+
+**Inline actions (in `index.ts`):** item creation/removal and folder helpers for text, solids, meshes, cameras, lights, 3D effectors, math scenes, motion shapes, and live inputs; plus `getItemsByFolder`, `getItemById`, and `getFileByName`.
+
+**Boot Sequence:** `init.ts` handles IndexedDB initialization, timeline restore from saved state, status synchronization, auto-save interval setup, beforeunload handler, and audio cleanup via `disposeAllAudio()`.
+
+Helper modules in `helpers/`:
+
+| Module | Purpose |
+|--------|---------|
+| `importPipeline.ts` | Unified import processing -- orchestrates the two-phase import (placeholder then background processing) |
+| `mediaInfoHelpers.ts` | Codec detection, metadata extraction (uses mp4box for MP4 container parsing) |
+| `thumbnailHelpers.ts` | Thumbnail generation, deduplication by file hash, skip logic for large files |
+| `fileHashHelpers.ts` | File hash calculation for deduplication and proxy matching |
+
+---
+
+## Tests
+
+| Test File | Tests | Coverage |
+|-----------|-------|----------|
+| [`fileManageSlice.test.ts`](https://github.com/Sportinger/MasterSelects/blob/master/tests/stores/mediaStore/fileManageSlice.test.ts) | 121 | Files, folders, solids, text items, selection, labels |
+| [`compositionSlice.test.ts`](https://github.com/Sportinger/MasterSelects/blob/master/tests/stores/mediaStore/compositionSlice.test.ts) | 113 | Compositions |
+
+Run tests: `npx vitest run`
+
+---
+
+## Related Features
+
+- [Timeline](/features/timeline/) - Using media in edits
+- [Audio](/features/audio/) - Audio media handling
+- [Project Persistence](/features/project-persistence/) - Saving
+- [Export](/features/export/) - Rendering output
+
+---
+
+*Source: `src/components/panels/MediaPanel.tsx`, `src/components/panels/media/`, `src/stores/mediaStore/index.ts`, `src/stores/mediaStore/slices/`*

@@ -12,23 +12,25 @@ MasterSelects supports per-clip vector masks with preview-overlay editing, selec
 - Mask drawing and editing can extend into preview pasteboard space outside the visible content.
 - Mask navigation preserves the composition aspect ratio and uses the same neutral pasteboard around it as the regular transform editor, keeping the composition boundary visible while zooming and panning.
 - Mask outlines, vertices, handles, and hit areas keep screen-stable sizes while zooming the preview.
-- Whole-mask dragging uses an internal mask offset; visible shape animation is driven by the `Mask Path` stopwatch.
+- Whole-mask dragging uses an internal mask offset for static masks. When `Mask Path` recording is active or path keyframes exist, it translates the vertices and records the path instead.
 - Mask outlines are projected through the active layer transform, so 2D and 3D movement, scale, and rotation keep the editable overlay aligned with the rendered mask.
 - When the mask tab is active, the normal preview Edit Mode toggle becomes navigation-only: wheel zoom and Alt/MMB pan stay available, but layer transform handles are disabled.
 - Mask outlines are only shown while the mask tab is open. Opening the tab activates the current mask for editing; leaving the tab hides the overlay again.
 - Mask path animation is exposed as one `Mask Path` stopwatch, not separate vertex X/Y stopwatches.
 - The active mask can be copied and pasted to another selected clip together with its mask keyframes, keeping keyframe times relative to the target clip start.
+- Mask rows can be moved up or down to change mask compositing order.
 - Individual mask edges can be selected and given their own edge feather value.
+- The registered AI tool surface can inspect, create, remove, and update masks and vertices, including whole-path keyframes.
 - Mask changes are serialized with the project.
 
 ## Data Model
 
-`ClipMask` currently includes:
+`ClipMask` includes:
 
 - `id` and `name`
 - `vertices`
 - `closed`
-- `opacity` (legacy/persisted, not rendered or exposed in the active panel)
+- `opacity` (persisted, not rendered or exposed in the active panel)
 - `feather`
 - `edgeFeathers`
 - `featherQuality`
@@ -40,7 +42,7 @@ MasterSelects supports per-clip vector masks with preview-overlay editing, selec
 - `visible`
 - `outlineColor`
 
-`MaskMode` is currently `add`, `subtract`, or `intersect`.
+`MaskMode` is `add`, `subtract`, or `intersect`.
 `enabled` controls whether a mask contributes to the rendered mask texture.
 `visible` controls only the preview overlay outline and edit handles.
 `outlineColor` controls the SVG stroke color used for that mask in the preview overlay.
@@ -62,7 +64,7 @@ Dragging while placing a pen point creates bezier handles.
 When the pen is near an existing edge, the overlay previews the inserted point; clicking inserts a vertex at that exact curve position.
 Clicking the first point closes the path once at least three vertices exist.
 
-`MaskEditMode` currently includes:
+`MaskEditMode` includes:
 
 - `none`
 - `drawing`
@@ -81,7 +83,7 @@ The preview overlay is implemented in `src/components/preview/MaskOverlay.tsx`.
 - Vertex hit areas sit above edge hit areas so corner grabs prefer the vertex over the adjacent edge.
 - Selected bezier vertices always show their handles, including when the outline is hidden or a handle is currently zero-length.
 - Mask geometry is edited in layer-local UV space and projected to the preview with the current layer transform.
-- Whole-mask dragging moves the internal `position.x` and `position.y` offset, leaving the stored vertex topology unchanged.
+- Whole-mask dragging moves the internal `position.x` and `position.y` offset for static masks. With Mask Path recording armed or existing path keyframes, it translates all vertices and commits a path keyframe instead.
 - Whole-mask, vertex, bezier-handle, and edge drags use a transient evaluated-mask preview. The SVG overlay follows every animation frame, while project data, keyframes, cache invalidation, and undo history are committed only once when the pointer is released.
 - Dragging an edge moves the two adjacent vertices together.
 - Clicking an edge selects it. Clicking empty preview space clears vertex and edge selection.
@@ -139,7 +141,7 @@ This is the primary animation workflow for changing individual mask vertices ove
 
 Mask feather, per-edge feather, and feather quality use the normal numeric keyframe workflow.
 Per-edge feather keyframes use `mask.{maskId}.edge.{fromVertexId}->{toVertexId}.feather`; project save files remap the edge portion through vertex indexes so animated edge feather survives reloads.
-The underlying `mask.{maskId}.position.x` and `mask.{maskId}.position.y` properties stay supported for older projects and automation paths, but they are not exposed in the Mask tab.
+The underlying `mask.{maskId}.position.x` and `mask.{maskId}.position.y` properties stay supported for automation paths, but they are not exposed in the Mask tab.
 Copying a mask copies every `mask.{maskId}.*` keyframe. Pasting creates a new mask id and remaps all pasted mask keyframes to that id.
 Deleting a mask removes every keyframe and recording flag for that mask id.
 
@@ -148,7 +150,7 @@ This matches the After Effects-style workflow where the mask path is one animata
 Static mask changes are also picked up by the global undo history. Mask-only changes use a 1 second idle debounce so slider and drag updates do not flood the history stack.
 
 Path interpolation can morph between different vertex counts.
-When a vertex exists on only one side of a keyframe segment, playback creates a temporary collapsed vertex on the nearest surviving neighbor and tweens it into, or out of, that point.
+When vertices exist on only one side of a keyframe segment, playback expands the topology through the surviving Bezier segments and tweens the temporary vertices into, or out of, the path. A one-vertex source collapses the temporary vertices to that anchor.
 The open/closed state remains discrete and switches at the destination keyframe.
 
 ## Shortcuts
@@ -194,12 +196,14 @@ Relevant files:
 - `src/engine/texture/MaskTextureManager.ts`
 - `src/engine/export/ExportMaskTextures.ts`
 - `src/stores/timeline/keyframeSlice.ts`
+- `src/services/compositionRender/layerEvaluation.ts`
+- `src/utils/maskRenderer.ts`
+- `src/hooks/engine/useEngineMaskTextureSync.ts`
 - `src/engine/native3d/NativeSceneRenderer.ts`
 - `src/engine/native3d/shaders/PlanePass.wgsl`
 
 ## Limitations
 
-- Mask tracking is not implemented.
-- Mask path interpolation morphs added and removed vertices through collapsed neighbor points.
+- Mask path interpolation across topology changes is a best-effort Bezier-segment morph; a one-vertex source collapses added vertices to its anchor.
 - Mask mode is applied while generating the combined CPU mask texture.
 

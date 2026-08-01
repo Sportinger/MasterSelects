@@ -59,10 +59,11 @@ if (import.meta.env.DEV) {
     list: () => AI_TOOLS,
     status: getQuickTimelineSummary,
   };
-}
 
-// Bridge: allow external agents to call aiTools via HTTP POST /api/ai-tools
-void import('./services/aiTools/bridge');
+  // The HTTP/MCP bridge is a local development interface. External agents
+  // bring their own model and harness; production builds do not expose it.
+  void import('./services/aiTools/bridge');
+}
 
 // Expose store for debugging
 if (import.meta.env.DEV) {

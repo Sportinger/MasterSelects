@@ -30,10 +30,6 @@ interface BuildFlashBoardModelCatalogStateInput {
   initialProviderId?: string;
   initialService?: CatalogEntry['service'];
   serviceScope?: CatalogEntry['service'];
-  useElevenLabsKeyByDefault: boolean;
-  useEvolinkKeyByDefault: boolean;
-  useHostedProductionProviders: boolean;
-  usePiApiKeyByDefault: boolean;
 }
 
 interface BuildFlashBoardModelOptionsStateInput {
@@ -98,7 +94,7 @@ export function getFlashBoardModelCategory(entry: CatalogEntry | undefined): Fla
     return 'music';
   }
 
-  if (entry.service === 'elevenlabs' || (entry.outputType === 'audio' && entry.supportsTextToAudio)) {
+  if (entry.outputType === 'audio' && entry.supportsTextToAudio) {
     return 'voice';
   }
 
@@ -113,30 +109,15 @@ export function getFlashBoardModelCategory(entry: CatalogEntry | undefined): Fla
 }
 
 function getModelSourceLabel(entry: CatalogEntry): string {
-  switch (entry.service) {
-    case 'evolink':
-      return 'EvoLink';
-    case 'piapi':
-      return 'PiAPI';
-    case 'cloud':
-      return 'Cloud';
-    case 'elevenlabs':
-      return 'ElevenLabs';
-    default:
-      return entry.service;
-  }
+  return entry.service === 'cloud' ? 'Cloud' : entry.service;
 }
 
 function getModelDisplayName(entry: CatalogEntry): string {
-  if (entry.service === 'elevenlabs') {
-    return 'ElevenLabs Speech';
-  }
-
   if (entry.providerId === SUNO_PROVIDER_ID) {
     return 'Suno Music';
   }
 
-  return entry.name.replace(' (Kie.ai)', '').replace(' (EvoLink)', '');
+  return entry.name.replace(' (Kie.ai)', '');
 }
 
 function isCatalogEntryVisible({
@@ -144,10 +125,6 @@ function isCatalogEntryVisible({
   entry,
   hasHostedSession,
   serviceScope,
-  useElevenLabsKeyByDefault,
-  useEvolinkKeyByDefault,
-  useHostedProductionProviders,
-  usePiApiKeyByDefault,
 }: BuildFlashBoardModelCatalogStateInput & { entry: CatalogEntry }): boolean {
   if (serviceScope && entry.service !== serviceScope) {
     return false;
@@ -157,35 +134,7 @@ function isCatalogEntryVisible({
     return false;
   }
 
-  if (entry.service === 'cloud') {
-    if (!hasHostedSession) {
-      return false;
-    }
-
-    if (!useHostedProductionProviders && entry.providerId === 'cloud-elevenlabs-tts' && useElevenLabsKeyByDefault) {
-      return false;
-    }
-
-    return true;
-  }
-
-  if (useHostedProductionProviders) {
-    return false;
-  }
-
-  if (entry.service === 'piapi') {
-    return usePiApiKeyByDefault;
-  }
-
-  if (entry.service === 'evolink') {
-    return useEvolinkKeyByDefault;
-  }
-
-  if (entry.service === 'elevenlabs') {
-    return useElevenLabsKeyByDefault;
-  }
-
-  return false;
+  return entry.service === 'cloud' && hasHostedSession;
 }
 
 function findInitialEntry({

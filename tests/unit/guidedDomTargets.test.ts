@@ -64,6 +64,82 @@ describe('guided DOM target resolvers', () => {
     }));
   });
 
+  it('anchors media item guidance to the visible name instead of the full row', async () => {
+    const registry = new GuidedTargetRegistry();
+    registerDomGuidedTargetResolvers(registry);
+
+    const row = addElement({ 'data-item-id': 'tutorial-media' }, {
+      x: 20,
+      y: 80,
+      width: 620,
+      height: 26,
+    });
+    const name = addElement({ 'data-guided-media-name': 'tutorial-media' }, {
+      x: 56,
+      y: 84,
+      width: 112,
+      height: 18,
+    });
+    row.appendChild(name);
+
+    const resolution = await registry.resolve({
+      kind: 'mediaItem',
+      itemId: 'tutorial-media',
+    });
+
+    expect(resolution.status).toBe('resolved');
+    expect(resolution.rect).toEqual({ x: 56, y: 84, width: 112, height: 18 });
+    expect(resolution.center).toEqual({ x: 112, y: 93 });
+  });
+
+  it('resolves generic dock divider and real intersecting corner anchors', async () => {
+    const registry = new GuidedTargetRegistry();
+    registerDomGuidedTargetResolvers(registry);
+
+    const verticalDivider = addElement({
+      'data-guided-resize-handle': 'true',
+      'data-guided-resize-axis': 'x',
+    }, {
+      x: 400,
+      y: 40,
+      width: 2,
+      height: 360,
+    });
+    const endCorner = addElement({
+      'data-guided-resize-corner': 'end',
+    }, {
+      x: 389,
+      y: 388,
+      width: 24,
+      height: 24,
+    });
+    verticalDivider.appendChild(endCorner);
+    addElement({
+      'data-guided-resize-handle': 'true',
+      'data-guided-resize-axis': 'y',
+    }, {
+      x: 0,
+      y: 399,
+      width: 900,
+      height: 2,
+    });
+
+    await expect(registry.resolve({
+      kind: 'dom',
+      id: 'dock-resize:any',
+    })).resolves.toEqual(expect.objectContaining({
+      status: 'resolved',
+      rect: { x: 400, y: 40, width: 2, height: 360 },
+    }));
+    await expect(registry.resolve({
+      kind: 'dom',
+      id: 'dock-resize-corner:any',
+    })).resolves.toEqual(expect.objectContaining({
+      status: 'resolved',
+      center: { x: 401, y: 400 },
+    }));
+  });
+
   it('maps normalized preview points to viewport coordinates', async () => {
     const registry = new GuidedTargetRegistry();
     registerDomGuidedTargetResolvers(registry);
@@ -136,6 +212,38 @@ describe('guided DOM target resolvers', () => {
       width: 8,
       height: 28,
     });
+  });
+
+  it('maps ruler timeline targets to the visible ruler lane', async () => {
+    const registry = new GuidedTargetRegistry();
+    registerDomGuidedTargetResolvers(registry);
+    useTimelineStore.setState({ zoom: 40, scrollX: 20 });
+
+    addElement({
+      'data-guided-target': 'timeline-tracks',
+      'data-guided-timeline-origin-x': '210',
+    }, {
+      x: 0,
+      y: 70,
+      width: 900,
+      height: 240,
+    });
+    addElement({ 'data-guided-target': 'timeline-ruler' }, {
+      x: 210,
+      y: 42,
+      width: 690,
+      height: 24,
+    });
+
+    const resolution = await registry.resolve({
+      kind: 'timelineTime',
+      surface: 'ruler',
+      time: 3,
+    });
+
+    expect(resolution.status).toBe('resolved');
+    expect(resolution.point).toEqual({ x: 310, y: 54 });
+    expect(resolution.center).toEqual({ x: 310, y: 54 });
   });
 
   it('reports offscreen timeline times with a scroll recovery action', async () => {

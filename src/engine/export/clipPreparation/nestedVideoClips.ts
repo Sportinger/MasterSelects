@@ -40,8 +40,24 @@ export function collectNestedVideoClips(compositionClip: TimelineClip): NestedVi
   ): void => {
     if (depth >= MAX_NESTING_DEPTH || !parentClip.nestedClips) return;
 
+    // A nested composition is represented by a visual clip and a linked audio
+    // clip. Both carry composition data, but only the instance on a visible
+    // video track belongs in the video decoder tree. Traversing the audio twin
+    // duplicates every descendant decoder under an "(Audio)" namespace.
+    const nestedVideoTrackIds = parentClip.nestedTracks
+      ? new Set(
+        parentClip.nestedTracks
+          .filter((track) => track.type === 'video' && track.visible !== false)
+          .map((track) => track.id),
+      )
+      : null;
+
     for (const clip of parentClip.nestedClips) {
+      if (nestedVideoTrackIds && !nestedVideoTrackIds.has(clip.trackId)) {
+        continue;
+      }
       if (clip.isComposition) {
+        if (clip.source?.type === 'audio') continue;
         const childMapping = getCompositionMapping(
           clip,
           mainAtSourceZero,

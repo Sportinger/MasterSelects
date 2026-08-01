@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
+import { withExclusiveHistorySnapshotMutationLease } from './timeline/exclusiveMutationLease';
 import type { ContainerFormat, VideoCodec } from '../engine/export';
 import type { AudioOnlyExportFormat } from '../engine/audio/AudioFileEncoder';
 import type {
@@ -550,7 +551,7 @@ export function getExportStoreData(
 }
 
 export const useExportStore = create<ExportStoreState>()(
-  subscribeWithSelector((set, get) => ({
+  subscribeWithSelector(withExclusiveHistorySnapshotMutationLease((set, get) => ({
     ...createDefaultExportStoreData(),
 
     setSettings: (patch) => {
@@ -864,5 +865,5 @@ export const useExportStore = create<ExportStoreState>()(
     hydrateFromProject: (data) => {
       set(() => sanitizeStoreData(data));
     },
-  }))
+  })))
 );

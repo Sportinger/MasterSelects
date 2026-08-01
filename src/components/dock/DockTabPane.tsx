@@ -305,6 +305,7 @@ export function DockTabPane({ group }: DockTabPaneProps) {
       ref={containerRef}
       className={`dock-tab-pane ${isDropTarget ? 'drop-target' : ''} ${groupContainsMaximizedPanel ? 'is-maximized-pane' : ''} ${isAudioMixerWoodPane ? 'audio-mixer-wood-pane' : ''}`}
       data-group-id={group.id}
+      data-guided-target={`pane:${group.id}`}
       data-active-panel-type={activePanel?.type}
       data-dock-layout-anim-id={layoutAnimationId}
       data-dock-layout-anim-title={activePanel?.title ?? group.id}

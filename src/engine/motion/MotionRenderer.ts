@@ -1,5 +1,6 @@
 import type { Layer } from '../core/types';
 import type { MotionLayerDefinition } from '../../types/motionDesign';
+import type { TextureFillAppearance } from '../../types/motionDesign';
 import {
   MOTION_UNIFORM_BYTE_SIZE,
   createMotionInstanceArray,
@@ -15,6 +16,7 @@ import {
   type MotionFrameRuntimeAdmission,
 } from './MotionFrameRuntime';
 import { MotionPipeline } from './MotionPipeline';
+import { MotionTextureAcquisition } from './media/motionTextureAcquisition';
 import { ReplicatorInstanceBufferState } from './replicator/instanceBufferState';
 import { planReplicatorSourceTexture } from './replicator/resourcePlanning';
 import {
@@ -24,8 +26,10 @@ import {
 } from './replicator/runtimeContracts';
 import {
   recordMotionRender,
+  recordMotionTextureDiagnostic,
   setMotionRendererCacheCount,
 } from './MotionDiagnostics';
+import { renderHostPort } from '../../services/render/renderHostPort';
 
 function isRenderableMotionShape(motion: MotionLayerDefinition | undefined): motion is MotionLayerDefinition {
   const primitive = motion?.shape?.primitive;
@@ -41,12 +45,17 @@ function isRenderableMotionShape(motion: MotionLayerDefinition | undefined): mot
 export class MotionRenderer {
   private device: GPUDevice;
   private pipeline: MotionPipeline;
+  private textureAcquisition: MotionTextureAcquisition;
   private caches = new Map<string, MotionClipGpuCache>();
   private instanceBufferStates = new Map<string, ReplicatorInstanceBufferState>();
+  private textureBindings = new WeakMap<MotionClipGpuCache, GPUTextureView>();
 
   constructor(device: GPUDevice) {
     this.device = device;
     this.pipeline = new MotionPipeline(device);
+    this.textureAcquisition = new MotionTextureAcquisition(device, {
+      onDiagnostic: (code, message) => recordMotionTextureDiagnostic({ code, message }),
+    });
   }
 
   renderLayer(
@@ -80,13 +89,44 @@ export class MotionRenderer {
     if (size.replicator.instanceCount === 0) {
       return null;
     }
+    const fallbackBinding = this.pipeline.getTextureBinding();
+    const textureFills = (motion.appearance?.items ?? [])
+      .filter((item): item is TextureFillAppearance => item.kind === 'texture-fill')
+      .slice(0, 8);
+    if (textureFills.length > 1) {
+      for (const appearance of textureFills.slice(1)) {
+        recordMotionTextureDiagnostic({
+          code: 'TEXTURE_SLOT_EXCEEDED',
+          appearanceId: appearance.id,
+          message: 'Motion texture-fill supports one bound texture slot; only the first texture-fill renders.',
+        });
+      }
+    }
+    const primaryTextureFill = textureFills[0];
+    const textureResult = primaryTextureFill
+      ? this.textureAcquisition.acquire(primaryTextureFill, () => renderHostPort.requestRender())
+      : null;
+    const textureBinding = textureResult?.status === 'ready' && textureResult.textureView
+      ? { view: textureResult.textureView, sampler: fallbackBinding.sampler }
+      : fallbackBinding;
     const cache = this.getOrCreateCache(
       layer,
       size.width,
       size.height,
       size.replicator.instanceCount,
+      fallbackBinding,
     );
-    const uniforms = createMotionUniformArray(motion, size);
+    this.ensureTextureBinding(cache, textureBinding);
+    const uniforms = createMotionUniformArray(
+      motion,
+      size,
+      primaryTextureFill
+        ? {
+            activeAppearanceId: textureResult?.status === 'ready' ? primaryTextureFill.id : null,
+            sourceSize: textureResult?.sourceSize,
+          }
+        : undefined,
+    );
     const instances = createMotionInstanceArray(size);
     const cacheKey = this.getCacheKey(layer);
     let instanceBufferState = this.instanceBufferStates.get(cacheKey);
@@ -149,6 +189,9 @@ export class MotionRenderer {
     }
     this.caches.clear();
     this.instanceBufferStates.clear();
+    this.textureBindings = new WeakMap<MotionClipGpuCache, GPUTextureView>();
+    this.textureAcquisition.destroy();
+    this.pipeline.destroy();
     setMotionRendererCacheCount(0);
   }
 
@@ -161,6 +204,7 @@ export class MotionRenderer {
     width: number,
     height: number,
     requiredInstances: number,
+    fallbackBinding: { view: GPUTextureView; sampler: GPUSampler },
   ): MotionClipGpuCache {
     const key = this.getCacheKey(layer);
     const existing = this.caches.get(key);
@@ -203,10 +247,11 @@ export class MotionRenderer {
     const bindGroup = this.device.createBindGroup({
       label: `motion-shape-bind-group-${key}`,
       layout: this.pipeline.getBindGroupLayout(),
-      entries: [{
-        binding: 0,
-        resource: { buffer: uniformBuffer },
-      }],
+      entries: [
+        { binding: 0, resource: { buffer: uniformBuffer } },
+        { binding: 1, resource: fallbackBinding.view },
+        { binding: 2, resource: fallbackBinding.sampler },
+      ],
     });
 
     const cache = {
@@ -220,8 +265,26 @@ export class MotionRenderer {
       instanceCapacity,
     };
     this.caches.set(key, cache);
+    this.textureBindings.set(cache, fallbackBinding.view);
     setMotionRendererCacheCount(this.caches.size);
     return cache;
+  }
+
+  private ensureTextureBinding(
+    cache: MotionClipGpuCache,
+    textureBinding: { view: GPUTextureView; sampler: GPUSampler },
+  ): void {
+    if (this.textureBindings.get(cache) === textureBinding.view) return;
+    cache.bindGroup = this.device.createBindGroup({
+      label: 'motion-shape-texture-bind-group',
+      layout: this.pipeline.getBindGroupLayout(),
+      entries: [
+        { binding: 0, resource: { buffer: cache.uniformBuffer } },
+        { binding: 1, resource: textureBinding.view },
+        { binding: 2, resource: textureBinding.sampler },
+      ],
+    });
+    this.textureBindings.set(cache, textureBinding.view);
   }
 }
 

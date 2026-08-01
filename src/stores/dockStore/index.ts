@@ -23,6 +23,7 @@ import {
   START_CHROME_TRANSITION_EVENT,
 } from './layoutTransition';
 import type { DockStoreState } from './storeTypes';
+import { withExclusiveHistorySnapshotMutationLease } from '../timeline/exclusiveMutationLease';
 
 export {
   FACTORY_3D_EDIT_LAYOUT_ID,
@@ -50,15 +51,16 @@ export {
 
 export const useDockStore = create<DockStoreState>()(
   subscribeWithSelector(
-    persist(
-      (set, get) => ({
+    withExclusiveHistorySnapshotMutationLease(
+      persist(
+        (set, get) => ({
         ...createDockStoreInitialState(),
         ...createLayoutMutationActions(set, get),
         ...createDragAndPanelStateActions(set, get),
         ...createPanelVisibilityActions(set, get),
         ...createSavedLayoutActions(set, get),
-      }),
-      {
+        }),
+        {
         name: 'webvj-dock-layout',
         partialize: (state) => ({
           layout: state.layout,
@@ -119,7 +121,8 @@ export const useDockStore = create<DockStoreState>()(
             activeSavedLayoutId,
           };
         },
-      }
+        }
+      )
     )
   )
 );

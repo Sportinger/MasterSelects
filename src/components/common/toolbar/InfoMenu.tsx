@@ -38,19 +38,12 @@ export function InfoMenu({
       </button>
       {openMenu === 'info' && (
         <div className="menu-dropdown">
-          <button className="menu-option" onClick={() => dispatchAndClose('open-welcome-screen')}>
-            <span>Where are you coming from?</span>
-          </button>
-          <div className="menu-separator" />
           <button className="menu-option" onClick={() => dispatchAndClose('open-tutorial-campaigns')}>
             <span>Tutorials</span>
           </button>
           <div className="menu-separator" />
           <button className="menu-option" onClick={() => dispatchAndClose('start-tutorial')}>
-            <span>Quick Tour</span>
-          </button>
-          <button className="menu-option" onClick={() => dispatchAndClose('start-timeline-tutorial')}>
-            <span>Timeline Tour</span>
+            <span>Workspace Tour</span>
           </button>
           <div className="menu-separator" />
           <button className="menu-option" onClick={() => { onOpenChangelog?.(); closeMenu(); }}>

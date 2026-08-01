@@ -3,6 +3,7 @@ import { insertAiAuditEvent } from '../../lib/aiAudit';
 import { blocksAiRequest, moderateAiInput } from '../../lib/aiModeration';
 import { getCreditLedgerEntryBySource, refundCreditsForFailedTask, spendCredits } from '../../lib/credits';
 import { getCurrentUser, json, methodNotAllowed, parseJson } from '../../lib/db';
+import { rejectByokCredentials } from '../../lib/noByok';
 import {
   buildHostedElevenLabsCapabilities,
   calculateHostedElevenLabsCredits,
@@ -202,6 +203,13 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     });
   }
 
+  const byokHeaderError = rejectByokCredentials({
+    headers: context.request.headers,
+  });
+  if (byokHeaderError) {
+    return byokHeaderError;
+  }
+
   const requestId = context.data.requestId ?? crypto.randomUUID();
 
   if (context.request.method === 'GET') {
@@ -326,6 +334,10 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   }
 
   const rawBody = (await parseJson<HostedAudioRouteBody>(context.request)) ?? null;
+  const byokBodyError = rejectByokCredentials({ payload: rawBody });
+  if (byokBodyError) {
+    return byokBodyError;
+  }
   const paramsInput = rawBody?.params ?? rawBody;
 
   if (rawBody?.action === 'music' || rawBody?.action === 'sound') {

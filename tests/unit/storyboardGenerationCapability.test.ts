@@ -60,17 +60,9 @@ describe('storyboard generation capability and prepare gate', () => {
     const capabilities = resolveStoryboardGenerationCapabilities({
       availability: {
         hostedAvailable: true,
-        byoServices: { piapi: true },
       },
       brief: brief(),
-      catalogEntries: [
-        entry(),
-        entry({
-          service: 'piapi',
-          providerId: 'piapi-video',
-          name: 'PiAPI video',
-        }),
-      ],
+      catalogEntries: [entry()],
     });
 
     expect(capabilities.map((capability) => ({
@@ -84,12 +76,6 @@ describe('storyboard generation capability and prepare gate', () => {
         route: 'hosted',
         service: 'cloud',
         submissionSupported: true,
-      },
-      {
-        providerId: 'piapi-video',
-        route: 'byo',
-        service: 'piapi',
-        submissionSupported: false,
       },
     ]);
   });

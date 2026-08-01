@@ -28,7 +28,13 @@ import { GuidedActionOverlay } from './components/guidedActions/GuidedActionOver
 import { TutorialOverlay } from './components/common/TutorialOverlay';
 import { TutorialCampaignDialog } from './components/common/TutorialCampaignDialog';
 import { InteractiveTutorialOverlay } from './components/common/tutorial/InteractiveTutorialOverlay';
-import { INTERACTIVE_CAMPAIGNS } from './components/common/tutorial/interactiveCampaigns';
+import { TutorialSetupOverlay } from './components/common/tutorial/TutorialSetupOverlay';
+import {
+  getNextInteractiveCampaign,
+  INTERACTIVE_CAMPAIGNS,
+  isInteractiveCampaignId,
+  STARTUP_GUIDED_TUTORIAL_ID,
+} from './components/common/tutorial/interactiveCampaigns';
 import { getCampaignById } from './components/common/tutorialCampaigns';
 import type { CampaignStep } from './components/common/tutorialCampaigns';
 import { MobileApp } from './components/mobile';
@@ -221,77 +227,25 @@ function App() {
   const showChangelogOnStartup = useSettingsStore((s) => s.showChangelogOnStartup);
   const lastSeenChangelogVersion = useSettingsStore((s) => s.lastSeenChangelogVersion);
 
-  // Tutorial state (legacy part 1/2)
-  const [showTutorial, setShowTutorial] = useState(false);
-  const [tutorialPart, setTutorialPart] = useState<1 | 2>(1);
+  // Tutorial completion state
   const hasSeenTutorial = useSettingsStore((s) => s.hasSeenTutorial);
   const setHasSeenTutorial = useSettingsStore((s) => s.setHasSeenTutorial);
-  const hasSeenTutorialPart2 = useSettingsStore((s) => s.hasSeenTutorialPart2);
   const setHasSeenTutorialPart2 = useSettingsStore((s) => s.setHasSeenTutorialPart2);
 
   // Campaign tutorial state
   const [showCampaignDialog, setShowCampaignDialog] = useState(false);
+  const [showTutorialSetup, setShowTutorialSetup] = useState(false);
   const [activeCampaign, setActiveCampaign] = useState<{ id: string; title: string; steps: CampaignStep[]; interactive?: boolean } | null>(null);
   const completeTutorial = useSettingsStore((s) => s.completeTutorial);
 
   // IndexedDB error dialog state
   const [showIndexedDBError, setShowIndexedDBError] = useState(false);
 
-  // Load API keys from encrypted storage on mount
-  const loadApiKeys = useSettingsStore((s) => s.loadApiKeys);
-  const toggleApiKeysUnlocked = useSettingsStore((s) => s.toggleApiKeysUnlocked);
+  // Load the optional non-AI YouTube integration credential on mount.
+  const loadIntegrationCredentials = useSettingsStore((s) => s.loadIntegrationCredentials);
   useEffect(() => {
-    loadApiKeys();
-  }, [loadApiKeys]);
-
-  useEffect(() => {
-    let armed = false;
-    let resetTimer: number | null = null;
-
-    const reset = () => {
-      armed = false;
-      if (resetTimer !== null) {
-        window.clearTimeout(resetTimer);
-        resetTimer = null;
-      }
-    };
-
-    const arm = () => {
-      armed = true;
-      if (resetTimer !== null) {
-        window.clearTimeout(resetTimer);
-      }
-      resetTimer = window.setTimeout(reset, 1400);
-    };
-
-    const isShortcutDigit = (event: KeyboardEvent, digit: '7' | '8') => (
-      event.code === `Digit${digit}` || event.code === `Numpad${digit}` || event.key === digit
-    );
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (!event.ctrlKey || !event.shiftKey || event.altKey || event.metaKey) {
-        return;
-      }
-
-      if (isShortcutDigit(event, '8')) {
-        event.preventDefault();
-        arm();
-        return;
-      }
-
-      if (armed && isShortcutDigit(event, '7')) {
-        event.preventDefault();
-        reset();
-        toggleApiKeysUnlocked();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => {
-      reset();
-      window.removeEventListener('keydown', handleKeyDown, true);
-    };
-  }, [toggleApiKeysUnlocked]);
+    void loadIntegrationCredentials();
+  }, [loadIntegrationCredentials]);
 
   const accountDialog = useAccountStore((s) => s.dialog);
   const accountCreditBalance = useAccountStore((s) => s.creditBalance);
@@ -430,6 +384,36 @@ function App() {
     setShowSplash(true);
   }, [isChecking, isStartLayout, showWelcome, shouldShowChangelogOnStartup, startupOverlaysReady]);
 
+  const activateTutorialCampaign = useCallback((campaignId: string) => {
+    const campaign = getCampaignById(campaignId);
+    if (!campaign) return false;
+    setShowCampaignDialog(false);
+    setActiveCampaign({
+      id: campaign.id,
+      title: campaign.title,
+      steps: campaign.steps,
+      interactive: campaign.interactive,
+    });
+    return true;
+  }, []);
+
+  const startTutorialSequence = useCallback(() => {
+    setShowCampaignDialog(false);
+    setActiveCampaign(null);
+    setShowTutorialSetup(true);
+  }, []);
+
+  const handleTutorialSetupComplete = useCallback(() => {
+    setShowTutorialSetup(false);
+    activateTutorialCampaign(STARTUP_GUIDED_TUTORIAL_ID);
+  }, [activateTutorialCampaign]);
+
+  const handleTutorialSetupCancel = useCallback(() => {
+    setShowTutorialSetup(false);
+    setHasSeenTutorial(true);
+    setHasSeenTutorialPart2(true);
+  }, [setHasSeenTutorial, setHasSeenTutorialPart2]);
+
   const handleWelcomeComplete = useCallback(() => {
     setManuallyDismissed(true);
     setHasStoredProject(true); // Project was just created
@@ -438,16 +422,16 @@ function App() {
       setTimeout(() => setShowSplash(true), 300);
     } else if (!hasSeenTutorial) {
       // No splash → start tutorial directly
-      setTimeout(() => setShowTutorial(true), 200);
+      setTimeout(startTutorialSequence, 200);
     }
-  }, [hasSeenTutorial, shouldShowChangelogOnStartup]);
+  }, [hasSeenTutorial, shouldShowChangelogOnStartup, startTutorialSequence]);
 
   const handleSplashClose = useCallback(() => {
     setShowSplash(false);
     if (!hasSeenTutorial) {
-      setTimeout(() => setShowTutorial(true), 200);
+      setTimeout(startTutorialSequence, 200);
     }
-  }, [hasSeenTutorial]);
+  }, [hasSeenTutorial, startTutorialSequence]);
 
   const handleSplashOpenChangelog = useCallback(() => {
     setShowSplash(false);
@@ -457,79 +441,70 @@ function App() {
   const handleChangelogClose = useCallback(() => {
     setShowChangelog(false);
     if (!hasSeenTutorial) {
-      setTimeout(() => setShowTutorial(true), 200);
+      setTimeout(startTutorialSequence, 200);
     }
-  }, [hasSeenTutorial]);
-
-  const handleTutorialClose = useCallback(() => {
-    if (tutorialPart === 1 && !hasSeenTutorialPart2) {
-      // Part 1 finished, auto-start Part 2
-      setTutorialPart(2);
-      setHasSeenTutorial(true);
-    } else if (tutorialPart === 2) {
-      // Part 2 finished
-      setShowTutorial(false);
-      setHasSeenTutorial(true);
-      setHasSeenTutorialPart2(true);
-    } else {
-      // Part 1 re-triggered manually (Part 2 already seen)
-      setShowTutorial(false);
-    }
-  }, [tutorialPart, hasSeenTutorialPart2, setHasSeenTutorial, setHasSeenTutorialPart2]);
-
-  const handleTutorialSkip = useCallback(() => {
-    setShowTutorial(false);
-    setHasSeenTutorial(true);
-    setHasSeenTutorialPart2(true);
-  }, [setHasSeenTutorial, setHasSeenTutorialPart2]);
+  }, [hasSeenTutorial, startTutorialSequence]);
 
   // Campaign tutorial handlers
   const handleStartCampaign = useCallback((campaignId: string) => {
-    const campaign = getCampaignById(campaignId);
-    if (!campaign) return;
-    setShowCampaignDialog(false);
-    setActiveCampaign({ id: campaign.id, title: campaign.title, steps: campaign.steps, interactive: campaign.interactive });
-  }, []);
+    activateTutorialCampaign(campaignId);
+  }, [activateTutorialCampaign]);
 
   const handleCampaignClose = useCallback(() => {
     if (activeCampaign) {
       completeTutorial(activeCampaign.id);
+      if (activeCampaign.interactive) {
+        const nextCampaign = getNextInteractiveCampaign(activeCampaign.id);
+        if (nextCampaign) {
+          activateTutorialCampaign(nextCampaign.id);
+          return;
+        }
+      }
+      if (isInteractiveCampaignId(activeCampaign.id)) {
+        setHasSeenTutorial(true);
+        setHasSeenTutorialPart2(true);
+      }
     }
     setActiveCampaign(null);
-  }, [activeCampaign, completeTutorial]);
+  }, [
+    activateTutorialCampaign,
+    activeCampaign,
+    completeTutorial,
+    setHasSeenTutorial,
+    setHasSeenTutorialPart2,
+  ]);
 
   const handleCampaignSkip = useCallback(() => {
+    if (activeCampaign && isInteractiveCampaignId(activeCampaign.id)) {
+      setHasSeenTutorial(true);
+      setHasSeenTutorialPart2(true);
+    }
     setActiveCampaign(null);
-  }, []);
+  }, [activeCampaign, setHasSeenTutorial, setHasSeenTutorialPart2]);
+
+  const handleCampaignCancel = useCallback(() => {
+    if (activeCampaign && isInteractiveCampaignId(activeCampaign.id)) {
+      setHasSeenTutorial(true);
+      setHasSeenTutorialPart2(true);
+    }
+    setActiveCampaign(null);
+  }, [activeCampaign, setHasSeenTutorial, setHasSeenTutorialPart2]);
 
   // Listen for manual tutorial trigger from Info menu
   useEffect(() => {
     const handleStartTutorial = () => {
-      setTutorialPart(1);
-      setShowTutorial(true);
-    };
-    const handleStartTimelineTutorial = () => {
-      setTutorialPart(2);
-      setShowTutorial(true);
+      startTutorialSequence();
     };
     const handleOpenCampaignDialog = () => {
       setShowCampaignDialog(true);
     };
-    const handleOpenWelcomeScreen = () => {
-      setTutorialPart(1);
-      setShowTutorial(true);
-    };
     window.addEventListener('start-tutorial', handleStartTutorial);
-    window.addEventListener('start-timeline-tutorial', handleStartTimelineTutorial);
     window.addEventListener('open-tutorial-campaigns', handleOpenCampaignDialog);
-    window.addEventListener('open-welcome-screen', handleOpenWelcomeScreen);
     return () => {
       window.removeEventListener('start-tutorial', handleStartTutorial);
-      window.removeEventListener('start-timeline-tutorial', handleStartTimelineTutorial);
       window.removeEventListener('open-tutorial-campaigns', handleOpenCampaignDialog);
-      window.removeEventListener('open-welcome-screen', handleOpenWelcomeScreen);
     };
-  }, []);
+  }, [startTutorialSequence]);
 
   const handleIndexedDBErrorClose = useCallback(() => {
     setShowIndexedDBError(false);
@@ -568,6 +543,10 @@ function App() {
     return <MobileApp />;
   }
 
+  const activeInteractiveCampaign = activeCampaign?.interactive
+    ? INTERACTIVE_CAMPAIGNS.find((campaign) => campaign.id === activeCampaign.id) ?? null
+    : null;
+
   return (
     <div
       className={[
@@ -601,23 +580,27 @@ function App() {
           {showIndexedDBError && (
             <IndexedDBErrorDialog onClose={handleIndexedDBErrorClose} />
           )}
-          {showTutorial && (
-            <TutorialOverlay key={tutorialPart} onClose={handleTutorialClose} onSkip={handleTutorialSkip} part={tutorialPart} />
-          )}
           {showCampaignDialog && (
             <TutorialCampaignDialog
               onClose={() => setShowCampaignDialog(false)}
               onStartCampaign={handleStartCampaign}
             />
           )}
-          {activeCampaign && activeCampaign.interactive ? (
+          {showTutorialSetup && (
+            <TutorialSetupOverlay
+              onCancel={handleTutorialSetupCancel}
+              onComplete={handleTutorialSetupComplete}
+            />
+          )}
+          {activeInteractiveCampaign ? (
             <InteractiveTutorialOverlay
-              key={`interactive-${activeCampaign.id}`}
-              campaign={INTERACTIVE_CAMPAIGNS.find(c => c.id === activeCampaign.id)!}
+              key={`interactive-${activeInteractiveCampaign.id}`}
+              campaign={activeInteractiveCampaign}
+              onCancel={handleCampaignCancel}
               onClose={handleCampaignClose}
               onSkip={handleCampaignSkip}
             />
-          ) : activeCampaign ? (
+          ) : activeCampaign && !activeCampaign.interactive ? (
             <TutorialOverlay
               key={`campaign-${activeCampaign.id}`}
               onClose={handleCampaignClose}

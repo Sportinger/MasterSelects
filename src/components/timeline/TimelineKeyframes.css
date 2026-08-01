@@ -190,6 +190,15 @@
   color: var(--amber-600);
 }
 
+.keyframe-context-menu .context-menu-divider {
+  border-top: 1px solid var(--gray-450);
+  margin: 4px 0;
+}
+
+.keyframe-context-menu .context-menu-item.danger {
+  color: var(--danger-light);
+}
+
 .keyframe-context-menu .context-menu-item .checkmark {
   color: var(--success);
   font-size: 14px;

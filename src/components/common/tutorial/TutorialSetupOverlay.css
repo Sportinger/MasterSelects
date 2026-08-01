@@ -1,0 +1,301 @@
+@layer overlays {
+.tutorial-setup-backdrop {
+  align-items: center;
+  animation: tutorial-setup-backdrop-in 240ms ease-out both;
+  background: rgba(4, 7, 10, 0.7);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 16px;
+  position: fixed;
+  z-index: 10030;
+}
+
+.tutorial-setup-card {
+  backdrop-filter: blur(14px);
+  background: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  box-sizing: border-box;
+  color: var(--text-primary);
+  display: grid;
+  gap: 24px;
+  grid-template-rows: auto 1fr auto;
+  max-height: calc(100vh - 32px);
+  max-width: 860px;
+  min-height: min(460px, calc(100vh - 32px));
+  overflow: auto;
+  padding: 28px 36px 26px;
+  position: relative;
+  width: min(860px, calc(100vw - 32px));
+}
+
+.tutorial-setup-progress {
+  align-items: center;
+  border-bottom: 1px solid rgba(135, 154, 174, 0.25);
+  color: var(--text-secondary);
+  display: flex;
+  font-size: 12px;
+  font-weight: 650;
+  justify-content: space-between;
+  letter-spacing: 0.08em;
+  margin: 0 136px 0 0;
+  padding-bottom: 15px;
+  text-transform: uppercase;
+}
+
+.tutorial-setup-content {
+  align-self: center;
+  min-width: 0;
+}
+
+.tutorial-setup-card h1 {
+  font-size: clamp(32px, 3.2vw, 42px);
+  line-height: 1.12;
+  margin: 0;
+  max-width: calc(100% - 136px);
+}
+
+.tutorial-setup-content > p {
+  color: var(--text-secondary);
+  font-size: 19px;
+  line-height: 1.5;
+  margin: 14px 136px 26px 0;
+}
+
+.tutorial-setup-card strong {
+  color: var(--text-primary);
+}
+
+.tutorial-setup-clippy {
+  height: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 30px;
+  top: 30px;
+  width: 116px;
+  z-index: 1;
+}
+
+.tutorial-setup-clippy .clippy-mascot {
+  right: 0;
+  top: -34px;
+  width: 116px;
+}
+
+.tutorial-setup-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.tutorial-setup-choice {
+  align-items: center;
+  background: rgba(9, 13, 18, 0.58);
+  border: 1px solid rgba(135, 154, 174, 0.34);
+  border-radius: 10px;
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  font-weight: 650;
+  gap: 12px;
+  line-height: 1.25;
+  min-height: 126px;
+  padding: 18px 10px 16px;
+  transition: background 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+
+.tutorial-setup-choice:hover,
+.tutorial-setup-choice:focus-visible {
+  background: rgba(34, 49, 64, 0.82);
+  border-color: rgba(83, 185, 255, 0.82);
+  outline: none;
+  transform: translateY(-2px);
+}
+
+.tutorial-setup-choice-icon {
+  align-items: center;
+  display: flex;
+  height: 48px;
+  justify-content: center;
+  width: 48px;
+}
+
+.tutorial-setup-choice-icon img {
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.tutorial-setup-beginner {
+  align-items: center;
+  background: linear-gradient(135deg, var(--green-500), #187342);
+  border-radius: 11px;
+  color: white;
+  display: flex;
+  font-size: 24px;
+  height: 48px;
+  justify-content: center;
+  width: 48px;
+}
+
+.tutorial-setup-confirmation {
+  align-items: center;
+  background: rgba(9, 13, 18, 0.58);
+  border: 1px solid rgba(73, 214, 146, 0.44);
+  border-radius: 10px;
+  display: flex;
+  gap: 14px;
+  margin-right: 0;
+  padding: 18px 20px;
+}
+
+.tutorial-setup-confirmation-mark {
+  align-items: center;
+  background: rgba(73, 214, 146, 0.16);
+  border-radius: 999px;
+  color: rgb(73, 214, 146);
+  display: flex;
+  font-size: 20px;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.tutorial-setup-confirmation div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tutorial-setup-confirmation strong {
+  font-size: 17px;
+}
+
+.tutorial-setup-confirmation div span {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.tutorial-setup-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin: 0;
+}
+
+.tutorial-setup-footer {
+  align-items: center;
+  border-top: 1px solid rgba(135, 154, 174, 0.25);
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  min-height: 42px;
+  padding-top: 20px;
+}
+
+.tutorial-setup-footer-exit {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.tutorial-setup-footer-exit > span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.tutorial-setup-button,
+.tutorial-setup-exit {
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 650;
+  min-height: 38px;
+  padding: 8px 16px;
+}
+
+.tutorial-setup-button--primary {
+  background: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 80%, white);
+  color: var(--text-on-accent);
+}
+
+.tutorial-setup-button--quiet,
+.tutorial-setup-exit {
+  background: rgba(17, 21, 28, 0.82);
+  border: 1px solid rgba(135, 154, 174, 0.36);
+  color: var(--text-primary);
+}
+
+.tutorial-setup-exit {
+  position: static;
+}
+
+.tutorial-setup-button:hover,
+.tutorial-setup-exit:hover {
+  filter: brightness(1.15);
+}
+
+@keyframes tutorial-setup-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (max-width: 760px) {
+  .tutorial-setup-card {
+    gap: 20px;
+    padding: 24px;
+  }
+
+  .tutorial-setup-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tutorial-setup-content > p,
+  .tutorial-setup-confirmation {
+    margin-right: 0;
+  }
+
+  .tutorial-setup-card h1 {
+    max-width: calc(100% - 112px);
+  }
+
+  .tutorial-setup-progress {
+    margin-right: 112px;
+  }
+
+  .tutorial-setup-clippy {
+    right: 22px;
+    width: 96px;
+  }
+
+  .tutorial-setup-clippy .clippy-mascot {
+    width: 96px;
+  }
+
+  .tutorial-setup-footer {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .tutorial-setup-actions {
+    justify-content: stretch;
+  }
+
+  .tutorial-setup-button {
+    flex: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tutorial-setup-backdrop,
+  .tutorial-setup-choice {
+    animation: none;
+    transition: none;
+  }
+}
+}

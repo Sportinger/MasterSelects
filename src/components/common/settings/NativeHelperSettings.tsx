@@ -15,7 +15,6 @@ type Platform = 'mac' | 'windows' | 'linux' | 'unknown';
 type ExtendedSystemInfo = SystemInfo & {
   ytdlp_available?: boolean;
   fs_commands?: boolean;
-  ai_bridge?: boolean;
   matanyone_available?: boolean;
   matanyone_status?: string;
 };
@@ -188,13 +187,11 @@ export function NativeHelperSettings() {
     ? [
         { label: helperInfo.ytdlp_available ? 'Downloads ready' : 'yt-dlp missing', tone: helperInfo.ytdlp_available ? 'good' : 'warn' },
         { label: helperInfo.fs_commands ? 'Projects ready' : 'Projects unavailable', tone: helperInfo.fs_commands ? 'good' : 'warn' },
-        { label: helperInfo.ai_bridge ? 'AI bridge ready' : 'AI bridge unavailable', tone: helperInfo.ai_bridge ? 'good' : 'warn' },
         { label: helperInfo.matanyone_available ? 'MatAnyone2 ready' : 'MatAnyone2 N/A', tone: helperInfo.matanyone_available ? 'good' : 'neutral' },
       ]
     : [
         { label: 'Downloads', tone: 'neutral' },
         { label: 'Firefox projects', tone: 'neutral' },
-        { label: 'AI bridge', tone: 'neutral' },
         { label: 'MatAnyone2', tone: 'neutral' },
       ];
 

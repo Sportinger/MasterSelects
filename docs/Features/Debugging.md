@@ -16,7 +16,7 @@ The Logger service (`src/services/logger.ts`) provides:
 | Global access | `window.Logger` in the browser console |
 | AI-agent support | Structured summaries for tool inspection |
 | Timestamps | Timestamp prefixes enabled by default |
-| Stack traces | Automatic capture for errors |
+| Stack traces | Captured when an error object is logged |
 | Log sync | Development log sync through `window.LogSync` |
 
 Default log level: `WARN`. Errors are always shown and always buffered. `WARN` and `ERROR` entries are buffered even when they are not displayed.
@@ -87,27 +87,15 @@ If the dev bridge token is not present, the browser falls back to `sendBeacon` f
 
 ## AI Tool Debug Surface
 
-In development, the browser exposes a lightweight AI-tool console surface in addition to the HTTP bridge:
-
-```javascript
-window.aiTools.execute('getStats', {})
-window.aiTools.list()
-window.aiTools.status()
-```
-
-- `execute()` routes through the same shared AI-tool dispatcher used by chat and local bridge callers
-- `list()` returns the exported tool definitions
-- `status()` returns the quick timeline summary
-
-The dev HTTP bridge uses the same underlying tool registry:
+In development, the HMR-backed browser client registers the dev HTTP bridge. It dispatches through the shared AI-tool registry with the `devBridge` caller context:
 
 ```text
 POST /api/ai-tools
 ```
 
-It also supports the `_list` and `_status` meta-commands, plus targeted execution against the active browser tab through the HMR bridge.
+It supports the `_list` and `_status` meta-commands, plus targeted execution against a connected browser tab through the HMR bridge.
 
-For bridge preflight, `GET /api/ai-tools` reports connected browser tabs without auth, while `GET /api/ai-tools/auth-check` validates the bearer token without dispatching a browser tool. This catches stale `.ai-bridge-token` files after multiple dev servers have been started.
+For bridge preflight, `GET /api/ai-tools` reports connected browser tabs without auth, while `GET /api/ai-tools/auth-check` validates the bearer token without dispatching a browser tool. This catches stale `.ai-bridge-token` files when multiple dev servers are running.
 
 ```powershell
 $token = Get-Content -Path .ai-bridge-token -Raw
@@ -194,8 +182,11 @@ The playback-related AI tools read from the same sources:
 - `getStatsHistory`
 - `getAudioDiagnostics`
 - `getLogs`
+- `getRuntimeDiagnostics`
+- `clearRuntimeDiagnostics`
 - `getPlaybackTrace`
 - `purgePlaybackPath`
+- `samplePlaybackFramePacing`
 
 Those tools surface:
 - Engine state and readiness
@@ -206,6 +197,7 @@ Those tools surface:
 - Render loop and render dispatcher state
 - WebCodecs / VF pipeline event windows
 - Audio media element ready/buffer state, Web Audio context latency, routing graph state, and recent audio drift/correction events
+- Captured console output, window errors, unhandled rejections, WebGPU uncaptured errors, and device-lost events
 
 `purgePlaybackPath` resets the live playback path at the current playhead without a page reload. It clears VideoSync warmups/seeks, retargets active HTMLVideo/WebCodecs providers, resets GPU-ready state, and can resume playback automatically. The health monitor can invoke the same path when `vf_preview_frame` telemetry shows the playhead target moving while the preview frame remains frozen.
 
@@ -215,7 +207,9 @@ HTML playback stop keeps a decoded frame within 50 ms of the playhead and aligns
 
 `getAudioDiagnostics` is the focused bridge tool for audio crackle/dropout debugging. Capture it during audible playback to inspect `mediaSummary`, per-element `buffered.bufferedAheadSeconds`, `routing.context.baseLatencyMs`, `status.drift`, and `events.correctionMs`.
 
-`getStatsHistory` is capped to 1-30 samples, `getAudioDiagnostics` caps the inspected event window and returned event count, `getLogs` caps the returned buffer to 1-500 entries, and `getPlaybackTrace` caps the inspected time window and event count so the bridge stays responsive.
+`getStatsHistory` is capped to 1-30 samples, `getAudioDiagnostics` caps the inspected event window and returned event count, `getLogs` caps the returned buffer to 1-500 entries, `getRuntimeDiagnostics` caps returned entries to 1-1000, and `getPlaybackTrace` caps the inspected time window and event count so the bridge stays responsive.
+
+`getRuntimeDiagnostics` reads the browser runtime-diagnostics buffer. Use `clearRuntimeDiagnostics` before a reproducible dev-bridge run; the buffer records console calls, window errors, unhandled rejections, and WebGPU errors/device-loss events.
 
 ---
 
@@ -353,4 +347,4 @@ Each log entry contains:
 
 ---
 
-*Source: `src/services/logger.ts`, `src/services/playbackDebugSnapshot.ts`, `src/services/playbackDebugStats.ts`, `src/services/playbackHealthMonitor.ts`, `src/services/wcPipelineMonitor.ts`, `src/services/vfPipelineMonitor.ts`, `src/services/aiTools/handlers/stats.ts`*
+*Source: `src/services/logger.ts`, `src/services/runtimeDiagnostics.ts`, `src/services/playbackDebugSnapshot.ts`, `src/services/playbackDebugStats.ts`, `src/services/playbackHealthMonitor.ts`, `src/services/wcPipelineMonitor.ts`, `src/services/vfPipelineMonitor.ts`, `src/services/aiTools/bridge.ts`, `src/services/aiTools/handlers/stats.ts`, `tools/devBridge/vitePlugin.ts`*

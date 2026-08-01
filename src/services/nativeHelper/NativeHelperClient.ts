@@ -1,5 +1,4 @@
 import { Logger } from '../logger';
-import { APP_VERSION } from '../../version';
 import type {
   Command,
   Response,
@@ -212,33 +211,6 @@ class NativeHelperClientImpl {
               finish(false);
               return;
             }
-          }
-
-          try {
-            const registerResponse = await this.send({
-              cmd: 'register_client',
-              id: this.nextId(),
-              role: 'editor',
-              capabilities: ['ai_tools'],
-              session_name: 'masterselects-editor',
-              app_version: APP_VERSION,
-            });
-            if (registerResponse.ok !== true) {
-              throw new Error(getErrorMessage(registerResponse, 'Registration failed'));
-            }
-          } catch (error) {
-            log.warn('Editor registration with native helper failed', error);
-            if (this.ws === ws) {
-              this.ws = null;
-            }
-            try {
-              ws.close();
-            } catch {
-              // Ignore close errors while unwinding a failed registration attempt.
-            }
-            this.setStatus('disconnected');
-            finish(false);
-            return;
           }
 
           this.setStatus('connected');

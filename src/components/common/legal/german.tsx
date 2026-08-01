@@ -68,10 +68,10 @@ export function PrivacyDE() {
         Wenn Sie eine Cloud- oder KI-Funktion starten, werden die dafür ausgewählten Prompts, Nachrichten, Medien,
         Referenzen und technischen Metadaten an den jeweiligen Anbieter übermittelt. Abhängig von der gewählten Funktion
         sind Empfänger insbesondere <strong>OpenAI</strong>, <strong>Kie.ai</strong> und dessen ausgewählte Modell- oder
-        Upload-Anbieter sowie <strong>ElevenLabs</strong>. Bei Verwendung eigener API-Schlüssel kann die Übermittlung direkt
-        aus Ihrem Browser unter anderem an OpenAI, Anthropic, AssemblyAI, Deepgram, PiAPI, Evolink, ElevenLabs
-        oder die YouTube Data API erfolgen. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO; Sicherheits- und
-        Missbrauchsprotokolle beruhen ergänzend auf Art. 6 Abs. 1 lit. f DSGVO.
+        Upload-Anbieter sowie <strong>ElevenLabs</strong>. Zugangsdaten für KI-Anbieter werden von den
+        MasterSelects-Diensten verwaltet und nicht im Browser gespeichert. Wenn Sie die optionale YouTube-Data-API-
+        Integration konfigurieren, verbindet sich der Browser mit diesem Zugang direkt zu Google. Rechtsgrundlage ist
+        Art. 6 Abs. 1 lit. b DSGVO; Sicherheits- und Missbrauchsprotokolle beruhen ergänzend auf Art. 6 Abs. 1 lit. f DSGVO.
       </p>
       <p>
         Beim gehosteten AI-Chat können Prompts, Antworten, Tool Calls, Moderationsergebnisse, Tokenzahlen, Credit-Kosten,
@@ -82,8 +82,8 @@ export function PrivacyDE() {
 
       <h3>6. Lokale Speicherung und externe Ressourcen</h3>
       <p>
-        Projekte, Einstellungen, verschlüsselte eigene API-Schlüssel und Medienreferenzen liegen in Local Storage,
-        IndexedDB oder OPFS Ihres Browsers und können über die Browserdaten gelöscht werden. Wenn Sie ausdrücklich eine
+        Projekte, Einstellungen, der optionale verschlüsselte YouTube-Data-API-Zugang und Medienreferenzen liegen in
+        Local Storage, IndexedDB oder OPFS Ihres Browsers und können über die Browserdaten gelöscht werden. Wenn Sie ausdrücklich eine
         Google-Schrift auswählen oder ein KI-/Audio-Modell laden, verbindet sich Ihr Browser mit Google Fonts bzw.
         Hugging Face; dabei werden insbesondere IP-Adresse und angefragte Ressource übertragen. Wenn Sie Release-Infos
         des Native Helpers oder GitHub-Links öffnen, verbindet sich Ihr Browser mit GitHub. Das Demo-Video wird von

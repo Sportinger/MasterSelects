@@ -1,8 +1,8 @@
 # Security
 
-[← Back to Index](../../README.md)
+[Back to Index](../../README.md)
 
-Security model, secret handling, and trust boundaries for MasterSelects.
+Security model, credential handling, and trust boundaries for MasterSelects.
 
 ---
 
@@ -20,28 +20,28 @@ Security model, secret handling, and trust boundaries for MasterSelects.
 
 ## Trust Model
 
-MasterSelects is a local-first application. Rendering, editing, and most analysis happen in the browser, but the app also has two explicit local bridge surfaces:
-- The Vite dev bridge used in development
-- The Native Helper bridge used for production/local companion workflows
+MasterSelects is local-first for editing and browser-side processing. It also has explicit local bridge surfaces:
+
+- The Vite development bridge
+- The Native Helper WebSocket and HTTP bridge
 
 The main trust boundaries are:
-- The browser origin
-- The dev bridge auth token injected by Vite
-- The Native Helper auth token generated at startup
+
+- The browser origin and authenticated session cookie
+- The Vite dev-bridge token injected only into development builds
+- The Native Helper token generated at startup
 - Explicit allowed file roots
-- IndexedDB for encrypted API keys
-- OPFS for the SAM 2 model cache
-- Cloudflare D1 for hosted account, billing, usage, and credit-claim records
+- IndexedDB for the optional encrypted YouTube Data API credential
+- OPFS for downloaded SAM 2 and stem-separation model caches
+- Cloudflare D1 for hosted accounts, billing, usage, AI audit data, chat logs, and credit claims
 
-External services are only contacted when the user enables a feature that needs them, such as AI chat, transcription, AI media generation, Google Fonts, or model downloads. The startup demo is served from the MasterSelects origin and does not embed YouTube.
+External services are contacted only when their feature is used, including hosted AI, cloud transcription or generation, Google Fonts, Google's optional YouTube Data API integration, and model downloads. The demo video is served by MasterSelects and does not connect to YouTube.
 
-The German and English legal information is directly reachable at `/impressum`, `/datenschutz`, `/imprint`, and `/privacy`. The website checks for the browser-bound free-credit offer only after the user clicks the offer button; the corresponding necessary cookie lasts no longer than the one-hour offer window.
+German and English legal pages are available at `/impressum`, `/datenschutz`, `/imprint`, and `/privacy`. The website free-credit offer is requested only after the user activates it. Its browser-binding cookie expires with the offer, up to one hour.
 
-Local Lemonade chat is treated as a local provider rather than a MasterSelects bridge. The app sends chat prompts, timeline summaries, tool definitions, and tool results to the configured Lemonade Server, but the configured endpoint is restricted to loopback hosts (`localhost`, `127.0.0.1`, or `::1`).
+Hosted AI requests go through Cloudflare Functions, require an authenticated session and credits, and use server-managed provider credentials. The current chat UI exposes the Kie-hosted model catalog.
 
-Hosted OpenAI/Cloud chat is different from local editing and local Lemonade chat. Authenticated hosted chat requests are sent to the Cloudflare Functions backend, are credit-gated, and are logged best-effort in D1 for account history, billing/debugging, abuse handling, and support.
-
-Hosted credit claim links are also a Cloudflare boundary. The admin-created link contains a high-entropy random code, but D1 stores only its SHA-256 hash. Public claim routes can read claim metadata and redeem only through a same-origin POST with a signed-in session whose email matches the submitted email and any server-side recipient lock. The independent user-activated website offer adds a six-digit Account code whose domain-separated hash is stored in D1. A signed, HttpOnly, SameSite cookie binds that offer to the winning browser, so the short code is neither a public lookup token nor a transferable bearer credential.
+Credit-claim links contain high-entropy codes, while D1 stores only their SHA-256 hashes. Public claim routes expose claim metadata; redemption is a same-origin POST that requires a signed-in session, checks the supplied email, and honours any recipient lock. The website offer additionally uses a six-digit redeem code whose domain-separated hash is stored in D1. A signed, HttpOnly, SameSite cookie binds that offer to the browser that acquired it.
 
 ---
 
@@ -49,65 +49,54 @@ Hosted credit claim links are also a Cloudflare boundary. The admin-created link
 
 ### Storage
 
-API keys are stored encrypted in IndexedDB using the Web Crypto API:
+The only optional browser-stored credential is the YouTube Data API key:
 
-- Each browser instance generates a unique AES-256-GCM key
-- The encryption key is stored alongside the encrypted secrets in IndexedDB
-- This blocks casual inspection, but not same-origin scripts or browser extensions with storage access
-- The API-key settings panel is hidden by default. The internal shortcut `Ctrl+Shift+8`, then `Ctrl+Shift+7`, toggles visibility.
-- Stored personal keys do not replace hosted Cloud credits unless the key's provider is explicitly marked as the default.
-- Kie.ai is managed server-side only. IndexedDB schema version 2 deletes any legacy `kieai-api-key` record during upgrade.
+- It is encrypted with a per-browser AES-256-GCM key in IndexedDB.
+- The encryption key is stored in the same IndexedDB database, so this prevents casual inspection rather than hostile same-origin code or extensions.
+- The Integrations settings panel stores, loads, clears, and masks this credential.
 
-### File Export
-
-The `.keys.enc` export/import path remains disabled. The previous implementation relied on a deterministic hardcoded passphrase, so it was only obfuscation. Keys must be re-entered manually on a new machine until a passphrase-based scheme is implemented.
+Hosted AI and generation provider credentials are managed by MasterSelects services and are not stored in browser settings.
 
 ### Key Types
 
 | Key | Service | Storage |
 |-----|---------|---------|
-| `openai` | OpenAI API | Encrypted IndexedDB |
-| `anthropic` | Anthropic API | Encrypted IndexedDB |
-| `assemblyai` | AssemblyAI | Encrypted IndexedDB |
-| `deepgram` | Deepgram | Encrypted IndexedDB |
-| `piapi` | PiAPI gateway | Encrypted IndexedDB |
-| `evolink` | EvoLink | Encrypted IndexedDB |
-| `elevenlabs` | ElevenLabs | Encrypted IndexedDB |
-| `youtube` | YouTube Data API | Encrypted IndexedDB |
-| `klingAccessKey` | Kling AI | Encrypted IndexedDB |
-| `klingSecretKey` | Kling AI | Encrypted IndexedDB |
+| `youtube-api-key` | Optional YouTube Data API v3 integration | AES-256-GCM encrypted IndexedDB (`multicam-settings` / `api-keys`) |
+| Hosted AI and generation credentials | MasterSelects service providers | Server-side environment configuration; not exposed to browser settings |
 
 ---
 
 ## Log Redaction
 
-All log output is scanned for common secret patterns and redacted before it is stored in the log buffer or exposed through the AI bridge.
+Browser log entries are scanned for common secret patterns before they enter the in-memory log buffer. AI tool statistics reapply redaction when returning buffered logs. Hosted AI audit and chat-log storage use separate recursive redaction before D1 persistence.
 
 This applies to:
+
 - Log messages
 - Data objects attached to log entries
 - Error messages and stack traces
-- AI tool bridge responses
+- AI-tool statistics returned from the browser
+- Hosted AI payloads and errors persisted to D1
 
 ### Patterns Detected
 
 | Pattern | Example |
 |---------|---------|
-| OpenAI / Anthropic API keys | `sk-proj-...`, `sk-ant-...`, `sk-...` |
+| OpenAI / Anthropic-style API keys | `sk-proj-...`, `sk-ant-...`, `sk-...` |
 | Bearer tokens | `Bearer eyJ...` |
 | `x-api-key` header values | `x-api-key: abc123...` |
 | URL key parameters | `?key=AIzaSy...` |
-| Long hex tokens | 40+ hex chars |
-| Long alphanumeric tokens | 40+ chars |
+| Long hex tokens | 40+ hex characters |
+| Long alphanumeric tokens | 40+ alphanumeric or underscore characters |
 
 ### Preserved
 
 | Type | Why |
 |------|-----|
 | UUIDs | Used as clip and track IDs |
-| Hex color codes | Short hex strings like `#ff4444` |
-| Short strings | Anything under the secret-length thresholds |
-| Normal log text | Common messages, numbers, paths |
+| Hex color codes | Short hex strings such as `#ff4444` |
+| Short strings | Below the secret-length thresholds |
+| Normal log text | Common messages, numbers, and paths |
 
 ---
 
@@ -115,7 +104,7 @@ This applies to:
 
 ### Development Bridge
 
-The Vite dev bridge exposes local HTTP endpoints for AI tooling and local file access. The browser only attaches the dev bridge token when `__DEV_BRIDGE_TOKEN__` is present.
+The Vite development bridge exposes local HTTP endpoints for AI tooling and file access. Development builds receive `__DEV_BRIDGE_TOKEN__`; production builds receive an empty value.
 
 The current flow is:
 ```
@@ -123,85 +112,63 @@ POST /api/ai-tools -> Vite server -> HMR -> browser -> executeAITool()
 ```
 
 Bridge preflight endpoints:
-- `GET /api/ai-tools` is status-only and does not require auth
-- `GET /api/ai-tools/auth-check` requires the bearer token and returns `{ "status": "ok" }` without dispatching a browser tool
-- `POST /api/ai-tools` requires the bearer token and forwards tool execution to the selected browser tab
 
-The bridge also serves local file endpoints used by the AI media tools:
+- `GET /api/ai-tools` is status-only and does not require auth.
+- `GET /api/ai-tools/auth-check` requires the bearer token and returns `{ "status": "ok" }`.
+- `POST /api/ai-tools` requires the bearer token and forwards tool execution to a selected browser tab.
+
+The bridge also serves authenticated local-file endpoints:
+
 - `/api/local-file`
 - `/api/local-files`
 
-Those routes are protected by:
-- A bearer token injected by Vite
-- Loopback-only origins
-- Explicit allowed roots
-- Absolute-path validation plus traversal rejection
+Authenticated bridge routes check a bearer token. Browser requests with an `Origin` header must use `localhost` or `127.0.0.1`; CORS headers are issued only for those origins. File routes require an existing absolute non-UNC path that resolves inside an allowed root. Default roots are the repository, optional project root, system temp directory, and the user's Desktop, Documents, Downloads, and Videos directories; `MASTERSELECTS_ALLOWED_FILE_ROOTS` can add roots.
 
-Allowed roots are seeded from the Vite config from the project root, temp directory, Desktop, Documents, Downloads, and Videos, and can be extended through `MASTERSELECTS_ALLOWED_FILE_ROOTS`.
+### Native Helper
 
-### Native Helper Bridge
+The Native Helper binds its WebSocket server to `127.0.0.1:9876` by default and its HTTP server to `127.0.0.1:9877`. It generates a new token at startup unless launched with `--no-auth`:
 
-The Native Helper runs on `127.0.0.1` only and uses its own random auth token:
-- HTTP on port `9877`
-- WebSocket on port `9876`
-- `GET /ai-tools` and `GET /api/ai-tools` are status-only and do not require auth
-- `POST /ai-tools` and `POST /api/ai-tools` require the bearer token
-- `GET /startup-token` is localhost-only and lets the browser discover the helper token
+- `GET /startup-token` is served only on the loopback HTTP listener and returns the current token for browser discovery.
+- WebSocket clients must send the token in the protocol `Auth` command before they can run other commands.
 
-The helper also writes its auth token to a temp file named `masterselects-helper.token` so the browser can discover it during startup.
+The helper writes its token to the system temporary directory as `masterselects-helper.token`; on Unix it attempts mode `0600`.
 
-The helper enforces:
-- Bearer-token authentication for HTTP and WebSocket requests
-- Origin checks for the WebSocket connection
-- Explicit allowed file roots for file reads, uploads, and directory listing
-- Rejection of traversal and UNC paths
+The helper checks configured origins for HTTP CORS and WebSocket handshakes, permits its configured MasterSelects and local origins, and accepts Cloudflare Pages origins. Its file and upload routes require authentication and enforce absolute paths inside helper-owned allowed roots.
 
-The AI chat approval UI is separate from these bridge checks. It is a user-experience gate for mutating or sensitive tools, not the underlying security boundary.
-
-### Lemonade Local Provider
-
-Lemonade is not allowed to call the MasterSelects bridge directly. It only receives the chat request and can return text or OpenAI-compatible tool-call suggestions.
-
-Those tool calls still execute through the normal chat path:
-- The AI chat approval mode is applied before mutating or sensitive tools run
-- Tool execution goes through the shared `executeAITool()` dispatcher
-- Local file tools continue to rely on the dev bridge or Native Helper file-access checks
-
-The Lemonade request includes `Authorization: Bearer lemonade` because Lemonade's OpenAI-compatible endpoint accepts that convention. It is a static compatibility header, not a secret and not equivalent to the dev bridge token or Native Helper startup token.
+The Native Helper has no external-agent/editor-tool forwarding route. External agent control is development-only through the separately authenticated Vite/MCP path.
 
 ---
 
 ## Hosted AI Chat Logging
 
-Hosted `/api/ai/chat` requests write rows into the D1 `chat_logs` table when logging succeeds. Logging is best-effort and does not block the chat response.
+Hosted `/api/ai/chat` calls may write best-effort rows to the D1 `chat_logs` table. Logging does not block the chat response. Billing settlement and replay data are stored separately in hosted-chat turn records.
 
-Stored fields can include:
+Stored chat-log fields include:
 
-- authenticated user id and model id
-- request messages and prompt payload
-- assistant response payload
-- tool-call payloads
-- token counts, credit cost, duration, status, and error state
+- authenticated user id, request id, idempotency key, and model id
+- redacted request/audit payload
+- redacted provider response and extracted tool calls
+- token counts, credit cost, duration, status, and error code
 
-Users can inspect hosted chat history through:
+Authenticated users can inspect their own history through:
 
 - `GET /api/ai/chat-history`
 - `GET /api/ai/chat-history?id=<log-id>`
 
-Local Lemonade chat and purely local tool execution do not write to `chat_logs`, but the local provider can still see the prompt, timeline summary, tool definitions, and tool results sent to it.
+Local editor tool execution does not itself write to `chat_logs`.
 
 ---
 
 ## Known Limitations
 
-1. IndexedDB encryption is only defense against casual inspection. A same-origin script or extension with storage access can still read the keys.
-2. Development does not add CSP headers by default.
-3. Log redaction is pattern-based. Unrecognized secret formats may still leak if they reach the logger before redaction rules are added.
-4. The dev bridge token is local-process-scoped. The token file is stored in the project root as `.ai-bridge-token`, so any local process with file access can read it.
-5. The Native Helper can be started with `--no-auth`, but that disables the auth boundary entirely and is not recommended.
-6. API keys are still sent to external services over HTTPS when you enable AI features that need them.
-7. Lemonade runs outside the app. Any local process that controls the configured local Lemonade server can see the chat prompt, timeline summary, tool definitions, and tool results sent to it.
-8. Hosted OpenAI/Cloud chat prompts, responses, tool calls, token/cost metadata, duration, status, and error state are stored in D1 when the hosted chat route is used.
+1. IndexedDB encryption protects the optional YouTube credential from casual inspection only. Same-origin code or browser extensions with storage access can still read it.
+2. The development server sets cross-origin isolation headers but does not set a general CSP. The deployed middleware sets a CSP only for the admin page.
+3. Browser log redaction is pattern-based; unrecognised secret formats can still leak through logged data.
+4. The dev bridge token is written to `.ai-bridge-token` in the repository by default, so local processes that can read that file can use the bridge.
+5. Launching Native Helper with `--no-auth` disables its HTTP and WebSocket authentication boundary.
+6. The Native Helper discovery endpoint returns its token to any client that can reach its loopback HTTP listener.
+7. Hosted AI prompts, responses, tool calls, and billing metadata are stored in D1 when the hosted chat route is used; persisted chat payloads are redacted but still contain user-supplied content.
+8. The helper's token-file permission hardening is Unix-specific; the code does not set an equivalent Windows ACL.
 
 ---
 
@@ -209,11 +176,11 @@ Local Lemonade chat and purely local tool execution do not write to `chat_logs`,
 
 If you discover a security vulnerability:
 
-1. Do not open a public GitHub issue
-2. Contact the maintainers privately
-3. Include steps to reproduce the issue
-4. Allow reasonable time for a fix before disclosure
+1. Do not open a public GitHub issue.
+2. Contact the maintainers privately.
+3. Include steps to reproduce the issue.
+4. Allow reasonable time for a fix before disclosure.
 
 ---
 
-*Source: `src/services/security/redact.ts`, `src/services/logger.ts`, `src/services/security/fileAccessBroker.ts`, `src/services/security/devBridgeAuth.ts`, `src/services/lemonadeProvider.ts`, `vite.config.ts`, `tools/native-helper/src/server.rs`, `tools/native-helper/src/main.rs`, `src/components/panels/AIChatPanel.tsx`, `functions/api/ai/chat.ts`, `functions/api/ai/chat-history.ts`, `functions/lib/chatLog.ts`*
+*Source: `src/services/security/redact.ts`, `src/services/logger.ts`, `src/services/youtubeCredentialManager.ts`, `src/components/common/settings/IntegrationCredentialsSettings.tsx`, `tools/devBridge/auth.ts`, `tools/devBridge/vitePlugin.ts`, `tools/devBridge/localFileEndpoints.ts`, `tools/native-helper/src/main.rs`, `tools/native-helper/src/server.rs`, `tools/native-helper/src/http_server.rs`, `tools/native-helper/src/websocket_server.rs`, `functions/api/ai/chat.ts`, `functions/api/ai/chat-history.ts`, `functions/lib/chatLog.ts`, `functions/lib/creditClaims.ts`, `functions/lib/websiteFreeCreditOffer.ts`*

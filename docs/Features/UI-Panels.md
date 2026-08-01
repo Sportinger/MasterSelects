@@ -57,7 +57,7 @@ Dockable desktop panel system with an After Effects-style menu bar, unified clip
 - **Open Project** opens an existing project folder
 - **Open Recent** shows browser-remembered projects and can clear that recent list
 - **Save / Save As** follow the folder-based project model
-- **Autosave** still exposes enable/disable plus 1, 2, 5, and 10 minute intervals for interval-save mode
+- **Autosave** exposes enable/disable plus 1, 2, 5, and 10 minute intervals for interval-save mode
 - **Save Mode** itself lives in Settings -> General, and the default branch behavior is continuous save with a short debounce after changes
 - **Clear All Cache and Reload** clears localStorage, IndexedDB, caches, and service workers
 
@@ -96,7 +96,7 @@ All docked panels can be:
 | Action | Method |
 |--------|--------|
 | Switch tab | Click |
-| Cycle tabs | Middle mouse scroll |
+| Pan an overflowing tab bar | Middle-mouse drag |
 | Drag tab | Hold for 500 ms, then drag |
 | Insert into tab group | Drag into the tab group and choose one of the visible gap cubes |
 | Maximize hovered tab | Hover a dock tab and use the fullscreen shortcut |
@@ -118,7 +118,7 @@ All docked panels can be:
 
 ## Available Panels
 
-MasterSelects currently exposes 17 active dockable panel types, plus the Slot Grid overlay that sits on top of the Timeline. The old `ai-video`, `youtube`, `download`, and `multicam` panel types are removed from restored saved layouts; generation and downloads now live inside the Media Panel. `AI Scene Description` remains registered for existing layouts but is hidden from the View, add-panel, and change-panel pickers.
+MasterSelects registers 17 dockable editor panel types, plus the Slot Grid overlay that sits on top of the Timeline. `Start` is a separate hidden landing-panel type. `AI Scene Description` is registered and hidden from the View, add-panel, and change-panel pickers.
 
 | Panel | Type ID | Surface |
 |-------|---------|---------|
@@ -132,7 +132,7 @@ MasterSelects currently exposes 17 active dockable panel types, plus the Slot Gr
 | **Node Workspace** | `node-workspace` | AI-assisted node workspace |
 | **Export** | `export` | Render and export controls |
 | **MIDI Mapping** | `midi-mapping` | Editable list of assigned MIDI notes and trigger previews |
-| **AI Chat** | `ai-chat` | Editing assistant chat |
+| **Screen Capture** | `capture` | Record a display, window, or browser tab into the project |
 | **AI Segment** | `ai-segment` | Local SAM2 segmentation tools |
 | **AI Scene Description** | `scene-description` | Scene list with playback sync |
 | **Transitions** | `transitions` | Transition library |
@@ -143,7 +143,7 @@ MasterSelects currently exposes 17 active dockable panel types, plus the Slot Gr
 ### View Menu Grouping
 
 - **Panels** submenu: all dockable panels in one flyout
-- Inside **Panels**, entries are grouped into Core, AI, Scopes, and Work in Progress
+- Inside **Panels**, entries are grouped into Core, AI, and Scopes
 - Panel entries show their current visible/on state directly in the menu and update immediately when toggled
 - **Layouts** submenu: named layouts, default layout selection, and loading saved layouts
 
@@ -174,7 +174,7 @@ MasterSelects currently exposes 17 active dockable panel types, plus the Slot Gr
 - Single toggle button switches between list view and grid view
 - Reorderable column headers in list view
 - Grid breadcrumb navigation for folder drilling
-- Add menu for compositions, folders, text, 3D text, solids, cameras, splat effectors, mesh primitives, and Gaussian splat import
+- Add menu for compositions, folders, text, solids, live input, and nested 3D items (mesh, 3D text, camera, light, 3D effector, and Gaussian splat), plus motion nulls, adjustment layers, math scenes, and motion-shape primitives
 - Dragging files or folders from the OS recreates the folder structure inside the project
 - Dropping multiple OS files directly on the timeline asks whether to place them side by side or stacked on new layers, while still importing through the Media Panel file path first
 - Drag-to-timeline support
@@ -206,12 +206,11 @@ MasterSelects currently exposes 17 active dockable panel types, plus the Slot Gr
 - Marker bindings support `Jump To Marker`, `Play From Marker`, and `Jump To Marker And Stop`
 - Slot bindings can be created from the Slot Grid filled-slot context menu, which opens this panel with a pending `Listening...` mapping
 
-### AI Chat Panel
+### Screen Capture Panel
 
-- GPT-backed editing assistant
-- Model and provider selection
-- Context-aware editing commands
-- First-open onboarding card with example prompts and editor-mode guidance
+- Records a display, window, or browser tab directly into an open project
+- Supports display and microphone audio, cursor capture, preview, pause/resume, and recovery of interrupted recordings
+- Imports completed recordings into `Recordings`; when enabled, the experimental WebCodecs tier adds crop and scale controls
 
 ### AI Segment Panel
 
@@ -230,11 +229,11 @@ MasterSelects currently exposes 17 active dockable panel types, plus the Slot Gr
 ### Media Generator Tray
 
 - Compact bottom-right prompt entry point inside the Media Panel
-- Expanded tray embeds only the compact FlashBoard prompt composer for video, image, hosted ElevenLabs audio, hosted Suno music, and supported non-production provider-key flows
+- Expanded tray embeds only the compact FlashBoard prompt composer for hosted video, image, ElevenLabs audio, and Suno music flows
 - Active generation jobs render as compact preview cards above the prompt, including queued/processing state, elapsed timer, progress, prompt, and failed-job dismissal
 - Service and provider selection reflect the active backend through the FlashBoard composer
 - Image, video, and audio media can be attached as ordered prompt references from the Media Panel context menu or by dragging them onto the expanded composer
-- Current generation backends are MasterSelects Cloud in production, plus ElevenLabs, EvoLink, and PiAPI provider-key paths for non-production development. All Kie.ai-backed generation uses the hosted Cloud route. Hosted ElevenLabs speech and hosted Suno music use Cloud credits; PiAPI remains primarily as legacy compatibility/catalog metadata rather than the main runtime description for the current generator
+- Current generation backends route through MasterSelects Cloud. Hosted Kie.ai media, ElevenLabs speech, and Suno music use Cloud credits; provider credentials do not enter browser settings.
 
 #### FlashBoard Prompt Composer
 
@@ -248,7 +247,6 @@ MasterSelects currently exposes 17 active dockable panel types, plus the Slot Gr
 - Paste one or more URLs from major platforms
 - Downloads use the same Media tray queue as generated media
 - Completed downloads are imported back into the Media panel under Downloads/platform folders
-- The old `youtube` and `download` dock panels are deprecated and removed from restored layouts
 
 ### Transitions Panel
 
@@ -270,17 +268,12 @@ MasterSelects currently exposes 17 active dockable panel types, plus the Slot Gr
   grouped as one Light family. Pattern search includes visible multi-panel
   Puzzle Push, Shatter Glass, and Magnetic Tiles variants through the grouped
   Pattern family. 3D search includes separate Flip, Tumble, Roll,
-  and Spin families for the current runtime effects; planned dev metadata adds
-  non-draggable Cube, Door, Fold, and Peel families.
+  and Spin families for the current runtime effects.
   Search results stay expanded even if a section was collapsed before searching.
 - Family cards show a variant count. Clicking a family expands the draggable
-  leaf variants until the pointer leaves the panel; planned dev metadata shows
-  a Planned badge and is not draggable.
-- All 74 runtime transition thumbnails have dedicated lightweight SVG
-  animations that communicate the transition's direction, mask, pattern,
-  light, distortion, or 3D motion. Animation runs only while the item is
-  hovered, resets to a representative static frame, and is disabled when the
-  operating system requests reduced motion.
+  leaf variants until the pointer leaves the panel.
+- Transition cards render through the transition-preview renderer map, with a
+  generic SVG fallback when a transition has no dedicated preview renderer.
 - Family-card assembly, sectioning, and search indexing live in focused
   transition panel helpers so the panel layout does not grow with each new
   transition definition.
@@ -290,7 +283,7 @@ MasterSelects currently exposes 17 active dockable panel types, plus the Slot Gr
 - Each transition item carries a plain JSON drag payload with transition ID and duration.
 - The duration control keeps only the minimum bound; long transitions are allowed and rely on hold-frame fallback where source material runs out.
 - Timeline hover uses source-aware ghosts: normal transition body, real-handle coverage, and red hold-frame fallback coverage.
-- The panel is active in the View menu and is no longer marked WIP.
+- The panel is active in the View menu.
 
 ### Video Scopes Panels
 
@@ -331,7 +324,7 @@ Resolume-style slot grid for simultaneous multi-layer composition playback. The 
 
 | Action | Behavior |
 |--------|----------|
-| Click a filled slot | Select slot clip settings, open the Slot Clip tab, and either open the comp in the editor or trigger it live depending on `useLiveSlotTrigger` |
+| Click a filled slot | Select slot clip settings, open the Slot Clip tab, open the composition in the editor, and activate its layer; the disabled-by-default `useLiveSlotTrigger` flag instead triggers it live |
 | Re-click an active slot | Restart playback from the slot trim-in point |
 | Click an empty slot | Deactivate that layer |
 | Click a column header | Activate all compositions in that column |
@@ -344,7 +337,7 @@ Resolume-style slot grid for simultaneous multi-layer composition playback. The 
 - Active layers loop automatically
 - Background layer audio is muted by default
 - Deactivating a layer returns control to the next active layer if needed
-- Optional warm-deck badges show slot preparation state when `useWarmSlotDecks` is enabled
+- Optional warm-deck badges show slot preparation state when `useWarmSlotDecks` is enabled (the current feature flag is disabled by default)
 
 See [Slot Grid](./Slot-Grid.md) for the current live/deck behavior, slot-clip trimming, and context-menu actions.
 
@@ -357,7 +350,7 @@ The unified Properties panel adapts its tabs to the selected clip type, selected
 Selecting a timeline transition switches the panel to `TRANSITION Parameters`.
 That tab shows the transition type, first-pass centered placement with timeline
 body offset support,
-hold-frame policy, duration, planned body range, real source-handle duration,
+hold-frame policy, duration, body range, real source-handle duration,
 hold fallback duration, and remove action. The same duration edit operation is
 used by the selected timeline body's drag-resize handle; dragging the body
 updates the transition offset relative to the cut. Timeline body moves snap to
@@ -385,9 +378,8 @@ behind a fixed-size split. This keeps talking-head footage navigable even when
 cut detection returns one long scene. The list consumes all remaining panel
 height and owns its scroll. Each virtualized segment keeps visible face crops on
 the left with a separate transcript-speaker abbreviation beside them, larger
-word-synchronized dialogue across the remaining width. The former right-side
-range/duration column is intentionally omitted; the compact scene/speech label
-keeps the segment-start seek action and exposes timing details as a tooltip.
+word-synchronized dialogue across the remaining width. The compact scene/speech
+label keeps the segment-start seek action and exposes timing details as a tooltip.
 Speaker labels are not silently equated with anonymous face identities. Segments
 remain compact and never expand. Clicking a word seeks to that exact word;
 clicking the scene/speech label seeks to the speech-segment start (or the scene
@@ -429,20 +421,18 @@ speech markers. The Audio Intelligence Action Center card reports analysis
 state, progress, and marker count and supports run/re-run or cancel. Inside the
 Analysis settings disclosure, `AnalysisAudioSettings` lists the persisted age
 of VAD, alignment, markers, prosody, and room-tone artifacts and provides the
-same run/re-run or cancel control. These surfaces reflect the artifact state
-implemented by WP13; opening the panel does not start analysis implicitly.
+same run/re-run or cancel control.
 
 Best Quality uses a fixed provider split: Deepgram supplies every displayed word
-and timestamp, while OpenAI supplies the speaker turns. The completed summary
-states these two roles directly; it has no agreement percentage, conflict count,
-review queue, or agent state.
+and timestamp, while OpenAI supplies the speaker turns. The summary states
+these two roles directly.
 
 The transcript workspace header uses one compact surface for language, quality
 mode, actions, progress, coverage, and search. An active run
 replaces the completed-result summary instead of stacking contradictory states.
 Best Quality shows Deepgram, OpenAI, and Speakers as three compact stages beneath
 one overall progress rail. Cancel aborts local, direct-provider, hosted
-Cloudflare requests and restores the previously completed
+Cloudflare requests and restores the most recently completed
 transcript when re-transcription is stopped.
 
 ### Audio Clip Tabs
@@ -482,7 +472,6 @@ transcript when re-transcription is stopped.
 
 - Camera clips expose `Nav Mode` controls at the top of the Transform tab.
 - Camera lens and gate controls also live in the Transform tab: FOV, full-frame-equivalent millimeters, Near, Far, and Resolution X/Y.
-- The legacy camera Zoom and Distance controls are hidden from the Camera Transform UI to avoid mixing a real-camera surface with orbit-rig controls.
 - In Scene Nav, mouse wheel over the preview moves the real camera position along the current view direction, so X/Y/Z can all change. It does not change FOV or the mm lens field.
 - Camera Position X/Y/Z is the camera eye position in world space and is edited independently from lens FOV/mm; changing the lens does not rewrite or recalculate the position fields.
 - Camera Resolution X/Y sets the edit-view gate aspect used to draw the camera frame; it is stored with the camera clip and has keyframe controls like the other camera settings.
@@ -543,7 +532,7 @@ Multi Preview, scopes, and other panels are available from the View menu and can
 - Floating panels are restored across sessions
 - Browser window panels are restored from local dock state on refresh and stay connected when project layout hydration runs
 - Invalid panel types are cleaned up on load
-- Named layouts can be stored in the View menu and reused later
+- Named layouts can be stored in the View menu and reused
 - The active named layout can be overwritten directly with `Save to Current Layout`
 - Named layouts also store the timeline audio focus/display mode, track slot counts, per-slot heights, and track visibility
 - Loading a saved layout animates panel movement, resizing, and reflow over 500ms
@@ -607,7 +596,7 @@ MIDI Control (N devices)
 
 ### Output Resolution
 
-Configured in Settings -> Output.
+Configured in Settings -> General -> Output.
 
 | Preset | Dimensions |
 |--------|------------|
@@ -620,7 +609,7 @@ Custom width and height are also supported. This applies to newly created compos
 
 ### Preview Quality
 
-Configured in Settings -> Previews.
+Configured in Settings -> General -> Preview.
 
 | Option | Render Size |
 |--------|-------------|
@@ -649,19 +638,13 @@ Edit menu -> Settings
 | **Audio** | Browser input/output device selection, latency mode, device API status, output-routing status, and AudioContext diagnostics |
 | **Transcription** | Provider selection and pricing |
 | **Native Helper** | Native helper connection, port, helper-backed flows, and decode settings |
-| **API Keys** | OpenAI, AssemblyAI, Deepgram, PiAPI (legacy/compat), EvoLink, ElevenLabs, and YouTube |
+| **Integrations** | Optional YouTube Data API key; AI uses authenticated hosted services |
 
 The Preferences dialog drag position is updated at animation-frame cadence during mouse movement so moving the dialog does not force React state updates for every raw mouse event.
 
-### API Keys
+### Integrations
 
-The current Media generator-relevant keys are:
-
-- `ElevenLabs` for non-production BYO text-to-speech; production hosted speech uses the Cloudflare `ELEVENLABS_API_KEY` secret
-- `EvoLink` for supported non-production image generation
-- `PiAPI` for legacy compatibility and older catalog/pricing paths
-
-Hosted cloud access is account/session based and does not depend on a user-entered API key in this dialog. Kie.ai is not configurable here; its server secret powers hosted media and Suno routes without reaching browser storage.
+The dialog currently exposes only the optional YouTube Data API v3 key. AI features use authenticated hosted services rather than user-entered provider keys in Preferences.
 
 ---
 
@@ -669,11 +652,11 @@ Hosted cloud access is account/session based and does not depend on a user-enter
 
 ### WebGPU Status
 
-Top-right of the toolbar:
+In the expanded preview statistics overlay:
 
 ```
-WebGPU (Vendor)   when ready
-Loading...        during init
+WebGPU (Vendor)       when GPU information is available
+Initializing WebGPU... during preview initialization
 ```
 
 ### Native Helper Status
@@ -702,38 +685,17 @@ Loading...        during init
 
 ## Mobile UI
 
-MasterSelects includes a touch-optimized component tree for mobile devices.
+MasterSelects detects mobile devices and presents an unsupported-device gate.
 
 ### Root Component
 
-`MobileApp.tsx` replaces the desktop dock layout on mobile.
+`MobileApp.tsx` replaces the desktop dock layout with an unsupported-device gate. Its **Trotzdem Desktop oeffnen** action enables the desktop interface for the current device.
 
 ### Components
 
 | Component | Purpose |
 |-----------|---------|
-| `MobileApp` | Root layout, panel state, and gesture handling |
-| `MobilePreview` | Always-visible preview canvas |
-| `MobileTimeline` | Touch-optimized timeline with playhead and trim gestures |
-| `MobileToolbar` | Cut, play/pause, precision mode, and timecode |
-| `MobilePropertiesPanel` | Slide-up properties panel with Transform, Effects, and Audio tabs |
-| `MobileMediaPanel` | Slide-in media browser and import surface |
-| `MobileOptionsMenu` | File, export, and desktop-mode actions |
-
-### Touch Gestures
-
-| Gesture | Action |
-|---------|--------|
-| Edge swipe | Open side panels |
-| Two-finger swipe left | Undo |
-| Two-finger swipe right | Redo |
-| Tap toolbar buttons | Cut, play/pause, precision mode |
-
-### Feature Limits
-
-- The mobile UI keeps preview, timeline, media, and basic properties
-- It does not expose the full dock system, floating windows, or scopes
-- The options menu can switch back to desktop mode
+| `MobileApp` | Unsupported-device gate and desktop-mode action |
 
 ---
 

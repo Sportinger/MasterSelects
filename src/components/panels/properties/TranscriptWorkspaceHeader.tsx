@@ -61,7 +61,6 @@ const TRANSCRIPTION_MODES: Array<{
 }> = [
   { id: 'local', label: 'Local Whisper', shortLabel: 'Local Whisper', hosted: false },
   { id: 'openai', label: 'OpenAI Whisper', shortLabel: 'OpenAI', hosted: true },
-  { id: 'assemblyai', label: 'AssemblyAI', shortLabel: 'AssemblyAI', hosted: false },
   { id: 'deepgram', label: 'Deepgram Nova-3', shortLabel: 'Deepgram', hosted: true },
   {
     id: 'hybrid',

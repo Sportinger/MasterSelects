@@ -32,12 +32,11 @@ Every decoded source frame is resized to `160x90`. The detector combines:
   analysis pixels;
 - an adaptive threshold based on the preceding two seconds.
 
-The adaptive detector does not require most of the full frame to change.
 Shared-background shot/reverse-shot edits can pass through a combination of
 content, histogram, edge, and motion-compensated evidence, while the rolling
 baseline keeps ordinary subject motion below the local cut threshold. Detector
-version changes invalidate older cut caches so improved scoring is applied on
-the next scan.
+version changes invalidate older cut caches and apply improved scoring during
+rescan.
 
 A candidate is delayed by one frame. This lets the detector suppress an
 isolated flash that immediately returns to the preceding image. An
@@ -48,10 +47,12 @@ timestamp and decoded presentation-frame number.
 
 ## Performance and platform behavior
 
-On non-Linux platforms, source frames are cloned into a dedicated analysis
-worker. The worker owns its `OffscreenCanvas`, performs the `160x90` readback
-and scoring, and applies bounded backpressure so decoded `VideoFrame` handles
-cannot accumulate without limit.
+When `Worker` and `OffscreenCanvas` are available and the Linux safety policy
+does not apply, source frames are cloned into a dedicated analysis worker. The
+worker owns its `OffscreenCanvas`, performs the `160x90` readback and scoring,
+and applies bounded backpressure so decoded `VideoFrame` handles cannot
+accumulate without limit. Other environments fall back to the main-thread
+software analyzer.
 
 Linux follows the shared Mesa safety policy and uses a main-thread software 2D
 canvas with `willReadFrequently: true`. The canvas is fixed at `160x90` and
@@ -68,20 +69,17 @@ out, so a cut-heavy source does not cover its thumbnails. Marker positions are
 mapped from the stored source timestamps into each clip's current in/out range,
 including live trim previews and reversed playback.
 Cuts outside the visible source range and linked audio clips are not marked.
-The same marker resource is rendered by the worker canvas and the Linux
-main-thread fallback. The clip Properties **Analysis** summary shows the number
-of cuts in the visible clip range (with the source total on hover). If the
-source has no cut cache yet, the same row offers **Analyze** or **Retry** and
-shows decode progress while the frame-accurate scan runs. The Analysis tab's
-top action area also provides dedicated Analyze, Reanalyze, Retry, and Cancel
-controls for Scene Cuts alongside the other independent analysis pipelines.
-The four channels use a two-column action grid, and **Analyze All** runs the
-video-heavy pipelines sequentially to avoid competing decoder and GPU work.
+The same marker painter is used by the worker canvas and the Linux main-thread
+fallback. The clip Properties **Analysis** action bar includes a **Cuts**
+control that shows the source-wide cut count or decode progress and changes
+between Analyze, Reanalyze, Retry, and Cancel as its state changes. It sits
+alongside Focus & motion, Faces, Transcript, Audio intelligence, and AI Scenes.
+**Analyze all** coordinates visual analysis, scene cuts, transcript, and audio
+intelligence; source-decoding jobs share a resource lock, while audio and
+provider work can run independently. AI Scenes remains an individual action.
 
 ## Scope
 
-This detector intentionally targets hard cuts. Gradual fades and dissolves are
-not reported as hard cuts; they require a separate windowed transition
-detector. Current results are exposed as a persisted cut index, a found-cut
-count in the context menus, and clip markers. Automatic timeline splitting
-remains a separate editing action.
+This detector targets frame-to-frame hard-boundary signals. Results are
+exposed as a persisted cut index, a found-cut count in the context menus, and
+clip markers. Automatic timeline splitting remains a separate editing action.

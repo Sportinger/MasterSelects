@@ -1,4 +1,4 @@
-import type { HostedAiRefundInfo, TaskStatus } from './piApiService';
+import type { HostedAiRefundInfo, TaskStatus } from './aiGenerationContracts';
 
 export const SUNO_PROVIDER_ID = 'suno-music';
 export const SUNO_SOUNDS_PROVIDER_ID = 'suno-sounds';

@@ -33,6 +33,8 @@ struct MotionUniforms {
 };
 
 @group(0) @binding(0) var<uniform> motion: MotionUniforms;
+@group(0) @binding(1) var textureFill: texture_2d<f32>;
+@group(0) @binding(2) var textureFillSampler: sampler;
 
 @vertex
 fn vertexMain(
@@ -283,6 +285,10 @@ fn sampleAppearance(
   var coverage = 1.0 - smoothstep(-aa, aa, signedDistance);
   var color = motion.appearanceColor[appearanceIndex];
 
+  // Appearance kinds: 0 color fill, 1 stroke, 2 linear gradient,
+  // 3 radial gradient, 4 texture fill. Color fill (0) must stay on the
+  // default color path; texture fill (4) must not fall into the gradient
+  // branch.
   if (kind > 0.5 && kind < 1.5) {
     let detail = motion.appearanceDetail[appearanceIndex];
     coverage = strokeCoverage(
@@ -291,7 +297,7 @@ fn sampleAppearance(
       detail.y,
       aa
     );
-  } else if (kind > 1.5) {
+  } else if (kind > 1.5 && kind < 3.5) {
     let shapeSize = max(motion.data0.xy, vec2f(1.0));
     let normalizedPoint = localPoint / shapeSize + vec2f(0.5);
     let geometry = motion.appearanceGeometry[appearanceIndex];
@@ -300,7 +306,7 @@ fn sampleAppearance(
       let direction = geometry.zw - geometry.xy;
       amount = dot(normalizedPoint - geometry.xy, direction)
         / max(dot(direction, direction), 0.0001);
-    } else {
+    } else if (kind < 3.5) {
       let radius = max(
         motion.appearanceDetail[appearanceIndex].w,
         0.0001
@@ -308,6 +314,61 @@ fn sampleAppearance(
       amount = distance(normalizedPoint, geometry.xy) / radius;
     }
     color = sampleGradient(appearanceIndex, amount);
+  } else if (kind > 3.5) {
+    let shapeSize = max(motion.data0.xy, vec2f(1.0));
+    let detail = motion.appearanceDetail[appearanceIndex];
+    let geometry = motion.appearanceGeometry[appearanceIndex];
+    let scale = vec2f(
+      select(geometry.z, 1.0, abs(geometry.z) < 0.0001),
+      select(geometry.w, 1.0, abs(geometry.w) < 0.0001)
+    );
+    let normalizedPoint = localPoint / shapeSize + vec2f(0.5);
+    let translated = (normalizedPoint - vec2f(0.5) - geometry.xy) / scale;
+    let radians = -detail.w * PI / 180.0;
+    let rotated = vec2f(
+      translated.x * cos(radians) - translated.y * sin(radians),
+      translated.x * sin(radians) + translated.y * cos(radians)
+    ) + vec2f(0.5);
+    let fitMode = detail.x;
+    let shapeAspect = shapeSize.x / max(shapeSize.y, 0.0001);
+    let textureAspect = max(detail.z, 0.0001);
+    var uv = rotated;
+    var textureCoverage = 1.0;
+    if (fitMode > 4.5) {
+      uv = fract(rotated);
+    } else if (fitMode < 4.5) {
+      // contain preserves the whole image; cover/fill crop to preserve aspect.
+      let contain = fitMode < 1.5;
+      let aspectScale = textureAspect / shapeAspect;
+      var display = vec2f(1.0);
+      if (textureAspect >= shapeAspect) {
+        display = select(
+          vec2f(aspectScale, 1.0),
+          vec2f(1.0, 1.0 / aspectScale),
+          contain
+        );
+      } else {
+        display = select(
+          vec2f(1.0, 1.0 / aspectScale),
+          vec2f(aspectScale, 1.0),
+          contain
+        );
+      }
+      uv = (rotated - (vec2f(1.0) - display) * 0.5) / display;
+      textureCoverage = select(
+        0.0,
+        1.0,
+        uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0
+      );
+    } else {
+      textureCoverage = select(
+        0.0,
+        1.0,
+        uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0
+      );
+    }
+    color = textureSample(textureFill, textureFillSampler, uv);
+    coverage *= textureCoverage;
   }
 
   return vec4f(

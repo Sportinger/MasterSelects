@@ -13,6 +13,7 @@ import {
 } from './addCompClip';
 import { releaseCompositionMixdownClipRuntime } from '../../../services/timeline/compositionAudioMixdownRuntimeResources';
 import type { ClipActionContext } from './clipActionContext';
+import { findCompositionInsertionCycle } from '../compositionCycleGuard';
 
 const log = Logger.create('CompositionClipActions');
 
@@ -27,6 +28,24 @@ export async function applyAddCompClipAction(
   if (tracks.find(track => track.id === trackId)?.locked) {
     log.warn('Cannot add composition clip to locked track', { trackId, composition: composition.name });
     return;
+  }
+  const { useMediaStore } = await import('../../mediaStore');
+  const mediaState = useMediaStore.getState();
+  const parentCompositionId = mediaState.activeCompositionId;
+  if (parentCompositionId) {
+    const cycle = findCompositionInsertionCycle({
+      parentCompositionId,
+      childCompositionId: composition.id,
+      compositions: mediaState.compositions,
+    });
+    if (cycle) {
+      log.warn('Cannot add composition clip because it would create a cycle', {
+        parentCompositionId,
+        childCompositionId: composition.id,
+        compositionPath: cycle,
+      });
+      return;
+    }
   }
   const timelineSessionId = get().timelineSessionId;
   const isCurrentTimelineSession = () => get().timelineSessionId === timelineSessionId;

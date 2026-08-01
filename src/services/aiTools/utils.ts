@@ -291,7 +291,7 @@ export function getQuickTimelineSummary(): string {
 
   // YouTube / NativeHelper status
   const nativeConnected = NativeHelperClient.isConnected();
-  const hasYouTubeKey = !!useSettingsStore.getState().apiKeys.youtube;
+  const hasYouTubeKey = !!useSettingsStore.getState().youtubeApiKey;
   const ytStatus = nativeConnected
     ? `Native Helper: connected (downloads available).`
     : `Native Helper: not connected (downloads unavailable).`;

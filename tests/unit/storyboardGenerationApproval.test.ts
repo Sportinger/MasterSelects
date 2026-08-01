@@ -175,8 +175,8 @@ describe('storyboard generation approval token', () => {
     ['provider', (prepared: Awaited<ReturnType<typeof prepare>>) => {
       prepared.capability.providerId = 'different-provider';
     }],
-    ['route', (prepared: Awaited<ReturnType<typeof prepare>>) => {
-      prepared.capability.route = 'byo';
+    ['idempotency policy', (prepared: Awaited<ReturnType<typeof prepare>>) => {
+      prepared.capability.durableProviderIdempotency = !prepared.capability.durableProviderIdempotency;
     }],
     ['max spend', (prepared: Awaited<ReturnType<typeof prepare>>) => {
       prepared.quote.maximumSpend = 999;

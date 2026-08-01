@@ -1,0 +1,38 @@
+---
+title: MasterSelects
+description: Browser-based WebGPU video editor with timeline editing, motion design, and AI-assisted workflows.
+template: splash
+hero:
+  tagline: A browser-based WebGPU compositor and media editor — timeline editing, nested compositions, motion design with GPU replicators, an audio workstation, and AI-assisted workflows.
+  actions:
+    - text: Get started
+      link: /getting-started/welcome/
+      icon: right-arrow
+    - text: Open the editor
+      link: https://www.masterselects.com
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Highlights
+
+<CardGrid stagger>
+  <Card title="Timeline editing" icon="setting">
+    Multi-track NLE timeline with clips, keyframes, masks, nested
+    compositions, and a global graph editor.
+  </Card>
+  <Card title="Motion design" icon="star">
+    Shape layers, appearance stacks, GPU-instanced replicators with
+    modifiers and falloffs, expressions, presets, and templates.
+  </Card>
+  <Card title="WebGPU engine" icon="rocket">
+    Real-time compositing, effects, and export on your GPU — preview and
+    export share one evaluated frame model.
+  </Card>
+  <Card title="AI-assisted workflows" icon="open-book">
+    Semantic AI tools for every editing capability, from clip creation to
+    motion templates.
+  </Card>
+</CardGrid>

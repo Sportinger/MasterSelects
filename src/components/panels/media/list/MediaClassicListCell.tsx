@@ -252,6 +252,7 @@ export function MediaClassicListCell({
           ) : (
             <span
               className={`media-item-name ${isSelected ? 'editable' : ''}`}
+              data-guided-media-name={item.id}
               onClick={(event) => onNameClick(event, item.id, item.name)}
             >
               {item.name}

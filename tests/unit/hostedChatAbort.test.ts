@@ -62,6 +62,14 @@ function hostedToolEvents(turnId: string, sessionId = 'abort-session'): Response
   });
 }
 
+function hostedAgentV1ProtocolResponse(): Response {
+  return new Response(JSON.stringify({
+    availableExecutionProfiles: ['fast'],
+    protocolVersion: 'hosted-agent-k2-v1',
+    reason: 'outside_canary',
+  }), { headers: { 'Content-Type': 'application/json' }, status: 200 });
+}
+
 describe('hosted FlashBoard chat cancellation', () => {
   beforeEach(() => {
     mocks.executeAIToolCalls.mockResolvedValue([{
@@ -104,6 +112,9 @@ describe('hosted FlashBoard chat cancellation', () => {
   it('stops after a tool-bearing response when cancelled before execution', async () => {
     const controller = new AbortController();
     const fetchMock = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (String(url) === '/api/kernel/hosted-agent/protocol') {
+        return hostedAgentV1ProtocolResponse();
+      }
       if (String(url) === '/api/kernel/hosted-agent/turns') {
         controller.abort(new DOMException('Chat stopped.', 'AbortError'));
         return acceptedTurn(init);
@@ -121,12 +132,12 @@ describe('hosted FlashBoard chat cancellation', () => {
       temperature: 0.7,
     })).rejects.toMatchObject({ name: 'AbortError' });
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(mocks.executeAIToolCalls).not.toHaveBeenCalled();
-    const firstBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    const firstBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
     expect(firstBody.routePreference).toBe('auto');
-    expect(String(fetchMock.mock.calls[1]?.[0])).toMatch(/\/cancel$/);
-    expect(String(fetchMock.mock.calls[2]?.[0])).toMatch(/\/events$/);
+    expect(String(fetchMock.mock.calls[2]?.[0])).toMatch(/\/cancel$/);
+    expect(String(fetchMock.mock.calls[3]?.[0])).toMatch(/\/events$/);
   });
 
   it('does not authorize a later provider round after cancellation during a tool batch', async () => {
@@ -134,6 +145,9 @@ describe('hosted FlashBoard chat cancellation', () => {
     let turnId = '';
     const fetchMock = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
       const path = String(url);
+      if (path === '/api/kernel/hosted-agent/protocol') {
+        return hostedAgentV1ProtocolResponse();
+      }
       if (path === '/api/kernel/hosted-agent/turns') {
         turnId = String((JSON.parse(String(init?.body)) as Record<string, unknown>).turnId);
         return acceptedTurn(init);
@@ -166,10 +180,10 @@ describe('hosted FlashBoard chat cancellation', () => {
     })).rejects.toMatchObject({ name: 'AbortError' });
 
     expect(mocks.executeAIToolCalls).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledTimes(4);
-    const firstBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    const firstBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
     expect(firstBody.turnId).toBe('cancel-after-tool');
-    expect(String(fetchMock.mock.calls[2]?.[0])).toMatch(/\/cancel$/);
-    expect(String(fetchMock.mock.calls[3]?.[0])).toMatch(/\/events$/);
+    expect(String(fetchMock.mock.calls[3]?.[0])).toMatch(/\/cancel$/);
+    expect(String(fetchMock.mock.calls[4]?.[0])).toMatch(/\/events$/);
   });
 });

@@ -3,6 +3,7 @@ import { insertAiAuditEvent } from '../../lib/aiAudit';
 import { blocksAiRequest, moderateAiInput } from '../../lib/aiModeration';
 import { getCreditLedgerEntryBySource, refundCreditsForFailedTask, spendCredits } from '../../lib/credits';
 import { getCurrentUser, json, methodNotAllowed, parseJson } from '../../lib/db';
+import { rejectByokCredentials } from '../../lib/noByok';
 import {
   buildHostedKlingCapabilities,
   calculateHostedImageCost,
@@ -419,6 +420,13 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     });
   }
 
+  const byokHeaderError = rejectByokCredentials({
+    headers: context.request.headers,
+  });
+  if (byokHeaderError) {
+    return byokHeaderError;
+  }
+
   if (context.request.method === 'GET') {
     const url = new URL(context.request.url);
     const taskId = url.searchParams.get('taskId');
@@ -489,6 +497,10 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
 
   const requestId = context.data.requestId ?? crypto.randomUUID();
   const rawBody = (await parseJson<HostedVideoRouteBody>(context.request)) ?? null;
+  const byokBodyError = rejectByokCredentials({ payload: rawBody });
+  if (byokBodyError) {
+    return byokBodyError;
+  }
 
   if (rawBody?.action === 'status' || rawBody?.taskId) {
     const taskId = typeof rawBody.taskId === 'string' ? rawBody.taskId.trim() : '';

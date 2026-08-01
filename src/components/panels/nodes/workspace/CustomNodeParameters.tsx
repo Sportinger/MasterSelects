@@ -6,15 +6,12 @@ import {
   type ClipCustomNodeConversationMessage,
 } from '../../../../services/nodeGraph';
 import { useAccountStore } from '../../../../stores/accountStore';
-import { useSettingsStore } from '../../../../stores/settingsStore';
 import { useTimelineStore } from '../../../../stores/timeline';
 import type { TimelineClip } from '../../../../stores/timeline/types';
 import { AINodeExposedParameters } from './AINodeExposedParameters';
 import {
   appendConversationTurn,
   createAssistantChatContent,
-  DEFAULT_LEMONADE_ENDPOINT,
-  DEFAULT_LEMONADE_MODEL,
   extractGeneratedNodeCode,
   generateAINodeResponse,
   type NodeAIGenerationAccess,
@@ -23,10 +20,6 @@ import { AIPortDropdown } from './AIPortDropdown';
 
 export function CustomNodeParameters({ clip, node }: { clip: TimelineClip; node: NodeGraphNode }) {
   const updateClipAICustomNode = useTimelineStore((state) => state.updateClipAICustomNode);
-  const aiProvider = useSettingsStore((state) => state.aiProvider);
-  const lemonadeEndpoint = useSettingsStore((state) => state.lemonadeEndpoint);
-  const lemonadeModel = useSettingsStore((state) => state.lemonadeModel);
-  const openSettings = useSettingsStore((state) => state.openSettings);
   const hostedAIEnabled = useAccountStore((state) => state.hostedAIEnabled);
   const accountSession = useAccountStore((state) => state.session);
   const clips = useTimelineStore((state) => state.clips);
@@ -71,22 +64,15 @@ export function CustomNodeParameters({ clip, node }: { clip: TimelineClip; node:
     return <div className="node-workspace-inspector-empty">Custom node not found</div>;
   }
 
-  const access: NodeAIGenerationAccess = aiProvider === 'lemonade'
-    ? {
-        endpoint: lemonadeEndpoint || DEFAULT_LEMONADE_ENDPOINT,
-        kind: 'lemonade',
-        label: 'Local',
-        model: lemonadeModel || DEFAULT_LEMONADE_MODEL,
-      }
-    : accountSession?.authenticated && hostedAIEnabled
-      ? { kind: 'hosted', label: 'Cloud' }
-      : { kind: 'none', label: 'No AI' };
+  const access: NodeAIGenerationAccess = accountSession?.authenticated && hostedAIEnabled
+    ? { kind: 'hosted', label: 'Cloud' }
+    : { kind: 'none', label: 'No AI' };
   const canSendPrompt = access.kind !== 'none' && definition.ai.prompt.trim().length > 0 && !isGenerating;
   const conversationCount = definition.ai.conversation?.length ?? 0;
 
   const sendPromptToAI = async () => {
     if (access.kind === 'none') {
-      setGenerationError('No AI provider configured.');
+      setGenerationError('Sign in to use hosted AI.');
       return;
     }
 
@@ -270,9 +256,7 @@ export function CustomNodeParameters({ clip, node }: { clip: TimelineClip; node:
         <div className="node-workspace-ai-footer">
           <span>{definition.status === 'ready' ? 'Ready' : 'Draft'}</span>
           <span>{conversationCount > 0 ? `${conversationCount} messages` : access.label}</span>
-          {access.kind === 'none' && (
-            <button type="button" onClick={() => openSettings()}>Configure AI</button>
-          )}
+          {access.kind === 'none' && <span>Sign in to use AI</span>}
         </div>
       </div>
     </div>

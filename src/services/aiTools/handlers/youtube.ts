@@ -143,7 +143,7 @@ export async function handleSearchYouTube(args: Record<string, unknown>): Promis
     return { success: false, error: 'query is required' };
   }
 
-  const youtubeApiKey = useSettingsStore.getState().apiKeys.youtube;
+  const youtubeApiKey = useSettingsStore.getState().youtubeApiKey;
   if (!youtubeApiKey) {
     return { success: false, error: 'YouTube API key not configured. Please set it in Settings > API Keys.' };
   }

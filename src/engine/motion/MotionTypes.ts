@@ -7,7 +7,11 @@ import {
   type ReplicatorRuntimeDiagnostic,
 } from './replicator/runtimeContracts';
 import type { ReplicatorDiagnostic } from '../../services/motionDesign/replicator/contracts';
-import type { MotionFrameReplicatorState } from '../../services/motionDesign/contracts/evaluatedMotionFrame';
+import type {
+  MotionFrameExpressionValue,
+  MotionFrameModifierState,
+  MotionFrameReplicatorState,
+} from '../../services/motionDesign/contracts/evaluatedMotionFrame';
 
 export const MOTION_RENDER_TEXTURE_FORMAT: GPUTextureFormat = 'rgba8unorm';
 export const MOTION_REPLICATOR_SHADER_MAX_INSTANCES = 100_000;
@@ -133,6 +137,8 @@ export function getMotionReplicatorSourceGeometry(
 export function getMotionReplicatorRenderState(
   motion: MotionLayerDefinition | undefined,
   frameReplicator: MotionFrameReplicatorState | null | undefined = undefined,
+  frameModifier: MotionFrameModifierState | null | undefined = undefined,
+  frameExpressions: readonly MotionFrameExpressionValue[] | null | undefined = undefined,
 ): MotionReplicatorRenderState {
   const { sourceBounds } = getMotionReplicatorSourceGeometry(motion);
   const replicatorValue = motion?.replicator;
@@ -230,7 +236,24 @@ export function getMotionReplicatorRenderState(
         boundsHeight: sourceBounds.maxY - sourceBounds.minY,
       };
     }
-    const packet = createReplicatorRenderPacket(evaluation);
+    // The frame state pairs modifier plans with the replicator evaluation of
+    // the same layer, so that evaluation's cache key is the plan's provenance.
+    // The adapter applies planned per-instance transforms and omits clipped
+    // instances; without a plan the packet is byte-identical to before.
+    const packet = createReplicatorRenderPacket(evaluation, {
+      ...(frameModifier
+        ? {
+            modifierPlan: frameModifier.plan,
+            modifierPlanReplicatorCacheKey: evaluation.cacheKey,
+          }
+        : {}),
+      ...(frameExpressions && frameExpressions.length > 0
+        ? {
+            expressionValues: frameExpressions,
+            expressionValuesReplicatorCacheKey: evaluation.cacheKey,
+          }
+        : {}),
+    });
     if (!packet.ok || !packet.contentBounds || !packet.cacheIdentity) {
       return createFailedReplicatorState(packet.diagnostics, sourceBounds);
     }
@@ -297,6 +320,8 @@ function createFailedReplicatorState(
 export function getMotionRenderSize(
   motion: MotionLayerDefinition | undefined,
   frameReplicator: MotionFrameReplicatorState | null | undefined = undefined,
+  frameModifier: MotionFrameModifierState | null | undefined = undefined,
+  frameExpressions: readonly MotionFrameExpressionValue[] | null | undefined = undefined,
 ): MotionRenderSize {
   const strokePadding = motion
     ? getVisibleStrokes(motion).reduce(
@@ -304,7 +329,12 @@ export function getMotionRenderSize(
         0,
       )
     : 0;
-  const replicator = getMotionReplicatorRenderState(motion, frameReplicator);
+  const replicator = getMotionReplicatorRenderState(
+    motion,
+    frameReplicator,
+    frameModifier,
+    frameExpressions,
+  );
   const replicatedWidth = Math.ceil(replicator.boundsWidth);
   const replicatedHeight = Math.ceil(replicator.boundsHeight);
 

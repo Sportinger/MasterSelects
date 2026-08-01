@@ -1,6 +1,5 @@
 // LayerBuilderService - Main orchestrator for layer building
 // Delegates video sync to VideoSyncManager and audio sync to AudioTrackSyncManager
-
 import type { TimelineClip, Layer, VideoBakeRegion } from '../../types';
 import type { FrameContext } from './types';
 import { createFrameContext, getMediaFileForClip, isVideoTrackVisible } from './FrameContext';
@@ -55,7 +54,6 @@ import { ensureTransitionCompositionsForActiveTimeline } from '../../stores/time
 import { buildLayerBuilderTransitionCompositionLayer } from './layerBuilderTransitionComposition';
 
 const log = Logger.create('LayerBuilder');
-
 /**
  * LayerBuilderService - Builds render layers from timeline state
  * Optimized with caching, memoization, and object reuse
@@ -382,6 +380,7 @@ export class LayerBuilderService {
         ctx,
         transformCache: this.transformCache,
         proxyFrames: this.proxyFrames,
+        previewContinuationResolver: this.videoSyncManager,
         opacityOverride,
       });
     }
@@ -515,7 +514,6 @@ export class LayerBuilderService {
   getVideoSyncManager(): VideoSyncManager {
     return this.videoSyncManager;
   }
-
   // ==================== VIDEO & AUDIO SYNC (delegated) ====================
 
   /**

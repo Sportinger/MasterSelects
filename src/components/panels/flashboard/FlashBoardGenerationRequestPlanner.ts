@@ -93,10 +93,7 @@ export function buildFlashBoardGenerationRequest({
   voiceName,
   voiceSettings,
 }: BuildFlashBoardGenerationRequestInput): FlashBoardGenerationRequest {
-  const requestIsElevenLabs = isAudioRequest && (
-    service === 'elevenlabs'
-    || providerId === 'cloud-elevenlabs-tts'
-  );
+  const requestIsElevenLabs = isAudioRequest && providerId === 'cloud-elevenlabs-tts';
   const modeSupportedForAudio = isAudioRequest && selectedEntry.modes.length > 0;
   const trimmedOriginalPrompt = originalPrompt?.trim();
   const requestOriginalPrompt = trimmedOriginalPrompt && trimmedOriginalPrompt !== effectivePrompt.trim()

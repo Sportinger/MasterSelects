@@ -506,7 +506,7 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
             >
               {line.label ? line.label :
                (property === 'opacity' || property.includes('.volume')) ? `${(line.value * 100).toFixed(0)}%` :
-               parseCameraProperty(property) === 'fov' ? `${line.value.toFixed(0)}Â°` :
+               parseCameraProperty(property) === 'fov' ? `${line.value.toFixed(0)}°` :
                property.startsWith('scale.') ? `${(line.value * 100).toFixed(0)}%` :
                property.startsWith('rotation.') ? `${line.value.toFixed(0)}°` :
                Number.isInteger(line.value) ? line.value.toFixed(0) :

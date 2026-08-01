@@ -1,23 +1,43 @@
 import { getTimelineRevision } from '../../stores/timeline/revisionMiddleware';
 import { useTimelineStore } from '../../stores/timeline';
+import { executeAIToolCalls } from '../aiTools';
 import { handleCaptureFrame } from '../aiTools/handlers/preview';
 import {
   HOSTED_AGENT_MAXIMUM_ITERATIONS,
+  HOSTED_AGENT_FAST_V2_CAPABILITY_BUNDLE_VERSION,
   HostedAgentK2ClientSession,
+  adaptHostedAgentFastV2TransportToK2,
+  buildHostedAgentFastV2BrowserRequest,
   clearHostedAgentReloadSnapshot,
+  createHostedAgentFastV2FetchTransport,
   createHostedAgentK2FetchTransport,
   getHostedAgentClientInstanceId,
+  hostedAgentFastV2RoundIdempotencyKey,
   hostedAgentRoundIdempotencyKey,
+  readHostedAgentFastV2ReloadSnapshot,
   readHostedAgentReloadSnapshot,
+  saveHostedAgentFastV2ReloadSnapshot,
   saveHostedAgentReloadSnapshot,
   startHostedAgentK2Turn,
   type HostedAgentEvent,
+  type HostedAgentFastV2FetchTransport,
+  type HostedAgentFastV2StartRequest,
+  type HostedAgentFastV2TurnAccepted,
+  type HostedAgentFastV2VisualReference,
   type HostedAgentK1TurnRequest,
   type HostedAgentK2BatchExecutorResult,
   type HostedAgentK2ClientPersistedState,
   type HostedAgentToolExecutionMode,
   type HostedAgentTurnAccepted,
 } from '../kernelClient/hostedAgent';
+import { createWp1AgentTransactionAdapter } from '../kernelClient/wp1Spike/agentTransactionAdapter';
+import { createWp1EditorOperationDispatcher } from '../kernelClient/wp1Spike/editorOperationDispatcher';
+import { KernelOperationRoundTripV1 } from '../kernelClient/wp1Spike/operationRoundTrip';
+import { fingerprintPublicTimelineStateV1 } from '../kernelClient/wp1Spike/publicOperationContracts';
+import {
+  KernelOperationSessionAuthorityV1,
+  type KernelOperationSessionDescriptorV1,
+} from '../kernelClient/wp1Spike/operationSessionAuthority';
 import {
   applyConfirmedCreditUpdate,
   beginCreditActivity,
@@ -50,6 +70,7 @@ import {
 import { findFlashBoardChatImageData } from './FlashBoardChatImageData';
 import type {
   FlashBoardChatRequest,
+  FlashBoardChatExecutionProfile,
   FlashBoardChatToolExecutionMode,
   FlashBoardChatVisualReference,
   FlashBoardExecutedToolCall,
@@ -214,6 +235,94 @@ export function buildHostedAgentTurnRequest(input: {
   return request;
 }
 
+function fastV2ModelClass(model: string): 'fast' | 'quality' {
+  return [
+    'claude-fable-5',
+    'claude-opus-4-8',
+    'gpt-5-6-sol',
+  ].includes(model) ? 'quality' : 'fast';
+}
+
+function fastV2VisualReferences(
+  visualReferences: readonly FlashBoardChatVisualReference[],
+): HostedAgentFastV2VisualReference[] {
+  return visualReferences.map((reference, index) => {
+    const image = getVisualReferenceImage(reference);
+    return {
+      id: `initial-reference-${index + 1}`,
+      mediaType: image.mediaType as HostedAgentFastV2VisualReference['mediaType'],
+      role: 'initial',
+      source: reference.dataUrl,
+      transport: 'data-url',
+    };
+  });
+}
+
+async function buildCurrentHostedAgentFastV2Request(
+  request: FlashBoardChatRequest,
+): Promise<HostedAgentFastV2StartRequest> {
+  const currentTurnId = turnId(request);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const timelineRevision = getTimelineRevision();
+    const state = useTimelineStore.getState();
+    const clips = state.clips.map((clip) => ({
+      duration: clip.duration,
+      id: clip.id,
+      inPoint: clip.inPoint,
+      ...(clip.linkedClipId === undefined ? {} : { linkedClipId: clip.linkedClipId }),
+      name: clip.name,
+      outPoint: clip.outPoint,
+      startTime: clip.startTime,
+      trackId: clip.trackId,
+    } as typeof clip));
+    const tracks = state.tracks.map((track) => ({
+      height: track.height,
+      id: track.id,
+      locked: track.locked,
+      muted: track.muted,
+      name: track.name,
+      solo: track.solo,
+      type: track.type,
+      visible: track.visible,
+    }));
+    const built = await buildHostedAgentFastV2BrowserRequest({
+      clientInstanceId: clientInstanceId(),
+      ...(request.resumeMessageId === undefined
+        ? {}
+        : { conversationRef: request.resumeMessageId }),
+      executionProfile: request.executionProfile ?? 'fast',
+      request: request.prompt,
+      requestedExecutionMode: hostedExecutionMode(request.toolExecutionMode),
+      requestedModelClass: fastV2ModelClass(request.model),
+      runSource: request.runSource === 'bridge' || request.runSource === 'mcp'
+        ? request.runSource
+        : 'ui',
+      snapshot: {
+        clips,
+        duration: state.duration,
+        inPoint: state.inPoint,
+        outPoint: state.outPoint,
+        playheadPosition: state.playheadPosition,
+        selectedClipIds: new Set(state.selectedClipIds),
+        timelineRevision,
+        tracks,
+      },
+      turnId: currentTurnId,
+      visualReferences: fastV2VisualReferences(request.visualReferences ?? []),
+    });
+    if (getTimelineRevision() === timelineRevision) return built;
+  }
+  throw new Error('The timeline changed while the Fast V2 snapshot was being prepared.');
+}
+
+export async function getHostedAgentExecutionProfileAvailability(
+  input: { signal?: AbortSignal } = {},
+): Promise<readonly FlashBoardChatExecutionProfile[]> {
+  const transport = createHostedAgentFastV2FetchTransport({ signal: input.signal });
+  const selection = await transport.getProtocol({ signal: input.signal });
+  return [...selection.availableExecutionProfiles];
+}
+
 function toolCallsForEvent(
   event: Extract<HostedAgentEvent, { kind: 'tool-batch-request' }>,
 ): FlashBoardToolCall[] {
@@ -350,7 +459,7 @@ async function executeKernelToolBatch(
   };
 }
 
-export async function sendHostedKieAgentChat(input: {
+async function sendHostedKieAgentChatV1(input: {
   protocol: FlashBoardKieChatProtocol;
   request: FlashBoardChatRequest;
   supportsTools: boolean;
@@ -399,6 +508,254 @@ function assertCompatibleAcceptedTurn(
   ) {
     throw new Error('The kernel accepted an incompatible hosted-agent contract.');
   }
+}
+
+function createKernelOperationRoundTrip(
+  descriptor: KernelOperationSessionDescriptorV1,
+  sessionId: string,
+  turnRequest: Pick<HostedAgentK1TurnRequest, 'clientInstanceId' | 'turnId'>,
+  callbackRequest: FlashBoardChatRequest,
+): KernelOperationRoundTripV1 {
+  return new KernelOperationRoundTripV1({
+    authority: new KernelOperationSessionAuthorityV1({
+      binding: {
+        clientInstanceId: turnRequest.clientInstanceId,
+        sessionId,
+        turnId: turnRequest.turnId,
+      },
+      descriptor,
+    }),
+    requestConfirmation: async (request) => {
+      const approved = callbackRequest.onKernelOperationConfirmation
+        ? await callbackRequest.onKernelOperationConfirmation(request)
+        : typeof window !== 'undefined'
+          && window.confirm(
+            'Allow this AI request to perform a destructive timeline edit? You can undo it after completion.',
+          );
+      return {
+        decision: approved ? 'approved' : 'denied',
+        planBinding: request.planBinding,
+      };
+    },
+    dependencies: {
+      dispatch: createWp1EditorOperationDispatcher(executeAIToolCalls),
+      getCommittedStateFingerprint: async () => {
+        const { clips, tracks } = useTimelineStore.getState();
+        return fingerprintPublicTimelineStateV1({ clips, tracks });
+      },
+      getPreparedStateFingerprint: async () => {
+        const { clips, tracks } = useTimelineStore.getState();
+        return fingerprintPublicTimelineStateV1({ clips, tracks });
+      },
+      getTimelineRevision,
+      transaction: createWp1AgentTransactionAdapter(),
+    },
+  });
+}
+
+async function sendHostedFastV2AgentChat(
+  input: {
+    protocol: FlashBoardKieChatProtocol;
+    request: FlashBoardChatRequest;
+    supportsTools: boolean;
+    systemPrompt: string;
+  },
+  transport: HostedAgentFastV2FetchTransport,
+): Promise<string> {
+  const turnRequest = await buildCurrentHostedAgentFastV2Request(input.request);
+  if (input.request.resumeMessageId) {
+    saveHostedAgentFastV2ReloadSnapshot({
+      assistantMessageId: input.request.resumeMessageId,
+      cursor: null,
+      request: turnRequest,
+    });
+  }
+  let accepted: HostedAgentFastV2TurnAccepted;
+  try {
+    accepted = await transport.start({
+      request: turnRequest,
+      signal: input.request.signal,
+    });
+  } catch (error) {
+    if (input.request.resumeMessageId) {
+      clearHostedAgentReloadSnapshot(input.request.resumeMessageId);
+    }
+    throw error;
+  }
+  input.request.onPhase?.('provider');
+  return runHostedFastV2Session({
+    accepted,
+    assistantMessageId: input.request.resumeMessageId,
+    callbackRequest: input.request,
+    transport,
+    turnRequest,
+  });
+}
+
+async function runHostedFastV2Session(input: {
+  accepted: HostedAgentFastV2TurnAccepted;
+  assistantMessageId?: string;
+  callbackRequest: FlashBoardChatRequest;
+  restoredCursor?: string | null;
+  transport: HostedAgentFastV2FetchTransport;
+  turnRequest: HostedAgentFastV2StartRequest;
+}): Promise<string> {
+  const activityId = input.turnRequest.turnId;
+  beginCreditActivity({
+    feature: 'AI agent',
+    id: activityId,
+    targetId: 'flashboard-credit-activity-anchor',
+  });
+  let activityEnded = false;
+  const finishActivity = (status: 'completed' | 'failed' | 'canceled') => {
+    if (activityEnded) return;
+    activityEnded = true;
+    endCreditActivity({ id: activityId, status });
+  };
+  const persist = (state: HostedAgentK2ClientPersistedState) => {
+    if (!input.assistantMessageId) return;
+    if (state.status !== 'active') {
+      clearHostedAgentReloadSnapshot(input.assistantMessageId);
+      return;
+    }
+    saveHostedAgentFastV2ReloadSnapshot({
+      assistantMessageId: input.assistantMessageId,
+      cursor: state.cursor,
+      request: input.turnRequest,
+    });
+  };
+  if (input.assistantMessageId) {
+    saveHostedAgentFastV2ReloadSnapshot({
+      assistantMessageId: input.assistantMessageId,
+      cursor: input.restoredCursor ?? null,
+      request: input.turnRequest,
+    });
+  }
+
+  let client: HostedAgentK2ClientSession;
+  try {
+    client = new HostedAgentK2ClientSession({
+      clientInstanceId: input.turnRequest.clientInstanceId,
+      completedBatches: [],
+      cursor: input.restoredCursor,
+      lease: input.accepted.pageLease,
+      onStateChange: persist,
+      toolSchemaVersion: HOSTED_AGENT_FAST_V2_CAPABILITY_BUNDLE_VERSION,
+      transport: adaptHostedAgentFastV2TransportToK2(input.transport),
+      turnId: input.turnRequest.turnId,
+    });
+  } catch (error) {
+    finishActivity('failed');
+    throw error;
+  }
+
+  let finalMessage = '';
+  let terminalError = '';
+  let detachingForReload = false;
+  const interruptForPageExit = () => {
+    detachingForReload = true;
+    client.detachForReload();
+  };
+  window.addEventListener('pagehide', interruptForPageExit);
+  try {
+    const result = await client.runUntilTerminal({
+      createOperationRoundTrip: (descriptor) => createKernelOperationRoundTrip(
+        descriptor,
+        input.accepted.pageLease.sessionId,
+        input.turnRequest,
+        input.callbackRequest,
+      ),
+      execute: async () => {
+        throw new Error('Fast V2 rejected an unexpected client tool-batch request.');
+      },
+      onEvent: (event) => {
+        if (event.kind === 'narration-complete' || event.kind === 'narration-delta') {
+          emitAgentActivity(input.callbackRequest, {
+            kind: 'narration',
+            phase: event.phase,
+            roundIndex: event.roundIndex,
+            text: event.text,
+          });
+        } else if (event.kind === 'billing-settled') {
+          applyConfirmedCreditUpdate({
+            activityId,
+            activityTotalCredits: event.totalCreditsCharged,
+            balance: event.creditBalance,
+            credits: event.creditsCharged,
+            kind: 'debit',
+            mutationId: event.ledgerEntryId
+              ? `debit:hosted:ai_chat:${event.ledgerEntryId}`
+              : `debit:hosted:ai_chat:${hostedAgentFastV2RoundIdempotencyKey(event.turnId, event.roundIndex)}`,
+            source: 'hosted:ai_chat',
+          });
+        } else if (event.kind === 'turn-complete') {
+          recordCreditActivityTotal(activityId, event.creditsCharged);
+          finalMessage = event.message;
+          finishActivity('completed');
+        } else if (
+          event.kind === 'turn-failed'
+          || event.kind === 'turn-canceled'
+          || event.kind === 'turn-interrupted'
+        ) {
+          terminalError = event.message === 'verified-family-unsupported'
+            ? 'The Verified profile does not support this request yet. Choose Fast or use a supported range-removal request.'
+            : event.message === 'fast-family-unsupported'
+              ? 'The Fast profile does not support this request yet.'
+              : event.message;
+          finishActivity(event.kind === 'turn-canceled' ? 'canceled' : 'failed');
+        }
+      },
+      signal: input.callbackRequest.signal,
+    });
+    if (result.status !== 'completed') {
+      throw new Error(terminalError || `The kernel Fast V2 turn ended as ${result.status}.`);
+    }
+    if (input.assistantMessageId) {
+      clearHostedAgentReloadSnapshot(input.assistantMessageId);
+    }
+    if (!finalMessage.trim()) {
+      throw new Error('The kernel completed without a final Fast V2 response.');
+    }
+    return finalMessage;
+  } catch (error) {
+    if (!detachingForReload) {
+      finishActivity(input.callbackRequest.signal?.aborted ? 'canceled' : 'failed');
+    }
+    if (!detachingForReload && input.assistantMessageId) {
+      clearHostedAgentReloadSnapshot(input.assistantMessageId);
+    }
+    throw error;
+  } finally {
+    window.removeEventListener('pagehide', interruptForPageExit);
+  }
+}
+
+export async function sendHostedKieAgentChat(input: {
+  protocol: FlashBoardKieChatProtocol;
+  request: FlashBoardChatRequest;
+  supportsTools: boolean;
+  systemPrompt: string;
+}): Promise<string> {
+  const fastV2Transport = createHostedAgentFastV2FetchTransport({
+    signal: input.request.signal,
+  });
+  const selection = await fastV2Transport.getProtocol({ signal: input.request.signal });
+  const executionProfile = input.request.executionProfile ?? 'fast';
+  if (executionProfile === 'verified') {
+    if (
+      selection.protocolVersion !== 'fast-agent-v2'
+      || !selection.availableExecutionProfiles.includes('verified')
+    ) {
+      throw new Error(
+        'The Verified profile pilot is unavailable for this account. Choose Fast and try again.',
+      );
+    }
+    return sendHostedFastV2AgentChat(input, fastV2Transport);
+  }
+  if (selection.protocolVersion === 'fast-agent-v2') {
+    return sendHostedFastV2AgentChat(input, fastV2Transport);
+  }
+  return sendHostedKieAgentChatV1(input);
 }
 
 async function runHostedAgentSession(input: {
@@ -469,6 +826,14 @@ async function runHostedAgentSession(input: {
   window.addEventListener('pagehide', interruptForPageExit);
   try {
     const result = await client.runUntilTerminal({
+      createOperationRoundTrip: (descriptor) => (
+        createKernelOperationRoundTrip(
+          descriptor,
+          input.accepted.pageLease.sessionId,
+          input.turnRequest,
+          input.callbackRequest,
+        )
+      ),
       execute: (event) => executeKernelToolBatch(
         input.callbackRequest,
         input.turnRequest.providerInput.protocol,
@@ -533,10 +898,67 @@ async function runHostedAgentSession(input: {
   }
 }
 
+async function resumeHostedFastV2AgentChat(input: {
+  assistantMessageId: string;
+  request: FlashBoardChatRequest;
+}): Promise<string | null> {
+  const snapshot = readHostedAgentFastV2ReloadSnapshot(input.assistantMessageId);
+  if (!snapshot) return null;
+  if (snapshot.request.clientInstanceId !== clientInstanceId()) {
+    clearHostedAgentReloadSnapshot(input.assistantMessageId);
+    return null;
+  }
+
+  const auditRun = await reactivateFlashBoardChatRunByIdempotencyKey(snapshot.request.turnId);
+  const resumedToolCalls: FlashBoardExecutedToolCall[] = [];
+  const callbackRequest: FlashBoardChatRequest = {
+    ...input.request,
+    onExecutedToolCalls: (toolCalls) => {
+      resumedToolCalls.push(...toolCalls);
+      if (auditRun) appendFlashBoardChatRunToolCalls(auditRun.runId, toolCalls);
+      input.request.onExecutedToolCalls?.(toolCalls);
+    },
+  };
+  const transport = createHostedAgentFastV2FetchTransport({ signal: input.request.signal });
+  try {
+    const accepted = await transport.start({
+      request: snapshot.request,
+      signal: input.request.signal,
+    });
+    input.request.onPhase?.('provider');
+    const response = await runHostedFastV2Session({
+      accepted,
+      assistantMessageId: input.assistantMessageId,
+      callbackRequest,
+      restoredCursor: snapshot.cursor,
+      transport,
+      turnRequest: snapshot.request,
+    });
+    if (auditRun) {
+      completeFlashBoardChatRun(auditRun.runId, {
+        executedToolCalls: resumedToolCalls,
+        response,
+      });
+    }
+    return response;
+  } catch (error) {
+    if (auditRun) {
+      completeFlashBoardChatRun(auditRun.runId, {
+        error,
+        executedToolCalls: resumedToolCalls,
+      });
+    }
+    throw error;
+  }
+}
+
 export async function resumeHostedKieAgentChat(input: {
   assistantMessageId: string;
   request: FlashBoardChatRequest;
 }): Promise<string | null> {
+  if (readHostedAgentFastV2ReloadSnapshot(input.assistantMessageId)) {
+    return resumeHostedFastV2AgentChat(input);
+  }
   const snapshot = readHostedAgentReloadSnapshot(input.assistantMessageId);
   if (!snapshot) return null;
   if (snapshot.request.clientInstanceId !== clientInstanceId()) {
@@ -573,7 +995,7 @@ export async function resumeHostedKieAgentChat(input: {
     });
     if (auditRun) {
       completeFlashBoardChatRun(auditRun.runId, {
-        executedToolCalls: [...auditRun.executedToolCalls, ...resumedToolCalls],
+        executedToolCalls: resumedToolCalls,
         response,
       });
     }
@@ -582,7 +1004,7 @@ export async function resumeHostedKieAgentChat(input: {
     if (auditRun) {
       completeFlashBoardChatRun(auditRun.runId, {
         error,
-        executedToolCalls: [...auditRun.executedToolCalls, ...resumedToolCalls],
+        executedToolCalls: resumedToolCalls,
       });
     }
     throw error;

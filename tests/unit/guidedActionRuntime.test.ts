@@ -99,7 +99,7 @@ describe('guided action runtime', () => {
     }));
   });
 
-  it('resolves visual targets before rendering highlight, spotlight, and callout state', async () => {
+  it('resolves visual targets and clears transient visuals when the session finishes', async () => {
     const target = { kind: 'dom' as const, id: 'target-panel' };
     const registry = new GuidedTargetRegistry();
     const resolver = vi.fn((requestedTarget) => {
@@ -135,7 +135,9 @@ describe('guided action runtime', () => {
       rect: { x: 10, y: 20, width: 120, height: 40 },
       center: { x: 70, y: 40 },
     }));
-    expect(state.highlights[0]).toEqual(expect.objectContaining({ target }));
+    expect(state.highlights).toEqual([]);
+    expect(state.spotlight).toBeNull();
+    expect(state.callout).toBeNull();
   });
 
   it('keeps the click ripple visible for the scheduled visual duration', async () => {
@@ -549,5 +551,31 @@ describe('guided action runtime', () => {
 
     const result = await resultPromise;
     expect(result.status).toBe('completed');
+  });
+
+  it('holds a tutorial step until navigation cancels or replaces it', async () => {
+    const runtime = new GuidedActionRuntime({
+      targetRegistry: new GuidedTargetRegistry(),
+    });
+
+    const resultPromise = runtime.startSession({
+      sessionId: 'wait-for-tutorial-navigation',
+      callerContext: 'internal',
+      playbackMode: 'tutorialDemo',
+      animationBudget: 100,
+      actions: [
+        { type: 'waitForTutorialNavigation' },
+      ],
+    });
+
+    await flushMicrotasks();
+    expect(useGuidedActionStore.getState().currentStep?.action.type).toBe('waitForTutorialNavigation');
+
+    runtime.cancelSession('wait-for-tutorial-navigation', 'Move to another tutorial step');
+    const result = await resultPromise;
+
+    expect(result.status).toBe('cancelled');
+    expect(result.error).toBe('Move to another tutorial step');
+    expect(useGuidedActionStore.getState().currentStep).toBeNull();
   });
 });

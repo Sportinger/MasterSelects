@@ -11,6 +11,7 @@ import { fileSystemService } from '../../services/fileSystemService';
 import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../types/splatEffector';
 import { DEFAULT_LIGHT_CLIP_SETTINGS } from '../../types/light';
 import type { LiveInputSource } from '../../types/liveInput';
+import { withExclusiveHistorySnapshotMutationLease } from '../timeline/exclusiveMutationLease';
 
 // Import slices
 import { createFileImportSlice, type FileImportActions } from './slices/fileImportSlice';
@@ -115,7 +116,7 @@ type MediaStoreState = MediaState &
   };
 
 export const useMediaStore = create<MediaStoreState>()(
-  subscribeWithSelector((set, get) => ({
+  subscribeWithSelector(withExclusiveHistorySnapshotMutationLease((set, get) => ({
     // Initial state
     files: [],
     compositions: [DEFAULT_COMPOSITION],
@@ -560,7 +561,7 @@ export const useMediaStore = create<MediaStoreState>()(
     ...createDuplicateSlice(set, get),
     ...createProxySlice(set, get),
     ...createProjectSlice(set, get),
-  }))
+  })))
 );
 
 // Register store globally for init.ts to access (avoids circular dependency)

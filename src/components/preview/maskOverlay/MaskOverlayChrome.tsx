@@ -178,6 +178,8 @@ export function MaskOverlayChrome({
 
       {activeMask?.closed && activeMask.visible && pathData && (
         <path
+          className="mask-body-hit"
+          data-guided-mask-body={activeMask.id}
           d={pathData}
           fill="transparent"
           stroke="none"

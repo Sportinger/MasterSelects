@@ -43,9 +43,9 @@ The panel also accepts a few specialized asset types that flow into the timeline
 - `model` files: OBJ, glTF/GLB
 - `gaussian-splat` files: PLY, compressed PLY, SPLAT, KSPLAT, SPZ, SOG, LCC, and SOG-style ZIP payloads
 
-Lottie and Rive imports are treated as first-class media items. `.json` files are only accepted when their contents actually match Lottie structure, so arbitrary JSON data is not misclassified as animation.
+Lottie and Rive imports are treated as first-class media items. `.json` files are accepted when their contents match Lottie structure.
 
-Files that are not legacy timeline media are routed through the universal Signal IR importer instead of being rejected. Signal assets can be organized, renamed, labeled, deleted, saved, loaded, and dragged to video tracks. The timeline renderer dispatcher uses real 3D clip paths for renderable model and point-cloud artifacts, then falls back to text-summary clips for data/document/binary signals that do not yet have a rich renderer. Source signal metadata is preserved on every materialized clip.
+Other files are routed through the universal Signal IR importer. Signal assets can be organized, renamed, labeled, deleted, saved, loaded, and dragged to video tracks. The timeline renderer dispatcher uses real 3D clip paths for renderable model and point-cloud artifacts, while data/document/binary signals use text-summary clips. Source signal metadata is preserved on every materialized clip.
 
 ### Import Methods
 
@@ -57,15 +57,15 @@ Click the **+ Add** button for creating new items:
 - **Composition** - New composition (uses active comp's output resolution)
 - **Folder** - New folder for organization
 - **Text** - New text item (placed in auto-created "Text" folder)
-- **3D Text** - New 3D text mesh item
 - **Solid** - New solid color item (placed in auto-created "Solids" folder)
-- **Camera** - New camera item
-- **Splat Effector** - New splat-effector item
-- **Mesh** ▶ - Submenu with 3D primitive meshes (placed in auto-created "Meshes" folder):
-  - Cube, Sphere, Plane, Cylinder, Torus, Cone
-  - Creates a `MeshItem` which can be dragged to the timeline as a 3D clip
-- **Adjustment Layer** - Coming soon
-- **Gaussian Splat** - Import a gaussian-splat asset directly from the add menu
+- **Live Input...** - Create a camera, display, or composition-feedback input
+- **3D** submenu - Mesh primitives, 3D Text, Camera, Light, 3D Effector, and Gaussian Splat import
+  - Mesh primitives: Cube, Sphere, Plane, Cylinder, Torus, Cone (placed in auto-created "Meshes" folder)
+  - 3D Effectors are placed in an auto-created "Effectors" folder
+- **Motion Null** - Creates a motion null on a video track
+- **Adjustment Layer** - Creates an adjustment clip on a video track
+- **Math Scene** - New math scene item (placed in auto-created "Math Scenes" folder)
+- **Motion Shape** - Rectangle, Ellipse, Polygon, or Star (placed in auto-created "Motion Shapes" folder)
 
 #### Drag and Drop
 - Drag files directly from the OS file explorer into the Media Panel
@@ -73,18 +73,18 @@ Click the **+ Add** button for creating new items:
 - Drag folders directly into the panel; nested folders are recreated inside the project
 - Multiple files supported
 - Attempts to acquire file handles via `getAsFileSystemHandle` for persistence
-- Falls back to legacy directory-entry walking where needed
+- Uses directory-entry walking where needed
 - Falls back to standard File objects when handles are unavailable
 
 #### Premiere Pro Projects
 
 Dropping or selecting a `.prproj` creates one import folder and converts every Premiere sequence into a MasterSelects composition. The importer preserves video/audio track layout, cuts, trims, clip speed, nested composition references, and static Motion/Opacity values. Video tracks are reversed into MasterSelects' top-to-bottom compositing order.
 
-Media already present in the current MasterSelects project is reused by normalized path and filename. Sources that cannot be identified uniquely are added as missing media with their Premiere path and flow through the normal Relink dialog. Premiere bins, markers, transitions, blend modes, effect stacks, and animated effect/keyframe data are not converted yet.
+Media already present in the current MasterSelects project is reused by normalized path and filename. Sources that cannot be identified uniquely are added as missing media with their Premiere path and flow through the normal Relink dialog.
 
 ### Import Pipeline
 
-Legacy media imports use a two-phase approach:
+Media imports use a two-phase approach:
 
 1. **Phase 1 (instant):** A placeholder entry appears immediately in the panel with `isImporting: true`, showing file name and size
 2. **Phase 2 (background):** Full processing runs in the background:
@@ -99,7 +99,7 @@ Legacy media imports use a two-phase approach:
 
 **Batch processing:** When importing multiple files, up to 3 files are processed in parallel.
 
-If a project-local `Raw/` copy is created, that copy becomes the canonical source for the imported asset. The store promotes the copied handle so later reloads and exports do not depend on the original file.
+If a project-local `Raw/` copy is created, that copy becomes the canonical source for the imported asset. The store promotes the copied handle, and reloads and exports use the project copy.
 
 Signal imports use the universal import orchestrator. CSV files emit `table`, `metadata`, and `binary` refs; unknown files emit `binary` and `metadata` refs. When a project is open, their binary artifacts are persisted content-addressed under `Cache/artifacts/` and referenced from `project.json`. Without an open File System Access project, the same artifact store persists bytes in IndexedDB so SignalAssets are not metadata-only session objects.
 
@@ -131,7 +131,7 @@ When supported (Chrome/Edge):
 - Default duration: 5 seconds
 - Placed in auto-created "Text" folder
 - Drag to timeline to create text clips
-- **Note:** These are defaults for Media Panel text items (Arial, 48px). Timeline text clips use different defaults: Roboto, 72px (from `DEFAULT_TEXT_PROPERTIES` in `stores/timeline/constants.ts`).
+- **Note:** These are defaults for Media Panel text items (Arial, 48px). Timeline text clips use Arial, 72px (from `DEFAULT_TEXT_PROPERTIES` in `stores/timeline/constants.ts`).
 - See [Text Clips](./Text-Clips.md) for full details
 
 ---
@@ -170,7 +170,8 @@ Image and video-capable media items show a cursor-following preview tooltip only
 - Right-dragging a folder group moves the group and its contents as a spatial unit; nested folder groups move along with their parent folder
 - Folder groups accept dropped items and folders from the other Media Panel views, while drops outside the root area are ignored
 - Ctrl/right-drag starts a marquee selection; right-clicking opens the normal Media Panel context menu
-- Media, compositions, text, solids, meshes, cameras, and splat effectors appear as board nodes with hover-only name and metadata overlays
+- Media, compositions, text, solids, meshes, cameras, lights, 3D effectors, math scenes, and motion shapes appear as board nodes with hover-only name and metadata overlays
+- Board annotations can be added from the Board context menu, then edited, resized, and stored locally
 - Video board nodes request missing thumbnails lazily like images, use a middle-frame thumbnail as the poster frame, and skim while hovered: horizontal mouse position maps to video time with a full-height white scrub indicator line like editor thumbnail scrubbing instead of always starting playback at 0:00; the board also loads a capped set of visible video nodes as poster fallbacks, including in the zoomed-out overview canvas mode, so missing or black cached thumbnails do not leave the board blank
 - Board zoom supports deep inspection up to 6400%; from 250% zoom upward, board UI text, badges, and metadata overlays counter-scale so they stop growing while media content keeps magnifying
 - At 400% zoom and higher, the image node closest to the viewport center is promoted from its thumbnail to the original source URL; other nodes stay on thumbnails so high-resolution files are lazy-loaded one at a time
@@ -191,7 +192,7 @@ Image and video-capable media items show a cursor-following preview tooltip only
 - Image, video, and audio files can be referenced from Classic, Icons, or Board view by right-clicking and choosing **Reference in AI Prompt**; the same menu changes to **Unreference from AI Prompt** when all selected media are already linked
 - Dragging a media-panel image, video, or audio item onto the expanded prompt composer appends it to the ordered reference strip without moving it between folders
 - Queued and running generations appear above the prompt as compact preview cards with output type, status, elapsed timer, prompt, provider metadata, progress when available, and dismiss controls for failed/canceled jobs
-- The tray replaces the old dock-level AI Generative tab, so generation starts from Media and results land back in the Media Pool under the normal AI Gen folders
+- Generation starts from Media, and results land back in the Media Pool under the normal AI Gen folders
 
 Board pan and reorder previews use imperative CSS transforms and commit final order only on mouse-up/drop. This avoids re-rendering the Media Panel and writing `localStorage` on every pointer move, which keeps board interaction responsive while heavy preview scenes or splat renders are active.
 
@@ -226,7 +227,7 @@ Video thumbnails are generated per source media file, not per clip instance.
 ### Operations
 ```typescript
 createFolder(name, parentId?)     // Create folder (returns MediaFolder)
-removeFolder(id)                  // Delete (moves children to parent)
+removeFolder(id)                  // Delete (reparents files, compositions, and Signal assets)
 renameFolder(id, name)            // Rename
 toggleFolderExpanded(id)          // Toggle expand/collapse
 moveToFolder(itemIds[], folderId) // Move items (null = root)
@@ -236,7 +237,7 @@ moveToFolder(itemIds[], folderId) // Move items (null = root)
 
 ## Deleting Media
 
-Deleting imported media files from the Media Panel now performs a project-wide cleanup:
+Deleting imported media files from the Media Panel performs a project-wide cleanup:
 
 - If the media is used by clips in any composition, a confirmation dialog reports that those clips will be removed from all compositions.
 - Project-local source files in `Raw/` are deleted when no remaining media item references the same project path.
@@ -252,7 +253,7 @@ Deleting imported media files from the Media Panel now performs a project-wide c
 1. Add dropdown -> Composition
 2. Created with settings from `settingsStore.outputResolution`
 3. Default duration: 60 seconds, frame rate: 30 fps
-4. Starts with one Video track and one Audio track
+4. Starts with two Video tracks and one Audio track
 
 ### Composition Settings Dialog
 Edit via right-click -> Composition Settings:
@@ -316,7 +317,7 @@ Proxies require an open project (via `projectFileService`). For large video file
 
 ### Proxy Settings
 ```typescript
-FPS: 30  // Constant frame rate for proxy
+FPS: min(30, source FPS)  // 30 FPS fallback when source FPS is unavailable
 ```
 
 ### Proxy Completion
@@ -331,7 +332,7 @@ interface MediaFile {
   proxyStatus: 'none' | 'generating' | 'ready' | 'error';
   proxyProgress: number;      // 0-100
   proxyFrameCount?: number;   // Total frames generated
-  proxyFps?: number;          // Always 30
+  proxyFps?: number;          // At most 30; may match a lower source FPS
   hasProxyAudio?: boolean;    // Audio proxy extracted
 }
 ```
@@ -381,7 +382,8 @@ Right-click on items or empty space for context options.
 - New Folder
 - New Text
 - New Solid
-- **Mesh** ▶ submenu: Cube, Sphere, Plane, Cylinder, Torus, Cone
+- **3D** submenu: Mesh (Cube, Sphere, Plane, Cylinder, Torus, Cone), 3D Text, Camera, Light, 3D Effector, Gaussian Splat
+- Live Input..., Motion Null, Adjustment Layer, Math Scene, Motion Shape
 
 ### Single/Multi Selection
 - **Reference in AI Prompt** / **Unreference from AI Prompt** for selected image, video, and audio files
@@ -395,7 +397,7 @@ Right-click on items or empty space for context options.
 
 ### Video Files (single selection)
 - **Extract First Frame** / **Extract Last Frame** imports a PNG still from the selected source video into the same Media Panel folder and selects it after import
-- **Generate Proxy** / **Stop Proxy Generation (X%)** / **Proxy Ready** (disabled)
+- **Regenerate** submenu: Proxy / Stop Proxy Generation (X%), Scene Cuts, Thumbnails, and (when audio is available) WAV Audio Proxy, Waveform, and Spectral
 - **Show in Explorer** submenu:
   - Raw (downloads file if no native path)
   - Proxy (disabled if no proxy)
@@ -461,7 +463,7 @@ Clicking transcript or analysis badges selects the corresponding clip in the tim
 interface MediaFile {
   id: string;
   name: string;
-  type: 'video' | 'audio' | 'image' | 'lottie' | 'rive';
+  type: 'video' | 'audio' | 'image' | 'model' | 'gaussian-avatar' | 'gaussian-splat' | 'lottie' | 'rive';
   file?: File;               // Undefined when needs reload
   url: string;
   parentId: string | null;
@@ -489,7 +491,12 @@ interface MediaFile {
   proxyVideoUrl?: string;        // URL to proxy video
   proxyFrameCount?: number;
   proxyFps?: number;
+  proxyFormat?: 'jpeg-sequence' | 'mp4-all-intra';
   hasProxyAudio?: boolean;
+  audioProxyStatus?: ProxyStatus;
+  audioProxyProgress?: number;
+  waveformStatus?: 'idle' | 'generating' | 'ready' | 'skipped' | 'error';
+  sceneCutStatus?: SceneCutAnalysisStatus;
   // Transcript
   transcriptStatus?: TranscriptStatus;
   transcript?: TranscriptWord[];
@@ -534,7 +541,7 @@ interface MediaFile {
 - Files still importing or missing cannot be dragged to timeline
 - Compositions cannot be dragged into themselves (active comp check)
 - Mesh items create 3D clips with `is3D: true` and `meshType` (rendered via the shared 3D scene)
-- Signal assets create timeline clips through renderer adapters: OBJ/glTF/GLB mesh or geometry artifacts become `model` clips, PLY/SPLAT-family point-cloud or geometry artifacts become `gaussian-splat` clips, and unsupported Signal refs become text-summary clips.
+- Signal assets create timeline clips through renderer adapters: OBJ/glTF/GLB mesh or geometry artifacts become `model` clips, PLY/SPLAT-family point-cloud or geometry artifacts become `gaussian-splat` clips, and other Signal refs become text-summary clips.
 
 ### Track Type Enforcement
 | Media Type | Allowed Tracks |
@@ -553,7 +560,7 @@ Media references are saved with the project file, while IndexedDB keeps the hand
 - Folder structure
 - Media Panel view mode, Board viewport, Board folder group offsets, and Board slot order
 - Composition state with timeline data
-- Text items and solid items (via localStorage)
+- Text, solid, mesh, camera, light, 3D-effector, math-scene, and motion-shape items saved in project data
 - When present, `projectPath` points at the copied `Raw/<name>` file and is used for automatic relinking
 
 ### Restoration
@@ -562,11 +569,11 @@ On project load:
 - Media metadata restored from IndexedDB and project JSON
 - File handles used to restore file access when no `Raw/` copy is available
 - Thumbnails restored from `Cache/thumbnails` by file hash
-- Existing proxies detected automatically, including legacy media-id based storage
+- Existing proxies detected automatically
 - Existing transcripts and analysis data loaded from the project folder
 - Dead blob/object URLs are regenerated for available files
 - If a retained `File` object is still present, image/video thumbnails are rebuilt when needed after refresh
-- Project load is marked ready after relink and UI hydration; thumbnail, metadata, proxy, transcript, and analysis cache checks continue later in an idle window so preview playback after refresh is not blocked by media-panel cache work.
+- Project load is marked ready after relink and UI hydration; thumbnail, metadata, proxy, transcript, and analysis cache checks continue in an idle window so preview playback after refresh is not blocked by media-panel cache work.
 - Folder structure, expansion state, dock layout, and per-composition view state restored
 
 ### Media File IDs
@@ -591,7 +598,7 @@ Files are reloaded in priority order:
 2. **Project folder scan** - Recursively scans the opened project folder and all subfolders, keeping `Raw/` matches first when duplicate names exist
 3. **Stored file handle** - Re-access the original file location, including permission re-checks
 
-On project load and in the Relink dialog, missing files are matched case-insensitively by expected filenames. Recursive scans preserve relative subfolder paths and all duplicate basenames; path suffixes disambiguate matches such as `Folder A/1.mp4` versus `Folder B/1.mp4`. A basename-only collision stays unresolved for manual selection instead of silently linking the wrong file. Sequence assets match their frame filenames (`.glb`, `.ply`, `.splat`) instead of the media-panel display name. There is no content-hash relink pass.
+On project load and in the Relink dialog, missing files are matched case-insensitively by expected filenames. Recursive scans preserve relative subfolder paths and all duplicate basenames; path suffixes disambiguate matches such as `Folder A/1.mp4` versus `Folder B/1.mp4`. A basename-only collision stays unresolved for manual selection instead of silently linking the wrong file. Sequence assets match their frame filenames (`.glb`, `.ply`, `.splat`) instead of the media-panel display name.
 
 ### Double-Click Reload
 Double-clicking a file that has lost access triggers a single-file reload attempt with permission request.
@@ -618,10 +625,11 @@ The media store is split into modular slices:
 | **multiLayerSlice** | `slices/multiLayerSlice.ts` | Multi-layer playback activation |
 | **folderSlice** | `slices/folderSlice.ts` | Folder CRUD and expand/collapse |
 | **selectionSlice** | `slices/selectionSlice.ts` | Selection, move-to-folder, label colors |
+| **duplicateSlice** | `slices/duplicateSlice.ts` | Copy, paste, and duplicate Media Panel items |
 | **proxySlice** | `slices/proxySlice.ts` | Proxy generation, cancellation, progress |
 | **projectSlice** | `slices/projectSlice.ts` | Save, load, init from DB |
 
-**Inline actions (in `index.ts`):** `createTextItem`, `removeTextItem`, `getOrCreateTextFolder`, `createSolidItem`, `removeSolidItem`, `updateSolidItem`, `getOrCreateSolidFolder`, `createMeshItem`, `removeMeshItem`, `getOrCreateMeshFolder`, `getItemsByFolder`, `getItemById`, `getFileByName`.
+**Inline actions (in `index.ts`):** item creation/removal and folder helpers for text, solids, meshes, cameras, lights, 3D effectors, math scenes, motion shapes, and live inputs; plus `getItemsByFolder`, `getItemById`, and `getFileByName`.
 
 **Boot Sequence:** `init.ts` handles IndexedDB initialization, timeline restore from saved state, status synchronization, auto-save interval setup, beforeunload handler, and audio cleanup via `disposeAllAudio()`.
 
@@ -640,19 +648,10 @@ Helper modules in `helpers/`:
 
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
-| [`fileManageSlice.test.ts`](../../tests/stores/mediaStore/fileManageSlice.test.ts) | 106 | Files, folders, solids, text items, selection, labels |
-| [`compositionSlice.test.ts`](../../tests/stores/mediaStore/compositionSlice.test.ts) | 101 | Compositions |
+| [`fileManageSlice.test.ts`](../../tests/stores/mediaStore/fileManageSlice.test.ts) | 121 | Files, folders, solids, text items, selection, labels |
+| [`compositionSlice.test.ts`](../../tests/stores/mediaStore/compositionSlice.test.ts) | 113 | Compositions |
 
 Run tests: `npx vitest run`
-
----
-
-## Not Implemented
-
-- Cloud storage integration
-- Asset library across projects
-- Batch import settings
-- Adjustment layers (UI placeholder exists)
 
 ---
 
@@ -665,4 +664,4 @@ Run tests: `npx vitest run`
 
 ---
 
-*Source: `src/components/panels/MediaPanel.tsx`, `src/stores/mediaStore/index.ts`, `src/stores/mediaStore/slices/`*
+*Source: `src/components/panels/MediaPanel.tsx`, `src/components/panels/media/`, `src/stores/mediaStore/index.ts`, `src/stores/mediaStore/slices/`*

@@ -25,6 +25,10 @@ lerna-debug.log*
 
 # Testing
 coverage
+playwright-report/
+playwright-built-report/
+test-results/
+blob-report/
 !src/components/properties/storyboard/coverage/
 !src/components/properties/storyboard/coverage/**
 !src/services/storyboard/coverage/
@@ -146,3 +150,8 @@ public/instruments/gm/**/*.json
 !public/instruments/gm/0081.json
 !public/instruments/gm/0089.json
 !public/instruments/gm/drums/0000.json
+.astro/
+
+# Internal planning documents stay local (public repo publishes features/evidence, not plans)
+docs/plans/
+docs/completed/plans/

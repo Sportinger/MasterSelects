@@ -229,7 +229,10 @@ export function useTimelineKeyboard({
       // Delete: remove selected keyframes first, then clips
       if (registry.matches('edit.delete', e)) {
         const timelineState = useTimelineStore.getState();
-        if (timelineState.maskEditMode !== 'none') return;
+        // A selected Timeline keyframe is an explicit delete target even while
+        // the mask editor is open. Yield to MaskOverlay only when no keyframe
+        // selection exists (for example, while deleting selected vertices).
+        if (timelineState.maskEditMode !== 'none' && selectedKeyframeIds.size === 0) return;
         if (!claimShortcut(e, 'edit.delete')) return;
         const propertiesSelection = timelineState.propertiesSelection;
         if (propertiesSelection?.kind === 'transition') {

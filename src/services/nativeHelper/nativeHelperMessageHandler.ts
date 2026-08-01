@@ -28,7 +28,6 @@ export async function handleNativeHelperMessage(
 
   handleBinaryFrame(host, data, log);
 }
-
 async function handleJsonMessage(
   host: NativeHelperCommandHost,
   data: string,
@@ -36,15 +35,6 @@ async function handleJsonMessage(
 ): Promise<void> {
   try {
     const message = JSON.parse(data) as NativeHelperJsonMessage;
-    if (message.type === 'ai_tool_request') {
-      await handleAiToolRequest(host, {
-        request_id: message.request_id,
-        tool: message.tool,
-        args: message.args,
-      }, log);
-      return;
-    }
-
     if (!message.id) {
       return;
     }
@@ -62,7 +52,6 @@ async function handleJsonMessage(
     log.error('Failed to parse response', err);
   }
 }
-
 function handleBinaryFrame(
   host: NativeHelperCommandHost,
   data: ArrayBuffer,
@@ -93,58 +82,4 @@ function handleBinaryFrame(
   };
 
   host.dispatchFrame(frame);
-}
-
-async function handleAiToolRequest(
-  host: NativeHelperCommandHost,
-  payload: {
-    request_id?: string;
-    tool?: string;
-    args?: Record<string, unknown>;
-  },
-  log: NativeHelperLogger,
-): Promise<void> {
-  const requestId = payload.request_id;
-  const tool = payload.tool;
-
-  if (!requestId || !tool) {
-    log.warn('Ignoring malformed ai_tool_request from native helper');
-    return;
-  }
-
-  const commandId = host.nextId();
-
-  try {
-    const { executeAITool, AI_TOOLS, getQuickTimelineSummary } = await import('../aiTools');
-    let result: unknown;
-
-    if (tool === '_list') {
-      result = { success: true, data: AI_TOOLS };
-    } else if (tool === '_status') {
-      result = { success: true, data: getQuickTimelineSummary() };
-    } else {
-      result = await executeAITool(tool, payload.args ?? {}, 'nativeHelper');
-    }
-
-    await host.send({
-      cmd: 'ai_tool_result',
-      id: commandId,
-      request_id: requestId,
-      result,
-    });
-  } catch (error) {
-    try {
-      await host.send({
-        cmd: 'ai_tool_result',
-        id: commandId,
-        request_id: requestId,
-        result: {
-          success: false,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-    } catch (sendError) {
-      log.error('Failed to send ai_tool_result error response', sendError);
-    }
-  }
 }

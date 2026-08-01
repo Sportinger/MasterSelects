@@ -6,7 +6,7 @@ Transition compositions make a timeline transition editable as a linked composit
 
 ## Mapped-v3 Source Layout
 
-A mapped-v3 composition has exactly one full-duration outgoing source clip and one full-duration incoming source clip. Both span the complete transition composition; they are not split into coverage segments at the cut. Panel expansions and generated overlays may add editable layers, but do not replace that source pair.
+A mapped-v3 composition normally has one full-duration outgoing source clip and one full-duration incoming source clip. Both span the complete transition composition; they are not split into coverage segments at the cut. Multi-panel templates replace either source with full-duration, editable panel slices; generated overlays may add further layers.
 
 Each source uses `TransitionSourceMap` v2, which keeps three time domains separate:
 
@@ -18,7 +18,7 @@ The mapped animation combines the original and generated edits without reinterpr
 
 ## Transition Templates
 
-There are 74 active runtime transitions. The generic compiler materializes 73 of them from their recipes; Light Leak uses its dedicated mapped builder for its outgoing, masked incoming, and light-streak layers. The 20 planned definitions are metadata only and are not available to preview, runtime, or export.
+There are 74 active runtime transitions. The generic compiler materializes 73 of them from their recipes; Light Leak uses its dedicated mapped builder for its outgoing, masked incoming, and light-streak layers.
 
 The generic compiler is `templateVersion` 4; Light Leak is `templateVersion` 3. These are recipe-template revisions, not the `sourceLayout: mapped-v3` format name.
 
@@ -30,17 +30,12 @@ Preview, live runtime, paused-frame sync, mask-texture updates, and export all r
 
 Dynamic nested video sources are recollected within a timeline frame instead of reusing a same-time nested texture, so a late decoded source frame updates the mapped composite without a separate transition renderer.
 
-## Editing And Legacy Upgrades
+## Editing
 
-Double-click a transition body to open its linked composition. If it is a legacy segmented composition, MasterSelects asks before changing it:
-
-- **OK** creates a fresh mapped-v3 composition, retains the legacy composition as a hidden linked backup, and records the upgrade as one undo batch.
-- **Cancel**, or an upgrade failure, opens the legacy composition unchanged.
-
-There is no silent auto-migration. The backup is saved with the project and remains available after reload; deleting the mapped transition composition also removes its linked backup.
+Double-click a transition body to open its linked composition.
 
 ## Troubleshooting And Verification
 
-If a composition still shows split source clips, it is legacy and must be explicitly upgraded. A mapped-v3 composition shows one full-duration source clip per side, with any panel or generated layers separately editable.
+Mapped-v3 compositions normally show one full-duration source clip per side; multi-panel templates show full-duration panel slices instead, and generated layers remain separately editable.
 
-Mapped continuity keeps the source owners alive across the transition instead of handing off between segments. For a playback investigation, refresh, wait 5 seconds, then use the AI bridge's `getStats`, `getStatsHistory`, and `getPlaybackTrace` around the transition. No final benchmark figures are recorded here; measure the target media and browser path.
+Mapped continuity keeps the source owners alive across the transition instead of handing off between segments. For a playback investigation, refresh, wait 5 seconds, then use the AI bridge's `getStats`, `getStatsHistory`, and `getPlaybackTrace` around the transition.

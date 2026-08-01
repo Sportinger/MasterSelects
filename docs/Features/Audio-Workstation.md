@@ -8,9 +8,9 @@ The Advanced Audio Workstation turns audio from a clip-side utility into a proje
 
 Audio state is split across source media, clips, tracks, the master bus, project artifacts, and Node Workspace signal metadata.
 
-- Source analysis artifacts live in project-addressable binary manifests and payloads: waveform pyramids, spectrogram tiles, loudness envelopes, beat/onset maps, frequency summaries, and phase correlation.
-- Clip `audioState` stores non-destructive edit stacks, spectral image layers, registry-backed FX instances, source/processed analysis refs, and bake provenance.
-- Track `audioState` stores fader, pan, mute/solo, record arm, input monitor, sends, meters, and track FX.
+- Source analysis artifacts live in project-addressable binary manifests and payloads: waveform pyramids, spectrogram tiles, loudness envelopes, beat/onset maps, frequency summaries, phase correlation, transcript timing, stem-separation results, voice activity, speech markers, prosody contours, and room-tone profiles.
+- Clip `audioState` stores non-destructive edit stacks, spectral image layers, stem-separation state, registry-backed FX instances, source/processed analysis refs, and bake provenance.
+- Track `audioState` stores fader, pan, mute/solo, record arm, input monitor, sends, meter mode, and track FX. Live meter snapshots are runtime state rather than persisted track audio state.
 - `masterAudioState` stores the master fader, limiter, target LUFS, true-peak ceiling, master FX, and export preflight/measurement state.
 - Node Workspace exposes audio analysis directly on the `Source` node for audio-capable clips, alongside the source media ports and audio effect lanes. The source node shows artifact availability/status badges and progress directly on the graph. Audio ports expose artifact refs and bounded summaries, not raw full-length buffers. Waveform and loudness ports are `curve` signals, spectrogram ports are `texture` signals, frequency-band summaries are `table` signals, beats/onsets are `event` signals, transcript timing is a `text` signal, and audio metadata stays a bounded `metadata` signal.
 - Source audio-analysis output ports can seed AI/custom nodes directly from the inspector. Those nodes inherit the selected signal type and metadata, connect as analysis sidechains, and stay out of the primary clip output chain unless the user wires them there explicitly. Linked video/audio clips share one graph: selecting either side opens the visual clip's graph, with the linked audio clip feeding the source node's audio and analysis ports.
@@ -19,7 +19,7 @@ Audio state is split across source media, clips, tracks, the master bus, project
 
 Audio Focus mode keeps the timeline as the detailed editor. It expands audio lanes while leaving video layers visible as compact context. MIDI tracks remain freely resizable in Audio Focus because they behave as musical lanes rather than video context strips.
 
-- Audio-capable imports build the fast stereo/multichannel preview first, then persist the source waveform pyramid in the project artifact store. Detailed Audio mode reuses that artifact on timeline placement, while compact/deep-zoom lazy upgrade remains a fallback for legacy preview-only media. Current waveform pyramids use one packed Float32 payload for all levels/channels/statistics, and older split-stat manifests remain readable. The timeline context-menu regenerate action refreshes the fast preview only, while detailed artifact generation remains cancellable and yields during bucket analysis.
+- Audio-capable imports build the fast stereo/multichannel preview first, then persist the source waveform pyramid in the project artifact store. Detailed Audio mode reuses that artifact on timeline placement, while compact/deep-zoom lazy upgrade remains a fallback for legacy preview-only media. Waveform pyramids use one packed Float32 payload for all levels/channels/statistics, and split-stat manifests remain readable. The timeline context-menu regenerate action refreshes the fast preview only, while detailed artifact generation remains cancellable and yields during bucket analysis.
 - Simple processed waveform changes, including region gain, derive directly from the source waveform pyramid for near-instant UI feedback when the operation is mathematically representable from existing buckets. The clip waveform also applies region gain/silence preview math directly to the currently visible LOD columns while the user drags, so the display does not jump back to raw source while the processed artifact refreshes. For these derivable edits, processed waveform regeneration is treated as background cache refresh and does not show the red waveform-generation border or progress bar on the clip. Full processed audio rendering remains the path for repair DSP, speed/pitch, spectral edits, compacting delete-silence, and signal-shaping FX.
 - Spectral Audio mode renders real spectrogram tile artifacts inline.
 - Artifact-backed waveform lanes render stereo and multi-channel sources as separated channel lanes when the waveform pyramid includes channel data. Legacy thumbnails remain mono fallback views.
@@ -27,9 +27,9 @@ Audio Focus mode keeps the timeline as the detailed editor. It expands audio lan
 - Waveform lanes also show compact `CLIP` and `SIL` diagnostic badges from the visible source/processed waveform pyramid. Clipping evidence only comes from true artifact peak data; normalized legacy thumbnails are used only for safe digital-silence detection.
 - Audio-volume fades and volume automation render as a timeline overlay curve on audio clips. The curve is derived from enabled legacy or registry `audio-volume` keyframes and stays separate from source/processed analysis artifacts.
 - Inline spectrogram canvases render the visible clip window with an adaptive pixel budget and precomputed frame/frequency lookup tables, so deep zoom stretches a bounded canvas instead of redrawing unbounded millions of pixels per clip.
-- Waveform canvases render the visible clip window on cancellable animation frames. Rapid zoom/scroll updates cancel stale waveform draws, and the timeline zoom cap now reaches 10,000 px/sec with 10ms/20ms ruler intervals for precise audio editing.
+- Waveform canvases render the visible clip window on cancellable animation frames. Rapid zoom/scroll updates cancel stale waveform draws, and the timeline zoom cap reaches 10,000 px/sec with 10ms/20ms ruler intervals for precise audio editing.
 - Audio region selections are created with Ctrl/Strg-drag in Audio Focus so normal left-drag outside a selected region can still move clips. Left-dragging an already selected region repositions that region inside the clip while preserving its duration, and dragging the selected region's left/right edges resizes the region directly. Matching edit-stack operations move/resize in place, preserving their operation ids rather than creating duplicate region edits. Selected regions expose a direct gain line with fade-in/fade-out handles for common level changes, with the bottom 2% of the lane reserved for a true silence `-∞ dB` endpoint below -24 dB. Dragging those controls publishes a transient gain preview for live playback, scrub, and waveform drawing; mouse-up commits the non-destructive edit once. Right-click opens direct Split/Cut/Copy/Paste actions first, then secondary non-destructive edit-stack operations grouped into compact submenus for silence, insert/delete silence, reverse, polarity, channel operations, and repairs. Cut copies the selected region and lifts it out of the track, leaving the original audio as the remaining left/right clip parts.
-- Scrub and normal playback preview follow simple region edit-stack level changes for gain fades, silence/cut, and duration-preserving delete-silence, so auditioning a marked region no longer always plays the raw source level.
+- Scrub and normal playback preview follow simple region edit-stack level changes for gain fades, silence/cut, and duration-preserving delete-silence.
 - Audio track headers use timeline-embedded mixer-strip controls with live Peak/RMS metering, automatic left/right stereo bars when the runtime snapshot has channel data, stereo phase-correlation metadata, fader, dB readout, center-out bipolar pan controls, pan readout, core routing buttons, responsive density classes, and compact fallbacks for short tracks.
 - Spectral selections create time/frequency edit operations and image-in-spectrum layers. Rectangle drags remain the precise selection tool; Shift/Alt drags use a soft spectral brush selection that stores brush radius/shape metadata on the resulting non-destructive spectral operation. `spectral-resynthesis` renders through a phase-preserving STFT/overlap-add path that edits selected magnitudes while keeping source phase, instead of reusing the cheaper band-gain filter path used by `spectral-mask`. Replace-mode spectral image layers use STFT image resynthesis: image luminance controls bin magnitudes, source phase is reused when available, and silent bins use phase-continuous deterministic synthesis instead of frame-random phase. Spectral image masks are stored at higher resolution and sampled bilinearly so image-driven edits do not step at pixel boundaries.
 - The Audio Edit Stack panel surfaces cached rule-based repair suggestions from loudness, frequency, and phase analysis. Suggestions can be auditioned through the same render path used by the edit stack before applying. Applying a suggestion creates a non-destructive whole-clip repair or mono-sum operation with evidence metadata; it does not mutate the source file.
@@ -38,6 +38,9 @@ Audio Focus mode keeps the timeline as the detailed editor. It expands audio lan
 - Room Tone Fill uses selected audio regions as non-destructive fill targets. It loops detected quiet source ranges through the clip render path, with a deterministic low-level noise fallback when no reusable source tone is available.
 - Transient Cleanup detects short high-crest peaks from decoded clip audio and adds non-destructive `repairType: transient-soften` operations. The same edit-stack render path handles preview, bake/render, processed waveform/spectrogram generation, and export.
 - Bake/render creates derived media while preserving the original source file.
+- Clip context menus provide configured-provider transcription. The Analysis workspace can generate Audio Intelligence results for voice activity, transcript alignment, speech markers, prosody, and room-tone profiles; these persist as bounded analysis artifacts and can support transcript and repair workflows.
+- Stem Separation is available from the clip context menu. The production browser model separates drums, bass, other, and vocals; generated stems are stored as project artifacts, can be enabled/soloed in the clip stem controls, and are shared between linked clips.
+- Music to MIDI opens the Muscriptor setup dialog and creates editable MIDI tracks from a selected audio clip. Timeline controls also provide a tempo-map metronome.
 
 ## Mixer Surface
 
@@ -76,7 +79,7 @@ Signal-shaping changes include:
 
 ## Verification
 
-Current focused checks cover:
+Focused checks cover:
 
 - Dock registration for the Audio Mixer panel.
 - Volume-only clip edits preserving processed analysis refs.
@@ -95,7 +98,7 @@ Current focused checks cover:
 - Node Workspace audio projection and AI runtime context for semantic audio ports, `frequencyBands`, `audioMetadata`, repair suggestions, and artifact-only bounded summaries.
 - Node Workspace `Generate`/`Refresh` actions for audio analysis ports. Refresh forces regeneration instead of returning early when a matching artifact ref already exists.
 - Node Workspace `Source` graph node status/progress params and badges for ready/partial/missing audio artifact state.
-- Node Workspace direct AI/custom node creation from waveform, spectrum, loudness, frequency-band, beat/onset, phase, transcript, and audio-metadata ports without corrupting the main signal chain. On visual graph owners, those actions now create renderable texture AI Nodes in the main visual chain and attach the selected audio port as a bounded named sidechain.
+- Node Workspace direct AI/custom node creation from waveform, spectrum, loudness, frequency-band, beat/onset, phase, transcript, and audio-metadata ports without corrupting the main signal chain. On visual graph owners, those actions create renderable texture AI Nodes in the main visual chain and attach the selected audio port as a bounded named sidechain.
 - Node Workspace linked-clip ownership coverage verifies that selecting linked audio resolves to the visual clip graph owner, selecting linked video keeps the same owner, legacy audio-side graph edits are projected onto the visual owner when needed, and existing visual graph edits win over stale audio-side state.
 - Node Workspace runtime coverage verifies that the shared visual clip graph receives analysis, metadata, track-routing context, and linked source-node port metadata from the linked audio clip during render, so `context.audio`, `context.graph`, `signals.frequencyBands`, and `signals.audioMetadata` match the same source-node audio ports shown in the editor. Connected source audio-analysis ports are also exposed as bounded named AI-node inputs and under `signals.connectedInputs`, allowing audio-reactive texture nodes to consume frequency tables or audio metadata without raw buffers.
 - Rule-based repair suggestions previewed and applied from the Audio Edit Stack as non-destructive edit operations with processed-analysis invalidation.
@@ -115,7 +118,7 @@ Current focused checks cover:
 - Timeline waveform diagnostic coverage distinguishes artifact-backed clipping, output-gain silence, normalized legacy thumbnails, and trimmed source ranges.
 - Timeline audio automation curve coverage verifies legacy and registry `audio-volume` keyframes are extracted, sorted, clamped for display, and ignored when the backing effect is disabled or bypassed.
 - Deep-zoom timeline checks cover the 10,000 px/sec zoom cap, high-resolution ruler/grid intervals, and cancellable waveform/spectrogram canvas redraws.
-- Deep-zoom scrub checks cover proxy-frame teleport behavior: stale queued proxy preloads are dropped after large scrub jumps, held proxy/canvas frames are rejected when too far from the target media time, playback diagnostics distinguish responsive proxy scrub preview from genuinely cold playback, and the dev bridge teleport scrub no longer reports proxy-frame freeze events.
+- Deep-zoom scrub checks cover proxy-frame teleport behavior: stale queued proxy preloads are dropped after large scrub jumps, held proxy/canvas frames are rejected when too far from the target media time, playback diagnostics distinguish responsive proxy scrub preview from genuinely cold playback, and the dev bridge teleport scrub reports responsive proxy behavior without proxy-frame freeze events.
 - Timeline audio track-header checks cover responsive density selection, dB/pan readout formatting, and vertical meter fill/peak/phase-marker behavior.
 - Audio meter checks cover automatic layer-meter stereo selection and the docked mixer's independent left/right stereo bar rendering without the mono phase-marker overlay.
 - Timeline audio track-header render checks cover full, compact, and condensed mixer-strip markup with meter/fader, Aux label, SVG icon, dB, and pan readout DOM.
@@ -141,6 +144,10 @@ Current focused checks cover:
 - `src/services/audio/audioTransientDetection.ts`
 - `src/services/audio/AudioEditPreviewService.ts`
 - `src/services/audio/AudioRecordingService.ts`
+- `src/services/audio/stemSeparation/StemSeparationService.ts`
+- `src/stores/timeline/clip/clipAudioIntelligenceActions.ts`
+- `src/components/timeline/ClipAudioAIContextMenuItems.tsx`
+- `src/components/common/MuscriptorSetupDialog.tsx`
 - `src/services/nodeGraph/clipGraphProjection.ts`
 - `src/services/nodeGraph/aiNodeRuntime.ts`
 - `src/services/nodeGraph/aiNodeAuthoringContext.ts`

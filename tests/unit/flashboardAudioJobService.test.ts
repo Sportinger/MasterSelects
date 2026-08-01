@@ -1,26 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useSettingsStore } from '../../src/stores/settingsStore';
 import type { FlashBoardGenerationRequest } from '../../src/stores/flashboardStore/types';
 import { flashBoardJobService } from '../../src/services/flashboard/FlashBoardJobService';
-
-const elevenLabsMock = vi.hoisted(() => ({
-  setApiKey: vi.fn(),
-  createSpeech: vi.fn(),
-}));
 
 const cloudAiMock = vi.hoisted(() => ({
   createElevenLabsSpeech: vi.fn(),
   createSunoMusic: vi.fn(),
   pollSunoMusicTaskUntilComplete: vi.fn(),
-}));
-
-vi.mock('../../src/services/elevenLabsService', () => ({
-  DEFAULT_ELEVENLABS_SPEECH_OUTPUT_FORMAT: 'mp3_44100_128',
-  ELEVENLABS_MP3_MIME_TYPE: 'audio/mpeg',
-  elevenLabsService: elevenLabsMock,
-  isElevenLabsMp3OutputFormat: (value: string) => (
-    ['mp3_44100_128', 'mp3_44100_192', 'mp3_22050_32'].includes(value)
-  ),
 }));
 
 vi.mock('../../src/services/cloudAiService', () => ({
@@ -51,24 +36,6 @@ function createHostedSpeechRequest(): FlashBoardGenerationRequest {
 describe('FlashBoardJobService ElevenLabs audio jobs', () => {
   beforeEach(() => {
     flashBoardJobService.setUpdateCallback(null);
-    vi.mocked(useSettingsStore.getState).mockReturnValue({
-      apiKeys: {
-        openai: '',
-        anthropic: '',
-        assemblyai: '',
-        deepgram: '',
-        piapi: '',
-        kieai: '',
-        evolink: '',
-        elevenlabs: 'eleven-key',
-        youtube: '',
-        klingAccessKey: '',
-        klingSecretKey: '',
-      },
-      shouldUseApiKeyByDefault: (provider) => provider === 'elevenlabs',
-    } as ReturnType<typeof useSettingsStore.getState>);
-    elevenLabsMock.setApiKey.mockClear();
-    elevenLabsMock.createSpeech.mockReset();
     cloudAiMock.createElevenLabsSpeech.mockReset();
     cloudAiMock.createSunoMusic.mockReset();
     cloudAiMock.pollSunoMusicTaskUntilComplete.mockReset();
@@ -96,36 +63,17 @@ describe('FlashBoardJobService ElevenLabs audio jobs', () => {
 
     flashBoardJobService.submit({
       recordId: 'record-audio',
-      request: {
-        service: 'elevenlabs',
-        providerId: 'elevenlabs-tts',
-        version: 'eleven_multilingual_v2',
-        outputType: 'audio',
-        prompt: 'Hello from the board',
-        voiceId: 'voice-1',
-        voiceName: 'Narrator',
-        outputFormat: 'mp3_44100_128',
-        voiceSettings: {
-          speed: 1,
-          stability: 0.5,
-          similarityBoost: 0.75,
-          style: 0,
-          useSpeakerBoost: true,
-        },
-        referenceMediaFileIds: [],
-      },
+      request: createHostedSpeechRequest(),
     });
 
     const update = await completed;
 
-    expect(elevenLabsMock.setApiKey).not.toHaveBeenCalled();
-    expect(elevenLabsMock.createSpeech).not.toHaveBeenCalled();
     expect(cloudAiMock.createElevenLabsSpeech).toHaveBeenCalledWith(expect.objectContaining({
       voiceId: 'voice-1',
       text: 'Hello from the board',
       modelId: 'eleven_multilingual_v2',
       outputFormat: 'mp3_44100_128',
-    }), expect.stringMatching(/^flashboard-audio:record-audio:/), expect.any(AbortSignal));
+    }), 'flashboard-audio:record-audio', expect.any(AbortSignal));
     expect(update.mediaType).toBe('audio');
     expect(update.assetFile).toBeInstanceOf(File);
     expect(update.assetFile?.type).toBe('audio/mpeg');

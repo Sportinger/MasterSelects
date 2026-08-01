@@ -40,13 +40,27 @@ const MOTION_TOOL_NAMES = [
   'createMotionShapeClip',
   'updateMotionProperties',
   'updateMotionAppearances',
+  'saveMotionAppearancePreset',
+  'listMotionAppearancePresets',
+  'applyMotionAppearancePreset',
+  'saveMotionTemplate',
+  'listMotionTemplates',
+  'applyMotionTemplate',
   'setMotionParent',
   'createMotionNull',
   'createMotionNullAndParent',
   'editMotionAdjustment',
-  'configureMotionReplicator',
   'editMotionModifier',
+  'setMotionExpression',
+  'configureMotionReplicator',
 ] as const;
+
+const READ_ONLY_MOTION_TOOLS = new Set<string>([
+  'getMotionCapabilities',
+  'getMotionDesign',
+  'listMotionAppearancePresets',
+  'listMotionTemplates',
+]);
 
 function resetTimeline(): void {
   useTimelineStore.setState({
@@ -148,11 +162,13 @@ describe('AI Motion Design tools', () => {
       expect(policies.has(name), `${name} policy`).toBe(true);
     }
 
-    expect(getToolPolicy('getMotionCapabilities')?.readOnly).toBe(true);
-    expect(getToolPolicy('getMotionDesign')?.readOnly).toBe(true);
-    for (const name of MOTION_TOOL_NAMES.slice(2)) {
-      expect(getToolPolicy(name)?.readOnly, `${name} policy`).toBe(false);
-      expect(MODIFYING_TOOLS.has(name), `${name} history classification`).toBe(true);
+    for (const name of MOTION_TOOL_NAMES) {
+      if (READ_ONLY_MOTION_TOOLS.has(name)) {
+        expect(getToolPolicy(name)?.readOnly, `${name} policy`).toBe(true);
+      } else {
+        expect(getToolPolicy(name)?.readOnly, `${name} policy`).toBe(false);
+        expect(MODIFYING_TOOLS.has(name), `${name} history classification`).toBe(true);
+      }
     }
   });
 
@@ -176,7 +192,9 @@ describe('AI Motion Design tools', () => {
       },
     });
     expect((result.data as { unsupportedUntilLaterPhases: string[] })
-      .unsupportedUntilLaterPhases.join(' ')).toContain('texture');
+      .unsupportedUntilLaterPhases.join(' ')).not.toContain('texture');
+    expect((result.data as { unsupportedUntilLaterPhases: string[] })
+      .unsupportedUntilLaterPhases.join(' ')).toContain('motion group');
   });
 
   it('sets and clears Motion parents through the production graph transaction', async () => {

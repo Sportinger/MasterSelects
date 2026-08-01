@@ -33,7 +33,7 @@ export function MaskToolbar({
   onStartDrawMode,
 }: MaskToolbarProps) {
   return (
-    <div className="mask-toolbar">
+    <div className="mask-toolbar" role="toolbar" aria-label="Mask tools">
       <div className="mask-toolbar-group">
         <IconButton
           icon="pen"

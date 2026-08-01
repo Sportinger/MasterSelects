@@ -27,7 +27,13 @@ export function isInfiniteTimelineSourceType(sourceType: string | null | undefin
     sourceType === 'math-scene' ||
     sourceType === 'transition-overlay' ||
     sourceType === 'storyboard' ||
-    sourceType === 'midi';
+    sourceType === 'midi' ||
+    // Motion clips are procedural: there is no recorded source to run out of,
+    // so both edges may extend freely (their naturalDuration is only the
+    // creation-time default).
+    sourceType === 'motion-shape' ||
+    sourceType === 'motion-null' ||
+    sourceType === 'motion-adjustment';
 }
 
 export function canLoopExtendTimelineVectorClip(clip: Pick<TimelineClipSourceTimingLike, 'source'>): boolean {

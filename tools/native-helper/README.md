@@ -54,9 +54,7 @@ WebSocket (JSON commands) on port 9876, HTTP server on port 9877.
 | Command | Description |
 |---------|-------------|
 | `ping` | Connection keepalive |
-| `info` | System info (helper features, bundled/system yt-dlp status, project root, AI bridge status) |
-| `register_client` | Register the running MasterSelects editor session with the helper |
-| `ai_tool_result` | Return the result of a forwarded AI tool request |
+| `info` | System info (helper features, bundled/system yt-dlp status, project root) |
 | `list_formats` | List available download formats for a URL |
 | `download` | Download a video with progress streaming |
 | `get_file` | Get a file as base64 |
@@ -87,16 +85,5 @@ HTTP endpoints:
 | `GET /file?path=...` | Serve a local file |
 | `POST /upload?path=...` | Upload/write a local file |
 | `GET /project-root` | Return default project root |
-| `GET /api/ai-tools` | AI bridge status |
-| `POST /api/ai-tools` | Forward an AI tool call to the connected editor session |
 
 MatAnyone2 is GPU-only: setup and server start require an accessible NVIDIA CUDA GPU. The helper and Python sidecar reject CPU execution.
-
-Example:
-
-```bash
-curl -X POST http://127.0.0.1:9877/api/ai-tools \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <startup-token>" \
-  -d '{"tool":"_status","args":{}}'
-```

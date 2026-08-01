@@ -17,6 +17,7 @@ import type {
 import type { MediaFile } from '../../stores/mediaStore';
 import { setExternalDragPayload, clearExternalDragPayload } from '../../components/timeline/utils/externalDragSession';
 import { recordStoryboardTelemetry } from '../storyboard/telemetry';
+import { assertExclusiveTimelineMutationAllowed } from '../../stores/timeline/exclusiveMutationLease';
 
 const log = Logger.create('FlashBoardMedia');
 
@@ -299,6 +300,7 @@ class FlashBoardMediaBridge {
 
     const metadata = this.buildMetadata(mediaFile.id, record, mediaType);
     if (metadata) {
+      assertExclusiveTimelineMutationAllowed();
       this.generationMetadata.set(mediaFile.id, metadata);
     }
 
@@ -605,6 +607,7 @@ class FlashBoardMediaBridge {
    * Restore generation metadata from a saved project.
    */
   hydrateMetadata(data: Record<string, FlashBoardGenerationMetadata>): void {
+    assertExclusiveTimelineMutationAllowed();
     this.generationMetadata.clear();
     for (const [id, meta] of Object.entries(data)) {
       this.generationMetadata.set(id, meta);
@@ -616,6 +619,7 @@ class FlashBoardMediaBridge {
    * Remove metadata for a media file (e.g., when the file is deleted from the pool).
    */
   removeMetadata(mediaFileId: string): void {
+    assertExclusiveTimelineMutationAllowed();
     this.generationMetadata.delete(mediaFileId);
   }
 }

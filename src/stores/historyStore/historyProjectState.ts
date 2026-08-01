@@ -4,7 +4,7 @@ import { cloneHistoryForProject, deepClone } from './snapshotCloning';
 import { normalizePersistedEventLog, normalizePersistedSnapshot } from './projectHistoryPersistence';
 
 const nodeId = () => `node:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
-const MAX_PERSISTED_HISTORY_NODES = 64;
+const MAX_PERSISTED_HISTORY_NODES = 50;
 
 export function serializeHistoryForProject(input: Pick<HistoryState, 'nodes' | 'rootId' | 'activeNodeId' | 'lastVisitedChildByNodeId' | 'eventLog'> & { isHistoryDisabled: boolean; persistHistorySnapshots: boolean; maxEventLogSize: number }): ProjectHistoryState | null {
   const eventLog = input.isHistoryDisabled ? [] : input.eventLog.filter((event) => event.type !== 'autosave').slice(-input.maxEventLogSize);

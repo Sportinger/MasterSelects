@@ -149,7 +149,7 @@ export class AudioExportPipeline {
     try {
       // 2. Extract audio from all clips
       onProgress?.({ phase: 'extracting', percent: 0, message: 'Extracting audio...' });
-      const extractedBuffers = await this.extractAllAudio(audioClips, tracks, onProgress);
+      const extractedBuffers = await this.extractAllAudio(audioClips, tracks, onProgress, endTime);
 
       if (this.cancelled) return null;
 
@@ -252,7 +252,7 @@ export class AudioExportPipeline {
     try {
       // 2. Extract audio from all clips
       onProgress?.({ phase: 'extracting', percent: 0, message: 'Extracting audio...' });
-      const extractedBuffers = await this.extractAllAudio(audioClips, tracks, onProgress);
+      const extractedBuffers = await this.extractAllAudio(audioClips, tracks, onProgress, endTime);
 
       if (this.cancelled) return null;
 
@@ -593,7 +593,8 @@ export class AudioExportPipeline {
   private async extractAllAudio(
     clips: TimelineClip[],
     tracks: TimelineTrack[],
-    onProgress?: AudioExportProgressCallback
+    onProgress?: AudioExportProgressCallback,
+    exportEndTime?: number,
   ): Promise<Map<string, AudioBuffer>> {
     const buffers = new Map<string, AudioBuffer>();
     const sourceBuffersByMediaId = new Map<string, AudioBuffer>();
@@ -796,12 +797,21 @@ export class AudioExportPipeline {
               log.debug(`Skipping nested comp without audio ${clip.name}`);
               continue;
             }
-            buffer = mixdown.buffer;
+            buffer = this.trimCompositionMixdownForExport(clip, mixdown.buffer, exportEndTime);
+            const usesCompleteMixdown = buffer === mixdown.buffer;
+            if (!usesCompleteMixdown) {
+              this.preTrimmedClipIds.add(clip.id);
+            }
             // Admission must succeed before committing lazily generated mixdown
-            // state to the timeline.
+            // state to the timeline. A bounded export-only buffer must not replace
+            // the reusable full-composition mixdown stored on the clip.
             retainSourceBuffer(clip, buffer);
-            applyCompositionAudioMixdownToTimelineClip(clip.id, mixdown);
-            log.debug(`Using lazy mixdown buffer for nested comp ${clip.name}`);
+            if (usesCompleteMixdown) {
+              applyCompositionAudioMixdownToTimelineClip(clip.id, mixdown);
+            }
+            log.debug(
+              `Using ${usesCompleteMixdown ? 'complete' : 'export-bounded'} lazy mixdown buffer for nested comp ${clip.name}`
+            );
           } else if (reusable) {
             buffer = reusable;
             log.debug(`Using cached/proxy audio for ${clip.name} (${mediaFileId})`);
@@ -849,6 +859,64 @@ export class AudioExportPipeline {
     }
 
     return buffers;
+  }
+
+  /**
+   * Keep a nested composition source anchored at clip.inPoint, but stop it at
+   * the end of the requested export range. Keeping the start anchor intact
+   * preserves prepareExportTrackData's sourceOffsetTime when an export begins
+   * in the middle of a clip while avoiding hundreds of seconds of unused PCM.
+   */
+  private trimCompositionMixdownForExport(
+    clip: TimelineClip,
+    buffer: AudioBuffer,
+    exportEndTime?: number,
+  ): AudioBuffer {
+    if (!Number.isFinite(exportEndTime) || clip.reversed) {
+      return buffer;
+    }
+
+    const speed = Math.abs(clip.speed ?? 1);
+    if (!Number.isFinite(speed) || speed <= 0) {
+      return buffer;
+    }
+
+    const sourceStart = Math.max(0, clip.inPoint ?? 0);
+    const activeTimelineDuration = Math.max(
+      0,
+      Math.min(clip.duration, (exportEndTime as number) - clip.startTime),
+    );
+    const declaredSourceEnd = Number.isFinite(clip.outPoint)
+      ? Math.max(sourceStart, clip.outPoint as number)
+      : sourceStart + clip.duration * speed;
+    const sourceEnd = Math.min(
+      buffer.duration,
+      declaredSourceEnd,
+      sourceStart + activeTimelineDuration * speed,
+    );
+
+    if (sourceStart <= 0.000_001 && sourceEnd >= buffer.duration - 0.000_001) {
+      return buffer;
+    }
+
+    const startSample = Math.max(0, Math.floor(sourceStart * buffer.sampleRate));
+    const endSample = Math.min(
+      buffer.length,
+      Math.max(startSample + 1, Math.ceil(sourceEnd * buffer.sampleRate)),
+    );
+    const bounded = createAudioBufferLike(
+      buffer.numberOfChannels,
+      endSample - startSample,
+      buffer.sampleRate,
+    );
+
+    for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+      bounded.getChannelData(channel).set(
+        buffer.getChannelData(channel).subarray(startSample, endSample),
+      );
+    }
+
+    return bounded;
   }
 
   private async tryReadRangedProxyAudio(

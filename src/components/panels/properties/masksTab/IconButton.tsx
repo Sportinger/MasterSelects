@@ -26,6 +26,8 @@ export function IconButton({
       type="button"
       className={`mask-icon-btn ${active ? 'active' : ''} ${className}`}
       title={title}
+      aria-label={title}
+      aria-pressed={active === undefined ? undefined : active}
       disabled={disabled}
       onClick={onClick}
       data-guided-mask-tool={guidedTarget}

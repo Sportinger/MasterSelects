@@ -19,6 +19,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+      - run: npm run test:kernel-boundary
+      - run: npm run test:fast-v2-boundary
       - run: npm run test
       - run: npm audit --audit-level=high
         continue-on-error: true

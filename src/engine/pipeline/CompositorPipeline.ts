@@ -46,8 +46,9 @@ export class CompositorPipeline {
   private frameExternalBindGroupCache: Map<string, GPUBindGroup> = new Map();
   private currentFrameId = 0;
 
-  // Uniform change detection - track last values per layer
-  private lastUniformValues: Map<string, UniformValueSnapshot> = new Map();
+  // Uniform change detection must be scoped to the actual GPU buffer. Nested
+  // render occurrences may share a layer id while using separate buffers.
+  private lastUniformValues = new WeakMap<GPUBuffer, UniformValueSnapshot>();
 
   constructor(device: GPUDevice) {
     this.device = device;
@@ -161,7 +162,7 @@ export class CompositorPipeline {
     );
 
     // Change detection - only write to GPU if values changed
-    const lastValuesEntry = this.lastUniformValues.get(layer.id);
+    const lastValuesEntry = this.lastUniformValues.get(uniformBuffer);
     const needsUpdate = shouldUpdateLayerUniforms(
       this.uniformData,
       this.uniformDataU32,
@@ -172,7 +173,7 @@ export class CompositorPipeline {
       this.device.queue.writeBuffer(uniformBuffer, 0, this.uniformData);
       // Store copy of current values (both float and u32 views)
       if (!lastValuesEntry) {
-        this.lastUniformValues.set(layer.id, {
+        this.lastUniformValues.set(uniformBuffer, {
           float: new Float32Array(this.uniformData),
           u32: new Uint32Array(this.uniformDataU32),
         });
@@ -308,6 +309,6 @@ export class CompositorPipeline {
     // Clear bind group caches
     this.bindGroupCache.clear();
     this.frameExternalBindGroupCache.clear();
-    this.lastUniformValues.clear();
+    this.lastUniformValues = new WeakMap<GPUBuffer, UniformValueSnapshot>();
   }
 }

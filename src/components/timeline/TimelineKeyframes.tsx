@@ -62,6 +62,7 @@ function TimelineKeyframesComponent({
   clipDrag,
   onSelectKeyframe,
   onMoveKeyframe,
+  onDeleteKeyframes,
   onUpdateKeyframe,
   onToggleCurveExpanded,
   timeToPixel,
@@ -109,6 +110,7 @@ function TimelineKeyframesComponent({
     x: number;
     y: number;
     targetKeyframeIds: string[];
+    deleteKeyframeIds: string[];
     currentEasing: EasingType | null;
     rotationTargetKeyframeIds: string[];
     currentRotationInterpolation: RotationInterpolationMode | null;
@@ -250,6 +252,7 @@ function TimelineKeyframesComponent({
 
     return {
       targetKeyframeIds,
+      deleteKeyframeIds: sourceKeyframes.map((sourceKeyframe) => sourceKeyframe.id),
       currentEasing,
       rotationTargetKeyframeIds: rotationTargetKeyframes.map((targetKeyframe) => targetKeyframe.id),
       currentRotationInterpolation,
@@ -412,8 +415,12 @@ function TimelineKeyframesComponent({
   ) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!selectedKeyframeIds.has(kf.id)) {
+      onSelectKeyframe(kf.id, false);
+    }
     const {
       targetKeyframeIds,
+      deleteKeyframeIds,
       currentEasing,
       rotationTargetKeyframeIds,
       currentRotationInterpolation,
@@ -423,11 +430,12 @@ function TimelineKeyframesComponent({
       x: e.clientX,
       y: e.clientY,
       targetKeyframeIds,
+      deleteKeyframeIds,
       currentEasing,
       rotationTargetKeyframeIds,
       currentRotationInterpolation,
     });
-  }, [getContextMenuTargets]);
+  }, [getContextMenuTargets, onSelectKeyframe, selectedKeyframeIds]);
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
@@ -464,6 +472,12 @@ function TimelineKeyframesComponent({
       setContextMenu(null);
     }
   }, [contextMenu, onUpdateKeyframe]);
+
+  const handleDeleteKeyframes = useCallback(() => {
+    if (!contextMenu) return;
+    onDeleteKeyframes(contextMenu.deleteKeyframeIds);
+    setContextMenu(null);
+  }, [contextMenu, onDeleteKeyframes]);
 
   return (
     <>
@@ -565,6 +579,17 @@ function TimelineKeyframesComponent({
               ))}
             </>
           )}
+          <div className="context-menu-divider" />
+          <div
+            className="context-menu-item danger"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onClick={handleDeleteKeyframes}
+          >
+            {contextMenu.deleteKeyframeIds.length > 1 ? 'Delete Keyframes' : 'Delete Keyframe'}
+          </div>
         </div>,
         document.body
       )}

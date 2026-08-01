@@ -114,6 +114,13 @@ describe('FlashBoardChatService', () => {
     const sessionId = 'ha_test_session';
     const fetchMock = vi.fn(async (requestInfo: RequestInfo | URL, init?: RequestInit) => {
       const url = String(requestInfo);
+      if (url === '/api/kernel/hosted-agent/protocol') {
+        return new Response(JSON.stringify({
+          availableExecutionProfiles: ['fast'],
+          protocolVersion: 'hosted-agent-k2-v1',
+          reason: 'outside_canary',
+        }), { headers: { 'Content-Type': 'application/json' }, status: 200 });
+      }
       if (url === '/api/kernel/hosted-agent/turns') {
         const request = JSON.parse(String(init?.body)) as Record<string, unknown>;
         turnId = String(request.turnId);
@@ -177,7 +184,7 @@ describe('FlashBoardChatService', () => {
       method: 'POST',
     }));
 
-    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    const body = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
     expect(body).toMatchObject({
       maximumOutputTokens: FLASHBOARD_CHAT_MAX_OUTPUT_TOKENS,
       model: 'gpt-5-6-luna',
@@ -185,8 +192,8 @@ describe('FlashBoardChatService', () => {
       routePreference: 'auto',
       toolExecutionMode: 'normal',
     });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(String(fetchMock.mock.calls[1]?.[0]))
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(String(fetchMock.mock.calls[2]?.[0]))
       .toContain(`/hosted-agent/turns/${encodeURIComponent(turnId)}/events`);
   });
 
@@ -202,64 +209,6 @@ describe('FlashBoardChatService', () => {
       model: 'claude-opus-4-8',
       protocol: 'openai-responses',
     })).toBeNull();
-  });
-
-  it('lets Lemonade cold-start past the old 60s timeout window', async () => {
-    vi.useFakeTimers();
-    let requestSignal: AbortSignal | undefined;
-    const fetchMock = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
-      requestSignal = init?.signal ?? undefined;
-      return new Promise<Response>((resolve, reject) => {
-        requestSignal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
-        setTimeout(() => {
-          resolve(new Response('data: {"choices":[{"delta":{"content":"Ready"}}]}\n\ndata: [DONE]\n\n', {
-            headers: { 'Content-Type': 'text/event-stream' },
-            status: 200,
-          }));
-        }, 100_000);
-      });
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    const responsePromise = sendFlashBoardChatMessage({
-      lemonadeEndpoint: 'http://localhost:13305/api/v1',
-      model: 'user.gemma3-4b-it-GGUF',
-      prompt: 'Make this timeline shorter.',
-      provider: 'lemonade',
-      temperature: 0.7,
-    });
-
-    await Promise.resolve();
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(requestSignal?.aborted).toBe(false);
-
-    await vi.advanceTimersByTimeAsync(40_000);
-    await expect(responsePromise).resolves.toBe('Ready');
-  });
-
-  it('asks Lemonade to load the selected context size before chat', async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'loaded' }), { status: 200 }))
-      .mockResolvedValueOnce(new Response('data: {"choices":[{"delta":{"content":"Ready"}}]}\n\ndata: [DONE]\n\n', {
-        headers: { 'Content-Type': 'text/event-stream' },
-        status: 200,
-      }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const response = await sendFlashBoardChatMessage({
-      lemonadeContextSize: 16384,
-      lemonadeEndpoint: 'http://localhost:13305/api/v1',
-      model: 'Gemma-3-4b-it-GGUF',
-      prompt: 'Make this timeline shorter.',
-      provider: 'lemonade',
-      temperature: 0.7,
-    });
-
-    expect(response).toBe('Ready');
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
-      ctx_size: 16384,
-      model_name: 'Gemma-3-4b-it-GGUF',
-    });
   });
 
   it('labels hosted chat as exact usage-based billing', () => {

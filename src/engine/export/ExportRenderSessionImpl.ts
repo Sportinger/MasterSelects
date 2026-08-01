@@ -13,7 +13,10 @@ import { seekVideo } from './VideoSeeker';
 import type { RenderSurfaceFrameContext } from '../../services/render/renderHostTypes';
 
 const MAX_EXPORT_VIDEO_SOURCE_NESTING_DEPTH = 8;
-const EXPORT_NESTED_DEFER_RETRY_LIMIT = 3;
+// Two real-media nesting levels can need several compositor turns after every
+// precise seek. Three animation frames (~48 ms) made readiness timing depend on
+// GPU/decoder load; allow up to roughly one second before failing the frame.
+const EXPORT_NESTED_DEFER_RETRY_LIMIT = 60;
 const EXPORT_NESTED_DEFER_RETRY_DELAY_MS = 16;
 
 export interface ExportRenderSessionOptions {

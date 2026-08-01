@@ -199,6 +199,83 @@ describe('GuidedActionOverlay', () => {
     expect(container.querySelector('.guided-action-overlay')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Cancel guided action' })).toBeNull();
   });
+
+  it('does not leave the overlay visible after a failed session', () => {
+    const actions: GuidedAction[] = [{ type: 'delay', ms: 100 }];
+    const budget = normalizeGuidedAnimationBudget({ totalMs: 100, compression: 'none' });
+    const session: GuidedSessionSnapshot = {
+      id: 'failed-tutorial',
+      status: 'failed',
+      error: 'Target disappeared',
+      context: {
+        sessionId: 'failed-tutorial',
+        callerContext: 'internal',
+        playbackMode: 'tutorialDemo',
+        visualizationMode: 'full',
+        animationBudget: budget,
+        inputLock: { mode: 'locked', allowCancel: true },
+        legacyFeedback: 'off',
+      },
+      startedAt: 10,
+      finishedAt: 20,
+      plan: planGuidedActions(actions, budget),
+    };
+
+    useGuidedActionStore.setState({
+      activeSession: session,
+      callout: { title: 'Stale tutorial state' },
+      spotlight: { kind: 'panel', panel: 'timeline' },
+    });
+
+    const { container } = render(<GuidedActionOverlay />);
+
+    expect(container.querySelector('.guided-action-overlay')).toBeNull();
+    expect(screen.queryByText('Stale tutorial state')).toBeNull();
+  });
+
+  it('does not flash a full-window spotlight while a target is unresolved', () => {
+    const target: GuidedTargetRef = { kind: 'panel', panel: 'media' };
+    const actions: GuidedAction[] = [{ type: 'spotlight', target }];
+    const budget = normalizeGuidedAnimationBudget({ totalMs: 100, compression: 'none' });
+    const session: GuidedSessionSnapshot = {
+      id: 'unresolved-spotlight',
+      status: 'running',
+      metadata: { presentation: 'panel-overview' },
+      context: {
+        sessionId: 'unresolved-spotlight',
+        callerContext: 'internal',
+        playbackMode: 'tutorialDemo',
+        visualizationMode: 'full',
+        animationBudget: budget,
+        inputLock: { mode: 'locked', allowCancel: true },
+        legacyFeedback: 'off',
+      },
+      startedAt: 10,
+      plan: planGuidedActions(actions, budget),
+    };
+
+    useGuidedActionStore.setState({
+      activeSession: session,
+      callout: { title: 'Media', body: 'Your source material lives here.', target },
+      currentStep: session.plan.actions[0] ?? null,
+      spotlight: target,
+      targetResolutions: {},
+    });
+
+    const { container } = render(<GuidedActionOverlay />);
+
+    expect(container.querySelector('.guided-action-overlay')).not.toBeNull();
+    expect(container.querySelector('.guided-spotlight')).toBeNull();
+    expect(screen.queryByText('Left click')).not.toBeInTheDocument();
+    expect(screen.queryByText('Right click')).not.toBeInTheDocument();
+    const embeddedHud = container.querySelector('.guided-step-hud--embedded');
+    expect(embeddedHud).not.toBeNull();
+    expect(container.querySelector('.guided-callout')?.contains(embeddedHud)).toBe(true);
+    expect(container.querySelector('.guided-clippy-wrapper')).not.toBeNull();
+    expect(container.querySelector('source[src="/clippy-intro.webm"]')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'End walkthrough' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Skip guided action' })).toBeNull();
+  });
 });
 
 function resetGuidedActionStore(): void {

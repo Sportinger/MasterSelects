@@ -1,5 +1,5 @@
 import { Logger } from '../logger';
-import type { GenerationReferenceMedia } from '../piApiService';
+import type { GenerationReferenceMedia } from '../aiGenerationContracts';
 import type {
   FlashBoardGenerationOutput,
   FlashBoardGenerationRequest,
@@ -7,7 +7,6 @@ import type {
   FlashBoardMediaType,
 } from '../../stores/flashboardStore/types';
 import type { SubmitGenerationJobInput, SubmitGenerationJobResult } from './types';
-import { useSettingsStore } from '../../stores/settingsStore';
 import { useMediaStore } from '../../stores/mediaStore';
 import { createThumbnail } from '../../stores/mediaStore/helpers/thumbnailHelpers';
 import {
@@ -30,41 +29,6 @@ export interface FlashBoardCancelResult {
   disposition: FlashBoardCancelDisposition;
   recordId: string;
   remoteTaskId?: string;
-}
-
-function shouldUsePersonalApiKey(provider: 'piapi' | 'evolink' | 'elevenlabs'): boolean {
-  if (import.meta.env.PROD) {
-    return false;
-  }
-
-  return useSettingsStore.getState().shouldUseApiKeyByDefault(provider);
-}
-
-function resolveEffectiveRequest(request: FlashBoardGenerationRequest): FlashBoardGenerationRequest {
-  if (request.service === 'elevenlabs') {
-    return {
-      ...request,
-      providerId: 'cloud-elevenlabs-tts',
-      service: 'cloud',
-    };
-  }
-
-  return request;
-}
-
-function assertPersonalApiKeyAccess(request: FlashBoardGenerationRequest): void {
-  if (request.service === 'piapi' && !shouldUsePersonalApiKey('piapi')) {
-    throw new Error('Enable a PiAPI key as default in Settings to generate with PiAPI.');
-  }
-
-  if (request.service === 'evolink' && !shouldUsePersonalApiKey('evolink')) {
-    throw new Error('Enable an EvoLink key as default in Settings to generate with EvoLink.');
-  }
-
-  if (request.service === 'elevenlabs' && !shouldUsePersonalApiKey('elevenlabs')) {
-    throw new Error('Enable an ElevenLabs key as default in Settings to generate speech with ElevenLabs.');
-  }
-
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
@@ -113,8 +77,6 @@ class FlashBoardJobService {
   private queue: QueueEntry[] = [];
   private running: RunningJob[] = [];
   private maxConcurrent = 100;
-  private maxConcurrentEvolink = 1;
-  private maxConcurrentElevenLabs = 2;
   private onUpdate: JobUpdateCallback | null = null;
 
   setUpdateCallback(cb: JobUpdateCallback | null): void {
@@ -195,7 +157,7 @@ class FlashBoardJobService {
       return;
     }
 
-    const request = resolveEffectiveRequest(input.request);
+    const request = input.request;
     const abortController = new AbortController();
     this.running.push({
       recordId: input.recordId,
@@ -222,14 +184,7 @@ class FlashBoardJobService {
 
   private canStartJob(service: FlashBoardGenerationRequest['service']): boolean {
     if (this.running.length >= this.maxConcurrent) return false;
-    if (service === 'evolink') {
-      const evolinkRunning = this.running.filter(r => r.service === 'evolink').length;
-      if (evolinkRunning >= this.maxConcurrentEvolink) return false;
-    }
-    if (service === 'elevenlabs') {
-      const elevenLabsRunning = this.running.filter(r => r.service === 'elevenlabs').length;
-      if (elevenLabsRunning >= this.maxConcurrentElevenLabs) return false;
-    }
+    if (service !== 'cloud') return true;
     return true;
   }
 
@@ -343,7 +298,7 @@ class FlashBoardJobService {
 
   private async startJob(entry: QueueEntry): Promise<void> {
     const { recordId, abortController } = entry;
-    const request = resolveEffectiveRequest(entry.request);
+    const request = entry.request;
     this.running.push({
       recordId,
       service: request.service,
@@ -351,8 +306,6 @@ class FlashBoardJobService {
     });
 
     try {
-      assertPersonalApiKeyAccess(request);
-
       const result = await runFlashBoardProviderJob({
         recordId,
         request,
@@ -395,10 +348,9 @@ class FlashBoardJobService {
     abortController: AbortController;
   }): Promise<void> {
     const { recordId, remoteTaskId, abortController } = input;
-    const request = resolveEffectiveRequest(input.request);
+    const request = input.request;
 
     try {
-      assertPersonalApiKeyAccess(request);
       const result = await resumeFlashBoardProviderJob({
         request,
         remoteTaskId,

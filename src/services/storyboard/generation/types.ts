@@ -18,11 +18,10 @@ import type {
 export const STORYBOARD_GENERATION_REQUEST_KEY_PREFIX = 'storyboard-generation:';
 export const STORYBOARD_GENERATION_APPROVAL_TTL_MS = 5 * 60 * 1000;
 
-export type StoryboardGenerationRoute = 'hosted' | 'byo';
+export type StoryboardGenerationRoute = 'hosted';
 
 export interface StoryboardGenerationAvailability {
   hostedAvailable: boolean;
-  byoServices?: Partial<Record<Exclude<FlashBoardService, 'cloud'>, boolean>>;
 }
 
 export interface StoryboardGenerationReference {

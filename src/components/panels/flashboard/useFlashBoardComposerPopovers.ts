@@ -12,6 +12,7 @@ export type FlashBoardComposerPopover =
   | 'voiceSettings'
   | 'sunoModel'
   | 'chatProvider'
+  | 'chatExecutionProfile'
   | 'chatModel'
   | 'chatContext'
   | 'chatTemperature'
@@ -28,6 +29,7 @@ const INLINE_SUBMENU_POPOVERS = new Set<FlashBoardComposerActivePopover>([
   'mode',
   'sunoModel',
   'chatProvider',
+  'chatExecutionProfile',
   'chatModel',
   'chatContext',
   'chatTemperature',

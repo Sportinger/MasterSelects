@@ -359,6 +359,7 @@ export interface TimelineKeyframesProps {
   timelineRef: React.RefObject<HTMLDivElement | null>;
   onSelectKeyframe: (keyframeId: string, addToSelection: boolean) => void;
   onMoveKeyframe: (keyframeId: string, newTime: number) => void;
+  onDeleteKeyframes: (keyframeIds: string[]) => void;
   onUpdateKeyframe: (
     keyframeId: string,
     updates: { easing?: EasingType; rotationInterpolation?: RotationInterpolationMode },

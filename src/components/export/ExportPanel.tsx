@@ -696,11 +696,11 @@ export function ExportPanel() {
   // If neither encoder is supported, show error
   if (!webCodecsAvailable && !ffmpegAvailable) {
     return (
-      <div className="export-panel">
+      <div className="export-panel" role="region" aria-label="Export">
         <div className="panel-header">
           <h3>Export</h3>
         </div>
-        <div className="export-error">
+        <div className="export-error" role="alert">
           No video encoder available. WebCodecs requires Chrome 94+ or Safari 16.4+.
           FFmpeg WASM requires WebAssembly support.
         </div>
@@ -712,6 +712,9 @@ export function ExportPanel() {
     <div
       className="export-panel"
       ref={panelRef}
+      role="region"
+      aria-label="Export"
+      aria-busy={isExporting || isBatchRunning}
       onDragOver={handleBatchDragOver}
       onDragLeave={handleBatchDragLeave}
       onDrop={handleBatchDrop}

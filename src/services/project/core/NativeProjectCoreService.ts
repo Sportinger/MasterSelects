@@ -3,7 +3,6 @@
 // instead of FileSystemDirectoryHandle. Enables project persistence in Firefox.
 
 import { Logger } from '../../logger';
-import { apiKeyManager } from '../../apiKeyManager';
 import { NativeHelperClient } from '../../nativeHelper/NativeHelperClient';
 import { PROJECT_FOLDER_PATHS, MAX_BACKUPS } from './constants';
 import { shouldPreferAutosave, shouldSkipEmptyProjectSave } from './autosaveRecovery';
@@ -13,7 +12,6 @@ import type { ProjectFile, ProjectMediaFile, ProjectComposition, ProjectFolder }
 
 const log = Logger.create('NativeProjectCore');
 
-const KEYS_FILE_NAME = '.keys.enc';
 const LAST_PROJECT_KEY = 'ms-native-last-project-path';
 const PROJECT_FILE_NAME = 'project.json';
 const PROJECT_AUTOSAVE_FILE_NAME = 'project.autosave.json';
@@ -190,9 +188,6 @@ export class NativeProjectCoreService {
       this.storeLastProject(projectPath);
       await addRecentNativeProject(projectPath, initialProject);
 
-      // Save any existing API keys
-      await this.saveKeysFile();
-
       log.info(`Created project: ${name} at ${projectPath}`);
       return true;
     } catch (e) {
@@ -229,16 +224,6 @@ export class NativeProjectCoreService {
       await addRecentNativeProject(projectPath, projectData);
 
       // Try to restore API keys from file if IndexedDB keys are empty
-      try {
-        const existingKeys = await apiKeyManager.getAllKeys();
-        const hasAnyKey = Object.values(existingKeys).some((v: string) => v !== '');
-        if (!hasAnyKey) {
-          await this.loadKeysFile();
-        }
-      } catch (e) {
-        log.warn('Failed to check/restore API keys:', e);
-      }
-
       log.info(`Opened project: ${projectData.name}`);
       return true;
     } catch (e) {
@@ -280,8 +265,6 @@ export class NativeProjectCoreService {
         log.error('Failed to write project.json');
         return false;
       }
-
-      await this.saveKeysFile();
 
       if (this.dirtyRevision === savedRevision) {
         this.isDirty = false;
@@ -491,47 +474,6 @@ export class NativeProjectCoreService {
     if (!this.projectData) return;
     this.projectData.folders = folders;
     this.markDirty();
-  }
-
-  // ============================================
-  // API KEYS FILE (.keys.enc)
-  // ============================================
-
-  async saveKeysFile(): Promise<void> {
-    if (!this.projectPath) return;
-
-    try {
-      const content = await apiKeyManager.exportKeysForFile();
-      if (!content) {
-        log.debug('No API keys to save to file');
-        return;
-      }
-
-      const keysPath = this.joinPath(this.projectPath, KEYS_FILE_NAME);
-      await this.client.writeFile(keysPath, content);
-
-      log.debug('API keys saved to project file');
-    } catch (e) {
-      log.warn('Failed to save keys file:', e);
-    }
-  }
-
-  async loadKeysFile(): Promise<boolean> {
-    if (!this.projectPath) return false;
-
-    try {
-      const keysPath = this.joinPath(this.projectPath, KEYS_FILE_NAME);
-      const content = await this.client.readFileText(keysPath);
-      if (!content) return false;
-
-      const restored = await apiKeyManager.importKeysFromFile(content);
-      if (restored) {
-        log.info('API keys restored from project file');
-      }
-      return restored;
-    } catch {
-      return false;
-    }
   }
 
   // ============================================

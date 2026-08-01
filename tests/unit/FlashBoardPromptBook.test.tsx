@@ -31,94 +31,6 @@ describe('FlashBoardPromptBook', () => {
     vi.useRealTimers();
   });
 
-  it('shows the active system prompt even when there is no prompt history', () => {
-    render(
-      <FlashBoardPromptBook
-        activeSystemPrompt="Always answer in German."
-        activeSystemPromptProvider="lemonade"
-        copiedEntryId={null}
-        entries={[]}
-        generationRecords={[]}
-        mediaFiles={[]}
-        onClose={vi.fn()}
-        onCopy={vi.fn()}
-      />,
-    );
-
-    expect(screen.getAllByText('System').length).toBeGreaterThan(0);
-    expect(screen.getByText('Current system prompt - Lemonade')).toBeInTheDocument();
-    expect(screen.getByText('Always answer in German.')).toBeInTheDocument();
-    expect(screen.getByText('Presets')).toBeInTheDocument();
-    expect(screen.queryByText('No generated media for this prompt.')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'System prompt' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Gen$/ })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /^Chat$/ })).toBeDisabled();
-    expect(screen.queryByLabelText('Previous prompt')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Next prompt')).not.toBeInTheDocument();
-  });
-
-  it('edits the current system prompt inside the prompt book', () => {
-    const loadSystemPrompt = vi.fn();
-    const setPromptDraft = vi.fn();
-
-    render(
-      <FlashBoardPromptBook
-        activeSystemPrompt="Current prompt"
-        activeSystemPromptProvider="openai"
-        copiedEntryId={null}
-        entries={[]}
-        generationRecords={[]}
-        mediaFiles={[]}
-        projectPromptStorageReady
-        promptDraft="Current prompt"
-        promptNameDraft="Editorial prompt"
-        promptSendContext={false}
-        savedSystemPrompts={[{
-          fileName: 'openai--editorial.prompt.json',
-          name: 'Editorial prompt',
-          provider: 'openai',
-          sendContext: false,
-          updatedAt: new Date(1000).toISOString(),
-        }]}
-        selectedPromptFile="openai--editorial.prompt.json"
-        onClose={vi.fn()}
-        onCopy={vi.fn()}
-        onLoadSystemPrompt={loadSystemPrompt}
-        onSetPromptDraft={setPromptDraft}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
-    expect(screen.getByDisplayValue('Current prompt')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Save new' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Send current MasterSelects context')).not.toBeChecked();
-    expect(screen.getByText('Context off')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Editorial prompt/ }));
-    expect(loadSystemPrompt).toHaveBeenCalledWith('openai--editorial.prompt.json');
-  });
-
-  it('toggles whether a system prompt sends live MasterSelects context', () => {
-    const setPromptSendContext = vi.fn();
-
-    render(
-      <FlashBoardPromptBook
-        activeSystemPrompt="Current prompt"
-        activeSystemPromptProvider="openai"
-        copiedEntryId={null}
-        entries={[]}
-        generationRecords={[]}
-        mediaFiles={[]}
-        promptSendContext
-        onClose={vi.fn()}
-        onCopy={vi.fn()}
-        onSetPromptSendContext={setPromptSendContext}
-      />,
-    );
-
-    fireEvent.click(screen.getByLabelText('Send current MasterSelects context'));
-    expect(setPromptSendContext).toHaveBeenCalledWith(false);
-  });
-
   it('renders prompt text beside generated media with run metadata and page-side navigation', () => {
     const generationRecords: FlashBoardActiveGenerationRecord[] = [{
       id: 'run-1',
@@ -133,7 +45,7 @@ describe('FlashBoardPromptBook', () => {
         prompt: 'A blue robot in a studio',
         providerId: 'kie',
         referenceMediaFileIds: [],
-        service: 'kie-ai',
+        service: 'cloud',
         version: 'nano-banana',
       },
       result: {
@@ -170,7 +82,7 @@ describe('FlashBoardPromptBook', () => {
     expect(document.querySelector('.fb-prompt-book-media-group.user')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Gen$/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Chat$/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'System prompt' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'System prompt' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /A blue robot/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Older chat prompt/ })).not.toBeInTheDocument();
 
@@ -249,7 +161,7 @@ describe('FlashBoardPromptBook', () => {
         prompt: 'A red moon over water',
         providerId: 'openai',
         referenceMediaFileIds: [],
-        service: 'openai',
+        service: 'cloud',
         version: 'gpt-image-1',
       },
     });

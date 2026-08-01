@@ -3,16 +3,20 @@ import {
   createDefaultReplicatorDefinition,
   createLinearGradientAppearance,
   createMotionAppearanceId,
+  createMotionExpressionBinding,
   createRadialGradientAppearance,
   createStrokeAppearance,
+  createTextureFillAppearance,
   MOTION_APPEARANCE_BLEND_MODES,
   type AppearanceItem,
   type ColorFillAppearance,
   type GradientStop,
   type MotionColor,
   type MotionLayerDefinition,
+  type MotionExpressionBinding,
   type MotionVector2,
   type StrokeAppearance,
+  type TextureFillAppearance,
 } from '../../../types/motionDesign';
 import {
   MOTION_MAX_APPEARANCES,
@@ -56,6 +60,20 @@ import { getTimelineMotionStructureGraphRevision } from '../../motionDesign/cont
 import { applyTimelineMotionAdjustmentMutation } from '../../motionDesign/adjustment/timelineMutationAdapter';
 import { planMotionModifierSemanticOperation, type MotionModifierSemanticOperation } from '../../motionDesign/modifiers/semanticOperations';
 import { MOTION_MODIFIER_MAX_ABS_AMOUNT, MOTION_MODIFIER_TARGET_PATHS, parseMotionModifierStackContract } from '../../motionDesign/modifiers/contracts';
+import { compileMotionExpression } from '../../motionDesign/expressions/validator';
+import { applyMotionAppearancePreset, createMotionAppearancePreset } from '../../motionDesign/appearancePresets';
+import { getMotionAppearancePresetFromLibrary, listMotionAppearancePresets, saveMotionAppearancePresetToLibrary } from '../../motionDesign/presetLibrary';
+import { getMotionTemplateFromLibrary, listMotionTemplates, saveMotionTemplateToLibrary } from '../../motionDesign/motionTemplateLibrary';
+import { decodeMotionTemplateEnvelope, encodeMotionTemplateEnvelope } from '../../motionDesign/templates/codec';
+import { inventoryMotionTemplateDependencies } from '../../motionDesign/templates/dependencyInventory';
+import { planMotionTemplateIdRemap } from '../../motionDesign/templates/idRemapPlanner';
+import { planMotionTemplateInstantiation } from '../../motionDesign/templates/instantiatePlanner';
+import type {
+  MotionTemplateDependencyInventoryEntry,
+  MotionTemplateEnvelopeV1,
+  MotionTemplateInstantiateOperation,
+} from '../../motionDesign/templates/contracts';
+import { startBatch, endBatch } from '../../../stores/historyStore';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
@@ -787,6 +805,194 @@ export async function handleUpdateMotionAppearances(
   }
 }
 
+export async function handleSaveMotionAppearancePreset(args: Record<string, unknown>, timelineStore: TimelineStore): Promise<ToolResult> {
+  const clipResult = findMotionShapeClip(args.clipId, timelineStore);
+  if (!clipResult.success) return clipResult.result;
+  try {
+    const name = requiredNonEmptyString(args.name, 'name');
+    if (name instanceof Error) return failure(name.message);
+    const preset = createMotionAppearancePreset(clipResult.clip.motion!.appearance ?? { version: 1, items: [] }, name);
+    saveMotionAppearancePresetToLibrary(preset);
+    return { success: true, data: { id: preset.id, name: preset.name, itemCount: preset.items.length, createdAt: preset.createdAt } };
+  } catch (error) { return failure(errorMessage(error)); }
+}
+
+export async function handleListMotionAppearancePresets(): Promise<ToolResult> {
+  const library = listMotionAppearancePresets();
+  return { success: true, data: { presets: library.presets.map((preset) => ({ id: preset.id, name: preset.name, itemCount: preset.items.length, createdAt: preset.createdAt })), warnings: library.warnings } };
+}
+
+export async function handleApplyMotionAppearancePreset(args: Record<string, unknown>, timelineStore: TimelineStore): Promise<ToolResult> {
+  const clipResult = findMotionShapeClip(args.clipId, timelineStore);
+  if (!clipResult.success) return clipResult.result;
+  const presetId = requiredNonEmptyString(args.presetId, 'presetId');
+  if (presetId instanceof Error) return failure(presetId.message);
+  const mode = args.mode === undefined ? 'replace' : args.mode;
+  if (mode !== 'replace' && mode !== 'append') return failure('mode must be replace or append');
+  const preset = getMotionAppearancePresetFromLibrary(presetId);
+  if (!preset) return failure(`Appearance preset not found: ${presetId}`);
+  try {
+    const currentItems = clipResult.clip.motion!.appearance?.items ?? [];
+    if (mode === 'append' && currentItems.length + preset.items.length > MOTION_MAX_APPEARANCES) {
+      return failure(`Appending this preset exceeds the maximum of ${MOTION_MAX_APPEARANCES} appearance items`);
+    }
+    const applied = applyMotionAppearancePreset(clipResult.clip.motion!, preset);
+    const nextMotion = mode === 'replace' ? applied.motion : {
+      ...applied.motion,
+      appearance: { ...applied.motion.appearance!, items: [...currentItems.map((item) => structuredClone(item)), ...applied.motion.appearance!.items] },
+    };
+    const mutationSnapshot = captureMutationEntitySnapshot('clip', [clipResult.clip]);
+    // One updateMotionLayer invocation makes this a single undo/history transaction.
+    useTimelineStore.getState().updateMotionLayer(clipResult.clip.id, () => nextMotion);
+    const finalClip = useTimelineStore.getState().clips.find((clip) => clip.id === clipResult.clip.id);
+    if (!finalClip || !isMotionShapeClip(finalClip)) return failure(`Motion shape disappeared: ${clipResult.clip.id}`);
+    selectClipAndOpenTab(finalClip.id, 'motion');
+    return { success: true, data: { ...describeMotionDesignForAi(finalClip), presetId, mode, createdAppearanceIds: Object.values(applied.appearanceIdMap), createdGradientStopIds: Object.values(applied.gradientStopIdMap), ...describeMutationEntities(mutationSnapshot, [finalClip], { updatedEntityIds: [finalClip.id] }) } };
+  } catch (error) { return failure(errorMessage(error)); }
+}
+
+/** Capture one rendered Motion Shape as an ID-free MD8 template envelope. */
+export async function handleSaveMotionTemplate(
+  args: Record<string, unknown>,
+  timelineStore: TimelineStore,
+): Promise<ToolResult> {
+  try {
+    const name = requiredNonEmptyString(args.name, 'name');
+    if (name instanceof Error) return failure(name.message);
+    const category = args.category === undefined
+      ? 'motion-clip'
+      : requiredNonEmptyString(args.category, 'category');
+    if (category instanceof Error) return failure(category.message);
+    const clips = resolveMotionTemplateCaptureClips(args, timelineStore);
+    if (clips instanceof Error) return failure(clips.message);
+    const captured = captureMotionTemplateEnvelope(clips, name, category);
+    const { envelope, droppedParentLinks } = captured;
+    const encoded = encodeMotionTemplateEnvelope(envelope);
+    if (!encoded.ok) return failure(encoded.failures.map((item) => item.message).join(' '));
+    saveMotionTemplateToLibrary(envelope);
+    return {
+      success: true,
+      data: {
+        id: envelope.templateId,
+        name: envelope.name,
+        createdAt: templateCreatedAt(envelope.templateId),
+        entityCounts: countTemplateEntities(envelope),
+        dependencies: envelope.dependencies.map((dependency) => ({
+          id: dependency.id,
+          kind: dependency.kind,
+          label: dependency.label,
+        })),
+        droppedParentLinks,
+      },
+    };
+  } catch (error) {
+    return failure(errorMessage(error));
+  }
+}
+
+export async function handleListMotionTemplates(): Promise<ToolResult> {
+  const library = listMotionTemplates();
+  return {
+    success: true,
+    data: {
+      templates: library.templates.map((template) => ({
+        id: template.templateId,
+        name: template.name,
+        category: template.category,
+        createdAt: templateCreatedAt(template.templateId),
+        entityCounts: countTemplateEntities(template),
+        dependencies: template.dependencies.map((dependency) => ({
+          id: dependency.id,
+          kind: dependency.kind,
+          label: dependency.label,
+        })),
+      })),
+      warnings: library.warnings,
+    },
+  };
+}
+
+/**
+ * Instantiate through live domain actions. The frozen planner owns envelope
+ * entity remapping; no envelope ID is used as a runtime clip/item/keyframe ID.
+ */
+export async function handleApplyMotionTemplate(
+  args: Record<string, unknown>,
+  timelineStore: TimelineStore,
+): Promise<ToolResult> {
+  const templateId = requiredNonEmptyString(args.templateId, 'templateId');
+  if (templateId instanceof Error) return failure(templateId.message);
+  const trackResult = resolveVideoTrack(args.trackId, timelineStore);
+  if (!trackResult.success) return trackResult.result;
+  let startTime: number;
+  try {
+    startTime = validateFiniteNumber(args.startTime, 'startTime', 0, Number.MAX_SAFE_INTEGER);
+  } catch (error) {
+    return failure(errorMessage(error));
+  }
+  const stored = getMotionTemplateFromLibrary(templateId);
+  if (!stored) return failure(`Motion template not found: ${templateId}`);
+  const decoded = decodeMotionTemplateEnvelope(stored);
+  if (!decoded.ok) return failure(decoded.failures.map((item) => item.message).join(' '));
+
+  try {
+    const envelope = decoded.envelope;
+    const dependencyResolutions = resolveTemplateDependencies(envelope);
+    const inventory = inventoryMotionTemplateDependencies(envelope, dependencyResolutions);
+    if (!inventory.ok) return failure(inventory.failures.map((item) => item.message).join(' '));
+    const missingDependencies = inventory.plan.entries
+      .filter((entry) => entry.status === 'missing')
+      .map((entry) => ({ id: entry.dependencyId, label: envelope.dependencies.find((item) => item.id === entry.dependencyId)?.label }));
+    // The frozen instantiation planner intentionally fails closed for missing
+    // dependencies. For this packet a missing texture is optional, so plan a
+    // derived replay envelope after removing only its media binding.
+    const replayEnvelope = materializeTemplateDependencyBindings(
+      envelope,
+      inventory.plan.entries,
+    );
+    const occupiedIds = collectMotionRuntimeIds(useTimelineStore.getState());
+    const instanceKey = `apply_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const namespace = JSON.stringify([
+      useMediaStore.getState().activeCompositionId ?? 'timeline:active',
+      instanceKey,
+    ]);
+    const remap = planMotionTemplateIdRemap(replayEnvelope, namespace, occupiedIds);
+    if (!remap.ok) return failure(remap.failures.map((item) => item.message).join(' '));
+    const plan = planMotionTemplateInstantiation({
+      envelope: replayEnvelope,
+      destinationCompositionId: useMediaStore.getState().activeCompositionId ?? 'timeline:active',
+      insertionTime: startTime,
+      instanceKey,
+      dependencyResolutions: dependencyResolutions.filter((resolution) => replayEnvelope.dependencies.some((dependency) => dependency.id === resolution.dependencyId)),
+      occupiedTargetIds: occupiedIds,
+    });
+    if (!plan.ok) return failure(plan.failures.map((item) => item.message).join(' '));
+
+    const beforeRevision = getTimelineRevision();
+    const batch = startBatch('Apply Motion Template');
+    try {
+      const created = await replayMotionTemplatePlan(plan.plan.batch.operations, trackResult.track.id);
+      if (created.clipIds.length === 0) throw new Error('Motion template did not create a motion clip');
+      return {
+        success: true,
+        data: {
+          clipId: created.clipIds[0],
+          clipIds: created.clipIds,
+          createdTrackIds: created.createdTrackIds,
+          remappedIdCount: remap.plan.length,
+          missingDependencies,
+          history: { mode: 'single-entry', label: 'Apply Motion Template', atomic: true },
+          stateRevisions: { before: beforeRevision, timeline: getTimelineRevision() },
+        },
+      };
+    } finally {
+      if (batch.opened) endBatch();
+    }
+  } catch (error) {
+    return failure(errorMessage(error));
+  }
+}
+
 export async function handleEditMotionModifier(
   args: Record<string, unknown>,
   timelineStore: TimelineStore,
@@ -823,7 +1029,17 @@ export async function handleEditMotionModifier(
     else if (operationName === 'update') { const modifierId = requiredNonEmptyString(args.modifierId, 'modifierId'); if (modifierId instanceof Error) return failure(modifierId.message); operation = { type: 'update', modifierId, enabled: optionalBoolean(args.enabled, 'enabled'), target, fields }; }
     else if (operationName === 'remove') { const modifierId = requiredNonEmptyString(args.modifierId, 'modifierId'); if (modifierId instanceof Error) return failure(modifierId.message); operation = { type: 'remove', modifierId }; }
     else if (operationName === 'reorder') { const modifierId = requiredNonEmptyString(args.modifierId, 'modifierId'); if (modifierId instanceof Error) return failure(modifierId.message); operation = { type: 'reorder', modifierId, newIndex: validateInteger(args.newIndex, 'newIndex', 0, Number.MAX_SAFE_INTEGER) }; }
-    else if (operationName === 'set-falloff') { const shapeClipId = requiredNonEmptyString(args.falloffShapeClipId, 'falloffShapeClipId'); if (shapeClipId instanceof Error) return failure(shapeClipId.message); operation = { type: 'set-falloff', falloff: { shapeClipId, shapeRevision: 0, feather: validateFiniteNumber(args.falloffFeather ?? 0, 'falloffFeather', 0, 10), invert: optionalBoolean(args.falloffInvert, 'falloffInvert') ?? false, clip: optionalBoolean(args.falloffClip, 'falloffClip') ?? false } }; }
+    else if (operationName === 'set-falloff') {
+      const shapeClipId = requiredNonEmptyString(args.falloffShapeClipId, 'falloffShapeClipId');
+      if (shapeClipId instanceof Error) return failure(shapeClipId.message);
+      // Falloff references use the referenced clip's replicator revision as the
+      // staleness snapshot — the same convention the UI and the runtime's
+      // shape-reference provisioning use. A mismatch fails the plan as STALE.
+      const referencedClip = useTimelineStore.getState().clips.find((clip) => clip.id === shapeClipId);
+      if (!referencedClip) return failure(`Falloff shape clip not found: ${shapeClipId}`);
+      const referencedShapeRevision = referencedClip.motion?.replicator?.revision ?? 0;
+      operation = { type: 'set-falloff', referencedShapeRevision, falloff: { shapeClipId, shapeRevision: referencedShapeRevision, feather: validateFiniteNumber(args.falloffFeather ?? 0, 'falloffFeather', 0, 10), invert: optionalBoolean(args.falloffInvert, 'falloffInvert') ?? false, clip: optionalBoolean(args.falloffClip, 'falloffClip') ?? false } };
+    }
     else operation = { type: 'clear-falloff' };
     const plan = planMotionModifierSemanticOperation(current, operation);
     if (!plan.ok) return { success: false, error: plan.diagnostics[0].message, data: plan };
@@ -833,8 +1049,84 @@ export async function handleEditMotionModifier(
     const finalClip = useTimelineStore.getState().clips.find((clip) => clip.id === clipResult.clip.id);
     if (!finalClip || !isMotionShapeClip(finalClip)) return failure(`Motion shape disappeared: ${clipResult.clip.id}`);
     const afterIds = new Set(plannedStack.modifiers.map((modifier) => modifier.id));
-    return { success: true, data: { ...describeMotionDesignForAi(finalClip), modifierStackRevision: { previous: revision, next: plannedStack.revision }, entities: { created: [...afterIds].filter((id) => !beforeIds.has(id)).map((id) => ({ id, kind: 'modifier' })), updated: operationName === 'update' ? [{ id: (operation as any).modifierId, kind: 'modifier' }] : [], removed: [...beforeIds].filter((id) => !afterIds.has(id)).map((id) => ({ id, kind: 'modifier' })) }, history: { mode: 'single-entry', label: 'Edit Motion Modifier' }, stateRevisions: { timeline: getTimelineRevision() } } };
+    return { success: true, data: { ...describeMotionDesignForAi(finalClip), modifierStackRevision: { previous: revision, next: plannedStack.revision }, entities: { created: [...afterIds].filter((id) => !beforeIds.has(id)).map((id) => ({ id, kind: 'modifier' })), updated: operation.type === 'update' ? [{ id: operation.modifierId, kind: 'modifier' }] : [], removed: [...beforeIds].filter((id) => !afterIds.has(id)).map((id) => ({ id, kind: 'modifier' })) }, history: { mode: 'single-entry', label: 'Edit Motion Modifier' }, stateRevisions: { timeline: getTimelineRevision() } } };
   } catch (error) { return failure(errorMessage(error)); }
+}
+
+export async function handleSetMotionExpression(
+  args: Record<string, unknown>,
+  timelineStore: TimelineStore,
+): Promise<ToolResult> {
+  const clipResult = findMotionShapeClip(args.clipId, timelineStore);
+  if (!clipResult.success) return clipResult.result;
+  try {
+    if (args.operation !== 'set' && args.operation !== 'remove') {
+      return failure('operation must be set or remove');
+    }
+    if (!MOTION_MODIFIER_TARGET_PATHS.includes(args.path as never)) {
+      return failure(`path must be one of: ${MOTION_MODIFIER_TARGET_PATHS.join(', ')}`);
+    }
+    const path = args.path as MotionExpressionBinding['path'];
+    const currentBindings = clipResult.clip.motion?.expressions?.bindings ?? [];
+    const existing = currentBindings.find((binding) => binding.path === path);
+    if (args.operation === 'remove') {
+      if (!existing) return failure(`Motion expression binding not found for ${path}`);
+      const bindings = currentBindings.filter((binding) => binding.path !== path);
+      useTimelineStore.getState().updateMotionLayer(clipResult.clip.id, (motion) => ({
+        ...motion,
+        expressions: bindings.length > 0 ? { version: 1, bindings } : undefined,
+      }));
+      return {
+        success: true,
+        data: {
+          clipId: clipResult.clip.id,
+          path,
+          binding: null,
+          history: { mode: 'single-entry', label: 'Remove Motion Expression' },
+          stateRevisions: { timeline: getTimelineRevision() },
+        },
+      };
+    }
+
+    const source = requiredNonEmptyString(args.source, 'source');
+    if (source instanceof Error) return failure(source.message);
+    const compiled = compileMotionExpression(source);
+    if (!compiled.ok) {
+      const expressionFailure = compiled.failures[0];
+      return failure(`Invalid Motion expression at position ${expressionFailure.position}: ${expressionFailure.message}`);
+    }
+    const fallback = args.fallback === undefined
+      ? 0
+      : validateFiniteNumber(args.fallback, 'fallback', -Number.MAX_VALUE, Number.MAX_VALUE);
+    const enabled = optionalBoolean(args.enabled, 'enabled') ?? true;
+    const binding = createMotionExpressionBinding(
+      path,
+      source,
+      fallback,
+      enabled,
+      existing?.id,
+    );
+    const bindings = [
+      ...currentBindings.filter((candidate) => candidate.path !== path),
+      binding,
+    ].sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
+    useTimelineStore.getState().updateMotionLayer(clipResult.clip.id, (motion) => ({
+      ...motion,
+      expressions: { version: 1, bindings },
+    }));
+    return {
+      success: true,
+      data: {
+        clipId: clipResult.clip.id,
+        path,
+        binding,
+        history: { mode: 'single-entry', label: 'Set Motion Expression' },
+        stateRevisions: { timeline: getTimelineRevision() },
+      },
+    };
+  } catch (error) {
+    return failure(errorMessage(error));
+  }
 }
 
 export async function handleConfigureMotionReplicator(
@@ -1163,6 +1455,442 @@ function getExactClipPropertyDescriptor(
   return descriptor;
 }
 
+function resolveMotionTemplateCaptureClips(
+  args: Record<string, unknown>,
+  timelineStore: TimelineStore,
+): TimelineClip[] | Error {
+  const hasClipId = args.clipId !== undefined;
+  const hasClipIds = args.clipIds !== undefined;
+  if (hasClipId === hasClipIds) {
+    return new Error('Provide exactly one of clipId or clipIds');
+  }
+  const requestedIds: string[] = [];
+  if (hasClipId) {
+    const clipId = requiredNonEmptyString(args.clipId, 'clipId');
+    if (clipId instanceof Error) return clipId;
+    requestedIds.push(clipId);
+  } else {
+    if (!Array.isArray(args.clipIds) || args.clipIds.length < 1 || args.clipIds.length > 8) {
+      return new Error('clipIds must be an array containing between 1 and 8 clip ids');
+    }
+    const seen = new Set<string>();
+    for (let index = 0; index < args.clipIds.length; index += 1) {
+      const clipId = requiredNonEmptyString(args.clipIds[index], `clipIds[${index}]`);
+      if (clipId instanceof Error) return clipId;
+      if (seen.has(clipId)) return new Error(`clipIds contains duplicate id: ${clipId}`);
+      seen.add(clipId);
+      requestedIds.push(clipId);
+    }
+  }
+  const clips: TimelineClip[] = [];
+  for (const clipId of requestedIds) {
+    const result = findMotionShapeClip(clipId, timelineStore, true);
+    if (!result.success) return new Error(result.result.error ?? `Motion shape clip not found: ${clipId}`);
+    clips.push(result.clip);
+  }
+  return clips;
+}
+
+function captureMotionTemplateEnvelope(
+  clips: readonly TimelineClip[],
+  name: string,
+  category: string,
+): {
+  envelope: MotionTemplateEnvelopeV1;
+  droppedParentLinks: Array<{ clipId: string; parentClipId: string }>;
+} {
+  if (clips.length === 0) throw new Error('Motion template capture requires at least one clip');
+  if (clips.some((clip) => !clip.motion?.shape)) {
+    throw new Error('Motion template capture requires motion shape definitions');
+  }
+  const templateId = `motion-template_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const dependencies: Array<MotionTemplateEnvelopeV1['dependencies'][number]> = [];
+  const relationships: MotionTemplateEnvelopeV1['relationships'][number][] = [];
+  const dependencyByMediaId = new Map<string, string>();
+  const mediaFiles = useMediaStore.getState().files;
+  const minimumStartTime = Math.min(...clips.map((clip) => clip.startTime));
+  const entityIdByClipId = new Map(clips.map((clip, index) => [clip.id, `clip-${index}`]));
+  const droppedParentLinks: Array<{ clipId: string; parentClipId: string }> = [];
+  const dependencyForMedia = (mediaFileId: string): string => {
+    const known = dependencyByMediaId.get(mediaFileId);
+    if (known) return known;
+    const id = `media-${dependencyByMediaId.size}`;
+    dependencyByMediaId.set(mediaFileId, id);
+    dependencies.push({
+      id,
+      kind: 'media',
+      sourceProjectId: mediaFileId,
+      label: mediaFiles.find((file) => file.id === mediaFileId)?.name ?? mediaFileId,
+    });
+    return id;
+  };
+  const entities: MotionTemplateEnvelopeV1['entities'][number][] = [];
+  for (const [clipIndex, clip] of clips.entries()) {
+    const ownerId = `clip-${clipIndex}`;
+    const owns = (entityId: string): void => {
+      relationships.push({
+        id: `owns-${ownerId}-${entityId}`,
+        kind: 'owns-op',
+        fromEntityId: ownerId,
+        toEntityId: entityId,
+        payload: {},
+      });
+    };
+    const replicator = clip.motion!.replicator ?? createDefaultReplicatorDefinition();
+    entities.push({
+      id: ownerId,
+      kind: 'motion-clip',
+      startOffset: clip.startTime - minimumStartTime,
+      duration: clip.duration,
+      payload: toTemplateJson({
+        name: clip.name,
+        duration: clip.duration,
+        shape: clip.motion!.shape,
+        replicator: {
+          enabled: replicator.enabled,
+          layout: replicator.layout,
+          terminalTransform: replicator.terminalTransform,
+          userLimit: replicator.userLimit ?? null,
+        },
+      }) as never,
+      dependencyIds: [],
+    });
+    for (const [index, item] of (clip.motion!.appearance?.items ?? []).entries()) {
+      const id = `appearance-${clipIndex}-${index}`;
+      const dependencyIds = item.kind === 'texture-fill' && item.mediaFileId
+        ? [dependencyForMedia(item.mediaFileId)]
+        : [];
+      entities.push({ id, kind: 'appearance-op', startOffset: 0, duration: clip.duration, payload: toTemplateJson(appearanceAddPayload(item)) as never, dependencyIds });
+      owns(id);
+    }
+    for (const [index, modifier] of (clip.motion!.modifierStack?.modifiers ?? []).entries()) {
+      const id = `modifier-${clipIndex}-${index}`;
+      entities.push({ id, kind: 'modifier-op', startOffset: 0, duration: clip.duration, payload: toTemplateJson(modifierAddPayload(modifier)) as never, dependencyIds: [] });
+      owns(id);
+    }
+    const byPath: Record<string, unknown[]> = {};
+    for (const keyframe of clipKeyframesFor(clip.id)) {
+      const values = byPath[keyframe.property] ?? [];
+      values.push(toTemplateJson({
+        time: keyframe.time,
+        value: keyframe.value,
+        easing: keyframe.easing,
+        ...(keyframe.rotationInterpolation ? { rotationInterpolation: keyframe.rotationInterpolation } : {}),
+        ...(keyframe.handleIn ? { handleIn: keyframe.handleIn } : {}),
+        ...(keyframe.handleOut ? { handleOut: keyframe.handleOut } : {}),
+      }));
+      byPath[keyframe.property] = values;
+    }
+    const keyframesId = `keyframes-${clipIndex}`;
+    entities.push({ id: keyframesId, kind: 'keyframes', startOffset: 0, duration: clip.duration, payload: toTemplateJson({ byPath }) as never, dependencyIds: [] });
+    owns(keyframesId);
+    for (const [index, binding] of (clip.motion!.expressions?.bindings ?? []).entries()) {
+      const id = `expression-${clipIndex}-${index}`;
+      entities.push({
+        id,
+        kind: 'expression-op',
+        startOffset: 0,
+        duration: clip.duration,
+        payload: toTemplateJson({ path: binding.path, source: binding.source, fallback: binding.fallback, enabled: binding.enabled }) as never,
+        dependencyIds: [],
+      });
+      owns(id);
+    }
+    if (clip.parentClipId) {
+      const parentEntityId = entityIdByClipId.get(clip.parentClipId);
+      if (parentEntityId) {
+        relationships.push({ id: `motion-parent-${clipIndex}`, kind: 'motion-parent', fromEntityId: ownerId, toEntityId: parentEntityId, payload: {} });
+      } else {
+        droppedParentLinks.push({ clipId: clip.id, parentClipId: clip.parentClipId });
+      }
+    }
+  }
+  return { envelope: {
+    format: 'masterselects.msmotion',
+    version: 1,
+    scope: 'project-local',
+    templateId,
+    name: name.trim(),
+    category: category.trim(),
+    duration: Math.max(...clips.map((clip) => clip.startTime + clip.duration)) - minimumStartTime,
+    entities,
+    relationships,
+    dependencies,
+  }, droppedParentLinks };
+}
+
+async function replayMotionTemplatePlan(
+  operations: readonly MotionTemplateInstantiateOperation[],
+  trackId: string,
+): Promise<{ clipIds: string[]; createdTrackIds: string[] }> {
+  const entityOperations = operations.filter((operation): operation is Extract<MotionTemplateInstantiateOperation, { type: 'create-entity' }> => operation.type === 'create-entity');
+  const clipOperations = entityOperations
+    .map((operation, envelopeOrder) => ({ operation, envelopeOrder }))
+    .filter((item) => item.operation.entityKind === 'motion-clip')
+    .sort((left, right) => left.operation.startTime - right.operation.startTime || left.envelopeOrder - right.envelopeOrder);
+  if (clipOperations.length === 0) return { clipIds: [], createdTrackIds: [] };
+  const createdClipIdByEntityId = new Map<string, string>();
+  const createdTrackIds: string[] = [];
+  for (const [index, item] of clipOperations.entries()) {
+    const targetTrackId = index === 0 ? trackId : useTimelineStore.getState().addTrack('video');
+    if (index > 0) createdTrackIds.push(targetTrackId);
+    createdClipIdByEntityId.set(
+      item.operation.targetEntityId,
+      await replayMotionClipEntity(item.operation, targetTrackId),
+    );
+  }
+  const ownerEntityIdByOpEntityId = new Map<string, string>();
+  const parentEntityIdByChildEntityId = new Map<string, string>();
+  for (const operation of operations) {
+    if (operation.type !== 'create-relationship') continue;
+    if (operation.relationshipKind === 'owns-op') {
+      ownerEntityIdByOpEntityId.set(operation.toEntityId, operation.fromEntityId);
+    } else if (operation.relationshipKind === 'motion-parent') {
+      parentEntityIdByChildEntityId.set(operation.fromEntityId, operation.toEntityId);
+    }
+  }
+  const legacyOwnerEntityId = clipOperations[0].operation.targetEntityId;
+  const rank: Record<string, number> = {
+    'appearance-op': 0,
+    'modifier-op': 1,
+    keyframes: 2,
+    'expression-op': 3,
+  };
+  for (const operation of [...entityOperations].sort((left, right) => (
+    (rank[left.entityKind] ?? Number.MAX_SAFE_INTEGER) - (rank[right.entityKind] ?? Number.MAX_SAFE_INTEGER)
+  ))) {
+    if (operation.entityKind === 'motion-clip') continue;
+    const ownerEntityId = ownerEntityIdByOpEntityId.get(operation.targetEntityId)
+      ?? (ownerEntityIdByOpEntityId.size === 0 ? legacyOwnerEntityId : undefined);
+    if (!ownerEntityId) throw new Error(`Motion template operation has no owner relationship: ${operation.entityKind}`);
+    const clipId = createdClipIdByEntityId.get(ownerEntityId);
+    if (!clipId) throw new Error(`Motion template operation has no created owner clip: ${operation.entityKind}`);
+    if (operation.entityKind === 'appearance-op') {
+      // Awaiting keeps every mutation inside the open history batch and in
+      // template order, and lets domain-level rejections fail the apply.
+      const result = await handleUpdateMotionAppearances({
+        clipId,
+        operations: [{ operation: 'add', ...operation.payload }],
+      }, useTimelineStore.getState());
+      if (!result.success) {
+        throw new Error(result.error ?? 'Motion template appearance operation was rejected');
+      }
+    } else if (operation.entityKind === 'modifier-op') {
+      await replayModifierEntity(clipId, operation.payload);
+    } else if (operation.entityKind === 'keyframes') {
+      replayKeyframesEntity(clipId, operation.payload);
+    } else if (operation.entityKind === 'expression-op') {
+      const payload = operation.payload as Record<string, unknown>;
+      const result = await handleSetMotionExpression({
+        clipId,
+        operation: 'set',
+        path: payload.path,
+        source: payload.source,
+        fallback: payload.fallback,
+        enabled: payload.enabled,
+      }, useTimelineStore.getState());
+      if (!result.success) throw new Error(result.error ?? 'Motion template expression operation was rejected');
+    } else {
+      throw new Error(`Unsupported motion template entity kind: ${operation.entityKind}`);
+    }
+  }
+  for (const [childEntityId, parentEntityId] of parentEntityIdByChildEntityId) {
+    const childClipId = createdClipIdByEntityId.get(childEntityId);
+    const parentClipId = createdClipIdByEntityId.get(parentEntityId);
+    if (!childClipId || !parentClipId) throw new Error('Motion template parent relationship references an unknown created clip');
+    useTimelineStore.getState().setClipParent(childClipId, parentClipId);
+    if (useTimelineStore.getState().clips.find((clip) => clip.id === childClipId)?.parentClipId !== parentClipId) {
+      throw new Error('Motion template parent relationship was rejected by the timeline graph');
+    }
+  }
+  return { clipIds: clipOperations.map((item) => createdClipIdByEntityId.get(item.operation.targetEntityId)!), createdTrackIds };
+}
+
+async function replayMotionClipEntity(operation: Extract<MotionTemplateInstantiateOperation, { type: 'create-entity' }>, trackId: string): Promise<string> {
+  const payload = operation.payload as Record<string, unknown>;
+  const shape = payload.shape as MotionLayerDefinition['shape'];
+  if (!shape || typeof shape !== 'object') throw new Error('Motion template clip payload is missing shape settings');
+  const clipId = useTimelineStore.getState().addMotionShapeClip(trackId, operation.startTime, {
+    primitive: shape.primitive,
+    size: shape.size,
+    duration: operation.duration,
+    name: typeof payload.name === 'string' ? payload.name : 'Motion Shape',
+  });
+  if (!clipId) throw new Error('The editor could not create the motion template shape clip');
+  useTimelineStore.getState().updateMotionLayer(clipId, (motion) => ({
+    ...motion,
+    shape: structuredClone(shape),
+  }));
+  replayReplicatorSettings(clipId, payload.replicator);
+  // The native shape constructor creates a default fill. Remove it before the
+  // ordered appearance-op entities are replayed.
+  const defaultItems = useTimelineStore.getState().clips.find((clip) => clip.id === clipId)?.motion?.appearance?.items ?? [];
+  for (const item of defaultItems) {
+    const removed = await handleUpdateMotionAppearances({ clipId, operations: [{ operation: 'remove', itemId: item.id }] }, useTimelineStore.getState());
+    if (!removed.success) {
+      throw new Error(removed.error ?? 'Motion template could not clear the default appearance');
+    }
+  }
+  return clipId;
+}
+
+function replayReplicatorSettings(clipId: string, value: unknown): void {
+  if (!isRecord(value)) return;
+  let current = useTimelineStore.getState().clips.find((clip) => clip.id === clipId)?.motion?.replicator ?? createDefaultReplicatorDefinition();
+  const apply = (operation: Parameters<typeof planMotionReplicatorSemanticOperation>[1]) => {
+    const planned = planMotionReplicatorSemanticOperation(current, operation);
+    if (!planned.ok) throw new Error(planned.diagnostics[0]?.message ?? 'Motion replicator settings were rejected');
+    current = planned.contract;
+  };
+  if (value.layout !== undefined) apply({ type: 'set-layout', expectedRevision: current.revision, layout: value.layout as never });
+  if (value.terminalTransform !== undefined) apply({ type: 'set-terminal-transform', expectedRevision: current.revision, terminalTransform: value.terminalTransform as never });
+  if (value.userLimit !== undefined) apply({ type: 'set-user-limit', expectedRevision: current.revision, userLimit: value.userLimit as number | null });
+  if (value.enabled !== undefined) apply({ type: 'set-enabled', expectedRevision: current.revision, enabled: value.enabled as boolean });
+  useTimelineStore.getState().updateMotionLayer(clipId, (motion) => ({ ...motion, replicator: current }));
+}
+
+async function replayModifierEntity(clipId: string, payload: unknown): Promise<void> {
+  if (!isRecord(payload) || typeof payload.kind !== 'string' || !isRecord(payload.target)) {
+    throw new Error('Motion template modifier payload is malformed');
+  }
+  const target = payload.target as Record<string, unknown>;
+  const addArgs = {
+    clipId,
+    operation: 'add',
+    kind: payload.kind,
+    ...(typeof payload.enabled === 'boolean' ? { enabled: payload.enabled } : {}),
+    targetPath: target.path,
+    targetOperation: target.operation,
+    targetAmount: target.amount,
+    ...(isRecord(payload.fields) ? payload.fields : {}),
+  };
+  // The current modifier domain allocator is revision-based. Advance a fresh
+  // target stack through real handler add/remove operations before its first template
+  // modifier so replay never reuses the source session's common `modifier-1-0`
+  // identifier; the final stack still consists solely of replayed entities.
+  if (!useTimelineStore.getState().clips.find((candidate) => candidate.id === clipId)?.motion?.modifierStack) {
+    const scratch = await handleEditMotionModifier(addArgs, useTimelineStore.getState());
+    if (!scratch.success) throw new Error(scratch.error ?? 'Motion modifier namespace setup was rejected');
+    const scratchId = useTimelineStore.getState().clips.find((candidate) => candidate.id === clipId)
+      ?.motion?.modifierStack?.modifiers[0]?.id;
+    if (!scratchId) throw new Error('Motion modifier namespace setup did not create a modifier');
+    const removed = await handleEditMotionModifier({ clipId, operation: 'remove', modifierId: scratchId }, useTimelineStore.getState());
+    if (!removed.success) throw new Error(removed.error ?? 'Motion modifier namespace setup could not remove its modifier');
+  }
+  const result = await handleEditMotionModifier(addArgs, useTimelineStore.getState());
+  if (!result.success) throw new Error(result.error ?? 'Motion template modifier operation was rejected');
+}
+
+function replayKeyframesEntity(clipId: string, payload: unknown): void {
+  if (!isRecord(payload) || !isRecord(payload.byPath)) throw new Error('Motion template keyframes payload is malformed');
+  for (const [property, values] of Object.entries(payload.byPath)) {
+    if (!Array.isArray(values)) throw new Error(`Motion template keyframes for ${property} must be an array`);
+    for (const value of values) {
+      if (!isRecord(value) || typeof value.time !== 'number' || typeof value.value !== 'number') {
+        throw new Error(`Motion template keyframe for ${property} is malformed`);
+      }
+      useTimelineStore.getState().addKeyframe(
+        clipId,
+        property as never,
+        value.value,
+        value.time,
+        typeof value.easing === 'string' ? value.easing : 'linear',
+      );
+    }
+  }
+}
+
+function appearanceAddPayload(item: AppearanceItem): Record<string, unknown> {
+  const common = { kind: item.kind, name: item.name, visible: item.visible, opacity: item.opacity, ...(item.blendMode ? { blendMode: item.blendMode } : {}) };
+  if (item.kind === 'color-fill') return { ...common, color: motionColorToHex(item.color) };
+  if (item.kind === 'stroke') return { ...common, color: motionColorToHex(item.color), width: item.width, alignment: item.alignment };
+  if (item.kind === 'linear-gradient') return { ...common, stops: item.stops.map(({ offset, color }) => ({ offset, color: motionColorToHex(color) })), start: item.start, end: item.end };
+  if (item.kind === 'radial-gradient') return { ...common, stops: item.stops.map(({ offset, color }) => ({ offset, color: motionColorToHex(color) })), center: item.center, radius: item.radius };
+  return { ...common, ...(item.mediaFileId ? { mediaFileId: item.mediaFileId } : {}), fit: item.fit, transform: item.transform, ...(item.time !== undefined ? { time: item.time } : {}) };
+}
+
+// The appearance-op API accepts hex color strings; templates quantize colors
+// to 8 bits per channel on capture (#RRGGBBAA round-trips via parseMotionColor).
+function motionColorToHex(color: { r: number; g: number; b: number; a: number }): string {
+  const channel = (value: number): string => Math.round(Math.min(1, Math.max(0, value)) * 255)
+    .toString(16)
+    .padStart(2, '0');
+  return `#${channel(color.r)}${channel(color.g)}${channel(color.b)}${channel(color.a)}`;
+}
+
+function modifierAddPayload(modifier: NonNullable<MotionLayerDefinition['modifierStack']>['modifiers'][number]): Record<string, unknown> {
+  const fields = modifier.kind === 'random' ? { seed: modifier.seed }
+    : modifier.kind === 'noise' ? { seed: modifier.seed, indexFrequency: modifier.indexFrequency, timeFrequencyHz: modifier.timeFrequencyHz, octaves: modifier.octaves, lacunarity: modifier.lacunarity, persistence: modifier.persistence }
+      : modifier.kind === 'oscillator' ? { waveform: modifier.waveform, frequencyHz: modifier.frequencyHz, cyclesAcrossInstances: modifier.cyclesAcrossInstances, phaseDegrees: modifier.phaseDegrees }
+        : { field: modifier.field, centerX: modifier.center.x, centerY: modifier.center.y, radius: modifier.radius, exponent: modifier.exponent };
+  return { kind: modifier.kind, enabled: modifier.enabled, target: modifier.targets[0], fields };
+}
+
+function resolveTemplateDependencies(envelope: MotionTemplateEnvelopeV1): Array<{ dependencyId: string; resolvedProjectId: string }> {
+  const files = useMediaStore.getState().files;
+  return envelope.dependencies.flatMap((dependency) => {
+    if (dependency.kind !== 'media') return [];
+    const file = files.find((candidate) => candidate.id === dependency.sourceProjectId)
+      ?? files.find((candidate) => candidate.name === dependency.label);
+    return file ? [{ dependencyId: dependency.id, resolvedProjectId: file.id }] : [];
+  });
+}
+
+function materializeTemplateDependencyBindings(
+  envelope: MotionTemplateEnvelopeV1,
+  entries: readonly MotionTemplateDependencyInventoryEntry[],
+): MotionTemplateEnvelopeV1 {
+  const statusById = new Map(entries.map((entry) => [entry.dependencyId, entry]));
+  const dependencyBySourceId = new Map(envelope.dependencies.map((dependency) => [dependency.sourceProjectId, dependency.id]));
+  return {
+    ...envelope,
+    dependencies: envelope.dependencies.filter((dependency) => statusById.get(dependency.id)?.status === 'resolved'),
+    entities: envelope.entities.map((entity) => {
+      const payload = toTemplateJson(entity.payload) as Record<string, unknown>;
+      if (entity.kind === 'appearance-op' && typeof payload.mediaFileId === 'string') {
+        const dependencyId = dependencyBySourceId.get(payload.mediaFileId);
+        const entry = dependencyId ? statusById.get(dependencyId) : undefined;
+        if (entry?.status === 'resolved') payload.mediaFileId = entry.resolvedProjectId;
+        else delete payload.mediaFileId;
+      }
+      return {
+        ...entity,
+        payload: payload as never,
+        dependencyIds: entity.dependencyIds.filter((id) => statusById.get(id)?.status === 'resolved'),
+      };
+    }),
+  };
+}
+
+function collectMotionRuntimeIds(state: TimelineStore): string[] {
+  return [
+    ...state.clips.map((clip) => clip.id),
+    ...state.clips.flatMap((clip) => clip.motion?.appearance?.items.flatMap((item) => [item.id, ...(item.kind === 'linear-gradient' || item.kind === 'radial-gradient' ? item.stops.map((stop) => stop.id) : [])]) ?? []),
+    ...state.clips.flatMap((clip) => clip.motion?.modifierStack?.modifiers.map((modifier) => modifier.id) ?? []),
+    ...flattenTimelineKeyframes(state.clipKeyframes).map((keyframe) => keyframe.id),
+  ];
+}
+
+function clipKeyframesFor(clipId: string): readonly Keyframe[] {
+  return useTimelineStore.getState().clipKeyframes.get(clipId) ?? [];
+}
+
+function toTemplateJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function templateCreatedAt(templateId: string): number {
+  const match = /_(\d+)_/.exec(templateId);
+  return match ? Number(match[1]) : 0;
+}
+
+function countTemplateEntities(template: MotionTemplateEnvelopeV1): Record<string, number> {
+  return template.entities.reduce<Record<string, number>>((counts, entity) => {
+    counts[entity.kind] = (counts[entity.kind] ?? 0) + 1;
+    return counts;
+  }, {});
+}
+
 function findMotionShapeClip(
   clipIdInput: unknown,
   timelineStore: TimelineStore,
@@ -1487,9 +2215,11 @@ function createAppearanceFromOperation(
     item = createLinearGradientAppearance();
   } else if (kind === 'radial-gradient') {
     item = createRadialGradientAppearance();
+  } else if (kind === 'texture-fill') {
+    item = createTextureFillAppearance();
   } else {
     throw new Error(
-      `${fieldName}.kind must be one of: color-fill, stroke, linear-gradient, radial-gradient`,
+      `${fieldName}.kind must be one of: color-fill, stroke, linear-gradient, radial-gradient, texture-fill`,
     );
   }
   const updated = updateAppearanceFromOperation(item, input, fieldName);
@@ -1637,6 +2367,34 @@ function updateAppearanceFromOperation(
     };
   }
 
+  if (
+    input.mediaFileId !== undefined
+    || input.fit !== undefined
+    || input.time !== undefined
+    || input.transform !== undefined
+  ) {
+    if (next.kind !== 'texture-fill') {
+      throw new Error(`${fieldName} texture fields require a texture-fill appearance`);
+    }
+    const mediaFileId = input.mediaFileId === undefined
+      ? undefined
+      : requiredNonEmptyString(input.mediaFileId, `${fieldName}.mediaFileId`);
+    if (mediaFileId instanceof Error) throw mediaFileId;
+    const fit = normalizeTextureFillFit(input.fit, `${fieldName}.fit`);
+    const time = optionalFiniteNumber(input.time, `${fieldName}.time`, 0, Number.MAX_SAFE_INTEGER);
+    const transform = normalizeTextureFillTransform(
+      input.transform,
+      `${fieldName}.transform`,
+    );
+    next = {
+      ...next,
+      ...(mediaFileId !== undefined ? { mediaFileId } : {}),
+      ...(fit !== undefined ? { fit } : {}),
+      ...(time !== undefined ? { time } : {}),
+      ...(transform !== undefined ? { transform } : {}),
+    };
+  }
+
   return { item: next, createdGradientStopIds: [] };
 }
 
@@ -1730,6 +2488,49 @@ function normalizeBlendMode(
   return value as (typeof MOTION_APPEARANCE_BLEND_MODES)[number];
 }
 
+const TEXTURE_FILL_FIT_MODES: readonly TextureFillAppearance['fit'][] = [
+  'contain',
+  'cover',
+  'fill',
+  'stretch',
+  'tile',
+];
+
+function normalizeTextureFillFit(
+  value: unknown,
+  fieldName: string,
+): TextureFillAppearance['fit'] | undefined {
+  if (value === undefined) return undefined;
+  if (
+    typeof value !== 'string'
+    || !TEXTURE_FILL_FIT_MODES.includes(value as TextureFillAppearance['fit'])
+  ) {
+    throw new Error(`${fieldName} must be one of: ${TEXTURE_FILL_FIT_MODES.join(', ')}`);
+  }
+  return value as TextureFillAppearance['fit'];
+}
+
+function normalizeTextureFillTransform(
+  value: unknown,
+  fieldName: string,
+): TextureFillAppearance['transform'] | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value) || !isRecord(value.position) || !isRecord(value.scale)) {
+    throw new Error(`${fieldName} must include position, scale, and rotation`);
+  }
+  return {
+    position: {
+      x: validateFiniteNumber(value.position.x, `${fieldName}.position.x`, -Number.MAX_VALUE, Number.MAX_VALUE),
+      y: validateFiniteNumber(value.position.y, `${fieldName}.position.y`, -Number.MAX_VALUE, Number.MAX_VALUE),
+    },
+    scale: {
+      x: validateFiniteNumber(value.scale.x, `${fieldName}.scale.x`, -Number.MAX_VALUE, Number.MAX_VALUE),
+      y: validateFiniteNumber(value.scale.y, `${fieldName}.scale.y`, -Number.MAX_VALUE, Number.MAX_VALUE),
+    },
+    rotation: validateFiniteNumber(value.rotation, `${fieldName}.rotation`, -Number.MAX_VALUE, Number.MAX_VALUE),
+  };
+}
+
 function normalizeInsertIndex(
   value: unknown,
   maximum: number,
@@ -1748,7 +2549,17 @@ function validateAppearanceStack(motion: MotionLayerDefinition): void {
   }
   for (const item of items) {
     if (item.kind === 'texture-fill') {
-      throw new Error('Texture fills are reserved for Motion Design MD5');
+      if (
+        item.mediaFileId !== undefined
+        && (typeof item.mediaFileId !== 'string' || !item.mediaFileId.trim())
+      ) {
+        throw new Error(`${item.name}.mediaFileId must be a non-empty string`);
+      }
+      normalizeTextureFillFit(item.fit, `${item.name}.fit`);
+      if (item.time !== undefined) {
+        validateFiniteNumber(item.time, `${item.name}.time`, 0, Number.MAX_SAFE_INTEGER);
+      }
+      normalizeTextureFillTransform(item.transform, `${item.name}.transform`);
     }
     if (
       (item.kind === 'linear-gradient' || item.kind === 'radial-gradient')

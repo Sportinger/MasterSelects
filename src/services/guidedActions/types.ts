@@ -47,7 +47,7 @@ export type GuidedTargetRef =
   | { kind: 'propertiesTab'; tab: string }
   | { kind: 'propertyControl'; property: string; clipId?: string }
   | { kind: 'timelineClip'; clipId: string }
-  | { kind: 'timelineTime'; trackId?: string; time: number }
+  | { kind: 'timelineTime'; surface?: 'track' | 'ruler'; trackId?: string; time: number }
   | { kind: 'timelineTrimHandle'; clipId: string; edge: 'start' | 'end' }
   | { kind: 'timelineFadeHandle'; clipId: string; edge: 'start' | 'end' }
   | { kind: 'timelineMarker'; markerId: string }
@@ -166,7 +166,8 @@ export type GuidedAction =
   | (GuidedActionBase & { type: 'setTimelineToolVisual'; toolId: TimelineToolId })
   | (GuidedActionBase & { type: 'executeTool'; tool: string; args: Record<string, unknown> })
   | (GuidedActionBase & { type: 'confirmState'; check: ValidationCheck })
-  | (GuidedActionBase & { type: 'waitForUserAction'; check: ValidationCheck; timeoutMs?: number });
+  | (GuidedActionBase & { type: 'waitForUserAction'; check: ValidationCheck; timeoutMs?: number })
+  | (GuidedActionBase & { type: 'waitForTutorialNavigation' });
 
 export type GuidedActionType = GuidedAction['type'];
 

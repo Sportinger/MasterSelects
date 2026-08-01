@@ -1,9 +1,7 @@
-import { DEFAULT_LEMONADE_MODEL } from '../lemonadeProvider';
 import type { FlashBoardChatModelOption, FlashBoardChatProvider, FlashBoardChatProviderOption, FlashBoardOpenAiReasoningEffort } from './FlashBoardChatTypes';
 
 export const FLASHBOARD_CHAT_PROVIDERS: FlashBoardChatProviderOption[] = [
   { id: 'kie', label: 'AI' },
-  { id: 'lemonade', label: 'Local AI' },
 ];
 
 const KIE_GPT_REASONING_EFFORTS: FlashBoardOpenAiReasoningEffort[] = ['low', 'medium', 'high', 'xhigh'];
@@ -94,15 +92,6 @@ export const FLASHBOARD_CHAT_MODEL_OPTIONS: Record<FlashBoardChatProvider, Flash
       supportsTools: false,
     },
   ],
-  lemonade: [
-    {
-      id: DEFAULT_LEMONADE_MODEL,
-      label: 'Lemonade',
-      provider: 'lemonade',
-      supportsTemperature: true,
-      supportsTools: true,
-    },
-  ],
 };
 
 export const DEFAULT_FLASHBOARD_CHAT_PROVIDER: FlashBoardChatProvider = 'kie';
@@ -147,15 +136,6 @@ export const FLASHBOARD_CHAT_MAX_OUTPUT_TOKENS = 32_000;
  * context windows are large enough to carry the real thing.
  */
 export const FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS = Number.POSITIVE_INFINITY;
-/**
- * Local models keep a real cap: their context is whatever the user configured
- * for Lemonade, so an unbounded result would overflow the window instead of
- * informing it. Raised from 2,000 — still finite on purpose.
- */
-export const FLASHBOARD_LEMONADE_MAX_TOOL_RESULT_CHARS = 24_000;
-export const FLASHBOARD_LEMONADE_INITIAL_RESPONSE_TIMEOUT_MS = 180_000;
-export const FLASHBOARD_LEMONADE_STREAM_IDLE_TIMEOUT_MS = 90_000;
-
 export function getFlashBoardChatCreditCost(model: string): number {
   return FLASHBOARD_CHAT_MODEL_CREDIT_COSTS[model] ?? 5;
 }
@@ -174,7 +154,7 @@ export function clampTemperature(value: number): number {
 
 export function isTemperatureSupported(provider: FlashBoardChatProvider, model: string): boolean {
   const option = FLASHBOARD_CHAT_MODEL_OPTIONS[provider].find((candidate) => candidate.id === model);
-  return option?.supportsTemperature ?? provider !== 'kie';
+  return option?.supportsTemperature ?? false;
 }
 
 export function isOpenAiReasoningEffortSupported(model: string): boolean {

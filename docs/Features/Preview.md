@@ -2,13 +2,13 @@
 
 [Back to Index](./README.md)
 
-WebGPU preview with RAM preview caching, source monitor playback, edit overlays, multi-preview targets, and output windows.
+WebGPU-backed preview with RAM preview caching, source monitor playback, edit overlays, multi-preview targets, and output windows.
 
 ---
 
 ## Overview
 
-The preview system is built around a single WebGPU engine and a unified render-target store. The main preview canvas, additional preview panels, multi-preview slots, and output windows all register as render targets and are rendered through the same engine path.
+The preview system uses a shared render host and a unified render-target store. The main preview canvas, additional preview panels, multi-preview slots, and output windows all register as render targets through the shared render-target path.
 
 Current preview-related overlays and modes include:
 
@@ -27,7 +27,7 @@ Current preview-related overlays and modes include:
 ### Main Preview
 
 - Renders the active composition or a pinned composition source.
-- Uses `engine.registerTargetCanvas()` to attach the canvas to WebGPU.
+- Uses `renderHostPort.registerTargetCanvas()` through the preview-target registration helper to attach the canvas to WebGPU.
 - Registers as an active-comp or independent render target in `renderTargetStore`.
 
 ### Independent Previews
@@ -56,6 +56,7 @@ The source monitor shows a raw media file in the preview panel instead of the co
 - Audio sources use a panel-local audio playback path with waveform display and scrubbing.
 - Images render through a plain `<img>` element in the same panel surface.
 - Supports images, but images do not show transport controls.
+- Images and videos support wheel zoom and middle-button panning; image sources also provide a crop tool with aspect-ratio presets.
 - Time display, play/pause, scrubbing, start/end buttons, and frame stepping are provided for video sources.
 - Audio sources provide waveform scrubbing, playback controls, In/Out marking, and placement actions for inserting or dragging the selected range into the timeline.
 - `Space` toggles source playback only while the pointer hovers the playable source monitor. Outside it, `Space` controls timeline playback.
@@ -85,15 +86,11 @@ The engine render loop is RAF-based and has three important behaviors:
 - Dynamic preview target FPS is derived from the active composition's
   `frameRate`; renderer RAF may still report a 60 fps loop while the visual
   target is 24/25/30/etc.
-- Scrubbing is rate-limited to about 30 fps unless a fresh frame arrives via `requestVideoFrameCallback`.
+- Scrubbing is rate-limited to about 60 fps unless a fresh frame arrives via `requestVideoFrameCallback`.
 - The loop does not render while export is active.
 - During normal playback outside strict worker GPU mode, video clips stay on the live HTMLVideo/WebGPU import path even when JPEG proxy frames are available. Proxy image frames are used for paused preview, scrub fallback, and timeline thumbnails, but not as the primary playback surface because dense cut sequences need the browser video decoder and cut warmup path to remain active.
-- In strict `worker-gpu-only` mode on the current staging path, timeline video playback hydrates hidden `HTMLVideoElement` sources, lets the browser HTML decoder drive media time, transfers the current HTML video frame as an `ImageBitmap`, and presents it through Worker WebGPU. Worker WebCodecs playback is disabled by default in this mode.
-- Strict `worker-gpu-only` normal 1x forward playback no longer starts Worker WebCodecs stream sessions while the HTMLVideo worker-GPU experiment is active. Reverse playback and non-1x playback fall back to the HTMLVideo sync path instead of binding worker WebCodecs runtime sources.
-- Strict `worker-gpu-only` playback keeps simultaneous visible video clips as separate transferred HTMLVideo frame layers, so overlapping video layers can still carry independent opacity, blend mode, and effect parameters into Worker WebGPU.
-- Strict `worker-gpu-only` playback composites visible video layers in Worker WebGPU. The path carries opacity, blend mode, inline color effects (`brightness`, `contrast`, `saturation`, `invert`), and worker GPU shader-compatible color/distort/stylize/keying effects (`hue-shift`, `exposure`, `temperature`, `vibrance`, `levels`, `threshold`, `posterize`, `vignette`, `pixelate`, `kaleidoscope`, `mirror`, `rgb-split`, `wave`, `twirl`, `bulge`, `scanlines`, `grain`, `sharpen`, `edge-detect`, `glow`, `chroma-key`) into the worker-side layer shader. Heavy multi-pass effects still need dedicated worker GPU passes.
-- In strict `worker-gpu-only` HTMLVideo mode, frame cadence depends on the browser HTMLVideo decoder and the host-to-worker `ImageBitmap` transfer cadence; stats label presented frames as `worker-gpu-only:video-frame`.
-- In strict `worker-gpu-only` HTMLVideo mode, active scrubbing uses the HTMLVideo seek/warmup path and then transfers the displayed frame to Worker WebGPU.
+- Worker-first render hosts, including a strict `worker-gpu-only` diagnostic mode, are present but feature-gated. The normal default is the main fallback render host; full WebCodecs playback is also disabled by default.
+- When enabled for worker-GPU diagnostics, the worker path can present HTML-video frames or Worker WebCodecs frames and labels its presentation paths in playback statistics. Capability and browser support determine the active path.
 
 ### Browser Fallbacks
 
@@ -111,7 +108,7 @@ RAM preview is implemented by `RamPreviewEngine` and the timeline RAM preview sl
 - Frames are generated outward from the playhead.
 - Only frames where there is visible content are generated.
 - Each frame is verified against expected video positions before it is committed.
-- Caching uses the same composition render path as normal preview, then stores the composited frame for later playback.
+- Caching uses the same composition render path as normal preview, then stores the composited frame for playback.
 
 ### Current Cache Limits
 
@@ -188,7 +185,7 @@ The UI exposes Full / Half / Quarter preview quality choices.
 
 - The setting is persisted in `settingsStore`.
 - The selector is visible in preview UI.
-- `useEngine()` reads the value, scales the active composition resolution by `1`, `0.5`, or `0.25`, and calls `engine.setResolution(...)`.
+- `useEngineResolutionSync()` reads the value, scales the active composition resolution by `1`, `0.5`, or `0.25`, and calls `renderHostPort.setResolution(...)`.
 
 ### Practical Impact
 
@@ -215,10 +212,14 @@ Key implementation files:
 - `src/components/preview/StatsOverlay.tsx`
 - `src/components/preview/MultiPreviewPanel.tsx`
 - `src/components/preview/PreviewBottomControls.tsx`
+- `src/components/preview/usePreviewRenderTargetRegistration.ts`
 - `src/engine/WebGPUEngine.ts`
 - `src/engine/render/RenderDispatcher.ts`
 - `src/engine/render/htmlVideoPreviewFallback.ts`
+- `src/engine/managers/OutputWindowManager.ts`
+- `src/hooks/engine/useEngineResolutionSync.ts`
 - `src/services/ramPreviewEngine.ts`
 - `src/services/proxyFrameCache.ts`
+- `src/services/render/previewTargetRegistration.ts`
 - `src/stores/timeline/ramPreviewSlice.ts`
 - `src/stores/timeline/proxyCacheSlice.ts`

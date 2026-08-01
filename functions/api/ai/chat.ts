@@ -18,6 +18,7 @@ import {
 } from '../../lib/chatBilling';
 import { insertChatLog } from '../../lib/chatLog';
 import { getCurrentUser, json, methodNotAllowed, parseJson } from '../../lib/db';
+import { rejectByokCredentials } from '../../lib/noByok';
 import {
   getKieChatCapabilities,
   normalizeHostedKieChatRequest,
@@ -146,6 +147,13 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     });
   }
 
+  const byokHeaderError = rejectByokCredentials({
+    headers: context.request.headers,
+  });
+  if (byokHeaderError) {
+    return byokHeaderError;
+  }
+
   if (context.request.method === 'GET') {
     const hostedContext = await loadHostedContext(context);
     return json(buildCapabilityResponse(context, hostedContext));
@@ -157,6 +165,10 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
 
   const requestId = context.data.requestId ?? crypto.randomUUID();
   const rawBody = (await parseJson<Record<string, unknown>>(context.request)) ?? null;
+  const byokBodyError = rejectByokCredentials({ payload: rawBody });
+  if (byokBodyError) {
+    return byokBodyError;
+  }
   const request = normalizeHostedKieChatRequest(rawBody);
   const turnAction = resolveHostedChatTurnAction(rawBody);
   const actionOnly = turnAction === 'cancel' || (turnAction === 'complete' && !request);

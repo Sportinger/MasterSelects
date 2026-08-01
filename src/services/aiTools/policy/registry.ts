@@ -7,10 +7,10 @@ import type {
   ToolPolicyEntry,
 } from './types';
 
-const allCallers: CallerContext[] = ['chat', 'devBridge', 'nativeHelper', 'console', 'internal'];
-const localFileCallers: CallerContext[] = ['chat', 'devBridge', 'nativeHelper', 'console', 'internal'];
+const allCallers: CallerContext[] = ['chat', 'devBridge', 'console', 'internal'];
+const localFileCallers: CallerContext[] = ['chat', 'devBridge', 'console', 'internal'];
 const bridgeTelemetryCallers: CallerContext[] = ['chat', 'devBridge', 'console', 'internal'];
-const helperEditingCallers: CallerContext[] = ['chat', 'devBridge', 'nativeHelper', 'console', 'internal'];
+const helperEditingCallers: CallerContext[] = ['chat', 'devBridge', 'console', 'internal'];
 
 const PLAN_MODE_MUTATION_ALLOWLIST = new Set([
   'executeBatch',
@@ -92,6 +92,13 @@ function mutatingHigh(): ToolPolicyEntry {
   };
 }
 
+function allowKernelOperation(policy: ToolPolicyEntry): ToolPolicyEntry {
+  return {
+    ...policy,
+    allowedCallers: [...policy.allowedCallers, 'kernel'],
+  };
+}
+
 function localFileAccess(): ToolPolicyEntry {
   return {
     readOnly: false,
@@ -136,13 +143,14 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['getTextProperties', readOnly()],
   ['getMotionCapabilities', readOnly()],
   ['getMotionDesign', readOnly()],
+  ['listMotionAppearancePresets', readOnly()],
   ['getMarkers', readOnly()],
   ['getMasks', readOnly()],
   ['listEffects', readOnly()],
   ['getYouTubeVideos', readOnly()],
   ['captureFrame', readOnly()],
   ['getCutPreviewQuad', readOnly()],
-  ['getFramesAtTimes', readOnly()],
+  ['getFramesAtTimes', allowKernelOperation(readOnly())],
   ['runPixelParticleDisintegrateQa', {
     ...bridgeTelemetry(),
     readOnly: false,
@@ -175,6 +183,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['openComposition', readOnly()],
   ['listStoryboardScenes', readOnly()],
   ['listTimelineVariantOptions', readOnly()],
+  ['listMotionTemplates', readOnly()],
 
   // ── SENSITIVE (read-only but debug data) ──────────────────────────────
   ['getStats', bridgeTelemetry()],
@@ -473,7 +482,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
 
   // ── MUTATING HIGH RISK ────────────────────────────────────────────────
   ['deleteClip', mutatingHigh()],
-  ['deleteClips', mutatingHigh()],
+  ['deleteClips', allowKernelOperation(mutatingHigh())],
   ['deleteTrack', mutatingHigh()],
   ['deleteMediaItem', mutatingHigh()],
   ['cutRangesFromClip', mutatingHigh()],
@@ -483,7 +492,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   // ── MUTATING MEDIUM ───────────────────────────────────────────────────
   ['splitClip', mutatingMedium()],
   ['splitClipEvenly', mutatingMedium()],
-  ['splitClipAtTimes', mutatingMedium()],
+  ['splitClipAtTimes', allowKernelOperation(mutatingMedium())],
   ['moveClip', mutatingMedium()],
   ['trimClip', mutatingMedium()],
   ['reorderClips', mutatingMedium()],
@@ -501,12 +510,17 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['createMotionShapeClip', mutatingMedium()],
   ['updateMotionProperties', mutatingMedium()],
   ['updateMotionAppearances', mutatingMedium()],
+  ['saveMotionAppearancePreset', mutatingMedium()],
+  ['applyMotionAppearancePreset', mutatingMedium()],
+  ['saveMotionTemplate', mutatingMedium()],
+  ['applyMotionTemplate', mutatingMedium()],
   ['setMotionParent', mutatingMedium()],
   ['createMotionNull', mutatingMedium()],
   ['createMotionNullAndParent', mutatingMedium()],
   ['editMotionAdjustment', mutatingMedium()],
   ['configureMotionReplicator', mutatingMedium()],
   ['editMotionModifier', mutatingMedium()],
+  ['setMotionExpression', mutatingMedium()],
   ['setClipSpeed', mutatingMedium()],
   ['addTransition', mutatingMedium()],
   ['removeTransition', mutatingMedium()],

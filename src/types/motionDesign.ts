@@ -1,5 +1,8 @@
 import type { BlendMode } from './index';
-import type { MotionModifierStackContractV1 } from '../services/motionDesign/modifiers/contracts';
+import type {
+  MotionModifierStackContractV1,
+  MotionModifierTargetPath,
+} from '../services/motionDesign/modifiers/contracts';
 
 export type MotionLayerKind = 'shape' | 'null' | 'adjustment' | 'group';
 export type ShapePrimitive = 'rectangle' | 'ellipse' | 'polygon' | 'star';
@@ -23,6 +26,10 @@ export interface MotionLayerDefinition {
   appearance?: AppearanceStack;
   replicator?: ReplicatorDefinition;
   modifierStack?: MotionModifierStackContractV1;
+  expressions?: {
+    version: 1;
+    bindings: MotionExpressionBinding[];
+  };
   /** Quarantined legacy payload retained for recovery after a failed migration. */
   replicatorRecovery?: {
     raw: unknown;
@@ -249,6 +256,16 @@ export function createMotionAppearanceId(prefix = 'appearance'): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+export function createMotionExpressionBinding(
+  path: MotionModifierTargetPath,
+  source: string,
+  fallback = 0,
+  enabled = true,
+  id = createMotionAppearanceId('expression'),
+): MotionExpressionBinding {
+  return { id, path, source, fallback, enabled };
+}
+
 export function createColorFillAppearance(
   color: MotionColor = DEFAULT_MOTION_COLOR,
   id = createMotionAppearanceId('fill'),
@@ -276,6 +293,32 @@ export function createStrokeAppearance(
     color: { ...color },
     width: 4,
     alignment: 'center',
+  };
+}
+
+export interface MotionExpressionBinding {
+  id: string;
+  path: MotionModifierTargetPath;
+  source: string;
+  fallback: number;
+  enabled: boolean;
+}
+
+export function createTextureFillAppearance(
+  id = createMotionAppearanceId('texture-fill'),
+): TextureFillAppearance {
+  return {
+    id,
+    kind: 'texture-fill',
+    name: 'Texture Fill',
+    visible: true,
+    opacity: 1,
+    fit: 'contain',
+    transform: {
+      position: { x: 0, y: 0 },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+    },
   };
 }
 

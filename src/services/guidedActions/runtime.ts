@@ -413,6 +413,7 @@ export class GuidedActionRuntime {
         if (action.target) {
           await this.resolveTarget(action.target, context);
         }
+        this.store.getState().clearHighlights();
         this.store.getState().setSpotlight(action.target);
         return undefined;
       case 'callout':
@@ -438,6 +439,8 @@ export class GuidedActionRuntime {
         }
         return validation;
       }
+      case 'waitForTutorialNavigation':
+        return await waitForTutorialNavigation(context.abortSignal);
       case 'confirmState': {
         const validation = validateGuidedCheck(action.check);
         if (!validation.success) {
@@ -688,6 +691,17 @@ function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) {
     throw new GuidedRuntimeAbortError();
   }
+}
+
+function waitForTutorialNavigation(signal: AbortSignal): Promise<never> {
+  return new Promise((_resolve, reject) => {
+    if (signal.aborted) {
+      reject(new GuidedRuntimeAbortError());
+      return;
+    }
+
+    signal.addEventListener('abort', () => reject(new GuidedRuntimeAbortError()), { once: true });
+  });
 }
 
 function isToolResult(value: unknown): value is ToolResult {

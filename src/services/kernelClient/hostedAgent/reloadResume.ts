@@ -2,6 +2,10 @@ import type {
   HostedAgentK1ToolBatchResult,
   HostedAgentK1TurnRequest,
 } from './contracts';
+import {
+  clearHostedAgentFastV2ReloadSnapshot,
+  hasHostedAgentFastV2ReloadSnapshot,
+} from './fastV2ReloadResume';
 
 const CLIENT_INSTANCE_KEY = 'masterselects.hostedAgent.clientInstance.v1';
 const ACTIVE_TURNS_KEY = 'masterselects.hostedAgent.activeTurns.v1';
@@ -114,11 +118,13 @@ export function readHostedAgentReloadSnapshot(
 }
 
 export function hasHostedAgentReloadSnapshot(assistantMessageId: string): boolean {
-  return readHostedAgentReloadSnapshot(assistantMessageId) !== null;
+  return readHostedAgentReloadSnapshot(assistantMessageId) !== null
+    || hasHostedAgentFastV2ReloadSnapshot(assistantMessageId);
 }
 
 export function clearHostedAgentReloadSnapshot(assistantMessageId: string): void {
   writeAll(readAll().filter(
     (candidate) => candidate.assistantMessageId !== assistantMessageId,
   ));
+  clearHostedAgentFastV2ReloadSnapshot(assistantMessageId);
 }

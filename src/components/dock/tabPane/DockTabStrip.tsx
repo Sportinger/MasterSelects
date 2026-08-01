@@ -121,6 +121,9 @@ export function DockTabStrip({
     <div
       ref={tabBarRef}
       className={`dock-tab-bar ${isMiddleDragging ? 'middle-dragging' : ''} ${groupContainsMaximizedPanel ? 'is-maximized-bar' : ''}`}
+      role="tablist"
+      aria-label="Panel tabs"
+      data-guided-target={`pane-tabs:${group.id}`}
       title="Ctrl+Scroll to zoom | Hold to drag | Middle-click drag to scroll"
       onMouseDown={onTabBarMouseDown}
       onContextMenu={onTabBarContextMenu}
@@ -147,6 +150,8 @@ export function DockTabStrip({
               } ${dropTargetIndex === index ? 'drop-target-tab' : ''} ${
                 hoveredTabTarget?.kind === 'timeline-composition' && hoveredTabTarget.compositionId === comp.id ? 'shortcut-hover' : ''
               } ${maximizedPanelId === timelinePanel?.id && comp.id === activeCompositionId ? 'maximized-target' : ''}`}
+              role="tab"
+              aria-selected={comp.id === activeCompositionId}
               onClick={() => onCompositionClick(comp.id)}
               title={comp.name}
               onMouseEnter={() => onCompositionTabMouseEnter(comp.id)}
@@ -188,6 +193,8 @@ export function DockTabStrip({
               } ${holdClasses.isHolding ? 'hold-glow' : ''} ${holdClasses.isReady ? 'hold-ready' : ''} ${holdClasses.isFading ? 'hold-fade' : ''} ${
                 hoveredPanelId === panel.id ? 'shortcut-hover' : ''
               } ${maximizedPanelId === panel.id ? 'maximized-target' : ''}`}
+              role="tab"
+              aria-selected={index === group.activeIndex}
               onClick={() => onTabClick(index)}
               onMouseDown={(event) => onTabMouseDown(event, panel, index)}
               onContextMenu={(event) => onTabContextMenu(event, panel, index)}

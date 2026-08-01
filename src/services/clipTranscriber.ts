@@ -3,7 +3,6 @@
 
 import { Logger } from './logger';
 import { triggerTimelineSave, useMediaStore } from '../stores/mediaStore';
-import type { APIKeys } from '../stores/settingsStore';
 import type {
   TranscriptFusionArtifact,
   TranscriptFusionProgress,
@@ -32,7 +31,6 @@ import { resolveClipTranscriptWords } from './transcription/clipTranscriptResolv
 import { findGaps, mergeTranscriptWords } from './transcription/resultMapping';
 import {
   HOSTED_TRANSCRIPTION_MAX_BYTES,
-  transcribeWithCloudProvider,
   transcribeWithHostedProvider,
 } from './transcription/cloudProviders';
 import {
@@ -80,56 +78,25 @@ function boundedPercent(completed: number, total: number): number {
   return Math.max(0, Math.min(100, Math.round((completed / total) * 100)));
 }
 
-function isLocalHostedApiUnavailable(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  return error.message.includes('Hosted API route /api/ai/audio')
-    && (error.message.includes('not available') || error.message.includes('did not respond'));
-}
+export const SIGNED_OUT_HOSTED_TRANSCRIPTION_MESSAGE =
+  'Sign in to use hosted transcription, or explicitly select Local Whisper. Personal provider API keys are not supported.';
 
 async function transcribeHybridProvider(
   provider: TranscriptProviderId,
   options: {
-    apiKeys: APIKeys;
     audioBlob: Blob;
     clipId: string;
     inPointOffset: number;
     language: string;
     signal: AbortSignal;
-    useHostedTranscription: boolean;
   },
 ): Promise<TranscriptWord[]> {
   const ignoreProviderProgress = () => undefined;
-  if (options.useHostedTranscription) {
-    try {
-      return await transcribeWithHostedProvider(
-        provider,
-        options.clipId,
-        options.audioBlob,
-        options.language,
-        options.inPointOffset,
-        ignoreProviderProgress,
-        {
-          ...(provider === 'openai' ? { openAIVariant: 'diarized-speakers' as const } : {}),
-          signal: options.signal,
-        },
-      );
-    } catch (error) {
-      if (!isLocalHostedApiUnavailable(error) || !options.apiKeys[provider]?.trim()) {
-        throw error;
-      }
-      log.warn(`Hosted ${provider} transcription unavailable; using configured API key`, error);
-    }
-  }
-
-  return transcribeWithCloudProvider(
+  return transcribeWithHostedProvider(
     provider,
     options.clipId,
     options.audioBlob,
     options.language,
-    options.apiKeys[provider],
     options.inPointOffset,
     ignoreProviderProgress,
     {
@@ -140,10 +107,8 @@ async function transcribeHybridProvider(
 }
 
 async function transcribeHybridRange(options: {
-  apiKeys: APIKeys;
   audioBlob: Blob;
   clipId: string;
-  isSignedIn: boolean;
   language: string;
   onArtifactUpdate?: (
     artifact: TranscriptFusionArtifact,
@@ -158,13 +123,11 @@ async function transcribeHybridRange(options: {
   signal: AbortSignal;
 }): Promise<TranscriptFusionArtifact> {
   const providerOptions = {
-    apiKeys: options.apiKeys,
     audioBlob: options.audioBlob,
     clipId: options.clipId,
     inPointOffset: options.range[0],
     language: options.language,
     signal: options.signal,
-    useHostedTranscription: options.isSignedIn,
   };
   const runProvider = async (provider: TranscriptProviderId): Promise<TranscriptWord[]> => {
     try {
@@ -219,7 +182,9 @@ async function transcribeHybridRange(options: {
 
 /**
  * Extract audio from a clip's file and transcribe it.
- * Signed-in accounts use the selected hosted transcription provider; signed-out users use the configured provider.
+ * Signed-in accounts use the selected hosted transcription provider. Signed-out
+ * accounts may only use explicitly selected local transcription; browser-supplied
+ * provider credentials are never a fallback.
  * When continueMode is true, only transcribes uncovered time ranges.
  */
 export async function transcribeClip(
@@ -245,7 +210,7 @@ export async function transcribeClip(
     return;
   }
 
-  const { transcriptionProvider, apiKeys } = useSettingsStore.getState();
+  const { transcriptionProvider } = useSettingsStore.getState();
   const useHostedTranscription = Boolean(useAccountStore.getState().session?.authenticated);
   const useHybridTranscription = transcriptionProvider === 'hybrid';
   const hostedProvider = transcriptionProvider === 'deepgram' ? 'deepgram' : 'openai';
@@ -254,31 +219,14 @@ export async function transcribeClip(
     : useHostedTranscription
       ? hostedProvider
       : transcriptionProvider;
-  const fallbackApiKey = transcriptionProvider !== 'local' && transcriptionProvider !== 'hybrid'
-    ? apiKeys[transcriptionProvider]
-    : null;
-  const apiKey = !useHostedTranscription && effectiveProvider !== 'local' ? fallbackApiKey : null;
-
-  if (
-    useHybridTranscription
-    && !useHostedTranscription
-    && (!apiKeys.deepgram?.trim() || !apiKeys.openai?.trim())
-  ) {
-    log.error('Hybrid transcription requires both Deepgram and OpenAI API keys');
-    updateClipTranscript(clipId, {
-      status: 'error',
-      progress: 0,
-      message: 'Hybrid transcription requires both a Deepgram key and an OpenAI key.',
+  if (!useHostedTranscription && effectiveProvider !== 'local') {
+    log.warn('Blocked signed-out hosted transcription; sign-in is required', {
+      provider: effectiveProvider,
     });
-    return;
-  }
-
-  if (!useHybridTranscription && !useHostedTranscription && effectiveProvider !== 'local' && !apiKey) {
-    log.error(`No API key configured for ${effectiveProvider}`);
     updateClipTranscript(clipId, {
       status: 'error',
       progress: 0,
-      message: `No API key configured for ${effectiveProvider}. Go to Settings to add one.`,
+      message: SIGNED_OUT_HOSTED_TRANSCRIPTION_MESSAGE,
     });
     return;
   }
@@ -546,10 +494,8 @@ export async function transcribeClip(
           });
           const audioBlob = await audioBufferToWav(audioChunk);
           const artifact = await transcribeHybridRange({
-            apiKeys,
             audioBlob,
             clipId,
-            isSignedIn: useHostedTranscription,
             language,
             onProviderUpdate: (provider, status, providerWords) => {
               if (
@@ -637,63 +583,18 @@ export async function transcribeClip(
         });
 
         const audioBlob = await audioBufferToWav(audioBuffer);
-        if (useHostedTranscription) {
-          try {
-            words = await transcribeWithHostedProvider(
-              hostedProvider,
-              clipId,
-              audioBlob,
-              language,
-              rangeStart,
-              publishProviderUpdate,
-              { signal },
-            );
-          } catch (error) {
-            if (!isLocalHostedApiUnavailable(error)) {
-              throw error;
-            }
-
-            log.warn('Hosted transcription unavailable, falling back to configured provider', error);
-            if (transcriptionProvider !== 'local' && fallbackApiKey) {
-              words = await transcribeWithCloudProvider(
-                transcriptionProvider,
-                clipId,
-                audioBlob,
-                language,
-                fallbackApiKey,
-                rangeStart,
-                publishProviderUpdate,
-                { signal },
-              );
-            } else {
-              const audioData = await resampleAudio(audioBuffer, 16000);
-              signal.throwIfAborted();
-              publishClipUpdate({
-                progress: progressBase + Math.round(5 * progressScale),
-                message: 'Hosted API unavailable; using local transcription...',
-              });
-              words = await runWorkerTranscription(
-                clipId,
-                audioData,
-                language,
-                audioDuration,
-                rangeStart,
-                publishProviderUpdate,
-              );
-            }
-          }
-        } else {
-          words = await transcribeWithCloudProvider(
-            effectiveProvider,
-            clipId,
-            audioBlob,
-            language,
-            apiKey!,
-            rangeStart,
-            publishProviderUpdate,
-            { signal },
-          );
+        if (!useHostedTranscription) {
+          throw new Error(SIGNED_OUT_HOSTED_TRANSCRIPTION_MESSAGE);
         }
+        words = await transcribeWithHostedProvider(
+          hostedProvider,
+          clipId,
+          audioBlob,
+          language,
+          rangeStart,
+          publishProviderUpdate,
+          { signal },
+        );
       }
 
       allNewWords.push(...words);

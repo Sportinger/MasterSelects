@@ -3,30 +3,37 @@
 [Back to Index](./README.md)
 
 Audio Intelligence turns persisted audio analysis into reusable source-time
-evidence for the Analysis workspace, Agent Timeline, AI tools, kernel story
-moments, and non-destructive audio edits. Analysis runs against source audio;
-the resulting artifacts are durable and are invalidated when their input audio
-identity becomes stale.
+evidence for the Analysis workspace, Agent Timeline, AI tools, and
+non-destructive audio edits. Analysis runs against source audio; the resulting
+artifacts are durable and are invalidated when their input audio identity
+becomes stale.
 
 ---
 
 ## Capabilities
 
-The feature has eight connected capabilities:
+The feature combines five Audio Intelligence stages with three connected
+analysis and editing integrations:
 
-1. Loudness envelopes retain RMS/LUFS and peak measurements.
-2. Onset maps identify transients and rhythmic attacks.
+1. Loudness envelopes retain RMS/LUFS and peak measurements; they are created
+   by the separate Loudness Envelope analysis generator.
+2. Onset maps identify transients and rhythmic attacks; they are created by
+   the separate Beat/Onset analysis generator.
 3. Voice activity detection separates speech from non-speech intervals.
 4. Transcript alignment refines provider or synthetic word timing against the audio.
 5. Speech markers identify breaths, fillers, repetitions, false starts, and long pauses.
-6. Prosody contours retain pitch and speech-rate evidence.
+6. Prosody contours retain pitch, speech-rate, and energy evidence.
 7. Room-tone profiles rank reusable low-noise source ranges.
 8. Editing integration uses VAD-first silence detection, zero-crossing edge snaps,
    and persisted room tone before live heuristics.
 
+`startClipAudioIntelligence` runs stages 3 through 7 (or a requested subset).
+Loudness and onset artifacts are consumed alongside those results, but are not
+stages of that job.
+
 The VAD model is pinned to Silero VAD **v5.1.2**. The model URL, cache version,
-manifest provenance, and analyzer version all retain that exact version so a
-later model update cannot silently reinterpret an existing artifact.
+manifest provenance, and analyzer version retain that exact version and keep
+artifact interpretations stable.
 
 ## Artifacts And Agent Timeline Events
 
@@ -37,12 +44,13 @@ later model update cannot silently reinterpret an existing artifact.
 | `voice-activity` | Speech spans and confidence | Speech/non-speech coverage; non-speech gaps become silence candidates and pause events |
 | `transcript-timing` | Source-aligned word timings | Refined transcript word ranges used by downstream speech analysis |
 | `speech-markers` | Breath, filler, repetition, false-start, and long-pause records | `speech-marker` events; repetition and false-start map to disfluency |
-| `prosody-contour` | Pitch and speech-rate curves/summary | Prosody evidence and kernel emphasis evidence when present |
+| `prosody-contour` | Pitch, speech-rate, and energy curves/summary | Settings and Analysis UI evidence |
 | `room-tone-profile` | Ranked quiet candidates and noise floor | Preferred `room-tone-fill` source ranges; it does not fabricate a timeline event |
 
-Legacy Agent Timeline materialization keeps analyzer/model provenance and
-artifact references on derived events. Missing coverage remains missing rather
-than being interpreted as an empty result.
+Agent Timeline materialization keeps analyzer/model provenance and
+artifact references on the loudness, onset, VAD, and speech-marker derived
+events. Missing coverage remains missing rather than being interpreted as an
+empty result.
 
 ## Analysis UI
 
@@ -75,20 +83,23 @@ Silence-removal detection first loads the freshest non-stale persisted
 `voice-activity` artifact. Speech gaps become `AudioSilenceRange` values; an
 overlapping persisted loudness curve supplies `rmsDb`, otherwise the range is
 explicitly marked with the `-60 dB` fallback. If VAD is unavailable or
-unreadable, the existing live RMS detector remains the fallback.
+unreadable, the live RMS detector remains the fallback.
 
 The decode used for live RMS is also used to snap every detected source-range
-edge to the nearest channel-zero crossing within 10 ms. VAD ranges attempt the
-same decode only for snapping and remain usable without it. Room-tone fill
+edge to the nearest zero crossing on channel 0 within 10 ms. VAD ranges attempt
+the same decode only for snapping and remain usable without it. Room-tone fill
 prefers `roomToneProfileToFillParams` from the freshest non-stale persisted
-profile; only when no profile is available does it run the existing live RMS
+profile; only when no profile is available does it run the live RMS
 quiet-range heuristic.
 
 ---
 
 *Source: `src/services/audio/intelligence/`,
+`src/services/audio/LoudnessEnvelopeGenerator.ts`,
+`src/services/audio/BeatOnsetAnalysisGenerator.ts`,
 `src/services/agentTimeline/artifacts/audioIntelligencePayloadLoader.ts`,
 `src/services/agentTimeline/adapters/audioIntelligenceLegacyAdapter.ts`,
 `src/services/aiTools/handlers/speechMarkers.ts`,
 `src/stores/timeline/audioEdit/audioDetectionActions.ts`,
+`src/services/audio/sampleAccurateSnap.ts`,
 `src/components/panels/properties/AnalysisAudioSettings.tsx`*

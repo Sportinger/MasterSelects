@@ -16,6 +16,8 @@ MuScriptor, developed by Kyutai and Mirelo, is the local multi-instrument music-
 
 The default is `small`, which is the practical CPU choice. `medium` trades more memory and compute for accuracy; `large` is intended for capable GPUs.
 
+The same runtime status, model, and device controls are available in **AI Features** settings. The timeline action opens the setup dialog for the selected clip.
+
 ## Local Runtime Boundary
 
 ```text
@@ -31,7 +33,7 @@ Timeline clip
 
 The browser never runs PyTorch. The Rust Native Helper owns an isolated MuScriptor virtual environment, pinned upstream source revision, provider cache, model markers, temporary staging directory, and sidecar lifecycle. MatAnyone2 and MuScriptor reuse provisioning patterns but do not share Python environments or model caches.
 
-The model stays resident between transcription jobs. Setup, model download, model loading, transcription, cancellation, stop, and uninstall are explicit Native Helper commands. Long-running browser requests use activity-reset timeouts: valid progress keeps the operation alive, while a silent sidecar eventually fails with an actionable timeout.
+The model stays resident between transcription jobs. Setup, model download, model loading, transcription, cancellation, stop, and uninstall are explicit Native Helper commands. Long-running browser requests use activity-reset timeouts: valid progress keeps the operation alive, while a silent sidecar fails with an actionable timeout. Cancelling a transcription stops the sidecar because inference is not safely interruptible within every model chunk; start it again before the next job.
 
 ## Audio Preparation
 
@@ -64,7 +66,7 @@ All generated tracks and clips are committed as one timeline edit and therefore 
 | `muscriptor_status` | Runtime, model, GPU, sidecar, temp-path, and instrument status |
 | `muscriptor_setup` | Create/update and validate the pinned isolated runtime |
 | `muscriptor_download_model` | Download one gated model variant with a transient HF token |
-| `muscriptor_start` | Load a variant on auto/CUDA/MPS/CPU and start the persistent sidecar |
+| `muscriptor_start` | Load a variant on auto, CUDA, or CPU and start the persistent sidecar; auto may select MPS when available |
 | `muscriptor_transcribe` | Run one WAV transcription with optional instrument constraints |
 | `muscriptor_cancel` | Cancel the active job |
 | `muscriptor_stop` | Stop the sidecar and release model memory |
@@ -85,6 +87,7 @@ All file paths crossing into the sidecar are checked against the Native Helper's
 |---|---|
 | Browser service and mapping | `src/services/muscriptor/` |
 | Provider store | `src/stores/muscriptorStore.ts` |
+| Setup dialog and settings | `src/components/common/MuscriptorSetupDialog.tsx`, `src/components/common/settings/MuscriptorFeatureSettings.tsx` |
 | Native Helper commands | `src/services/nativeHelper/nativeHelperMuscriptorCommands.ts` |
 | Timeline commit | `src/stores/timeline/midiClipSlice.ts` |
 | Native runtime | `tools/native-helper/src/muscriptor/` |

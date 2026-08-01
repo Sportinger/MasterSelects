@@ -1,5 +1,4 @@
 import { useAccountStore } from '../../../stores/accountStore';
-import { useSettingsStore } from '../../../stores/settingsStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import type {
   ClipCustomNodeConversationKind,
@@ -11,12 +10,6 @@ import type {
 } from '../../../types';
 import { cloudAiService } from '../../cloudAiService';
 import {
-  createLemonadeChatCompletionStream,
-  DEFAULT_LEMONADE_ENDPOINT,
-  DEFAULT_LEMONADE_MODEL,
-  type LemonadeMessage,
-} from '../../lemonadeProvider';
-import {
   buildAINodeAuthoringContext,
   buildClipNodeGraph,
   extractAINodeGeneratedCode,
@@ -27,8 +20,6 @@ import type { ToolResult } from '../types';
 
 const AI_NODE_KIE_MODEL = 'gpt-5-6-luna';
 const AI_NODE_MAX_TOKENS = 100_000;
-const AI_NODE_TIMEOUT_MS = 90_000;
-const AI_NODE_STREAM_IDLE_TIMEOUT_MS = 20_000;
 const AI_NODE_MAX_CONVERSATION_MESSAGES = 10;
 const AI_NODE_MAX_STORED_CONVERSATION_MESSAGES = 48;
 const AI_NODE_CONTEXT_MAX_CHARS = 12_000;
@@ -37,8 +28,12 @@ const AI_NODE_SUMMARY_MAX_CHARS = 2_400;
 
 type AINodeGenerationAccess =
   | { kind: 'hosted'; label: 'Cloud' }
-  | { endpoint: string; kind: 'lemonade'; label: 'Local'; model: string }
   | { kind: 'none'; label: 'No AI' };
+
+type AINodeMessage = {
+  role: 'assistant' | 'system' | 'user';
+  content: string;
+};
 
 function truncateForAI(value: string, maxLength: number): string {
   if (value.length <= maxLength) {
@@ -132,17 +127,7 @@ function appendConversationTurn(
 }
 
 function resolveAINodeAccess(): AINodeGenerationAccess {
-  const settings = useSettingsStore.getState();
   const account = useAccountStore.getState();
-
-  if (settings.aiProvider === 'lemonade') {
-    return {
-      endpoint: settings.lemonadeEndpoint || DEFAULT_LEMONADE_ENDPOINT,
-      kind: 'lemonade',
-      label: 'Local',
-      model: settings.lemonadeModel || DEFAULT_LEMONADE_MODEL,
-    };
-  }
 
   if (account.session?.authenticated && account.hostedAIEnabled) {
     return { kind: 'hosted', label: 'Cloud' };
@@ -156,11 +141,11 @@ function buildAINodeMessages(
   definition: ClipCustomNodeDefinition,
   projectContext: { clips: TimelineClip[]; tracks: TimelineTrack[]; masterAudioState?: MasterAudioState },
   userPrompt: string,
-): LemonadeMessage[] {
+): AINodeMessage[] {
   const authoringContext = buildAINodeAuthoringContext(clip, definition, projectContext);
   const recentConversation = (definition.ai.conversation ?? [])
     .slice(-AI_NODE_MAX_CONVERSATION_MESSAGES)
-    .map<LemonadeMessage>((message) => ({
+    .map<AINodeMessage>((message) => ({
       role: message.role,
       content: `[node memory:${message.kind}] ${truncateForAI(message.content, AI_NODE_CONVERSATION_MESSAGE_MAX_CHARS)}`,
     }));
@@ -223,18 +208,6 @@ async function generateAINodeResponse(
   userPrompt: string,
 ): Promise<string> {
   const messages = buildAINodeMessages(clip, definition, projectContext, userPrompt);
-
-  if (access.kind === 'lemonade') {
-    const result = await createLemonadeChatCompletionStream({
-      endpoint: access.endpoint,
-      model: access.model,
-      messages,
-      maxTokens: AI_NODE_MAX_TOKENS,
-      streamIdleTimeoutMs: AI_NODE_STREAM_IDLE_TIMEOUT_MS,
-      timeoutMs: AI_NODE_TIMEOUT_MS,
-    });
-    return (result.content ?? '').trim();
-  }
 
   const systemPrompt = messages
     .filter((message) => message.role === 'system')

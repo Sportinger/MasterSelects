@@ -1,10 +1,12 @@
 import crypto from 'crypto'
 import fs from 'fs'
+import path from 'path'
 import type { IncomingMessage, ServerResponse } from 'http'
 import type { Plugin, ViteDevServer } from 'vite'
 import {
   allowedFileRoots,
   bridgeToken,
+  bridgeTokenFileIsExplicit,
   sanitizeBridgeTimeoutMs,
   setCorsHeaders,
   tokenFilePath,
@@ -14,7 +16,6 @@ import {
   installAgentControlEndpoints,
   type AgentControlSession,
 } from './agentControlEndpoints.ts'
-import { installAgentChatEndpoints } from './agentChatEndpoints.ts'
 import { installLocalFileEndpoints } from './localFileEndpoints.ts'
 import { installBlobStoreEndpoint, installBrowserLogEndpoint } from './supportEndpoints.ts'
 import { parseExplicitBridgeTarget } from './targetRouting.ts'
@@ -145,9 +146,30 @@ export function createDevBridgePlugin(options: DevBridgePluginOptions = {}): Plu
         return
       }
 
-      try {
-        fs.writeFileSync(tokenFilePath, bridgeToken, 'utf-8')
-      } catch { /* best effort */ }
+      // Vitest boots Vite's dev-server plugins too; its ephemeral token must
+      // not clobber the running dev server's token file (breaks MCP bridge).
+      if (process.env.VITEST) {
+        return
+      }
+
+      // The canonical dev server owns the default token file. Embedded servers
+      // such as Playwright may opt into an isolated token file explicitly.
+      const writeTokenIfCanonical = () => {
+        const address = server.httpServer?.address()
+        const port = typeof address === 'object' && address ? address.port : null
+        if (!bridgeTokenFileIsExplicit && port !== null && port !== 5173) {
+          return
+        }
+        try {
+          fs.mkdirSync(path.dirname(tokenFilePath), { recursive: true })
+          fs.writeFileSync(tokenFilePath, bridgeToken, 'utf-8')
+        } catch { /* best effort */ }
+      }
+      if (server.httpServer?.listening) {
+        writeTokenIfCanonical()
+      } else {
+        server.httpServer?.once('listening', writeTokenIfCanonical)
+      }
 
       console.log('\n┌─────────────────────────────────────────────────────────┐')
       console.log('│  AI Bridge Token (required for /api/* endpoints):       │')
@@ -155,6 +177,7 @@ export function createDevBridgePlugin(options: DevBridgePluginOptions = {}): Plu
       console.log('│  Token written to .ai-bridge-token                      │')
       console.log('│  Use: Authorization: Bearer <token>                     │')
       console.log('└─────────────────────────────────────────────────────────┘\n')
+      console.log(`[security] Dev bridge token file: ${tokenFilePath}`)
       console.log(`[security] Allowed dev file roots: ${allowedFileRoots.join(', ')}`)
 
       server.hot.on('ai-tools:result', (data: { requestId: string; result: unknown }) => {
@@ -264,10 +287,6 @@ export function createDevBridgePlugin(options: DevBridgePluginOptions = {}): Plu
         })
       }
 
-      installAgentChatEndpoints(server, {
-        dispatch: dispatchAgentRequest,
-        listSessions: listAgentSessions,
-      })
       installAgentControlEndpoints(server, {
         dispatch: dispatchAgentRequest,
         listSessions: listAgentSessions,

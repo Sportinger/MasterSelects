@@ -2,7 +2,7 @@
 
 # AI Bridge Control
 
-MasterSelects exposes its live in-app AI tool surface to local external agents through an authenticated development bridge. The bridge is intended for debugging, parity checks, and controlled automation: an external client can inspect the same tool schemas offered to FlashBoard Chat, execute those tools through the same dispatcher and policy layer, and inspect the resulting history.
+MasterSelects exposes its live in-app AI tool surface to local external agents through an authenticated development bridge. The bridge is intended for debugging, parity checks, and controlled automation: an external client can inspect the same tool schemas offered to FlashBoard Chat, execute tools through the browser, and inspect resulting history.
 
 ## Architecture
 
@@ -21,17 +21,17 @@ Vite /api/agent-control
         v
 Selected MasterSelects browser tab
         |
-        +-- FlashBoard Chat dispatcher and approval policy
-        +-- project chat history
-        +-- browser-wide AI tool audit
+        +-- FlashBoard Chat tool executor
+        +-- AI tool dispatcher and policy registry
+        +-- browser AI-tool audit and project chat history
 ```
 
-The browser is the execution authority. The HTTP server does not reproduce editor state or tool behavior, so bridge calls observe the same currently loaded project and state as an in-app AI call.
+The browser is the execution authority. The HTTP server does not reproduce editor state or tool behavior, so bridge calls observe the same currently loaded project and state as the selected browser tab.
 
 ## Requirements
 
 - Run the MasterSelects Vite development server at `http://localhost:5173`.
-- Keep at least one editor tab open. After a page reload, allow about five seconds for bridge presence to register.
+- Keep at least one editor tab open. The browser client announces bridge presence at registration and then every three seconds.
 - Keep `.ai-bridge-token` private. The MCP adapter reads it directly and does not expose it as a tool result.
 - Restart Codex after adding or changing the MCP registration so it reloads the server configuration.
 
@@ -62,18 +62,13 @@ The MCP server publishes the current FlashBoard Chat tools with their exact live
 | `bridge_list_tools` | Read the live tool registry for either surface |
 | `bridge_get_tool_schema` | Inspect one live schema and policy |
 | `bridge_call_tool` | Execute a named tool, optionally as a dry run |
-| `bridge_get_history` | Merge saved project chat calls, browser audit calls, and bridge traces |
+| `bridge_get_history` | Merge current project chat calls, browser audit calls, and bridge traces |
 | `bridge_get_tool_result` | Read the stored details of one call |
 | `bridge_replay_tool_call` | Replay a stored call with optional replacement arguments |
-| `bridge_send_chat_message` | Run a complete turn through the real in-app chat agent |
-| `bridge_compare_chat_prompts` | Compare legacy-v1 and v2 with identical read-only tasks |
-| `bridge_list_chat_runs` | List durable UI, bridge, MCP, and test chat runs |
-| `bridge_get_chat_run` | Read a run’s exact system prompt, response, tool calls, results, and timing |
-| `bridge_get_chat_system_prompt` | Render v1 or v2 plus live context/playbook without calling a model |
 
-Direct MCP calls to a published editor tool use the `chat` surface by default. That route goes through the FlashBoard Chat execution layer and therefore uses the current in-app approval mode and tool policy.
+Direct MCP calls to a published editor tool use the `chat` surface by default. That route invokes the FlashBoard Chat tool executor. The `devBridge` surface instead invokes the policy-filtered AI tool dispatcher.
 
-Chat turns require explicit `confirm: true` because they can incur provider cost; normal mode may also mutate the editor. `dryRun: true` validates routing and reports the expected provider-round count without sending a model request. Prompt comparison always runs with technically enforced read-only tool execution and makes two provider calls.
+`dryRun: true` resolves the target session, reads the selected tool schema and policy, and does not execute the tool. It does not invoke a model or validate the tool arguments. Direct `devBridge` calls require `confirm: true` when policy marks the tool as mutating, sensitive, or local-file access.
 
 ## HTTP API
 
@@ -104,48 +99,28 @@ Example request body:
 
 Explicit unknown or stale session IDs fail instead of silently targeting another tab.
 
-Complete chat-agent runs use the separate authenticated `/api/agent-chat` control plane:
+## FlashBoard Chat Runs
 
-| Method | Route | Purpose |
-|---|---|---|
-| `GET` | `/prompt` | Render v2 or legacy-v1, optional task playbook, and live context |
-| `GET` | `/runs` | List durable chat runs |
-| `GET` | `/runs/:runId` | Read one complete run |
-| `POST` | `/turn` | Execute one full model/tool loop |
-| `POST` | `/compare` | Run the same read-only task through legacy-v1 and v2 |
+The in-app FlashBoard chat uses prompt version `v2` and records its own runs in browser IndexedDB. Bridge history exposes current FlashBoard chat messages and executed tool calls, browser AI-tool audit records, and bridge traces.
 
-`POST /turn` supports provider/model selection, history inclusion, chat-store persistence, prompt version or complete override, context/playbook toggles, reasoning effort, temperature, read-only enforcement, timeout, and idempotency keys. The response contains the final model answer and every executed tool call; the durable run additionally stores the exact resolved system prompt.
-
-## Chat Agent v2
-
-The built-in v2 prompt replaces the recipe-heavy default with a compact operating loop:
-
-```text
-Inspect -> Plan -> Act -> Verify -> Report
-```
-
-The previous prompt remains available as `legacy-v1` for regression comparisons. Specialized instructions are selected from the user’s current task and injected only when relevant, including montage, transcript, face/person, silence, quality-analysis, and visual-verification playbooks. Call budgets, approval policy, and diagnostic read-only execution are enforced in code instead of relying on prompt compliance.
-
-Conversation context now includes bounded summaries of prior successful tool calls and their results. This allows a later turn to know what was actually executed rather than seeing only assistant prose.
-
-Long inspection tools are also bounded:
+Long inspection tool responses are bounded by their tool implementations:
 
 - `getClipAnalysis` returns a summary by default; use `includeFrames`, a source-time range, `offset`, and `limit` for details.
-- `getClipTranscript` returns a bounded word page and `hasMore`/`nextOffset` continuation metadata.
+- `getClipTranscript` returns a bounded word page with `hasMore` and `nextOffset` continuation metadata.
 
 ## History And Safety
 
 The history response keeps three sources distinct:
 
-- `project`: tool calls already stored in the open project’s FlashBoard chat messages;
+- `project`: tool calls stored in the current FlashBoard chat messages;
 - `audit`: central browser-side records for in-app and bridge-triggered AI tool execution;
 - `bridgeCalls`: durable JSONL traces created by HTTP/MCP bridge requests.
 
-Chat-agent runs are stored separately in browser IndexedDB (`masterselects-ai-chat-runs`). They survive UI chat clearing and contain source, session/project, provider/model, prompt version, exact resolved system prompt, full request prompt, response, tool calls/results, execution mode, status, and timing. API keys are never included.
+FlashBoard chat runs are stored separately in browser IndexedDB (`masterselects-ai-chat-runs`). They contain source, session/project, provider/model, prompt version, system prompt, request prompt, response, tool calls/results, execution mode, status, and timing.
 
 Audit and bridge records include source, caller context, session, timing, policy snapshot, arguments, status, result, replay origin, and idempotency key where applicable. Secret-like fields are redacted, and embedded base64 images are omitted from durable traces. MCP returns a discovered image as image content instead of duplicating its data in structured output.
 
-`dryRun` resolves the target and policy without performing the tool. An `idempotencyKey` prevents accidental duplicate bridge execution. Replays keep a link to the original call. On the broader `devBridge` surface, mutating or sensitive calls require explicit `confirm: true`; the default `chat` surface delegates approval to the same in-app policy used by FlashBoard Chat.
+An `idempotencyKey` is scoped to the resolved browser session and returns an existing trace for retries. Replays keep a link to the original call. On the `devBridge` surface, mutating or sensitive calls require explicit `confirm: true` as determined by tool policy.
 
 ## Current Scope
 
@@ -153,4 +128,4 @@ Audit and bridge records include source, caller context, session, timing, policy
 - A browser tab must remain connected because the real editor state and dispatcher live in the browser.
 - Hosted Cloudflare/D1 chat logs are a separate data source and are not silently merged into local project history.
 - A timeout stops waiting on the HTTP side but cannot forcibly cancel browser work that has already started. Use idempotency keys for safe retries.
-- Native Helper parity and multi-editor routing outside the Vite bridge are not part of this implementation.
+- The Vite bridge supports multiple connected browser sessions: it prefers a focused visible tab when no session is requested, and direct callers can select an explicit session. Native Helper exposes a separate local bridge and is not routed through these endpoints.

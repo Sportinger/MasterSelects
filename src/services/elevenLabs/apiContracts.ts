@@ -4,18 +4,6 @@ import type {
   ElevenLabsMp3OutputFormat,
 } from './config';
 
-export type ElevenLabsErrorCode =
-  | 'missing_api_key'
-  | 'invalid_request'
-  | 'network_error'
-  | 'provider_error'
-  | 'unauthorized'
-  | 'rate_limited'
-  | 'quota_exceeded'
-  | 'aborted'
-  | 'unsupported_format'
-  | 'invalid_response';
-
 export interface ElevenLabsLanguage {
   languageId: string;
   name: string;

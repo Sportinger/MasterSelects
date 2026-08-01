@@ -6,7 +6,6 @@ import {
 } from '../../functions/lib/providers/openaiTranscription';
 import {
   mapHostedTranscriptionWords,
-  transcribeWithCloudProvider,
 } from '../../src/services/transcription/cloudProviders';
 
 const diarizedAudio: PreparedHostedOpenAITranscription = {
@@ -57,58 +56,6 @@ describe('OpenAI diarized transcription review', () => {
     expect(result.words.map(word => word.speaker)).toEqual(['A', 'A', 'B']);
     expect(result.words[0].start).toBe(0);
     expect(result.words[1].end).toBe(1);
-  });
-
-  it('uses the same diarized review request with a local BYO OpenAI key', async () => {
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(diarizedResponse());
-    vi.stubGlobal('fetch', fetchMock);
-
-    const words = await transcribeWithCloudProvider(
-      'openai',
-      'clip-1',
-      new Blob([new Uint8Array([82, 73, 70, 70])], { type: 'audio/wav' }),
-      'de',
-      'browser-secret',
-      4,
-      vi.fn(),
-      { openAIVariant: 'diarized-speakers' },
-    );
-
-    const request = fetchMock.mock.calls[0][1];
-    const body = request?.body as FormData;
-    expect(body.get('model')).toBe('gpt-4o-transcribe-diarize');
-    expect(body.get('response_format')).toBe('diarized_json');
-    expect(body.get('chunking_strategy')).toBe('auto');
-    expect(words.map(word => word.speaker)).toEqual([
-      'Speaker A',
-      'Speaker A',
-      'Speaker B',
-    ]);
-    expect(words[0].start).toBe(4);
-    expect(words[1].end).toBe(5);
-  });
-
-  it('keeps Whisper word timestamps for the normal OpenAI-only mode', async () => {
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-      words: [{ end: 0.5, start: 0.1, word: 'Test' }],
-    })));
-    vi.stubGlobal('fetch', fetchMock);
-
-    await transcribeWithCloudProvider(
-      'openai',
-      'clip-1',
-      new Blob([new Uint8Array([82, 73, 70, 70])], { type: 'audio/wav' }),
-      'de',
-      'browser-secret',
-      0,
-      vi.fn(),
-    );
-
-    const body = fetchMock.mock.calls[0][1]?.body as FormData;
-    expect(body.get('model')).toBe('whisper-1');
-    expect(body.get('response_format')).toBe('verbose_json');
-    expect(body.get('timestamp_granularities[]')).toBe('word');
-    expect(body.has('chunking_strategy')).toBe(false);
   });
 
   it('maps hosted diarized labels without pretending they are provider word timings', () => {

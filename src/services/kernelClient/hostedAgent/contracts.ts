@@ -1,3 +1,13 @@
+import type {
+  KernelOperationPlanRequestV1,
+  KernelOperationPlanSettlementV1,
+  KernelOperationSessionDescriptorV1,
+} from '../wp1Spike/operationSessionAuthority';
+import type {
+  KernelOperationPlanResultV1,
+  KernelOperationSettlementReceiptV1,
+} from '../wp1Spike/operationRoundTrip';
+
 export const HOSTED_AGENT_K0_PROTOCOL_VERSION = 'hosted-agent-k0-v1' as const;
 export const HOSTED_AGENT_K1_PROTOCOL_VERSION = 'hosted-agent-k1-v1' as const;
 export const HOSTED_AGENT_K2_PROTOCOL_VERSION = 'hosted-agent-k2-v1' as const;
@@ -114,6 +124,18 @@ export type HostedAgentEvent =
         toolName: string;
         args: unknown;
       }>;
+    })
+  | (HostedAgentEventBase & {
+      kind: 'operation-session-ready';
+      descriptor: KernelOperationSessionDescriptorV1;
+    })
+  | (HostedAgentEventBase & {
+      kind: 'operation-plan-request';
+      request: KernelOperationPlanRequestV1;
+    })
+  | (HostedAgentEventBase & {
+      kind: 'operation-plan-settlement';
+      settlement: KernelOperationPlanSettlementV1;
     })
   | (HostedAgentEventBase & {
       kind: 'turn-complete';
@@ -289,6 +311,14 @@ export interface HostedAgentK2BatchPostResponse {
   sessionId: string;
   status: HostedAgentK2SessionStatus;
   turnId: string;
+}
+
+export interface HostedAgentK2OperationResultPost {
+  result: KernelOperationPlanResultV1;
+}
+
+export interface HostedAgentK2OperationSettlementPost {
+  receipt: KernelOperationSettlementReceiptV1;
 }
 
 export interface HostedAgentK2LargeResultReference {

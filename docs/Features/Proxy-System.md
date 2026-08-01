@@ -8,16 +8,15 @@ JPEG image proxy generation and playback for smoother scrubbing of large video f
 
 ## Overview
 
-Proxies are stored inside the project folder and are used only when proxy mode is enabled. The current implementation does not generate a separate proxy folder picker or a detached proxy library.
+For File System Access projects, image proxies are stored inside the project folder and are used only when proxy mode is enabled.
 
 ### Current Behavior
 
 - Proxy mode mutes and pauses the original video elements when enabled.
-- Video proxies are stored as packed JPEG frame data in the project folder.
+- In File System Access projects, video proxies are stored as packed JPEG frame data in the project folder.
 - The editor falls back to the original media when proxy data is missing.
 - Audio proxy files are optional and non-fatal.
-- The all-intra MP4 proxy path remains in the codebase for quick reactivation, but it is not the active generation or playback path.
-- Existing `mp4-all-intra` proxy status does not count as complete for the active JPEG path; enabling proxy mode can regenerate the JPEG proxy frames.
+- Video proxy generation also performs scene-cut analysis when the current media has no valid scene-cut result.
 
 ---
 
@@ -30,9 +29,10 @@ Proxy generation is handled by `ProxyGeneratorWebCodecs`.
 1. MP4Box parses the source file.
 2. Codec configuration is extracted from the sample entry (`avcC`, `hvcC`, `vpcC`, or `av1C`) and passed to WebCodecs.
 3. WebCodecs `VideoDecoder` decodes frames.
-4. Decoded `VideoFrame` objects are transferred to a bounded Dedicated Worker pool.
-5. Each worker resizes on `OffscreenCanvas` and encodes a JPEG frame.
+4. When Dedicated Workers are available, decoded `VideoFrame` objects are transferred to a bounded worker pool; otherwise a main-thread `OffscreenCanvas` pool is used.
+5. The selected encoder pool resizes on `OffscreenCanvas` and encodes a JPEG frame.
 6. JPEG frames are saved into project proxy pack files plus an index.
+7. The decoded frames can also feed scene-cut analysis during the same generation pass.
 
 ### Current Settings
 
@@ -62,18 +62,18 @@ Proxy generation is handled by `ProxyGeneratorWebCodecs`.
 
 ## Storage
 
-Proxies are stored in the project folder under `Proxy/{mediaId}/`.
+For File System Access projects, video proxies are stored under `Proxy/{storageKey}/`, where `storageKey` is the file hash when available and otherwise the media file ID.
 
 ### Current On-Disk Layout
 
-- Video proxies are written as packed JPEG data: `Proxy/{mediaId}/frames_0000.pack`, `Proxy/{mediaId}/frames_0001.pack`, and `Proxy/{mediaId}/frames.index.json`.
+- Video proxies are written as packed JPEG data: `Proxy/{storageKey}/frames_0000.pack`, `Proxy/{storageKey}/frames_0001.pack`, and `Proxy/{storageKey}/frames.index.json`.
 - The index maps each frame index to a pack filename, byte offset, byte size, and MIME type.
-- Older `frame_000000.jpg` and `.webp` frame files are still readable for project compatibility, but new active generation writes pack files.
-- Audio proxies are written as WAV files under the project audio-proxy folder, using a sanitized storage-key filename such as `<mediaId>.wav`. Older `Proxy/{mediaId}/audio.wav` and `Proxy/{mediaId}/audio.m4a` files are still read for compatibility.
+- Project compatibility supports `frame_000000.jpg` and `.webp` frame files.
+- Audio proxies are written as WAV files under `Audio Proxies/`, using a sanitized storage-key filename such as `<storageKey>.wav`. Project compatibility supports `Proxy/{storageKey}/audio.wav` and `Proxy/{storageKey}/audio.m4a` files.
 
 ### Backend Caveat
 
-- Image proxy storage currently uses the File System Access project handle path.
+- Image proxy frame storage currently uses the File System Access project-handle path. The Native Helper path supports audio proxies but does not persist image proxy frames.
 
 ### Deduplication
 
@@ -130,21 +130,13 @@ After the video frames finish, the code attempts to extract audio in the backgro
 
 - Audio extraction is non-blocking after the JPEG proxy frames complete.
 - Audio proxy failures are treated as non-fatal.
-- If extraction succeeds, the current audio proxy is saved as WAV. Legacy `audio.m4a` proxy files remain readable.
+- If extraction succeeds, the current audio proxy is saved as WAV. Project compatibility supports `audio.m4a` proxy files.
 - Scrub audio uses decoded WAV/AudioBuffer data and schedules pitch-stable short grains with minimal overlap.
 - Fast scrub jumps fade out older grains before scheduling the new position so stale audio does not stack up.
 
 ### Limitation
 
 - Proxy audio is best-effort. The editor keeps working even if audio extraction fails.
-
----
-
-## Current Limitations
-
-- Native Helper-backed projects do not currently persist image proxy files through the same native path.
-- Proxy generation is browser-session based and relies on WebCodecs and OffscreenCanvas support.
-- Only one generation can run at a time.
 
 ---
 

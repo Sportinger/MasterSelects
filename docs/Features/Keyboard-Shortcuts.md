@@ -61,7 +61,7 @@ On Mac, `Ctrl` maps to `Cmd` and `Alt` maps to `Option`.
 
 ### Editing
 
-- `C` toggles the cut tool in the default preset.
+- `C` selects the Blade tool in the default preset.
 - `Escape` exits cut mode.
 - `Shift+C` splits the clip at the playhead in the default preset.
 - `Ctrl+C` copies selected keyframes when any are selected; otherwise it copies selected clips.
@@ -108,7 +108,12 @@ On Mac, `Ctrl` maps to `Cmd` and `Alt` maps to `Option`.
 
 ### Panels
 
-- The German-layout `u-umlaut` key toggles fullscreen for the hovered dock tab.
+- The German-layout umlaut key toggles fullscreen for the hovered dock tab.
+- `G` toggles the timeline between timeline and graph view.
+
+### Masking
+
+When the Mask panel is active, the default preset provides `P` (pen), `V` (edit path), `R` (rectangle), `E` (ellipse), `Enter` (close path), `Alt+I` (invert), `Alt+H` (toggle outline), `Ctrl+A` (select all vertices), and `B` (toggle selected vertex handles).
 
 ---
 
@@ -124,6 +129,7 @@ On Mac, `Ctrl` maps to `Cmd` and `Alt` maps to `Option`.
 - `Tab` only works when the preview source is editable.
 - The preview panel ignores the shortcut when showing a non-editable source monitor.
 - In camera edit mode, `1`, `2`, `3`, and `4` animate only the focused/first edit preview between Front, Side, Top, and Camera view.
+- `Escape` closes an open Source Monitor when text entry does not own the key.
 
 ### Docking
 
@@ -145,7 +151,7 @@ On Mac, `Ctrl` maps to `Cmd` and `Alt` maps to `Option`.
 ## Customization
 
 - Shortcuts can be changed in `Preferences -> Shortcuts`.
-- Each action can store one or more combos.
+- Each action can be assigned one recorded combo; preset maps can provide multiple combos.
 - Conflicts are detected live in the UI.
 - Custom named presets are saved locally.
 - Resetting to a preset clears manual overrides.

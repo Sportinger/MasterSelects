@@ -56,6 +56,7 @@ export function ExportSummaryBadgesSection({
             className="export-pill export-summary-cta"
             onClick={onPrimaryExport}
             disabled={exportDisabled}
+            aria-label={primaryExportLabel}
             title={`${primaryExportLabel}${estimatedSizeLabel.startsWith('~') ? ` ${estimatedSizeLabel}` : ''}`}
           >
             <span>{primaryExportLabel}</span>
@@ -120,7 +121,7 @@ export function ExportPresetCommandSection({
       </div>
 
       {setupStatus && (
-        <div className="export-inline-note">
+        <div className="export-inline-note" role="status">
           {setupStatus}
         </div>
       )}
@@ -196,10 +197,10 @@ export function ExportWorkflowSection({
           onChange={(e) => onSetEncoder(e.target.value as EncoderType)}
         >
           {webCodecsAvailable && (
-            <option value="webcodecs">âš¡ WebCodecs (Fast)</option>
+            <option value="webcodecs">⚡ WebCodecs (Fast)</option>
           )}
           {webCodecsAvailable && (
-            <option value="htmlvideo">ðŸŽ¯ HTMLVideo (Precise)</option>
+            <option value="htmlvideo">🎯 HTMLVideo (Precise)</option>
           )}
           {ffmpegAvailable && (
             <option value="ffmpeg">
@@ -229,7 +230,7 @@ export function ExportWorkflowSection({
       )}
 
       {ffmpegLoadError && encoder === 'ffmpeg' && (
-        <div className="export-error export-error-inline">
+        <div className="export-error export-error-inline" role="alert">
           {ffmpegLoadError}
         </div>
       )}

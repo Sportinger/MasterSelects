@@ -28,6 +28,7 @@ export interface EditableDraggableNumberProps {
   min?: number;
   max?: number;
   persistenceKey?: string;
+  ariaLabel?: string;
   onDragStart?: () => void;
   onDragEnd?: () => void;
 }
@@ -92,6 +93,7 @@ export function EditableDraggableNumber({
   min,
   max,
   persistenceKey,
+  ariaLabel,
   onDragStart,
   onDragEnd,
 }: EditableDraggableNumberProps) {
@@ -538,6 +540,7 @@ export function EditableDraggableNumber({
           className="draggable-number draggable-number-input"
           type="text"
           inputMode="decimal"
+          aria-label={ariaLabel}
           value={draftValue}
           style={{ width: `${Math.max(4, Math.min(18, draftValue.length + 1))}ch` }}
           onChange={(e) => setDraftValue(e.target.value)}
@@ -557,6 +560,7 @@ export function EditableDraggableNumber({
         <span
           ref={spanRef}
           className="draggable-number"
+          aria-label={ariaLabel}
           onMouseDown={handleMouseDown}
           onAuxClick={(e) => {
             if (e.button === 1) {

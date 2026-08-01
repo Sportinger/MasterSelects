@@ -2,211 +2,11 @@ import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { APP_VERSION } from './src/version'
 import path from 'path'
-import type { IncomingMessage, ServerResponse } from 'http'
 import {
   allowedFileRoots,
   bridgeToken,
   createDevBridgePlugin,
 } from './tools/devBridge/vitePlugin.ts'
-
-const EVOLINK_PROXY_BASE_URL = 'https://api.evolink.ai';
-const EVOLINK_PROXY_UPLOAD_URL = 'https://files-api.evolink.ai/api/v1/files/upload/stream';
-
-function writeJsonResponse(res: ServerResponse, statusCode: number, payload: unknown): void {
-  res.statusCode = statusCode;
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.end(JSON.stringify(payload));
-}
-
-function getByoEvolinkKey(req: IncomingMessage): string | null {
-  const raw = req.headers['x-evolink-api-key'];
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  return typeof value === 'string' && value.trim() ? value.trim() : null;
-}
-
-function isSameOriginDevRequest(req: IncomingMessage): boolean {
-  const origin = req.headers.origin;
-  if (!origin) {
-    return true;
-  }
-
-  try {
-    return new URL(origin).host === req.headers.host;
-  } catch {
-    return false;
-  }
-}
-
-function readRequestBody(req: IncomingMessage, maxBytes = 1024 * 1024): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let total = 0;
-    const chunks: Buffer[] = [];
-
-    req.on('data', (chunk: Buffer) => {
-      total += chunk.length;
-      if (total > maxBytes) {
-        reject(new Error('Request body too large'));
-        req.destroy();
-        return;
-      }
-      chunks.push(chunk);
-    });
-
-    req.on('end', () => {
-      resolve(Buffer.concat(chunks).toString('utf8'));
-    });
-
-    req.on('error', reject);
-  });
-}
-
-function isAllowedEvolinkProxyPath(pathname: string): boolean {
-  return pathname === '/v1/images/generations'
-    || pathname === '/v1/credits'
-    || /^\/v1\/tasks\/[^/]+$/.test(pathname);
-}
-
-function resolveAllowedEvolinkProxyUrl(endpoint: unknown): URL | null {
-  if (typeof endpoint !== 'string' || !endpoint.trim()) {
-    return null;
-  }
-
-  try {
-    const target = new URL(endpoint, EVOLINK_PROXY_BASE_URL);
-    const base = new URL(EVOLINK_PROXY_BASE_URL);
-
-    if (target.origin !== base.origin || !isAllowedEvolinkProxyPath(target.pathname)) {
-      return null;
-    }
-
-    return target;
-  } catch {
-    return null;
-  }
-}
-
-function evolinkByoProxy(): Plugin {
-  return {
-    name: 'evolink-byo-proxy',
-    configureServer(server) {
-      server.middlewares.use('/api/evolink/byo/request', async (req, res) => {
-        if (req.method === 'OPTIONS') {
-          res.statusCode = 204;
-          res.end();
-          return;
-        }
-
-        if (req.method !== 'POST') {
-          res.statusCode = 405;
-          res.setHeader('Allow', 'POST, OPTIONS');
-          res.end('Method not allowed');
-          return;
-        }
-
-        if (!isSameOriginDevRequest(req)) {
-          writeJsonResponse(res, 403, { error: 'invalid_origin' });
-          return;
-        }
-
-        const apiKey = getByoEvolinkKey(req);
-        if (!apiKey) {
-          writeJsonResponse(res, 401, { error: 'missing_evolink_key' });
-          return;
-        }
-
-        let body: { body?: unknown; endpoint?: unknown; method?: unknown };
-        try {
-          body = JSON.parse(await readRequestBody(req)) as typeof body;
-        } catch (error) {
-          writeJsonResponse(res, 400, {
-            error: 'invalid_json',
-            message: error instanceof Error ? error.message : 'Invalid JSON body',
-          });
-          return;
-        }
-
-        const target = resolveAllowedEvolinkProxyUrl(body.endpoint);
-        const method = body.method === 'POST' ? 'POST' : body.method === 'GET' ? 'GET' : null;
-        if (!target || !method) {
-          writeJsonResponse(res, 400, { error: 'invalid_evolink_proxy_request' });
-          return;
-        }
-
-        try {
-          const upstream = await fetch(target, {
-            method,
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: method === 'POST' && body.body !== undefined ? JSON.stringify(body.body) : undefined,
-          });
-          const responseBody = await upstream.arrayBuffer();
-
-          res.statusCode = upstream.status;
-          res.setHeader('Content-Type', upstream.headers.get('Content-Type') ?? 'application/json; charset=utf-8');
-          res.end(Buffer.from(responseBody));
-        } catch (error) {
-          writeJsonResponse(res, 502, {
-            error: 'evolink_proxy_failed',
-            message: error instanceof Error ? error.message : 'Failed to reach EvoLink',
-          });
-        }
-      });
-
-      server.middlewares.use('/api/evolink/byo/upload', async (req, res) => {
-        if (req.method === 'OPTIONS') {
-          res.statusCode = 204;
-          res.end();
-          return;
-        }
-
-        if (req.method !== 'POST') {
-          res.statusCode = 405;
-          res.setHeader('Allow', 'POST, OPTIONS');
-          res.end('Method not allowed');
-          return;
-        }
-
-        if (!isSameOriginDevRequest(req)) {
-          writeJsonResponse(res, 403, { error: 'invalid_origin' });
-          return;
-        }
-
-        const apiKey = getByoEvolinkKey(req);
-        const contentType = req.headers['content-type'];
-        if (!apiKey || typeof contentType !== 'string') {
-          writeJsonResponse(res, apiKey ? 400 : 401, {
-            error: apiKey ? 'missing_content_type' : 'missing_evolink_key',
-          });
-          return;
-        }
-
-        try {
-          const upstream = await fetch(EVOLINK_PROXY_UPLOAD_URL, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              'Content-Type': contentType,
-            },
-            body: req,
-            duplex: 'half',
-          } as RequestInit & { duplex: 'half' });
-          const responseBody = await upstream.arrayBuffer();
-
-          res.statusCode = upstream.status;
-          res.setHeader('Content-Type', upstream.headers.get('Content-Type') ?? 'application/json; charset=utf-8');
-          res.end(Buffer.from(responseBody));
-        } catch (error) {
-          writeJsonResponse(res, 502, {
-            error: 'evolink_upload_proxy_failed',
-            message: error instanceof Error ? error.message : 'Failed to upload to EvoLink',
-          });
-        }
-      });
-    },
-  };
-}
 
 function splatTransformWebpWasmPathFix(): Plugin {
   return {
@@ -230,6 +30,7 @@ function splatTransformWebpWasmPathFix(): Plugin {
 export default defineConfig(({ command, mode }) => {
   const isDevServer = command === 'serve';
   const enableDevBridge = isDevServer && mode !== 'test';
+  const freezeE2eSourceSnapshot = process.env.MASTERSELECTS_E2E_FREEZE_SOURCE === '1';
   const hostedApiProxyTarget = 'http://127.0.0.1:8788';
   const hostedApiProxyRoutes = [
     '/api/me',
@@ -258,7 +59,6 @@ export default defineConfig(({ command, mode }) => {
   return {
     plugins: [
       react(),
-      evolinkByoProxy(),
       createDevBridgePlugin({ enableAiToolsBridge: enableDevBridge }),
       splatTransformWebpWasmPathFix(),
       // Replace __APP_VERSION__ in index.html during build
@@ -283,6 +83,10 @@ export default defineConfig(({ command, mode }) => {
     },
     server: {
       allowedHosts: ['localhost', '.localhost', '127.0.0.1'],
+      // Keep a headed release journey on the source snapshot it booted with.
+      // The dev bridge still uses Vite's websocket; only filesystem-triggered
+      // HMR/full reloads are suppressed for this isolated test server.
+      watch: freezeE2eSourceSnapshot ? { ignored: ['**/*'] } : undefined,
       headers: {
         // Required for SharedArrayBuffer (FFmpeg multi-threaded, cross-tab sync)
         // Using 'credentialless' instead of 'require-corp' to allow CDN resources
@@ -297,6 +101,10 @@ export default defineConfig(({ command, mode }) => {
         'Cross-Origin-Opener-Policy': 'same-origin',
         'Cross-Origin-Embedder-Policy': 'credentialless',
       },
+    },
+    worker: {
+      // Runtime-host workers import split chunks, which requires the ES module format.
+      format: 'es',
     },
     build: {
       target: 'esnext',

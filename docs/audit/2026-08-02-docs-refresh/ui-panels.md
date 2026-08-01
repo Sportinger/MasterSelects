@@ -1,0 +1,30 @@
+# UI-Panels.md — audit 2026-08-02
+
+## Verified (spot checks that held)
+
+- The client package version is 2.4.4 (`package.json`).
+- Docked panels support tab groups, split resizing, floating panels, root-edge drop targets, and detached browser windows with `Dock back` (`src/stores/dockStore/dragAndPanelStateActions.ts`, `src/components/dock/FloatingPanel.tsx`, `src/components/dock/DetachedPanelWindow.tsx`, `src/components/dock/tabPane/DockTabMenus.tsx`).
+- The documented core panel implementations—including Preview, Multi Preview, Timeline, Media, Properties, Export, MIDI Mapping, Transitions, AI Segment, Scene Description, and three scopes—are selected by the dock content host (`src/components/dock/DockPanelContent.tsx`, `src/stores/dockStore/panelRegistry.ts`).
+- Slot Grid remains a 4-by-12 timeline overlay and its Ctrl/Cmd+Shift+wheel entry/return behaviour is implemented (`src/components/timeline/SlotGrid.tsx`, `src/components/timeline/hooks/useTimelineZoom.ts`).
+- The standard output presets and preview-quality values are still 1080p, 1440p, 4K, 9:16 and Full/Half/Quarter (`src/components/common/settings/OutputSettings.tsx`, `src/components/common/settings/GeneralSettings.tsx`).
+- The File-menu autosave intervals, cache-clear action, named dock layouts, and detached-window persistence are present (`src/components/common/toolbar/FileMenu.tsx`, `src/components/dock/container/useDockLayoutTransition.ts`, `src/types/dock.ts`).
+
+## Outdated or wrong (claim → reality, with file evidence)
+
+- `AI Chat` / `ai-chat` is listed as an active dock panel → no such `PanelType` or dock-content case exists. `capture` is the missing registered editor panel, implemented as Screen Capture. Evidence: `src/types/dock.ts`, `src/stores/dockStore/panelRegistry.ts`, `src/components/dock/DockPanelContent.tsx`, `src/components/panels/capture/CapturePanel.tsx`.
+- “17 active dockable panel types” → 17 editor panel types are registered, but `scene-description` is hidden from pickers and `start` is an additional hidden landing-panel type. Evidence: `src/types/dock.ts`, `src/components/common/toolbar/viewPanelConfig.ts`, `src/marketing/LandingPanel.tsx`.
+- “Cycle tabs: Middle mouse scroll” → middle-mouse drag pans an overflowing tab bar; it does not cycle tabs. Evidence: `src/components/dock/tabPane/useTabBarScrollZoom.ts`.
+- The Media Add-menu list omits shipped items and calls the effector a “splat effector” → the current menu includes Live Input, Light, 3D Effector, Motion Null, Adjustment Layer, Math Scene, and Motion Shape primitives in addition to the documented items. Evidence: `src/components/panels/media/import/MediaAddItemsMenu.tsx`.
+- The transition panel claims exactly 74 dedicated animated SVG thumbnails, hover-only animation, and reduced-motion handling → the current implementation dispatches through `TRANSITION_PREVIEW_RENDERERS` and deliberately supplies a generic SVG fallback; the asserted count/interaction contract is not encoded there. Evidence: `src/components/panels/TransitionsPanel.tsx`, `src/components/panels/transitions/AnimatedTransitionPreview.tsx`, `src/components/panels/transitions/previewRenderers.ts`.
+- Slot Grid wording implies live triggering may be current → both `useLiveSlotTrigger` and `useWarmSlotDecks` default to `false`; normal filled-slot clicks open the composition and activate its layer. Evidence: `src/engine/featureFlags.ts`, `src/components/timeline/SlotGrid.tsx`.
+- Output and preview preferences are described as `Settings -> Output` and `Settings -> Previews` → both are embedded under `Settings -> General`. Evidence: `src/components/common/SettingsDialog.tsx`, `src/components/common/settings/GeneralSettings.tsx`.
+- The Preferences category and API-key list are stale → the current category is `Integrations` and only exposes an optional YouTube Data API v3 key; provider keys are not rendered there. Evidence: `src/components/common/SettingsDialog.tsx`, `src/components/common/settings/IntegrationCredentialsSettings.tsx`.
+- WebGPU status is described as top-right toolbar text with `Loading...` → GPU information is in the preview stats overlay and preview initialization displays `Initializing WebGPU...`. Evidence: `src/components/preview/StatsOverlay.tsx`, `src/components/preview/PreviewCanvasMount.tsx`.
+- The mobile section describes a mounted touch editor, gestures, and mobile export/options UI → `App.tsx` mounts `MobileApp`, whose current implementation is only the unsupported-device gate and desktop-mode action. The named mobile editor components remain in the repository but are not mounted by `MobileApp`. Evidence: `src/App.tsx`, `src/components/mobile/MobileApp.tsx`, `src/components/mobile/MobileTimeline.tsx`, `src/components/mobile/MobileOptionsMenu.tsx`.
+- “Work in Progress” is stated as a current Panels-menu group → `WIP_PANEL_TYPES` is empty and the menu renders that group only if it has entries. Evidence: `src/types/dock.ts`, `src/components/common/toolbar/ViewMenu.tsx`.
+
+## Noteworthy / unusual
+
+- Screen Capture is a substantial shipped panel that the doc omitted: it records a screen/window/tab, can mix display and microphone audio, persists interrupted-recording recovery metadata, and imports recordings to `Recordings`. Its crop/scale WebCodecs tier is feature-flagged off by default. Evidence: `src/components/panels/capture/CapturePanel.tsx`, `src/services/capture/recording/recoveryPersistence.ts`, `src/engine/featureFlags.ts`.
+- Several detailed mobile editor components still exist even though the production mobile entry point does not render them; `MobileOptionsMenu` itself still labels export as “coming soon.” Evidence: `src/components/mobile/MobileApp.tsx`, `src/components/mobile/MobileOptionsMenu.tsx`, `src/components/mobile/MobilePropertiesPanel.tsx`.
+- The Scene Description panel is a compatibility-only registered type: it has a dock implementation but is intentionally absent from View/add/change pickers. Evidence: `src/components/dock/DockPanelContent.tsx`, `src/types/dock.ts`, `src/components/common/toolbar/viewPanelConfig.ts`.

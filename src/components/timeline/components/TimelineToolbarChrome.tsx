@@ -68,6 +68,7 @@ export function TimelineToolbarChrome({
       <div className="timeline-timebar">
         <div
           className={`timeline-ruler-timecode ${timelineTimeDisplayMode === 'frames' ? 'frames' : 'time'}`}
+          data-guided-target="timeline-timecode"
           title="Current time / composition duration"
         >
           {timelineTimeDisplayMode === 'frames' && (
@@ -126,6 +127,7 @@ export function TimelineToolbarChrome({
           aria-label="Toggle Timeline and Graph view"
           aria-pressed={timelineCurveMode === 'graph'}
           className={`timeline-curve-mode-toggle${timelineCurveMode === 'graph' ? ' active' : ''}`}
+          data-guided-target="button:timeline-graph-toggle"
           type="button"
           onClick={onToggleTimelineCurveMode}
           title="Toggle Timeline / Graph view (G)"

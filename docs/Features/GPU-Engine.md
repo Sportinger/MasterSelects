@@ -14,7 +14,7 @@ WebGPU rendering, texture management, preview output, export capture, and GPU-ba
 
 `WebGPUEngine` is a thin facade over the rendering subsystems. It owns WebGPU context setup, texture and cache managers, the render loop, the render dispatcher, output windows, and export canvas state.
 
-The engine currently supports:
+The engine supports:
 
 - Main preview rendering
 - Independent preview targets
@@ -23,6 +23,8 @@ The engine currently supports:
 - RAM preview and scrubbing caches
 - Zero-copy export frames when the export canvas path is available
 - CPU readback as a fallback path
+- Waveform, histogram, and vectorscope GPU panels
+- Native 3D scene and Gaussian-splat composition when their enabled runtime flags apply
 
 ---
 
@@ -63,8 +65,8 @@ The engine currently supports:
 
 - `motion-shape` clips render through `src/engine/motion/MotionRenderer.ts`.
 - Rectangle, ellipse, polygon, and star primitives are drawn with analytic WGSL SDFs into transparent `rgba8unorm` textures.
-- A bounded uniform layout composites up to 8 ordered color-fill, stroke, linear-gradient, or radial-gradient appearances, with up to 8 stable stops per gradient and six shader blend modes.
-- Grid-replicated motion shapes use a per-shape instance buffer and instanced draws in the same shader path, capped at 100 instances for the current MVP.
+- A bounded uniform layout composites up to 8 ordered color-fill, stroke, linear-gradient, radial-gradient, or texture-fill appearances, with up to 8 stable stops per gradient and six shader blend modes.
+- Replicated motion shapes use a per-shape instance buffer and instanced draws in the same shader path. The shader ceiling is 100,000 instances; effective counts are also constrained by the device, render target, and configured user limit.
 - The resulting texture view is composited through the normal `CompositorPipeline`, so masks, effects, blend mode, nested comps, preview targets, and export share the same downstream path.
 
 ### Masks
@@ -83,9 +85,9 @@ The engine currently supports:
 ### Idle And Scrub Control
 
 - Idle mode starts after about 1 second of no activity.
-- Idle detection is suppressed until the first play event so browser video surfaces can warm up.
+- Idle detection is initially suppressed so browser video surfaces can warm up; it is lifted by the first play event or after about 3 seconds.
 - Playback is limited to about 60 fps.
-- Scrubbing is limited to about 30 fps unless a fresh video frame arrives.
+- Scrubbing is limited to about 60 fps unless a fresh video frame arrives, which bypasses the limiter.
 
 ### Watchdog
 
@@ -109,7 +111,7 @@ The engine currently supports:
 3. Live external texture import
 4. Last known frame or same-clip hold frame
 
-This is why preview can stay stable during seeks even when a fresh frame is not yet ready.
+This is why preview can stay stable during seeks while a fresh frame is pending.
 
 ### Firefox Special Case
 
@@ -161,22 +163,22 @@ This is why preview can stay stable during seeks even when a fresh frame is not 
 
 Runtime flags are exposed on `window.__ENGINE_FLAGS__`.
 
-- `useRenderGraph` is still a stub.
-- `useDecoderPool` is not wired.
 - `useFullWebCodecsPlayback` and `disableHtmlPreviewFallback` are synced with the persisted settings toggle.
 - `useLiveSlotTrigger` swaps slot-grid clicks from editor-open behavior to direct live triggering.
 - `useWarmSlotDecks` prepares reusable slot-owned live decks for faster layer adoption.
 - `use3DLayers` and `useGaussianSplat` are enabled in this branch.
-- Motion shape/appearance rendering and the Grid Replicator MVP are always part of the native layer path. The former `useMotionDesignSystem` and `useMotionReplicators` placeholders were retired because they never gated runtime behavior.
+- `workerFirstRenderHost` exists for worker-host presentation, but defaults to `false`; the main-thread render host remains the default.
+- `timelineCanvasWorker` is enabled for eligible timeline rows; it is separate from the main preview render host.
+- Motion shape/appearance rendering and the Grid Replicator MVP are always part of the native layer path.
 
 ---
 
 ## Performance Notes
 
-- `ScrubbingCache` keeps 300 video scrub frames at 30 fps quantization.
+- `ScrubbingCache` keeps up to 192 video scrub frames at 30 fps quantization, with a 192 MiB texture budget and a 960-pixel maximum source dimension.
 - Composite RAM preview caches are capped at 900 frames and 512 MB.
 - GPU RAM preview cache is capped at 60 frames.
-- These are hard cache limits from code, not benchmark promises.
+- These are hard cache limits from code.
 
 ### Preview Quality
 
@@ -207,9 +209,13 @@ Key implementation files:
 - `src/engine/render/htmlVideoPreviewFallback.ts`
 - `src/engine/motion/MotionRenderer.ts`
 - `src/engine/motion/shaders/motionShapes.wgsl`
+- `src/engine/analysis/ScopeRenderer.ts`
+- `src/engine/native3d/NativeSceneRenderer.ts`
 - `src/engine/pipeline/OutputPipeline.ts`
+- `src/engine/pipeline/SlicePipeline.ts`
 - `src/engine/managers/ExportCanvasManager.ts`
 - `src/engine/texture/ScrubbingCache.ts`
 - `src/engine/core/RenderTargetManager.ts`
 - `src/engine/featureFlags.ts`
 - `src/engine/video/VideoFrameManager.ts`
+- `src/services/render/renderHostPort.ts`

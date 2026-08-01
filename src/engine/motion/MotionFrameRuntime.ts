@@ -1,14 +1,31 @@
 import type { Layer } from '../../types';
+import type { MotionExpressionBinding } from '../../types/motionDesign';
+import { useMediaStore } from '../../stores/mediaStore';
 import {
   bindMotionFrameStateConsumer,
   createMotionFrameState,
   MOTION_FRAME_STATE_LIMITS,
   type MotionFrameConsumerInput,
+  type MotionFrameExpressionValue,
+  type MotionFrameMediaEntry,
   type MotionFrameModifierState,
   type MotionFrameReplicatorState,
   type MotionFrameState,
   type MotionFrameStateConsumer,
 } from '../../services/motionDesign/contracts/evaluatedMotionFrame';
+import {
+  resolveMotionExpressionValue,
+} from '../../services/motionDesign/expressions/evaluator';
+import { compileMotionExpression } from '../../services/motionDesign/expressions/validator';
+import { evaluateMotionMediaFrame } from '../../services/motionDesign/media/evaluationPlanner';
+import {
+  MOTION_MEDIA_REQUEST_VERSION,
+  type MotionMediaFitMode,
+} from '../../services/motionDesign/media/contracts';
+import {
+  createAvailableMotionMediaBinding,
+  createMotionMediaSourceReference,
+} from '../../services/motionDesign/media/sourceReferencePlanner';
 import type {
   MotionLimitDescriptor,
   MotionStableDiagnostic,
@@ -27,6 +44,7 @@ import { evaluateMotionReplicatorReference } from '../../services/motionDesign/r
 import {
   getMotionRenderSize,
   getMotionReplicatorSourceGeometry,
+  getMotionShapeRenderBounds,
   MOTION_REPLICATOR_SHADER_MAX_INSTANCES,
   type MotionRenderSize,
 } from './MotionTypes';
@@ -64,6 +82,7 @@ interface PreparedReplicator {
   contract: MotionFrameReplicatorState['contract'];
   modifierStack: MotionFrameModifierState['contract'] | undefined;
   sourceBounds: MotionFrameReplicatorState['sourceBounds'];
+  expressionBindings: readonly MotionExpressionBinding[];
   contentIdentity: string;
 }
 
@@ -85,6 +104,7 @@ const MOTION_FRAME_DEFAULT_MAX_TEXTURE_DIMENSION_2D = 8192;
 const MOTION_FRAME_DEFAULT_MAX_TEXTURE_PIXELS = 64 * 1024 * 1024;
 const motionFrameRuntimeCache = new Map<string, MotionFrameCacheEntry>();
 const motionModifierPlanCache = new Map<string, Extract<MotionFrameModifierState['plan'], { ok: true }>>();
+const motionExpressionProgramCache = new Map<string, ReturnType<typeof compileMotionExpression>>();
 const admittedMotionFrameRuntimeAdmissions = new WeakSet<object>();
 
 function stableHash(value: string): string {
@@ -139,6 +159,133 @@ function toModifierFrameDiagnostic(
     ...(diagnostic.path === undefined ? {} : { path: diagnostic.path }),
     entityId: layerId,
   };
+}
+
+function toExpressionFrameDiagnostic(
+  layerId: string,
+  binding: MotionExpressionBinding,
+  message: string,
+): MotionStableDiagnostic {
+  return {
+    code: 'MOTION_EXPRESSION_EVALUATION_FAILED',
+    severity: 'error',
+    source: 'expression',
+    message: `Expression ${binding.id} at ${binding.path}: ${message}`,
+    path: binding.path,
+    entityId: layerId,
+  };
+}
+
+function stableExpressionBindings(
+  value: MotionExpressionBinding[] | undefined,
+): readonly MotionExpressionBinding[] {
+  if (!Array.isArray(value)) return [];
+  const byPath = new Map<string, MotionExpressionBinding>();
+  for (const binding of value) {
+    if (!binding || typeof binding !== 'object' || typeof binding.path !== 'string') continue;
+    byPath.set(binding.path, binding);
+  }
+  return [...byPath.values()].sort((left, right) => (
+    left.path < right.path ? -1 : left.path > right.path ? 1 : 0
+  ));
+}
+
+function expressionBindingRevision(bindings: readonly MotionExpressionBinding[]): string {
+  return `layer:${stableHash(JSON.stringify(bindings.map((binding) => [
+    binding.id,
+    binding.path,
+    binding.source,
+    binding.fallback,
+    binding.enabled,
+  ])))}`;
+}
+
+function compileCachedMotionExpression(source: string): ReturnType<typeof compileMotionExpression> {
+  const cached = motionExpressionProgramCache.get(source);
+  if (cached) return cached;
+  const compiled = compileMotionExpression(source);
+  motionExpressionProgramCache.set(source, compiled);
+  return compiled;
+}
+
+function evaluateExpressionBindings(
+  layerId: string,
+  bindings: readonly MotionExpressionBinding[],
+  contractRevision: string,
+  clipLocalTimeSeconds: number,
+  effectiveCount: number,
+): { values: MotionFrameExpressionValue[]; diagnostics: MotionStableDiagnostic[] } {
+  const values: MotionFrameExpressionValue[] = [];
+  const diagnostics: MotionStableDiagnostic[] = [];
+  if (effectiveCount < 1) return { values, diagnostics };
+  for (const binding of bindings) {
+    if (!binding.enabled) continue;
+    const fallback = Number.isFinite(binding.fallback) ? binding.fallback : 0;
+    const compiled = typeof binding.source === 'string'
+      ? compileCachedMotionExpression(binding.source)
+      : null;
+    let reportedFailure = false;
+    const reportFailure = (message: string) => {
+      if (reportedFailure) return;
+      reportedFailure = true;
+      diagnostics.push(toExpressionFrameDiagnostic(layerId, binding, message));
+    };
+    if (!compiled?.ok) {
+      const failure = compiled?.failures[0];
+      reportFailure(failure
+        ? `${failure.message} (position ${failure.position})`
+        : 'Expression source must be a string.');
+    }
+    for (let instanceIndex = 0; instanceIndex < effectiveCount; instanceIndex += 1) {
+      const resolved = compiled?.ok
+        ? resolveMotionExpressionValue({
+            program: compiled.value,
+            context: { time: clipLocalTimeSeconds, index: instanceIndex, count: effectiveCount },
+            baseValue: fallback,
+          })
+        : null;
+      if (!resolved?.ok) {
+        const failure = resolved?.failures[0];
+        reportFailure(failure
+          ? `${failure.message} (position ${failure.position})`
+          : 'Expression could not be evaluated.');
+      }
+      values.push({
+        entityId: layerId,
+        propertyPath: binding.path,
+        contractRevision,
+        clipLocalTimeSeconds,
+        instanceIndex,
+        effectiveCount,
+        resolved: resolved?.ok
+          ? resolved.value
+          : { value: fallback, source: 'expression', precedence: 'expression-over-keyframe' },
+      });
+    }
+  }
+  return { values, diagnostics };
+}
+
+function buildFalloffShapeReferences(
+  layers: readonly { layer: Layer }[],
+) {
+  return layers.flatMap(({ layer }) => {
+    const motion = layer.source?.type === 'motion' ? layer.source.motion : undefined;
+    if (motion?.kind !== 'shape') return [];
+    const primitive = motion.shape?.primitive;
+    if (primitive !== 'ellipse' && primitive !== 'rectangle') return [];
+    const shapeBounds = getMotionShapeRenderBounds(motion);
+    return [{
+      shapeClipId: layer.sourceClipId ?? layer.id,
+      revision: motion.replicator?.revision ?? 0,
+      kind: primitive,
+      center: { x: layer.position.x, y: layer.position.y },
+      size: {
+        x: shapeBounds.width * Math.abs(layer.scale.x),
+        y: shapeBounds.height * Math.abs(layer.scale.y),
+      },
+    }];
+  });
 }
 
 function collectVisibleLayers(
@@ -245,6 +392,7 @@ function storeFrameState(
 export function clearMotionFrameRuntimeCache(): void {
   motionFrameRuntimeCache.clear();
   motionModifierPlanCache.clear();
+  motionExpressionProgramCache.clear();
 }
 
 export function getMotionDeviceMaxInstances(device: GPUDevice): number {
@@ -417,13 +565,20 @@ export function createMotionFrameRuntimeAdmission(
       );
       const contract = bundle.replicator;
       const { sourceBounds } = getMotionReplicatorSourceGeometry(motion);
+      const expressionBindings = stableExpressionBindings(motion.expressions?.bindings);
       prepared.push({
         layer,
         layerId: entryId,
         contract,
         modifierStack: bundle.modifierStack,
         sourceBounds,
-        contentIdentity: JSON.stringify({ contract, modifierStack: bundle.modifierStack, sourceBounds }),
+        expressionBindings,
+        contentIdentity: JSON.stringify({
+          contract,
+          modifierStack: bundle.modifierStack,
+          expressionBindings,
+          sourceBounds,
+        }),
       });
     } catch (error) {
       return {
@@ -463,8 +618,16 @@ export function createMotionFrameRuntimeAdmission(
     return admission;
   }
 
+  const hasFalloff = prepared.some((entry) => entry.modifierStack?.falloff !== undefined);
+  // Falloff references are composition-local. Nested compositions are admitted independently.
+  const shapeReferences = hasFalloff
+    ? buildFalloffShapeReferences(collected.layers.filter(({ layer }) => request.layers.includes(layer)))
+    : [];
+
   const replicators: MotionFrameReplicatorState[] = [];
   const modifiers: MotionFrameModifierState[] = [];
+  const expressions: MotionFrameExpressionValue[] = [];
+  const expressionBindingRevisions = new Map<string, string>();
   const limits: MotionLimitDescriptor[] = [];
   const diagnostics: MotionStableDiagnostic[] = [];
 
@@ -517,8 +680,9 @@ export function createMotionFrameRuntimeAdmission(
     diagnostics.push(...evaluation.diagnostics.map(
       (diagnostic) => toFrameDiagnostic(entry.layerId, diagnostic),
     ));
+    let clipLocalTimeSeconds = request.timelineTimeSeconds;
     if (entry.modifierStack) {
-      const clipLocalTimeSeconds = Math.round(
+      clipLocalTimeSeconds = Math.round(
         request.timelineTimeSeconds * entry.modifierStack.ticksPerSecond,
       ) / entry.modifierStack.ticksPerSecond;
       const context = {
@@ -530,7 +694,7 @@ export function createMotionFrameRuntimeAdmission(
           layoutTransform: instance.layoutTransform,
           offsetTransform: instance.offsetTransform,
         })),
-        shapeReferences: [],
+        shapeReferences,
       };
       let cacheKey: string | null = null;
       try {
@@ -565,6 +729,19 @@ export function createMotionFrameRuntimeAdmission(
         plan,
       });
     }
+    if (entry.expressionBindings.length > 0) {
+      const revision = expressionBindingRevision(entry.expressionBindings);
+      expressionBindingRevisions.set(entry.layerId, revision);
+      const evaluatedExpressions = evaluateExpressionBindings(
+        entry.layerId,
+        entry.expressionBindings,
+        revision,
+        clipLocalTimeSeconds,
+        evaluation.effectiveCount,
+      );
+      expressions.push(...evaluatedExpressions.values);
+      diagnostics.push(...evaluatedExpressions.diagnostics);
+    }
     if (evaluation.enabled) {
       const hardLimit = Math.min(
         entry.contract.userLimit ?? MOTION_REPLICATOR_SHADER_MAX_INSTANCES,
@@ -583,10 +760,22 @@ export function createMotionFrameRuntimeAdmission(
   }
 
   const replicatorsByLayerId = new Map(replicators.map((entry) => [entry.layerId, entry] as const));
+  const modifiersByLayerId = new Map(modifiers.map((entry) => [entry.layerId, entry] as const));
+  const expressionsByLayerId = new Map<string, MotionFrameExpressionValue[]>();
+  for (const expression of expressions) {
+    const layerExpressions = expressionsByLayerId.get(expression.entityId) ?? [];
+    layerExpressions.push(expression);
+    expressionsByLayerId.set(expression.entityId, layerExpressions);
+  }
   for (const { layer, entryId } of collected.layers) {
     const motion = layer.source?.type === 'motion' ? layer.source.motion : undefined;
     if (motion?.kind !== 'shape') continue;
-    const size = getMotionRenderSize(motion, replicatorsByLayerId.get(entryId));
+    const size = getMotionRenderSize(
+      motion,
+      replicatorsByLayerId.get(entryId),
+      modifiersByLayerId.get(entryId),
+      expressionsByLayerId.get(entryId),
+    );
     try {
       const texturePlan = planReplicatorSourceTexture({
         sourceWidth: size.width,
@@ -617,11 +806,56 @@ export function createMotionFrameRuntimeAdmission(
     }
   }
 
+  const mediaEntries: MotionFrameMediaEntry[] = [];
+  for (const { layer, entryId } of collected.layers) {
+    const motion = layer.source?.type === 'motion' ? layer.source.motion : undefined;
+    try {
+      // The frame-state contract requires replicated media to cover every
+      // effective stable index exactly once, and a DISABLED replicator
+      // evaluates to effectiveCount 0 — the contract then forbids media
+      // entries for that layer entirely. Frame media entries exist for
+      // replicated decode/pool planning; the engine renders plain (non- or
+      // disabled-replicator) texture fills directly from the motion
+      // definition, so skipping them here loses nothing visually.
+      const replicatorEntry = replicators.find((entry) => entry.layerId === entryId);
+      const effectiveCount = replicatorEntry === undefined
+        ? 1
+        : replicatorEntry.evaluation.enabled
+          ? replicatorEntry.evaluation.effectiveCount
+          : 0;
+      if (effectiveCount > 0) {
+        mediaEntries.push(...buildTextureFillMediaEntries(
+          entryId,
+          request.timelineTimeSeconds,
+          motion,
+          effectiveCount,
+        ));
+      }
+    } catch (error) {
+      diagnostics.push(toMediaFrameDiagnostic(
+        entryId,
+        error instanceof Error ? error.message : 'Invalid texture-fill media reference',
+      ));
+    }
+  }
+
   const identity = JSON.stringify({
     compositionId: request.compositionId,
     timelineTimeSeconds: request.timelineTimeSeconds,
     replicators: replicators.map((entry) => [entry.layerId, entry.evaluation.cacheKey]),
     modifiers: modifiers.map((entry) => [entry.layerId, entry.plan.cacheKey]),
+    expressions: expressions.map((entry) => [
+      entry.entityId,
+      entry.propertyPath,
+      entry.contractRevision,
+      entry.instanceIndex,
+      entry.resolved.value,
+    ]),
+    media: mediaEntries.map((entry) => [entry.layerId, entry.evaluation.reuseKey]),
+    falloffReferences: shapeReferences.map((reference) => [
+      reference.shapeClipId,
+      reference.revision,
+    ]),
     frameContentIdentity: frameLayers.map((entry) => [entry.layerId, entry.contentIdentity]),
     diagnostics: diagnostics.map((entry) => [entry.entityId, entry.code]),
   });
@@ -664,13 +898,34 @@ export function createMotionFrameRuntimeAdmission(
         entityId: entry.layerId,
         revision: `modifier:${entry.contract.revision}`,
       })),
+      ...[...expressionBindingRevisions].flatMap(([entityId, revision]) => ([{
+        kind: 'expression-binding' as const,
+        entityId,
+        revision: `expression-binding:${revision.slice('layer:'.length)}`,
+      }, {
+        // The frozen expression frame contract binds each evaluated series to
+        // a layer revision, while this companion entry makes binding edits an
+        // explicit frame-cache dependency.
+        kind: 'layer' as const,
+        entityId,
+        revision,
+      }])),
+      // Media entries fan out per effective instance, but the binding
+      // revision is a per-LAYER fact — emit exactly one entity revision per
+      // layer or the contract rejects the duplicate stable ids.
+      ...[...new Map(mediaEntries.map((entry) => [entry.layerId, entry] as const)).values()]
+        .map((entry) => ({
+          kind: 'media-binding' as const,
+          entityId: entry.layerId,
+          revision: `media:${entry.evaluation.bindingRevision ?? 'missing'}`,
+        })),
     ],
     replicators,
     modifiers,
     structure: null,
     adjustment: null,
-    mediaEntries: [],
-    expressions: [],
+    mediaEntries,
+    expressions,
     diagnostics,
   });
   if (!stateResult.ok) {
@@ -720,11 +975,152 @@ export function resolveMotionFrameReplicator(
   if (admission === undefined) return undefined;
   if (!admission.ok) return null;
   if (!admittedMotionFrameRuntimeAdmissions.has(admission)) return null;
-  const entryId = admission.layerEntryIds.get(layer);
+  const entryId = resolveMotionFrameLayerEntryId(layer, admission);
   if (!entryId) return null;
   return admission.consumerInput.frameState.replicators.find(
     (entry) => entry.layerId === entryId,
   ) ?? null;
+}
+
+function toMediaFrameDiagnostic(layerId: string, message: string): MotionStableDiagnostic {
+  return {
+    code: 'MOTION_MEDIA_INVALID_REFERENCE',
+    severity: 'error',
+    source: 'media',
+    message,
+    entityId: layerId,
+  };
+}
+
+function finiteOr(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function nonZeroOr(value: number | undefined, fallback: number): number {
+  const resolved = finiteOr(value, fallback);
+  return resolved === 0 ? fallback : resolved;
+}
+
+function textureFillFitMode(
+  fit: 'contain' | 'cover' | 'fill' | 'stretch' | 'tile',
+): MotionMediaFitMode {
+  return fit === 'contain' ? 'fit' : fit === 'cover' ? 'fill' : fit;
+}
+
+function buildTextureFillMediaEntries(
+  layerId: string,
+  timelineTimeSeconds: number,
+  motion: NonNullable<Layer['source']>['motion'],
+  effectiveCount: number,
+): MotionFrameMediaEntry[] {
+  if (!motion || motion.kind !== 'shape') return [];
+  // MD5-B1 binds one texture slot, so frame evaluation follows its first-fill selection.
+  const appearance = motion.appearance?.items.find((item) => item.kind === 'texture-fill');
+  if (!appearance?.mediaFileId) return [];
+  const bounds = getMotionShapeRenderBounds(motion);
+  const mediaFile = useMediaStore.getState().files.find((file) => file.id === appearance.mediaFileId);
+  const isVideo = mediaFile?.type === 'video';
+  const durationSeconds = isVideo ? mediaFile.duration : undefined;
+  const source = isVideo
+    ? createMotionMediaSourceReference('video', appearance.mediaFileId, durationSeconds ?? Number.NaN)
+    : createMotionMediaSourceReference('image', appearance.mediaFileId, null);
+  // The frozen timing contract requires its requested value to lie within the
+  // source window. Non-finite authored values use the schema's zero-time
+  // fallback; finite out-of-range values are clamped to that source window.
+  const freezeTimeSeconds = isVideo
+    ? Math.min(durationSeconds ?? 0, Math.max(0, finiteOr(appearance.time, 0)))
+    : 0;
+  const entries: MotionFrameMediaEntry[] = [];
+  for (let instanceIndex = 0; instanceIndex < effectiveCount; instanceIndex += 1) {
+    const request = {
+      contractVersion: MOTION_MEDIA_REQUEST_VERSION,
+      binding: createAvailableMotionMediaBinding(source, appearance.mediaFileId),
+      clipLocalTimeSeconds: timelineTimeSeconds,
+      instanceIndex,
+      timing: {
+        mode: 'freeze' as const,
+        sourceInSeconds: 0,
+        sourceOutSeconds: isVideo ? durationSeconds ?? 0 : 0,
+        freezeTimeSeconds,
+        playbackRate: 1,
+        perInstanceOffsetSeconds: 0,
+      },
+      // Images retain B2's byte-identical 1 Hz zero-time tuple. Video frozen
+      // frames use microsecond quantization so an authored still time such as
+      // 2.5 resolves to the same frozen time in the reuse key.
+      quantization: {
+        ticksPerSecond: isVideo ? 1_000_000 : 1,
+        rounding: 'nearest-half-up' as const,
+      },
+      renderParameters: {
+        targetWidth: Math.min(16_384, Math.max(1, Math.round(bounds.width))),
+        targetHeight: Math.min(16_384, Math.max(1, Math.round(bounds.height))),
+        pixelRatio: 1,
+        fitMode: textureFillFitMode(appearance.fit),
+        positionX: finiteOr(appearance.transform.position.x, 0),
+        positionY: finiteOr(appearance.transform.position.y, 0),
+        scaleX: nonZeroOr(appearance.transform.scale.x, 1),
+        scaleY: nonZeroOr(appearance.transform.scale.y, 1),
+        rotationDegrees: finiteOr(appearance.transform.rotation, 0),
+        tileRepeatX: 1,
+        tileRepeatY: 1,
+        tileOffsetX: 0,
+        tileOffsetY: 0,
+        sampling: 'linear' as const,
+      },
+    };
+    entries.push({ layerId, request, evaluation: evaluateMotionMediaFrame(request) });
+  }
+  return entries;
+}
+
+/**
+ * Worker frame-stack transport reconstructs Layers from serializable payloads,
+ * so object identity is not preserved across its admission/render boundary.
+ * A unique stable layer id is the corresponding transport-safe lookup key;
+ * duplicated/nested occurrence ids deliberately remain identity-only.
+ */
+function resolveMotionFrameLayerEntryId(
+  layer: Layer,
+  admission: Extract<MotionFrameRuntimeAdmission, { ok: true }>,
+): string | null {
+  const identityEntryId = admission.layerEntryIds.get(layer);
+  if (identityEntryId) return identityEntryId;
+  const matchingEntries = admission.consumerInput.frameState.replicators.filter(
+    (entry) => entry.layerId === layer.id,
+  );
+  return matchingEntries.length === 1 ? matchingEntries[0].layerId : null;
+}
+
+export function resolveMotionFrameModifier(
+  layer: Layer,
+  admission: MotionFrameRuntimeAdmission | undefined,
+): MotionFrameModifierState | null | undefined {
+  if (layer.source?.type !== 'motion' || !layer.source.motion?.modifierStack) return undefined;
+  if (admission === undefined) return undefined;
+  if (!admission.ok) return null;
+  if (!admittedMotionFrameRuntimeAdmissions.has(admission)) return null;
+  const entryId = resolveMotionFrameLayerEntryId(layer, admission);
+  if (!entryId) return null;
+  return admission.consumerInput.frameState.modifiers.find(
+    (entry) => entry.layerId === entryId,
+  ) ?? null;
+}
+
+export function resolveMotionFrameExpressions(
+  layer: Layer,
+  admission: MotionFrameRuntimeAdmission | undefined,
+): readonly MotionFrameExpressionValue[] | null | undefined {
+  if (layer.source?.type !== 'motion' || !layer.source.motion?.expressions?.bindings.length) {
+    return undefined;
+  }
+  if (admission === undefined) return undefined;
+  if (!admission.ok || !admittedMotionFrameRuntimeAdmissions.has(admission)) return null;
+  const entryId = resolveMotionFrameLayerEntryId(layer, admission);
+  if (!entryId) return null;
+  return admission.consumerInput.frameState.expressions.filter(
+    (entry) => entry.entityId === entryId,
+  );
 }
 
 export function getMotionRenderSizeForAdmission(
@@ -732,5 +1128,10 @@ export function getMotionRenderSizeForAdmission(
   admission: MotionFrameRuntimeAdmission,
 ): MotionRenderSize {
   const motion = layer.source?.type === 'motion' ? layer.source.motion : undefined;
-  return getMotionRenderSize(motion, resolveMotionFrameReplicator(layer, admission));
+  return getMotionRenderSize(
+    motion,
+    resolveMotionFrameReplicator(layer, admission),
+    resolveMotionFrameModifier(layer, admission),
+    resolveMotionFrameExpressions(layer, admission),
+  );
 }

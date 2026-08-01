@@ -1,6 +1,5 @@
 import type { FlashBoardGenerationRequest } from '../../stores/flashboardStore/types';
 import { calculateKieAiCost } from '../kieAi/catalog';
-import { calculateCost as calculatePiApiCost } from '../piApiService';
 import { estimateHostedElevenLabsSpeechCredits, type ElevenLabsModelRates } from '../elevenLabsService';
 import { SUNO_PROVIDER_ID, SUNO_SOUNDS_PROVIDER_ID } from '../sunoContracts';
 import type { CatalogEntry } from './types';
@@ -52,10 +51,6 @@ export interface FlashBoardPricingInput {
   service: PricingService;
   text?: string;
   hasVideoInput?: boolean;
-}
-
-function formatUsd(value: number): string {
-  return `~$${value.toFixed(2)}`;
 }
 
 function normalizeVideoDuration(value: number | undefined, min = 3): number {
@@ -169,21 +164,6 @@ function buildHostedSunoEstimate(): FlashBoardPriceEstimate {
   };
 }
 
-function calculatePiApiAmount(input: FlashBoardPricingInput): number {
-  const duration = input.duration && input.duration > 0 ? input.duration : 5;
-  const mode = normalizeMode(input.mode);
-  return calculatePiApiCost(input.providerId, mode, duration);
-}
-
-function buildPiApiEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate {
-  const usd = calculatePiApiAmount(input);
-
-  return {
-    compactLabel: formatUsd(usd),
-    fullLabel: formatUsd(usd),
-  };
-}
-
 export function getFlashBoardPriceQuote(
   input: FlashBoardPricingInput,
 ): FlashBoardPriceQuote | null {
@@ -220,14 +200,6 @@ export function getFlashBoardPriceEstimate(input: FlashBoardPricingInput): Flash
     return input.service === 'cloud' ? buildHostedElevenLabsEstimate(input) : null;
   }
 
-  if (input.service === 'elevenlabs') {
-    return null;
-  }
-
-  if (input.service === 'evolink') {
-    return null;
-  }
-
   if (input.service === 'cloud') {
     if (input.outputType === 'image' || input.providerId === 'nano-banana-2') {
       return buildHostedImageEstimate(input);
@@ -238,10 +210,6 @@ export function getFlashBoardPriceEstimate(input: FlashBoardPricingInput): Flash
     }
 
     return buildHostedKlingEstimate(input);
-  }
-
-  if (input.service === 'piapi') {
-    return buildPiApiEstimate(input);
   }
 
   return null;

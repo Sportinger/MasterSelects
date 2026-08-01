@@ -728,6 +728,8 @@ export function Preview({ panelId, source, showTransparencyGrid, initialEdit }: 
       ref={containerRef}
       data-preview-panel-id={panelId}
       data-preview-editable={isEditableSource ? 'true' : 'false'}
+      role="region"
+      aria-label="Preview"
       onMouseDownCapture={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}

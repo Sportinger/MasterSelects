@@ -1,0 +1,251 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "caseId": "floating-interior-range-v1",
+      "expectedStateFingerprint": "sha256:941acfb7bbd2f55c24cb293d5cf8b303d5413922e77b68f319aed4dda744abd7",
+      "initialTimeline": {
+        "tracks": [
+          { "id": "video-track", "type": "video" },
+          { "id": "audio-track", "type": "audio" }
+        ],
+        "clips": [
+          {
+            "id": "video-source",
+            "trackId": "video-track",
+            "type": "video",
+            "startTime": 0,
+            "duration": 1,
+            "inPoint": 0,
+            "outPoint": 1,
+            "linkedClipId": "audio-source",
+            "sourceId": "source-1"
+          },
+          {
+            "id": "audio-source",
+            "trackId": "audio-track",
+            "type": "audio",
+            "startTime": 0,
+            "duration": 1,
+            "inPoint": 0,
+            "outPoint": 1,
+            "linkedClipId": "video-source",
+            "sourceId": "source-1"
+          }
+        ]
+      },
+      "compiledSteps": [
+        {
+          "arguments": {
+            "clipId": "video-source",
+            "times": [0.3000001, 0.7000002],
+            "withLinked": true
+          },
+          "operationId": "timeline.segment.split.v1",
+          "sequence": 1,
+          "stepId": "split"
+        },
+        {
+          "arguments": {
+            "clipIds": [
+              {
+                "$result": {
+                  "path": ["data", "segments", "videoClipIds", 1],
+                  "stepId": "split"
+                }
+              }
+            ],
+            "withLinked": true
+          },
+          "operationId": "timeline.segment.delete-many.v1",
+          "sequence": 2,
+          "stepId": "delete"
+        }
+      ],
+      "expectedCanonicalTimeline": [
+        ["audio:0", "audio", 0, 0.3, 0, 0.3, 2],
+        ["audio:0", "audio", 0.7, 0.3, 0.7, 1, 3],
+        ["video:0", "video", 0, 0.3, 0, 0.3, 0],
+        ["video:0", "video", 0.7, 0.3, 0.7, 1, 1]
+      ]
+    },
+    {
+      "caseId": "leading-boundary-range-v1",
+      "expectedStateFingerprint": "sha256:773d4429aa69378b40034b34c5cf11a3f18373410a55646316c814942f844170",
+      "initialTimeline": {
+        "tracks": [
+          { "id": "video-track", "type": "video" },
+          { "id": "audio-track", "type": "audio" }
+        ],
+        "clips": [
+          {
+            "id": "video-source",
+            "trackId": "video-track",
+            "type": "video",
+            "startTime": 0,
+            "duration": 1,
+            "inPoint": 0,
+            "outPoint": 1,
+            "linkedClipId": "audio-source",
+            "sourceId": "source-1"
+          },
+          {
+            "id": "audio-source",
+            "trackId": "audio-track",
+            "type": "audio",
+            "startTime": 0,
+            "duration": 1,
+            "inPoint": 0,
+            "outPoint": 1,
+            "linkedClipId": "video-source",
+            "sourceId": "source-1"
+          }
+        ]
+      },
+      "compiledSteps": [
+        {
+          "arguments": {
+            "clipId": "video-source",
+            "times": [0.2],
+            "withLinked": true
+          },
+          "operationId": "timeline.segment.split.v1",
+          "sequence": 1,
+          "stepId": "split"
+        },
+        {
+          "arguments": {
+            "clipIds": [
+              {
+                "$result": {
+                  "path": ["data", "segments", "videoClipIds", 0],
+                  "stepId": "split"
+                }
+              }
+            ],
+            "withLinked": true
+          },
+          "operationId": "timeline.segment.delete-many.v1",
+          "sequence": 2,
+          "stepId": "delete"
+        }
+      ],
+      "expectedCanonicalTimeline": [
+        ["audio:0", "audio", 0.2, 0.8, 0.2, 1, 1],
+        ["video:0", "video", 0.2, 0.8, 0.2, 1, 0]
+      ]
+    },
+    {
+      "caseId": "trailing-boundary-range-v1",
+      "expectedStateFingerprint": "sha256:d271e7195416e963cf4d162fa57af6087c9b55947d02b4b2d84016211eaf91f9",
+      "initialTimeline": {
+        "tracks": [
+          { "id": "video-track", "type": "video" },
+          { "id": "audio-track", "type": "audio" }
+        ],
+        "clips": [
+          {
+            "id": "video-source",
+            "trackId": "video-track",
+            "type": "video",
+            "startTime": 0,
+            "duration": 1,
+            "inPoint": 0,
+            "outPoint": 1,
+            "linkedClipId": "audio-source",
+            "sourceId": "source-1"
+          },
+          {
+            "id": "audio-source",
+            "trackId": "audio-track",
+            "type": "audio",
+            "startTime": 0,
+            "duration": 1,
+            "inPoint": 0,
+            "outPoint": 1,
+            "linkedClipId": "video-source",
+            "sourceId": "source-1"
+          }
+        ]
+      },
+      "compiledSteps": [
+        {
+          "arguments": {
+            "clipId": "video-source",
+            "times": [0.8],
+            "withLinked": true
+          },
+          "operationId": "timeline.segment.split.v1",
+          "sequence": 1,
+          "stepId": "split"
+        },
+        {
+          "arguments": {
+            "clipIds": [
+              {
+                "$result": {
+                  "path": ["data", "segments", "videoClipIds", 1],
+                  "stepId": "split"
+                }
+              }
+            ],
+            "withLinked": true
+          },
+          "operationId": "timeline.segment.delete-many.v1",
+          "sequence": 2,
+          "stepId": "delete"
+        }
+      ],
+      "expectedCanonicalTimeline": [
+        ["audio:0", "audio", 0, 0.8, 0, 0.8, 1],
+        ["video:0", "video", 0, 0.8, 0, 0.8, 0]
+      ]
+    },
+    {
+      "caseId": "whole-clip-boundary-range-v1",
+      "expectedStateFingerprint": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "initialTimeline": {
+        "tracks": [
+          { "id": "video-track", "type": "video" },
+          { "id": "audio-track", "type": "audio" }
+        ],
+        "clips": [
+          {
+            "id": "video-source",
+            "trackId": "video-track",
+            "type": "video",
+            "startTime": 0,
+            "duration": 1,
+            "inPoint": 0,
+            "outPoint": 1,
+            "linkedClipId": "audio-source",
+            "sourceId": "source-1"
+          },
+          {
+            "id": "audio-source",
+            "trackId": "audio-track",
+            "type": "audio",
+            "startTime": 0,
+            "duration": 1,
+            "inPoint": 0,
+            "outPoint": 1,
+            "linkedClipId": "video-source",
+            "sourceId": "source-1"
+          }
+        ]
+      },
+      "compiledSteps": [
+        {
+          "arguments": {
+            "clipIds": ["video-source"],
+            "withLinked": true
+          },
+          "operationId": "timeline.segment.delete-many.v1",
+          "sequence": 1,
+          "stepId": "delete"
+        }
+      ],
+      "expectedCanonicalTimeline": []
+    }
+  ]
+}

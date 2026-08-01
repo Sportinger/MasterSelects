@@ -44,6 +44,27 @@ function responseError(response: Response): Error {
   return new Error(`The hosted-agent request failed safely (${response.status}).`);
 }
 
+function isAbortFailure(error: unknown, signal?: AbortSignal): boolean {
+  return signal?.aborted === true
+    || (error instanceof Error && error.name === 'AbortError');
+}
+
+async function boundFetch(
+  request: typeof fetch,
+  input: RequestInfo | URL,
+  init: RequestInit,
+): Promise<Response> {
+  try {
+    return await request(input, init);
+  } catch (error) {
+    if (isAbortFailure(error, init.signal ?? undefined)) throw error;
+    if (error instanceof HostedAgentK2ReconnectableError) throw error;
+    throw new HostedAgentK2ReconnectableError(
+      'The hosted-agent connection is temporarily unavailable.',
+    );
+  }
+}
+
 export async function startHostedAgentK2Turn(input: {
   apiBasePath?: string;
   fetchImplementation?: typeof fetch;
@@ -142,7 +163,7 @@ export function createHostedAgentK2FetchTransport(input: {
     keepalive: boolean,
     signal?: AbortSignal,
   ): Promise<void> {
-    const response = await request(`${turnPath(binding.turnId)}/cancel`, {
+    const response = await boundFetch(request, `${turnPath(binding.turnId)}/cancel`, {
       headers: boundHeaders(binding),
       keepalive,
       method: 'POST',
@@ -163,7 +184,7 @@ export function createHostedAgentK2FetchTransport(input: {
     async postToolResults({ batch, ...binding }) {
       const headers = boundHeaders(binding);
       headers.set('Content-Type', 'application/json');
-      const response = await request(`${turnPath(binding.turnId)}/tool-results`, {
+      const response = await boundFetch(request, `${turnPath(binding.turnId)}/tool-results`, {
         body: JSON.stringify(batch),
         headers,
         method: 'POST',
@@ -173,13 +194,35 @@ export function createHostedAgentK2FetchTransport(input: {
       }
       return await response.json() as HostedAgentK2BatchPostResponse;
     },
+    async postOperationResult({ result, ...binding }) {
+      const headers = boundHeaders(binding);
+      headers.set('Content-Type', 'application/json');
+      const response = await boundFetch(request, `${turnPath(binding.turnId)}/operation-results`, {
+        body: JSON.stringify({ result }),
+        headers,
+        method: 'POST',
+      });
+      if (!response.ok) throw responseError(response);
+      return await response.json() as HostedAgentK2BatchPostResponse;
+    },
+    async postOperationSettlement({ receipt, ...binding }) {
+      const headers = boundHeaders(binding);
+      headers.set('Content-Type', 'application/json');
+      const response = await boundFetch(request, `${turnPath(binding.turnId)}/operation-settlements`, {
+        body: JSON.stringify({ receipt }),
+        headers,
+        method: 'POST',
+      });
+      if (!response.ok) throw responseError(response);
+      return await response.json() as HostedAgentK2BatchPostResponse;
+    },
     async replayEvents({ afterEventId, signal, ...binding }): Promise<HostedAgentK2EventReplay> {
       const headers = boundHeaders(binding);
       headers.set('Accept', 'text/event-stream');
       if (afterEventId) {
         headers.set(HOSTED_AGENT_HEADERS.lastEventId, afterEventId);
       }
-      const response = await request(`${turnPath(binding.turnId)}/events`, {
+      const response = await boundFetch(request, `${turnPath(binding.turnId)}/events`, {
         headers,
         method: 'GET',
         signal: signal ?? input.signal,

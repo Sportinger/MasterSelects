@@ -10,7 +10,7 @@ MasterSelects has a modular GPU effect system built around registered effect mod
 - 34 GPU effects are registered in `src/effects/`, including fullscreen
   fragment effects and specialized render effects.
 - Registered effect categories are `color`, `blur`, `distort`, `stylize`, `keying`, `generate`, `time`, and `transition`.
-- `generate`, `time`, and `transition` currently have no registered clip-stack effects and are hidden from the add-effect UI. Timeline transitions are implemented separately in `src/transitions/` because they own two clips, source handles, hold-frame policy, and export participants.
+- `generate`, `time`, and `transition` have no registered clip-stack effects and are hidden from the add-effect UI. Timeline transitions are implemented separately in `src/transitions/` because they own two clips, source handles, hold-frame policy, and export participants.
 
 ## Registry And UI
 
@@ -31,6 +31,8 @@ are registered for UI/project data, but are skipped by the fullscreen
 
 The production editor UI is `src/components/panels/properties/EffectsTab.tsx`.
 `src/effects/EffectControls.tsx` is a generic fallback renderer.
+For motion-adjustment clips, the production tab limits the picker to
+Brightness, Contrast, Saturation, Invert, and Gaussian Blur.
 
 ## Current Effect Categories
 
@@ -51,7 +53,7 @@ The production editor UI is `src/components/panels/properties/EffectsTab.tsx`.
 - Quality values can be dragged past the visible slider max in the editor.
 - Parameters marked `animatable: false` are shown as static controls.
 
-The registered quality parameters are currently:
+The registered quality parameters are:
 
 - Gaussian Blur: `samples`
 - Motion Blur: `samples`
@@ -60,7 +62,7 @@ The registered quality parameters are currently:
 - Glow: `rings`, `samplesPerRing`
 - Voxel Relief: `maxSteps`
 - Pixel Particle Disintegrate: `maxPreviewParticles`, `maxExportParticles`,
-  `maxInstances`, `softness`
+  `maxInstances`
 
 Right-click on a numeric control resets that parameter to its default.
 The `performanceMonitor` service can also reset quality parameters to defaults when rendering becomes too slow.
@@ -91,16 +93,14 @@ carries UVs from its original source cell, so moving particles keep their
 assigned image patch instead of sampling from their new screen position. Preview
 and export use explicit render/media time instead of wall-clock time.
 
-V1 is terminal in the clip effect stack. Effects before it are pre-rendered
-into the particle source texture; effects after it are reported as unsupported
-instead of being silently reordered. The Effects tab includes a `Particle Out`
+This effect is terminal in the clip effect stack. Effects before it are pre-rendered
+into the particle source texture; effects after it are ignored with a renderer
+warning instead of being silently reordered. The Effects tab includes a `Particle Out`
 preset button that adds the effect and creates progress keyframes near the end
 of the selected clip.
 
-Strict worker-gpu-only video presentation does not run the dedicated particle
-pass yet. That path detects the effect, reports an explicit recoverable
-diagnostic, and applies the same opacity envelope as a visible fallback rather
-than rendering stale or black frames.
+The worker-GPU compositor also runs the dedicated particle pass for preview and
+export, using the frame stack's preview/export particle-quality setting.
 
 ## Timeline Transitions
 
@@ -150,30 +150,13 @@ while dragging a collapsed family card uses that family's default variant. The
 current 3D families opt eligible participants into `scene-3d-panel` rendering
 so video frames, video elements, images, and text canvases can render as native
 shared-scene textured planes with camera projection and depth; unsupported
-source states fall back to the compositor transform path. Cube, Door, Fold,
-and Page Peel remain planned until origin, panel-slicing, or mesh-strip
-renderer contracts exist. Kaleidoscope is available as the first exotic
+source states fall back to the compositor transform path. Kaleidoscope is an exotic
 pattern-lab transition by reusing transition-scoped registered effect
 primitives rather than adding a one-off compositor path. `Puzzle Push`,
-`Magnetic Tiles`, and `Shatter Glass` are the first visible multi-panel
-transitions: the layer contract now supports normalized `sourceRect` sampling,
+`Magnetic Tiles`, and `Shatter Glass` are visible multi-panel
+transitions: the layer contract supports normalized `sourceRect` sampling,
 and transition assembly clones transition participants into deterministic
 staggered panels, center-magnetic tiles, or rectangular outgoing tile-shatter.
-True Voronoi glass shards and cast shadows remain planned, and Origami Fold
-remains planned until per-panel 3D source UVs plus pivot/hinge contracts
-exist. Planned transitions that
-need true two-participant sampling, luma/matte comparison, mesh strips, richer
-visible multi-panel rendering, or temporal frame history remain out of the
-production palette until those renderer contracts exist.
-
-The 2026-06-15 visible-browser Dev-Bridge QA pass for `Flash`,
-`Chroma Leak`, `Lens Flare`, `Film Burn`, `Water Drop`, `Swirl`, and
-`Kaleidoscope` used DOM-mode progress grids plus midpoint captures to avoid
-the known GPU readback timeout path while still sampling the real preview
-canvas. The same visible-browser path verified `Puzzle Push` and
-`Magnetic Tiles` after the `sourceRect` compositor path landed, with
-distributed panel slices or center-pulled tiles and no browser errors, missing
-transition pipelines, runtime diagnostics errors, or shader warnings.
 
 The default placement is virtual `center`: the edit point remains stable,
 neither clip is moved, and missing source handles render as first/last-frame
@@ -183,8 +166,10 @@ normal layers pay no extra bind-group cost when `transitionRender` is absent.
 
 ## Effect Pipeline
 
-Non-inline effects are compiled from shared WGSL utilities plus the effect shader itself.
-The pipeline creates one GPU render pipeline per registered effect and filters out disabled effects and `audio-` effects during application.
+Non-inline fullscreen effects are compiled from shared WGSL utilities plus the
+effect shader itself. The pipeline creates one GPU render pipeline per
+non-inline fullscreen effect and filters out disabled effects and `audio-`
+effects during application.
 
 Effects with `uniformSize` 0 use no uniform buffer.
 Most effects use a 16-byte-aligned uniform block; a few multi-parameter effects use larger blocks.
@@ -195,8 +180,7 @@ a per-effect-instance feedback texture. Acuarela and the frozen Rom1 snapshot
 use this path to build a watery smoke trail from animated fractal UV offsets.
 The worker software renderer mirrors standalone Acuarela/Rom1 feedback with a
 per-target/effect software feedback cache for preview and export readback;
-stacked feedback with other visual effects still waits for the worker
-multi-pass effect pipeline. Voxel Relief uses the same binding to smooth a
+Voxel Relief uses the same binding to smooth a
 raymarched block-heightfield between video frames and remains a complex
 raymarch/feedback effect.
 
@@ -216,10 +200,9 @@ effect.{effectId}.{paramName}
 
 The clip context menu supports Copy Effects and Paste Effects. This copies the full effect stack plus matching `effect.*` keyframes and pastes them onto the selected clip set.
 
-## Current Notes
+## Notes
 
-- `color` and `point` parameter types exist in the effect type system, but the current registered effects do not use them.
-- The empty `generate`, `time`, and `transition` categories are present in the type system so they can be populated later without changing the registry shape.
+- The empty `generate`, `time`, and `transition` categories are present in the type system without changing the registry shape.
 
 ## Related Docs
 

@@ -11,7 +11,43 @@ interface MotionPropertyBrowserProps {
   clipId: string;
 }
 
+const EXPANDED_STORAGE_KEY = 'masterselects.motionPropertyBrowser.expanded';
+
+function readStoredExpanded(): boolean {
+  try {
+    return localStorage.getItem(EXPANDED_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function persistExpanded(expanded: boolean): void {
+  try {
+    localStorage.setItem(EXPANDED_STORAGE_KEY, expanded ? '1' : '0');
+  } catch { /* storage unavailable */ }
+}
+
 const browserStyles = {
+  header: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    width: '100%',
+    margin: 0,
+    padding: 0,
+    border: 'none',
+    background: 'none',
+    color: 'inherit',
+    font: 'inherit',
+    textAlign: 'left',
+    cursor: 'pointer',
+  },
+  chevron: {
+    display: 'inline-block',
+    width: '1em',
+    color: 'var(--text-secondary)',
+    fontSize: 'var(--font-xs)',
+  },
   search: {
     boxSizing: 'border-box',
     width: '100%',
@@ -74,9 +110,18 @@ export function MotionPropertyBrowser({ clipId }: MotionPropertyBrowserProps) {
   const clip = useTimelineStore(state => state.clips.find(candidate => candidate.id === clipId));
   const updateMotionLayer = useTimelineStore(state => state.updateMotionLayer);
   const [query, setQuery] = useState('');
+  const [expanded, setExpanded] = useState(readStoredExpanded);
   const [favoritePaths, setFavoritePaths] = useState<string[]>(
     () => readStoredMotionPropertyFavoritePaths([]),
   );
+
+  const toggleExpanded = useCallback(() => {
+    setExpanded(current => {
+      const next = !current;
+      persistExpanded(next);
+      return next;
+    });
+  }, []);
 
   const descriptors = useMemo(
     () => clip ? propertyRegistry.search({ clip, query }) : [],
@@ -118,7 +163,20 @@ export function MotionPropertyBrowser({ clipId }: MotionPropertyBrowserProps) {
 
   return (
     <section className="properties-section" aria-label="Motion property browser">
-      <h4>Property Browser</h4>
+      <h4>
+        <button
+          aria-expanded={expanded}
+          style={browserStyles.header}
+          type="button"
+          onClick={toggleExpanded}
+        >
+          <span aria-hidden="true" style={browserStyles.chevron}>
+            {expanded ? '▾' : '▸'}
+          </span>
+          Property Browser
+        </button>
+      </h4>
+      {!expanded ? null : (<>
       <input
         aria-label="Search motion properties"
         type="search"
@@ -171,6 +229,7 @@ export function MotionPropertyBrowser({ clipId }: MotionPropertyBrowserProps) {
       ) : (
         <p style={browserStyles.empty}>No properties match this search.</p>
       )}
+      </>)}
     </section>
   );
 }

@@ -223,18 +223,29 @@ function TimelineControlsComponent({
   }, [armedAudioTracks, duration, inPoint, isRecording, outPoint, playheadPosition, recordingBusy]);
 
   return (
-    <div className={`timeline-toolbar timeline-toolbar-${variant}`}>
+    <div
+      className={`timeline-toolbar timeline-toolbar-${variant}`}
+      data-guided-target={`timeline-${variant}-controls`}
+    >
       {showMainControls && (
         <>
-      <div className="timeline-controls">
-        <button className="btn btn-sm btn-icon timeline-transport-button" onClick={onStop} title="Stop">
+      <div className="timeline-controls" data-guided-target="timeline-transport-controls">
+        <button
+          className="btn btn-sm btn-icon timeline-transport-button"
+          onClick={onStop}
+          title="Stop"
+          aria-label="Stop"
+        >
           <IconPlayerStopFilled className="timeline-transport-icon" aria-hidden="true" />
         </button>
         <button
           className={`btn btn-sm btn-icon timeline-transport-button ${isPlaying ? 'btn-active' : ''}`}
           onClick={isPlaying ? onPause : onPlay}
+          data-guided-target="button:timeline-play"
           data-tutorial-id="play-btn"
           title={isPlaying ? 'Pause' : 'Play'}
+          aria-label={isPlaying ? 'Pause' : 'Play'}
+          aria-pressed={isPlaying}
         >
           {isPlaying ? (
             <IconPlayerPauseFilled className="timeline-transport-icon" aria-hidden="true" />
@@ -283,7 +294,7 @@ function TimelineControlsComponent({
           </span>
         )}
       </div>
-      <div className="timeline-edit-tools">
+      <div className="timeline-edit-tools" data-guided-target="timeline-edit-tools">
         <div className="timeline-edit-tools-items">
           <TimelineToolPalette />
           <TimelineSnappingButton
@@ -429,7 +440,7 @@ function TimelineControlsComponent({
           </div>
         )}
       </div>
-      <div className="timeline-ram-preview">
+      <div className="timeline-ram-preview" data-guided-target="timeline-view-controls">
         <RulerLanesMenu />
         <MetronomeButton />
         <div className="view-dropdown" ref={viewDropdownRef}>
@@ -474,7 +485,7 @@ function TimelineControlsComponent({
                 className="view-dropdown-item"
                 onClick={toggleFaceRanges}
               >
-                <span className={`view-check ${showFaceRanges ? 'checked' : ''}`}>âœ“</span>
+                <span className={`view-check ${showFaceRanges ? 'checked' : ''}`}>✓</span>
                 <span>Face Ranges</span>
               </div>
               <div className="view-dropdown-divider" />
@@ -525,7 +536,7 @@ function TimelineControlsComponent({
                 className="view-dropdown-item"
                 onClick={onToggleAudioRegionEditMarkers}
               >
-                <span className={`view-check ${showAudioRegionEditMarkers ? 'checked' : ''}`}>âœ“</span>
+                <span className={`view-check ${showAudioRegionEditMarkers ? 'checked' : ''}`}>✓</span>
                 <span>Audio Region Markers</span>
               </div>
               <div
@@ -557,7 +568,7 @@ function TimelineControlsComponent({
         </>
       )}
       {showMainControls && (
-      <div className="timeline-zoom-controls">
+      <div className="timeline-zoom-controls" data-guided-target="timeline-zoom-controls">
         <button className="btn btn-sm btn-icon timeline-zoom-button" onClick={() => onSetZoom(zoom - 10)} title="Zoom out">
           <IconMinus size={14} stroke={2.4} aria-hidden="true" />
         </button>

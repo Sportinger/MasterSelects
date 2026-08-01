@@ -322,6 +322,36 @@ export class FrameExporter {
     let finalStatus: 'success' | 'failed' | 'cancelled' = 'failed';
     let finalError: unknown;
     try {
+      // Finish audio before allocating the parallel video decoder pool. Nested
+      // composition mixdowns can briefly hold decoded source PCM; running both
+      // pipelines together made a short export compete with multi-gigabyte
+      // VideoFrame buffers and fail runtime admission nondeterministically.
+      let audioResult: EncodedAudioResult | null = null;
+      if (shouldExportAudio && this.audioPipeline) {
+        log.info('Starting audio export before video decoder preparation...');
+        const audioStart = performance.now();
+        audioResult = await this.audioPipeline.exportAudio(startTime, endTime, (audioProgress) => {
+          if (this.isCancelled) return;
+          const progress: ExportProgress = {
+            phase: 'audio',
+            currentFrame: 0,
+            totalFrames,
+            percent: audioProgress.percent * 0.05,
+            estimatedTimeRemaining: 0,
+            currentTime: startTime,
+            audioPhase: audioProgress.phase,
+            audioPercent: audioProgress.percent,
+          };
+          exportDiagnostics.updateProgress(progress);
+          onProgress(progress);
+        });
+        exportDiagnostics.recordPhase('audio', performance.now() - audioStart);
+        if (this.isCancelled) {
+          finalStatus = 'cancelled';
+          return null;
+        }
+      }
+
       // Prepare clips for export
       const prepareStart = performance.now();
       const preparation = await prepareClipsForExport(this.settings, this.exportMode, exportRunId);
@@ -358,39 +388,8 @@ export class FrameExporter {
       const keyframeInterval = getKeyframeInterval(fps);
       let previousClipSignature: string | null = null;
 
-      // Audio is independent of the rendered video frames, so kick off the whole
-      // audio pipeline now and let it run in parallel with the video loop instead
-      // of as a serial phase afterwards. Its progress is surfaced in the video
-      // progress reports; the result is awaited once the frames are done.
-      let audioExportPromise: Promise<EncodedAudioResult | null> | null = null;
-      let latestAudioPhase: ExportProgress['audioPhase'];
-      let latestAudioPercent = 0;
-      let audioDone = false;
-      let audioError: unknown = null;
-      if (shouldExportAudio && this.audioPipeline) {
-        log.info('Starting audio export (parallel with video)...');
-        const audioStart = performance.now();
-        audioExportPromise = this.audioPipeline
-          .exportAudio(startTime, endTime, (audioProgress) => {
-            if (this.isCancelled) return;
-            latestAudioPhase = audioProgress.phase;
-            latestAudioPercent = audioProgress.percent;
-          })
-          .catch((err) => { audioError = err; return null; })
-          .finally(() => {
-            audioDone = true;
-            exportDiagnostics.recordPhase('audio', performance.now() - audioStart);
-          });
-      }
-
-      const throwIfAudioExportFailed = (): void => {
-        if (!audioError) return;
-        throw audioError instanceof Error ? audioError : new Error(String(audioError));
-      };
-
       // Phase 1: Encode video frames
       for (let frame = 0; frame < totalFrames; frame++) {
-        throwIfAudioExportFailed();
         if (this.isCancelled) {
           log.info('Export cancelled');
           this.encoder.cancel();
@@ -420,7 +419,6 @@ export class FrameExporter {
 
         const seekStart = performance.now();
         await seekAllClipsToTime(ctx, this.clipStates, this.parallelDecoder, this.useParallelDecode);
-        throwIfAudioExportFailed();
         const seekMs = performance.now() - seekStart;
         this.reportExportRuntimeState(exportRunId);
 
@@ -510,8 +508,8 @@ export class FrameExporter {
 
         const avgFrameTime = this.frameTimes.reduce((a, b) => a + b, 0) / this.frameTimes.length;
         const remainingFrames = totalFrames - frame - 1;
-        const videoWeight = shouldExportAudio ? 0.95 : 1.0;
-        const videoPercent = ((frame + 1) / totalFrames) * 100 * videoWeight;
+        const audioWeight = shouldExportAudio ? 5 : 0;
+        const videoPercent = audioWeight + ((frame + 1) / totalFrames) * (100 - audioWeight);
 
         const progress: ExportProgress = {
           phase: 'video',
@@ -520,42 +518,17 @@ export class FrameExporter {
           percent: videoPercent,
           estimatedTimeRemaining: (remainingFrames * avgFrameTime) / 1000,
           currentTime: time,
-          ...(audioExportPromise ? { audioPhase: latestAudioPhase, audioPercent: latestAudioPercent } : {}),
+          ...(shouldExportAudio ? { audioPhase: 'complete' as const, audioPercent: 100 } : {}),
         };
         exportDiagnostics.updateProgress(progress);
         onProgress(progress);
       }
 
-      // Phase 2: Await the parallel audio export (usually already finished while
-      // the video frames were encoding) and attach the chunks before muxing.
-      let audioResult: EncodedAudioResult | null = null;
-      if (audioExportPromise) {
-        if (this.isCancelled) {
-          this.audioPipeline?.cancel();
-          finalStatus = 'cancelled';
-          return null;
-        }
-        if (!audioDone) {
-          onProgress({
-            phase: 'audio',
-            currentFrame: totalFrames,
-            totalFrames,
-            percent: 96,
-            estimatedTimeRemaining: 0,
-            currentTime: endTime,
-            audioPhase: latestAudioPhase ?? 'processing',
-            audioPercent: latestAudioPercent,
-          });
-        }
-        audioResult = await audioExportPromise;
-        if (audioError) {
-          throw audioError instanceof Error ? audioError : new Error(String(audioError));
-        }
-        if (audioResult && audioResult.chunks.length > 0) {
-          this.encoder.addAudioChunks(audioResult);
-        } else {
-          log.debug('No audio to add');
-        }
+      // Phase 2: Attach the already encoded audio before muxing.
+      if (audioResult && audioResult.chunks.length > 0) {
+        this.encoder.addAudioChunks(audioResult);
+      } else if (shouldExportAudio) {
+        log.debug('No audio to add');
       }
 
       const muxStart = performance.now();

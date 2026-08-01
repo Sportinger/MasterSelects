@@ -500,6 +500,25 @@ describe('Compositor scrub fast path', () => {
 });
 
 describe('CompositorPipeline bind group cache', () => {
+  it('initializes every distinct uniform buffer even when the layer values are identical', () => {
+    const writeBuffer = vi.fn();
+    const pipeline = new CompositorPipeline({
+      queue: { writeBuffer },
+    } as unknown as GPUDevice);
+    const layer = makeSourceLayerData('shared-nested-layer', 'source').layer;
+    const firstOccurrenceBuffer = { label: 'outer-a' } as unknown as GPUBuffer;
+    const secondOccurrenceBuffer = { label: 'outer-b' } as unknown as GPUBuffer;
+
+    pipeline.updateLayerUniforms(layer, 16 / 9, 16 / 9, false, firstOccurrenceBuffer);
+    pipeline.updateLayerUniforms(layer, 16 / 9, 16 / 9, false, secondOccurrenceBuffer);
+
+    expect(writeBuffer).toHaveBeenCalledTimes(2);
+    expect(writeBuffer.mock.calls.map((call) => call[0])).toEqual([
+      firstOccurrenceBuffer,
+      secondOccurrenceBuffer,
+    ]);
+  });
+
   it('does not reuse a static image bind group for a different source texture view in the same layer slot', () => {
     let bindGroupId = 0;
     const createBindGroup = vi.fn(() => ({ id: ++bindGroupId }));

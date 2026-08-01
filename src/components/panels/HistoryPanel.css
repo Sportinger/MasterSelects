@@ -239,7 +239,7 @@
 }
 
 .history-panel-graph-line-branch {
-  stroke: var(--blue-700);
+  stroke: var(--gray-450);
   stroke-width: 2px;
 }
 
@@ -301,11 +301,11 @@
 }
 
 .history-panel-node-branch {
-  background: var(--info);
+  background: var(--gray-300);
 }
 
 .history-panel-node-manual-save {
-  background: var(--success);
+  background: var(--gray-300);
 }
 
 .history-panel-node-autosave,

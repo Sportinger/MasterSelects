@@ -30,7 +30,7 @@ export function ExportProgressView({
     : (ffmpegProgress?.percent ?? 0);
 
   return (
-    <div className="export-progress-container">
+    <div className="export-progress-container" role="status" aria-label="Export progress">
       <div style={{ marginBottom: '12px', fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
         {usesBrowserProgress ? (
           <>
@@ -55,7 +55,14 @@ export function ExportProgressView({
         )}
       </div>
 
-      <div className="export-progress-bar">
+      <div
+        className="export-progress-bar"
+        role="progressbar"
+        aria-label="Export progress"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.max(0, Math.min(100, progressPercent))}
+      >
         <div
           className="export-progress-fill"
           style={{ width: `${progressPercent}%` }}

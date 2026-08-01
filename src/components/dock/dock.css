@@ -255,6 +255,40 @@ html[data-dock-resize-hover-axis='xy'] * {
   height: 2px;
 }
 
+/* Geometry anchors for guided explanations of two-axis corner resizing. */
+.dock-guided-resize-corner {
+  height: 24px;
+  pointer-events: none;
+  position: absolute;
+  width: 24px;
+}
+
+.dock-resize-handle.horizontal > .dock-guided-resize-corner {
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.dock-resize-handle.horizontal > .dock-guided-resize-corner--start {
+  top: 0;
+}
+
+.dock-resize-handle.horizontal > .dock-guided-resize-corner--end {
+  top: 100%;
+}
+
+.dock-resize-handle.vertical > .dock-guided-resize-corner {
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.dock-resize-handle.vertical > .dock-guided-resize-corner--start {
+  left: 0;
+}
+
+.dock-resize-handle.vertical > .dock-guided-resize-corner--end {
+  left: 100%;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dock-container.layout-switch-divider-fade-in .dock-resize-handle::after {
     animation: none;

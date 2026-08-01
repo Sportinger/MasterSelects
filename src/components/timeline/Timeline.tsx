@@ -594,6 +594,24 @@ export function Timeline() {
     onEmptyContextMenu: handleEmptyTimelineContextMenu,
     onEmptyMouseDown: handleEmptyTimelineMouseDown,
     onFadeStart: handleFadeStart,
+    onDeleteKeyframes: (keyframeIds) => {
+      const transactionId = `context-menu-delete-keyframes:${Date.now()}`;
+      timelineActions.applyTimelineEditOperation({
+        id: transactionId,
+        type: 'keyboard-delete-command',
+        transactionId,
+        historyBatchId: transactionId,
+        source: 'context-menu',
+        command: 'delete',
+        priority: 'keyframes-only',
+        keyframeIds,
+        clipIds: [],
+        includeLinked: false,
+      }, {
+        source: 'context-menu',
+        historyLabel: keyframeIds.length > 1 ? 'Delete keyframes' : 'Delete keyframe',
+      });
+    },
     onRulerMouseDown: handleTimelineRulerMouseDown,
     onMoveKeyframe: timelineActions.moveKeyframe,
     onMoveKeyframeGroup: timelineActions.moveKeyframes,

@@ -21,6 +21,7 @@ import {
   startCurrentExportFromPanel,
 } from './exportPanel';
 import { measureTimelineInteraction } from './interaction';
+import { loadProjectSnapshotForDebug } from './loadProjectSnapshot';
 import { inspectLayoutOverflow } from './layoutOverflow';
 import { probeMediaBitstream } from './mediaBitstream';
 import { probeMediaPipeline } from './mediaPipelineProbe';
@@ -794,6 +795,9 @@ export async function runDebugAction(action: string, args: Record<string, unknow
           projectName: projectFileService.getProjectData()?.name ?? null,
         },
       };
+    }
+    case 'load-project-snapshot': {
+      return loadProjectSnapshotForDebug(args);
     }
     case 'reload-page': {
       window.location.reload();

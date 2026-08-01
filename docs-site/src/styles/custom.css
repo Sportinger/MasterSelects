@@ -1,0 +1,45 @@
+/* MasterSelects docs theme — Plate-style token set, written as our own
+   Starlight overrides. Every value below is a plain design token
+   (measured, then chosen); adapt freely, piece by piece. */
+
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+
+:root {
+  --sl-font: 'Geist', ui-sans-serif, system-ui, sans-serif;
+  --sl-font-mono: 'Geist Mono', ui-monospace, monospace;
+}
+
+/* Dark is the primary look: near-black canvas, slightly lifted nav and
+   sidebar, neutral gray ramp, one saturated blue accent. */
+:root[data-theme='dark'] {
+  --sl-color-bg: #0f0f0f;
+  --sl-color-bg-nav: oklch(0.205 0 0);
+  --sl-color-bg-sidebar: oklch(0.205 0 0);
+  --sl-color-bg-inline-code: oklch(0.269 0 0);
+
+  --sl-color-accent-low: hsl(224, 54%, 20%);
+  --sl-color-accent: hsl(224, 100%, 60%);
+  --sl-color-accent-high: hsl(224, 100%, 85%);
+
+  --sl-color-white: oklch(0.985 0 0);
+  --sl-color-gray-1: oklch(0.985 0 0);
+  --sl-color-gray-2: oklch(0.708 0 0);
+  --sl-color-gray-3: oklch(0.5 0 0);
+  --sl-color-gray-4: oklch(0.37 0 0);
+  --sl-color-gray-5: oklch(0.205 0 0);
+  --sl-color-gray-6: #0f0f0f;
+  --sl-color-black: hsl(224, 10%, 10%);
+
+  --sl-color-text: oklch(0.985 0 0);
+  --sl-color-text-accent: oklch(0.922 0 0);
+  --sl-color-hairline: oklch(0.275 0 0);
+  --sl-color-hairline-light: oklch(0.275 0 0);
+  --sl-color-hairline-shade: oklch(0.275 0 0);
+}
+
+/* Keep light mode usable with the same accent family. */
+:root[data-theme='light'] {
+  --sl-color-accent-low: hsl(224, 100%, 92%);
+  --sl-color-accent: hsl(224, 100%, 52%);
+  --sl-color-accent-high: hsl(224, 80%, 30%);
+}

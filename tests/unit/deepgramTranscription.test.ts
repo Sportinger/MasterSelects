@@ -7,7 +7,6 @@ import type { Env } from '../../functions/lib/env';
 import type { PreparedHostedOpenAITranscription } from '../../functions/lib/providers/openaiTranscription';
 import {
   mapHostedTranscriptionWords,
-  transcribeWithCloudProvider,
 } from '../../src/services/transcription/cloudProviders';
 
 const preparedAudio: PreparedHostedOpenAITranscription = {
@@ -114,54 +113,6 @@ describe('hosted Deepgram transcription', () => {
       speakerConfidence: 0.89,
       start: 4.5,
       text: 'Hallo.',
-    }]);
-  });
-
-  it('uses Nova-3 and current diarization for direct local Deepgram requests', async () => {
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-      results: {
-        channels: [{
-          alternatives: [{
-            words: [{
-              confidence: 0.94,
-              end: 0.8,
-              speaker: 1,
-              speaker_confidence: 0.88,
-              start: 0.2,
-              word: 'Test.',
-            }],
-          }],
-        }],
-      },
-    })));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const words = await transcribeWithCloudProvider(
-      'deepgram',
-      'clip-1',
-      new Blob([new Uint8Array([82, 73, 70, 70])], { type: 'audio/wav' }),
-      'de',
-      'browser-secret',
-      2,
-      vi.fn(),
-    );
-
-    const [requestUrl] = fetchMock.mock.calls[0];
-    const url = new URL(String(requestUrl));
-    expect(url.searchParams.get('model')).toBe('nova-3');
-    expect(url.searchParams.get('smart_format')).toBe('true');
-    expect(url.searchParams.get('diarize_model')).toBe('latest');
-    expect(url.searchParams.has('diarize')).toBe(false);
-    expect(url.searchParams.get('utterances')).toBe('true');
-    expect(url.searchParams.get('language')).toBe('de');
-    expect(words).toEqual([{
-      confidence: 0.94,
-      end: 2.8,
-      id: 'word-0',
-      speaker: 'Speaker 2',
-      speakerConfidence: 0.88,
-      start: 2.2,
-      text: 'Test.',
     }]);
   });
 

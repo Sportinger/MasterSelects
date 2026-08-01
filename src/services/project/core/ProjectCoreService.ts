@@ -3,7 +3,6 @@
 
 import { Logger } from '../../logger';
 import { projectDB } from '../../projectDB';
-import { apiKeyManager } from '../../apiKeyManager';
 import { shouldSkipEmptyProjectSave } from './autosaveRecovery';
 import { addRecentFsaProject, removeRecentFsaProject } from '../recentProjects';
 import { createDefaultRulerLaneState } from '../../../timeline/tempo/rulerDefaults';
@@ -19,7 +18,6 @@ import {
   writeFsaProjectFile,
   writeFsaProjectJsonWithAutosaveFallback,
 } from './projectCorePersistence';
-import { loadProjectKeysFile, saveProjectKeysFile } from './projectKeysFile';
 import type { ProjectComposition } from '../types/composition.types';
 import type { ProjectFolder } from '../types/folder.types';
 import type { ProjectMediaFile } from '../types/media.types';
@@ -208,9 +206,6 @@ export class ProjectCoreService {
       await this.storeLastProject(projectFolder);
       await addRecentFsaProject(projectFolder, initialProject);
 
-      // Save any existing API keys to the new project
-      await this.saveKeysFile();
-
       log.info(`Created project: ${name}`);
       return true;
     } catch (e) {
@@ -258,16 +253,6 @@ export class ProjectCoreService {
       await addRecentFsaProject(handle, projectData);
 
       // Try to restore API keys from file if IndexedDB keys are empty
-      try {
-        const existingKeys = await apiKeyManager.getAllKeys();
-        const hasAnyKey = Object.values(existingKeys).some((v: string) => v !== '');
-        if (!hasAnyKey) {
-          await this.loadKeysFile();
-        }
-      } catch (e) {
-        log.warn('Failed to check/restore API keys:', e);
-      }
-
       log.info(`Opened project: ${projectData.name}`);
       return true;
     } catch (e) {
@@ -304,9 +289,6 @@ export class ProjectCoreService {
 
       this.projectData.updatedAt = new Date().toISOString();
       await writeFsaProjectJsonWithAutosaveFallback(this.projectHandle, this.projectData);
-
-      // Also update the keys file
-      await this.saveKeysFile();
 
       if (this.dirtyRevision === savedRevision) {
         this.isDirty = false;
@@ -632,18 +614,6 @@ export class ProjectCoreService {
     if (!this.projectData) return;
     this.projectData.folders = folders;
     this.markDirty();
-  }
-
-  // ============================================
-  // API KEYS FILE (.keys.enc)
-  // ============================================
-
-  async saveKeysFile(): Promise<void> {
-    await saveProjectKeysFile(this.projectHandle);
-  }
-
-  async loadKeysFile(): Promise<boolean> {
-    return loadProjectKeysFile(this.projectHandle);
   }
 
   private async storeLastProject(handle: FileSystemDirectoryHandle): Promise<void> {

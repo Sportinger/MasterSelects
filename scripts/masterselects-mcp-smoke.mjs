@@ -31,9 +31,6 @@ try {
     'bridge_list_tools',
     'bridge_get_history',
     'bridge_replay_tool_call',
-    'bridge_send_chat_message',
-    'bridge_compare_chat_prompts',
-    'bridge_get_chat_system_prompt',
     'getTimelineState',
   ]) {
     if (!names.has(expected)) {
@@ -52,16 +49,6 @@ try {
     arguments: {},
   });
   assertSuccessfulTextResult(timeline, 'getTimelineState');
-
-  const prompt = await client.callTool({
-    name: 'bridge_get_chat_system_prompt',
-    arguments: {
-      includeContext: false,
-      prompt: 'Inspect the selected clip transcript.',
-      promptVersion: 'v2',
-    },
-  });
-  assertSuccessfulTextResult(prompt, 'bridge_get_chat_system_prompt');
 
   console.log(`MasterSelects MCP smoke passed (${listed.tools.length} tools).`);
 } finally {

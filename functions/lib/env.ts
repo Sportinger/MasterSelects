@@ -70,7 +70,6 @@ export interface Env {
   MEDIA: AppR2Bucket;
   MASTERSELECTS_PUBLIC_URL?: string;
   OPENAI_API_KEY?: string;
-  PIAPI_API_KEY?: string;
   RESEND_API_KEY?: string;
   SESSION_SECRET?: string;
   STRIPE_PRICE_ID?: string;

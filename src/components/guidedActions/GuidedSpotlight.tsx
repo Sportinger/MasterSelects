@@ -6,7 +6,7 @@ interface GuidedSpotlightProps {
 
 export function GuidedSpotlight({ rect }: GuidedSpotlightProps) {
   if (!rect) {
-    return <div className="guided-spotlight guided-spotlight--full" aria-hidden="true" />;
+    return null;
   }
 
   return (

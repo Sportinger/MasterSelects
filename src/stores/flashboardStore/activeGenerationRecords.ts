@@ -173,8 +173,8 @@ export function getFlashBoardActiveGenerationRecordByRequestKey(
 
 /**
  * Only hosted image/video generation currently replays an already-created
- * remote task for a stable idempotency key. Audio and BYO routes fail closed
- * because their provider call cannot yet be proven exactly-once after reload.
+ * remote task for a stable idempotency key. Audio routes fail closed because
+ * their provider call cannot yet be proven exactly-once after reload.
  */
 export function hasDurableFlashBoardProviderIdempotency(
   request: FlashBoardGenerationRequest,

@@ -1,0 +1,437 @@
+---
+title: "Timeline"
+---
+
+[<- Back to Index](/features/readme/)
+
+The Timeline is the core editing interface for multi-track editing. It now covers video, audio, image, Lottie, Rive, text, solid, motion shape, mesh, composition, camera, and splat-effector clips, with keyframe lanes, transitions, multicam grouping, pick-whip parenting, and slot-grid playback.
+
+---
+
+## Track Types
+
+### Video Tracks
+- Hold video, image, Lottie, Rive, text, solid, motion shape, mesh, composition, camera, and splat-effector clips.
+- Higher tracks render on top of lower tracks.
+- Expanded tracks can show keyframe property rows and curve editors.
+- Default layout starts with `Video 2` above `Video 1`.
+
+### Audio Tracks
+- Hold audio-only clips and audio-linked companions for video clips.
+- Waveforms support compact, detailed, and spectral timeline display modes.
+- Audio Focus mode expands audio lanes and compacts video lanes without switching to a separate editor window.
+- Linked audio follows video movement unless moved independently with `Alt` drag.
+- Default layout includes one audio track named `Audio`.
+
+### Track Management
+```ts
+addTrack()          // Create a video or audio track
+removeTrack()       // Delete a track and its clips
+renameTrack()       // Rename on double-click
+setTrackHeight()    // Resize a single track
+scaleTracksOfType() // Resize all tracks of the same type together
+setTrackLocked()    // Lock or unlock timeline editing for a track
+setTrackParent()    // Parent tracks with cycle detection
+getTrackChildren()  // Query child tracks
+```
+
+### Track Height
+- Track height clamps to 20-600 px.
+- Curve editors clamp to 80-600 px.
+- Expanded track height depends on the selected clip, visible property rows, and open curve editors.
+
+### Track and Clip Colors
+- Clip titles and passive status badges render as a lightweight DOM chrome
+  above `TimelineClipCanvas`, clamped to the visible clip span while
+  scrolling/zooming. The canvas still owns clip bodies, thumbnails, waveforms,
+  spectrograms, and passive analysis/progress visuals.
+- When no thumbnail bitmap is available, clip chrome centers a height-scaled
+  white outline pictogram in the currently visible clip span. Hidden track
+  colors fall back to neutral gray, so every visible clip remains identifiable.
+- **Invariant — never perturb the clip previsualization:** the clip body preview
+  (waveform, spectrogram, MIDI note bars, thumbnail) is the primary way a clip is
+  read at a glance and must stay unobstructed. Any clip whose body already
+  canvas-draws its own preview MUST NOT also render a type-icon pictogram overlay
+  on top of it — the overlay is redundant clutter that hurts legibility.
+  Currently this suppresses the icon for `midi` and `audio` clips (see
+  `showIcon` in `timelineClipCanvasChromeOverlays.ts`). This rule applies to
+  any clip type with a body preview. Do not add badges, icons, or
+  chrome that sit over the previsualization area.
+- A single resolver, `getTimelineTrackColor()` (`src/components/timeline/trackColor.ts`),
+  is the source of truth for a track's color. Precedence: a user-picked
+  **label color** wins; otherwise a **per-type default** applies; otherwise the
+  generic `#303030`.
+- **MIDI identity:** MIDI tracks with no custom label color resolve to
+  `MIDI_TRACK_COLOR` (`#3a4050`), which must stay in sync with the `--midi-color`
+  token in `src/styles/tokens.css`. The token also drives the MIDI **track-header**
+  tint (`TimelineHeader` `isMidiDefaultTint` + `.track-header.midi.midi-default-tint`
+  in `TimelineTracks.css`). Keep header and clip in sync from these two anchors.
+- **Pitfall (issue #259 / #228 fallout):** clip **bodies** are painted by the
+  **canvas** renderer (`TimelineClipCanvas`) using the color from
+  `getTimelineTrackColor()`. Per-type clip colors are resolved through
+  `getTimelineTrackColor()` rather than `.timeline-clip.*` CSS. Any per-type
+  clip color (like MIDI's) must live in `getTimelineTrackColor()`.
+
+---
+
+## Clip Types
+
+### Video / Image
+- Imported from the media panel or by dropping files on the timeline.
+- External drag previews are shown only for valid destinations. Video ghosts are always blue and audio ghosts are always green. A normal video-lane drop previews only the video, without an extra linked-audio ghost lane. Dropping a video that contains audio directly on an audio lane instead previews and places the linked audio on that exact lane plus the video on the lowest free video lane (normally `Video 1`); silent video, images, generated visuals, and other incompatible sources show no clip ghost on audio lanes.
+- Thumbnails and proxies are supported.
+- In Video Focus, holding Ctrl/Strg while dragging inside a visual clip marks a clip-scoped video bake region. Double-click marks the full visible clip. Clip-scoped regions currently use the transient preview cache path and can be unbaked or removed from the clip overlay.
+- Holding Ctrl/Strg while dragging on the ruler marks a composition-scoped video bake region. Baking a ruler region renders the visible composition into a compressed WebCodecs proxy and substitutes that single proxy layer during preview playback, so the generic RAM cache indicator is not the durable bake source.
+
+### Audio
+- Can exist alone or as linked audio for video clips.
+- Fades are authored through `audio-volume` keyframes.
+- In Audio Focus with detailed or spectral display, holding Ctrl/Strg while dragging inside the waveform creates an inline audio region selection. Plain left-drag keeps the normal clip move behavior.
+- Double-clicking a detailed audio clip in Audio Focus highlights the full visible clip as an editable audio region.
+- Left-dragging an already selected audio region moves that highlighted region along the clip without changing its duration; left-dragging outside the selected region keeps moving the whole clip.
+- Dragging the selected audio region's left or right edge resizes the highlighted region.
+- Matching audio edit operations move/resize in place with the highlighted region instead of being duplicated.
+- The selected region exposes a horizontal gain line for direct level edits and side handles for fading that gain change in and out.
+- Existing audio-region edit markers are displayed from the top of the clip downward when ranges overlap, and `Audio Region Markers` in the View menu hides/shows those markers without changing edit processing.
+- Right-clicking the selected region opens direct Split/Cut/Copy/Paste actions first, then secondary non-destructive audio edit-stack operations in compact submenus such as silence, insert silence, delete silence, reverse, invert polarity, channel swap, mono sum, and Region FX presets. Split isolates the selected region as its own middle clip and selects that new clip. Cut removes the selected region from the track and leaves the original audio as left/right clip parts.
+- Region FX presets are stored as region edit-stack operations, not ordinary whole-clip effects, so they stay attached to the selected source range when that region is moved or resized. Their exact waveform cache renders in the background while live playback routes the effect only when the playhead is inside the region.
+- Simple detailed-waveform updates for those non-destructive region edits derive from the source waveform pyramid when possible, and region gain/silence preview is applied directly to the visible waveform columns while dragging. The lane keeps high-resolution detail without waiting for a full processed-audio render, and derivable processed-waveform refreshes run as background cache updates without showing the red waveform-generation border or progress bar. Scrub and playback preview also follow simple region gain/silence changes instead of always using the raw source level.
+- Audio edit-stack chips appear on edited audio clips for quick state, while the selected clip Properties panel exposes an `Audio Edits` tab for inspection, bypass, removal, clear, bake, unbake, and bake history.
+- Bake renders active region edits into a new WAV media source in the Media Panel `Baked Audio` folder, stores the project-local file under `Raw/Baked Audio/`, and resets the clip edit stack. Unbake restores the latest reversible bake to the original source media and the pre-bake region edit stack when that source media is still present in the project.
+- **Waveform pyramid resolution:** the displayed waveform comes from a pyramid that is content-addressed by the **source** (one pyramid per media file, shared by all its clips). The reference is stored per clip (`audioState.sourceAnalysisRefs.waveformPyramidId`) and is only back-filled onto the clip that triggered analysis (`clipWaveformAnalysisActions.ts`). A clip created/rebuilt before the source finished analysing can therefore end up with an empty ref and fall back to a **single-channel (mono)** render while its siblings render full stereo. `TimelineClipCanvas` guards against this by back-filling a missing ref at render time from the media file or any sibling clip of the same source (`enrichClipsWithSourceWaveformRef`). Per-clip refs are a cache, not the source of truth — never assume a clip without one has no waveform.
+
+### Text
+- Created through the timeline text slice.
+- Supports typography, stroke, shadow, and path text.
+
+### Vector Animation
+- Lottie is imported from `.lottie` packages or Lottie JSON files from the Media Panel.
+- Rive is imported from `.riv` files and rendered through the Rive WASM canvas runtime.
+- Both providers use the same canvas-backed render path as text and solids, so preview, nested comps, and export stay aligned.
+- Exposes per-clip loop, end behavior, playback mode, fit, render resolution, animation selection, and background controls in the Properties panel.
+- State machines can be selected in the provider tab, with state changes stored as blue stepped keyframes when state names are available.
+- Boolean and numeric state-machine inputs appear as normal stopwatch-keyframed properties.
+- Rive Data Binding exposes view models, instances, static string/enum values, and keyframed numeric/boolean/color values.
+- When loop is enabled, the clip can be extended beyond its source duration on the right trim edge without freezing on the first pass.
+
+### Solid
+- Flat color clips used for mattes and backgrounds.
+
+### Motion Shape
+- Rectangle and ellipse shape clips are timeline clips with JSON motion definitions.
+- Video track-header context menus can add Motion Rectangle or Motion Ellipse clips at the current playhead position.
+- Solid clip context menus expose Convert Solid to Motion Shape.
+- The Motion tab exposes primitive, size, radius, fill, and stroke controls.
+- Motion shape replicator controls can enable a grid, edit X/Y counts, edit X/Y spacing, and keyframe the per-instance fade.
+- Solid clips can be converted in the store to motion rectangle clips while preserving timeline identity, timing, transform, effects, and keyframes.
+- Motion shape rendering uses WebGPU SDF textures, then the normal compositor stack.
+
+### Mesh
+- Primitive 3D meshes such as cube, sphere, plane, cylinder, torus, and cone.
+- Rendered as 3D clips with full transform and keyframe support.
+
+### Composition
+- Nested compositions can be dropped from the media panel.
+- Double-click enters the nested comp for editing.
+
+### Camera and Splat Effector
+- Camera clips and splat-effector clips are first-class clip types in the store and copy/paste flow.
+- Camera/native-gaussian clips expose camera-oriented property labels in the keyframe UI.
+- New and reset camera clips start at Z = 1 so their eye is outside the scene origin.
+
+### YouTube Download
+- Pending download clips are represented in the timeline while the download is in progress.
+
+---
+
+## Clip Operations
+
+| Action | Current Behavior |
+|--------|------------------|
+| Move | Drag a clip or a multi-selection. |
+| Trim | Drag clip edges. |
+| Cut tool | `C` toggles Blade mode through the timeline tool palette; click clips to split them. |
+| Split at playhead | `Shift+C` in MasterSelects, preset-specific alternatives elsewhere. |
+| Split all at playhead | Available in the Cut flyout; runs through the shared timeline edit operation kernel. |
+| Blade all tracks | Available in the Cut flyout as a mode; splits every unlocked visible clip crossing the click time. |
+| Trim start/end to playhead | Available in the Cut flyout; trims selected clips through the operation kernel and keeps linked audio aligned. |
+| Ripple delete | Available in the Cut flyout and clip context menu; deletes selected clips and closes the affected track gap through the operation kernel. |
+| Delete gap | Available in the Cut flyout, clip context menu, and empty timeline right-click menu; closes an empty gap through the operation kernel. |
+| Delete all gaps in this layer | Available from the empty timeline right-click menu; closes gaps on the clicked layer from the clicked empty space onward as one undoable operation. |
+| Delete all gaps | Available from the empty timeline right-click menu; closes all gaps on unlocked visible tracks as one undoable operation. |
+| Fit comp to window | Available from the zoom controls and empty timeline right-click menu. |
+| Right-drag empty space or clips | Scrubs the playhead without opening the timeline context menu; context menus open only for a single right-click. |
+| Edge playhead drag | Left-drag the ruler or playhead head against either visible lane edge to auto-scroll proportionally; persistent snapping plus the `Shift` temporary-enable and `Alt` bypass modifiers remain active. Snapping to a clip end lands on its last visible composition frame instead of the exclusive time immediately after it. |
+| Sync via Audio | Clip context menu action for selections with at least two audible clips; aligns selected audio/video pairs by waveform correlation and writes one manual linked group. |
+| Lift range | Available in the Cut flyout after drawing a Range Selection; removes the range and leaves a gap. |
+| Extract range | Available in the Cut flyout after drawing a Range Selection; removes the range and ripples following clips left. |
+| Copy | `Ctrl+C` copies selected keyframes first, otherwise selected clips. |
+| Paste | `Ctrl+V` pastes keyframes if the clipboard has them, otherwise pastes clips. |
+| Delete | `Delete` / `Backspace` removes selected keyframes first, then clips. |
+| Reverse | Available from the clip context menu and via clip state. |
+| Create Subcomposition | Clip context menu action that moves the selected timeline clips into a new composition and inserts that composition back into the current timeline. |
+| Blend mode | `+` / `-` cycles blend modes on selected clips. |
+
+- Linked clip partners use the same live drag geometry as the directly dragged clip, so linked audio/video and manual linked-group peers stay visually in sync while moving.
+- Dragging a multi-selection across video or audio tracks moves every selected clip in that track family by the same track-index delta, preserving relative layer spacing in the live preview and committed edit. Cross-family partners such as linked audio stay on their corresponding audio tracks.
+
+### Copy and Paste
+- Copying clips includes linked audio automatically when the video clip is selected.
+- Copy/paste preserves vector animation clip type and vector animation settings.
+- Copy/paste preserves motion shape definitions.
+- Copying keyframes stores them relative to the earliest copied keyframe.
+- Pasting keyframes targets the selected clip when exactly one clip is selected; otherwise it falls back to the original clip from the clipboard data.
+- When timeline clips or keyframes are selected, timeline clipboard shortcuts take precedence over Media Panel clipboard shortcuts.
+
+### Timeline Tool Palette
+- The ruler/header strip contains a compact grouped timeline tool palette.
+- UX: the palette is always visible, with every tool button in place at full size like a normal toolbar (issue #256). The hold-to-open grouped-tool flyout is available.
+- Root groups are Selection, Cut, Trim, Placement, and Navigation/Marking.
+- Clicking a root button activates the last enabled child tool for that group.
+- UX press-drag-release (issue #256): the whole root button is one target — there is no chevron/edge hit-zone. A short click just activates the group's current tool. Pressing and holding past `HOLD_TO_OPEN_MS` (200ms, pointer still down) opens the unclipped portal flyout; the pointer is captured so the user can slide off the small button onto the items and release over the desired tool to select it in one continuous gesture. Releasing back on the root button activates the current tool (a hold-and-release without choosing never swallows the click); releasing over empty space cancels. Right-click and the keyboard (`ArrowDown`) open a sticky, click-to-pick flyout instead (no held pointer to drag with).
+- Enabled tools are Select, Track Select Forward/Backward/Forward All Tracks, Range Selection, Blade, Blade All Tracks, Split at Playhead, Split All at Playhead, Trim Start/End to Playhead, Ripple Trim Start/End to Playhead, Ripple Delete, Delete Gap, Edge Trim, Ripple Trim, Rolling Edit, Slip, Slide, Rate Stretch, Position/Overwrite, Hand/Pan, Zoom, Marker, In Point, Out Point, and Pen/Keyframe.
+- Track Select Forward, Track Select Backward, and Track Select Forward All Tracks are enabled selection subtools; their clip clicks route through the shared pointer dispatcher and `select-clips-from-time` operation.
+- Range Selection is an enabled selection mode. Dragging on timeline space stores a timeline range with the affected unlocked visible track IDs and leaves a persistent range overlay for later lift/extract/copy commands.
+- Shared tool previews render through `TimelineToolOverlayLayer` for section-scrolled overlays such as Track Select highlights, Blade All Tracks cut lines, and blocked tool messages.
+- Active pointer tools set a matching icon cursor so the selected tool remains visible at the mouse pointer. Blade, Range, track-selection, trim modes, Hand, Zoom, Marker, In/Out, and Pen/Keyframe expose custom SVG cursor glyphs with normal CSS fallbacks.
+- Hand/Pan drags the timeline surface horizontally without moving clips. Zoom clicks around the pointer and uses `Alt` or `Shift` for zooming out.
+- Tool selection is treated as non-mutating and remains available during export; mutating commands are blocked while export is active.
+
+### Cut Tool
+- `C` toggles Blade mode in the default preset.
+- `Escape` exits cut mode.
+- `Shift+C` performs a direct split at the playhead without entering cut mode.
+- Blade hover/click is handled by the timeline tool pointer dispatcher, which writes shared preview state and commits through `applyTimelineEditOperation`.
+- Split-at-playhead, AI single-clip split, AI bulk split-at-times/evenly, AI move, AI trim, and AI reorder all route through `applyTimelineEditOperation`.
+- Lift Range and Extract Range also route through `applyTimelineEditOperation`; they split clip boundaries at the selected range and clear the range overlay after commit.
+- Mutating operation-kernel commits and global undo/redo are blocked while export is active.
+- Timeline edit operations expose replay descriptors for Guided Action playback, so Blade, Track Select, Trim, Slip/Slide, Placement, Lift/Extract, and related operation-kernel edits can be represented as semantic timeline replay targets without DOM clicks as the execution source.
+
+### Trim Tools
+- Trim-to-playhead and ripple-trim-to-playhead commands run through the shared operation kernel and preserve linked audio/video timing.
+- Edge Trim, Ripple Trim, Rolling Edit, and Rate Stretch reuse the existing trim handles, but commit through `applyTimelineEditOperation` instead of direct clip mutations.
+- Edge-trimming a linked video/audio clip resizes the linked partner live in the canvas preview, including the source-extension ghost; holding `Alt` keeps the partner independent.
+- Slip and Slide are available as registered operation-kernel modes. Dragging a clip body with either tool previews the slip/slide and commits through `applyTimelineEditOperation`; `Alt` slips independently from linked audio/video.
+- Trim mode activation gives Blade, Hand, Zoom, and Range clicks priority over trim/fade handles.
+
+### Placement Tools
+- Position/Overwrite is an enabled Placement mode. Dropping media in this mode uses the shared `place-timeline-range` operation to clear the target range before the new clip is created.
+- The placement operation supports insert-style space creation and overwrite-style range clearing, including split/trim/delete behavior and linked video/audio split preservation.
+- Normal Select-mode drops still use gap-aware placement. Position/Overwrite intentionally keeps the requested drop time and lets the kernel trim/delete the affected target range.
+- Insert, Overwrite, Replace, Fit to Fill, Append, Place on Top, and Ripple Overwrite are enabled when the Media Panel or Source Monitor exposes a current source item. The commands resolve the source, prepare the affected range through the placement operation, then create the new clip on the target track.
+- Replace, Fit to Fill, and Ripple Overwrite prefer the selected timeline range or selected compatible target clip. Insert and Overwrite use the playhead. Append uses the end of the compatible target track, and Place on Top uses a free upper video track or creates one.
+- New visual media clips keep the default 100% scale; users resize or fit them manually in the Properties panel when needed.
+- Source Monitor In/Out marks constrain the placement source duration and source in point. Clearing the marks returns placement to the full source duration.
+- Source Monitor exposes a full-width source timeline with ruler, playhead, draggable In/Out handles, audio-file playback, and direct Insert, Overwrite, Replace, Fit, Append, and Top buttons, so source edit commands are available outside the timeline tool flyout.
+- Clicking a track header targets that video or audio track for source edits and clip paste. Clicking the same highlighted track again clears that target.
+- Hovering or focusing Placement commands in the timeline flyout or Source Monitor publishes a non-mutating placement preview. The shared overlay renders ghost clips on affected tracks and shows the source In/Out bounds used for the command.
+
+### Pen / Keyframe Tool
+- Pen/Keyframe is an enabled Navigation/Marking mode with a dedicated cursor.
+- Clicking a visible keyframe property lane adds or updates a keyframe at the clicked time.
+- The inserted keyframe value is sampled from the existing property lane by linear interpolation, so adding in-between keys preserves the current visible curve value before further edits.
+
+---
+
+## Selection
+
+- Click selects a clip.
+- `Ctrl+Click` adds or removes a clip from the selection.
+- `Shift+Click` toggles only the clicked clip, which is different from the normal linked-selection behavior.
+- Normal click on a linked video clip selects both the video and linked audio clip.
+- Marquee selection also activates linked audio partners for selected video clips.
+- Click empty space to clear selection.
+- Marquee selection works from empty timeline space.
+- Keyframe selection uses the same shift-toggle pattern.
+
+### Keyframe Selection
+- Select keyframes by clicking the diamond.
+- `Delete` removes selected keyframes before it removes clips.
+- See [Keyframes](/features/keyframes/) for curve and property details.
+
+---
+
+## Keyframe Lanes
+
+- Expanded track headers show a flat list of property rows, not nested folders.
+- Property row labels are single-line with ellipsis so long effect, mask, and generated-source labels do not collide with keyframe controls or values.
+- The current clip's keyframes decide which rows are visible.
+- The UI hides `rotation.x`, `rotation.y`, `position.z`, and `scale.z` for 2D clips.
+- Camera clips and native-render gaussian splats keep the camera-style property model visible.
+- Numeric effect parameters appear as `effect.{effectId}.{paramName}` lanes.
+- Vector animation state changes appear as `lottieState.{stateMachine}` lanes; state-machine inputs appear as `lottieInput.{stateMachine}.{input}` lanes. Rive Data Binding values appear as `riveData.{property}` lanes.
+- Motion shape numeric lanes use registry paths such as `shape.size.w` and `appearance.{id}.stroke.width`.
+- Audio EQ lanes sort `volume` and the band parameters first.
+
+### Curve Editor
+- Double-click a property row to open the curve editor.
+- Only one curve editor can be open at a time.
+- The curve editor shows Bezier curves, auto-scales the value axis, and supports `Shift+wheel` resizing.
+- Selected keyframes expose in/out handles; right-click on a handle resets it to the default 1/3-distance handle.
+
+---
+
+## Compositions and Transitions
+
+### Nested Compositions
+- Composition clips can be nested to a depth of 8.
+- Composition changes propagate into nested render data.
+- Selected clips can be converted into a new nested composition from the clip context menu.
+- Composition switches trigger clip entrance/exit animations in the timeline UI.
+- Vector animation clips inside nested comps render through the same canvas path used in the primary timeline and export flow.
+
+### Transitions
+- Transitions operate between adjacent clips on the same track.
+- The first-pass suite includes Crossfade, Dip to Black, Dip to White, Wipe Left, and Wipe Right.
+- Dragging a transition from the Transitions panel targets a clip junction. Hover preview shows the transition body, real source-handle coverage, and red hold-frame fallback coverage when the requested duration extends past available source material.
+- The default placement is virtual `center`: the transition body is centered on the cut without moving either clip. Preview and export sample the incoming left handle before the clip start and the outgoing right handle after the clip end; when either side lacks real source material, the nearest first/last frame is held and shown as red fallback coverage.
+- Existing transition bodies render on the timeline, can be selected, moved left/right by dragging the body, resized by dragging either edge, and expose duration plus handle/hold details in the transition-scoped Properties tab. Move snaps to the centered cut position and to available source-handle edges; resize snaps to the same source edges. Move and resize previews show the same source-handle and red hold-frame feedback. Transition durations are not capped by clip length; missing material is represented with hold-frame fallback.
+- Preview and export share the same transition planner and layer assembly. Wipe transitions use compositor transition metadata rather than clip effects.
+- Double-clicking a transition body opens its linked transition composition. Mapped-v3 has exactly one full-duration outgoing source clip and one incoming source clip; panels and generated layers may remain additional editable layers. Legacy segmented compositions prompt for an explicit upgrade and are otherwise opened unchanged. See [Transition Compositions](/features/transition-compositions/) for mapped timing, template versions, parity, and the backup lifecycle.
+
+### Multicam
+- Sync via Audio is available for selected audio/video pairs.
+- Linked group movement preserves offsets so sync timing stays intact.
+
+### Pick Whip Parenting
+- Clips and tracks support parent-child relationships.
+- Parent-child links are rendered as overlays with the pick-whip interaction.
+
+---
+
+## Track Controls
+
+Each track header exposes:
+
+- Visibility for video tracks.
+- Mute for audio tracks.
+- Solo for both track types.
+- Lock for both track types; locked tracks block timeline edits such as move, trim, split, delete, keyframe edits, and dropping new clips.
+- Track rename on double-click.
+- Track expansion to reveal keyframe lanes.
+- Right-click opens a track-header context menu with `Add Video Track`, `Add Audio Track`, `Duplicate Track`, and `Delete`.
+
+Soloing multiple tracks is supported. Non-solo tracks dim visually when any solo state is active.
+
+Audio and MIDI tracks share one audible solo group: soloing a MIDI track silences non-soloed audio tracks and vice versa (both during playback and export), and the non-soloed tracks of either type dim in the timeline. Video solo stays an independent, visual-only group. An active solo button on an audio/MIDI track shows a filled amber chip so the soloed state is obvious.
+
+### Track Header Context Menu
+
+- Math Scene and Motion Shape presets are created from the Media panel add/context menu and then dragged to video tracks.
+- `Duplicate Track` currently creates a new empty track of the same type.
+- `Delete` is blocked for the last remaining track of that type.
+- Deleting a populated track shows the affected clip count in the menu label/tooltip.
+
+---
+
+## Playback and Zoom
+
+The toolbar and wheel gestures drive playback and navigation:
+
+- Space toggles play/pause.
+- `J`, `K`, `L` shuttle reverse, pause, and forward.
+- `I` and `O` set in/out points.
+- `X` clears in/out.
+- Stop returns the playhead to the In point when one is set; otherwise it returns to timeline start.
+- `M` adds a marker at the playhead.
+- Right-clicking a marker opens marker transport and MIDI actions.
+- Markers can be turned into `Stop Marker`s that automatically pause playback when crossed.
+- Marker MIDI bindings support `Jump To Marker`, `Play From Marker`, and `Jump To Marker And Stop`.
+- Left/Right arrows step frame by frame.
+- The ruler is a stack of independent **ruler lanes** (Time / Timecode / Frames / Bars+Beats) toggled from the **Rulers** checklist next to the View dropdown; each lane keeps a fixed format and only its tick density adapts to zoom (no frame↔time crossfade). Bars+Beats is projected through a per-composition TempoMap. Clicking a lane marks it active (highlighted). See [Timeline Rulers](/features/timeline-rulers/).
+- The timeline **body** lane grid (behind clips, distinct from the ruler) still uses the active composition frame rate at deep zoom: the base time grid crossfades out while frame-accurate grid lines fade in with zoom.
+- Unselected clips keep persistent white edge brackets: each vertical edge has short top and bottom caps that fade inward, so adjacent clips form a visible `][` cut marker without obscuring thumbnails or waveforms. Selected clips retain the complete white outline.
+- `Alt+Scroll` or `Ctrl+Scroll` zooms the timeline around the mouse pointer by default; Preferences -> General -> Timeline can switch the zoom anchor to the playhead. While zooming in near either lane edge, a magnetic 48 px edge zone preserves the corresponding visible time boundary so the nearby beginning or end is not pushed offscreen. Timeline zoom remains contained behind the dedicated navigator instead of exposing a second native panel scrollbar. Faster wheel gestures use larger zoom steps.
+- `Shift+Scroll` pans horizontally.
+- Vertical scroll snaps to track boundaries.
+- `Ctrl+Shift+Scroll` or `Cmd+Shift+Scroll` toggles slot-grid view.
+- The toolbar also exposes a dedicated slot-grid toggle button that flips between timeline bars and the 12x4 grid icon.
+- The Navigation/Marking tool flyout exposes Marker, In Point, and Out Point commands for the current playhead position.
+
+The timeline navigator below the tracks provides the same scroll and zoom control in a dedicated bar. Releasing its scroll thumb or zoom handles never falls through to the track's click-to-jump action.
+
+---
+
+## Performance Features
+
+- Thumbnails, waveforms, and transcript markers can each be toggled from the toolbar.
+- RAM preview caches 30 fps frames.
+- Composition video bake regions render a compressed preview proxy through the export pipeline and use it as a single layer during editor preview playback. Clip-scoped video bake regions use the transient RAM preview path.
+- Video bake proxy artifacts are runtime-only; project persistence keeps the region marks and resets volatile bake status after reload or timeline cache invalidation.
+- Proxy caching keeps proxy frame ranges warm in the background.
+- Export progress is shown directly on the timeline.
+- Slot-grid view is animated through the same `slotGridProgress` state that drives the timeline/grid transition.
+- When `useWarmSlotDecks` is enabled, slot-grid tiles can show deck warmup badges (`C`, `Wi`, `Wa`, `H`, `F`, `D`) that reflect reusable background playback state.
+
+---
+
+## Store Architecture
+
+The timeline store in `src/stores/timeline/index.ts` combines modular slices plus utility modules:
+
+- `trackSlice`
+- `clipSlice`
+- `textClipSlice`
+- `solidClipSlice`
+- `mathSceneClipSlice`
+- `motionClipSlice`
+- `meshClipSlice`
+- `cameraClipSlice`
+- `splatEffectorClipSlice`
+- `clipEffectSlice`
+- `colorCorrectionSlice`
+- `linkedGroupSlice`
+- `downloadClipSlice`
+- `audioEditSlice`
+- `videoBakeSlice`
+- `toolSlice`
+- `editOperations`
+- `playbackSlice`
+- `ramPreviewSlice`
+- `proxyCacheSlice`
+- `selectionSlice`
+- `keyframeSlice`
+- `maskSlice`
+- `markerSlice`
+- `transitionSlice`
+- `nodeGraphSlice`
+- `clipboardSlice`
+- `aiActionFeedbackSlice`
+
+Utility modules:
+
+- `positioningUtils`
+- `serializationUtils`
+
+Important guard:
+
+- `timelineSessionId` is incremented when the timeline is cleared or reloaded so stale async callbacks do not write back into the wrong session.
+
+---
+
+## Component Structure
+
+Core timeline components live in `src/components/timeline/`:
+
+- `Timeline.tsx` orchestrates the full timeline.
+- `TimelineTrack.tsx` renders track rows and property lanes.
+- `TimelineHeader.tsx` renders track headers and property controls.
+- `TimelineClipCanvas.tsx` renders passive clip bodies, thumbnails, waveforms, spectrograms, labels, and canvas-only passive decorations.
+- `ClipInteractionShell` modules render active clip affordances such as trim/fade handles, keyframe ticks, region controls, and context-menu shells.
+- `TimelineKeyframes.tsx` renders keyframe diamonds in track lanes.
+- `CurveEditor.tsx` and `CurveEditorHeader.tsx` handle curve editing.
+- `TimelineControls.tsx`, `TimelineRuler.tsx`, and `TimelineNavigator.tsx` handle navigation and toolbar controls.
+- `SlotGrid.tsx` and `MiniTimeline.tsx` handle slot-grid mode.
+- `PickWhip.tsx`, `ParentChildLink.tsx`, and `PhysicsCable.tsx` handle parenting visuals.
+
+The main hooks are `useClipDrag`, `useClipTrim`, `useClipFade`, `useTimelineKeyboard`, `useTimelineZoom`, `useExternalDrop`, `useTransitionDrop`, `usePickWhipDrag`, `useMarqueeSelection`, `usePlayheadDrag`, `usePlayheadSnap`, `useMarkerDrag`, `usePlaybackLoop`, `useLayerSync`, and `useAutoFeatures`.
+
+---
+
+## Related Docs
+
+- [Keyframes](/features/keyframes/)
+- [Keyboard Shortcuts](/features/keyboard-shortcuts/)
+- [Slot Grid](/features/slot-grid/)
+- [Preview](/features/preview/)
+- [Audio](/features/audio/)

@@ -6,15 +6,13 @@
 export type ThemeMode = 'dark' | 'light' | 'midnight' | 'system' | 'crazy' | 'custom';
 
 // Transcription provider options
-export type TranscriptionProvider = 'local' | 'openai' | 'assemblyai' | 'deepgram' | 'hybrid';
+export type TranscriptionProvider = 'local' | 'openai' | 'deepgram' | 'hybrid';
 
 // Preview quality options (multiplier on base resolution)
 export type PreviewQuality = 1 | 0.5 | 0.25;
 
 // GPU power preference options
 export type GPUPowerPreference = 'high-performance' | 'low-power';
-
-export type AIProvider = 'openai' | 'lemonade';
 
 export type GuidedActionReplayVisualizationMode = 'off' | 'concise' | 'full';
 export type GuidedActionReplayCompressionMode = 'none' | 'family' | 'aggressive';
@@ -38,31 +36,6 @@ export function clampShortcutDisplayScale(value: number): number {
   }
   return Math.min(MAX_SHORTCUT_DISPLAY_SCALE, Math.max(MIN_SHORTCUT_DISPLAY_SCALE, value));
 }
-
-export interface APIKeys {
-  openai: string;
-  anthropic: string; // Legacy Anthropic key retained for settings migration
-  assemblyai: string;
-  deepgram: string;
-  piapi: string;  // PiAPI key for AI video generation (Kling, Luma, etc.)
-  evolink: string; // EvoLink key for Nano Banana 2 fallback image generation
-  elevenlabs: string; // ElevenLabs key for AI audio generation
-  youtube: string; // YouTube Data API v3 key (optional, Invidious works without)
-  // Legacy Kling keys (deprecated, use piapi instead)
-  klingAccessKey: string;
-  klingSecretKey: string;
-}
-
-export type ApiKeyDefaultProvider = 'openai' | 'anthropic' | 'piapi' | 'evolink' | 'elevenlabs';
-export type ApiKeyDefaults = Record<ApiKeyDefaultProvider, boolean>;
-
-export const DEFAULT_API_KEY_DEFAULTS: ApiKeyDefaults = {
-  openai: false,
-  anthropic: false,
-  piapi: false,
-  evolink: false,
-  elevenlabs: false,
-};
 
 // Autosave interval options (in minutes)
 export type AutosaveInterval = 1 | 2 | 5 | 10;

@@ -1,7 +1,10 @@
 import type { TimelineClip } from './types';
 import type { SerializableClip } from '../../types';
 import { clonePersistedClipAudioState } from '../../services/audio/clipAudioStatePersistence';
-import { createTimelineTransitionOverlayCanvasRuntime } from '../../services/timeline/timelineGeneratedCanvasRuntime';
+import {
+  createTimelineSolidCanvasRuntime,
+  createTimelineTransitionOverlayCanvasRuntime,
+} from '../../services/timeline/timelineGeneratedCanvasRuntime';
 import { mathSceneRenderer } from '../../services/mathScene/MathSceneRenderer';
 import { cloneClipNodeGraph } from '../../services/nodeGraph';
 import { normalizeTransitionInstanceParams } from '../../transitions';
@@ -280,6 +283,36 @@ export function createRestoredTransitionOverlayClip(
     isLoading: false,
     needsReload: false,
   });
+}
+
+export function createRestoredSolidClip(
+  serializedClip: SerializableClip,
+  clipId: string,
+  options: { width?: number; height?: number } = {},
+): TimelineClip | null {
+  if (serializedClip.sourceType !== 'solid' || !serializedClip.solidColor) {
+    return null;
+  }
+
+  const canvas = createTimelineSolidCanvasRuntime({
+    color: serializedClip.solidColor,
+    dimensions: options,
+  });
+  const clip = createRestoredNestedClipCommon(serializedClip, {
+    clipId,
+    name: serializedClip.name || `Solid ${serializedClip.solidColor}`,
+    file: new File([], 'solid-clip.dat', { type: 'application/octet-stream' }),
+    source: {
+      type: 'solid',
+      textCanvas: canvas,
+      mediaFileId: serializedClip.mediaFileId || undefined,
+      naturalDuration: serializedClip.duration,
+    },
+    isLoading: false,
+    needsReload: false,
+  });
+  clip.solidColor = serializedClip.solidColor;
+  return clip;
 }
 
 export function createManagedRestoredImageUrl(clipId: string, file: File | Blob): string {

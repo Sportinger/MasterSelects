@@ -33,7 +33,6 @@ export const classCHardTargets = [
   { path: 'src/components/panels/properties/AnalysisTab.tsx', maxCurrentHits: 1 },
   { path: 'src/components/panels/properties/AudioBusPropertiesTabs.tsx', maxCurrentHits: 10 },
   { path: 'src/components/panels/properties/BlendshapesTab.tsx', maxCurrentHits: 1 },
-  { path: 'src/components/panels/properties/CameraTab.tsx', maxCurrentHits: 3 },
   { path: 'src/components/panels/properties/EffectsTab.tsx', maxCurrentHits: 1 },
   { path: 'src/components/panels/properties/GaussianSplatTab.tsx', maxCurrentHits: 3 },
   { path: 'src/components/panels/properties/index.tsx', maxCurrentHits: 3 },

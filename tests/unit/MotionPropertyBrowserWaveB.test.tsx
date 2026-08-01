@@ -40,8 +40,24 @@ describe('Motion property browser Wave B UI', () => {
     });
   });
 
+  it('starts collapsed and expands via the section header', () => {
+    render(<MotionShapeTab clipId={clipId} />);
+
+    expect(screen.queryByRole('searchbox', { name: 'Search motion properties' }))
+      .not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Property Browser' }));
+    expect(screen.getByRole('searchbox', { name: 'Search motion properties' }))
+      .toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Property Browser' }));
+    expect(screen.queryByRole('searchbox', { name: 'Search motion properties' }))
+      .not.toBeInTheDocument();
+  });
+
   it('searches only clip-valid registry descriptors without dirtying project state', () => {
     render(<MotionShapeTab clipId={clipId} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Property Browser' }));
     const beforeClip = useTimelineStore.getState().clips.find(clip => clip.id === clipId);
     const revisionBeforeSearch = useTimelineStore.getState().timelineRevision;
 
@@ -62,6 +78,7 @@ describe('Motion property browser Wave B UI', () => {
 
   it('pins exact dynamic paths on the clip and favorites them only in user preferences', () => {
     render(<MotionShapeTab clipId={clipId} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Property Browser' }));
     const clip = useTimelineStore.getState().clips.find(candidate => candidate.id === clipId)!;
     const fillId = clip.motion?.appearance?.items[0]?.id;
     const path = `appearance.${fillId}.opacity`;

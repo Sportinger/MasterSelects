@@ -19,6 +19,11 @@ next poll.
 The browser polls every three seconds while the dialog is open. Telegram calls
 the webhook; the backend does not poll Telegram.
 
+The dialog keeps up to 12 recent conversation IDs and previews in browser local
+storage. While the dialog is closed, the Help menu checks those saved
+conversations every 10 seconds while the page is visible and shows an unread
+reply indicator.
+
 ```text
 MasterSelects dialog
   -> POST /api/support/chat
@@ -263,6 +268,11 @@ If multiple requests are active, always reply to the corresponding bot message.
 This is the thread key; quoting or manually copying text does not create the
 association.
 
+For a single MasterSelects conversation, each user message after the first is
+posted by the bot as a Telegram reply to the latest delivered bot message in that
+conversation. Developer replies must still use Telegram's **Reply** action on
+the bot message that carries the request being answered.
+
 Each MasterSelects bot message contains an internal `MasterSelects ref`. If
 Telegram delivers a valid direct reply before the normal bot-message mapping
 was committed, the webhook uses that reference to recover the pending outgoing
@@ -287,11 +297,12 @@ message with `201` and does not call Telegram again. If delivery is still
 the pending message and `Retry-After: 3`; the retry deliberately does not call
 Telegram again. The dialog marks that message as **Delivery pending**.
 
-Polling advances normally and separately asks the backend to reconcile the
-small set of known pending message IDs. A pending row therefore cannot block
-newer messages behind the normal page limit. After normal confirmation or
-webhook reference recovery changes it to `delivered`, the pending badge
-disappears; a stale response can never downgrade it back to `pending`.
+Polling advances normally and also asks the backend to reconcile a small set of
+known pending message IDs. Reconciliation rows share the normal 100-message
+response limit, so a busy conversation can require further polls to return all
+newer messages. After normal confirmation or webhook reference recovery changes
+a pending message to `delivered`, the pending badge disappears; a stale response
+can never downgrade it back to `pending`.
 
 Only a valid Telegram JSON response with `{"ok":false}` is a definitive
 rejection: the backend rolls back the pending row, returns
@@ -303,8 +314,8 @@ the draft or starting a new conversation generates a new ID.
 Send and poll rate limits use an atomic D1 counter per identity, scope, and
 minute. Concurrent requests cannot all read the same stale counter value.
 Expired counter rows are removed best-effort. If D1 cannot enforce the counter,
-the hosted endpoint fails closed temporarily instead of silently disabling
-abuse protection.
+send requests fail closed temporarily instead of silently disabling abuse
+protection; polling continues when its counter is unavailable.
 
 ---
 

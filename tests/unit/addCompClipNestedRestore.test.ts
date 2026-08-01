@@ -9,6 +9,7 @@ import {
   type NestedMediaRestoreEvent,
 } from '../../src/stores/timeline/nestedCompositionLoader';
 import { createCompLinkedAudioClip } from '../../src/stores/timeline/clip/addCompClip';
+import { findCompositionInsertionCycle } from '../../src/stores/timeline/compositionCycleGuard';
 import { thumbnailRenderer } from '../../src/services/thumbnailRenderer';
 import { blobUrlManager } from '../../src/stores/timeline/helpers/blobUrlManager';
 import { useMediaStore } from '../../src/stores/mediaStore';
@@ -221,6 +222,76 @@ describe('addCompClip nested restore', () => {
     vi.restoreAllMocks();
     compositionAudioMixerMocks.mixdownComposition.mockReset();
     compositionAudioMixerMocks.createAudioElement.mockReset();
+  });
+
+  it('detects direct and transitive composition insertion cycles', () => {
+    const videoTrack = track('video-1', 'video');
+    const ref = (id: string, compositionId: string) => ({
+      ...serializedClip(id, 'video', '', videoTrack.id),
+      isComposition: true,
+      compositionId,
+    } as SerializableClip);
+    const compA = composition('comp-a', [ref('a-to-b', 'comp-b')], [videoTrack]);
+    const compB = composition('comp-b', [ref('b-to-c', 'comp-c')], [videoTrack]);
+    const compC = composition('comp-c', [], [videoTrack]);
+    const compositions = [compA, compB, compC];
+
+    expect(findCompositionInsertionCycle({
+      parentCompositionId: 'comp-a',
+      childCompositionId: 'comp-a',
+      compositions,
+    })).toEqual(['comp-a', 'comp-a']);
+    expect(findCompositionInsertionCycle({
+      parentCompositionId: 'comp-c',
+      childCompositionId: 'comp-a',
+      compositions,
+    })).toEqual(['comp-c', 'comp-a', 'comp-b', 'comp-c']);
+    expect(findCompositionInsertionCycle({
+      parentCompositionId: 'comp-a',
+      childCompositionId: 'comp-c',
+      compositions,
+    })).toBeNull();
+  });
+
+  it('stops an existing nested composition cycle at the first repeated composition', async () => {
+    const videoTrack = track('video-1', 'video');
+    const compARef = {
+      ...serializedClip('b-to-a', 'video', '', videoTrack.id),
+      name: 'Comp A',
+      isComposition: true,
+      compositionId: 'comp-a',
+    } as SerializableClip;
+    const compBRef = {
+      ...serializedClip('a-to-b', 'video', '', videoTrack.id),
+      name: 'Comp B',
+      isComposition: true,
+      compositionId: 'comp-b',
+    } as SerializableClip;
+    const compA = composition('comp-a', [compBRef], [videoTrack]);
+    const compB = composition('comp-b', [compARef], [videoTrack]);
+    const harness = createStoreHarness();
+
+    const nestedClips = await loadNestedClips({
+      compClipId: 'top-level-comp-b-clip',
+      composition: compB,
+      get: harness.get,
+      set: harness.set,
+      getMediaState: () => ({
+        files: [],
+        compositions: [compA, compB],
+        activeCompositionId: compA.id,
+      }),
+    });
+
+    expect(nestedClips).toHaveLength(1);
+    expect(nestedClips[0]).toEqual(expect.objectContaining({
+      name: 'Comp A',
+      isComposition: true,
+      compositionId: compA.id,
+      nestedClips: [],
+      isLoading: false,
+    }));
+    expect(nestedClips[0].id).not.toContain('nested-nested-');
   });
 
   it('creates linked composition audio as a lazy placeholder without eager mixdown or audio element allocation', async () => {
@@ -597,6 +668,76 @@ describe('addCompClip nested restore', () => {
     });
     expect(nestedClips[1].isLoading).toBe(false);
     expect(nestedClips[1].source?.audioElement).toBeUndefined();
+  });
+
+  it('restores direct and sub-nested solids with their blend mode and composition-sized canvas', async () => {
+    const parentTrack = track('parent-video', 'video');
+    const solidTrack = track('solid-video', 'video');
+    const solid = {
+      ...serializedClip('clip-solid', 'solid', '', solidTrack.id),
+      name: 'Solid #00ff7b',
+      mediaFileId: undefined,
+      solidColor: '#00ff7b',
+      transform: {
+        ...baseTransform,
+        blendMode: 'add',
+        position: { x: 0.125, y: -0.25, z: 0 },
+      },
+    } as SerializableClip;
+    const childComp = composition('child-comp', [solid], [solidTrack]);
+    const parentComp = composition(
+      'parent-comp',
+      [{
+        ...serializedClip('nested-comp-source', 'video', '', parentTrack.id),
+        name: 'Nested Comp',
+        mediaFileId: undefined,
+        isComposition: true,
+        compositionId: childComp.id,
+      } as SerializableClip],
+      [parentTrack],
+    );
+    const harness = createStoreHarness();
+
+    vi.mocked(useMediaStore.getState).mockReturnValue({
+      files: [],
+      compositions: [parentComp, childComp],
+    } as ReturnType<typeof useMediaStore.getState>);
+
+    const directSolids = await loadNestedClips({
+      compClipId: 'direct-parent-clip',
+      composition: childComp,
+      get: harness.get,
+      set: harness.set,
+    });
+    const subNested = await loadNestedClips({
+      compClipId: 'outer-parent-clip',
+      composition: parentComp,
+      get: harness.get,
+      set: harness.set,
+    });
+
+    const restoredDirectSolid = directSolids[0];
+    const restoredSubNestedSolid = subNested[0]?.nestedClips?.[0];
+    for (const restoredSolid of [restoredDirectSolid, restoredSubNestedSolid]) {
+      expect(restoredSolid).toEqual(expect.objectContaining({
+        name: 'Solid #00ff7b',
+        solidColor: '#00ff7b',
+        isLoading: false,
+        needsReload: false,
+        transform: expect.objectContaining({
+          blendMode: 'add',
+          position: { x: 0.125, y: -0.25, z: 0 },
+        }),
+      }));
+      expect(restoredSolid?.source).toEqual(expect.objectContaining({
+        type: 'solid',
+        naturalDuration: 4,
+      }));
+      expect(restoredSolid?.source?.textCanvas).toEqual(expect.objectContaining({
+        width: 1920,
+        height: 1080,
+      }));
+    }
   });
 
   it('restores sub-nested video and audio as data-only sources', async () => {

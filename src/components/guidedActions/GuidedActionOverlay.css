@@ -18,28 +18,26 @@
 }
 
 .guided-spotlight {
-  border: 2px solid rgba(80, 190, 255, 0.9);
-  border-radius: 8px;
+  animation: guided-spotlight-in 240ms ease-out both;
+  border: 1px solid rgba(102, 197, 255, 0.78);
+  border-radius: 7px;
   box-shadow:
-    0 0 0 9999px rgba(4, 7, 10, 0.56),
-    0 0 22px rgba(80, 190, 255, 0.55);
+    0 0 0 9999px rgba(4, 7, 10, 0.3),
+    0 0 0 4px rgba(83, 185, 255, 0.07),
+    0 10px 30px rgba(40, 140, 205, 0.16);
   pointer-events: none;
   position: fixed;
-  transition: left 160ms ease, top 160ms ease, width 160ms ease, height 160ms ease;
-}
-
-.guided-spotlight--full {
-  background: rgba(4, 7, 10, 0.32);
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  inset: 0;
+  transition:
+    left 360ms cubic-bezier(0.22, 0.75, 0.25, 1),
+    top 360ms cubic-bezier(0.22, 0.75, 0.25, 1),
+    width 360ms cubic-bezier(0.22, 0.75, 0.25, 1),
+    height 360ms cubic-bezier(0.22, 0.75, 0.25, 1);
 }
 
 .guided-target-highlight {
-  border: 2px solid rgba(83, 185, 255, 0.95);
+  border: 1px solid rgba(83, 185, 255, 0.82);
   border-radius: 8px;
-  box-shadow: 0 0 18px rgba(83, 185, 255, 0.45);
+  box-shadow: 0 0 14px rgba(83, 185, 255, 0.24);
   pointer-events: none;
   position: fixed;
   transition: left 120ms ease, top 120ms ease, width 120ms ease, height 120ms ease;
@@ -121,6 +119,25 @@
   animation: guided-cursor-click 180ms ease-out;
 }
 
+.guided-cursor--dragging .guided-cursor-shape {
+  filter:
+    drop-shadow(0 0 5px rgba(83, 185, 255, 0.95))
+    drop-shadow(0 3px 8px rgba(0, 0, 0, 0.65));
+  transform: translate(-3px, -2px) scale(0.9);
+}
+
+.guided-drag-hold-ring {
+  animation: guided-drag-hold-pulse 900ms ease-in-out infinite;
+  background: rgba(83, 185, 255, 0.22);
+  border: 2px solid rgba(83, 185, 255, 0.95);
+  border-radius: 999px;
+  height: 27px;
+  left: -5px;
+  position: absolute;
+  top: -5px;
+  width: 27px;
+}
+
 .guided-drag-ghost {
   align-items: center;
   background: rgba(20, 25, 31, 0.94);
@@ -139,7 +156,13 @@
   top: 0;
   transition-property: transform;
   transition-timing-function: cubic-bezier(0.22, 0.74, 0.28, 1);
-  z-index: 10022;
+  z-index: 10024;
+}
+
+.guided-drag-ghost--panel {
+  background: rgba(26, 33, 42, 0.92);
+  border-color: rgba(83, 185, 255, 0.68);
+  min-width: 145px;
 }
 
 .guided-drag-ghost-thumb {
@@ -236,42 +259,60 @@
   border-color: rgba(83, 185, 255, 0.68);
 }
 
-.guided-callout {
-  background: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  bottom: 18px;
-  box-shadow: var(--shadow-lg);
-  color: var(--text-primary);
-  left: 50%;
-  max-width: calc(100vw - 32px);
-  padding: 10px 12px;
+.guided-callout-cluster {
   pointer-events: none;
   position: fixed;
-  transform: translateX(-50%);
-  width: min(420px, calc(100vw - 32px));
+  transition:
+    left 520ms cubic-bezier(0.22, 0.75, 0.25, 1),
+    top 520ms cubic-bezier(0.22, 0.75, 0.25, 1),
+    width 520ms cubic-bezier(0.22, 0.75, 0.25, 1);
+  will-change: left, top, width;
   z-index: 10023;
 }
 
+.guided-callout {
+  animation: guided-callout-content-in 280ms ease-out both;
+  backdrop-filter: blur(12px);
+  background: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-sizing: border-box;
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  padding: 22px 26px;
+  pointer-events: none;
+  position: relative;
+  width: 100%;
+}
+
 .guided-callout-title {
-  font-size: var(--font-md);
-  font-weight: var(--font-semibold);
-  line-height: 1.25;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .guided-callout-body {
   color: var(--text-secondary);
-  font-size: var(--font-sm);
-  line-height: 1.35;
-  margin-top: 4px;
+  font-size: 18px;
+  line-height: 1.55;
+  margin-top: 10px;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.guided-clippy-wrapper {
+  height: 0;
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  width: 100%;
+  z-index: 10024;
+}
+
+.guided-clippy-wrapper .clippy-mascot {
+  right: -10px;
+  top: -58px;
+  width: 132px;
 }
 
 .guided-step-hud {
@@ -283,8 +324,9 @@
   display: flex;
   gap: 10px;
   left: 50%;
-  min-height: 30px;
-  padding: 5px 10px;
+  min-height: 52px;
+  min-width: min(460px, calc(100vw - 120px));
+  padding: 8px 13px 11px;
   pointer-events: none;
   position: fixed;
   top: 10px;
@@ -294,13 +336,96 @@
 
 .guided-step-hud-label,
 .guided-step-hud-count {
-  font-size: 11px;
-  line-height: 1;
+  font-size: 14px;
+  line-height: 1.2;
   white-space: nowrap;
+}
+
+.guided-step-hud--embedded {
+  background: rgba(11, 15, 20, 0.38);
+  border: 0;
+  border-bottom: 1px solid rgba(135, 154, 174, 0.25);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  box-sizing: border-box;
+  left: auto;
+  margin: -22px -26px 20px;
+  min-height: 58px;
+  min-width: 0;
+  padding: 10px 118px 13px 26px;
+  position: relative;
+  top: auto;
+  transform: none;
+  width: calc(100% + 52px);
+}
+
+.guided-step-hud-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.guided-step-hud-session {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.08em;
+  line-height: 1.1;
+  margin-bottom: 3px;
+  text-transform: uppercase;
+}
+
+.guided-step-hud-label {
+  font-size: 15px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .guided-step-hud-count {
   color: var(--text-secondary);
+}
+
+.guided-step-hud-progress {
+  background: rgba(135, 154, 174, 0.2);
+  bottom: 0;
+  height: 3px;
+  left: 8px;
+  overflow: hidden;
+  position: absolute;
+  right: 8px;
+}
+
+@media (max-width: 720px) {
+  .guided-callout {
+    padding: 18px 20px;
+  }
+
+  .guided-callout-title {
+    font-size: 20px;
+  }
+
+  .guided-callout-body {
+    font-size: 16px;
+  }
+
+  .guided-step-hud--embedded {
+    margin: -18px -20px 18px;
+    padding: 9px 20px 12px;
+    width: calc(100% + 40px);
+  }
+
+  .guided-clippy-wrapper .clippy-mascot {
+    right: -18px;
+    width: 124px;
+  }
+}
+
+.guided-step-hud-progress > span {
+  background: rgba(83, 185, 255, 0.95);
+  display: block;
+  height: 100%;
+  transition: width 180ms ease;
 }
 
 .guided-control-strip {
@@ -333,9 +458,43 @@
   border-color: rgba(83, 185, 255, 0.65);
 }
 
+.guided-control-btn--tutorial-exit {
+  gap: 7px;
+  padding: 0 12px;
+  width: auto;
+}
+
+.guided-control-btn--tutorial-exit span:last-child {
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
 @keyframes guided-cursor-click {
   0%, 100% { transform: scale(1); }
   45% { transform: scale(0.84); }
+}
+
+@keyframes guided-drag-hold-pulse {
+  0%, 100% { opacity: 0.72; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+
+@keyframes guided-spotlight-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes guided-callout-content-in {
+  from {
+    opacity: 0.55;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes guided-click-ripple {
@@ -363,12 +522,15 @@
 
 @media (prefers-reduced-motion: reduce) {
   .guided-cursor,
+  .guided-callout-cluster,
   .guided-spotlight,
   .guided-target-highlight {
     transition: none;
   }
 
   .guided-click-ripple,
+  .guided-callout,
+  .guided-spotlight,
   .guided-cursor-gesture,
   .guided-cursor--clicking .guided-cursor-shape {
     animation: none;

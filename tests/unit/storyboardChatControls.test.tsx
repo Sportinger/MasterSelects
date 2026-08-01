@@ -46,8 +46,6 @@ describe('Storyboard directing controls', () => {
       hasHostedSession: true,
       hostedAIEnabled: true,
       isChatting: false,
-      lemonadeContextSize: 8_192,
-      lemonadeEndpoint: 'http://localhost:13305/api/v1',
       openAiReasoningEffort: 'medium',
       planThreeEnabled: false,
     });
@@ -76,8 +74,6 @@ describe('Storyboard directing controls', () => {
       hasHostedSession: true,
       hostedAIEnabled: true,
       isChatting: false,
-      lemonadeContextSize: 8_192,
-      lemonadeEndpoint: 'http://localhost:13305/api/v1',
       openAiReasoningEffort: 'medium',
       planThreeEnabled: true,
     });

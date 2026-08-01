@@ -106,7 +106,13 @@ export function MediaGridItem({
             </span>
           )}
         </div>
-        <div className="media-grid-name" title={item.name}>{item.name}</div>
+        <div
+          className="media-grid-name"
+          data-guided-media-name={item.id}
+          title={item.name}
+        >
+          {item.name}
+        </div>
       </div>
     </div>
   );

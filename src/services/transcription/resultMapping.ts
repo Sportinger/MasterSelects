@@ -263,24 +263,6 @@ export function mapOpenAIWords(
   }));
 }
 
-export function mapAssemblyAIWords(
-  rawWords: TranscriptApiWord[],
-  inPointOffset: number,
-): TranscriptWord[] {
-  return rawWords.map((word, index) => {
-    const startMs = typeof word.start === 'number' ? word.start : 0;
-    const endMs = typeof word.end === 'number' ? word.end : startMs + 100;
-    return {
-      id: `word-${index}`,
-      text: word.text ?? word.word ?? '',
-      start: (startMs / 1000) + inPointOffset,
-      end: (endMs / 1000) + inPointOffset,
-      confidence: word.confidence || 1,
-      speaker: word.speaker ? String(word.speaker) : 'Speaker 1',
-    };
-  });
-}
-
 export function mapDeepgramWords(
   rawWords: TranscriptApiWord[],
   inPointOffset: number,

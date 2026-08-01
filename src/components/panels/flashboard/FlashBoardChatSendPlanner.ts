@@ -1,6 +1,7 @@
 import type {
   FlashBoardChatProvider,
   FlashBoardChatRequest,
+  FlashBoardChatExecutionProfile,
   FlashBoardOpenAiReasoningEffort,
   ChatIntent,
   DecisionPolicy,
@@ -19,6 +20,7 @@ interface BuildFlashBoardChatSendPlanInput {
   chatMessages: FlashBoardChatMessage[];
   chatPanelOpen: boolean;
   planThreeEnabled: boolean;
+  chatExecutionProfile?: FlashBoardChatExecutionProfile;
   chatProvider: FlashBoardChatProvider;
   chatTemperature: number;
   chatIntent?: ChatIntent;
@@ -27,8 +29,6 @@ interface BuildFlashBoardChatSendPlanInput {
   hasHostedSession: boolean;
   hostedAIEnabled: boolean;
   isChatting: boolean;
-  lemonadeContextSize: number;
-  lemonadeEndpoint: string;
   openAiReasoningEffort: FlashBoardOpenAiReasoningEffort;
 }
 
@@ -100,6 +100,7 @@ export function buildFlashBoardChatSendPlan({
   chatMessages,
   chatPanelOpen,
   planThreeEnabled,
+  chatExecutionProfile = 'fast',
   chatProvider,
   chatTemperature,
   chatIntent = 'execute',
@@ -108,8 +109,6 @@ export function buildFlashBoardChatSendPlan({
   hasHostedSession,
   hostedAIEnabled,
   isChatting,
-  lemonadeContextSize,
-  lemonadeEndpoint,
   openAiReasoningEffort,
 }: BuildFlashBoardChatSendPlanInput): FlashBoardChatSendPlan {
   if (!chatPanelOpen) {
@@ -145,9 +144,10 @@ export function buildFlashBoardChatSendPlan({
   return {
     action: 'send',
     request: {
+      ...(chatProvider === 'kie' && canUseHostedChat
+        ? { executionProfile: chatExecutionProfile }
+        : {}),
       hostedAvailable: canUseHostedChat,
-      lemonadeContextSize: chatProvider === 'lemonade' ? lemonadeContextSize : undefined,
-      lemonadeEndpoint,
       model: activeChatModelId,
       intent: chatIntent,
       decisionPolicy,

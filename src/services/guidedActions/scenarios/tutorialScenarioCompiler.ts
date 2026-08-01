@@ -18,6 +18,8 @@ export interface GuidedScenarioStep {
   title: string;
   body?: string;
   mode?: GuidedScenarioStepMode;
+  focusPanel?: Extract<GuidedTargetRef, { kind: 'panel' }>['panel'];
+  showHighlight?: boolean;
   target?: GuidedTargetRef;
   inputTargets?: GuidedTargetRef[];
   actions?: GuidedAction[];
@@ -52,6 +54,14 @@ export interface GuidedCompiledScenario {
   scenario: GuidedScenario;
   actions: GuidedAction[];
   diagnostics: GuidedScenarioDiagnostics;
+  stepRanges: GuidedScenarioStepRange[];
+}
+
+export interface GuidedScenarioStepRange {
+  id: string;
+  title: string;
+  startActionIndex: number;
+  endActionIndex: number;
 }
 
 export interface GuidedScenarioDiagnostics {
@@ -70,12 +80,28 @@ export function compileGuidedScenario(
   scenario: GuidedScenario,
   options: GuidedScenarioCompileOptions = {},
 ): GuidedCompiledScenario {
-  const actions = scenario.steps.flatMap((step) => compileGuidedScenarioStep(scenario, step, options));
+  const compiledSteps = scenario.steps.map((step) => ({
+    actions: compileGuidedScenarioStep(scenario, step, options),
+    step,
+  }));
+  const actions = compiledSteps.flatMap((compiledStep) => compiledStep.actions);
   const modes = scenario.steps.map((step) => getStepMode(scenario, step, options));
+  let nextActionIndex = 0;
+  const stepRanges = compiledSteps.map(({ actions: stepActions, step }) => {
+    const startActionIndex = nextActionIndex;
+    nextActionIndex += stepActions.length;
+    return {
+      id: step.id,
+      title: step.title,
+      startActionIndex,
+      endActionIndex: Math.max(startActionIndex, nextActionIndex - 1),
+    };
+  });
 
   return {
     scenario,
     actions,
+    stepRanges,
     diagnostics: {
       actionCount: actions.length,
       assistSteps: modes.filter((mode) => mode === 'assist').length,
@@ -104,6 +130,7 @@ export function createGuidedScenarioSessionRequest(
       ...scenario.metadata,
       diagnostics: compiled.diagnostics,
       scenarioId: scenario.id,
+      tutorialSteps: compiled.stepRanges,
     },
     playbackMode: getScenarioPlaybackMode(scenario, options),
     sessionId: options.sessionId,
@@ -118,13 +145,14 @@ function compileGuidedScenarioStep(
 ): GuidedAction[] {
   const mode = getStepMode(scenario, step, options);
   const actions: GuidedAction[] = [];
+  const panelToFocus = step.focusPanel ?? (step.target?.kind === 'panel' ? step.target.panel : null);
 
-  if (step.target?.kind === 'panel') {
+  if (panelToFocus) {
     actions.push({
       type: 'focusPanel',
-      panel: step.target.panel,
+      panel: panelToFocus,
       family: 'context',
-      label: `Open ${step.target.panel}`,
+      label: `Open ${panelToFocus}`,
     });
   }
 
@@ -132,8 +160,16 @@ function compileGuidedScenarioStep(
     actions.push(
       { type: 'resolveTarget', target: step.target, required: false, family: 'context' },
       { type: 'spotlight', target: step.target, family: 'context' },
-      { type: 'highlightTarget', target: step.target, tone: 'primary', durationMs: 500, family: 'context' },
     );
+    if (step.showHighlight !== false) {
+      actions.push({
+        type: 'highlightTarget',
+        target: step.target,
+        tone: 'primary',
+        durationMs: 500,
+        family: 'context',
+      });
+    }
   }
 
   actions.push({

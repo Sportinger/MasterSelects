@@ -4,6 +4,7 @@ import type {
   ReplicatorEvaluation,
 } from '../../../services/motionDesign/replicator/contracts';
 import type { MotionModifierTargetPath } from '../../../services/motionDesign/modifiers/contracts';
+import type { MotionFrameExpressionValue } from '../../../services/motionDesign/contracts/evaluatedMotionFrame';
 import type {
   MotionModifierPlan,
   MotionModifierPlannedInstance,
@@ -26,11 +27,25 @@ export interface ReplicatorRendererAdapterOptions {
   modifierPlan?: MotionModifierPlan;
   /** Cache key of the exact Replicator evaluation used to produce modifierPlan. */
   modifierPlanReplicatorCacheKey?: string;
+  /** Evaluated expression values for the exact Replicator frame evaluation. */
+  expressionValues?: readonly MotionFrameExpressionValue[];
+  expressionValuesReplicatorCacheKey?: string;
 }
 
 interface TransformAndBounds {
   transform: EvaluatedReplicatorTransform;
   bounds: ReplicatorBounds;
+}
+
+type ExpressionValuesByInstance = ReadonlyMap<number, ReadonlyMap<MotionModifierTargetPath, number>>;
+
+function stableHash(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, '0');
 }
 
 function emptyStats() {
@@ -176,6 +191,48 @@ function resolveModifierPlan(
   return plan.cacheKey;
 }
 
+function resolveExpressionValues(
+  evaluation: Extract<ReplicatorEvaluation, { ok: true }>,
+  values: readonly MotionFrameExpressionValue[] | undefined,
+  originatingReplicatorCacheKey: string | undefined,
+): { cacheKey: string | null; byInstance: ExpressionValuesByInstance } {
+  if (!values || values.length === 0) {
+    if (originatingReplicatorCacheKey !== undefined) {
+      throw new RangeError('expression values Replicator provenance requires expression values');
+    }
+    return { cacheKey: null, byInstance: new Map() };
+  }
+  if (originatingReplicatorCacheKey !== evaluation.cacheKey) {
+    throw new RangeError('expression values Replicator provenance does not match current evaluation');
+  }
+  const byInstance = new Map<number, Map<MotionModifierTargetPath, number>>();
+  for (const entry of values) {
+    if (
+      entry.effectiveCount !== evaluation.effectiveCount
+      || entry.instanceIndex < 0
+      || entry.instanceIndex >= evaluation.effectiveCount
+      || !MODIFIER_TARGET_PATHS.includes(entry.propertyPath as MotionModifierTargetPath)
+      || !Number.isFinite(entry.resolved.value)
+    ) {
+      throw new RangeError('expression values do not match Replicator evaluation');
+    }
+    const paths = byInstance.get(entry.instanceIndex) ?? new Map<MotionModifierTargetPath, number>();
+    const path = entry.propertyPath as MotionModifierTargetPath;
+    if (paths.has(path)) throw new RangeError('expression values contain a duplicate instance path');
+    paths.set(path, entry.resolved.value);
+    byInstance.set(entry.instanceIndex, paths);
+  }
+  return {
+    cacheKey: `expressions:${stableHash(JSON.stringify(values.map((entry) => [
+      entry.propertyPath,
+      entry.contractRevision,
+      entry.instanceIndex,
+      entry.resolved.value,
+    ])))}`,
+    byInstance,
+  };
+}
+
 function equalTransform(
   left: EvaluatedReplicatorTransform,
   right: EvaluatedReplicatorTransform,
@@ -199,6 +256,24 @@ function getTransformPathValue(
   if (path === 'replicator.offset.scale.y') return transform.scale.y;
   if (path === 'replicator.offset.opacity') return transform.opacity;
   throw new RangeError('modifier plan contains an unsupported target path');
+}
+
+function applyExpressionValues(
+  offsetTransform: EvaluatedReplicatorTransform,
+  values: ReadonlyMap<MotionModifierTargetPath, number>,
+): EvaluatedReplicatorTransform {
+  return {
+    position: {
+      x: values.get('replicator.offset.position.x') ?? offsetTransform.position.x,
+      y: values.get('replicator.offset.position.y') ?? offsetTransform.position.y,
+    },
+    rotationDegrees: values.get('replicator.offset.rotation') ?? offsetTransform.rotationDegrees,
+    scale: {
+      x: values.get('replicator.offset.scale.x') ?? offsetTransform.scale.x,
+      y: values.get('replicator.offset.scale.y') ?? offsetTransform.scale.y,
+    },
+    opacity: values.get('replicator.offset.opacity') ?? offsetTransform.opacity,
+  };
 }
 
 function validateModifierPathBinding(
@@ -322,6 +397,11 @@ export function createReplicatorRenderPacket(
       options.modifierPlanReplicatorCacheKey,
     );
     const modifierInstances = options.modifierPlan?.ok ? options.modifierPlan.instances : null;
+    const expressionValues = resolveExpressionValues(
+      evaluation,
+      options.expressionValues,
+      options.expressionValuesReplicatorCacheKey,
+    );
     const viewport = options.viewport ? validateReplicatorViewport(options.viewport) : undefined;
     const strokePadding = requireFiniteNonNegative(options.strokePadding ?? 0, 'strokePadding');
     const maxDrawInstances = options.maxDrawInstances === undefined
@@ -348,8 +428,16 @@ export function createReplicatorRenderPacket(
       const base = evaluation.instances[index];
       const modified = modifierInstances?.[index];
       if (modified?.clipped) continue;
-      const transform = modified?.transform ?? base.transform;
-      const bounds = modified ? transformedBounds(evaluation.sourceBounds, transform) : base.bounds;
+      const expressions = expressionValues.byInstance.get(base.index);
+      const transform = expressions
+        ? composeReplicatorTransforms(
+            modified?.layoutTransform ?? base.layoutTransform,
+            applyExpressionValues(modified?.offsetTransform ?? base.offsetTransform, expressions),
+          )
+        : modified?.transform ?? base.transform;
+      const bounds = modified || expressions
+        ? transformedBounds(evaluation.sourceBounds, transform)
+        : base.bounds;
       if (isVisible(bounds, viewport, strokePadding)) visibleCount += 1;
     }
 
@@ -363,8 +451,16 @@ export function createReplicatorRenderPacket(
       const base = evaluation.instances[index];
       const modified = modifierInstances?.[index];
       if (modified?.clipped) continue;
-      const transform = modified?.transform ?? base.transform;
-      const bounds = modified ? transformedBounds(evaluation.sourceBounds, transform) : base.bounds;
+      const expressions = expressionValues.byInstance.get(base.index);
+      const transform = expressions
+        ? composeReplicatorTransforms(
+            modified?.layoutTransform ?? base.layoutTransform,
+            applyExpressionValues(modified?.offsetTransform ?? base.offsetTransform, expressions),
+          )
+        : modified?.transform ?? base.transform;
+      const bounds = modified || expressions
+        ? transformedBounds(evaluation.sourceBounds, transform)
+        : base.bounds;
       if (!isVisible(bounds, viewport, strokePadding)) continue;
       writeInstance(instanceData, outputIndex, base.normalizedIndex, { transform, bounds });
       stableIndices[outputIndex] = base.index;
@@ -377,6 +473,7 @@ export function createReplicatorRenderPacket(
     const cacheIdentity = [
       evaluation.cacheKey,
       modifierCacheKey ?? 'no-modifiers',
+      expressionValues.cacheKey ?? 'no-expressions',
       `draw:${maxDrawInstances}`,
       `viewport:${viewportIdentity}`,
       `stroke:${strokePadding}`,

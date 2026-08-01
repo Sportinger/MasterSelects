@@ -18,6 +18,7 @@ import { hydrateTimelineMediaWindow, keepLazyTimelineVideoElementAlive } from '.
 import { VideoSyncForceDecodeManager } from './videoSyncForceDecodeManager';
 import { VideoSyncFullWebCodecsCoordinator } from './videoSyncFullWebCodecsCoordinator';
 import { VideoSyncHandoffManager } from './videoSyncHandoffs';
+import type { PreviewContinuationOptions } from './videoSyncPreviewContinuations';
 import { VideoSyncHtmlClipCoordinator } from './videoSyncHtmlClipCoordinator';
 import { VideoSyncHtmlSeekCoordinator } from './videoSyncHtmlSeekCoordinator';
 import { VideoSyncHtmlSeekState } from './videoSyncHtmlSeekState';
@@ -143,6 +144,8 @@ export class VideoSyncManager {
       safeSeekTime: (video, time) => this.safeSeekTime(video, time),
       activateFreeRunVideo: (video) => this.freeRun.activate(video),
       stopFreeRunVideo: (video) => this.freeRun.stop(video),
+      getPreviewContinuationVideoElement: (clip, targetTime, trackKey, continuityKey) => this.getPreviewContinuationVideoElement(clip, targetTime, { trackKey, continuityKey }),
+      rememberPreviewVideo: (trackKey, clip, video, continuityKey) => this.handoffs.rememberPreviewVideo(trackKey, clip, video, continuityKey),
     });
     this.warmupCoordinator = new VideoSyncWarmupCoordinator({
       warmups: this.warmups,
@@ -422,15 +425,12 @@ export class VideoSyncManager {
   getHandoffVideoElement(clipId: string): HTMLVideoElement | null {
     return this.handoffs.getHandoffVideoElement(clipId);
   }
-
-  getPreviewContinuationVideoElement(
-    clip: TimelineClip,
-    targetTime: number
-  ): HTMLVideoElement | null {
+  getPreviewContinuationVideoElement(clip: TimelineClip, targetTime: number, options: PreviewContinuationOptions = {}): HTMLVideoElement | null {
     return this.handoffs.getPreviewContinuationVideoElement(
       clip,
       targetTime,
-      this.getClipHtmlVideoElement(clip)
+      this.getClipHtmlVideoElement(clip),
+      options,
     );
   }
 

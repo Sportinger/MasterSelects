@@ -103,22 +103,6 @@ export interface PingCommand {
   id: string;
 }
 
-export interface RegisterClientCommand {
-  cmd: 'register_client';
-  id: string;
-  role: string;
-  capabilities?: string[];
-  session_name?: string;
-  app_version?: string;
-}
-
-export interface AiToolResultCommand {
-  cmd: 'ai_tool_result';
-  id: string;
-  request_id: string;
-  result: unknown;
-}
-
 export interface DownloadYouTubeCommand {
   cmd: 'download_youtube';
   id: string;
@@ -360,8 +344,6 @@ export type Command =
   | CloseCommand
   | InfoCommand
   | PingCommand
-  | RegisterClientCommand
-  | AiToolResultCommand
   | DownloadYouTubeCommand
   | ListFormatsCommand
   | DownloadCommand
@@ -470,10 +452,6 @@ export interface SystemInfo {
   project_root?: string;
   /** True if native helper supports file system commands (write_file, create_dir, etc.) */
   fs_commands?: boolean;
-  /** True if helper can proxy AI tool requests to the running editor */
-  ai_bridge?: boolean;
-  /** True if an editor session is currently registered */
-  editor_connected?: boolean;
 }
 
 // Frame header (16 bytes)

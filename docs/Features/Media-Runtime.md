@@ -12,10 +12,10 @@ The media runtime layer gives the app a reusable source/session model instead of
 
 Core ideas:
 
-- one runtime is retained per underlying source
+- one runtime is retained per resolved source ID
 - multiple sessions can exist per runtime (`interactive`, `background`, `export`, `ram-preview`)
-- sessions can reuse a shared frame provider when that is safe
-- small source-frame caches keep recently requested frames near the active time
+- interactive preview and scrub paths can reuse a shared session when safe
+- a small source-frame cache retains recently requested cloneable frames
 
 ---
 
@@ -25,9 +25,12 @@ Core ideas:
 |--------|----------------|
 | `mediaRuntime/registry.ts` | source/runtime registry, session lifecycle, frame-handle cache |
 | `mediaRuntime/types.ts` | runtime/session/frame-provider contracts |
+| `mediaRuntime/contracts.ts` | media kinds, session policies, asset references, and lease contracts |
 | `mediaRuntime/clipBindings.ts` | bind clips or layer owners to a runtime source/session |
 | `mediaRuntime/runtimePlayback.ts` | session-key selection, shared preview/scrub sessions, frame-provider lookup |
-| `layerPlaybackManager.ts` | background/slot layers that adopt runtime-backed clip sources |
+| `mediaRuntime/objectUrlLeases.ts`, `mediaElementLeases.ts`, `scrubAudioLeases.ts` | runtime-owned object URL, media-element, and scrub-audio leases |
+| `mediaRuntime/liveInputRuntime.ts` | browser live-input connections and render invalidation |
+| `layerPlaybackManager.ts` and `slotDeckManager.ts` | slot-deck preparation and background-layer adoption |
 
 ---
 
@@ -41,7 +44,7 @@ A runtime descriptor can be built from:
 - file hash
 - optional absolute file path
 
-This lets the registry keep one logical runtime for the same underlying media source even when multiple clips reference it.
+The registry resolves a source ID in priority order: explicit source ID, media-file ID, file hash, normalized file path, `File` metadata, then file name. It retains one runtime per resolved source ID, so clips that resolve to the same ID share a runtime.
 
 ---
 
@@ -75,29 +78,37 @@ Frame providers expose the playback-facing API used by preview/runtime consumers
 - play/pause/seek
 - full-mode vs simple-mode capability
 - optional debug information
-- optional access to the current decoded frame
+- access to the current decoded frame
 
-The registry keeps a small per-source frame cache and clones cacheable runtime frames where possible. That cache is deliberately small and recent-time oriented; it is not a replacement for the larger scrub/RAM preview caches.
+The registry keeps a 12-entry per-source LRU frame cache and clones cacheable runtime frames where possible. Cache reads apply timestamp tolerance based on playback state and frame rate; this cache is not a replacement for the larger scrub/RAM preview caches.
 
 ---
 
 ## Shared Preview Sessions
 
-`runtimePlayback.ts` can derive shared session keys for preview or scrub sessions when a single active clip owns a track and the source has a full runtime-backed provider.
+`runtimePlayback.ts` can derive shared interactive preview or scrub session keys when a single active clip occupies a track and the source has a full runtime-backed provider.
 
-That allows preview consumers to reuse an existing full WebCodecs-style provider instead of spinning up another equivalent session for the same source/track path.
+That lets preview consumers reuse a full WebCodecs provider through the shared session instead of creating an equivalent provider for the same source/track path. Worker WebCodecs providers are also available when the rendering host supports them and the caller requests them.
 
 ---
 
 ## Slot And Background Playback
 
-The Slot Grid background playback path relies on these runtime bindings too.
+The Slot Grid warm-deck path relies on these runtime bindings when warm decks are enabled.
 
-- slot/background layers bind clip sources through `bindSourceRuntimeForOwner(...)`
-- `layerPlaybackManager` updates runtime playback time as the slot layer runs
-- optional warm-slot decks can later adopt those prepared sources onto a live layer
+- `slotDeckManager` binds prepared video, audio, and image clip sources through `bindSourceRuntimeForOwner(...)`
+- `layerPlaybackManager` can adopt a prepared deck onto a live layer when `useWarmSlotDecks` is enabled
+- deactivation releases the deck pin or the runtime session and owner retain
 
-That is why slot playback, background layers, and main preview reuse the same runtime concepts rather than three separate media stacks.
+Slot playback, background layers, and main preview therefore share runtime source/session concepts while retaining separate playback coordination paths.
+
+---
+
+## Runtime-Owned Leases And Live Inputs
+
+The media-runtime domain also owns object-URL, media-element, and scrub-audio lease managers. These leases track acquisition and release outside persisted timeline state.
+
+`liveInputRuntime.ts` manages display capture, camera, and composition-feedback streams, exposes their video elements to render consumers, and releases streams when inputs are removed or disconnected.
 
 ---
 

@@ -1,6 +1,7 @@
 import type { StateCreator, StoreApi } from 'zustand';
 
 import type { TimelineStore } from './types';
+import { assertExclusiveTimelineMutationAllowed } from './exclusiveMutationLease';
 
 const WATCHED_TIMELINE_KEYS = [
   'clips',
@@ -15,6 +16,26 @@ const WATCHED_TIMELINE_KEYS = [
   'tempoMap',
   'rulerLanes',
   'videoBakeRegions',
+] as const satisfies readonly (keyof TimelineStore)[];
+
+// Derived from historyStore/snapshotCapture.ts. These keys must be protected
+// even when they intentionally do not advance the durable timeline revision
+// (selection and viewport state are restored by project history as well).
+const HISTORY_SNAPSHOT_TIMELINE_KEYS = [
+  'duration',
+  'durationLocked',
+  'tracks',
+  'clips',
+  'selectedClipIds',
+  'selectedKeyframeIds',
+  'zoom',
+  'scrollX',
+  'layers',
+  'selectedLayerId',
+  'clipKeyframes',
+  'markers',
+  'tempoMap',
+  'masterAudioState',
 ] as const satisfies readonly (keyof TimelineStore)[];
 
 type TimelineStatePatch = TimelineStore | Partial<TimelineStore>;
@@ -40,6 +61,15 @@ function applyRevision(
     (key) => (replace || hasOwnKey(patch, key))
       && !Object.is(currentState[key], patch[key]),
   );
+
+  const historySnapshotStateChanged = HISTORY_SNAPSHOT_TIMELINE_KEYS.some(
+    (key) => (replace || hasOwnKey(patch, key))
+      && !Object.is(currentState[key], patch[key]),
+  );
+
+  if (watchedStateChanged || historySnapshotStateChanged) {
+    assertExclusiveTimelineMutationAllowed();
+  }
 
   return {
     ...patch,
@@ -67,13 +97,12 @@ export const withTimelineRevision = (
     const currentState = get();
     if (typeof update !== 'function') {
       const hasWatchedKey = WATCHED_TIMELINE_KEYS.some((key) => hasOwnKey(update, key));
+      const hasHistorySnapshotKey = HISTORY_SNAPSHOT_TIMELINE_KEYS.some(
+        (key) => hasOwnKey(update, key),
+      );
       const suppliesRevision = hasOwnKey(update, 'timelineRevision');
-      if (!hasWatchedKey && !suppliesRevision) {
-        if (replace) {
-          set(update as TimelineStore, true);
-        } else {
-          set(update);
-        }
+      if (!replace && !hasWatchedKey && !hasHistorySnapshotKey && !suppliesRevision) {
+        set(update);
         return;
       }
     }

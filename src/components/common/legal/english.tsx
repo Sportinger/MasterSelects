@@ -66,10 +66,10 @@ export function PrivacyEN() {
       <p>
         When you start a cloud or AI feature, the selected prompts, messages, media, references, and technical metadata
         are sent to the relevant provider. Depending on the feature, recipients include <strong>OpenAI</strong>,
-        <strong>Kie.ai</strong> and its selected model/upload providers, and <strong>ElevenLabs</strong>. When you use
-        your own API key, the browser may connect directly to OpenAI, Anthropic, AssemblyAI, Deepgram, PiAPI,
-        Evolink, ElevenLabs, or the YouTube Data API. Legal basis: Art. 6(1)(b) GDPR, supplemented by Art. 6(1)(f)
-        GDPR for security and abuse prevention.
+        <strong>Kie.ai</strong> and its selected model/upload providers, and <strong>ElevenLabs</strong>. AI provider
+        credentials are managed by MasterSelects services and are not stored in the browser. If you configure the
+        optional YouTube Data API integration, the browser connects directly to Google using that credential. Legal
+        basis: Art. 6(1)(b) GDPR, supplemented by Art. 6(1)(f) GDPR for security and abuse prevention.
       </p>
       <p>
         Hosted AI chat may store prompts, responses, tool calls, moderation results, token counts, credit cost, duration,
@@ -80,8 +80,8 @@ export function PrivacyEN() {
 
       <h3>6. Local Storage and External Resources</h3>
       <p>
-        Projects, settings, encrypted personal API keys, and media references are stored in Local Storage, IndexedDB,
-        or OPFS and can be erased through browser data controls. If you explicitly select a Google font or download an
+        Projects, settings, the optional encrypted YouTube Data API credential, and media references are stored in
+        Local Storage, IndexedDB, or OPFS and can be erased through browser data controls. If you explicitly select a Google font or download an
         AI/audio model, your browser connects to Google Fonts or Hugging Face and transmits the IP address and requested
         resource. If you open Native Helper release information or GitHub links, your browser connects to GitHub. The
         demo video is served by MasterSelects and makes no YouTube connection.

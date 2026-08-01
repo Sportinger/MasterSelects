@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "packId": "playwright-reference-media-v1",
+  "name": "MasterSelects Playwright Reference Media",
+  "mediaDirectory": "media",
+  "storage": "git-lfs",
+  "totalSizeBytes": 192881032,
+  "provenance": {
+    "kind": "user-provided-local-fixtures",
+    "distributionNote": "Confirm redistribution rights before pushing this media pack to a public remote."
+  },
+  "projectTemplates": [
+    {
+      "id": "masks-rectangle-v1",
+      "schemaVersion": 1,
+      "path": "projects/masks-rectangle-v1.json",
+      "module": "masks",
+      "status": "draft",
+      "workingCopyPolicy": "Materialize a fresh in-memory copy for every test run."
+    },
+    {
+      "id": "nested-super-project-v1",
+      "schemaVersion": 1,
+      "path": "projects/nested-super-project-v1/fixture.json",
+      "module": "nested-compositions",
+      "status": "draft",
+      "workingCopyPolicy": "Materialize a fresh temporary project directory with linked reference media for every test run."
+    }
+  ],
+  "assets": [
+    {
+      "id": "dynamic-landscape",
+      "kind": "video",
+      "role": "motion, transport, scrub, keyframe and export reference",
+      "originalFileName": "Betaflight  FPV Freestyle.mp4",
+      "fileName": "fpv-freestyle.mp4",
+      "mimeType": "video/mp4",
+      "sizeBytes": 76780458,
+      "sha256": "96ffd7900e32efcc0d1470aff8af7a00d30e595a2a34657bc811187db7db863e",
+      "durationSeconds": 133.306,
+      "container": "mov,mp4,m4a,3gp,3g2,mj2",
+      "video": { "codec": "h264", "width": 1920, "height": 1080, "frameRate": "30000/1001" },
+      "audio": { "codec": "aac", "sampleRate": 44100, "channels": 2 },
+      "suggestedSampleTimesSeconds": [1, 15, 45]
+    },
+    {
+      "id": "high-frequency-60fps",
+      "kind": "video",
+      "role": "60 fps frame accuracy, scaling, aliasing and scrub reference",
+      "originalFileName": "streifen.mp4",
+      "fileName": "striped-motion.mp4",
+      "mimeType": "video/mp4",
+      "sizeBytes": 60027247,
+      "sha256": "fd40ab6c208de9a39820df5e2f239a81991dcd8998fad4111a07bf976b1d56e5",
+      "durationSeconds": 30,
+      "container": "mov,mp4,m4a,3gp,3g2,mj2",
+      "video": { "codec": "h264", "width": 1920, "height": 1080, "frameRate": "60/1" },
+      "audio": { "codec": "aac", "sampleRate": 48000, "channels": 2 },
+      "suggestedSampleTimesSeconds": [0.25, 5, 15]
+    },
+    {
+      "id": "portrait-vp9",
+      "kind": "video",
+      "role": "portrait orientation, VP9-in-MP4, nested composition and transform reference",
+      "originalFileName": "Video by tueftenbacchus.mp4",
+      "fileName": "tueftenbacchus.mp4",
+      "mimeType": "video/mp4",
+      "sizeBytes": 17581055,
+      "sha256": "10dd7326d45249da86eca75a88760d793ce9864b78e21442bd690059ba365d37",
+      "durationSeconds": 61.115,
+      "container": "mov,mp4,m4a,3gp,3g2,mj2",
+      "video": { "codec": "vp9", "width": 1080, "height": 1920, "frameRate": "25/1" },
+      "audio": { "codec": "aac", "sampleRate": 44100, "channels": 2 },
+      "suggestedSampleTimesSeconds": [1, 10, 30]
+    },
+    {
+      "id": "longform-landscape",
+      "kind": "video",
+      "role": "trim, split, masks, effects, long scrub and nested export reference",
+      "originalFileName": "X-Rays Are Completely Safe.mp4",
+      "fileName": "x-rays-safe.mp4",
+      "mimeType": "video/mp4",
+      "sizeBytes": 32109450,
+      "sha256": "0eebf268d7abfed511cdcbf04bb588b0d192bbe27751d8cf0c34d3734ec52be6",
+      "durationSeconds": 91.092,
+      "container": "mov,mp4,m4a,3gp,3g2,mj2",
+      "video": { "codec": "h264", "width": 1920, "height": 1080, "frameRate": "30000/1001" },
+      "audio": { "codec": "aac", "sampleRate": 44100, "channels": 2 },
+      "suggestedSampleTimesSeconds": [1, 30, 60]
+    },
+    {
+      "id": "music-audio",
+      "kind": "audio",
+      "role": "audio timeline, waveform, mute, solo, fades, sync and export reference",
+      "originalFileName": "Ute Lemper - TIME TRAVELER (Official Music Video) (Cover).mp3",
+      "fileName": "time-traveler-cover.mp3",
+      "mimeType": "audio/mpeg",
+      "sizeBytes": 6382822,
+      "sha256": "7b7da54579c309d5829edc93607ca0913dc914e19170758ce2c75f6029e4c9f1",
+      "durationSeconds": 296.24,
+      "container": "mp3",
+      "coverArt": { "codec": "mjpeg", "width": 360, "height": 360 },
+      "audio": { "codec": "mp3", "sampleRate": 48000, "channels": 2 },
+      "suggestedSampleTimesSeconds": [5, 60, 180]
+    }
+  ]
+}

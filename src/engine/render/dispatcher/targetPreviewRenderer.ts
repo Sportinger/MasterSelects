@@ -17,6 +17,8 @@ import { TargetPreviewLayerCollector } from './targetPreviewLayerCollector';
 import { calculateSourcePixelScale } from '../../../utils/sourcePixelScale';
 import type { RenderSurfaceFrameContext } from '../../../services/render/renderHostTypes';
 import { Logger } from '../../../services/logger';
+import { resolveNestedPreviewRenderScale } from '../NestedCompRenderer';
+import { useTimelineStore } from '../../../stores/timeline';
 
 const log = Logger.create('TargetPreviewRenderer');
 
@@ -210,6 +212,14 @@ export class TargetPreviewRenderer {
         const data = layerData[i];
         const nested = data.layer.source?.nestedComposition;
         if (!nested) continue;
+        const nestedPreviewRenderScale = resolveNestedPreviewRenderScale({
+          compositionWidth: nested.width,
+          compositionHeight: nested.height,
+          outputWidth: width,
+          outputHeight: height,
+          isPlaying: useTimelineStore.getState().isPlaying,
+          particleQuality: 'preview',
+        });
         const view = d.nestedCompRenderer.preRender(
           nested.compositionId,
           nested.layers,
@@ -225,6 +235,7 @@ export class TargetPreviewRenderer {
           'preview',
           motionFrameAdmission,
           data.layer.id,
+          nestedPreviewRenderScale,
         );
         if (view) data.textureView = view;
         else layerData.splice(i, 1);

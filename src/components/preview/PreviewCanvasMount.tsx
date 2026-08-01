@@ -262,7 +262,10 @@ export function PreviewCanvasMount({
                 width={effectiveResolution.width}
                 height={effectiveResolution.height}
                 className="preview-canvas"
+                data-testid="preview-canvas"
                 data-live-feedback-composition-id={liveFeedbackCompositionId ?? undefined}
+                role="img"
+                aria-label="Composition preview"
                 style={{
                   width: canvasSize.width,
                   height: canvasSize.height,

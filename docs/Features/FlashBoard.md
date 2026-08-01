@@ -4,20 +4,14 @@
 
 FlashBoard is the AI generation runtime behind the Media Panel's bottom-right prompt tray. Its compact composer supports text-to-video, image-to-video, image generation, ElevenLabs text-to-speech, and Suno music generation, with direct import into the Media Pool. Projects persist the last selected model plus per-model generation settings. Prompt refinement treats START and END frame references as supplied video anchors and focuses on the motion between them instead of redescribing the images.
 
-> **Status:** Implemented. The compact composer is active inside Media, queued, persisted with the project, and connected to the current AI provider catalog.
-
----
-
 ## What It Does
 
 FlashBoard is not a separate model backend. It is a composer/runtime layer on top of the existing AI services:
 
-- `piapi` for the PiAPI catalog
-- `cloud` for all Kie.ai-backed Kling, Seedance, Veo, Runway, image, Suno, and chat routes, plus hosted ElevenLabs speech
-- `elevenlabs` for lower-level development compatibility; the Media generator tray uses hosted speech
-- compact chat for prompt discussion and editor actions through managed Kie.ai or local Lemonade; requests include the Media-chat system prompt, current timeline summary, and callable AI tools routed through the shared chat dispatcher. Managed Kie.ai chat requires a signed-in hosted session and enters the hosted agent kernel (see `docs/Features/Kernel-Client.md`)
+- `cloud` for the hosted Kie.ai video, image, Suno, ElevenLabs, and chat routes
+- compact chat for prompt discussion and editor actions through managed Kie.ai. Requests include the Media-chat system prompt, current timeline summary, and callable AI tools routed through the shared chat dispatcher. Hosted chat requires a signed-in hosted session and uses the hosted agent client (see `docs/Features/Kernel-Client.md`)
 
-The Media Panel generator tray offers two collapsed launch actions: `Generate` opens the normal generation prompt, while `Chat` opens a separate chat prompt window with provider/model/temperature controls and reasoning effort for Kie.ai GPT models. The chat model menu includes GPT 5.6 Luna/Terra/Sol, GPT 5.5/5.4, Claude Opus 4.8, Claude Sonnet 5, and chat-only Claude Fable 5. The generator tray exposes Kie.ai-backed media only as hosted Cloud entries. `Generate` remains the only action that queues media generation.
+The Media Panel generator tray offers three collapsed launch actions: `Chat`, `Generate`, and `Downloads`. `Generate` opens the normal generation prompt, while `Chat` opens a separate chat prompt window with provider/model controls, Claude temperature controls, and reasoning effort for Kie.ai GPT models. The chat model menu includes GPT 5.6 Terra/Luna/Sol, GPT 5.5/5.4, Claude Opus 4.8, Claude Sonnet 5, and chat-only Claude Fable 5. The generator tray exposes media generation only as signed-in hosted Cloud entries. `Generate` remains the action that queues media generation.
 
 ---
 
@@ -27,10 +21,10 @@ FlashBoard is composed of:
 
 - `MediaAIGenerativeTray` - Media Panel bottom-right expand/collapse shell
 - `MediaAIGenerationQueue` - compact Media Panel preview cards for queued, processing, failed, and canceled generation nodes, including model/settings labels and local cancellation for running AI jobs
-- `useFlashBoardRuntime` - board initialization plus queue/import callbacks
+- `useFlashBoardRuntime` - active-generation initialization plus queue/import callbacks
 - `FlashBoardComposer` - provider/output selection, separate generate/chat prompt windows, ordered media reference cards, compact chat controls, text-to-speech or music editing, durations, aspect ratio, image size, multi-shot setup, audio voice settings, and Suno song controls
 
-Boards are persisted inside the project state. The active board is restored on project load, generation metadata is serialized alongside the board state, and the prompt book keeps the project's generated and chat prompts available for review and copy. Prompt book generation pages group outputs by user prompt, show the Magic Wand prompt when one produced the final request, and preview generated images/videos directly on the page.
+The project persists the composer state, active generation records, generation metadata, prompt history, and chat messages. Pending resumable remote jobs are restored on project load. The prompt book keeps the project's generated and chat prompts available for review and copy. Prompt book generation pages group outputs by user prompt, show the Magic Wand prompt when one produced the final request, and preview generated images/videos directly on the page.
 
 The prompt book is presented as a "magic book": it opens with a one-shot fall-open animation, page navigation flips a blank textured overlay sheet across the spread, a short glitter burst accompanies opening and turning, and the pages carry a static paper-grain texture over a leather cover body. All effects are transform/opacity-only CSS animations that are time-boxed and removed from the DOM afterwards (the idle book is fully static), they are skipped entirely under `prefers-reduced-motion` and in the single-column mobile layout, and the animation state lives in `promptBookAnimations.ts` / `PromptBookSparkles.tsx` next to the book component.
 
@@ -46,11 +40,6 @@ Nodes move through the following states:
 - `completed`
 - `failed`
 - `canceled`
-
-There are two node kinds:
-
-- `generation` - an actual AI request
-- `reference` - a media reference used by generation requests or saved board state
 
 Generation nodes can include:
 
@@ -69,15 +58,13 @@ Generation nodes can include:
 
 ## Provider Matrix
 
-The composer uses the shared catalog from `FlashBoardModelCatalog`:
+The composer uses the hosted Cloud catalog from `FlashBoardModelCatalog`:
 
-- PiAPI video providers from the shared PiAPI catalog
-- Hosted Cloud Kling 3.0 video
-- Hosted Cloud Seedance 2.0 and Seedance 2.0 Fast video with image, video, and audio references
-- Hosted Cloud Veo 3.1, Runway, and Topaz Video Upscale
-- Hosted Cloud Nano Banana, GPT Image, Flux, Seedream, Flux Kontext, Recraft, and Topaz image generation/edit/utility entries
-- Cloud ElevenLabs text-to-speech audio generation
-- Cloud Suno music and sound generation
+- Kling, Seedance 2.0, Seedance 2.0 Fast, Veo 3.1, Runway, and Topaz Video Upscale video entries
+- Nano Banana 2/Pro, GPT Image 2 and GPT Image 2 Edit, Flux 2 Pro and Flux 2 Pro Edit, Seedream 5 Lite and Seedream 5 Lite Edit, Flux Kontext Pro/Max, Recraft utilities, and Topaz Image Upscale image entries
+- ElevenLabs text-to-speech, Suno music, and Suno Sounds audio entries
+
+Seedance 2.0 entries support exact IN/OUT frame inputs only.
 
 The compact composer exposes the richer FlashBoard catalog.
 
@@ -85,11 +72,11 @@ The compact composer exposes the richer FlashBoard catalog.
 
 ## Generation Flow
 
-1. The user creates a draft node from the composer.
-2. The store captures the current request on that node.
-3. `FlashBoardJobService` queues the node.
+1. The user creates a draft generation record from the composer.
+2. The store captures the current request on that record.
+3. `FlashBoardJobService` queues the record.
 4. The Media Panel queue renders a preview card with status and elapsed time while the job is queued or processing.
-5. Jobs run with a concurrency cap of 3 overall; hosted task creation is additionally paced at the Cloudflare boundary.
+5. Jobs run through the in-memory queue, whose current overall concurrency limit is 100.
 6. The selected media service submits the remote task and polls until completion when the provider is asynchronous.
 7. ElevenLabs audio jobs create speech through `/api/ai/audio` and return an audio `File` without remote polling.
 8. Suno music and Suno Sounds jobs use Cloudflare `/api/ai/audio`, where the server calls Kie.ai with `KIEAI_API_KEY`, spends hosted credits, and polls the task. At Kie.ai `FIRST_SUCCESS`, every currently available Suno result is exposed in the running generation card with cover art and an inline player using `streamAudioUrl`. Polling continues until the full job completes.
@@ -99,7 +86,7 @@ Kie.ai Market video/image tasks are asynchronous. A successful create call only 
 
 Polling tolerates brief browser/network `Failed to fetch` interruptions before failing the job. Completed hosted Kie.ai results are downloaded through authenticated application routes or the provider result URL appropriate to that model instead of remaining dependent on temporary preview URLs. The media bridge deduplicates repeated completion/import updates per generation output, so a slow or retried multi-track import does not create duplicate Media Pool items.
 
-Kie.ai requires a reachable Suno callback URL in addition to polling. `/api/ai/suno/callback` is a stateless acknowledgement endpoint that prevents provider `CALLBACK_EXCEPTION` failures; polling remains the authoritative state path. The callback deliberately performs no project or billing mutation. If callback data becomes authoritative in the future, Kie.ai's webhook signature and replay window must be verified before accepting it.
+Kie.ai requires a reachable Suno callback URL in addition to polling. `/api/ai/suno/callback` is a stateless acknowledgement endpoint that prevents provider `CALLBACK_EXCEPTION` failures; polling remains the authoritative state path. The callback performs no project or billing mutation.
 
 Suno controls follow the provider request matrix. The composer shows the available sections directly instead of a separate four-way mode selector: collapsing a section disables it and removes its values from the provider request. The panel itself has no inner scrollbar, so every enabled field remains visible.
 
@@ -109,9 +96,9 @@ Suno controls follow the provider request matrix. The composer shows the availab
 - the duration slider is available only for custom `V5_5` music and clamps whole seconds to Kie.ai's documented 10–360 second range
 - the small Magic Wand lives inside the active dark input: inside lyrics/song description for vocal modes and inside style for instrumental mode
 
-Image generation is handled alongside video generation. The code path resolves previewable reference images from media files, including thumbnails for video sources or a captured frame when needed. The compact composer accepts media-panel image, video, and audio references through right-click or drag-and-drop; hosted routes resolve and upload those inputs server-side into provider-specific fields such as Nano Banana `image_input`, Kling `kling_elements`, or Seedance multimodal reference URL arrays. Seedance 2.0 standard exposes 480p, 720p, and 1080p; Seedance 2.0 Fast exposes 480p and 720p. Both use `reference_audio_urls` for audio-driven sync. Because Kie.ai treats Seedance first/last-frame mode and multimodal reference mode as mutually exclusive, any Seedance request with generic references sends IN/OUT images as image references with prompt guidance instead of `first_frame_url` / `last_frame_url`.
+Image generation is handled alongside video generation. The code path resolves previewable reference images from media files, including thumbnails for video sources or a captured frame when needed. The compact composer accepts Media Panel image, video, and audio references through right-click or drag-and-drop; supported hosted routes resolve and upload those inputs server-side. Seedance 2.0 standard exposes 480p, 720p, and 1080p; Seedance 2.0 Fast exposes 480p and 720p. Seedance uses the IN and OUT frame slots for its exact first/last-frame mode.
 
-The composer wand has Seedance-specific prompt-refiner guidance. When Seedance is selected it asks the refiner to write concise cinematic motion, camera, continuity, and final-state instructions; preserve explicit REF labels; and treat audio references as performance, speech, mouth-shape, rhythm, or timing drivers rather than background music. Seedance reference-to-video mode sends `generate_audio: false` because Kie.ai treats multimodal reference audio as an input driver, not the native audio-generation switch. The composer therefore hides the `Sound` toggle for Seedance while REF media is attached; the audio card itself controls the timing. Seedance audio references are only valid when paired with at least one visual IN/REF image or video anchor.
+The composer wand has Seedance-specific prompt-refiner guidance. When Seedance is selected it asks the refiner to write concise cinematic motion, camera, continuity, and final-state instructions while preserving explicit reference labels.
 
 ---
 
@@ -150,13 +137,13 @@ Hosted Suno music uses the Cloudflare `KIEAI_API_KEY` secret and is charged as M
 
 ## Limitations
 
-- The composer does not add a new backend provider. It delegates to the existing AI services.
+- The composer delegates to the existing AI services.
 - Generated URLs are temporary, so imports force a local project copy.
 - ElevenLabs text-to-speech returns an MP3 `File` directly and is copied into project storage during import.
 - Suno music depends on Kie.ai's polling API. Kie.ai commonly returns multiple variations but does not contractually guarantee an exact count, so FlashBoard accepts and imports an arbitrary number of returned tracks.
 - Suno covers and streaming URLs are treated as optional provider data. Completed playback prefers the imported project-local audio before falling back to provider URLs.
-- The composer is still bound by provider-specific feature support in the catalog.
-- Some Kie.ai reference behaviors are model-specific: Nano Banana consumes image inputs, Kling consumes element references, and Seedance consumes separate image/video/audio reference arrays.
+- Feature support is provider-specific in the catalog.
+- Reference behavior remains model-specific: Nano Banana accepts image references, Kling accepts image/video references, and Seedance currently accepts exact IN/OUT frame inputs only.
 
 ---
 

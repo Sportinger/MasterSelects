@@ -3,11 +3,15 @@ import type {
   KernelActiveDecision,
   KernelDecisionPrompt,
 } from '../storyboard/contracts';
+import type {
+  HostedAgentFastV2ExecutionProfile,
+} from '../kernelClient/hostedAgent/fastV2StartContract';
 
-export type FlashBoardChatProvider = 'kernel' | 'kie' | 'lemonade';
+export type FlashBoardChatProvider = 'kernel' | 'kie';
+export type FlashBoardChatExecutionProfile = HostedAgentFastV2ExecutionProfile;
 export type FlashBoardKieChatProtocol = 'claude-messages' | 'openai-responses';
 export type FlashBoardOpenAiReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh';
-export type FlashBoardChatPromptVersion = 'v2' | 'legacy-v1';
+export type FlashBoardChatPromptVersion = 'v2';
 export type FlashBoardChatRunSource = 'ui' | 'bridge' | 'mcp' | 'test';
 export type FlashBoardChatToolExecutionMode = 'normal' | 'plan' | 'read-only';
 export type ChatIntent = 'plan' | 'execute';
@@ -86,8 +90,8 @@ export interface FlashBoardChatRequest {
   idempotencyKey?: string;
   intent?: ChatIntent;
   decisionPolicy?: DecisionPolicy;
-  lemonadeContextSize?: number;
-  lemonadeEndpoint?: string;
+  /** Explicit hosted execution profile; omitted callers retain the Fast default. */
+  executionProfile?: FlashBoardChatExecutionProfile;
   model: string;
   onActivityEvent?: (event: AgentActivityEvent) => void;
   onExecutedToolCalls?: (toolCalls: FlashBoardExecutedToolCall[]) => void;
@@ -97,21 +101,21 @@ export interface FlashBoardChatRequest {
   onKernelReport?: (report: import('../kernelClient/runReport').KernelRunReport) => void;
   /** Durable directing decision returned without implicit mutation. */
   onKernelDecision?: (decision: KernelDecisionPrompt) => void;
+  /** Explicit user gate for a bound destructive kernel operation plan. */
+  onKernelOperationConfirmation?: (
+    request: Readonly<import('../kernelClient/wp1Spike/operationRoundTrip').KernelOperationConfirmationRequestV1>,
+  ) => boolean | Promise<boolean>;
   /** Reports which explicitly selected engine is working on the turn. */
   onPhase?: (phase: 'kernel' | 'provider') => void;
   onRunCompleted?: (run: import('./FlashBoardChatRunAudit').FlashBoardChatRunRecord) => void;
   openAiReasoningEffort?: FlashBoardOpenAiReasoningEffort;
   playbookPrompt?: string;
   prompt: string;
-  promptVersion?: FlashBoardChatPromptVersion;
   provider: FlashBoardChatProvider;
   /** Pending assistant bubble that may reconnect to a hosted turn after reload. */
   resumeMessageId?: string;
   runSource?: FlashBoardChatRunSource;
   signal?: AbortSignal;
-  systemPromptIncludeContext?: boolean;
-  systemPromptIncludePlaybook?: boolean;
-  systemPromptOverride?: string;
   temperature: number;
   toolExecutionMode?: FlashBoardChatToolExecutionMode;
   visualReferences?: FlashBoardChatVisualReference[];

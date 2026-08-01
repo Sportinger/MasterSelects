@@ -1,0 +1,25 @@
+# Node-Workspace.md — audit 2026-08-02
+
+## Verified (spot checks that held)
+
+- The dock panel is lazily loaded as `NodeWorkspacePanel` for `node-workspace` in `src/components/dock/DockPanelContent.tsx`; selection uses `primarySelectedClipId` when it remains selected, otherwise the first selected clip, in `src/components/panels/nodes/useNodeGraphSubject.ts`.
+- Linked audio selection resolves to a non-audio linked clip as graph owner in `src/services/nodeGraph/clipGraphLinking.ts`; graph layout, forced built-ins, custom nodes, and manual edges are clip-owned `nodeGraph` state in `src/types/nodeGraph.ts` and `src/services/nodeGraph/clipGraphProjectionState.ts`.
+- The projection creates source, optional Transform/Mask/Color, non-audio effects, custom nodes, and combined output in `src/services/nodeGraph/clipGraphProjectionBuildView.ts`. Manual links replace the projected links after validation in `src/services/nodeGraph/clipGraphProjectionState.ts`.
+- The board supports pan, wheel zoom, node dragging, fit/reset, typed-port linking, selected-link disconnect, and Delete/Backspace removal in `src/components/panels/nodes/NodeGraphCanvas.tsx`; right-clicking an edge or port disconnects it in `src/components/panels/nodes/canvas/NodeGraphEdges.tsx` and `src/components/panels/nodes/canvas/NodeGraphNodeCard.tsx`.
+- Add/delete/bypass behavior is present: `src/components/panels/nodes/workspace/NodeContextMenu.tsx` exposes AI, Transform, Mask, Color, and effect additions; `src/components/panels/nodes/NodeWorkspacePanel.tsx` writes effect bypass to `setClipEffectEnabled` and custom-node bypass to `updateClipAICustomNode`.
+- Transform and effect inspectors write through to timeline actions in `src/components/panels/nodes/workspace/NodeWorkspaceParamEditors.tsx`; numeric effect parameters use `setPropertyValue`, while boolean/select parameters use `updateClipEffect`.
+- Source audio ports, generate/refresh actions, and AI seeding are implemented in `src/services/nodeGraph/clipGraphProjectionAudio.ts`, `src/components/panels/nodes/workspace/NodeWorkspaceInspector.tsx`, and `src/stores/timeline/nodeGraphSlice.ts`. Preview AI-node runtime supplies bounded linked-audio context and connected inputs in `src/services/nodeGraph/aiNodeRuntime.ts` and `src/services/nodeGraph/aiNodeRuntimeGraphSignals.ts`.
+
+## Outdated or wrong (claim → reality, with file evidence)
+
+- “Audio effects are shown in a separate audio lane when the source exposes audio” → the separate lane is only appended when the primary graph signal is not audio; an audio-only owner puts audio effects in the main lane. Evidence: `src/services/nodeGraph/clipGraphProjectionBuildView.ts`.
+- “During preview/export rendering, ready AI Nodes receive…” and “Runtime preview and export still use the existing layer builders” → the preview `LayerBuilderService` invokes `applyLayerBuilderAINodesToLayer`, but the export path uses `src/engine/export/ExportLayerBuilder.ts` and has no `renderClipAINodesToCanvas`/node-graph integration. Evidence: `src/services/layerBuilder/LayerBuilderService.ts`, `src/services/layerBuilder/layerBuilderLayerPostProcessing.ts`, `src/engine/export/FrameExporter.ts`, and `src/engine/export/ExportLayerBuilder.ts`.
+- “The inspector shows [numeric parameters] under Outputs” → generated numeric controls are rendered by `AINodeExposedParameters` in the custom-node Parameters area; they are not output-port controls. Color parameters are also keyframe-capable through RGB channels. Evidence: `src/components/panels/nodes/workspace/CustomNodeParameters.tsx` and `src/components/panels/nodes/workspace/AINodeExposedParameters.tsx`.
+- “configured AI provider” → the UI authoring path only enables sending when the account is authenticated and `hostedAIEnabled`; it calls `cloudAiService` with the hosted access kind. Evidence: `src/components/panels/nodes/workspace/CustomNodeParameters.tsx` and `src/components/panels/nodes/workspace/aiNodeAuthoring.ts`.
+
+## Noteworthy / unusual
+
+- AI custom-node execution is deliberately bounded and lossy for non-text visual clips: ordinary generated nodes are processed at at most 96×54 pixels, while pixel-sort nodes use 320×180; text uses its full source canvas. Evidence: `src/services/nodeGraph/aiNodeRuntimeRunnableNodes.ts`.
+- The inspector can generate, refresh, or cancel several audio-analysis artifacts, but its local `generateAudioAnalysis` dispatcher has no branch for the implemented `transcript-timing`, `voice-activity`, `speech-markers`, `prosody-contour`, or `room-tone-profile` artifact kinds it lists. Evidence: `src/components/panels/nodes/workspace/NodeWorkspaceInspector.tsx`.
+- The document omitted AI tooling: `getNodeWorkspaceDebugState` and `sendAINodePrompt` are registered client tools in `src/services/aiTools/definitions/nodeWorkspace.ts` with handlers in `src/services/aiTools/handlers/nodeWorkspace.ts`.
+- Custom-node state calls generated code “active” in the UI, but the data field remains `ai.generatedCode`; its statuses are only `draft` and `ready`. Evidence: `src/components/panels/nodes/workspace/CustomNodeParameters.tsx` and `src/types/nodeGraph.ts`.

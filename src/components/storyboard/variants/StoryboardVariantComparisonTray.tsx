@@ -232,7 +232,7 @@ export function StoryboardVariantComparisonTray({
           onClick={() => onAccept(activeOption.id)}
           type="button"
         >
-          {isCommitting ? 'Committingâ€¦' : 'Select for commit'}
+          {isCommitting ? 'Committing…' : 'Select for commit'}
         </button>
       </footer>
       {commitError && (

@@ -193,6 +193,7 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
       ref={containerRef}
       className={`dock-split ${isHorizontal ? 'horizontal' : 'vertical'} ${isResizing ? 'resizing' : ''} ${isMaximizedPath ? 'maximized-path' : ''}`}
       data-split-id={split.id}
+      data-guided-target={`dock-split:${split.id}`}
     >
       <div ref={firstChildRef} className={`dock-split-child ${isMaximizedPath && maximizedChildIndex !== 0 ? 'is-collapsed' : ''}`} style={firstChildStyle}>
         <DockNode node={split.children[0]} />
@@ -201,8 +202,24 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
         <div
           ref={handleRef}
           className={`dock-resize-handle ${isHorizontal ? 'horizontal' : 'vertical'} ${isResizing ? 'active' : ''}`}
+          data-guided-target={`dock-resize:${split.id}`}
+          data-guided-resize-handle="true"
+          data-guided-resize-axis={isHorizontal ? 'x' : 'y'}
           onPointerDown={handlePointerDown}
-        />
+        >
+          <span
+            aria-hidden="true"
+            className="dock-guided-resize-corner dock-guided-resize-corner--start"
+            data-guided-resize-corner="start"
+            data-guided-target={`dock-resize-corner:${split.id}:start`}
+          />
+          <span
+            aria-hidden="true"
+            className="dock-guided-resize-corner dock-guided-resize-corner--end"
+            data-guided-resize-corner="end"
+            data-guided-target={`dock-resize-corner:${split.id}:end`}
+          />
+        </div>
       )}
       <div ref={secondChildRef} className={`dock-split-child ${isMaximizedPath && maximizedChildIndex !== 1 ? 'is-collapsed' : ''}`} style={secondChildStyle}>
         <DockNode node={split.children[1]} />

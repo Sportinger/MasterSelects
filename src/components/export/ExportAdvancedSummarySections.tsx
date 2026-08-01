@@ -94,7 +94,7 @@ export function ExportAdvancedSummarySections({
         </div>
       </div>
 
-      {error && <div className="export-error">{error}</div>}
+      {error && <div className="export-error" role="alert">{error}</div>}
     </>
   );
 }

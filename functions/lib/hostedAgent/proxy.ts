@@ -47,6 +47,7 @@ function resolveOrigin(env: Env): string {
 }
 
 function responseHeaders(upstream: Response, metadata: {
+  protocolVersion?: string;
   sessionId: string;
   streamLeaseMs?: number;
   turnId: string;
@@ -59,7 +60,10 @@ function responseHeaders(upstream: Response, metadata: {
     }
   }
   headers.set('Cache-Control', 'no-store');
-  headers.set(HOSTED_AGENT_HEADERS.protocolVersion, HOSTED_AGENT_PROTOCOL_VERSION);
+  headers.set(
+    HOSTED_AGENT_HEADERS.protocolVersion,
+    metadata.protocolVersion ?? HOSTED_AGENT_PROTOCOL_VERSION,
+  );
   headers.set(HOSTED_AGENT_HEADERS.sessionId, metadata.sessionId);
   headers.set(HOSTED_AGENT_HEADERS.turnId, metadata.turnId);
   if (metadata.streamLeaseMs !== undefined) {
@@ -79,6 +83,7 @@ export async function forwardHostedAgentRequest(input: {
   lastEventId?: string;
   method: 'GET' | 'POST';
   pageLease?: string;
+  protocolVersion?: string;
   requestSignal: AbortSignal;
   sessionId: string;
   timeoutMs?: number;
@@ -96,7 +101,7 @@ export async function forwardHostedAgentRequest(input: {
     Accept: input.accept,
     Authorization: `Bearer ${token}`,
     [HOSTED_AGENT_HEADERS.clientInstanceId]: input.clientInstanceId,
-    [HOSTED_AGENT_HEADERS.protocolVersion]: HOSTED_AGENT_PROTOCOL_VERSION,
+    [HOSTED_AGENT_HEADERS.protocolVersion]: input.protocolVersion ?? HOSTED_AGENT_PROTOCOL_VERSION,
     [HOSTED_AGENT_HEADERS.serviceAssertion]: input.assertion,
     [HOSTED_AGENT_HEADERS.sessionId]: input.sessionId,
     [HOSTED_AGENT_HEADERS.turnId]: input.turnId,
@@ -159,6 +164,7 @@ export async function forwardHostedAgentRequest(input: {
   }
   return new Response(upstream.body, {
     headers: responseHeaders(upstream, {
+      ...(input.protocolVersion === undefined ? {} : { protocolVersion: input.protocolVersion }),
       sessionId: input.sessionId,
       streamLeaseMs: input.expectedEventStream ? timeoutMs : undefined,
       turnId: input.turnId,

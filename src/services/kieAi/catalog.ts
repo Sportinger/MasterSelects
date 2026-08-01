@@ -1,4 +1,4 @@
-import type { VideoProvider } from '../piApiService';
+import type { VideoProvider } from '../aiGenerationContracts';
 import {
   KLING_3_ASPECT_RATIOS,
   KLING_3_DURATIONS,

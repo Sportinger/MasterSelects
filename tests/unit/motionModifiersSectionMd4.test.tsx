@@ -76,10 +76,14 @@ describe('MotionModifiersSection MD4 authoring', () => {
   it('shows a diagnostic and does not apply invalid amount edits', () => {
     setStack(stack([{ id: 'random-one', kind: 'random' }])); render(<MotionShapeTab clipId={clipId} />);
     fireEvent.click(screen.getByLabelText('Expand Random modifier'));
-    const amount = screen.getByText('50.00');
-    fireEvent.mouseDown(amount, { button: 0, clientX: 0 });
-    fireEvent.mouseMove(window, { clientX: 20050 });
-    fireEvent.mouseUp(window);
+    // Drive the value through the component's double-click edit mode. A raw
+    // mousedown/mousemove drag needs pointer-lock mocks, `buttons`, and
+    // `movementX`, and the drag sensitivity is far too low to exceed the
+    // 10,000 budget in one gesture (see EditableDraggableNumber.test.tsx).
+    fireEvent.doubleClick(screen.getByText('50.00'));
+    const input = screen.getByTitle('Enter value');
+    fireEvent.change(input, { target: { value: '20000' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
     expect(screen.getByTestId('motion-modifier-diagnostic').textContent).toContain('must be in');
     expect(currentStack()?.revision).toBe(4);
   });

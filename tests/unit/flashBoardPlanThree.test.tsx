@@ -18,8 +18,6 @@ function buildSendPlan(planThreeEnabled: boolean) {
     hasHostedSession: true,
     hostedAIEnabled: true,
     isChatting: false,
-    lemonadeContextSize: 16_384,
-    lemonadeEndpoint: 'http://localhost:13305/api/v1',
     openAiReasoningEffort: 'medium',
     planThreeEnabled,
   });

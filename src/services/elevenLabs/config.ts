@@ -1,5 +1,3 @@
-export const BASE_URL = 'https://api.elevenlabs.io';
-
 export const ELEVENLABS_MP3_OUTPUT_FORMATS = [
   'mp3_44100_128',
   'mp3_44100_192',

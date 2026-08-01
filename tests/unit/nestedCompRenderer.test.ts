@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { LayerRenderData } from '../../src/engine/core/types';
-import { NestedCompRenderer } from '../../src/engine/render/NestedCompRenderer';
+import {
+  NestedCompRenderer,
+  resolveNestedPreviewRenderScale,
+} from '../../src/engine/render/NestedCompRenderer';
 import {
   getCompatibleNestedVideoOwnerId,
   getNestedVideoOwnerId,
@@ -66,6 +69,7 @@ type NestedCompRendererTestAccess = NestedCompRenderer & {
     particleQuality?: 'preview' | 'export',
     motionFrameAdmission?: MotionFrameRuntimeAdmission,
     renderOccurrenceKey?: string,
+    previewRenderScale?: number,
   ) => LayerRenderData[];
   process3DLayersForNested: (
     layerData: LayerRenderData[],
@@ -144,6 +148,202 @@ describe('NestedCompRenderer shared-scene integration', () => {
     mockNativeSceneRenderer.renderScene.mockReturnValue({ label: 'nested-shared-scene-view' });
     useMediaStore.setState(initialMediaState);
     useTimelineStore.setState(initialTimelineState);
+  });
+
+  it('caps nested playback previews while keeping paused and export resolution exact', () => {
+    expect(resolveNestedPreviewRenderScale({
+      compositionWidth: 1920,
+      compositionHeight: 1080,
+      outputWidth: 1920,
+      outputHeight: 1080,
+      isPlaying: true,
+      particleQuality: 'preview',
+    })).toBe(0.5);
+    expect(resolveNestedPreviewRenderScale({
+      compositionWidth: 1920,
+      compositionHeight: 1080,
+      outputWidth: 960,
+      outputHeight: 540,
+      isPlaying: false,
+      particleQuality: 'preview',
+    })).toBe(0.5);
+    expect(resolveNestedPreviewRenderScale({
+      compositionWidth: 1920,
+      compositionHeight: 1080,
+      outputWidth: 480,
+      outputHeight: 270,
+      isPlaying: true,
+      particleQuality: 'preview',
+    })).toBe(0.25);
+    expect(resolveNestedPreviewRenderScale({
+      compositionWidth: 1920,
+      compositionHeight: 1080,
+      outputWidth: 480,
+      outputHeight: 270,
+      isPlaying: true,
+      particleQuality: 'export',
+    })).toBe(1);
+  });
+
+  it('uses the preview scale but always renders exports at full size', () => {
+    const previousGPUTextureUsage = (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+    Object.defineProperty(globalThis, 'GPUTextureUsage', {
+      configurable: true,
+      value: { RENDER_ATTACHMENT: 1, TEXTURE_BINDING: 2, COPY_SRC: 4, COPY_DST: 8 },
+    });
+    const device = {
+      createTexture: vi.fn((descriptor: GPUTextureDescriptor) => {
+        const size = descriptor.size;
+        const width = Array.isArray(size) ? size[0] : size.width;
+        const height = Array.isArray(size) ? size[1] : size.height;
+        return createSizedMockTexture(Number(width), Number(height));
+      }),
+    } as unknown as GPUDevice;
+    const renderer = createRenderer(device);
+    const renderPass = { end: vi.fn() };
+    const encoder = {
+      beginRenderPass: vi.fn(() => renderPass),
+    } as unknown as GPUCommandEncoder;
+
+    try {
+      renderer.preRender(
+        'scaled-comp',
+        [],
+        1920,
+        1080,
+        encoder,
+        {} as GPUSampler,
+        1,
+        undefined,
+        undefined,
+        0,
+        false,
+        'preview',
+        undefined,
+        'wrapper',
+        0.5,
+      );
+      expect(renderer.getTexture('scaled-comp', 'wrapper')?.texture).toMatchObject({
+        width: 960,
+        height: 540,
+      });
+
+      renderer.preRender(
+        'scaled-comp',
+        [],
+        1920,
+        1080,
+        encoder,
+        {} as GPUSampler,
+        1,
+        undefined,
+        undefined,
+        0,
+        false,
+        'export',
+        undefined,
+        'wrapper',
+        0.5,
+      );
+      expect(renderer.getTexture('scaled-comp', 'wrapper')?.texture).toMatchObject({
+        width: 1920,
+        height: 1080,
+      });
+    } finally {
+      renderer.destroy();
+      if (previousGPUTextureUsage === undefined) {
+        delete (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+      } else {
+        Object.defineProperty(globalThis, 'GPUTextureUsage', {
+          configurable: true,
+          value: previousGPUTextureUsage,
+        });
+      }
+    }
+  });
+
+  it('preserves nested layer geometry in a reduced playback texture', () => {
+    const previousGPUTextureUsage = (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+    Object.defineProperty(globalThis, 'GPUTextureUsage', {
+      configurable: true,
+      value: { RENDER_ATTACHMENT: 1, TEXTURE_BINDING: 2, COPY_SRC: 4, COPY_DST: 8 },
+    });
+    const device = {
+      createTexture: vi.fn((descriptor: GPUTextureDescriptor) => {
+        const size = descriptor.size;
+        const width = Array.isArray(size) ? size[0] : size.width;
+        const height = Array.isArray(size) ? size[1] : size.height;
+        return createSizedMockTexture(Number(width), Number(height));
+      }),
+    } as unknown as GPUDevice;
+    const renderer = createRenderer(device);
+    const renderPass = { end: vi.fn() };
+    const encoder = {
+      beginRenderPass: vi.fn(() => renderPass),
+      copyTextureToTexture: vi.fn(),
+    } as unknown as GPUCommandEncoder;
+    const nestedLayer = {
+      id: 'child-wrapper',
+      name: 'Child composition',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1, z: 1 },
+      rotation: { x: 0, y: 0, z: 0 },
+      source: {
+        type: 'image',
+        nestedComposition: {
+          compositionId: 'child-comp',
+          layers: [],
+          width: 1920,
+          height: 1080,
+          currentTime: 1,
+        },
+      },
+    } as unknown as Layer;
+
+    try {
+      renderer.preRender(
+        'outer-comp',
+        [nestedLayer],
+        1920,
+        1080,
+        encoder,
+        {} as GPUSampler,
+        1,
+        undefined,
+        undefined,
+        0,
+        false,
+        'preview',
+        undefined,
+        'outer-wrapper',
+        0.5,
+      );
+
+      const compositeCall = mockCompositeNestedLayers.mock.calls.at(-1)?.[0] as {
+        layerData: LayerRenderData[];
+        width: number;
+        height: number;
+      };
+      expect(compositeCall).toMatchObject({ width: 960, height: 540 });
+      expect(compositeCall.layerData[0]).toMatchObject({
+        sourceWidth: 960,
+        sourceHeight: 540,
+      });
+    } finally {
+      renderer.destroy();
+      if (previousGPUTextureUsage === undefined) {
+        delete (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+      } else {
+        Object.defineProperty(globalThis, 'GPUTextureUsage', {
+          configurable: true,
+          value: previousGPUTextureUsage,
+        });
+      }
+    }
   });
 
   it('reuses one preview-frame owner across transition coverage segments', () => {
@@ -422,6 +622,112 @@ describe('NestedCompRenderer shared-scene integration', () => {
         nestedCompTextures: Map<string, { compositionId: string }>;
       }).nestedCompTextures.size).toBe(2);
       expect((renderer as unknown as { lastRenderTime: Map<string, number> }).lastRenderTime.size).toBe(2);
+    } finally {
+      renderer.destroy();
+      if (previousGPUTextureUsage === undefined) {
+        delete (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+      } else {
+        Object.defineProperty(globalThis, 'GPUTextureUsage', {
+          configurable: true,
+          value: previousGPUTextureUsage,
+        });
+      }
+    }
+  });
+
+  it('hands the last good preview frame to a newly split occurrence during a decode gap', () => {
+    const previousGPUTextureUsage = (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+    Object.defineProperty(globalThis, 'GPUTextureUsage', {
+      configurable: true,
+      value: { RENDER_ATTACHMENT: 1, TEXTURE_BINDING: 2, COPY_SRC: 4, COPY_DST: 8 },
+    });
+    let textureId = 0;
+    const device = {
+      createTexture: vi.fn(() => {
+        const view = { id: `handoff-view-${++textureId}` };
+        return {
+          width: 16,
+          height: 16,
+          createView: vi.fn(() => view),
+          destroy: vi.fn(),
+        };
+      }),
+    } as unknown as GPUDevice;
+    const renderer = createRenderer(device);
+    const renderPass = { end: vi.fn() };
+    const encoder = {
+      beginRenderPass: vi.fn(() => renderPass),
+      copyTextureToTexture: vi.fn(),
+    } as unknown as GPUCommandEncoder;
+    const unavailableVideoLayer = {
+      id: 'nested-video',
+      visible: true,
+      opacity: 1,
+      source: { type: 'video' },
+    } as unknown as Layer;
+
+    try {
+      const firstView = renderer.preRender(
+        'split-comp',
+        [],
+        16,
+        16,
+        encoder,
+        {} as GPUSampler,
+        0.84,
+        undefined,
+        undefined,
+        0,
+        false,
+        'preview',
+        undefined,
+        'wrapper-a',
+      );
+      const secondView = renderer.preRender(
+        'split-comp',
+        [unavailableVideoLayer],
+        16,
+        16,
+        encoder,
+        {} as GPUSampler,
+        0.91,
+        undefined,
+        undefined,
+        0,
+        false,
+        'preview',
+        undefined,
+        'wrapper-b',
+      );
+
+      const firstTexture = renderer.getTexture('split-comp', 'wrapper-a')!.texture;
+      const secondTexture = renderer.getTexture('split-comp', 'wrapper-b')!.texture;
+      expect(secondView).not.toBeNull();
+      expect(secondView).not.toBe(firstView);
+      expect(encoder.copyTextureToTexture).toHaveBeenCalledWith(
+        { texture: firstTexture },
+        { texture: secondTexture },
+        { width: 16, height: 16 },
+      );
+
+      const copyCount = vi.mocked(encoder.copyTextureToTexture).mock.calls.length;
+      expect(renderer.preRender(
+        'split-comp',
+        [unavailableVideoLayer],
+        16,
+        16,
+        encoder,
+        {} as GPUSampler,
+        0.92,
+        undefined,
+        undefined,
+        0,
+        false,
+        'export',
+        undefined,
+        'wrapper-export',
+      )).toBeNull();
+      expect(encoder.copyTextureToTexture).toHaveBeenCalledTimes(copyCount);
     } finally {
       renderer.destroy();
       if (previousGPUTextureUsage === undefined) {

@@ -129,6 +129,8 @@ export function MasksTab({ clipId, masks }: MasksTabProps) {
       className="properties-tab-content masks-tab"
       data-guided-properties-tab="masks"
       data-guided-target="properties-tab:masks"
+      role="region"
+      aria-label="Masks"
     >
       <MaskToolbar
         activeMask={activeMask}

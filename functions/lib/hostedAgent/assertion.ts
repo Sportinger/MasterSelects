@@ -2,6 +2,20 @@ import {
   HOSTED_AGENT_PROTOCOL_VERSION,
   type HostedAgentServiceAssertionClaims,
 } from '../../../src/services/kernelClient/hostedAgent/contracts';
+import {
+  HOSTED_AGENT_FAST_V2_BUDGET_POLICY_VERSION,
+  HOSTED_AGENT_FAST_V2_CAPABILITY_BUNDLE_VERSION,
+  HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_DIGEST,
+  HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_VERSION,
+  HOSTED_AGENT_FAST_V2_MAXIMUM_ITERATIONS,
+  HOSTED_AGENT_FAST_V2_MAXIMUM_SPEND_CREDITS,
+  HOSTED_AGENT_FAST_V2_MODEL_POLICY_VERSION,
+  HOSTED_AGENT_FAST_V2_PROMPT_VERSION,
+  HOSTED_AGENT_FAST_V2_PROTOCOL_VERSION,
+  type HostedAgentFastV2AssertionClaims,
+  type HostedAgentFastV2EdgePins,
+  type HostedAgentFastV2StartRequest,
+} from '../../../src/services/kernelClient/hostedAgent/fastV2StartContract';
 
 const ASSERTION_AUDIENCE = 'masterselects-hosted-agent';
 const ASSERTION_ISSUER = 'masterselects-cloudflare-kernel-proxy';
@@ -121,6 +135,78 @@ function isClaims(value: unknown): value is HostedAgentServiceAssertionClaims {
     && claims.maximumIterations > 0;
 }
 
+function isFastV2Claims(value: unknown): value is HostedAgentFastV2AssertionClaims {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  const allowedKeys = new Set([
+    'aud',
+    'browserRequestDigest',
+    'budgetPolicyVersion',
+    'capabilityBundleVersion',
+    'clientInstanceId',
+    'editorBuildId',
+    'executionContractDigest',
+    'executionContractVersion',
+    'executionProfile',
+    'exp',
+    'iat',
+    'iss',
+    'maximumIterations',
+    'maxTurnSpendCredits',
+    'modelPolicyVersion',
+    'nonce',
+    'promptVersion',
+    'protocolVersion',
+    'sessionId',
+    'snapshotStateFingerprint',
+    'snapshotTimelineRevision',
+    'sub',
+    'turnId',
+  ]);
+  if (Object.keys(record).some((key) => !allowedKeys.has(key))) return false;
+  const claims = record as Partial<HostedAgentFastV2AssertionClaims>;
+  const validSha256 = (candidate: unknown): candidate is string => (
+    typeof candidate === 'string' && /^sha256:[a-f0-9]{64}$/.test(candidate)
+  );
+  return claims.aud === ASSERTION_AUDIENCE
+    && claims.iss === ASSERTION_ISSUER
+    && claims.protocolVersion === HOSTED_AGENT_FAST_V2_PROTOCOL_VERSION
+    && claims.promptVersion === HOSTED_AGENT_FAST_V2_PROMPT_VERSION
+    && claims.capabilityBundleVersion === HOSTED_AGENT_FAST_V2_CAPABILITY_BUNDLE_VERSION
+    && claims.modelPolicyVersion === HOSTED_AGENT_FAST_V2_MODEL_POLICY_VERSION
+    && claims.budgetPolicyVersion === HOSTED_AGENT_FAST_V2_BUDGET_POLICY_VERSION
+    && claims.executionContractVersion === HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_VERSION
+    && claims.executionContractDigest === HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_DIGEST
+    && (
+      claims.executionProfile === undefined
+      || claims.executionProfile === 'fast'
+      || claims.executionProfile === 'verified'
+    )
+    && validString(claims.sub)
+    && validString(claims.turnId, 160)
+    && validString(claims.sessionId, 200)
+    && validString(claims.clientInstanceId, 200)
+    && validString(claims.editorBuildId, 120)
+    && validString(claims.nonce)
+    && validSha256(claims.browserRequestDigest)
+    && validSha256(claims.snapshotStateFingerprint)
+    && typeof claims.snapshotTimelineRevision === 'number'
+    && Number.isInteger(claims.snapshotTimelineRevision)
+    && claims.snapshotTimelineRevision >= 0
+    && typeof claims.iat === 'number'
+    && Number.isInteger(claims.iat)
+    && typeof claims.exp === 'number'
+    && Number.isInteger(claims.exp)
+    && typeof claims.maxTurnSpendCredits === 'number'
+    && Number.isInteger(claims.maxTurnSpendCredits)
+    && claims.maxTurnSpendCredits > 0
+    && claims.maxTurnSpendCredits <= HOSTED_AGENT_FAST_V2_MAXIMUM_SPEND_CREDITS
+    && typeof claims.maximumIterations === 'number'
+    && Number.isInteger(claims.maximumIterations)
+    && claims.maximumIterations > 0
+    && claims.maximumIterations <= HOSTED_AGENT_FAST_V2_MAXIMUM_ITERATIONS;
+}
+
 async function hmacKey(secret: string): Promise<CryptoKey> {
   if (secret.length < MINIMUM_SECRET_CHARACTERS) {
     throw new HostedAgentAssertionError(
@@ -170,8 +256,74 @@ export function buildHostedAgentAssertionClaims(input: {
   };
 }
 
+export function buildHostedAgentFastV2AssertionClaims(input: {
+  browserRequest: HostedAgentFastV2StartRequest;
+  browserRequestDigest: string;
+  edge: HostedAgentFastV2EdgePins;
+  nonce: string;
+  now?: Date;
+  userId: string;
+}): HostedAgentFastV2AssertionClaims {
+  return buildHostedAgentFastV2AssertionClaimsFromBinding({
+    browserRequestDigest: input.browserRequestDigest,
+    clientInstanceId: input.browserRequest.clientInstanceId,
+    edge: input.edge,
+    editorBuildId: input.browserRequest.editorBuildId,
+    executionContractDigest: input.browserRequest.executionContractDigest,
+    executionContractVersion: input.browserRequest.executionContractVersion,
+    nonce: input.nonce,
+    ...(input.now === undefined ? {} : { now: input.now }),
+    snapshotStateFingerprint: input.browserRequest.compactSnapshot.stateFingerprint,
+    snapshotTimelineRevision: input.browserRequest.compactSnapshot.timelineRevision,
+    turnId: input.browserRequest.turnId,
+    userId: input.userId,
+  });
+}
+
+export function buildHostedAgentFastV2AssertionClaimsFromBinding(input: {
+  browserRequestDigest: string;
+  clientInstanceId: string;
+  edge: HostedAgentFastV2EdgePins;
+  editorBuildId: string;
+  executionContractDigest: HostedAgentFastV2AssertionClaims['executionContractDigest'];
+  executionContractVersion: HostedAgentFastV2AssertionClaims['executionContractVersion'];
+  nonce: string;
+  now?: Date;
+  snapshotStateFingerprint: string;
+  snapshotTimelineRevision: number;
+  turnId: string;
+  userId: string;
+}): HostedAgentFastV2AssertionClaims {
+  const issuedAt = Math.floor((input.now ?? new Date()).getTime() / 1000);
+  return {
+    aud: ASSERTION_AUDIENCE,
+    browserRequestDigest: input.browserRequestDigest,
+    budgetPolicyVersion: input.edge.budgetPolicyVersion,
+    capabilityBundleVersion: input.edge.capabilityBundleVersion,
+    clientInstanceId: input.clientInstanceId,
+    editorBuildId: input.editorBuildId,
+    executionContractDigest: input.executionContractDigest,
+    executionContractVersion: input.executionContractVersion,
+    executionProfile: input.edge.executionProfile,
+    exp: issuedAt + ASSERTION_TTL_SECONDS,
+    iat: issuedAt,
+    iss: ASSERTION_ISSUER,
+    maximumIterations: input.edge.maximumIterations,
+    maxTurnSpendCredits: input.edge.maxTurnSpendCredits,
+    modelPolicyVersion: input.edge.modelPolicyVersion,
+    nonce: input.nonce,
+    promptVersion: input.edge.promptVersion,
+    protocolVersion: HOSTED_AGENT_FAST_V2_PROTOCOL_VERSION,
+    sessionId: input.edge.sessionId,
+    snapshotStateFingerprint: input.snapshotStateFingerprint,
+    snapshotTimelineRevision: input.snapshotTimelineRevision,
+    sub: input.userId,
+    turnId: input.turnId,
+  };
+}
+
 export async function signHostedAgentServiceAssertion(
-  claims: HostedAgentServiceAssertionClaims,
+  claims: HostedAgentServiceAssertionClaims | HostedAgentFastV2AssertionClaims,
   secret: string,
 ): Promise<string> {
   const encodedHeader = encodeJson(ASSERTION_HEADER);
@@ -185,11 +337,11 @@ export async function signHostedAgentServiceAssertion(
   return `${signingInput}.${encodeBase64Url(new Uint8Array(signature))}`;
 }
 
-export async function verifyHostedAgentServiceAssertion(
+async function verifyHostedAgentAssertionPayload(
   assertion: string,
   secret: string,
   now = new Date(),
-): Promise<HostedAgentServiceAssertionClaims> {
+): Promise<unknown> {
   const segments = assertion.split('.');
   if (segments.length !== 3) {
     throw new HostedAgentAssertionError('assertion_invalid', 'The service assertion is malformed.');
@@ -217,15 +369,48 @@ export async function verifyHostedAgentServiceAssertion(
   }
 
   const claims = decodeJson(encodedClaims);
-  if (!isClaims(claims)) {
+  if (typeof claims !== 'object' || claims === null) {
+    throw new HostedAgentAssertionError('assertion_invalid', 'The assertion claims are invalid.');
+  }
+  const temporal = claims as { exp?: unknown; iat?: unknown };
+  if (
+    typeof temporal.exp !== 'number'
+    || !Number.isInteger(temporal.exp)
+    || typeof temporal.iat !== 'number'
+    || !Number.isInteger(temporal.iat)
+  ) {
     throw new HostedAgentAssertionError('assertion_invalid', 'The assertion claims are invalid.');
   }
   const nowSeconds = Math.floor(now.getTime() / 1000);
-  if (claims.exp <= nowSeconds || claims.iat > nowSeconds + 5) {
+  if (temporal.exp <= nowSeconds || temporal.iat > nowSeconds + 5) {
     throw new HostedAgentAssertionError('assertion_expired', 'The service assertion has expired.');
   }
-  if (claims.exp - claims.iat > ASSERTION_TTL_SECONDS) {
+  if (temporal.exp - temporal.iat > ASSERTION_TTL_SECONDS) {
     throw new HostedAgentAssertionError('assertion_invalid', 'The assertion lifetime is invalid.');
+  }
+  return claims;
+}
+
+export async function verifyHostedAgentServiceAssertion(
+  assertion: string,
+  secret: string,
+  now = new Date(),
+): Promise<HostedAgentServiceAssertionClaims> {
+  const claims = await verifyHostedAgentAssertionPayload(assertion, secret, now);
+  if (!isClaims(claims)) {
+    throw new HostedAgentAssertionError('assertion_invalid', 'The assertion claims are invalid.');
+  }
+  return claims;
+}
+
+export async function verifyHostedAgentFastV2ServiceAssertion(
+  assertion: string,
+  secret: string,
+  now = new Date(),
+): Promise<HostedAgentFastV2AssertionClaims> {
+  const claims = await verifyHostedAgentAssertionPayload(assertion, secret, now);
+  if (!isFastV2Claims(claims)) {
+    throw new HostedAgentAssertionError('assertion_invalid', 'The Fast V2 assertion claims are invalid.');
   }
   return claims;
 }

@@ -43,7 +43,6 @@ const COPY_PROMPT_TOAST_MS = 900;
 const TRANSCRIPTION_PROVIDER_LABELS: Record<TranscriptionProvider, string> = {
   local: 'Local Whisper Base',
   openai: 'OpenAI Whisper API',
-  assemblyai: 'AssemblyAI',
   deepgram: 'Deepgram',
   hybrid: 'Best Quality: Deepgram + OpenAI',
 };

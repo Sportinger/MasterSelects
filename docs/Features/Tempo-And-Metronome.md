@@ -2,10 +2,8 @@
 
 # Tempo, Time Signature And Metronome
 
-**Status:** Implemented (issue #299). Builds on the read-only TempoMap shipped by
-[Timeline Rulers](./Timeline-Rulers.md) (#257) and makes it **editable**, makes
-tempo drive the **timeline grid and snapping**, makes **MIDI content follow tempo
-changes**, and adds a **metronome click**.
+The editable tempo map drives the **timeline grid and snapping**, makes **MIDI
+content follow tempo changes**, and provides a **metronome click**.
 
 ---
 
@@ -34,8 +32,7 @@ read-only mirror. It follows the same Rulers → Tempo toggle.
 
 ## The model
 
-Three ideas carry the whole feature. Each one is a decision that was wrong at
-least once during implementation, so the reasoning matters more than the code.
+Three ideas carry the whole feature.
 
 ### 1. BPM sets duration; the time signature only groups
 
@@ -43,9 +40,7 @@ A quarter note's duration comes from the BPM. The time signature says how beats
 are grouped into bars and which note value is counted — it changes no duration.
 
 So **content is anchored to its quarter-note position**, not to its (bar, beat)
-address. Anchoring to bar/beat meant that switching 4/4 → 3/4 at the same tempo
-re-addressed every note and physically moved it (a note at 6 s slid to 5 s),
-leaving the bars ruler out of sync with the content under it. With quarters:
+address. With quarters:
 
 - a meter change moves **nothing**, for any meter, including 6/8 where the
   counted beat changes from a quarter to an eighth;
@@ -61,9 +56,6 @@ four CC automation lanes, so a melody written at 120 stays on its bars at 100.
 Video, audio and image clips keep their seconds — a film edit must not reflow
 because someone set a tempo. Both land in **one undo entry** with the tempo edit.
 
-The test lives in one predicate, `trackFollowsTempo(track)`, which is the seam
-for a future per-track `timebase: 'musical' | 'linear'` flag.
-
 Durations are never scaled by a factor: an end is remapped and the remapped
 start subtracted, which is the only correct answer across a tempo boundary.
 
@@ -74,8 +66,8 @@ tempo — or turning this one into a ramp — changes how long the preceding int
 takes, so the flag's **seconds** must move to keep its **bar**. Without that, a
 ramp flag placed on bar 11 drifts to bar 11.5.
 
-Every edit therefore re-anchors: each event's quarter position is read in the map
-it was placed against, then the seconds are rebuilt under the new tempo profile.
+Every edit therefore re-anchors: each event's quarter position is read from the
+existing map, then the seconds are rebuilt under the new tempo profile.
 One exception — an **explicitly set position wins**: a flag you drag or insert
 lands exactly where you dropped it, or it would slide out from under the cursor.
 
@@ -108,10 +100,8 @@ speed-up, falling for a slow-down — plus a ↗/↘ arrow on the flag.
 
 ## Grid and snapping
 
-**An enabled Bars + Beats ruler wins the grid.** Enabling the lane is already the
-user saying "I am working in bars"; requiring a second, invisible "active lane"
-selection on top of that was the seam #257 stored but never used, and it is
-retired. `activeRulerLaneId` now means only the lane highlight.
+**An enabled Bars + Beats ruler wins the grid.** Enabling the lane indicates that
+the user is working in bars. `activeRulerLaneId` controls only the lane highlight.
 
 - Bars **replace** the time/frame grid rather than overlaying it.
 - Lines thin by pixel spacing using the **same thresholds as the ruler ticks**, so
@@ -171,9 +161,8 @@ TempoEvent {
 }
 ```
 
-`id` and `curve` are optional in the durable project tier and backfilled on load
-by `normalizeRulerLaneState`, so projects saved before this feature open
-unchanged with no version bump.
+`id` and `curve` are optional in the durable project tier and are backfilled on
+load by `normalizeRulerLaneState`.
 
 The editable BPM range is **deliberately not** `MIN_TEMPO_BPM` / `MAX_TEMPO_BPM`
 from `services/audio/beatOnset/beatGridEstimation.ts` (60 / 200). Those are
@@ -203,23 +192,3 @@ ids, clamped values. Writing onto an occupied bar replaces the event there.
 Tempo edits are **content**, so every action captures a history snapshot — after
 the mutation, matching the store's post-state model. Ruler lane toggles remain
 view state and stay out of undo.
-
----
-
-## Not included
-
-- **Count-in.** A real pre-count sounds the click for N bars while content stays
-  silent, which needs a new transport phase rather than a playhead roll-back;
-  `play()` has nowhere for "running but not advancing". Deferred rather than
-  bending playback for it.
-- **A separate time-signature track.** Tempo and meter stay one event type; each
-  event sets both.
-- **Per-track timebase flag.** The predicate seam exists, the schema field
-  does not.
-- **Tap tempo** and **detect tempo from an audio clip** —
-  `beatGridEstimation.ts` already estimates BPM from audio, so wiring "set the
-  project tempo from this clip" is a cheap follow-up now that editing exists.
-- **Ingesting a tempo map from an imported MIDI file.**
-- **Audio time-stretching to follow tempo** — media stays linear by design.
-- **Piano-roll note snapping.** Notes are free-placed by decision (#182); an
-  optional snap-to-subdivision is an open question.

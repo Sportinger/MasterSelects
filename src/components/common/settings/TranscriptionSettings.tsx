@@ -1,15 +1,10 @@
 import { useSettingsStore, type TranscriptionProvider } from '../../../stores/settingsStore';
 import { useAccountStore } from '../../../stores/accountStore';
 
-interface TranscriptionSettingsProps {
-  localKeys: { [key: string]: string };
-}
-
 const providers: { id: TranscriptionProvider; label: string; description: string }[] = [
   { id: 'local', label: 'Local Whisper Base', description: 'Private browser transcription, no API key needed. Slower than cloud.' },
-  { id: 'openai', label: 'OpenAI Whisper API', description: 'High-accuracy speech transcription, $0.006/minute. Requires API key.' },
-  { id: 'assemblyai', label: 'AssemblyAI', description: 'Excellent accuracy, speaker diarization. $0.015/minute.' },
-  { id: 'deepgram', label: 'Deepgram', description: 'Nova-3 accuracy with word timing and speaker detection.' },
+  { id: 'openai', label: 'Hosted OpenAI Whisper', description: 'High-accuracy transcription through MasterSelects credits.' },
+  { id: 'deepgram', label: 'Hosted Deepgram', description: 'Nova-3 transcription through MasterSelects credits.' },
   {
     id: 'hybrid',
     label: 'Best Quality — Deepgram Text + OpenAI Speakers',
@@ -17,13 +12,14 @@ const providers: { id: TranscriptionProvider; label: string; description: string
   },
 ];
 
-export function TranscriptionSettings({ localKeys }: TranscriptionSettingsProps) {
+export function TranscriptionSettings() {
   const { transcriptionProvider, setTranscriptionProvider } = useSettingsStore();
   const isSignedIn = useAccountStore((state) => Boolean(state.session?.authenticated));
-  const activeProvider = isSignedIn
-    && !['deepgram', 'hybrid'].includes(transcriptionProvider)
-    ? 'openai'
-    : transcriptionProvider;
+  const activeProvider = !isSignedIn
+    ? 'local'
+    : ['openai', 'deepgram', 'hybrid'].includes(transcriptionProvider)
+      ? transcriptionProvider
+      : 'openai';
 
   return (
     <div className="settings-category-content">
@@ -37,7 +33,7 @@ export function TranscriptionSettings({ localKeys }: TranscriptionSettingsProps)
             const hostedProvider = provider.id === 'openai'
               || provider.id === 'deepgram'
               || provider.id === 'hybrid';
-            const disabled = isSignedIn && !hostedProvider;
+            const disabled = !isSignedIn && hostedProvider;
             const description = isSignedIn && hostedProvider
               ? 'Uses MasterSelects credits for signed-in accounts.'
               : provider.description;
@@ -63,12 +59,6 @@ export function TranscriptionSettings({ localKeys }: TranscriptionSettingsProps)
                   <span className="provider-label">{provider.label}</span>
                   <span className="provider-description">{description}</span>
                 </div>
-                {provider.id !== 'local' && provider.id !== 'hybrid' && !isSignedIn && localKeys[provider.id] && (
-                  <span className="provider-status">{'\u2713'}</span>
-                )}
-                {provider.id === 'hybrid' && !isSignedIn && localKeys.deepgram && localKeys.openai && (
-                  <span className="provider-status">{'\u2713'}</span>
-                )}
                 {hostedProvider && isSignedIn && (
                   <span className="provider-status">CR</span>
                 )}
@@ -79,7 +69,7 @@ export function TranscriptionSettings({ localKeys }: TranscriptionSettingsProps)
         <p className="settings-hint">
           {isSignedIn
             ? 'Signed-in accounts can use OpenAI, Deepgram, or automatic Best Quality transcription through MasterSelects credits. Timeline clip menus show the active provider before transcription starts.'
-            : 'Timeline clip menus show the active provider before transcription starts. API keys for cloud transcription providers can be configured in the API Keys section.'}
+            : 'Sign in to use hosted transcription with MasterSelects credits, or select Local Whisper to run on this device.'}
         </p>
       </div>
     </div>

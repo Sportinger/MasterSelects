@@ -22,6 +22,7 @@ export function TimelinePlayheadOverlay({
       ref={playheadRef}
       className={`playhead ${switchMotionClass}`}
       data-ai-id="timeline-playhead"
+      aria-label="Timeline playhead"
       style={inlineStyle}
       onMouseDown={onMouseDown}
     >

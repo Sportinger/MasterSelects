@@ -168,7 +168,7 @@ export function TimelineNavigator({
   }, [isDragging, dragStartX, dragStartScrollX, dragStartZoom, dragStartThumbWidth, thumbWidth, trackWidth, maxScrollX, duration, viewportWidth, minZoom, maxZoom, onScrollChange, onZoomChange]);
 
   return (
-    <div className="timeline-navigator">
+    <div className="timeline-navigator" data-guided-target="timeline-navigator">
       <div
         className="timeline-navigator-track"
         ref={trackRef}

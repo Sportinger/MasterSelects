@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "templateId": "masks-rectangle-v1",
+  "name": "Playwright Reference - Masks v1",
+  "description": "Two real-video layers with one stored rectangle mask for headed Playwright review and visual assertions.",
+  "composition": {
+    "name": "Reference 03 - Rectangle Mask",
+    "width": 1920,
+    "height": 1080,
+    "frameRate": 30,
+    "duration": 4
+  },
+  "layers": {
+    "base": {
+      "mediaRole": "longform-landscape",
+      "sourceIn": 30,
+      "sourceOut": 34
+    },
+    "foreground": {
+      "mediaRole": "high-frequency-60fps",
+      "sourceIn": 10,
+      "sourceOut": 14
+    }
+  },
+  "mask": {
+    "name": "Rectangle Mask",
+    "closed": true,
+    "opacity": 1,
+    "feather": 0,
+    "inverted": false,
+    "enabled": true,
+    "visible": true,
+    "mode": "add",
+    "vertices": [
+      { "x": 0.1, "y": 0.1 },
+      { "x": 0.9, "y": 0.1 },
+      { "x": 0.9, "y": 0.9 },
+      { "x": 0.1, "y": 0.9 }
+    ]
+  },
+  "review": {
+    "sampleTime": 1,
+    "expectedInside": "striped-motion.mp4 foreground",
+    "expectedOutside": "x-rays-safe.mp4 background"
+  }
+}

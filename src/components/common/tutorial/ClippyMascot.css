@@ -1,0 +1,12 @@
+@layer overlays {
+.clippy-mascot {
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
+  height: auto;
+  object-fit: contain;
+  position: absolute;
+  right: -35px;
+  top: -55px;
+  width: 120px;
+  z-index: 1;
+}
+}

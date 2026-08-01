@@ -28,6 +28,7 @@ import {
   selectStoryboardProjectState,
 } from './projectState';
 import { projectStoryboardTimelineClips } from './timelineProjection';
+import { withExclusiveHistorySnapshotMutationLease } from '../timeline/exclusiveMutationLease';
 
 export interface StoryboardStoreActions {
   createGenerationBriefRevision(
@@ -46,7 +47,7 @@ export interface StoryboardStoreActions {
 
 export type StoryboardStore = StoryboardProjectState & StoryboardStoreActions;
 
-export const useStoryboardStore = create<StoryboardStore>((set) => ({
+export const useStoryboardStore = create<StoryboardStore>(withExclusiveHistorySnapshotMutationLease((set) => ({
   ...createEmptyStoryboardStoreProjectState(),
 
   createGenerationBriefRevision(input) {
@@ -144,7 +145,7 @@ export const useStoryboardStore = create<StoryboardStore>((set) => ({
       candidateState,
     ));
   },
-}));
+})));
 
 export function getStoryboardProjectSnapshot(): StoryboardProjectState {
   return cloneStoryboardStoreProjectState(

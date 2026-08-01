@@ -23,6 +23,7 @@ describe('TimelineKeyframes', () => {
     isRowHovered = false,
     onKeyframeRowHover = vi.fn(),
     onMoveKeyframe = vi.fn(),
+    onDeleteKeyframes = vi.fn(),
     onToggleCurveExpanded = vi.fn(),
     property = 'opacity',
     clip: providedClip,
@@ -31,6 +32,7 @@ describe('TimelineKeyframes', () => {
     isRowHovered?: boolean;
     onKeyframeRowHover?: ReturnType<typeof vi.fn>;
     onMoveKeyframe?: ReturnType<typeof vi.fn>;
+    onDeleteKeyframes?: ReturnType<typeof vi.fn>;
     onToggleCurveExpanded?: ReturnType<typeof vi.fn>;
     property?: AnimatableProperty;
     clip?: TimelineKeyframesProps['clips'][0];
@@ -69,6 +71,7 @@ describe('TimelineKeyframes', () => {
         timelineRef={{ current: timelineEl } as RefObject<HTMLDivElement | null>}
         onSelectKeyframe={vi.fn()}
         onMoveKeyframe={onMoveKeyframe}
+        onDeleteKeyframes={onDeleteKeyframes}
         onUpdateKeyframe={onUpdateKeyframe}
         onToggleCurveExpanded={onToggleCurveExpanded}
         timeToPixel={(time) => time * 20}
@@ -83,6 +86,7 @@ describe('TimelineKeyframes', () => {
       leftKeyframe,
       onKeyframeRowHover,
       onMoveKeyframe,
+      onDeleteKeyframes,
       onToggleCurveExpanded,
       onUpdateKeyframe,
     };
@@ -96,6 +100,17 @@ describe('TimelineKeyframes', () => {
     fireEvent.click(screen.getByText('Ease Out'));
 
     expect(onUpdateKeyframe).toHaveBeenCalledWith(leftKeyframe.id, { easing: 'ease-out' });
+  });
+
+  it('deletes the right-clicked keyframe from the context menu', () => {
+    const onDeleteKeyframes = vi.fn();
+    const { container } = renderKeyframes({ onDeleteKeyframes });
+    const diamonds = container.querySelectorAll('.keyframe-diamond');
+
+    fireEvent.contextMenu(diamonds[1], { clientX: 80, clientY: 40 });
+    fireEvent.click(screen.getByText('Delete Keyframe'));
+
+    expect(onDeleteKeyframes).toHaveBeenCalledWith(['kf-right']);
   });
 
   it('shows rotation path letters and edits the visible incoming rotation segment', () => {

@@ -2,7 +2,7 @@
 
 [<- Back to Index](./README.md)
 
-The keyframe system animates clip properties over time using per-clip keyframe maps, curve editors, and Bezier handles. It supports transform properties, speed, numeric effect parameters, mask properties, vector-animation state/input properties, and numeric motion-shape properties.
+The keyframe system animates clip properties over time using per-clip keyframe maps, Graph mode, and Bezier handles. It supports transform properties, speed, numeric effect parameters, color, masks, text bounds, camera and light settings, custom-node parameters, vector-animation state/input properties, and numeric motion-shape properties.
 
 ---
 
@@ -16,10 +16,10 @@ The keyframe system animates clip properties over time using per-clip keyframe m
 | `position.x` | Horizontal position. |
 | `position.y` | Vertical position. |
 | `position.z` | World-space Z position when the clip exposes it. For camera clips this is the real camera eye Z. |
-| `scale.all` | Independent uniform multiplier applied on top of the axis scale values. Camera clips keep the legacy value for project compatibility, but it is no longer part of the camera pose or exposed as a visible Zoom control. |
+| `scale.all` | Independent uniform multiplier applied on top of the axis scale values. Camera clips retain this value for project compatibility. |
 | `scale.x` | Horizontal scale. |
 | `scale.y` | Vertical scale. |
-| `scale.z` | Z scale for 3D objects when visible. Camera clips keep legacy values for compatibility, but `scale.z` is no longer a camera movement control. |
+| `scale.z` | Z scale for 3D objects when visible. Camera clips retain this value for project compatibility. |
 | `rotation.x` | Pitch-style rotation on 3D and camera-style clips. |
 | `rotation.y` | Yaw-style rotation on 3D and camera-style clips. |
 | `rotation.z` | Roll / 2D rotation. |
@@ -53,7 +53,7 @@ Examples:
 - `effect.effect_123.volume`
 - `effect.effect_123.band1k`
 
-Audio fades are built from `audio-volume.volume` keyframes. Flexible EQ lanes use nested effect-property paths so band and advanced numeric controls can be animated without flattening the EQ schema:
+Audio fades are built from `effect.{volumeEffectId}.volume` keyframes. Flexible EQ lanes use nested effect-property paths so band and advanced numeric controls can be animated without flattening the EQ schema:
 
 - `effect.effect_123.eq.audible.bands.presence.frequencyHz`
 - `effect.effect_123.eq.audible.bands.presence.gainDb`
@@ -72,6 +72,12 @@ color.{versionId}.{nodeId}.{paramName}
 ```
 
 The Color panel can enable every color stopwatch for the active grade version at the current playhead. Timeline Copy Color and Paste Color copy the grade state together with its `color.*` keyframes.
+
+### Text, Light, and Custom-node Properties
+
+Text bounds use `textBounds.path` for the complete bounds shape and `textBounds.position.x` / `textBounds.position.y` for numeric offsets.
+
+Light clips expose `light.intensity`, `light.diameter`, `light.shadowStrength`, and `light.color.r` / `.g` / `.b`. Exposed custom-node parameters use `node.{nodeId}.{paramName}`; color parameters are stored as per-channel paths.
 
 ### Mask Properties
 
@@ -148,7 +154,7 @@ The diamond button writes a keyframe at the playhead. If a keyframe already exis
 - Dragging the value scrubber updates the static property value when the property is not already keyframed.
 - If recording is enabled for that clip/property, or if keyframes already exist for that property, the same scrub updates keyframes instead of the static value.
 - Right-click on the value field resets the property to its default value.
-- Transform panel stopwatch buttons are per value, including Position X/Y/Z, Scale All/X/Y/Z, and Rotation X/Y/Z. Group stopwatches are not used for these rows.
+- Transform panel stopwatch buttons are per value, including Position X/Y/Z, Scale All/X/Y/Z, and Rotation X/Y/Z.
 - `scale.all` does not overwrite `scale.x`, `scale.y`, or `scale.z`; render, export, and scene-gizmo paths multiply it into the final visible scale only at evaluation time.
 - Camera stopwatch buttons are per camera value. FOV and mm both write `camera.fov`; Near, Far, Resolution X, and Resolution Y write their own camera properties.
 - Mask panel stopwatch buttons are available for the whole Mask Path, Feather, and Feather Quality. Position X/Y remain animatable for compatibility and automation, but the visible mask-shape workflow uses the Mask Path stopwatch.
@@ -172,7 +178,7 @@ When recording is enabled:
 - Click a diamond to select the keyframe.
 - `Shift+Click` toggles additional selection.
 - Drag left or right to move in time.
-- `Shift+drag` on a timeline diamond makes the drag 10x slower for fine control.
+- `Shift+drag` on a timeline diamond snaps the movement delta to other keyframes in the same clip.
 - Dragging a selected keyframe moves the whole selection by the same delta.
 - Clip bars show a compact global keyframe marker for each clip-local time that has keyframes. Hovering the marker enlarges it, and dragging it moves all keyframes at that same clip-local time together.
 
@@ -180,14 +186,12 @@ When recording is enabled:
 
 ![Bezier curve editor with selected keyframe handles](./assets/keyframes/bezier-curve-editor.png)
 
-- Double-click a property row to open the curve editor.
-- Only one curve editor can be open at a time.
-- The curve editor renders a value axis that auto-scales to the current keyframes.
-- `Shift+wheel` resizes the curve editor height.
+- Double-click a property row or keyframe diamond to open Graph mode.
+- Graph mode shows the selected clip's animated numeric properties as selectable curve series; only one property is expanded in the track header at a time.
+- The active curve renders a value axis that auto-scales to its current keyframes.
 - Selected keyframes expose Bezier handles.
 - Dragging a handle updates the stored handle position and switches the keyframe to Bezier mode.
 - `Shift+drag` on a keyframe constrains movement to one axis in the curve editor.
-- Right-clicking a handle resets it to the default 1/3-distance handle for that segment.
 - Vector animation state keyframes show state labels on the value axis and draw stepped segments instead of Bezier curves.
 - Mask path rows expose timing and easing in the timeline; their value is a whole shape snapshot rather than a numeric scalar.
 
@@ -238,13 +242,13 @@ Rotation keyframes that start a segment show the active path next to the keyfram
 ### Practical Notes
 
 - The easing stored on a keyframe applies to the segment that leads into the next keyframe.
-- If a handle exists, the curve editor treats the segment as custom Bezier even if the stored easing was previously one of the preset modes.
+- If a handle exists, the curve editor treats the segment as custom Bezier regardless of the stored preset easing mode.
 
 ---
 
 ## Speed Integration
 
-Speed is a first-class animatable property, not a special case in the UI.
+Speed is a first-class animatable property in the UI.
 
 - The store maps speed to source time through integration of the speed curve.
 - Variable speed uses trapezoidal integration for smooth ramps.
@@ -260,9 +264,8 @@ This means speed keyframes can create ramps, reversals, and mixed-rate playback 
 - Expanding a track shows flat property rows for the selected clip in that track.
 - The row order prefers transform properties first and effect properties after them.
 - Audio EQ parameters are ordered by band frequency, with `volume` first; nested flexible-EQ rows include frequency, gain, Q, dynamic EQ, and Spectral Dynamics numeric parameters.
-- If a curve editor is open for a property, it adds additional height beneath the row.
 
-The row-height constant is 18 px, and the curve editor height clamps to 80-600 px.
+The row-height constant is 18 px.
 
 ---
 

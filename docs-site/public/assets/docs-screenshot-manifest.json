@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "baseUrl": "http://127.0.0.1:5173",
+  "shots": [
+    {
+      "id": "flex-eq-visual-qa",
+      "doc": "docs/Features/Flex-EQ-Visual-QA.md",
+      "path": "/?test=flex-eq",
+      "output": "docs/Features/assets/flex-eq/flex-eq-visual-qa.png",
+      "window": {
+        "width": 1280,
+        "height": 1320
+      },
+      "waitMs": 8000,
+      "description": "Deterministic Flex EQ visual QA grid"
+    },
+    {
+      "id": "keyframes-bezier-curve-editor",
+      "doc": "docs/Features/Keyframes.md",
+      "path": "/?test=keyframe-curve",
+      "output": "docs/Features/assets/keyframes/bezier-curve-editor.png",
+      "window": {
+        "width": 1280,
+        "height": 720
+      },
+      "waitMs": 5000,
+      "description": "Bezier keyframe curve editor with selected handles"
+    }
+  ]
+}

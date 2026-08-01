@@ -5,6 +5,7 @@ import type {
   MotionLayerDefinition,
   ShapePrimitive,
   StrokeAppearance,
+  TextureFillAppearance,
 } from '../../types/motionDesign';
 import {
   getMotionShapeRenderBounds,
@@ -29,9 +30,9 @@ export const MOTION_UNIFORM_VEC4_COUNT =
 export const MOTION_UNIFORM_FLOAT_COUNT = MOTION_UNIFORM_VEC4_COUNT * 4;
 export const MOTION_UNIFORM_BYTE_SIZE = MOTION_UNIFORM_FLOAT_COUNT * 4;
 
-const APPEARANCE_META_OFFSET = HEADER_VEC4_COUNT * 4;
+export const MOTION_APPEARANCE_META_OFFSET = HEADER_VEC4_COUNT * 4;
 const APPEARANCE_DETAIL_OFFSET =
-  APPEARANCE_META_OFFSET + MOTION_MAX_APPEARANCES * 4;
+  MOTION_APPEARANCE_META_OFFSET + MOTION_MAX_APPEARANCES * 4;
 const APPEARANCE_GEOMETRY_OFFSET =
   APPEARANCE_DETAIL_OFFSET + MOTION_MAX_APPEARANCES * 4;
 const APPEARANCE_COLOR_OFFSET =
@@ -60,7 +61,16 @@ function appearanceKindCode(kind: AppearanceItem['kind']): number {
   if (kind === 'stroke') return 1;
   if (kind === 'linear-gradient') return 2;
   if (kind === 'radial-gradient') return 3;
+  if (kind === 'texture-fill') return 4;
   return 0;
+}
+
+function textureFitCode(fit: TextureFillAppearance['fit']): number {
+  if (fit === 'contain') return 1;
+  if (fit === 'cover') return 2;
+  if (fit === 'fill') return 3;
+  if (fit === 'stretch') return 4;
+  return 5;
 }
 
 function blendModeCode(blendMode: AppearanceItem['blendMode']): number {
@@ -87,8 +97,13 @@ function writeColor(target: Float32Array, offset: number, color: MotionColor): v
 
 function getRenderableAppearances(motion: MotionLayerDefinition): AppearanceItem[] {
   return (motion.appearance?.items ?? [])
-    .filter((item) => item.kind !== 'texture-fill')
     .slice(0, MOTION_MAX_APPEARANCES);
+}
+
+export interface MotionTextureFillUniformState {
+  /** Only slot zero is bound in this MD5 still-image slice. */
+  activeAppearanceId: string | null;
+  sourceSize?: { width: number; height: number };
 }
 
 function writeGradientStops(
@@ -119,14 +134,18 @@ function writeAppearance(
   target: Float32Array,
   item: AppearanceItem,
   index: number,
+  textureFill?: MotionTextureFillUniformState,
 ): void {
-  const metaOffset = APPEARANCE_META_OFFSET + index * 4;
+  const metaOffset = MOTION_APPEARANCE_META_OFFSET + index * 4;
   const detailOffset = APPEARANCE_DETAIL_OFFSET + index * 4;
   const geometryOffset = APPEARANCE_GEOMETRY_OFFSET + index * 4;
   const colorOffset = APPEARANCE_COLOR_OFFSET + index * 4;
 
   target[metaOffset] = appearanceKindCode(item.kind);
-  target[metaOffset + 1] = item.visible === false ? 0 : 1;
+  const textureIsActive = item.kind !== 'texture-fill'
+    || textureFill === undefined
+    || textureFill.activeAppearanceId === item.id;
+  target[metaOffset + 1] = item.visible === false || !textureIsActive ? 0 : 1;
   target[metaOffset + 2] = clamp(finiteOr(item.opacity, 1), 0, 1);
   target[metaOffset + 3] = blendModeCode(item.blendMode);
 
@@ -156,12 +175,31 @@ function writeAppearance(
     target[detailOffset + 3] = Math.max(0.001, finiteOr(item.radius, 0.5));
     target[geometryOffset] = finiteOr(item.center.x, 0.5);
     target[geometryOffset + 1] = finiteOr(item.center.y, 0.5);
+    return;
+  }
+
+  if (item.kind === 'texture-fill') {
+    // detail = fit mode, bind-group texture slot, source aspect, rotation.
+    // geometry = transform position.xy, transform scale.xy.
+    const source = textureFill?.sourceSize;
+    target[detailOffset] = textureFitCode(item.fit);
+    target[detailOffset + 1] = 0;
+    target[detailOffset + 2] = Math.max(
+      0.0001,
+      finiteOr(source?.width, 1) / Math.max(0.0001, finiteOr(source?.height, 1)),
+    );
+    target[detailOffset + 3] = finiteOr(item.transform.rotation, 0);
+    target[geometryOffset] = finiteOr(item.transform.position.x, 0);
+    target[geometryOffset + 1] = finiteOr(item.transform.position.y, 0);
+    target[geometryOffset + 2] = nonZeroOr(item.transform.scale.x, 1);
+    target[geometryOffset + 3] = nonZeroOr(item.transform.scale.y, 1);
   }
 }
 
 export function createMotionUniformArray(
   motion: MotionLayerDefinition,
   size: MotionRenderSize,
+  textureFill?: MotionTextureFillUniformState,
 ): Float32Array<ArrayBuffer> {
   const shape = motion.shape;
   const shapeBounds = getMotionShapeRenderBounds(motion);
@@ -192,8 +230,13 @@ export function createMotionUniformArray(
   data[13] = Math.max(0.5, finiteOr(star?.innerRadius, defaultRadius * 0.5));
   data[14] = Math.max(0, finiteOr(star?.cornerRadius, 0));
 
-  appearances.forEach((item, index) => writeAppearance(data, item, index));
+  appearances.forEach((item, index) => writeAppearance(data, item, index, textureFill));
   return data;
+}
+
+function nonZeroOr(value: number | undefined, fallback: number): number {
+  const resolved = finiteOr(value, fallback);
+  return resolved === 0 ? fallback : resolved;
 }
 
 export function createMotionInstanceArray(

@@ -1,6 +1,15 @@
 import { cloudApi, type CloudAiChatRequest, type CloudAiGatewayEnvelope, type CloudAiVideoRequest } from './cloudApi';
 import { resolveAiAccess, type AiAccessDecision, type AiAccessInput } from './aiAccess';
-import type { TextToImageParams } from './aiGenerationContracts';
+import type {
+  AccountInfo,
+  GenerationReferenceMedia,
+  HostedAiRefundInfo,
+  ImageToVideoParams,
+  TaskStatus,
+  TextToImageParams,
+  TextToVideoParams,
+  VideoTask,
+} from './aiGenerationContracts';
 import type { SunoCreateMusicParams, SunoCreateSoundsParams, SunoMusicTask } from './sunoContracts';
 import { SUNO_PROVIDER_ID, SUNO_SOUNDS_PROVIDER_ID } from './sunoContracts';
 import {
@@ -20,15 +29,6 @@ import {
   type ElevenLabsVoiceSearchParams,
   type ElevenLabsVoiceSearchResult,
 } from './elevenLabsService';
-import type {
-  AccountInfo,
-  GenerationReferenceMedia,
-  HostedAiRefundInfo,
-  ImageToVideoParams,
-  TaskStatus,
-  TextToVideoParams,
-  VideoTask,
-} from './piApiService';
 
 export interface CloudAiStreamEvent {
   data: unknown;
@@ -772,9 +772,6 @@ export const cloudAiService = {
 
     finishHostedTask(taskId, 'failed');
     throw new Error('Task timed out after 10 minutes');
-  },
-  setApiKey(): void {
-    return;
   },
   plan: planAiAccess,
 };

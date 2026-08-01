@@ -1,8 +1,3 @@
-import { getVideoProviders } from '../piApiService';
-import {
-  EVOLINK_NANO_BANANA_2_MODEL,
-  EVOLINK_NANO_BANANA_2_PROVIDER_ID,
-} from '../evolinkService';
 import type { CatalogEntry } from './types';
 import { DEFAULT_ELEVENLABS_MODEL_ID } from '../../stores/flashboardStore/defaults';
 import { DEFAULT_SUNO_MODEL_ID, SUNO_MODEL_IDS, SUNO_PROVIDER_ID, SUNO_SOUNDS_PROVIDER_ID } from '../sunoContracts';
@@ -296,61 +291,6 @@ const HOSTED_KIE_IMAGE_ENTRIES: CatalogEntry[] = [
 
 export function getCatalogEntries(): CatalogEntry[] {
   const entries: CatalogEntry[] = [];
-
-  for (const p of getVideoProviders()) {
-    entries.push({
-      service: 'piapi',
-      providerId: p.id,
-      name: p.name,
-      description: p.description,
-      versions: p.versions,
-      modes: p.supportedModes,
-      durations: p.supportedDurations,
-      aspectRatios: p.supportedAspectRatios,
-      supportsTextToVideo: p.supportsTextToVideo,
-      supportsImageToVideo: p.supportsImageToVideo,
-      supportsGenerateAudio: false,
-      supportsMultiShot: false,
-    });
-  }
-
-  entries.push({
-    service: 'evolink',
-    providerId: EVOLINK_NANO_BANANA_2_PROVIDER_ID,
-    name: 'Nano Banana 2 (EvoLink)',
-    description: 'Image generation via EvoLink with up to 14 ordered reference images',
-    versions: [EVOLINK_NANO_BANANA_2_MODEL],
-    modes: [],
-    durations: [],
-    aspectRatios: NANO_BANANA_ASPECT_RATIOS,
-    supportsTextToVideo: false,
-    supportsImageToVideo: false,
-    supportsTextToImage: true,
-    supportsGenerateAudio: false,
-    supportsMultiShot: false,
-    imageSizes: ['1K', '2K', '4K'],
-    maxReferenceImages: 14,
-    maxReferenceMedia: 14,
-    outputType: 'image',
-  });
-
-  entries.push({
-    service: 'elevenlabs',
-    providerId: 'elevenlabs-tts',
-    name: 'ElevenLabs',
-    description: 'Text-to-speech voice generation',
-    versions: [DEFAULT_ELEVENLABS_MODEL_ID],
-    modes: [],
-    durations: [],
-    aspectRatios: [],
-    supportsTextToVideo: false,
-    supportsImageToVideo: false,
-    supportsTextToImage: false,
-    supportsTextToAudio: true,
-    supportsGenerateAudio: false,
-    supportsMultiShot: false,
-    outputType: 'audio',
-  });
 
   entries.push({
     service: 'cloud',

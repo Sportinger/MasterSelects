@@ -25,6 +25,7 @@ These globals are the fastest way to inspect the live playback path:
 - `window.__WC_PIPELINE__` for WebCodecs events, seeks, stalls, and aggregate counters
 - `window.__VF_PIPELINE__` for HTML video / VideoFrame fallback events
 - `window.__PLAYBACK_HEALTH__` for health state, anomalies, active video status, and recovery helpers
+- `window.__FRAME_PHASES__` for per-frame phase timelines and summaries
 - `window.Logger` for buffered module logs and redacted summaries
 
 Useful console setup:
@@ -48,13 +49,16 @@ Logger.summary()
 
 ## AI Bridge Tools
 
-When the dev bridge or Native Helper bridge is available, prefer the structured tools:
+When the development bridge is available, prefer the structured tools:
 
 - `getStats`
 - `getStatsHistory`
 - `getAudioDiagnostics`
 - `getLogs`
 - `getPlaybackTrace`
+- `getRuntimeDiagnostics`
+- `purgePlaybackPath`
+- `samplePlaybackFramePacing`
 - `simulateScrub`
 - `simulatePlayback`
 - `simulatePlaybackPath`
@@ -73,12 +77,12 @@ For crackling, pops, or dropouts during audible playback, capture `getAudioDiagn
 
 ## Signals To Watch
 
-These fields are the highest-signal indicators in traces and health snapshots:
+These fields are the highest-signal indicators across trace, stats, and simulation results:
 
 - `stalePreviewWhileTargetMoved`
 - `decoderResets`
 - `previewFreezeEvents`
-- `previewPathCounts.empty`
+- `previewPathCounts` entries such as `empty-hold`, `paused-empty-hold`, and `target-empty-hold`
 - `driftSeconds`
 - `getAudioDiagnostics.events.correctionMs`
 - `getAudioDiagnostics.mediaElements[].buffered.bufferedAheadSeconds`
@@ -89,7 +93,7 @@ These fields are the highest-signal indicators in traces and health snapshots:
 - `HIGH_DROP_RATE`
 - `GPU_SURFACE_COLD`
 
-If the preview is black after reload, also confirm the browser media element is actually ready. A valid render path with a cold or unready surface will still produce empty frames.
+If the preview is black after reload, also confirm the browser media element is actually ready. A valid render path with a cold or unready surface still produces empty frames.
 
 ---
 
@@ -98,19 +102,19 @@ If the preview is black after reload, also confirm the browser media element is 
 ### Black Preview Or Black Source Monitor
 
 - Check browser media `readyState` first.
-- Confirm whether the app is on the WebCodecs path or the HTML video fallback path.
-- On Firefox, expect copied-texture fallback instead of imported external textures.
+- Check `getStats.decoder` and `playback.pipeline`: the active path can be full WebCodecs, HTML video / VideoFrame (including cache variants), Native Helper, or ParallelDecode.
+- If external texture import fails, inspect the media readiness and the recorded GPU/runtime diagnostics before assuming a browser-specific fallback.
 
 ### Scrub Freezes Or Delayed Updates
 
 - Inspect `previewFreezeEvents` and `firstPreviewUpdateMs`.
 - Check whether RAM preview is stale while the target moved.
-- Confirm whether the render loop idled and had to restart.
+- Confirm whether the render loop is idle and requires restarting.
 
 ### Drift During Playback
 
 - Check `driftSeconds`, handoff events, and active anomaly flags.
-- Compare WebCodecs and fallback pipeline events to see where sync diverged.
+- Compare the active decoder/pipeline with the WebCodecs and VF event streams to see where sync diverged.
 - Verify whether the issue is clip-specific with `getClipDetails`.
 
 ### Source FPS Higher Than Composition FPS
@@ -118,6 +122,7 @@ If the preview is black after reload, also confirm the browser media element is 
 - Playback preview is visually locked to the active composition frame rate. A 60 fps video in a 30 fps composition should show about 30 render/preview updates per second, not every decoded source frame.
 - `samplePlaybackFramePacing` may still report the browser media element advancing at the source cadence through `videoQuality` / video frame callbacks. Use `renderLoop.renderCountDelta`, `stats.fps`, `stats.targetFps`, `playback.previewUpdateFps`, and `visualTargetFps` to confirm the visible composition cadence.
 - During playback, the HTML media clock stays continuous to avoid per-frame seeking; visual layer target times are quantized to composition frames for cache/provider selection and deterministic preview presentation.
+- Full WebCodecs playback is disabled by the default feature flag, but can be enabled through the persisted settings toggle; it disables the HTML preview fallback.
 
 ### Export Looks Fine But Preview Is Wrong
 
@@ -142,11 +147,11 @@ This isolates whether the problem is in decode, render scheduling, target routin
 
 ## Source Map
 
-- `src/services/monitoring/playbackHealthMonitor.ts`
-- `src/services/monitoring/playbackDebugStats.ts`
-- `src/services/monitoring/framePhaseMonitor.ts`
-- `src/services/monitoring/wcPipelineMonitor.ts`
-- `src/services/monitoring/vfPipelineMonitor.ts`
+- `src/services/playbackHealthMonitor.ts`
+- `src/services/playbackDebugStats.ts`
+- `src/services/framePhaseMonitor.ts`
+- `src/services/wcPipelineMonitor.ts`
+- `src/services/vfPipelineMonitor.ts`
 - `src/components/preview/Preview.tsx`
 - `src/components/preview/SourceMonitor.tsx`
 - `src/services/aiTools/bridge.ts`

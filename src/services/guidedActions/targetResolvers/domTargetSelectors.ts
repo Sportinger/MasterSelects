@@ -31,11 +31,18 @@ function escapeCssIdentifier(value: string): string {
 
 export function findElementForTarget(target: GuidedTargetRef): Element | null {
   switch (target.kind) {
-    case 'dom':
+    case 'dom': {
+      if (target.id === 'dock-resize:any') {
+        return document.querySelector('[data-guided-resize-handle="true"]');
+      }
+      if (target.id === 'dock-resize-corner:any') {
+        return findDockResizeCorner();
+      }
       return findFirstElement([
         `[data-guided-target="${escapeAttr(target.id)}"]`,
         `#${escapeCssIdentifier(target.id)}`,
       ]);
+    }
     case 'button':
       return findFirstElement([
         `[data-guided-target="button:${escapeAttr(target.id)}"]`,
@@ -102,6 +109,7 @@ export function findElementForTarget(target: GuidedTargetRef): Element | null {
       ]);
     case 'mediaItem':
       return findFirstElement([
+        `[data-guided-media-name="${escapeAttr(target.itemId)}"]`,
         `[data-guided-target="media-item:${escapeAttr(target.itemId)}"]`,
         `[data-media-item-id="${escapeAttr(target.itemId)}"]`,
         `[data-item-id="${escapeAttr(target.itemId)}"]`,
@@ -163,4 +171,37 @@ export function findElementForTarget(target: GuidedTargetRef): Element | null {
     case 'timelineTime':
       return null;
   }
+}
+
+function findDockResizeCorner(): Element | null {
+  const corners = [
+    ...document.querySelectorAll('[data-guided-resize-corner="end"]'),
+    ...document.querySelectorAll('[data-guided-resize-corner="start"]'),
+  ];
+  const handles = Array.from(document.querySelectorAll<HTMLElement>(
+    '[data-guided-resize-handle="true"]',
+  ));
+
+  const intersectingCorner = corners.find((corner) => {
+    const ownHandle = corner.parentElement;
+    const ownAxis = ownHandle?.getAttribute('data-guided-resize-axis');
+    if (!ownHandle || (ownAxis !== 'x' && ownAxis !== 'y')) return false;
+
+    const rect = corner.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    return handles.some((handle) => {
+      if (handle === ownHandle) return false;
+      const otherAxis = handle.getAttribute('data-guided-resize-axis');
+      if (otherAxis === ownAxis) return false;
+      const handleRect = handle.getBoundingClientRect();
+      const margin = 14;
+      return centerX >= handleRect.left - margin
+        && centerX <= handleRect.right + margin
+        && centerY >= handleRect.top - margin
+        && centerY <= handleRect.bottom + margin;
+    });
+  });
+
+  return intersectingCorner ?? corners[0] ?? null;
 }

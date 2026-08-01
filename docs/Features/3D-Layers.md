@@ -1,27 +1,23 @@
 # 3D Layer System
 
-MasterSelects authorable 3D content now resolves through one shared scene contract.
+MasterSelects authorable 3D content resolves through one shared scene contract.
 
 - The native WebGPU scene is the primary runtime for 3D planes, primitive meshes, 3D text, imported OBJ/FBX/glTF/GLB models, camera clips, and native gaussian-splat scene objects.
 - Gaussian splat clips render through the native WebGPU scene path and stay inside the same scene camera, object-transform, and effector contract as the rest of the 3D system.
-- The old `three.js` bridge has been removed. Native shared-scene rendering is the only active 3D runtime.
+- Native shared-scene rendering is the active 3D runtime.
 
-Legacy gaussian-avatar support still exists in code for migration and old project data, but new avatar import is disabled.
+## 3D Surface
 
-## Surface Status
-
-| Surface | Status | Notes |
-|---|---|---|
-| Per-layer 3D toggle | Stable | Any normal video/image layer can be switched between 2D and 3D. |
-| 3D video/image planes | Stable | `clip.is3D` video and image layers render as scene planes. |
-| OBJ / FBX / glTF / GLB model import | Stable | Model clips are always 3D and render as shared-scene objects. |
-| Primitive mesh clips | Stable | Cube, sphere, plane, cylinder, torus, cone, and 3D text render through the native shared scene. |
-| Scene camera clips | Stable | Timeline camera clips drive preview and export scene navigation. |
-| Scene light clips | Initial stable surface | Point, panel, and environment lights are timeline clips that light native 3D meshes. Shadow settings are stored/keyframeable, but shadow-map rendering is not implemented yet. |
-| Gaussian splat clips | Stable | They render as normal shared-scene objects under the native WebGPU path. |
-| Splat effector clips | Stable but specialized | They deform scene-driven splats live at playback time; 3D planes remain excluded in phase 1. |
-| Gaussian avatar import | Legacy only | Import is blocked; existing projects may still expose blendshape editing. |
-| Temporal / particle splat settings | Experimental | Wired in the engine/export path, but not yet exposed as a dedicated properties tab. |
+| Surface | Notes |
+|---|---|
+| Per-layer 3D toggle | Any normal video/image layer can be switched between 2D and 3D. |
+| 3D video/image planes | `clip.is3D` video and image layers render as scene planes. |
+| OBJ / FBX / glTF / GLB model import | Model clips are always 3D and render as shared-scene objects. |
+| Primitive mesh clips | Cube, sphere, plane, cylinder, torus, cone, and 3D text render through the native shared scene. |
+| Scene camera clips | Timeline camera clips drive preview and export scene navigation. |
+| Scene light clips | Point, panel, and environment lights are timeline clips that light native 3D meshes. The shadow toggle is stored and shadow strength is keyframeable; shadow-map rendering is unavailable. |
+| Gaussian splat clips | They render as normal shared-scene objects under the native WebGPU path. |
+| Splat effector clips | They deform scene-driven splats directly and apply object-level motion to native meshes and 3D text; 3D planes are excluded. |
 
 ## Rendering Model
 
@@ -36,15 +32,14 @@ Legacy gaussian-avatar support still exists in code for migration and old projec
                    -> compositor
 ```
 
-Prepared splat runtime metadata, native splat rasterization, preview, nested compositions, preload, readiness, and export now all converge on the same scene-layer and scene-camera contract.
+Prepared splat runtime metadata, native splat rasterization, preview, nested compositions, preload, readiness, and export converge on the same scene-layer and scene-camera contract.
 
-## Stable 3D Features
+## 3D Features
 
 ### Per-Layer 3D Toggle
 
 - Any video or image clip can be toggled to 3D from the Transform panel.
 - 3D layers become textured planes in the common 3D scene.
-- Video and image clips that still use the default `position.z = 0` start slightly behind the scene target when first toggled to 3D, so a full-frame plane does not depth-mask splats or meshes.
 - During export, 3D video planes sample the per-frame `VideoFrame` produced by the export decoder instead of relying on the preview `HTMLVideoElement`, so animated video planes advance correctly in fast and precise exports.
 - While scrubbing, 3D video planes keep their last uploaded texture if the browser video element is briefly between decoded frames, avoiding full shared-scene flicker.
 - Turning 3D off resets the 3D-specific transform state back to 2D defaults.
@@ -68,7 +63,7 @@ Prepared splat runtime metadata, native splat rasterization, preview, nested com
 
 ### Primitive Meshes and 3D Text
 
-Create mesh clips from the Media Panel via `+ Add > Mesh` or the context menu:
+Create primitive mesh clips from the Media Panel via `+ Add > 3D > Mesh` or the context menu. Create 3D text via `+ Add > 3D > 3D Text`:
 
 | Primitive | Geometry | Notes |
 |---|---|---|
@@ -112,12 +107,12 @@ Camera clips expose camera settings inside the Transform tab:
 - Resolution X/Y for the camera gate aspect
 - Position X/Y/Z as camera placement controls that stay independent from lens FOV/mm
 
-The Transform tab becomes scene-navigation controls for the active camera clip. In FPS mode, the preview accepts WASD/QE navigation plus uncapped mouse look. Free scene navigation now belongs to camera clips rather than gaussian-splat clips.
-Lens controls change the projection/FOV without rewriting camera position fields. Camera Position X/Y/Z is the real camera eye position in world space. The camera Edit view draws the timeline-camera frame from FOV/mm and Resolution X/Y, so the front frame grows for wider lenses, shrinks for tele lenses, and follows the configured gate aspect. The preview wheel in Scene Nav moves that camera position along the current view direction and does not edit `camera.fov` or the full-frame-equivalent mm field. The old camera `scale.all` Zoom and Distance controls are hidden from the camera UI to avoid a second focal-length-like orbit-rig surface next to camera Position/Rotation.
+The Transform tab becomes scene-navigation controls for the active camera clip. In FPS mode, the preview accepts WASD/QE navigation plus uncapped mouse look. Free scene navigation belongs to camera clips.
+Lens controls change the projection/FOV without rewriting camera position fields. Camera Position X/Y/Z is the real camera eye position in world space. The camera Edit view draws the timeline-camera frame from FOV/mm and Resolution X/Y, so the front frame grows for wider lenses, shrinks for tele lenses, and follows the configured gate aspect. The preview wheel in Scene Nav moves that camera position along the current view direction and does not edit `camera.fov` or the full-frame-equivalent mm field.
 
 Camera Edit mode uses a temporary edit-view camera with its own 35 mm default lens, independent from the timeline camera's lens. Factory `3D EDIT` previews activate it even before a timeline camera is available; regular previews activate it while the playhead is over a camera clip, preserving normal 2D layer editing elsewhere. Orbiting, panning, and zooming this view does not write transform changes back to the real camera clip; entering and leaving Edit mode blends between the edit-view camera and the timeline camera. The free camera always orbits the scene origin `(0, 0, 0)` and is not retargeted by timeline or viewport selection. In that edit-view, shortcuts `1`, `2`, and `3` animate to orthographic Front, Side, and Top views, and `4` animates back to the normal edit-view camera. Edit views draw a projected Blender-style world grid that animates with the camera view instead of snapping as a screen overlay: Front uses XY at `z=0`, Side uses YZ at `x=0`, and Top/free camera uses XZ at `y=0`. In the camera edit views, wheel zoom and Shift-drag/MMB/RMB pan only move the temporary viewport, regular 3D object handles stay visible and selectable, and selecting a non-camera 3D object activates the same native scene gizmo used by the normal preview. The real timeline camera is drawn as a small projected camera wireframe with a direction/frustum indicator. The full viewport gizmo appears only when that camera clip is selected in the normal edit-view camera, and explicit gizmo drags still edit the camera clip through the normal transform/keyframe path. Camera clips do not show a viewport gizmo in the normal view.
 
-Camera rotation keyframes interpolate through the shortest angular path so timeline flights do not spin the long way around when yaw, pitch, or roll crosses a 360-degree wrap. Camera Position X/Y/Z and rotation keyframes render through world-pose interpolation: the camera eye and target are interpolated between keyed world poses, while legacy camera scale keyframes are ignored by the camera pose.
+Camera rotation keyframes interpolate through the shortest angular path so timeline flights do not spin the long way around when yaw, pitch, or roll crosses a 360-degree wrap. Camera Position X/Y/Z and rotation keyframes render through world-pose interpolation: the camera eye and target are interpolated between keyed world poses, while camera scale keyframes are ignored by the camera pose.
 
 ### Scene Lights
 
@@ -131,79 +126,56 @@ Light clips can be created from the Media Panel via `+ Add > 3D > Light` and dra
 - The Light tab exposes type, color, environment map, intensity, diameter, shadow toggle, and shadow strength.
 - Intensity, diameter, color, and shadow strength are keyframeable.
 - The Transform tab controls the light position and rotation; panel lights emit along their local negative Z direction.
-- Shadow fields are persisted for projects and keyframes, but real shadow-map rendering is not part of this first pass.
+- The shadow toggle is persisted and shadow strength is keyframeable; real shadow-map rendering is unavailable.
 
 ## Gaussian Splats
 
 Gaussian splat clips are imported through the SuperSplat-compatible `@playcanvas/splat-transform` reader path. Supported scene formats include `.ply`, `.compressed.ply`, `.splat`, `.ksplat`, `.spz`, `.sog`, `.lcc`, and zipped SOG-style `.zip` payloads. Plain point-cloud PLY files without gaussian scale properties fall back to the local point-cloud conversion path.
 
 - Clips are created as `is3D: true`.
-- The Gaussian tab exposes the native renderer status together with `maxSplats`, `sortFrequency`, `splatScale`, `orientationPreset`, `nearPlane`, and `farPlane`.
+- The Gaussian tab exposes native renderer information together with `maxSplats`, `sortFrequency`, `splatScale`, `orientationPreset`, `nearPlane`, and `farPlane`.
 - Gaussian splats participate in scene cameras, object transforms, object-level effectors, preview, nested compositions, export, preload, and readiness checks through the same native shared-scene path.
-- Realtime splat rendering uses a worker-backed back-to-front order buffer based on the SuperSplat/PlayCanvas sorter approach. Precise export can still fall back to the existing GPU sort path.
+- Realtime splat rendering uses a worker-backed back-to-front order buffer based on the SuperSplat/PlayCanvas sorter approach. Precise export can fall back to the existing GPU sort path.
 - Sequence splats follow the same shared runtime contract and preload nearby frames without replacing foreground playback with repeated loading overlays.
 - PLY/splat sequences imported into an open project are copied to `Raw/<sequence-name>/` using the original frame names; existing same-size frame files are reused instead of written again.
 - Imported splats and numbered splat sequences store media-panel stats: container label, file size, per-frame splat count, and total sequence splat count.
-- The Transform tab now exposes normal object transforms for gaussian splats. Scene navigation lives on camera clips.
+- The Transform tab exposes normal object transforms for gaussian splats. Scene navigation lives on camera clips.
 - Large gaussian splats show viewport loading progress during project restore, URL fetch, parser work, normalization, and GPU upload.
-
-Some gaussian-splat settings exist in the data model and export pipeline but are not yet surfaced as a full dedicated UI:
-
-- `backgroundColor`
-- temporal playback settings
-- particle effect settings
-
-Those are wired through the renderer and export code, but they should still be treated as in-progress surface area.
 
 ## Splat Effectors
 
-Splat effector clips are timeline clips that affect scene-driven splats, including native gaussian-splat clips.
+Splat effector clips are timeline clips that affect scene-driven 3D objects. Native gaussian splats deform directly; imported models, primitive meshes, and 3D text receive object-level motion.
 
 - Modes: `repel`, `attract`, `swirl`, and `noise`
 - Controls: strength, falloff, speed, and seed
 - Transform scale acts as the effector radius
 - They do not render visible content on their own
-- 3D planes remain excluded in phase 1 for parity with older projects
-
-This is a specialized 3D feature that is stable in the UI and now follows the shared scene contract.
-
-## Legacy Gaussian Avatars
-
-Gaussian avatar import is now legacy-only:
-
-- The import action is blocked in the current product surface.
-- Existing projects can still carry legacy avatar clips.
-- The Blendshapes tab remains available for those legacy clips.
-- New work should use gaussian-splat clips instead.
-
-If you see avatar-specific code paths in the renderer or AI tooling, treat them as migration/reference code rather than the recommended authoring path.
+- 3D planes are excluded
 
 ## Properties Tabs
 
 | Clip type | Visible tabs |
 |---|---|
-| Regular 2D clip | Transform, Effects, Masks, Transcript, Analysis |
+| Regular 2D clip | Transform, Color, Effects, Masks, Analysis |
 | Camera clip | Transform |
 | Light clip | Transform, Light |
-| Imported model clip | Transform, 3D, Color, Effects, Masks, Transcript, Analysis |
-| Gaussian splat clip | Transform, Gaussian, Effects, Masks, Transcript, Analysis |
-| Splat effector clip | Transform, Effector, Effects, Masks, Transcript, Analysis |
-| 3D text clip | 3D Text, Transform, Effects, Masks |
-| Legacy gaussian avatar clip | Transform, Blendshapes |
+| Imported model clip | Transform, 3D, Color, Effects, Masks, Analysis |
+| Gaussian splat clip | Transform, Color, Gaussian, Effects, Masks, Analysis |
+| Splat effector clip | Transform, Effector, Effects, Masks, Analysis |
+| 3D text clip | 3D Text, Transform, Color, Effects, Masks |
 
 The Transform tab is context-sensitive:
 
 - For normal 3D layers, it shows position, scale, rotation, opacity, blend mode, and 3D toggles. Scale All is stored as `scale.all` and multiplies X/Y/Z at render time, so uniform scale and axis scale can be animated independently.
 - 3D object position fields use scene units. Regular 2D clips still display composition pixel units.
 - For camera clips, it becomes scene-navigation and lens controls.
-- For gaussian splats, it now behaves like a normal 3D object transform surface plus 3D effector toggle.
-- The `Speed` field is explicitly marked WIP in the UI.
+- For gaussian splats, it behaves like a normal 3D object transform surface plus 3D effector toggle.
 
 ## Export
 
 3D layers are included in export.
 
-- Scene camera resolution, scene-layer collection, splat runtime preparation, preload, and readiness now share the same scene contract across preview, nested, and export.
+- Scene camera resolution, scene-layer collection, splat runtime preparation, preload, and readiness share the same scene contract across preview, nested, and export.
 - Exported 3D video planes use decoder-provided `VideoFrame` textures when available, matching the 2D export compositor frame timing.
 - Gaussian splats can export through prepared or direct native scene modes while keeping identical scene-camera semantics.
 - Export waits for shared 3D and splat readiness before capture so preview and export stay aligned.
@@ -247,12 +219,9 @@ The Transform tab is context-sensitive:
 | `.spz` | Supported | Loaded through `@playcanvas/splat-transform`. |
 | `.sog` / `.zip` | Supported | Loaded through the bundled SOG/zip reader path. |
 | `.lcc` | Supported | The first returned LOD table is used. |
-| Gaussian avatar `.zip` | Legacy only | Import is blocked in the current product surface. |
 
 ## Limitations
 
-- Temporal and particle splat controls are still only partially surfaced in the UI.
-- Composition-level camera settings still remain available alongside camera clips.
-- Legacy gaussian-avatar import is disabled.
+- Composition-level camera settings are available alongside camera clips.
 - Environment maps currently drive ambient color only; full image-based lighting, reflections, and HDR sampling are not implemented.
 - Higher-order spherical harmonics are preserved during import, but the current native shader still renders the DC color path only.

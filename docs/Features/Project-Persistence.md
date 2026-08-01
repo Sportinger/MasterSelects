@@ -2,7 +2,7 @@
 
 [← Back to Index](./README.md)
 
-Local project folder storage with continuous save by default, optional interval autosave, backups, and smart media relinking. Supports two backends: **File System Access API** (Chrome/Edge) and **Native Helper** (Firefox when the helper is connected).
+Local project folder storage with continuous save by default, optional interval autosave, backups, and media relinking. Supports two backends: **File System Access API** (when the browser exposes it) and the **Native Helper** (when FSA is unavailable and the helper is connected).
 
 ---
 
@@ -34,11 +34,11 @@ On first launch or when no project is open, the Welcome Overlay appears:
 | Browser | Behavior |
 |---------|----------|
 | Google Chrome | Recommended experience; full FSA support when the platform exposes it |
-| Firefox | Shows the friendly Chrome recommendation and uses the **Native Helper** for file-system access |
+| Firefox | Shows the friendly Chrome recommendation; uses the **Native Helper** for file-system access because FSA is unavailable |
 | Safari | Shows the friendly Chrome recommendation; runtime support is available only on some systems |
-| Edge / Chromium / Opera / Brave / other | Shows the friendly Chrome recommendation regardless of operating system; capabilities are still detected at runtime |
+| Edge / Chromium / Opera / Brave / other | Shows the friendly Chrome recommendation; FSA and helper availability are detected at runtime |
 
-For Firefox users:
+For browsers without FSA support:
 - The overlay checks if the Native Helper is running and connected
 - If available, activates the native backend and shows "New Project" / "Open Existing" buttons (using the OS folder picker via Native Helper)
 - If the helper cannot show an OS folder picker on the current platform, MasterSelects falls back to a manual path prompt seeded with the helper's project root
@@ -47,13 +47,13 @@ For Firefox users:
 ### Select Project Folder
 1. Click **"New Project"**
 2. Choose or create a folder for your project
-3. App creates the project folder with `project.json` plus the standard subfolders (`Raw/`, `Downloads/`, `Proxy/`, `Audio Proxies/`, `Cache/`, `Analysis/`, `Transcripts/`, `Renders/`, `Backups/`, `Prompts/`)
-4. Folder handle stored in IndexedDB (FSA) or path stored in localStorage (`ms-native-last-project-path`) for future sessions
+3. App creates the project folder with `project.json` plus the standard subfolders (`Raw/`, `Raw/Baked Audio/`, `Downloads/`, `Proxy/`, `Audio Proxies/`, `Cache/`, `Analysis/`, `Transcripts/`, `Renders/`, `Backups/`, `Prompts/`, `AI/Chat/`)
+4. Folder handle stored in IndexedDB (FSA) or path stored in localStorage (`ms-native-last-project-path`)
 
 ### Continue Without Saving
 - Click **"Start editing"** or press **Enter**
 - Work without persistence
-- Project lost on refresh
+- The project is lost on refresh
 - Useful for quick experiments
 
 ---
@@ -62,14 +62,14 @@ For Firefox users:
 
 The project system supports two backends, selected automatically based on browser capabilities:
 
-### FSA Backend (Chrome / Edge)
+### FSA Backend
 - Uses the [File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API)
 - `showDirectoryPicker()` for folder selection
 - `FileSystemDirectoryHandle` + `FileSystemFileHandle` for all I/O
 - Handles stored in IndexedDB (`fsHandles` store) for session persistence
 - Permission re-requested on page reload if needed
 
-### Native Helper Backend (Firefox)
+### Native Helper Backend
 - Uses a local Rust helper (`tools/native-helper`) communicating via WebSocket (port 9876) and HTTP (port 9877)
 - OS folder picker via `NativeHelperClient.pickFolder()`
 - Manual project path fallback via `ProjectFileService` when the helper reports that no native picker is available
@@ -80,7 +80,7 @@ The project system supports two backends, selected automatically based on browse
 - No permission prompts needed -- the Native Helper has full filesystem access
 - Project listing: `NativeProjectCoreService.listProjects()` scans the project root for directories containing `project.json`
 - The default project root comes from the helper (`Documents/MasterSelects` when available, otherwise `Home/MasterSelects`, or `MASTERSELECTS_PROJECT_ROOT` when set to an absolute path)
-- On Firefox refresh, `ProjectFileService.restoreLastProject()` now activates the Native backend before attempting restore, so it no longer depends on the Welcome Overlay running first
+- On Firefox refresh, `ProjectFileService.restoreLastProject()` activates the Native backend before attempting restore
 
 ### Backend Switching
 The `ProjectFileService` facade routes all calls to the active backend:
@@ -120,6 +120,7 @@ MyProject/
 +-- project.autosave.json  # Fallback when browser FSA cannot update project.json
 +-- .keys.enc              # Encrypted API keys (auto-saved with project)
 +-- Raw/                   # Auto-copied media files (portable)
++-- Raw/Baked Audio/       # Baked audio media
 |   +-- Interview_01.mp4
 |   +-- Music.wav
 |   +-- hero/              # Imported GLB sequence frames
@@ -141,16 +142,19 @@ MyProject/
 +-- Backups/               # Auto-backup folder
 |   +-- project_2026-01-11_14-00-00.json
 |   +-- ... (last 20 backups)
-+-- Proxy/                 # Generated proxy video frame folders and legacy proxy media
++-- Proxy/                 # Generated proxy video frame folders and proxy media
 +-- Audio Proxies/         # Current WAV audio proxy files
 +-- Cache/                 # Cached derived data
 |   +-- thumbnails/        # Media thumbnails (WebP, keyed by file hash)
+|   +-- face-thumbnails/   # Cached face thumbnails
 |   +-- splats/            # Cached Gaussian splat runtimes
 |   +-- waveforms/         # Waveform data (Float32Array binary)
 |   +-- artifacts/         # Signal IR artifacts, sharded by SHA-256 hash
 +-- Analysis/              # Clip analysis data (per media file)
 +-- Transcripts/           # Transcript data (per media file)
 +-- Renders/               # Exported renders
++-- Prompts/               # Project prompt files
++-- AI/Chat/               # FlashBoard chat journal files
 ```
 
 Folder constants defined in `src/services/project/core/constants.ts`:
@@ -158,21 +162,27 @@ Folder constants defined in `src/services/project/core/constants.ts`:
 ```typescript
 const PROJECT_FOLDERS = {
   RAW: 'Raw',
+  RAW_BAKED_AUDIO: 'Raw/Baked Audio',
   PROXY: 'Proxy',
+  AUDIO_PROXIES: 'Audio Proxies',
   ANALYSIS: 'Analysis',
   TRANSCRIPTS: 'Transcripts',
   CACHE: 'Cache',
   CACHE_THUMBNAILS: 'Cache/thumbnails',
+  CACHE_FACE_THUMBNAILS: 'Cache/face-thumbnails',
+  CACHE_SPLATS: 'Cache/splats',
   CACHE_ARTIFACTS: 'Cache/artifacts',
   CACHE_WAVEFORMS: 'Cache/waveforms',
   RENDERS: 'Renders',
   BACKUPS: 'Backups',
   DOWNLOADS: 'Downloads',
+  PROMPTS: 'Prompts',
+  AI_CHAT: 'AI/Chat',
 };
 ```
 
 ### Signal Artifacts
-Universal Signal IR imports persist metadata in `project.json` under `signals`. When a File System Access project is open, artifact bytes are stored content-addressed under `Cache/artifacts/sha256/<shard>/<hash>/` with a `manifest.json` and `artifact.bin`. IndexedDB keeps a manifest index for fast lookup/source-ref queries and also provides a content-addressed `artifactBlobs` fallback for imports made before a project folder is available.
+Universal Signal IR imports persist metadata in `project.json` under `signals`. When a File System Access project is open, artifact bytes are stored content-addressed under `Cache/artifacts/sha256/<shard>/<hash>/` with a `manifest.json` and `artifact.bin`. IndexedDB keeps a manifest index for fast lookup/source-ref queries and also provides a content-addressed `artifactBlobs` fallback when no project folder is available.
 
 ### Auto-Copy to Raw Folder
 When importing media files (controlled by `copyMediaToProject` setting):
@@ -204,7 +214,7 @@ When opening a project with missing media files:
 ## Auto-Save
 
 ### How Auto-Save Works
-There are two save modes in the current branch:
+There are two save modes:
 
 1. **Continuous save** (default): `projectLifecycle.ts` subscribes to the media, timeline, FlashBoard, dock, and download-related stores, marks the project dirty, and writes the project after a short debounce. Keyframe changes flush more aggressively.
 2. **Interval save**: `Toolbar.tsx` can still run a timer-based autosave loop. In this mode, the timer creates a backup first and then saves the project.
@@ -226,7 +236,9 @@ Settings persist in `settingsStore` (localStorage).
 The `setupAutoSync()` function (in `projectLifecycle.ts`) subscribes to store changes and marks the project dirty when:
 - Media files, compositions, or folders change (mediaStore)
 - Clips or tracks change (timelineStore)
-- YouTube panel state changes
+- MIDI state changes
+- FlashBoard workspace and chat state changes
+- Storyboard state changes
 - Dock layout changes
 - Export settings or export presets change
 
@@ -237,7 +249,7 @@ The `setupAutoSync()` function (in `projectLifecycle.ts`) subscribes to store ch
 - Syncs all store state to project data, then writes `project.json`
 
 ### On Page Unload
-In continuous-save mode, `beforeunload` flushes the pending store sync and kicks off a final best-effort project write. This still cannot fully guarantee the disk write completes before the page closes, but it is more aggressive than the old "memory only" unload path.
+In continuous-save mode, `beforeunload` flushes the pending store sync and kicks off a final best-effort project write. The disk write may not complete before the page closes.
 
 ---
 
@@ -287,11 +299,11 @@ When opening a project, the app automatically:
 
 Manual relink uses the same filename matching for normal media and sequence frames. For renamed single files, selecting one file directly assigns it to the clicked missing item.
 
-### Reload All Button
+### Relink Button
 In Media Panel toolbar:
-- Click "Reload All" to restore file permissions
-- Useful after browser restart
-- Re-requests access to stored file handles
+- Click `Relink (n)` when one or more media files need attention
+- Opens the relink dialog for restoring access or selecting replacement media
+- Opening a missing item directly can also invoke its reload path
 
 ### Visual Indicators
 | Indicator | Meaning |
@@ -329,8 +341,11 @@ interface ProjectFile {
 
   slotAssignments?: Record<string, number>;
   mediaSourceFolders?: string[];
-  youtube?: ProjectYouTubeState;
+  signals?: ProjectSignalState;
+  audio?: ProjectAudioState;
   uiState?: ProjectUIState;
+  flashboard?: ProjectFlashBoardState;
+  storyboard?: StoryboardProjectState;
 }
 ```
 
@@ -373,12 +388,15 @@ interface ProjectFile {
 - View toggles: thumbnails, waveforms, proxy, transcript markers
 - Changelog preferences (`showChangelogOnStartup`, `lastSeenChangelogVersion`)
 - Export panel state: live export settings, named export presets, and the selected preset
+- Media-panel view mode and board viewport/layout state
+- Serialized undo/redo history
 
 Temporary camera `NO KF` live offsets are intentionally not saved. They only affect the current preview session while the stored camera keyframes remain the project source of truth.
 
-### Other Persisted Panels
-- YouTube panel state is saved in `project.json`
-- FlashBoard workspace state is saved in `project.json` when boards exist
+### Other Persisted Project State
+- FlashBoard workspace state is saved in `project.json` when present; its chat journal is also mirrored as `AI/Chat/history.json` with an `history.autosave.json` fallback.
+- Storyboard plans, scenes, candidates, decisions, variants, and templates are saved in `project.json`.
+- Generated text, solid, mesh, camera, light, splat-effector, math-scene, and motion-shape items are saved in `project.json`.
 
 ### Stored in Project Folder
 | Location | Contents |
@@ -389,13 +407,16 @@ Temporary camera `NO KF` live offsets are intentionally not saved. They only aff
 | `Backups/` | Auto-backup files |
 | `Raw/` | Copied media files |
 | `Downloads/` | Downloaded videos (per platform) for File System Access projects; Native Helper projects import completed downloads through `Raw/` |
-| `Proxy/` | Proxy video frame folders and legacy proxy media |
+| `Proxy/` | Proxy video frame folders and proxy media |
 | `Audio Proxies/` | Current WAV audio proxy files |
 | `Cache/thumbnails/` | Media thumbnails (WebP) |
 | `Cache/waveforms/` | Waveform data |
+| `Cache/artifacts/` | Signal artifact files |
 | `Analysis/` | Clip analysis cache |
 | `Transcripts/` | Transcript data |
 | `Renders/` | Exported renders |
+| `Prompts/` | Project prompt files |
+| `AI/Chat/` | FlashBoard chat journal and fallback journal |
 
 ---
 
@@ -428,7 +449,7 @@ Temporary camera `NO KF` live offsets are intentionally not saved. They only aff
 
 ### Open Recent
 - File menu -> Open Recent
-- Shows projects remembered by the browser from previous create/open/rename actions
+- Shows projects remembered by the browser
 - FSA entries reuse stored IndexedDB handles and may ask for folder permission again
 - Native Helper entries reopen by stored path
 - The flyout includes "Clear Recent Projects" for clearing the browser-side list
@@ -440,7 +461,7 @@ Temporary camera `NO KF` live offsets are intentionally not saved. They only aff
 - Otherwise, updates only the display name in `project.json`
 
 ### Restore Last Project
-On app load, attempts to restore the previously opened project:
+On app load, attempts to restore the last opened project:
 - **FSA**: Retrieves `lastProject` handle from IndexedDB, checks permission
 - **Native**: Activates the helper backend, reconnects to the helper with a bounded timeout, grants the stored project path to the helper, then reads path from `localStorage` key `ms-native-last-project-path`
 - If permission is needed, shows a "Grant Access" prompt
@@ -495,7 +516,7 @@ visible 70 px video tracks and one visible 48 px compact audio track, and first 
 mark it as the active named layout. `AUDIO EDIT` stores audio focus with Timeline above
 Media, Audio Mixer, and Properties/History, using two visible 40 px video context tracks and
 one visible 96 px audio track. Saved layouts keep per-type track slot counts, per-slot height
-and visibility, and legacy per-track-id height/visibility for exact project restores. Loading
+and visibility, and per-track-id height/visibility for exact project restores. Loading
 a layout creates missing tracks to satisfy the saved slot count, but it does not delete extra
 existing tracks because that could remove clips.
 
@@ -517,7 +538,7 @@ If IndexedDB storage becomes corrupted, an error dialog appears automatically:
 4. Verify project `version` is `1`
 
 ### Missing Media After Reload
-1. Click "Reload All" in Media Panel
+1. Click `Relink (n)` in the Media Panel
 2. Check if source folder is accessible
 3. Verify files exist in `Raw/` folder
 
@@ -534,7 +555,7 @@ If IndexedDB storage becomes corrupted, an error dialog appears automatically:
 | Storage | Used For | Limits |
 |---------|----------|--------|
 | **Project Folder** | Project data, proxies, analysis, transcripts, cache, renders | Disk space |
-| **IndexedDB** | File handles, recent FSA project handles, media metadata, proxy frames (legacy), analysis cache, thumbnails, Signal artifact manifests and fallback blobs | Browser quota |
+| **IndexedDB** | File handles, recent FSA project handles, media metadata, proxy frames, analysis cache, thumbnails, Signal artifact manifests and fallback blobs | Browser quota |
 | **localStorage** | App settings, autosave config, named/default dock layouts, dock layout fallback, recent project metadata, Native Helper project paths | ~5MB |
 
 ---
@@ -549,6 +570,7 @@ src/services/project/
 +-- projectSave.ts             # Store -> project format conversion + save
 +-- projectLoad.ts             # Project format -> store conversion + load
 +-- projectLifecycle.ts        # Create/open/close + auto-sync subscriptions
++-- flashBoardChatProjectJournal.ts # Mirrored FlashBoard chat journal
 +-- index.ts                   # Re-exports
 +-- core/
 |   +-- ProjectCoreService.ts       # FSA backend: create, open, save, backup, rename
@@ -593,8 +615,8 @@ src/services/project/
 
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
-| [`serialization.test.ts`](../../tests/unit/serialization.test.ts) | 86 | Serialize/deserialize, round-trip |
-| [`historyStore.test.ts`](../../tests/stores/historyStore.test.ts) | 16 | Undo/redo |
+| [`serialization.test.ts`](../../tests/unit/serialization.test.ts) | Multiple | Serialize/deserialize, round-trip |
+| [`historyStore.test.ts`](../../tests/stores/historyStore.test.ts) | Multiple | Undo/redo and project-history persistence |
 
 Run tests: `npx vitest run`
 

@@ -65,7 +65,10 @@ export function TimelineRulerHeaderChrome({
             <TimelineControls variant="main" {...timelineControlsProps} />
           </div>
         </div>
-        <div className={`time-ruler-wrapper ${clipAnimationPhase !== 'idle' ? 'comp-switching' : ''}`}>
+        <div
+          className={`time-ruler-wrapper ${clipAnimationPhase !== 'idle' ? 'comp-switching' : ''}`}
+          data-guided-target="timeline-ruler"
+        >
           <TimelineRuler
             duration={duration}
             zoom={zoom}

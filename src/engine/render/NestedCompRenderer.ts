@@ -47,6 +47,7 @@ interface NestedCompTexture {
   texture: GPUTexture;
   view: GPUTextureView;
   initialized: boolean;
+  lastRenderedTimeSeconds?: number;
 }
 
 function getNestedCompCacheKey(compositionId: string, renderOccurrenceKey?: string): string {
@@ -57,6 +58,32 @@ function getNestedCompCacheKey(compositionId: string, renderOccurrenceKey?: stri
 
 function getNestedRenderOccurrenceKey(parentOccurrenceKey: string | undefined, layerId: string): string {
   return JSON.stringify([parentOccurrenceKey ?? null, layerId]);
+}
+
+const MAX_NESTED_PLAYBACK_PREVIEW_SCALE = 0.5;
+const MAX_OCCURRENCE_HANDOFF_DELTA_SECONDS = 1;
+
+export function resolveNestedPreviewRenderScale(input: {
+  compositionWidth: number;
+  compositionHeight: number;
+  outputWidth: number;
+  outputHeight: number;
+  isPlaying: boolean;
+  particleQuality: 'preview' | 'export';
+}): number {
+  if (input.particleQuality === 'export') return 1;
+
+  const widthScale = input.compositionWidth > 0
+    ? input.outputWidth / input.compositionWidth
+    : 1;
+  const heightScale = input.compositionHeight > 0
+    ? input.outputHeight / input.compositionHeight
+    : 1;
+  const outputScale = Math.max(0.01, Math.min(1, widthScale, heightScale));
+
+  return input.isPlaying
+    ? Math.min(outputScale, MAX_NESTED_PLAYBACK_PREVIEW_SCALE)
+    : outputScale;
 }
 
 function isRenderableNestedLayer(layer: Layer): boolean {
@@ -89,6 +116,22 @@ function hasMissingCriticalNestedLayer(
   return layers.some((layer) => isCriticalNestedLayer(layer) && !collectedLayerIds.has(layer.id));
 }
 
+function scaleNestedLayerGeometryForPreview(
+  layerData: LayerRenderData[],
+  renderScale: number,
+): void {
+  if (renderScale === 1) return;
+
+  for (const data of layerData) {
+    if (Number.isFinite(data.sourceWidth) && data.sourceWidth > 0) {
+      data.sourceWidth *= renderScale;
+    }
+    if (Number.isFinite(data.sourceHeight) && data.sourceHeight > 0) {
+      data.sourceHeight *= renderScale;
+    }
+  }
+}
+
 export class NestedCompRenderer {
   private device: GPUDevice;
   private compositor: Compositor;
@@ -110,6 +153,45 @@ export class NestedCompRenderer {
   private lastSuccessfulVideoProviderKey = new Map<string, string>();
   private lastCollectorState = new Map<string, 'render' | 'hold' | 'drop'>();
   private htmlHoldUntil = new Map<string, number>();
+
+  private initializeFromRecentOccurrence(
+    target: NestedCompTexture,
+    commandEncoder: GPUCommandEncoder,
+    currentTime: number | undefined,
+  ): boolean {
+    if (target.initialized || !Number.isFinite(currentTime)) return target.initialized;
+
+    let source: NestedCompTexture | undefined;
+    let closestDelta = Number.POSITIVE_INFINITY;
+    for (const candidate of this.nestedCompTextures.values()) {
+      if (
+        candidate === target ||
+        candidate.compositionId !== target.compositionId ||
+        !candidate.initialized ||
+        candidate.texture.width !== target.texture.width ||
+        candidate.texture.height !== target.texture.height ||
+        !Number.isFinite(candidate.lastRenderedTimeSeconds)
+      ) {
+        continue;
+      }
+      const delta = Math.abs(candidate.lastRenderedTimeSeconds! - currentTime!);
+      if (delta <= MAX_OCCURRENCE_HANDOFF_DELTA_SECONDS && delta < closestDelta) {
+        source = candidate;
+        closestDelta = delta;
+      }
+    }
+
+    if (!source) return false;
+
+    commandEncoder.copyTextureToTexture(
+      { texture: source.texture },
+      { texture: target.texture },
+      { width: target.texture.width, height: target.texture.height },
+    );
+    target.initialized = true;
+    target.lastRenderedTimeSeconds = source.lastRenderedTimeSeconds;
+    return true;
+  }
 
   private getProviderObjectId(provider: object): number {
     const existing = this.providerIds.get(provider);
@@ -203,6 +285,7 @@ export class NestedCompRenderer {
     particleQuality: 'preview' | 'export' = 'preview',
     suppliedMotionFrameAdmission?: MotionFrameRuntimeAdmission,
     renderOccurrenceKey?: string,
+    previewRenderScale = 1,
   ): GPUTextureView | null {
     if (depth >= MAX_NESTING_DEPTH) {
       log.warn('Max nesting depth reached in preRender', { compositionId, depth });
@@ -210,17 +293,22 @@ export class NestedCompRenderer {
     }
     const cacheKey = getNestedCompCacheKey(compositionId, renderOccurrenceKey);
     if (renderOccurrenceKey !== undefined) this.activeOccurrenceCacheKeys.add(cacheKey);
+    const effectiveRenderScale = particleQuality === 'export'
+      ? 1
+      : Math.max(0.01, Math.min(1, previewRenderScale));
+    const renderWidth = Math.max(1, Math.round(width * effectiveRenderScale));
+    const renderHeight = Math.max(1, Math.round(height * effectiveRenderScale));
 
     // Get or create one output texture per render occurrence. Two wrapper layers
     // can reference the same composition at different local times in one frame,
     // so composition identity alone is not a safe render-target cache key.
     let compTexture = this.nestedCompTextures.get(cacheKey);
-    if (!compTexture || compTexture.texture.width !== width || compTexture.texture.height !== height) {
+    if (!compTexture || compTexture.texture.width !== renderWidth || compTexture.texture.height !== renderHeight) {
       // Destroy old texture to free VRAM (safe - not in current command encoder yet)
       if (compTexture) compTexture.texture.destroy();
 
       const texture = this.device.createTexture({
-        size: { width, height },
+        size: { width: renderWidth, height: renderHeight },
         format: 'rgba8unorm',
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST,
       });
@@ -274,8 +362,8 @@ export class NestedCompRenderer {
     }
 
     // Acquire ping-pong textures from pool
-    const texturePair = this.texturePool.acquire(width, height);
-    const effectTexturePair = this.texturePool.acquire(width, height);
+    const texturePair = this.texturePool.acquire(renderWidth, renderHeight);
+    const effectTexturePair = this.texturePool.acquire(renderWidth, renderHeight);
     const nestedPingView = texturePair.pingView;
     const nestedPongView = texturePair.pongView;
     const effectTempView = effectTexturePair.pingView;
@@ -292,17 +380,27 @@ export class NestedCompRenderer {
         particleQuality,
         motionFrameAdmission,
         renderOccurrenceKey,
+        effectiveRenderScale,
       );
       if (hasMissingCriticalNestedLayer(nestedLayers, nestedLayerData)) {
+        if (particleQuality === 'preview') {
+          this.initializeFromRecentOccurrence(compTexture, commandEncoder, currentTime);
+        }
         return compTexture.initialized ? compTexture.view : null;
       }
+
+      // The reduced preview texture represents the same logical composition,
+      // so its source geometry must shrink by the same factor. Otherwise the
+      // compositor interprets full-resolution source pixels inside a smaller
+      // target and the nested result appears zoomed during playback.
+      scaleNestedLayerGeometryForPreview(nestedLayerData, effectiveRenderScale);
 
       // Process 3D layers through the shared scene renderer.
       if (flags.use3DLayers) {
         this.process3DLayersForNested(
           nestedLayerData,
-          width,
-          height,
+          renderWidth,
+          renderHeight,
           currentTime,
           compositionId,
           sceneClips,
@@ -317,6 +415,9 @@ export class NestedCompRenderer {
         if (hasActiveNestedLayer || hasPendingSceneWithoutLayers) {
           // Input layers exist but none could be collected (transient decode gap)
           // Retain the existing texture which holds the last good frame
+          if (particleQuality === 'preview') {
+            this.initializeFromRecentOccurrence(compTexture, commandEncoder, currentTime);
+          }
           return compTexture.initialized ? compTexture.view : null;
         }
         // Genuinely empty composition - clear to transparent
@@ -330,6 +431,7 @@ export class NestedCompRenderer {
         });
         clearPass.end();
         compTexture.initialized = true;
+        compTexture.lastRenderedTimeSeconds = Number.isFinite(currentTime) ? currentTime : undefined;
         this.lastRenderTime.set(cacheKey, quantizedTime);
         this.lastLayerCount.set(cacheKey, nestedLayers.length);
         this.lastMotionFrameRevision.set(cacheKey, motionFrameRevision);
@@ -340,8 +442,8 @@ export class NestedCompRenderer {
         layerData: nestedLayerData,
         device: this.device,
         compositionId,
-        width,
-        height,
+        width: renderWidth,
+        height: renderHeight,
         commandEncoder,
         sampler,
         compositor: this.compositor,
@@ -360,10 +462,11 @@ export class NestedCompRenderer {
       commandEncoder.copyTextureToTexture(
         { texture: sourceTexture },
         { texture: compTexture.texture },
-        { width, height }
+        { width: renderWidth, height: renderHeight }
       );
 
       compTexture.initialized = true;
+      compTexture.lastRenderedTimeSeconds = Number.isFinite(currentTime) ? currentTime : undefined;
       this.lastRenderTime.set(cacheKey, quantizedTime);
       this.lastLayerCount.set(cacheKey, nestedLayers.length);
       this.lastMotionFrameRevision.set(cacheKey, motionFrameRevision);
@@ -409,6 +512,7 @@ export class NestedCompRenderer {
     particleQuality: 'preview' | 'export' = 'preview',
     motionFrameAdmission?: MotionFrameRuntimeAdmission,
     renderOccurrenceKey?: string,
+    previewRenderScale = 1,
   ): LayerRenderData[] {
     const result: LayerRenderData[] = [];
 
@@ -434,6 +538,7 @@ export class NestedCompRenderer {
           particleQuality,
           motionFrameAdmission,
           getNestedRenderOccurrenceKey(renderOccurrenceKey, layer.id),
+          previewRenderScale,
         );
         if (subTextureView) {
           result.push({

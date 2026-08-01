@@ -46,7 +46,7 @@ export function MaskActiveCard({
   updateMask,
 }: MaskActiveCardProps) {
   return (
-    <div className="mask-active-card">
+    <div className="mask-active-card" role="group" aria-label={`Active mask ${activeMask.name}`}>
       <div className="mask-active-header">
         <div>
           <strong>{activeMask.name}</strong>

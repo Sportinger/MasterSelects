@@ -5,10 +5,6 @@ import type {
   FlashBoardGenerationMetadata,
   FlashBoardPromptHistoryEntry,
 } from '../../../stores/flashboardStore';
-import type { AIProvider } from '../../../stores/settingsStore';
-import {
-  type SavedAiSystemPrompt,
-} from '../../../services/aiPromptLibrary';
 import { flashBoardMediaBridge } from '../../../services/flashboard/FlashBoardMediaBridge';
 import { redactFlashBoardChatImageData } from '../../../services/flashboard/FlashBoardChatImageData';
 import { useMediaStore } from '../../../stores/mediaStore';
@@ -18,44 +14,20 @@ import { PromptBookSparkles } from './PromptBookSparkles';
 import { useBookOpening, usePrefersReducedMotion, usePromptBookTurnSheet } from './promptBookAnimations';
 
 interface FlashBoardPromptBookProps {
-  activeSystemPrompt?: string;
-  activeSystemPromptProvider?: AIProvider;
   chatMessages?: FlashBoardChatMessage[];
   entries: FlashBoardPromptHistoryEntry[];
   generationRecords: FlashBoardActiveGenerationRecord[];
   initialKind?: PromptBookKind;
-  isPromptLibraryLoading?: boolean;
   mediaFiles: MediaFile[];
   copiedEntryId: string | null;
-  projectPromptStorageReady?: boolean;
-  promptDialogError?: string | null;
-  promptDialogStatus?: string | null;
-  promptDraft?: string;
-  promptHasOverride?: boolean;
-  promptNameDraft?: string;
-  promptSendContext?: boolean;
-  savedSystemPrompts?: SavedAiSystemPrompt[];
-  selectedPromptFile?: string;
   onClose: () => void;
   onCopy: (prompt: string, pageId: string) => void;
-  onDeleteSystemPrompt?: () => void;
-  onLoadSystemPrompt?: (fileName?: string) => void;
-  onOverwriteSystemPrompt?: () => void;
-  onRefreshSystemPrompts?: () => void;
-  onResetSystemPromptDraft?: () => void;
-  onSaveSystemPrompt?: () => void;
-  onSetPromptDraft?: (prompt: string) => void;
-  onSetPromptSendContext?: (sendContext: boolean) => void;
-  onSetPromptName?: (name: string) => void;
-  onSetSelectedPromptFile?: (fileName: string) => void;
-  onApplySystemPromptDraft?: () => void;
 }
 
-const EMPTY_SAVED_SYSTEM_PROMPTS: SavedAiSystemPrompt[] = [];
 const EMPTY_FLASHBOARD_CHAT_MESSAGES: FlashBoardChatMessage[] = [];
 const EMPTY_PROMPT_BOOK_CHAT_MESSAGES: PromptBookChatTurn[] = [];
 
-type PromptBookKind = FlashBoardPromptHistoryEntry['kind'] | 'system';
+type PromptBookKind = FlashBoardPromptHistoryEntry['kind'];
 
 interface PromptBookRun {
   id: string;
@@ -107,8 +79,6 @@ interface PromptBookPage {
   kind: PromptBookKind;
   createdAt: number;
   chatMessages?: PromptBookChatTurn[];
-  provider?: AIProvider;
-  title?: string;
   toolCalls?: PromptBookToolCall[];
   userPrompt: string;
   magicPrompt?: string;
@@ -118,7 +88,6 @@ interface PromptBookPage {
 
 const PROMPT_BOOK_KINDS: Array<{ kind: PromptBookKind; label: string }> = [
   { kind: 'generation', label: 'Gen' },
-  { kind: 'system', label: 'System prompt' },
   { kind: 'chat', label: 'Chat' },
 ];
 
@@ -142,12 +111,8 @@ function getPromptBookDayKey(createdAt: number): string {
   return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 }
 
-function formatSystemPromptProvider(provider: AIProvider | undefined): string {
-  return provider === 'lemonade' ? 'Lemonade' : 'Kie.ai';
-}
-
 function formatPromptBookKind(kind: PromptBookPage['kind']): string {
-  return kind === 'generation' ? 'Gen' : kind === 'system' ? 'System' : 'Chat';
+  return kind === 'generation' ? 'Gen' : 'Chat';
 }
 
 function formatPromptBookChatRole(role: FlashBoardChatMessage['role']): string {
@@ -156,7 +121,7 @@ function formatPromptBookChatRole(role: FlashBoardChatMessage['role']): string {
 
 function formatPromptBookPageLabel(page: PromptBookPage): string {
   if (page.kind === 'chat') return formatPromptBookDay(page.createdAt);
-  const label = trimPrompt(page.kind === 'system' ? page.title : page.userPrompt) || formatPromptBookKind(page.kind);
+  const label = trimPrompt(page.userPrompt) || formatPromptBookKind(page.kind);
   return label.length > 34 ? `${label.slice(0, 31)}...` : label;
 }
 
@@ -396,26 +361,9 @@ function buildPromptBookPages(
   chatMessages: FlashBoardChatMessage[],
   generationRecords: FlashBoardActiveGenerationRecord[],
   mediaFiles: MediaFile[],
-  activeSystemPrompt: string | undefined,
-  activeSystemPromptProvider: AIProvider | undefined,
 ): PromptBookPage[] {
   const mediaFilesById = new Map(mediaFiles.map((mediaFile) => [mediaFile.id, mediaFile]));
   const generationPagesByPrompt = new Map<string, PromptBookPage>();
-  const systemPromptPages: PromptBookPage[] = [];
-  const activeSystemPromptText = trimPrompt(activeSystemPrompt);
-  if (activeSystemPromptText) {
-    systemPromptPages.push({
-      id: `system:active:${activeSystemPromptProvider ?? 'openai'}`,
-      kind: 'system',
-      createdAt: Date.now(),
-      provider: activeSystemPromptProvider,
-      title: 'Current system prompt',
-      userPrompt: activeSystemPromptText,
-      media: [],
-      runs: [],
-    });
-  }
-
   for (const record of generationRecords) {
     const finalPrompt = trimPrompt(record.request?.prompt);
     const originalPrompt = trimPrompt(record.request?.originalPrompt);
@@ -463,7 +411,7 @@ function buildPromptBookPages(
     if (page.magicPrompt) generationPromptKeys.add(page.magicPrompt);
   }
 
-  const pages = [...systemPromptPages, ...generationPagesByPrompt.values(), ...buildPromptBookChatPages(entries, chatMessages)];
+  const pages = [...generationPagesByPrompt.values(), ...buildPromptBookChatPages(entries, chatMessages)];
   for (const entry of entries) {
     const prompt = trimPrompt(entry.prompt);
     if (!prompt) continue;
@@ -517,43 +465,19 @@ function PromptBookVideo({
 }
 
 export function FlashBoardPromptBook({
-  activeSystemPrompt,
-  activeSystemPromptProvider,
   chatMessages = EMPTY_FLASHBOARD_CHAT_MESSAGES,
   entries,
   generationRecords,
   initialKind,
-  isPromptLibraryLoading = false,
   mediaFiles,
   copiedEntryId,
-  projectPromptStorageReady = false,
-  promptDialogError = null,
-  promptDialogStatus = null,
-  promptDraft,
-  promptHasOverride = false,
-  promptNameDraft = '',
-  promptSendContext = true,
-  savedSystemPrompts = EMPTY_SAVED_SYSTEM_PROMPTS,
-  selectedPromptFile = '',
   onClose,
   onCopy,
-  onDeleteSystemPrompt,
-  onLoadSystemPrompt,
-  onOverwriteSystemPrompt,
-  onRefreshSystemPrompts,
-  onResetSystemPromptDraft,
-  onSaveSystemPrompt,
-  onSetPromptDraft,
-  onSetPromptSendContext,
-  onSetPromptName,
-  onSetSelectedPromptFile,
-  onApplySystemPromptDraft,
 }: FlashBoardPromptBookProps) {
   const setSourceMonitorFile = useMediaStore((state) => state.setSourceMonitorFile);
   const prefersReducedMotion = usePrefersReducedMotion();
   const bookOpening = useBookOpening(!prefersReducedMotion);
   const { beginTurn, finishTurn, turnSheet } = usePromptBookTurnSheet(!prefersReducedMotion);
-  const [editingSystemPrompt, setEditingSystemPrompt] = useState(false);
   const [visibleChatTime, setVisibleChatTime] = useState<{ pageId: string; value: number } | null>(null);
   const [chatRowHeights, setChatRowHeights] = useState<{
     pageId: string;
@@ -571,10 +495,8 @@ export function FlashBoardPromptBook({
       chatMessages,
       generationRecords,
       mediaFiles,
-      activeSystemPrompt,
-      activeSystemPromptProvider,
     ),
-    [activeSystemPrompt, activeSystemPromptProvider, chatMessages, entries, generationRecords, mediaFiles],
+    [chatMessages, entries, generationRecords, mediaFiles],
   );
   const initialPageIndex = initialKind ? pages.findIndex((page) => page.kind === initialKind) : -1;
   const [pageIndex, setPageIndex] = useState(() => Math.max(0, initialPageIndex));
@@ -749,21 +671,9 @@ export function FlashBoardPromptBook({
   const goToFirstKind = (kind: PromptBookKind) => {
     const index = pages.findIndex((page) => page.kind === kind);
     if (index >= 0) {
-      if (kind === 'system') onSetPromptDraft?.(pages[index]?.userPrompt ?? '');
       navigateToIndex(index);
     }
   };
-
-  const selectedSystemPrompt = savedSystemPrompts.find((prompt) => prompt.fileName === selectedPromptFile);
-  const systemPromptEditorValue = promptDraft ?? activePage?.userPrompt ?? '';
-  const systemPromptFeedback = promptDialogError || promptDialogStatus || (
-    !projectPromptStorageReady ? 'Open a project to use saved presets.' : null
-  );
-  const canEditSystemPrompt = activePage?.kind === 'system' && Boolean(onSetPromptDraft);
-  const canUseSystemPresets = activePage?.kind === 'system' && projectPromptStorageReady;
-  const selectedSystemPromptUpdatedAt = selectedSystemPrompt
-    ? Date.parse(selectedSystemPrompt.updatedAt) || activePage?.createdAt || 0
-    : 0;
 
   const promptBook = (
     <div className="fb-prompt-book-backdrop" role="presentation" onMouseDown={onClose}>
@@ -824,7 +734,7 @@ export function FlashBoardPromptBook({
                   title={canGoBack ? 'Previous prompt' : undefined}
                 >
                   <div className="fb-prompt-book-entry-meta">
-                    <span>{activePage.kind === 'system' ? 'System' : activePage.kind === 'chat' ? 'Chat' : 'Gen'}</span>
+                    <span>{activePage.kind === 'chat' ? 'Chat' : 'Gen'}</span>
                     {displayedPageTime !== undefined && (
                       <time dateTime={new Date(displayedPageTime).toISOString()}>{formatPromptBookTime(displayedPageTime)}</time>
                     )}
@@ -865,30 +775,6 @@ export function FlashBoardPromptBook({
                             </div>
                           ))}
                         </div>
-                    ) : activePage.kind === 'system' ? (
-                      <section className="fb-prompt-book-prompt-section">
-                        <div className="fb-prompt-book-prompt-head">
-                          <div className="fb-prompt-book-section-label">
-                            {`${activePage.title ?? 'System prompt'} - ${formatSystemPromptProvider(activePage.provider)}`}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => onCopy(systemPromptEditorValue, activePage.id)}
-                          >
-                            {copiedEntryId === activePage.id ? 'Copied' : 'Copy'}
-                          </button>
-                        </div>
-                        {editingSystemPrompt && canEditSystemPrompt ? (
-                          <textarea
-                            className="fb-prompt-book-system-textarea"
-                            value={systemPromptEditorValue}
-                            onChange={(event) => onSetPromptDraft?.(event.target.value)}
-                            spellCheck={false}
-                          />
-                        ) : (
-                          <p>{activePage.userPrompt}</p>
-                        )}
-                      </section>
                     ) : (
                       <>
                         <section className="fb-prompt-book-prompt-section is-user">
@@ -926,37 +812,6 @@ export function FlashBoardPromptBook({
                       </>
                     )}
                   </div>
-                  {activePage.kind === 'system' && (
-                    <div className="fb-prompt-book-actions">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!editingSystemPrompt) onSetPromptDraft?.(activePage.userPrompt);
-                          setEditingSystemPrompt(!editingSystemPrompt);
-                        }}
-                      >
-                        {editingSystemPrompt ? 'Preview' : 'Edit'}
-                      </button>
-                      {editingSystemPrompt && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={onApplySystemPromptDraft}
-                            disabled={!systemPromptEditorValue.trim() || isPromptLibraryLoading}
-                          >
-                            Apply
-                          </button>
-                          <button
-                            type="button"
-                            onClick={onResetSystemPromptDraft}
-                            disabled={isPromptLibraryLoading}
-                          >
-                            Reset
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )}
                 </article>
 
                 <article
@@ -964,7 +819,7 @@ export function FlashBoardPromptBook({
                   onClick={(event) => handleSpreadPageClick(event, 1)}
                   title={canGoForward ? 'Next prompt' : undefined}
                 >
-                  {activePage.kind !== 'generation' && activePage.kind !== 'system' && (
+                  {activePage.kind === 'chat' && (
                     <div className="fb-prompt-book-media-header">
                       {activePage.kind === 'chat' ? (
                         <div className="fb-prompt-book-run">
@@ -987,80 +842,7 @@ export function FlashBoardPromptBook({
                     onScroll={activePage.kind === 'chat' ? () => handleChatScroll('tools') : undefined}
                     ref={activePage.kind === 'chat' ? chatToolScrollRef : undefined}
                   >
-                    {activePage.kind === 'system' ? (
-                      <div className="fb-prompt-book-system-presets">
-                        <div className="fb-prompt-book-run">
-                          <strong>Presets</strong>
-                          <span>{activePage.provider === 'lemonade' ? 'Lemonade Local' : 'Kie.ai / Cloud'}</span>
-                        </div>
-                        <label className="fb-prompt-book-preset-field">
-                          <span>Name</span>
-                          <input
-                            value={promptNameDraft}
-                            onChange={(event) => onSetPromptName?.(event.target.value)}
-                            disabled={isPromptLibraryLoading}
-                          />
-                        </label>
-                        <label className="fb-prompt-book-context-toggle">
-                          <input
-                            type="checkbox"
-                            checked={promptSendContext}
-                            onChange={(event) => onSetPromptSendContext?.(event.target.checked)}
-                            disabled={isPromptLibraryLoading}
-                          />
-                          <span>Send current MasterSelects context</span>
-                        </label>
-                        {selectedSystemPrompt && (
-                          <div className="fb-prompt-book-preset-meta">
-                            Updated {formatPromptBookTime(selectedSystemPromptUpdatedAt)} - Context {selectedSystemPrompt.sendContext ? 'on' : 'off'}
-                          </div>
-                        )}
-                        {systemPromptFeedback && (
-                          <div className={`fb-prompt-book-preset-feedback ${promptDialogError ? 'is-error' : ''}`}>
-                            {systemPromptFeedback}
-                          </div>
-                        )}
-                        <div className="fb-prompt-book-preset-actions">
-                          <button type="button" onClick={onSaveSystemPrompt} disabled={!systemPromptEditorValue.trim() || !canUseSystemPresets || isPromptLibraryLoading}>
-                            Save new
-                          </button>
-                          <button type="button" onClick={onOverwriteSystemPrompt} disabled={!selectedPromptFile || !systemPromptEditorValue.trim() || isPromptLibraryLoading}>
-                            Overwrite
-                          </button>
-                          <button type="button" onClick={onDeleteSystemPrompt} disabled={!selectedPromptFile || isPromptLibraryLoading}>
-                            Delete
-                          </button>
-                          <button type="button" onClick={onRefreshSystemPrompts} disabled={isPromptLibraryLoading}>
-                            Refresh
-                          </button>
-                        </div>
-                        <div className="fb-prompt-book-preset-list" aria-label="Saved system prompt presets">
-                          {savedSystemPrompts.length === 0 ? (
-                            <div className="fb-prompt-book-preset-empty">No saved presets.</div>
-                          ) : (
-                            savedSystemPrompts.map((prompt) => (
-                              <button
-                                className={`fb-prompt-book-preset-item ${selectedPromptFile === prompt.fileName ? 'active' : ''}`}
-                                key={prompt.fileName}
-                                type="button"
-                                onClick={() => {
-                                  onSetSelectedPromptFile?.(prompt.fileName);
-                                  onLoadSystemPrompt?.(prompt.fileName);
-                                }}
-                                disabled={!canUseSystemPresets || isPromptLibraryLoading}
-                              >
-                                <span>{prompt.name}</span>
-                                <small>{prompt.sendContext ? 'Context on' : 'Context off'}</small>
-                                <time dateTime={prompt.updatedAt}>{formatPromptBookTime(Date.parse(prompt.updatedAt) || activePage.createdAt)}</time>
-                              </button>
-                            ))
-                          )}
-                        </div>
-                        <div className="fb-prompt-book-preset-status">
-                          {promptHasOverride ? 'Custom active prompt' : 'Default active prompt'} - {systemPromptEditorValue.length} chars
-                        </div>
-                      </div>
-                    ) : activePage.kind === 'chat' ? (
+                    {activePage.kind === 'chat' ? (
                       (activePage.toolCalls?.length ?? 0) > 0 ? (
                         <div className="fb-prompt-book-tool-list">
                           {(activePage.chatMessages ?? []).map((message) => (

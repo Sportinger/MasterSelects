@@ -2,8 +2,8 @@ import type { Layer } from '../../types/layers';
 import type { TimelineClip } from '../../types/timeline';
 import { MAX_NESTING_DEPTH } from '../../stores/timeline/constants';
 import { Logger } from '../logger';
-import { getClipTimeInfo, getMediaFileForClip } from './FrameContext';
-import { buildNestedImageSourceLayer, buildNestedProxyImageSourceLayer, getLayerBuilderRenderableImageElement } from './layerBuilder2dSources';
+import { getClipTimeInfo } from './FrameContext';
+import { buildNestedImageSourceLayer, getLayerBuilderRenderableImageElement } from './layerBuilder2dSources';
 import { buildNestedLayerBuilder3dSourceLayer } from './layerBuilder3dLayers';
 import { buildNestedLayerBuilderCanvasBackedSourceLayer } from './layerBuilderCanvasSources';
 import type { LayerBuilderProxyFrames } from './layerBuilderProxyFrames';
@@ -14,11 +14,7 @@ import {
   getNestedClipKeyframes,
   getNestedClipSourceTime,
 } from './layerBuilderNestedLayers';
-import {
-  getLayerBuilderVideoSourceDebugInfo,
-  hasLayerBuilderRenderableVideoSource,
-  resolveLayerBuilderVideoSource,
-} from './layerBuilderVideoSources';
+import { getLayerBuilderVideoSourceDebugInfo } from './layerBuilderVideoSources';
 import type { FrameContext } from './types';
 import { buildLayerBuilderNestedTransitionLayer } from './layerBuilderNestedTransitionLayer';
 import {
@@ -27,6 +23,13 @@ import {
 } from './layerBuilderNestedCompositionLayer';
 import { buildMotionAdjustmentLayerFromBase } from './layerBuilderMotionAdjustment';
 import { evaluateParentedClipTransform } from './parentTransformEvaluation';
+import {
+  getNestedClipContinuityKey,
+  getNestedPreviewRootTrackKey,
+  getNestedPreviewTrackKey,
+  type NestedPreviewContinuationResolver,
+} from './nestedPreviewContinuity';
+import { buildNestedVideoSourceLayer } from './layerBuilderNestedVideoSource';
 
 const log = Logger.create('LayerBuilderNestedLayers');
 
@@ -38,6 +41,8 @@ type BuildNestedLayersParams = {
   depth?: number;
   parentTransformClips?: readonly TimelineClip[];
   parentTransformTimelineTime?: number;
+  previewContinuationResolver?: NestedPreviewContinuationResolver;
+  previewTrackKey?: string;
 };
 
 function buildNestedClipLayer(
@@ -52,6 +57,9 @@ function buildNestedClipLayer(
   });
   if (!nestedLayerBase) return null;
   const { baseLayer, keyframes } = nestedLayerBase;
+  const parentTrackKey = params.previewTrackKey ?? getNestedPreviewRootTrackKey(params.clip);
+  const trackKey = getNestedPreviewTrackKey(parentTrackKey, params.clip, nestedClip);
+  const continuityKey = getNestedClipContinuityKey(params.clip, nestedClip);
   let nestedCanvasLayer: Layer | null = null;
   let nested3dLayer: Layer | null = null;
 
@@ -63,6 +71,8 @@ function buildNestedClipLayer(
       ctx,
       proxyFrames,
       depth: depth + 1,
+      previewContinuationResolver: params.previewContinuationResolver,
+      previewTrackKey: trackKey,
     });
     if (subLayers.length === 0) return null;
 
@@ -73,36 +83,17 @@ function buildNestedClipLayer(
     return null;
   }
 
-  if (hasLayerBuilderRenderableVideoSource(nestedClip.source, nestedClip, getMediaFileForClip(ctx, nestedClip))) {
-    const nestedClipTime = getNestedClipSourceTime(nestedClip, nestedClipLocalTime);
-
-    if (ctx.proxyEnabled) {
-      const mediaFile = getMediaFileForClip(ctx, nestedClip);
-      if (mediaFile?.proxyFps) {
-        const proxyFrame = proxyFrames.selectProxyFrame({
-          clipId: nestedClip.id,
-          mediaFile,
-          targetMediaTime: nestedClipTime,
-          isDraggingPlayhead: ctx.isDraggingPlayhead,
-          previewPathBase: 'nested-proxy-image-frame',
-        });
-        if (proxyFrame) {
-          return buildNestedProxyImageSourceLayer(baseLayer, proxyFrame, mediaFile.id);
-        }
-      }
-    }
-
-    const videoSource = resolveLayerBuilderVideoSource({
-      clip: nestedClip,
-      ctx,
-      targetTime: nestedClipTime,
-      allowSharedPreviewSession: true,
-      workerGpuMediaFile: getMediaFileForClip(ctx, nestedClip),
-    });
-    return videoSource
-      ? ({ ...baseLayer, source: videoSource.source } as Layer)
-      : null;
-  }
+  const nestedVideoLayer = buildNestedVideoSourceLayer({
+    baseLayer,
+    nestedClip,
+    nestedClipTime: getNestedClipSourceTime(nestedClip, nestedClipLocalTime),
+    ctx,
+    proxyFrames,
+    previewContinuationResolver: params.previewContinuationResolver,
+    trackKey,
+    continuityKey,
+  });
+  if (nestedVideoLayer !== undefined) return nestedVideoLayer;
 
   if (nestedClip.source?.type === 'image') {
     const imageElement = getLayerBuilderRenderableImageElement(nestedClip, ctx);
@@ -204,7 +195,9 @@ export function buildLayerBuilderNestedLayers(params: BuildNestedLayersParams): 
   return layers;
 }
 
-export function buildLayerBuilderNestedCompLayer(params: BuildNestedCompLayerParams): Layer | null {
+export function buildLayerBuilderNestedCompLayer(
+  params: BuildNestedCompLayerParams & { previewContinuationResolver?: NestedPreviewContinuationResolver },
+): Layer | null {
   const { clip, ctx } = params;
   const timeInfo = getClipTimeInfo(ctx, clip);
   const mappedEvaluation = clip.transitionSourceMap?.version === 2
@@ -226,6 +219,7 @@ export function buildLayerBuilderNestedCompLayer(params: BuildNestedCompLayerPar
     clipTime: timeInfo.clipTime,
     ctx,
     proxyFrames: params.proxyFrames,
+    previewContinuationResolver: params.previewContinuationResolver,
   });
   if (nestedLayers.length === 0) return null;
 

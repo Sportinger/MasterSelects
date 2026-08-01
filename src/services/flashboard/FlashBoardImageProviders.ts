@@ -1,7 +1,6 @@
 import { cloudAiService } from '../cloudAiService';
-import { evolinkService } from '../evolinkService';
 import type { TextToImageParams } from '../aiGenerationContracts';
-import type { VideoTask } from '../piApiService';
+import type { VideoTask } from '../aiGenerationContracts';
 import type { FlashBoardService } from '../../stores/flashboardStore/types';
 
 export interface FlashBoardImageProvider {
@@ -12,7 +11,6 @@ export interface FlashBoardImageProvider {
     pollInterval?: number,
     timeout?: number,
   ): Promise<VideoTask>;
-  setApiKey?: (apiKey: string) => void;
 }
 
 const FLASHBOARD_IMAGE_PROVIDERS: Partial<Record<FlashBoardService, FlashBoardImageProvider>> = {
@@ -22,7 +20,6 @@ const FLASHBOARD_IMAGE_PROVIDERS: Partial<Record<FlashBoardService, FlashBoardIm
       cloudAiService.pollTaskUntilComplete(taskId, onProgress, pollInterval, timeout)
     ),
   },
-  evolink: evolinkService,
 };
 
 export function getFlashBoardImageProvider(service: FlashBoardService): FlashBoardImageProvider | null {

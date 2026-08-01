@@ -11,10 +11,7 @@ import {
   DEFAULT_ELEVENLABS_VOICE_SETTINGS,
 } from '../../../stores/flashboardStore/defaults';
 import { cloudAiService } from '../../../services/cloudAiService';
-import {
-  elevenLabsService,
-  type ElevenLabsMp3OutputFormat,
-} from '../../../services/elevenLabsService';
+import type { ElevenLabsMp3OutputFormat } from '../../../services/elevenLabs/config';
 import {
   buildFlashBoardElevenLabsOptionsState,
   findFlashBoardElevenLabsVoiceById,
@@ -31,8 +28,6 @@ import {
 } from './FlashBoardVoiceSettingsPlanner';
 
 interface UseFlashBoardElevenLabsControllerInput {
-  elevenLabsApiKey: string;
-  hasElevenLabsKey: boolean;
   hasHostedAudioAccess: boolean;
   initialLanguageCode?: string;
   initialLanguageOverride?: boolean;
@@ -41,14 +36,13 @@ interface UseFlashBoardElevenLabsControllerInput {
   initialVoiceName?: string;
   initialVoiceSettings?: Parameters<typeof normalizeFlashBoardVoiceSettings>[0];
   isElevenLabsMode: boolean;
-  isHostedAudioMode: boolean;
   setVersion: Dispatch<SetStateAction<string>>;
   version: string;
 }
 
+const HOSTED_ELEVENLABS_ACCESS_ERROR = 'Hosted ElevenLabs access is required.';
+
 export function useFlashBoardElevenLabsController({
-  elevenLabsApiKey,
-  hasElevenLabsKey,
   hasHostedAudioAccess,
   initialLanguageCode,
   initialLanguageOverride,
@@ -57,7 +51,6 @@ export function useFlashBoardElevenLabsController({
   initialVoiceName,
   initialVoiceSettings,
   isElevenLabsMode,
-  isHostedAudioMode,
   setVersion,
   version,
 }: UseFlashBoardElevenLabsControllerInput) {
@@ -99,33 +92,33 @@ export function useFlashBoardElevenLabsController({
   const voiceSettingsChanged = !areFlashBoardVoiceSettingsEqual(voiceSettings, DEFAULT_ELEVENLABS_VOICE_SETTINGS);
 
   useEffect(() => {
-    const canLoadHostedAudio = isHostedAudioMode && hasHostedAudioAccess;
-    const canLoadLocalAudio = !isHostedAudioMode && hasElevenLabsKey;
-
-    if (!isElevenLabsMode || (!canLoadHostedAudio && !canLoadLocalAudio)) {
+    if (!isElevenLabsMode) {
       queueMicrotask(() => {
         setElevenLabsModels([]);
         setElevenLabsModelsError(null);
+        setIsLoadingElevenLabsModels(false);
+      });
+      return;
+    }
+
+    if (!hasHostedAudioAccess) {
+      queueMicrotask(() => {
+        setElevenLabsModels([]);
+        setElevenLabsModelsError(HOSTED_ELEVENLABS_ACCESS_ERROR);
+        setIsLoadingElevenLabsModels(false);
       });
       return;
     }
 
     const controller = new AbortController();
     let cancelled = false;
-    if (!isHostedAudioMode) {
-      elevenLabsService.setApiKey(elevenLabsApiKey);
-    }
     queueMicrotask(() => {
       if (cancelled) return;
       setIsLoadingElevenLabsModels(true);
       setElevenLabsModelsError(null);
     });
 
-    const modelsPromise = isHostedAudioMode
-      ? cloudAiService.listElevenLabsModels()
-      : elevenLabsService.listModels(controller.signal);
-
-    void modelsPromise
+    void cloudAiService.listElevenLabsModels()
       .then((models) => {
         if (cancelled) return;
 
@@ -154,31 +147,32 @@ export function useFlashBoardElevenLabsController({
       controller.abort();
     };
   }, [
-    elevenLabsApiKey,
-    hasElevenLabsKey,
     hasHostedAudioAccess,
     isElevenLabsMode,
-    isHostedAudioMode,
     setVersion,
   ]);
 
   useEffect(() => {
-    const canLoadHostedAudio = isHostedAudioMode && hasHostedAudioAccess;
-    const canLoadLocalAudio = !isHostedAudioMode && hasElevenLabsKey;
-
-    if (!isElevenLabsMode || (!canLoadHostedAudio && !canLoadLocalAudio)) {
+    if (!isElevenLabsMode) {
       queueMicrotask(() => {
         setElevenLabsVoices([]);
         setElevenLabsVoicesError(null);
+        setIsLoadingElevenLabsVoices(false);
+      });
+      return;
+    }
+
+    if (!hasHostedAudioAccess) {
+      queueMicrotask(() => {
+        setElevenLabsVoices([]);
+        setElevenLabsVoicesError(HOSTED_ELEVENLABS_ACCESS_ERROR);
+        setIsLoadingElevenLabsVoices(false);
       });
       return;
     }
 
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => {
-      if (!isHostedAudioMode) {
-        elevenLabsService.setApiKey(elevenLabsApiKey);
-      }
       setIsLoadingElevenLabsVoices(true);
       setElevenLabsVoicesError(null);
 
@@ -188,11 +182,7 @@ export function useFlashBoardElevenLabsController({
         sort: 'name',
         sortDirection: 'asc',
       } as const;
-      const voicesPromise = isHostedAudioMode
-        ? cloudAiService.listElevenLabsVoices(voicesParams)
-        : elevenLabsService.listVoices(voicesParams, controller.signal);
-
-      void voicesPromise
+      void cloudAiService.listElevenLabsVoices(voicesParams)
         .then((result) => {
           if (controller.signal.aborted) return;
           setElevenLabsVoices(result.voices);
@@ -215,11 +205,8 @@ export function useFlashBoardElevenLabsController({
       controller.abort();
     };
   }, [
-    elevenLabsApiKey,
-    hasElevenLabsKey,
     hasHostedAudioAccess,
     isElevenLabsMode,
-    isHostedAudioMode,
     voiceRefreshNonce,
     voiceSearch,
   ]);

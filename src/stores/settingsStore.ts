@@ -1,35 +1,25 @@
-// Settings store for API keys and app configuration
+// Settings store for app configuration
 // Global settings persisted in browser localStorage
-// API keys stored encrypted in IndexedDB via apiKeyManager
+// The optional YouTube integration credential is encrypted in IndexedDB.
 
 import { create } from 'zustand';
 import { subscribeWithSelector, persist } from 'zustand/middleware';
-import { apiKeyManager, type ApiKeyType } from '../services/apiKeyManager';
+import { youtubeCredentialManager } from '../services/youtubeCredentialManager';
 import { projectFileService } from '../services/project/ProjectFileService';
 import { flags } from '../engine/featureFlags';
 import { Logger } from '../services/logger';
 import type { SimpleSynthPreset } from '../engine/audio/synth/simpleSynthPresets';
 import type { SimpleSynthInstrument } from '../types/midiClip';
 import { generateClipId } from './timeline/helpers/idGenerator';
-import {
-  DEFAULT_LEMONADE_CONTEXT_SIZE,
-  DEFAULT_LEMONADE_ENDPOINT,
-  DEFAULT_LEMONADE_MODEL,
-} from '../services/lemonadeProvider';
 import type { ShortcutPresetId, ShortcutMap, KeyCombo, ShortcutActionId, CustomShortcutPreset } from '../services/shortcutTypes';
 import { PRESETS, DEFAULT_PRESET_ID } from '../services/shortcutPresets';
 import {
-  DEFAULT_API_KEY_DEFAULTS,
   DEFAULT_GUIDED_ACTION_REPLAY_BUDGET_MS,
   DEFAULT_SHORTCUT_DISPLAY_SCALE,
   clampGuidedActionReplayBudgetMs,
   clampShortcutDisplayScale,
 } from './settings/settingsOptions';
 import type {
-  AIProvider,
-  APIKeys,
-  ApiKeyDefaultProvider,
-  ApiKeyDefaults,
   AutosaveInterval,
   GPUPowerPreference,
   GuidedActionReplayCompressionMode,
@@ -44,10 +34,6 @@ import type {
 // Compatibility re-export: option catalog moved to ./settings/settingsOptions.
 // Surface kept identical to the pre-split module (clamp helpers stay internal).
 export type {
-  AIProvider,
-  APIKeys,
-  ApiKeyDefaultProvider,
-  ApiKeyDefaults,
   AutosaveInterval,
   GPUPowerPreference,
   GuidedActionReplayCompressionMode,
@@ -75,7 +61,7 @@ export type SettingsCategoryId =
   | 'audio'
   | 'transcription'
   | 'nativeHelper'
-  | 'apiKeys';
+  | 'integrations';
 
 // Piano-roll controller-lane area (#249). Forward-compatible: `lanes` is an
 // ordered list of lane-type ids (see pianoRollLaneTypes.ts) so future CC /
@@ -92,19 +78,6 @@ const DEFAULT_PIANO_ROLL_CONTROLLER_AREA: PianoRollControllerAreaState = {
   height: 96,
   lanes: ['velocity'],
 };
-
-function sanitizeApiKeyDefaults(value: unknown): ApiKeyDefaults {
-  const stored = value && typeof value === 'object'
-    ? value as Record<string, unknown>
-    : {};
-  const defaults = { ...DEFAULT_API_KEY_DEFAULTS };
-
-  for (const provider of Object.keys(defaults) as ApiKeyDefaultProvider[]) {
-    defaults[provider] = stored[provider] === true;
-  }
-
-  return defaults;
-}
 
 function persistChangelogStateToProject(
   showChangelogOnStartup: boolean,
@@ -139,10 +112,8 @@ interface SettingsState {
   audioMixerWoodThemeEnabled: boolean;
   mediaPanelWoodThemeEnabled: boolean;
 
-  // API Keys
-  apiKeys: APIKeys;
-  apiKeysUnlocked: boolean;
-  apiKeyDefaults: ApiKeyDefaults;
+  // Optional non-AI integration credential. Never persisted to localStorage.
+  youtubeApiKey: string;
 
   // Transcription settings
   transcriptionProvider: TranscriptionProvider;
@@ -179,12 +150,6 @@ interface SettingsState {
   matanyoneEnabled: boolean;      // Enable MatAnyone2 video matting
   matanyonePythonPath: string;    // Python path ('' = auto-detect)
 
-  aiProvider: AIProvider;
-  lemonadeEndpoint: string;
-  lemonadeContextSize: number;
-  lemonadeModel: string;
-  aiSystemPromptOverrides: Partial<Record<AIProvider, string>>;
-  aiSystemPromptSendContext: Partial<Record<AIProvider, boolean>>;
   guidedActionReplayVisualizationMode: GuidedActionReplayVisualizationMode;
   guidedActionReplayBudgetMs: number;
   guidedActionReplayCompressionMode: GuidedActionReplayCompressionMode;
@@ -237,10 +202,7 @@ interface SettingsState {
   setCustomBrightness: (brightness: number) => void;
   setAudioMixerWoodThemeEnabled: (enabled: boolean) => void;
   setMediaPanelWoodThemeEnabled: (enabled: boolean) => void;
-  setApiKey: (provider: keyof APIKeys, key: string) => void;
-  setApiKeysUnlocked: (unlocked: boolean) => void;
-  toggleApiKeysUnlocked: () => void;
-  setApiKeyDefault: (provider: ApiKeyDefaultProvider, enabled: boolean) => void;
+  setYouTubeApiKey: (key: string) => void;
   setTranscriptionProvider: (provider: TranscriptionProvider) => void;
   setPreviewQuality: (quality: PreviewQuality) => void;
   setShowTransparencyGrid: (show: boolean) => void;
@@ -258,12 +220,6 @@ interface SettingsState {
   setGpuPowerPreference: (preference: GPUPowerPreference) => void;
   setMatAnyoneEnabled: (enabled: boolean) => void;
   setMatAnyonePythonPath: (path: string) => void;
-  setAiProvider: (provider: AIProvider) => void;
-  setLemonadeEndpoint: (endpoint: string) => void;
-  setLemonadeContextSize: (contextSize: number) => void;
-  setLemonadeModel: (model: string) => void;
-  setAiSystemPromptOverride: (provider: AIProvider, prompt: string) => void;
-  setAiSystemPromptSendContext: (provider: AIProvider, sendContext: boolean) => void;
   setGuidedActionReplayVisualizationMode: (mode: GuidedActionReplayVisualizationMode) => void;
   setGuidedActionReplayBudgetMs: (budgetMs: number) => void;
   setGuidedActionReplayCompressionMode: (mode: GuidedActionReplayCompressionMode) => void;
@@ -296,13 +252,8 @@ interface SettingsState {
   // Output actions
   setResolution: (width: number, height: number) => void;
 
-  // Helpers
-  getActiveApiKey: () => string | null;
-  hasApiKey: (provider: keyof APIKeys) => boolean;
-  shouldUseApiKeyByDefault: (provider: ApiKeyDefaultProvider) => boolean;
-
-  // API key persistence (encrypted in IndexedDB)
-  loadApiKeys: () => Promise<void>;
+  // YouTube credential persistence (encrypted in IndexedDB)
+  loadIntegrationCredentials: () => Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -315,20 +266,7 @@ export const useSettingsStore = create<SettingsState>()(
       customBrightness: 15, // Default: dark
       audioMixerWoodThemeEnabled: false,
       mediaPanelWoodThemeEnabled: false,
-      apiKeys: {
-        openai: '',
-        anthropic: '',
-        assemblyai: '',
-        deepgram: '',
-        piapi: '',
-        evolink: '',
-        elevenlabs: '',
-        youtube: '',
-        klingAccessKey: '',
-        klingSecretKey: '',
-      },
-      apiKeysUnlocked: false,
-      apiKeyDefaults: { ...DEFAULT_API_KEY_DEFAULTS },
+      youtubeApiKey: '',
       transcriptionProvider: 'local',
       previewQuality: 1, // Full quality by default
       showTransparencyGrid: false, // Don't show checkerboard by default
@@ -346,12 +284,6 @@ export const useSettingsStore = create<SettingsState>()(
       gpuPowerPreference: 'high-performance', // Prefer dGPU by default
       matanyoneEnabled: false, // MatAnyone2 disabled by default
       matanyonePythonPath: '', // Auto-detect Python path
-      aiProvider: 'openai' as AIProvider,
-      lemonadeEndpoint: DEFAULT_LEMONADE_ENDPOINT,
-      lemonadeContextSize: DEFAULT_LEMONADE_CONTEXT_SIZE,
-      lemonadeModel: DEFAULT_LEMONADE_MODEL,
-      aiSystemPromptOverrides: {},
-      aiSystemPromptSendContext: {},
       guidedActionReplayVisualizationMode: 'concise' as GuidedActionReplayVisualizationMode,
       guidedActionReplayBudgetMs: DEFAULT_GUIDED_ACTION_REPLAY_BUDGET_MS,
       guidedActionReplayCompressionMode: 'family' as GuidedActionReplayCompressionMode,
@@ -383,42 +315,11 @@ export const useSettingsStore = create<SettingsState>()(
       setAudioMixerWoodThemeEnabled: (enabled) => set({ audioMixerWoodThemeEnabled: enabled }),
       setMediaPanelWoodThemeEnabled: (enabled) => set({ mediaPanelWoodThemeEnabled: enabled }),
 
-      setApiKey: (provider, key) => {
-        set((state) => ({
-          apiKeys: {
-            ...state.apiKeys,
-            [provider]: key,
-          },
-        }));
-        // Save to encrypted IndexedDB + project file
-        apiKeyManager.storeKeyByType(provider as ApiKeyType, key)
-          .then(() => {
-            // Also update .keys.enc in the project folder if a project is open
-            if (projectFileService.isProjectOpen()) {
-              return projectFileService.saveKeysFile();
-            }
-          })
-          .catch((err) => {
-            log.error('Failed to save API key:', err);
-          });
-      },
-
-      setApiKeysUnlocked: (unlocked) => {
-        set({ apiKeysUnlocked: unlocked });
-      },
-
-      toggleApiKeysUnlocked: () => {
-        set((state) => ({ apiKeysUnlocked: !state.apiKeysUnlocked }));
-      },
-
-      setApiKeyDefault: (provider, enabled) => {
-        set((state) => ({
-          apiKeyDefaults: {
-            ...DEFAULT_API_KEY_DEFAULTS,
-            ...state.apiKeyDefaults,
-            [provider]: enabled,
-          },
-        }));
+      setYouTubeApiKey: (key) => {
+        set({ youtubeApiKey: key });
+        void youtubeCredentialManager.store(key).catch((err) => {
+          log.error('Failed to save YouTube integration credential:', err);
+        });
       },
 
       setTranscriptionProvider: (provider) => {
@@ -487,46 +388,6 @@ export const useSettingsStore = create<SettingsState>()(
 
       setMatAnyonePythonPath: (path) => {
         set({ matanyonePythonPath: path });
-      },
-
-      setAiProvider: (provider) => {
-        set({ aiProvider: provider });
-      },
-
-      setLemonadeEndpoint: (endpoint) => {
-        set({ lemonadeEndpoint: endpoint });
-      },
-
-      setLemonadeContextSize: (contextSize) => {
-        set({ lemonadeContextSize: Number.isFinite(contextSize) ? Math.trunc(contextSize) : DEFAULT_LEMONADE_CONTEXT_SIZE });
-      },
-
-      setLemonadeModel: (model) => {
-        set({ lemonadeModel: model });
-      },
-
-      setAiSystemPromptOverride: (provider, prompt) => {
-        set((state) => {
-          const overrides = { ...state.aiSystemPromptOverrides };
-          if (prompt.trim()) {
-            overrides[provider] = prompt;
-          } else {
-            delete overrides[provider];
-          }
-          return { aiSystemPromptOverrides: overrides };
-        });
-      },
-
-      setAiSystemPromptSendContext: (provider, sendContext) => {
-        set((state) => {
-          const next = { ...state.aiSystemPromptSendContext };
-          if (sendContext) {
-            delete next[provider];
-          } else {
-            next[provider] = false;
-          }
-          return { aiSystemPromptSendContext: next };
-        });
       },
 
       setGuidedActionReplayVisualizationMode: (mode) => {
@@ -666,58 +527,19 @@ export const useSettingsStore = create<SettingsState>()(
         set({ outputResolution: { width, height } });
       },
 
-      // Helpers
-      getActiveApiKey: () => {
-        const { transcriptionProvider, apiKeys } = get();
-        if (transcriptionProvider === 'local' || transcriptionProvider === 'hybrid') return null;
-        return apiKeys[transcriptionProvider] || null;
-      },
-
-      hasApiKey: (provider) => {
-        return !!get().apiKeys[provider];
-      },
-
-      shouldUseApiKeyByDefault: (provider) => {
-        const state = get();
-        const defaults = {
-          ...DEFAULT_API_KEY_DEFAULTS,
-          ...state.apiKeyDefaults,
-        };
-        return Boolean(
-          state.apiKeysUnlocked
-          && defaults[provider]
-          && state.apiKeys[provider]?.trim(),
-        );
-      },
-
-      // Load API keys from encrypted IndexedDB (call on app startup)
-      // Falls back to .keys.enc in the project folder if IndexedDB is empty
-      loadApiKeys: async () => {
+      loadIntegrationCredentials: async () => {
         try {
-          const keys = await apiKeyManager.getAllKeys();
-          const hasAnyKey = Object.values(keys).some((v) => v !== '');
-
-          if (!hasAnyKey && projectFileService.isProjectOpen()) {
-            // IndexedDB empty — try restoring from project file
-            const restored = await projectFileService.loadKeysFile();
-            if (restored) {
-              const restoredKeys = await apiKeyManager.getAllKeys();
-              set({ apiKeys: restoredKeys });
-              log.info('API keys restored from project file');
-              return;
-            }
-          }
-
-          set({ apiKeys: keys });
-          log.info('API keys loaded from encrypted storage');
+          set({ youtubeApiKey: await youtubeCredentialManager.get() ?? '' });
+          log.info('Integration credentials loaded from encrypted storage');
         } catch (err) {
-          log.error('Failed to load API keys:', err);
+          set({ youtubeApiKey: '' });
+          log.error('Failed to load integration credentials:', err);
         }
       },
     }),
     {
       name: 'masterselects-settings',
-      // Don't persist API keys in localStorage - they go to encrypted IndexedDB
+      // Don't persist the YouTube credential in localStorage.
       // Don't persist transient UI state like isSettingsOpen
       partialize: (state) => ({
         theme: state.theme,
@@ -725,8 +547,6 @@ export const useSettingsStore = create<SettingsState>()(
         customBrightness: state.customBrightness,
         audioMixerWoodThemeEnabled: state.audioMixerWoodThemeEnabled,
         mediaPanelWoodThemeEnabled: state.mediaPanelWoodThemeEnabled,
-        apiKeysUnlocked: state.apiKeysUnlocked,
-        apiKeyDefaults: state.apiKeyDefaults,
         transcriptionProvider: state.transcriptionProvider,
         previewQuality: state.previewQuality,
         showTransparencyGrid: state.showTransparencyGrid,
@@ -743,12 +563,6 @@ export const useSettingsStore = create<SettingsState>()(
         gpuPowerPreference: state.gpuPowerPreference,
         matanyoneEnabled: state.matanyoneEnabled,
         matanyonePythonPath: state.matanyonePythonPath,
-        aiProvider: state.aiProvider,
-        lemonadeEndpoint: state.lemonadeEndpoint,
-        lemonadeContextSize: state.lemonadeContextSize,
-        lemonadeModel: state.lemonadeModel,
-        aiSystemPromptOverrides: state.aiSystemPromptOverrides,
-        aiSystemPromptSendContext: state.aiSystemPromptSendContext,
         guidedActionReplayVisualizationMode: state.guidedActionReplayVisualizationMode,
         guidedActionReplayBudgetMs: state.guidedActionReplayBudgetMs,
         guidedActionReplayCompressionMode: state.guidedActionReplayCompressionMode,
@@ -770,11 +584,37 @@ export const useSettingsStore = create<SettingsState>()(
         simpleSynthUserPresets: state.simpleSynthUserPresets,
       }),
       merge: (persistedState, currentState) => {
-        const persisted = persistedState as Partial<SettingsState> & { apiKeyDefaults?: unknown };
+        const persisted = persistedState as Omit<Partial<SettingsState>, 'transcriptionProvider'> & {
+          apiKeys?: unknown;
+          apiKeysUnlocked?: unknown;
+          apiKeyDefaults?: unknown;
+          aiProvider?: unknown;
+          lemonadeEndpoint?: unknown;
+          lemonadeContextSize?: unknown;
+          lemonadeModel?: unknown;
+          aiSystemPromptOverrides?: unknown;
+          aiSystemPromptSendContext?: unknown;
+          transcriptionProvider?: TranscriptionProvider | 'assemblyai';
+        };
+        const {
+          apiKeys: _retiredApiKeys,
+          apiKeysUnlocked: _retiredApiKeysUnlocked,
+          apiKeyDefaults: _retiredApiKeyDefaults,
+          aiProvider: _retiredAiProvider,
+          lemonadeEndpoint: _retiredLemonadeEndpoint,
+          lemonadeContextSize: _retiredLemonadeContextSize,
+          lemonadeModel: _retiredLemonadeModel,
+          aiSystemPromptOverrides: _retiredPromptOverrides,
+          aiSystemPromptSendContext: _retiredPromptContext,
+          transcriptionProvider: persistedTranscriptionProvider,
+          ...supportedPersistedState
+        } = persisted;
         return {
           ...currentState,
-          ...persisted,
-          apiKeyDefaults: sanitizeApiKeyDefaults(persisted.apiKeyDefaults),
+          ...supportedPersistedState,
+          transcriptionProvider: persistedTranscriptionProvider === 'assemblyai'
+            ? 'deepgram'
+            : persistedTranscriptionProvider ?? currentState.transcriptionProvider,
         };
       },
       onRehydrateStorage: () => (state) => {

@@ -13,12 +13,12 @@ without uploading frames to a cloud service. The implementation uses:
 
 The first run downloads about 39 MB of pinned model files. MasterSelects checks
 their exact size and SHA-256 hash and stores valid responses in the browser
-cache. Later runs reuse that cache.
+cache. Cached runs reuse that cache.
 
 ## Results
 
-The durable result is a versioned `Analysis/<media-id>.json` artifact inside
-the project folder. It contains sampled source timestamps, normalized face
+When a project is open, the durable result is a versioned `Analysis/<media-id>.json`
+artifact in the project. It contains sampled source timestamps, normalized face
 boxes, five normalized landmarks, detection confidence, anonymous labels such
 as `Person 1`, compact appearance ranges, and the actual runtime backend.
 Project loading restores this sidecar whenever a clip needs analysis hydration;
@@ -65,11 +65,13 @@ their tile is near the viewport. Equal crop requests share the existing
 pending/blob cache.
 
 The top of the Analysis tab exposes compact status pills for **Focus & Motion**,
-**Faces**, **Cuts**, **Transcript**, and **AI Scenes**. Every pill can analyze,
+**Faces**, **Cuts**, **Transcript**, **Audio intelligence**, and **AI Scenes**.
+Audio intelligence covers voice activity, speech markers, prosody, and room tone;
+its data also contributes to the Analysis workspace. Every pill can analyze,
 reanalyze, retry, continue, or cancel without clearing the other results. A
 metrics-only pass preserves compatible face observations. A face-only pass
-reuses existing focus and motion samples; when no metrics exist yet, it creates
-the inexpensive metrics baseline during the same source decode. At normal
+preserves any existing focus and motion samples but does not guarantee a metrics
+baseline. At normal
 Properties widths the pills wrap naturally beside **Analyze all** and a compact
 settings disclosure. **Analyze All** creates a coalesced
 job graph: repeated clicks observe the same run, compatible completed channels
@@ -86,13 +88,13 @@ visible without estimate or explanatory rows. **Quick** (1 fps) and
 the runner receives the selected clipped source range and explicit sample
 cadence. Used Ranges, Selection, and overlapping In/Out therefore analyze only
 that honest source interval. Scene Cuts remain a frame-accurate, source-wide
-160×90 scan; Transcript and AI Scene providers retain their existing semantics.
+160x90 scan; Transcript and AI Scene providers retain their existing semantics.
 
 Face identities remain clip-range scoped. A whole-**Source** face pass is
 explicitly unavailable rather than creating a second, incompatible identity
 set; Focus/Motion can still use the complete source range. **Deep** and
-**Custom** are blocked until matching qualifying real-media benchmark evidence
-is available, so they never silently fall back to a denser or baseline pass.
+**Custom** remain blocked without matching qualifying real-media benchmark
+evidence, so they never silently fall back to a denser or baseline pass.
 
 Toggle **Face Ranges**
 from the timeline's **View** menu or by right-clicking a face-analyzed video
@@ -104,27 +106,6 @@ The tracker uses SFace's calibrated cosine boundary plus a small transient set
 of pose exemplars per identity, reducing false splits caused by lighting,
 profile views, and partial occlusion. A tracker revision requires re-analysis;
 the model files remain cached.
-
-## Optional Active-Speaker Model Gate
-
-The default active-speaker result remains the deterministic speaker/person fusion:
-off-screen, one verified face, mouth-motion, or explicit `unknown`. An optional
-local ROI model has no continuous-video mode. It can receive a bounded plan only
-for source-time speech spans that the existing fusion has already marked
-`unknown` with two or more visible people. The plan contains IDs, half-open time
-ranges, A/V skew, and candidate rate only; raw frames, crops, embeddings, and
-audio samples are ephemeral inference inputs and are never stored in the
-project or returned to AI chat.
-
-Before any model is promoted, its ONNX/local-runtime metadata must declare its
-WebGPU, WASM, and CPU-fallback capabilities, license, and model-byte size. It
-must beat the mouth-motion heuristic on labelled multi-person reference cases
-and provide measured real-media cold and warm evidence for every required
-platform/scenario: bounded-candidate runtime, peak memory, artifact size, and
-actual download or observed no-download bytes; warm evidence must also prove
-zero redundant source decode. Missing evidence, A/V skew or candidate-rate
-requirements, unsupported runtime capability, or a continuous full-video run
-keeps the model unpromoted and the result heuristic/`unknown`.
 
 ## AI chat
 
@@ -149,8 +130,8 @@ The Media-panel AI can start and inspect analysis:
 - `assignClipFaceReviewCandidate({ clipId, candidateId, targetPersonId })`
   assigns a yellow review track to a confirmed person.
 
-The compact Media-panel chat receives these definitions for hosted OpenAI,
-Anthropic, and local Lemonade providers. Correction tools use IDs from the
+The compact Media-panel chat receives these definitions through the hosted
+agent path. Correction tools use IDs from the
 latest `getClipFaceAnalysis` response, update the visible Analysis tab, and
 persist the corrected frames in the project sidecar.
 
@@ -169,9 +150,7 @@ can report it rather than claiming that no analysis exists.
 
 ### Real-media benchmark evidence
 
-The Phase-0A synthetic corpus validates only the benchmark schema; it never
-unlocks a production analysis channel. To collect qualifying local evidence for
-the existing `analysisBenchmarkGate`, use
+To collect qualifying local evidence for the existing `analysisBenchmarkGate`, use
 `node scripts/agent-timeline/collect-real-media-benchmark.mjs --help` and pass
 an explicitly selected licensed media file, its measured source duration, a
 scenario ID, profile, and a registered **local-only** dev-bridge benchmark
@@ -207,10 +186,9 @@ long edge is at most 640 pixels. Preprocessing and five-point alignment use
 typed arrays rather than `OffscreenCanvas`, preserving the Linux/Mesa
 main-thread fallback rules.
 
-The portable WASM backend is expected to be slower than GPU inference,
-especially when several faces require SFace inference in one sample. It is
-chosen for dependable model startup and cancellation while the editor continues
-to use WebGPU for rendering.
+The portable WASM backend is slower than GPU inference, especially when several
+faces require SFace inference in one sample. It provides dependable model
+startup and cancellation while the editor uses WebGPU for rendering.
 
 Faces smaller than 36 pixels in the 640-pixel analysis frame are intentionally
 excluded from automatic identity grouping. They remain visible as yellow

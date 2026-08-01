@@ -3,19 +3,20 @@ import {
   appendFlashBoardChatRunToolCalls,
   beginFlashBoardChatRun,
   completeFlashBoardChatRun,
-  getFlashBoardChatRun,
+  findFlashBoardChatRunByIdempotencyKey,
 } from '../../src/services/flashboard/FlashBoardChatRunAudit';
 
 describe('FlashBoard chat run audit durability', () => {
   it('persists tool progress while a run is still active', async () => {
+    const idempotencyKey = `audit-${crypto.randomUUID()}`;
     const run = beginFlashBoardChatRun({
       hostedAvailable: true,
-      idempotencyKey: `audit-${crypto.randomUUID()}`,
+      idempotencyKey,
       model: 'gpt-5-6-terra',
       prompt: 'Inspect the timeline.',
       provider: 'kie',
       temperature: 0.7,
-    }, 'system prompt');
+    });
     appendFlashBoardChatRunToolCalls(run.runId, [{
       modelContent: '{"success":true}',
       result: { success: true },
@@ -26,13 +27,17 @@ describe('FlashBoard chat run audit durability', () => {
       },
     }]);
 
-    await expect(getFlashBoardChatRun(run.runId)).resolves.toMatchObject({
+    const stored = await findFlashBoardChatRunByIdempotencyKey(idempotencyKey);
+    expect(stored).toMatchObject({
       status: 'running',
-      executedToolCalls: [{ toolCall: { id: 'timeline-1' } }],
+      executedToolCallCount: 1,
     });
+    expect(stored).not.toHaveProperty('prompt');
+    expect(stored).not.toHaveProperty('systemPrompt');
+    expect(stored).not.toHaveProperty('executedToolCalls');
 
     completeFlashBoardChatRun(run.runId, {
-      executedToolCalls: run.executedToolCalls,
+      executedToolCalls: [],
       response: 'Done.',
     });
   });

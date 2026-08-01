@@ -381,6 +381,37 @@ describe('useTimelineKeyboard edit operation routing', () => {
     expect(applyTimelineEditOperation).not.toHaveBeenCalled();
   });
 
+  it('deletes selected keyframes even while the mask editor is active', () => {
+    useTimelineStore.setState({
+      maskPanelActive: true,
+      maskEditMode: 'editing',
+      selectedVertexIds: new Set(),
+    });
+    render(
+      <KeyboardHarness
+        selectedKeyframeIds={new Set(['kf-mask-path'])}
+        applyTimelineEditOperation={applyTimelineEditOperation}
+      />,
+    );
+
+    const deleteEvent = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Delete',
+    });
+    window.dispatchEvent(deleteEvent);
+
+    expect(deleteEvent.defaultPrevented).toBe(true);
+    expect(applyTimelineEditOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'keyboard-delete-command',
+        priority: 'keyframes-first',
+        keyframeIds: ['kf-mask-path'],
+      }),
+      expect.objectContaining({ historyLabel: 'Delete keyframes' }),
+    );
+  });
+
   it('steps repeated frame shortcuts from the fresh store position without waiting for rerender', () => {
     const activeComposition: Composition = {
       id: 'comp-60fps',

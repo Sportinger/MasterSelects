@@ -8,13 +8,15 @@ The deterministic QA route for the flexible equalizer is available in the dev se
 http://127.0.0.1:5173/?test=flex-eq
 ```
 
-It renders seeded fixtures for 10-band graphic EQ, free parametric curves, dense mastering curves with dynamic/spectral metadata, the preset browser surface, Sketch/Grab/Match controls, Band Solo state, Spectral Dynamics graph overlays, and a compact track-insert layout. The route does not depend on project state.
+It renders four seeded fixtures: 10-band graphic EQ, free parametric curves, a dense mastering curve with active dynamic and spectral-dynamics band state, and a compact insert layout. The grid shows Sketch, Grab, Match, Band Solo, and Spectral Dynamics graph overlays; the preset browser is available through the **Presets** control rather than open by default. It also includes shipped band add/delete/enable controls, phase and character modes, A/B store/switch, clipboard actions, and selectable spectrum views.
+
+The route owns its fixture parameters locally and does not read project state. Its preset browser can load browser-local user presets and favorites.
 
 ## Documentation Image
 
 ![Flex EQ visual QA grid](./assets/flex-eq/flex-eq-visual-qa.png)
 
-The image above is generated from `docs/Features/assets/docs-screenshot-manifest.json`.
+The screenshot source is `docs/Features/assets/docs-screenshot-manifest.json`.
 Run the dev server first, then regenerate it with:
 
 ```powershell
@@ -28,4 +30,4 @@ $env:DOCS_SCREENSHOT_BROWSER = 'C:\Program Files (x86)\Microsoft\Edge\Applicatio
 npm run docs:screenshots -- --base-url=http://127.0.0.1:5173 --id=flex-eq-visual-qa
 ```
 
-Use a taller `window.height` in the manifest entry when checking the full fixture grid including compact controls.
+The manifest uses a 1280x1320 viewport, which captures the full four-card fixture grid including compact controls.

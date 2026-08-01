@@ -161,6 +161,7 @@ function TimelineRulerComponent({
       ref={rulerRef}
       className="time-ruler"
       data-ai-id="timeline-ruler"
+      aria-label="Timeline ruler"
       style={{ width, transform: `translateX(-${alignedScrollX}px)` }}
       onMouseDown={onRulerMouseDown}
     >

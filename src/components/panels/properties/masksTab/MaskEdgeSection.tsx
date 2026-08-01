@@ -79,6 +79,7 @@ export function MaskEdgeSection({
             onDragEnd={onBatchEnd}
           />
           <DraggableNumber
+            ariaLabel={`${activeMask.name} feather`}
             value={activeMask.feather}
             onChange={setFeather}
             defaultValue={0}
@@ -118,6 +119,7 @@ export function MaskEdgeSection({
               onDragEnd={onBatchEnd}
             />
             <DraggableNumber
+              ariaLabel={`${activeMask.name} selected edge feather`}
               value={selectedEdgeFeather}
               onChange={setSelectedEdgeFeather}
               defaultValue={0}
@@ -151,6 +153,7 @@ export function MaskEdgeSection({
             value={activeMask.featherQuality ?? 50}
           />
           <DraggableNumber
+            ariaLabel={`${activeMask.name} feather quality`}
             value={activeMask.featherQuality ?? 50}
             onChange={setFeatherQuality}
             defaultValue={50}

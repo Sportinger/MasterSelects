@@ -46,7 +46,6 @@ import type { ProjectFile } from '../../projectFileService';
 
 const log = Logger.create('ProjectSync');
 const MEDIA_PANEL_PROJECT_UI_LOADED_EVENT = 'media-panel-project-ui-loaded';
-const FLASHBOARD_SERVICES = new Set<FlashBoardService>(['piapi', 'evolink', 'cloud', 'elevenlabs']);
 const FLASHBOARD_OUTPUT_TYPES = new Set<FlashBoardOutputType>(['video', 'image', 'audio']);
 const FLASHBOARD_MEDIA_TYPES = new Set<FlashBoardMediaType>(['video', 'image', 'audio']);
 
@@ -59,24 +58,31 @@ function removeLocalStorageKey(key: string): void {
   storage.setItem(key, '');
 }
 
-function normalizeFlashBoardService(value: unknown): FlashBoardService {
-  if (value === 'kieai' || value === 'suno') {
-    return 'cloud';
+function normalizeFlashBoardService(_value: unknown): FlashBoardService {
+  return 'cloud';
+}
+
+function normalizeFlashBoardProviderId(service: unknown, providerId: string): string {
+  if ((service === 'kieai' || service === 'piapi') && (providerId === 'kling-3.0' || providerId === 'kling')) {
+    return 'cloud-kling';
   }
-  return typeof value === 'string' && FLASHBOARD_SERVICES.has(value as FlashBoardService)
-    ? value as FlashBoardService
-    : 'cloud';
+  if (service === 'evolink') {
+    return 'nano-banana-2';
+  }
+  if (service === 'elevenlabs' && providerId === 'elevenlabs-tts') {
+    return 'cloud-elevenlabs-tts';
+  }
+  return providerId;
 }
 
 function normalizeFlashBoardOutputType(
   value: unknown,
-  service: FlashBoardService,
 ): FlashBoardOutputType | undefined {
   if (typeof value === 'string' && FLASHBOARD_OUTPUT_TYPES.has(value as FlashBoardOutputType)) {
     return value as FlashBoardOutputType;
   }
 
-  return service === 'elevenlabs' ? 'audio' : undefined;
+  return undefined;
 }
 
 function normalizeFlashBoardMediaType(value: unknown): FlashBoardMediaType {
@@ -95,11 +101,9 @@ function normalizeFlashBoardRequest(
   return {
     ...request,
     service,
-    providerId: legacyService === 'kieai' && request.providerId === 'kling-3.0'
-      ? 'cloud-kling'
-      : request.providerId,
+    providerId: normalizeFlashBoardProviderId(legacyService, request.providerId),
     version: legacyService === 'kieai' ? 'latest' : request.version,
-    outputType: normalizeFlashBoardOutputType(request.outputType, service),
+    outputType: normalizeFlashBoardOutputType(request.outputType),
     referenceMediaFileIds: Array.isArray(request.referenceMediaFileIds)
       ? request.referenceMediaFileIds.filter((id): id is string => typeof id === 'string')
       : [],
@@ -155,7 +159,11 @@ function normalizeFlashBoardComposer(
     ...defaults,
     ...composer,
     service,
-    outputType: normalizeFlashBoardOutputType(composer.outputType, service) ?? defaults.outputType,
+    providerId: normalizeFlashBoardProviderId(
+      composer.service,
+      composer.providerId ?? defaults.providerId ?? 'cloud-kling',
+    ),
+    outputType: normalizeFlashBoardOutputType(composer.outputType) ?? defaults.outputType,
     mode: typeof composer.mode === 'string' ? composer.mode : defaults.mode,
     duration: normalizeNumber(composer.duration) ?? defaults.duration,
     aspectRatio: typeof composer.aspectRatio === 'string' ? composer.aspectRatio : defaults.aspectRatio,
@@ -230,11 +238,9 @@ function normalizeFlashBoardGenerationMetadata(
   return {
     ...metadata,
     service,
-    providerId: legacyService === 'kieai' && metadata.providerId === 'kling-3.0'
-      ? 'cloud-kling'
-      : metadata.providerId,
+    providerId: normalizeFlashBoardProviderId(legacyService, metadata.providerId),
     version: legacyService === 'kieai' ? 'latest' : metadata.version,
-    outputType: normalizeFlashBoardOutputType(metadata.outputType, service ?? 'cloud'),
+    outputType: normalizeFlashBoardOutputType(metadata.outputType),
     mediaType: metadata.mediaType ? normalizeFlashBoardMediaType(metadata.mediaType) : undefined,
     referenceMediaFileIds: normalizeStringArray(metadata.referenceMediaFileIds),
   };
@@ -399,5 +405,5 @@ export async function hydrateDockFlashboardAndWorkspaceFromProject(projectData: 
 
   useExportStore.getState().hydrateFromProject(projectData.uiState?.exportState);
   hydrateHistoryStateFromProject(projectData.uiState?.history);
-  await useSettingsStore.getState().loadApiKeys();
+  await useSettingsStore.getState().loadIntegrationCredentials();
 }

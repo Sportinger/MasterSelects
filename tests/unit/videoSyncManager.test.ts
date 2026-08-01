@@ -26,6 +26,12 @@ import {
 import { useTimelineStore } from '../../src/stores/timeline';
 import type { FrameContext } from '../../src/services/layerBuilder/types';
 import type { TimelineClip } from '../../src/types/timeline';
+import {
+  getNestedClipContinuityKey,
+  getNestedPreviewRootTrackKey,
+  getNestedPreviewSourceKey,
+  getNestedPreviewTrackKey,
+} from '../../src/services/layerBuilder/nestedPreviewContinuity';
 
 type EngineTestAccess = typeof engine & {
   ensureVideoFrameCached: ReturnType<typeof vi.fn>;
@@ -517,6 +523,8 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
       safeSeekTime: (_video, time) => time,
       activateFreeRunVideo: vi.fn(),
       stopFreeRunVideo: vi.fn(),
+      getPreviewContinuationVideoElement: vi.fn(() => null),
+      rememberPreviewVideo: vi.fn(),
     });
     const ctx = {
       isPlaying: true,
@@ -628,6 +636,8 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
         safeSeekTime: (_video, time) => time,
         activateFreeRunVideo: vi.fn(),
         stopFreeRunVideo: vi.fn(),
+        getPreviewContinuationVideoElement: vi.fn(() => null),
+        rememberPreviewVideo: vi.fn(),
       });
       const ctx = {
         isPlaying: false,
@@ -2308,6 +2318,173 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
 
     expect(handoffs.getPreviewContinuationVideoElement(clip as never, 6.08, nextVideo)).toBeNull();
     vi.useRealTimers();
+  });
+
+  it('reuses a warm nested video across wrapper split ids at nesting level two', () => {
+    vi.useFakeTimers();
+    const handoffs = createHandoffs();
+    const previousVideo = {
+      currentTime: 0.91,
+      readyState: 4,
+      seeking: false,
+      played: { length: 1 },
+    } as HTMLVideoElement;
+    const coldVideo = {
+      currentTime: 0.91,
+      readyState: 1,
+      seeking: true,
+      played: { length: 0 },
+    } as HTMLVideoElement;
+    const file = new File(['video'], 'nested-source.mp4', { type: 'video/mp4' });
+    const trackKey = '["outer-track","nested-comp","inner-track"]';
+    const continuityKey = '["inner-comp","original-video-clip"]';
+    const previousClip = {
+      id: 'nested-outer-a-inner-video',
+      trackId: 'inner-track',
+      file,
+      inPoint: 0,
+      outPoint: 30,
+      source: { mediaFileId: 'media-nested' },
+    } as TimelineClip;
+    const nextClip = {
+      ...previousClip,
+      id: 'nested-outer-b-inner-video',
+      source: { mediaFileId: 'media-nested' },
+    } as TimelineClip;
+
+    handoffs.rememberPreviewVideo(trackKey, previousClip, previousVideo, continuityKey);
+
+    expect(handoffs.getPreviewContinuationVideoElement(
+      nextClip,
+      0.91,
+      coldVideo,
+      { trackKey, continuityKey },
+    )).toBe(previousVideo);
+    expect(handoffs.getPreviewContinuationVideoElement(
+      nextClip,
+      0.91,
+      coldVideo,
+      { trackKey: 'parallel-instance', continuityKey },
+    )).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('derives equal nested continuity scopes for both halves of a split wrapper', () => {
+    const createTree = (wrapperId: string) => {
+      const parent = {
+        id: wrapperId,
+        trackId: 'outer-track',
+        compositionId: 'nested-comp-lvl-2',
+      } as TimelineClip;
+      const childComp = {
+        id: `nested-${wrapperId}-original-inner-comp`,
+        trackId: 'inner-track',
+        compositionId: 'nested-comp-lvl-1',
+      } as TimelineClip;
+      const childVideo = {
+        id: `nested-${childComp.id}-original-video-clip`,
+        trackId: 'deep-video-track',
+      } as TimelineClip;
+      const root = getNestedPreviewRootTrackKey(parent);
+      const childTrack = getNestedPreviewTrackKey(root, parent, childComp);
+      return {
+        trackKey: getNestedPreviewTrackKey(childTrack, childComp, childVideo),
+        continuityKey: getNestedClipContinuityKey(childComp, childVideo),
+      };
+    };
+
+    expect(createTree('outer-a')).toEqual(createTree('outer-b'));
+    const identity = createTree('outer-a');
+    expect(getNestedPreviewSourceKey(identity.trackKey, identity.continuityKey).length).toBeLessThan(80);
+  });
+
+  it('passes the same preview continuation identity through level-two coordinator recursion', () => {
+    const videoA = {
+      currentTime: 0.5,
+      paused: false,
+      seeking: false,
+      readyState: 4,
+      playbackRate: 1,
+      played: { length: 1 },
+      pause: vi.fn(),
+      play: vi.fn(() => Promise.resolve()),
+    } as unknown as HTMLVideoElement;
+    const videoB = { ...videoA, pause: vi.fn(), play: vi.fn(() => Promise.resolve()) } as unknown as HTMLVideoElement;
+    const createWrapper = (wrapperId: string, video: HTMLVideoElement) => {
+      const childCompId = `nested-${wrapperId}-original-child-comp`;
+      const childVideo = {
+        id: `nested-${childCompId}-original-video`,
+        trackId: 'deep-video-track',
+        startTime: 0,
+        duration: 10,
+        inPoint: 0,
+        outPoint: 10,
+        file: new File(['video'], 'same-source.mp4', { type: 'video/mp4' }),
+        source: { type: 'video', mediaFileId: 'same-media', videoElement: video },
+      } as TimelineClip;
+      const childComp = {
+        id: childCompId,
+        trackId: 'child-comp-track',
+        compositionId: 'child-composition',
+        startTime: 0,
+        duration: 10,
+        inPoint: 0,
+        outPoint: 10,
+        isComposition: true,
+        nestedTracks: [{ id: childVideo.trackId, type: 'video', visible: true }],
+        nestedClips: [childVideo],
+      } as TimelineClip;
+      return {
+        id: wrapperId,
+        trackId: 'outer-track',
+        compositionId: 'outer-composition',
+        startTime: 0,
+        duration: 10,
+        inPoint: 0,
+        outPoint: 10,
+        isComposition: true,
+        nestedTracks: [{ id: childComp.trackId, type: 'video', visible: true }],
+        nestedClips: [childComp],
+      } as TimelineClip;
+    };
+    const wrapperA = createWrapper('wrapper-a', videoA);
+    const wrapperB = createWrapper('wrapper-b', videoB);
+    const getPreviewContinuationVideoElement = vi.fn(() => null);
+    const rememberPreviewVideo = vi.fn();
+    const coordinator = new VideoSyncNestedCompositionCoordinator({
+      getClipHtmlVideoElement: clip => clip.source?.videoElement ?? null,
+      getClipRuntimeProvider: () => null,
+      isPlaybackProviderReadyForAudioStart: () => true,
+      shouldCorrectPlaybackAudioDrift: () => false,
+      getPausedWebCodecsProvider: () => null,
+      syncPausedWebCodecsProvider: vi.fn(),
+      shouldSeekPausedWebCodecsProvider: () => false,
+      forceVideoFrameDecode: vi.fn(),
+      isForceDecodeInProgress: () => false,
+      throttledSeek: vi.fn(),
+      maybeRecoverScrubSettle: vi.fn(),
+      beginOrQueueSettleSeek: vi.fn(),
+      safeSeekTime: (_video, time) => time,
+      activateFreeRunVideo: vi.fn(),
+      stopFreeRunVideo: vi.fn(),
+      getPreviewContinuationVideoElement,
+      rememberPreviewVideo,
+    });
+    const ctx = {
+      isPlaying: true,
+      isDraggingPlayhead: false,
+      hasClipDragPreview: false,
+      playbackSpeed: 1,
+      playheadPosition: 0.5,
+    } as FrameContext;
+
+    coordinator.syncNestedCompVideos(wrapperA, ctx);
+    coordinator.syncNestedCompVideos(wrapperB, ctx);
+
+    const firstIdentity = getPreviewContinuationVideoElement.mock.calls[0]?.slice(2);
+    const secondIdentity = getPreviewContinuationVideoElement.mock.calls[1]?.slice(2);
+    expect(firstIdentity).toEqual(secondIdentity);
+    expect(rememberPreviewVideo).toHaveBeenCalledTimes(2);
   });
 
   it('does not reuse the previous element as a paused preview continuation when it is too far from the cut target', () => {

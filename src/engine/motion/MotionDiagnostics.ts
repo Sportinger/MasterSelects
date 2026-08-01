@@ -32,6 +32,16 @@ export interface MotionRendererDiagnostics {
   lastRenderedAt: number | null;
 }
 
+export type MotionTextureDiagnosticCode =
+  | 'TEXTURE_MEDIA_MISSING'
+  | 'TEXTURE_SLOT_EXCEEDED';
+
+export interface MotionTextureDiagnostic {
+  code: MotionTextureDiagnosticCode;
+  message: string;
+  appearanceId?: string;
+}
+
 interface MotionRenderSample {
   layerId: string;
   sourceClipId?: string;
@@ -57,6 +67,8 @@ const rendererDiagnostics: MotionRendererDiagnostics = {
   lastSourceClipId: null,
   lastRenderedAt: null,
 };
+
+const textureDiagnostics: MotionTextureDiagnostic[] = [];
 
 function isActiveAt(clip: TimelineClip, time: number): boolean {
   return time >= clip.startTime && time < clip.startTime + clip.duration;
@@ -182,6 +194,20 @@ export function setMotionRendererCacheCount(cacheCount: number): void {
     : 0;
 }
 
+export function recordMotionTextureDiagnostic(diagnostic: MotionTextureDiagnostic): void {
+  if (textureDiagnostics.some((entry) => (
+    entry.code === diagnostic.code
+    && entry.message === diagnostic.message
+    && entry.appearanceId === diagnostic.appearanceId
+  ))) return;
+  textureDiagnostics.push({ ...diagnostic });
+  if (textureDiagnostics.length > 100) textureDiagnostics.shift();
+}
+
+export function getMotionTextureDiagnostics(): readonly MotionTextureDiagnostic[] {
+  return textureDiagnostics.map((diagnostic) => ({ ...diagnostic }));
+}
+
 export function getMotionRendererDiagnostics(): MotionRendererDiagnostics {
   return { ...rendererDiagnostics };
 }
@@ -202,4 +228,5 @@ export function resetMotionRendererDiagnostics(): void {
     lastSourceClipId: null,
     lastRenderedAt: null,
   } satisfies MotionRendererDiagnostics);
+  textureDiagnostics.length = 0;
 }

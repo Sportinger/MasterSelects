@@ -13,7 +13,10 @@ import type { SlicePipeline } from '../pipeline/SlicePipeline';
 import type { RenderTargetManager } from '../core/RenderTargetManager';
 import type { LayerCollector } from './LayerCollector';
 import type { Compositor } from './Compositor';
-import type { NestedCompRenderer } from './NestedCompRenderer';
+import {
+  resolveNestedPreviewRenderScale,
+  type NestedCompRenderer,
+} from './NestedCompRenderer';
 import type { PerformanceStats } from '../stats/PerformanceStats';
 import type { RenderLoop } from './RenderLoop';
 import { useTimelineStore } from '../../stores/timeline';
@@ -474,6 +477,14 @@ export class RenderDispatcher {
       if (data.layer.source?.nestedComposition) {
         hasNestedComps = true;
         const nc = data.layer.source.nestedComposition;
+        const nestedPreviewRenderScale = resolveNestedPreviewRenderScale({
+          compositionWidth: nc.width,
+          compositionHeight: nc.height,
+          outputWidth: width,
+          outputHeight: height,
+          isPlaying,
+          particleQuality: isExporting ? 'export' : 'preview',
+        });
         const view = d.nestedCompRenderer!.preRender(
           nc.compositionId,
           nc.layers,
@@ -492,6 +503,7 @@ export class RenderDispatcher {
             isExporting ? 'export' : 'nested-preview',
           ),
           data.layer.id,
+          nestedPreviewRenderScale,
         );
         if (view) {
           data.textureView = view;

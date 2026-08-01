@@ -7,17 +7,11 @@ import type {
   StoryboardGenerationReference,
 } from './types';
 
-function routeFor(entry: CatalogEntry): 'hosted' | 'byo' {
-  return entry.service === 'cloud' ? 'hosted' : 'byo';
-}
-
 function isAvailable(
-  entry: CatalogEntry,
+  _entry: CatalogEntry,
   input: ResolveStoryboardGenerationCapabilitiesInput,
 ): boolean {
-  return entry.service === 'cloud'
-    ? input.availability.hostedAvailable
-    : input.availability.byoServices?.[entry.service] === true;
+  return input.availability.hostedAvailable;
 }
 
 function outputTypeFor(entry: CatalogEntry): 'audio' | 'image' | 'video' {
@@ -209,9 +203,7 @@ function submissionSupport(entry: CatalogEntry): {
     submissionSupported: false,
     unsupportedReason: outputType === 'audio'
       ? 'Audio task/response replay is not yet durable across reload.'
-      : entry.service === 'cloud'
-        ? 'This hosted model has no matching exact versioned client/server price quote.'
-      : 'This BYO provider does not guarantee durable server-side idempotency.',
+      : 'This hosted model has no matching exact versioned client/server price quote.',
   };
 }
 
@@ -230,7 +222,7 @@ function capabilityFor(
     outputType: outputTypeFor(entry),
     providerId: entry.providerId,
     references: references.map((reference) => ({ ...reference })),
-    route: routeFor(entry),
+    route: 'hosted',
     service: entry.service,
     version: input.selection?.version ?? entry.versions[0] ?? 'latest',
   };

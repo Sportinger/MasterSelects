@@ -2,7 +2,7 @@
 
 [Back to Index](./README.md)
 
-12x4 live grid overlay for composition triggering, per-slot trim settings, and multi-layer background playback.
+12x4 live grid overlay for composition triggering, per-composition slot-playback trim settings, and multi-layer background playback.
 
 ---
 
@@ -51,8 +51,11 @@ When `window.__ENGINE_FLAGS__.useLiveSlotTrigger` is enabled, the primary click 
 - re-clicking an active slot restarts playback from the slot `trimIn` point
 - clicking an empty slot clears that layer
 - dragging moves or swaps slot assignments
+- clicking a column header activates every filled slot in that column
+- dragging media from the Media panel onto a slot creates and assigns a composition for that media
+- each row has an opacity slider for its live layer; filled slots show a miniature timeline and live time overlay
 - right-clicking a filled slot opens `Open in Editor`, `Map MIDI to Slot`, and `Remove from Slot`
-- `Map MIDI to Slot` opens the MIDI Mapping panel, creates a pending slot trigger mapping, and arms MIDI learn mode for that slot
+- `Map MIDI to Slot` opens the MIDI Mapping panel and arms a pending MIDI-learn target for that slot; a binding is saved after MIDI input is learned
 
 ---
 
@@ -70,7 +73,7 @@ The current defaults are:
 - `trimOut = composition duration`
 - `endBehavior = loop`
 
-These settings are stored in `mediaStore.slotClipSettings` and edited through the `Slot Clip` properties tab.
+These settings are stored in `mediaStore.slotClipSettings`, persisted with the project, and edited through the `Slot Clip` properties tab.
 
 Slot launches use the configured slot window, not the composition editor playhead. The `Slot Clip` tab renders the composition tracks, the active trim window, and the current layer playhead in the same timeline surface so the tab reflects the playback state used by `layerPlaybackManager`.
 
@@ -82,8 +85,8 @@ Each active slot layer runs independently from the global editor timeline.
 
 - background layers keep their own anchor time
 - active layers can keep running even when the editor focus changes
-- background layer audio is muted by default
-- deactivating a layer releases that layer back to the next active slot/editor state
+- background video elements are muted by default
+- deactivating a layer removes its active assignment and cleans up its background media
 
 The background playback plumbing is managed by `layerPlaybackManager`.
 
@@ -91,7 +94,7 @@ The background playback plumbing is managed by `layerPlaybackManager`.
 
 ## Warm Decks
 
-When `window.__ENGINE_FLAGS__.useWarmSlotDecks` is enabled, the grid can prepare reusable slot-owned playback decks before activation.
+Warm decks are implemented but disabled by default. When `window.__ENGINE_FLAGS__.useWarmSlotDecks` is enabled, the grid can prepare reusable slot-owned playback decks before activation.
 
 Deck badges use these states:
 

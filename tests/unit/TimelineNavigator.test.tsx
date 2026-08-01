@@ -26,6 +26,10 @@ describe('TimelineNavigator', () => {
       />,
     );
 
+    expect(container.querySelector('.timeline-navigator')).toHaveAttribute(
+      'data-guided-target',
+      'timeline-navigator',
+    );
     const thumb = container.querySelector<HTMLElement>('.timeline-navigator-thumb')!;
     expect(Number.parseFloat(thumb.style.width)).toBeCloseTo(181.82, 2);
     expect(Number.parseFloat(thumb.style.left)).toBeCloseTo(18.18, 2);

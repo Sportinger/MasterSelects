@@ -263,6 +263,54 @@ export const motionDesignToolDefinitions: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'saveMotionAppearancePreset',
+      description: 'Save a motion-shape clip appearance stack as a named user-library preset. Texture/media fills cannot be saved.',
+      parameters: { type: 'object', properties: { clipId: { type: 'string' }, name: { type: 'string' } }, required: ['clipId', 'name'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'listMotionAppearancePresets',
+      description: 'List saved user-library motion appearance presets.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'applyMotionAppearancePreset',
+      description: 'Apply a saved motion appearance preset to a motion-shape clip, replacing or appending its appearance stack.',
+      parameters: { type: 'object', properties: { clipId: { type: 'string' }, presetId: { type: 'string' }, mode: { type: 'string', enum: ['replace', 'append'] } }, required: ['clipId', 'presetId'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'saveMotionTemplate',
+      description: 'Capture one or up to eight rendered motion-shape clips, including appearance stacks, modifiers, keyframes, expressions, internal parent links, and texture media dependencies, as a named categorized user-library .msmotion template. Provide exactly one of clipId or clipIds.',
+      parameters: { type: 'object', properties: { clipId: { type: 'string' }, clipIds: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 8 }, name: { type: 'string' }, category: { type: 'string' } }, required: ['name'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'listMotionTemplates',
+      description: 'List saved user-library motion clip templates and their dependency summaries.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'applyMotionTemplate',
+      description: 'Instantiate one saved motion clip template onto an unlocked video track at the requested timeline time as one undoable operation. Missing texture media is reported and applied without its media binding.',
+      parameters: { type: 'object', properties: { templateId: { type: 'string' }, trackId: { type: 'string' }, startTime: { type: 'number' } }, required: ['templateId', 'trackId', 'startTime'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'setMotionParent',
       description: 'Atomically set or clear a 2D clip parent at the current playhead while preserving the child world transform. Cycles, missing clips, locked children, mixed 2D/3D relationships, and singular parent transforms fail closed.',
       parameters: {
@@ -442,6 +490,25 @@ export const motionDesignToolDefinitions: ToolDefinition[] = [
           targetPath: { type: 'string', enum: ['replicator.offset.position.x', 'replicator.offset.position.y', 'replicator.offset.rotation', 'replicator.offset.scale.x', 'replicator.offset.scale.y', 'replicator.offset.opacity'], description: 'Numeric Motion Replicator path to modify.' }, targetOperation: { type: 'string', enum: ['add', 'multiply'] }, targetAmount: { type: 'number' },
           falloffShapeClipId: { type: 'string' }, falloffFeather: { type: 'number', minimum: 0 }, falloffInvert: { type: 'boolean' }, falloffClip: { type: 'boolean' },
         }, required: ['operation', 'clipId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'setMotionExpression',
+      description: 'Set, replace, or remove one deterministic Motion Replicator expression binding. Expressions can use time, index, count, sin, cos, and random(seed, index); expression values replace keyframed and modifier-derived values for their target path.',
+      parameters: {
+        type: 'object',
+        properties: {
+          clipId: { type: 'string', description: 'The motion-shape clip id.' },
+          operation: { type: 'string', enum: ['set', 'remove'] },
+          path: { type: 'string', enum: ['replicator.offset.position.x', 'replicator.offset.position.y', 'replicator.offset.rotation', 'replicator.offset.scale.x', 'replicator.offset.scale.y', 'replicator.offset.opacity'] },
+          source: { type: 'string', description: 'Required for operation=set.' },
+          fallback: { type: 'number', description: 'Finite replacement value used if render-time evaluation fails. Defaults to 0.' },
+          enabled: { type: 'boolean', description: 'Defaults to true for operation=set.' },
+        },
+        required: ['clipId', 'operation', 'path'],
       },
     },
   },

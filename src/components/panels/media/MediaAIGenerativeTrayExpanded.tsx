@@ -19,10 +19,7 @@ interface MediaAIGenerativeTrayExpandedProps {
 }
 
 function getHostedInitialProviderId(service: string | undefined, providerId: string | undefined): string {
-  if (service === 'elevenlabs' && providerId === 'elevenlabs-tts') {
-    return 'cloud-elevenlabs-tts';
-  }
-
+  void service;
   return providerId ?? DEFAULT_FLASHBOARD_PROVIDER_ID;
 }
 

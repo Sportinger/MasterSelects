@@ -24,7 +24,7 @@ describe('FlashBoard model-authored activity narration', () => {
     vi.unstubAllGlobals();
   });
 
-  it('normalizes local completion rounds without leaking narration into the final answer', async () => {
+  it('normalizes completion rounds without leaking narration into the final answer', async () => {
     const activity: AgentActivityEventInput[] = [];
     const complete = vi.fn()
       .mockResolvedValueOnce({
@@ -39,7 +39,7 @@ describe('FlashBoard model-authored activity narration', () => {
     const response = await runChatCompletionToolLoop(
       [{ role: 'user', content: 'Inspect.' }],
       complete,
-      'Lemonade',
+      'AI',
       8_000,
       undefined,
       false,
@@ -79,7 +79,7 @@ describe('FlashBoard model-authored activity narration', () => {
           toolCalls: [{ id: 'inspect-1', name: 'getTimelineState', arguments: '{}' }],
         })
         .mockResolvedValueOnce({ content: 'Inspection failed.', toolCalls: [] }),
-      'Lemonade',
+      'AI',
       8_000,
       undefined,
       false,

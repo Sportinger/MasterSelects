@@ -3,10 +3,6 @@ import { describe, expect, it } from 'vitest';
 import { getCatalogEntries } from '../../src/services/flashboard/FlashBoardModelCatalog';
 import { getFlashBoardPriceEstimate } from '../../src/services/flashboard/FlashBoardPricing';
 import {
-  EVOLINK_NANO_BANANA_2_MODEL,
-  EVOLINK_NANO_BANANA_2_PROVIDER_ID,
-} from '../../src/services/evolinkService';
-import {
   DEFAULT_ELEVENLABS_MODEL_ID,
   DEFAULT_ELEVENLABS_OUTPUT_FORMAT,
   DEFAULT_ELEVENLABS_VOICE_SETTINGS,
@@ -14,38 +10,30 @@ import {
 } from '../../src/stores/flashboardStore/defaults';
 
 describe('FlashBoard audio catalog contract', () => {
-  it('exposes EvoLink Nano Banana 2 as an image provider', () => {
-    const entry = getCatalogEntries().find((candidate) => candidate.providerId === EVOLINK_NANO_BANANA_2_PROVIDER_ID);
+  it('exposes Nano Banana 2 only through the hosted service', () => {
+    const entry = getCatalogEntries().find((candidate) => candidate.providerId === 'nano-banana-2');
 
     expect(entry).toMatchObject({
-      service: 'evolink',
-      providerId: EVOLINK_NANO_BANANA_2_PROVIDER_ID,
+      service: 'cloud',
+      providerId: 'nano-banana-2',
       outputType: 'image',
       supportsTextToImage: true,
       supportsTextToVideo: false,
       supportsImageToVideo: false,
-      versions: [EVOLINK_NANO_BANANA_2_MODEL],
       maxReferenceImages: 14,
     });
   });
 
-  it('does not invent a local EvoLink cost estimate when provider pricing is credit-account based', () => {
-    expect(
-      getFlashBoardPriceEstimate({
-        providerId: EVOLINK_NANO_BANANA_2_PROVIDER_ID,
-        service: 'evolink',
-        outputType: 'image',
-        imageSize: '2K',
-      }),
-    ).toBeNull();
+  it('contains no browser-direct provider entries', () => {
+    expect(getCatalogEntries().every((entry) => entry.service === 'cloud')).toBe(true);
   });
 
-  it('exposes ElevenLabs as an audio generation provider', () => {
-    const entry = getCatalogEntries().find((candidate) => candidate.providerId === 'elevenlabs-tts');
+  it('exposes ElevenLabs only as a hosted audio generation provider', () => {
+    const entry = getCatalogEntries().find((candidate) => candidate.providerId === 'cloud-elevenlabs-tts');
 
     expect(entry).toMatchObject({
-      service: 'elevenlabs',
-      providerId: 'elevenlabs-tts',
+      service: 'cloud',
+      providerId: 'cloud-elevenlabs-tts',
       outputType: 'audio',
       supportsTextToAudio: true,
       supportsTextToVideo: false,
@@ -55,11 +43,11 @@ describe('FlashBoard audio catalog contract', () => {
     });
   });
 
-  it('does not estimate Kie or hosted credits for ElevenLabs audio', () => {
+  it('does not invent a preflight estimate for hosted ElevenLabs audio', () => {
     expect(
       getFlashBoardPriceEstimate({
-        providerId: 'elevenlabs-tts',
-        service: 'elevenlabs',
+        providerId: 'cloud-elevenlabs-tts',
+        service: 'cloud',
         outputType: 'audio',
       }),
     ).toBeNull();

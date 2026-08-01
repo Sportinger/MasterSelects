@@ -108,56 +108,6 @@ const CONTROL_TOOLS = [
       timeoutMs: { type: 'number', minimum: 1000, maximum: 300000 },
     }, ['callId']),
   },
-  {
-    name: 'bridge_send_chat_message',
-    description: 'Run one complete turn through the real MasterSelects in-app chat agent and return its response, tool calls, results, and durable run trace.',
-    inputSchema: chatInputSchema({
-      confirm: { type: 'boolean', default: false, description: 'Required because the provider call may cost credits and normal mode may edit the timeline.' },
-      dryRun: { type: 'boolean', default: false },
-      idempotencyKey: { type: 'string' },
-      persistToChat: { type: 'boolean', default: true },
-      toolExecutionMode: { type: 'string', enum: ['normal', 'read-only'], default: 'normal' },
-    }),
-  },
-  {
-    name: 'bridge_compare_chat_prompts',
-    description: 'Run the same prompt through legacy-v1 and v2 in enforced read-only mode, returning both complete traces. This makes two provider calls.',
-    inputSchema: chatInputSchema({
-      confirm: { type: 'boolean', default: false, description: 'Required because comparison makes two provider calls.' },
-      dryRun: { type: 'boolean', default: false },
-    }),
-  },
-  {
-    name: 'bridge_list_chat_runs',
-    description: 'List durable UI, bridge, MCP, and test chat-agent runs from the selected browser session.',
-    inputSchema: objectSchema({
-      limit: { type: 'number', minimum: 1, maximum: 2000, default: 100 },
-      sessionId: { type: 'string' },
-      source: { type: 'string', enum: ['ui', 'bridge', 'mcp', 'test'] },
-    }),
-    annotations: readOnlyAnnotations(),
-  },
-  {
-    name: 'bridge_get_chat_run',
-    description: 'Read one durable chat-agent run including exact system prompt, model response, tool calls, results, status, and timing.',
-    inputSchema: objectSchema({
-      runId: { type: 'string' },
-      sessionId: { type: 'string' },
-    }, ['runId']),
-    annotations: readOnlyAnnotations(),
-  },
-  {
-    name: 'bridge_get_chat_system_prompt',
-    description: 'Render the exact built-in legacy-v1 or v2 system prompt with optional task playbook and live editor context, without calling a model.',
-    inputSchema: objectSchema({
-      includeContext: { type: 'boolean', default: true },
-      includePlaybook: { type: 'boolean', default: true },
-      prompt: { type: 'string', description: 'Optional task text used to select a v2 playbook.' },
-      promptVersion: { type: 'string', enum: ['v2', 'legacy-v1'], default: 'v2' },
-      sessionId: { type: 'string' },
-    }),
-    annotations: readOnlyAnnotations(),
-  },
 ];
 
 const server = new Server(
@@ -266,55 +216,6 @@ async function callControlTool(name, args) {
           timeoutMs: normalizeTimeout(args.timeoutMs, defaultTimeoutMs),
         },
       });
-    case 'bridge_send_chat_message': {
-      const timeoutMs = normalizeTimeout(args.timeoutMs, 180_000);
-      return bridgeFetch('/api/agent-chat/turn', {
-        method: 'POST',
-        timeoutMs,
-        body: {
-          ...readChatArguments(args),
-          confirm: args.confirm === true,
-          dryRun: args.dryRun === true,
-          idempotencyKey: optionalString(args.idempotencyKey) || createIdempotencyKey(),
-          persistToChat: args.persistToChat !== false,
-          sessionId: optionalString(args.sessionId) || selectedSessionId,
-          timeoutMs,
-          toolExecutionMode: args.toolExecutionMode === 'read-only' ? 'read-only' : 'normal',
-        },
-      });
-    }
-    case 'bridge_compare_chat_prompts': {
-      const timeoutMs = normalizeTimeout(args.timeoutMs, 300_000);
-      return bridgeFetch('/api/agent-chat/compare', {
-        method: 'POST',
-        timeoutMs,
-        body: {
-          ...readChatArguments(args),
-          confirm: args.confirm === true,
-          dryRun: args.dryRun === true,
-          sessionId: optionalString(args.sessionId) || selectedSessionId,
-          timeoutMs,
-        },
-      });
-    }
-    case 'bridge_list_chat_runs':
-      return bridgeFetch(toQuery('/api/agent-chat/runs', {
-        limit: normalizeLimit(args.limit),
-        sessionId: optionalString(args.sessionId) || selectedSessionId,
-        source: optionalString(args.source),
-      }));
-    case 'bridge_get_chat_run':
-      return bridgeFetch(toQuery(`/api/agent-chat/runs/${encodeURIComponent(requiredString(args.runId, 'runId'))}`, {
-        sessionId: optionalString(args.sessionId) || selectedSessionId,
-      }));
-    case 'bridge_get_chat_system_prompt':
-      return bridgeFetch(toQuery('/api/agent-chat/prompt', {
-        includeContext: args.includeContext === false ? 'false' : 'true',
-        includePlaybook: args.includePlaybook === false ? 'false' : 'true',
-        prompt: optionalString(args.prompt),
-        promptVersion: args.promptVersion === 'legacy-v1' ? 'legacy-v1' : 'v2',
-        sessionId: optionalString(args.sessionId) || selectedSessionId,
-      }));
     default:
       throw new Error(`Unknown bridge control tool: ${name}`);
   }
@@ -328,14 +229,25 @@ async function callRemoteTool(name, args) {
     throw new Error(`MasterSelects tool "${name}" is not available on the ${defaultSurface} surface.`);
   }
 
+  const {
+    confirm,
+    dryRun,
+    idempotencyKey,
+    timeoutMs,
+    ...toolArgs
+  } = args;
+  const resolvedTimeoutMs = normalizeTimeout(timeoutMs, defaultTimeoutMs);
   return bridgeFetch('/api/agent-control/call', {
     method: 'POST',
+    timeoutMs: resolvedTimeoutMs,
     body: {
-      args,
-      idempotencyKey: createIdempotencyKey(),
+      args: toolArgs,
+      confirm: confirm === true,
+      dryRun: dryRun === true,
+      idempotencyKey: optionalString(idempotencyKey) || createIdempotencyKey(),
       sessionId: selectedSessionId,
       surface: defaultSurface,
-      timeoutMs: defaultTimeoutMs,
+      timeoutMs: resolvedTimeoutMs,
       tool: name,
     },
   });
@@ -359,12 +271,45 @@ function toMcpTool(descriptor) {
   return {
     name: definition.name,
     description: definition.description,
-    inputSchema: definition.parameters,
+    inputSchema: withExecutionControls(definition.parameters, policy),
     annotations: {
       readOnlyHint: policy.readOnly === true,
       destructiveHint: policy.riskLevel === 'high' || policy.requiresConfirmation === true,
       idempotentHint: policy.readOnly === true,
       openWorldHint: policy.localFileAccess === true || policy.sensitiveDataAccess === true,
+    },
+  };
+}
+
+function withExecutionControls(parameters, policy) {
+  const schema = isRecord(parameters) ? parameters : objectSchema({});
+  const properties = isRecord(schema.properties) ? schema.properties : {};
+  return {
+    ...schema,
+    type: 'object',
+    properties: {
+      ...properties,
+      confirm: {
+        type: 'boolean',
+        default: false,
+        description: policy.requiresConfirmation === true
+          ? 'Required to execute this tool because its policy requires confirmation.'
+          : 'Explicitly confirm execution.',
+      },
+      dryRun: {
+        type: 'boolean',
+        default: false,
+        description: 'Validate and preview the call without applying editor changes.',
+      },
+      idempotencyKey: {
+        type: 'string',
+        description: 'Optional stable key used to deduplicate retries.',
+      },
+      timeoutMs: {
+        type: 'number',
+        minimum: 1000,
+        maximum: 300000,
+      },
     },
   };
 }
@@ -464,49 +409,6 @@ function objectSchema(properties, required = []) {
     properties,
     required,
     additionalProperties: false,
-  };
-}
-
-function chatInputSchema(extraProperties = {}) {
-  return objectSchema({
-    includeContext: { type: 'boolean', default: true },
-    includeHistory: { type: 'boolean', default: true },
-    includePlaybook: { type: 'boolean', default: true },
-    model: { type: 'string' },
-    openAiReasoningEffort: { type: 'string', enum: ['none', 'low', 'medium', 'high', 'xhigh'] },
-    prompt: { type: 'string' },
-    promptVersion: { type: 'string', enum: ['v2', 'legacy-v1'], default: 'v2' },
-    provider: { type: 'string', enum: ['kernel', 'kie', 'lemonade'] },
-    referenceMediaFileIds: {
-      type: 'array',
-      items: { type: 'string' },
-      maxItems: 4,
-      description: 'Media-panel image IDs to attach to the first model turn as visual references.',
-    },
-    sessionId: { type: 'string' },
-    temperature: { type: 'number', minimum: 0, maximum: 2 },
-    timeoutMs: { type: 'number', minimum: 1000, maximum: 300000 },
-    ...extraProperties,
-  }, ['prompt']);
-}
-
-function readChatArguments(args) {
-  return {
-    includeContext: args.includeContext !== false,
-    includeHistory: args.includeHistory !== false,
-    includePlaybook: args.includePlaybook !== false,
-    model: optionalString(args.model),
-    openAiReasoningEffort: optionalString(args.openAiReasoningEffort),
-    prompt: requiredString(args.prompt, 'prompt'),
-    promptVersion: args.promptVersion === 'legacy-v1' ? 'legacy-v1' : 'v2',
-    provider: optionalString(args.provider),
-    referenceMediaFileIds: Array.isArray(args.referenceMediaFileIds)
-      ? args.referenceMediaFileIds
-        .filter(value => typeof value === 'string' && value.trim())
-        .map(value => value.trim())
-        .slice(0, 4)
-      : undefined,
-    temperature: typeof args.temperature === 'number' ? args.temperature : undefined,
   };
 }
 

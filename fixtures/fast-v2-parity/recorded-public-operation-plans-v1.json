@@ -1,0 +1,227 @@
+{
+  "schemaVersion": 1,
+  "claimScope": "controlled-public-boundary-mechanics-only",
+  "recordingProvenance": "sanitized-public-operation-plan-shapes-derived-from-the-existing-wp1-parity-corpus",
+  "cases": [
+    {
+      "caseId": "multi-range-linked",
+      "referenceFixture": "fixtures/kernel-operation-parity/linked-generated-identity-plan-v1.json",
+      "sanitizedInput": {
+        "inputId": "multi-range-linked-sanitized-v1",
+        "request": "Remove the two synthetic marked ranges from the linked source clip.",
+        "target": {
+          "clipId": "video-source",
+          "ranges": [
+            { "start": 3.25, "end": 5.5 },
+            { "start": 9.75, "end": 12 }
+          ],
+          "withLinked": true
+        },
+        "compactSnapshot": {
+          "schemaVersion": 1,
+          "timelineRevision": 7,
+          "stateFingerprint": "sha256:44bacb82614b2ed0bc1ab9b3170acbad553566d9c69106d8687c76fac539e2f5",
+          "payload": {
+            "duration": 15,
+            "inPoint": null,
+            "outPoint": null,
+            "playheadPosition": 0,
+            "selectedClipIds": ["video-source"],
+            "tracks": [
+              {
+                "id": "video-track",
+                "locked": false,
+                "muted": false,
+                "name": "Synthetic Video Track",
+                "solo": false,
+                "type": "video",
+                "visible": true
+              },
+              {
+                "id": "audio-track",
+                "locked": false,
+                "muted": false,
+                "name": "Synthetic Audio Track",
+                "solo": false,
+                "type": "audio",
+                "visible": true
+              }
+            ],
+            "clips": [
+              {
+                "id": "video-source",
+                "trackId": "video-track",
+                "name": "Synthetic Video Source",
+                "startTime": 0,
+                "duration": 15,
+                "inPoint": 0,
+                "outPoint": 15,
+                "linkedClipId": "audio-source"
+              },
+              {
+                "id": "audio-source",
+                "trackId": "audio-track",
+                "name": "Synthetic Audio Source",
+                "startTime": 0,
+                "duration": 15,
+                "inPoint": 0,
+                "outPoint": 15,
+                "linkedClipId": "video-source"
+              }
+            ]
+          }
+        },
+        "expectedStateFingerprint": "sha256:22f6927c8e2acae42597b4b7306894c32621e10259c803c84333ea0502ad39c0"
+      },
+      "fastV2RecordedSteps": [
+        {
+          "arguments": {
+            "clipId": "video-source",
+            "times": [3.25, 5.5, 9.75, 12],
+            "withLinked": true
+          },
+          "operationId": "timeline.segment.split.v1",
+          "sequence": 1,
+          "stepId": "split"
+        },
+        {
+          "arguments": {
+            "clipIds": [
+              {
+                "$result": {
+                  "path": ["data", "segments", "videoClipIds", 1],
+                  "stepId": "split"
+                }
+              },
+              {
+                "$result": {
+                  "path": ["data", "segments", "videoClipIds", 3],
+                  "stepId": "split"
+                }
+              }
+            ],
+            "withLinked": true
+          },
+          "operationId": "timeline.segment.delete-many.v1",
+          "sequence": 2,
+          "stepId": "delete"
+        }
+      ]
+    },
+    {
+      "caseId": "floating-interior-linked",
+      "referenceFixture": "fixtures/kernel-operation-parity/linked-generated-identity-edge-cases-v1.json",
+      "referenceCaseId": "floating-interior-range-v1",
+      "fastV2RecordedSteps": [
+        {
+          "arguments": {
+            "clipId": "video-source",
+            "times": [0.3000001, 0.7000002],
+            "withLinked": true
+          },
+          "operationId": "timeline.segment.split.v1",
+          "sequence": 1,
+          "stepId": "split"
+        },
+        {
+          "arguments": {
+            "clipIds": [
+              {
+                "$result": {
+                  "path": ["data", "segments", "videoClipIds", 1],
+                  "stepId": "split"
+                }
+              }
+            ],
+            "withLinked": true
+          },
+          "operationId": "timeline.segment.delete-many.v1",
+          "sequence": 2,
+          "stepId": "delete"
+        }
+      ]
+    },
+    {
+      "caseId": "leading-boundary-linked",
+      "referenceFixture": "fixtures/kernel-operation-parity/linked-generated-identity-edge-cases-v1.json",
+      "referenceCaseId": "leading-boundary-range-v1",
+      "fastV2RecordedSteps": [
+        {
+          "arguments": {
+            "clipId": "video-source",
+            "times": [0.2],
+            "withLinked": true
+          },
+          "operationId": "timeline.segment.split.v1",
+          "sequence": 1,
+          "stepId": "split"
+        },
+        {
+          "arguments": {
+            "clipIds": [
+              {
+                "$result": {
+                  "path": ["data", "segments", "videoClipIds", 0],
+                  "stepId": "split"
+                }
+              }
+            ],
+            "withLinked": true
+          },
+          "operationId": "timeline.segment.delete-many.v1",
+          "sequence": 2,
+          "stepId": "delete"
+        }
+      ]
+    },
+    {
+      "caseId": "trailing-boundary-linked",
+      "referenceFixture": "fixtures/kernel-operation-parity/linked-generated-identity-edge-cases-v1.json",
+      "referenceCaseId": "trailing-boundary-range-v1",
+      "fastV2RecordedSteps": [
+        {
+          "arguments": {
+            "clipId": "video-source",
+            "times": [0.8],
+            "withLinked": true
+          },
+          "operationId": "timeline.segment.split.v1",
+          "sequence": 1,
+          "stepId": "split"
+        },
+        {
+          "arguments": {
+            "clipIds": [
+              {
+                "$result": {
+                  "path": ["data", "segments", "videoClipIds", 1],
+                  "stepId": "split"
+                }
+              }
+            ],
+            "withLinked": true
+          },
+          "operationId": "timeline.segment.delete-many.v1",
+          "sequence": 2,
+          "stepId": "delete"
+        }
+      ]
+    },
+    {
+      "caseId": "whole-clip-linked",
+      "referenceFixture": "fixtures/kernel-operation-parity/linked-generated-identity-edge-cases-v1.json",
+      "referenceCaseId": "whole-clip-boundary-range-v1",
+      "fastV2RecordedSteps": [
+        {
+          "arguments": {
+            "clipIds": ["video-source"],
+            "withLinked": true
+          },
+          "operationId": "timeline.segment.delete-many.v1",
+          "sequence": 1,
+          "stepId": "delete"
+        }
+      ]
+    }
+  ]
+}

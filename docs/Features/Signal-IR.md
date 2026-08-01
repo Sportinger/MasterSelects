@@ -4,14 +4,12 @@
 
 Signal IR is the contract layer for turning any imported or generated file into typed signals before timeline, node graph, render, or export adapters decide how to use it.
 
-## Current Slice
-
-The current implementation is the integrated architecture slice for issue #134:
+Signal IR includes:
 
 - `src/signals/` defines `SignalKind`, `SignalAsset`, `SignalRef`, `SignalArtifact`, `SignalGraph`, `SignalOperatorDescriptor`, guards, normalization helpers, and mappings from legacy media/node graph types.
 - `src/runtime/capabilities/` defines fail-closed runtime capabilities such as `file.read`, `artifact.write`, `network.fetch`, `gpu.compute`, and `timeline.mutate`.
 - `src/extensions/` defines provider manifests and a registry for discovering importer/analyzer/operator/renderer/exporter providers by file signature, signal kind, runtime, or capability.
-- `src/importers/` defines the universal import orchestrator. CSV files become `table`/`metadata`/`binary` SignalAssets, unsupported files become binary SignalAssets, and known legacy video/audio/image/model/vector paths remain on the established media pipeline.
+- `src/importers/` defines the universal import orchestrator. CSV files become `table`/`metadata`/`binary` SignalAssets; JSON and JSONL files become `metadata`/`binary` SignalAssets; unsupported files become binary SignalAssets; and known legacy video/audio/image/model/vector paths remain on the established media pipeline.
 - `src/artifacts/` defines content-addressed SHA-256 artifact storage with project-local `Cache/artifacts/...` storage, IndexedDB manifest indexing, and an IndexedDB byte fallback for imports that happen outside an open project folder.
 - `src/runtime/worker/` defines the capability-ready worker job host/client protocol for long-running runtime providers.
 - `src/runtime/wasm/` defines the Wasm importer host adapter for direct and jco-style component exports.
@@ -48,7 +46,7 @@ The compatibility mappings keep current concepts bridgeable:
 | CSV | `table`, `metadata`, `binary` |
 | Unknown file | `binary`, `metadata` |
 
-Unknown files now become valid binary `SignalAsset`s instead of being rejected by the Media Panel import path.
+Unknown files become valid binary `SignalAsset`s. JSON and JSONL use the builtin structured-data importer; malformed JSON falls back to binary preservation.
 
 ## Timeline Renderer Adapters
 
@@ -56,7 +54,7 @@ Signal timeline placement is adapter-driven:
 
 | Adapter | Signal refs | Timeline source |
 |---|---|---|
-| `masterselects.renderer.signal-model` | `mesh`, `geometry`, `scene`, `binary` with `.obj`, `.gltf`, or `.glb` artifacts | `model` |
+| `masterselects.renderer.signal-model` | `mesh`, `geometry`, `scene`, `binary` with `.obj`, `.fbx`, `.gltf`, or `.glb` artifacts | `model` |
 | `masterselects.renderer.signal-gaussian-splat` | `point-cloud`, `geometry`, `scene`, `binary` with `.ply`, `.splat`, `.ksplat`, `.spz`, `.sog`, `.lcc`, or `.zip` artifacts | `gaussian-splat` |
 | `masterselects.renderer.signal-text-summary` | fallback for all signal kinds | `text` |
 
@@ -66,4 +64,4 @@ The file-based adapters require the artifact bytes to exist in the project artif
 
 Capabilities default to denial. A provider can only run a job if its manifest grants every requested capability. Unknown providers and unknown capabilities fail closed.
 
-No new generated-code or plugin path should execute in the main browser context. Worker and Wasm execution are the runtime boundaries for provider work; the current builtin CSV and binary importers are deliberately small host-side adapters used to connect the architecture before external providers are loaded.
+The worker runtime provides the off-main-thread job boundary for worker providers. The Wasm importer host adapts direct and jco-style component exports. The builtin host-side importers are CSV, JSON/JSONL, and binary fallback.

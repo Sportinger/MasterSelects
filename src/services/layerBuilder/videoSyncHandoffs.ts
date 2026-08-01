@@ -3,69 +3,33 @@ import { renderHostPort } from '../render/renderHostPort';
 import { scrubSettleState } from '../scrubSettleState';
 import { Logger } from '../logger';
 import type { FrameContext } from './types';
+import {
+  VideoSyncPreviewContinuationManager,
+  type PreviewContinuationOptions,
+  type VideoSyncTrackState,
+} from './videoSyncPreviewContinuations';
+
+export type { PreviewContinuationOptions, VideoSyncTrackState } from './videoSyncPreviewContinuations';
 
 const log = Logger.create('CutTransition');
 
-export interface VideoSyncTrackState {
-  clipId: string;
-  fileId: string;
-  file: File;
-  videoElement: HTMLVideoElement;
-  outPoint: number;
-}
-
 type GetClipHtmlVideoElement = (clip: TimelineClip) => HTMLVideoElement | null;
-
-const PREVIEW_CONTINUATION_MS = 180;
-const PREVIEW_CONTINUATION_TARGET_EPSILON = 0.22;
-const PREVIEW_CONTINUATION_OWN_READY_EPSILON = 0.12;
 
 function getClipSourceKey(clip: TimelineClip): string {
   return clip.source?.mediaFileId || clip.mediaFileId || '';
-}
-
-function canUsePreviewContinuationVideo(
-  video: HTMLVideoElement,
-  targetTime: number,
-  tolerance: number = PREVIEW_CONTINUATION_TARGET_EPSILON
-): boolean {
-  return Math.abs(video.currentTime - targetTime) <= tolerance && !video.seeking;
-}
-
-function clipNeedsPreviewContinuation(
-  video: HTMLVideoElement,
-  targetTime: number
-): boolean {
-  const ownDrift = Math.abs(video.currentTime - targetTime);
-  const hasPlayed = (video.played?.length ?? 0) > 0;
-  return (
-    !hasPlayed ||
-    video.readyState < 2 ||
-    video.seeking ||
-    ownDrift > PREVIEW_CONTINUATION_OWN_READY_EPSILON
-  );
-}
-
-function isSameSourceSequentialClip(clip: TimelineClip, prev: VideoSyncTrackState): boolean {
-  const clipFileId = getClipSourceKey(clip);
-  const sameSource = clipFileId ? clipFileId === prev.fileId : clip.file === prev.file;
-  return sameSource && Math.abs(clip.inPoint - prev.outPoint) <= 0.1;
 }
 
 export class VideoSyncHandoffManager {
   private lastTrackState = new Map<string, VideoSyncTrackState>();
   private activeHandoffs = new Map<string, HTMLVideoElement>();
   private handoffElements = new Set<HTMLVideoElement>();
-  private previewContinuationElements = new Map<string, {
-    videoElement: HTMLVideoElement;
-    expiresAt: number;
-  }>();
+  private previewContinuations = new VideoSyncPreviewContinuationManager();
 
   reset(): void {
     this.lastTrackState.clear();
     this.activeHandoffs.clear();
     this.handoffElements.clear();
-    this.previewContinuationElements.clear();
+    this.previewContinuations.reset();
   }
 
   setTrackState(trackId: string, state: VideoSyncTrackState): void {
@@ -81,11 +45,8 @@ export class VideoSyncHandoffManager {
   }
 
   getRetainedVideoElements(now: number = performance.now()): ReadonlySet<HTMLVideoElement> {
-    this.clearExpiredPreviewContinuations(now);
     const retained = new Set(this.handoffElements);
-    for (const entry of this.previewContinuationElements.values()) {
-      retained.add(entry.videoElement);
-    }
+    this.previewContinuations.getRetainedVideoElements(now).forEach(video => retained.add(video));
     return retained;
   }
 
@@ -200,56 +161,35 @@ export class VideoSyncHandoffManager {
   getPreviewContinuationVideoElement(
     clip: TimelineClip,
     targetTime: number,
-    ownVideo: HTMLVideoElement | null
+    ownVideo: HTMLVideoElement | null,
+    options: PreviewContinuationOptions = {},
   ): HTMLVideoElement | null {
-    if (!ownVideo || !clip.trackId) {
-      return null;
-    }
-
     const activeHandoff = this.activeHandoffs.get(clip.id);
-    if (activeHandoff) {
-      return activeHandoff;
-    }
+    if (activeHandoff) return activeHandoff;
+    const trackKey = options.trackKey ?? clip.trackId;
+    return this.previewContinuations.get(
+      clip,
+      targetTime,
+      ownVideo,
+      trackKey ? this.lastTrackState.get(trackKey) : undefined,
+      options,
+    );
+  }
 
-    const now = performance.now();
-    this.clearExpiredPreviewContinuations(now);
-
-    if (!clipNeedsPreviewContinuation(ownVideo, targetTime)) {
-      this.previewContinuationElements.delete(clip.id);
-      return null;
-    }
-
-    const stored = this.previewContinuationElements.get(clip.id);
-    if (
-      stored &&
-      stored.videoElement !== ownVideo &&
-      canUsePreviewContinuationVideo(stored.videoElement, targetTime)
-    ) {
-      return stored.videoElement;
-    }
-
-    const prev = this.lastTrackState.get(clip.trackId);
-    if (!prev || prev.videoElement === ownVideo) {
-      this.previewContinuationElements.delete(clip.id);
-      return null;
-    }
-
-    const canReusePrevious =
-      prev.clipId === clip.id ||
-      isSameSourceSequentialClip(clip, prev);
-    if (
-      !canReusePrevious ||
-      !canUsePreviewContinuationVideo(prev.videoElement, targetTime)
-    ) {
-      this.previewContinuationElements.delete(clip.id);
-      return null;
-    }
-
-    this.previewContinuationElements.set(clip.id, {
-      videoElement: prev.videoElement,
-      expiresAt: now + PREVIEW_CONTINUATION_MS,
+  rememberPreviewVideo(
+    trackKey: string,
+    clip: TimelineClip,
+    videoElement: HTMLVideoElement,
+    continuityKey?: string,
+  ): void {
+    this.lastTrackState.set(trackKey, {
+      clipId: clip.id,
+      fileId: getClipSourceKey(clip),
+      file: clip.file,
+      videoElement,
+      outPoint: clip.outPoint,
+      continuityKey,
     });
-    return prev.videoElement;
   }
 
   updateLastTrackState(
@@ -275,7 +215,7 @@ export class VideoSyncHandoffManager {
   }
 
   resetClip(clipId: string, video?: HTMLVideoElement): void {
-    this.previewContinuationElements.delete(clipId);
+    this.previewContinuations.resetClip(clipId);
     this.deleteHandoff(clipId);
 
     if (!video) {
@@ -289,11 +229,4 @@ export class VideoSyncHandoffManager {
     }
   }
 
-  private clearExpiredPreviewContinuations(now: number = performance.now()): void {
-    for (const [clipId, entry] of this.previewContinuationElements.entries()) {
-      if (entry.expiresAt <= now) {
-        this.previewContinuationElements.delete(clipId);
-      }
-    }
-  }
 }

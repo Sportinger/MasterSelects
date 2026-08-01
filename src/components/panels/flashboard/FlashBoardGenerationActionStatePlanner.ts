@@ -19,8 +19,6 @@ interface BuildFlashBoardGenerationActionStateInput {
   duration: number;
   effectiveGenerateAudio: boolean;
   effectivePrompt: string;
-  hasElevenLabsKey: boolean;
-  hasEvolinkKey: boolean;
   hasGenerationBoard: boolean;
   hasHostedSession: boolean;
   hasImageReferenceInput: boolean;
@@ -48,7 +46,6 @@ interface BuildFlashBoardGenerationActionStateInput {
   sunoInstrumental: boolean;
   sunoStyle: string;
   supportsMultiShot: boolean;
-  usePiApiKeyByDefault: boolean;
   version: string;
   voiceId: string;
 }
@@ -120,10 +117,8 @@ function buildMultiShotValidationError({
 function buildAudioValidationError({
   accountAuthenticated,
   effectivePrompt,
-  hasElevenLabsKey,
   hostedAIEnabled,
   isAudioMode,
-  isHostedAudioMode,
   isSunoMode,
   languageCode,
   languageOverride,
@@ -169,16 +164,12 @@ function buildAudioValidationError({
     return null;
   }
 
-  if (isHostedAudioMode) {
-    if (!accountAuthenticated) {
-      return 'Sign in to use MasterSelects Cloud speech.';
-    }
+  if (!accountAuthenticated) {
+    return 'Sign in to use MasterSelects Cloud speech.';
+  }
 
-    if (!hostedAIEnabled) {
-      return 'Enable hosted credits to generate cloud speech.';
-    }
-  } else if (!hasElevenLabsKey) {
-    return 'Add an ElevenLabs API key in Settings to generate speech.';
+  if (!hostedAIEnabled) {
+    return 'Enable hosted credits to generate cloud speech.';
   }
 
   if (!voiceId.trim()) {
@@ -204,7 +195,6 @@ function buildAudioValidationError({
 }
 
 function buildBackendValidationError({
-  hasEvolinkKey,
   hasHostedSession,
   hasImageReferenceInput,
   hasReferenceMediaInput,
@@ -212,7 +202,6 @@ function buildBackendValidationError({
   isHostedAudioMode,
   selectedEntry,
   service,
-  usePiApiKeyByDefault,
 }: BuildFlashBoardGenerationActionStateInput): string | null {
   if (selectedEntry?.requiresReferenceMedia && !hasReferenceMediaInput) {
     if (selectedEntry.requiredReferenceMediaType === 'video') {
@@ -232,12 +221,8 @@ function buildBackendValidationError({
     return 'Add a reference video for this model.';
   }
 
-  if (service === 'piapi' && !usePiApiKeyByDefault) {
-    return 'Enable a PiAPI key as default in Settings to generate with PiAPI.';
-  }
-
-  if (service === 'evolink' && !hasEvolinkKey) {
-    return 'Enable an EvoLink key as default in Settings to generate with EvoLink.';
+  if (service !== 'cloud') {
+    return 'This provider route is no longer available. Choose a hosted model.';
   }
 
   if (service === 'cloud' && !isHostedAudioMode && !hasHostedSession) {

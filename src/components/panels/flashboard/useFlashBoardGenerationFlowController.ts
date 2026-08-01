@@ -331,7 +331,7 @@ export function useFlashBoardGenerationFlowController({
   const handleGenerate = useCallback(() => {
     if (!canGenerate || !selectedEntry) return;
 
-    const requestIsAudio = selectedEntry.outputType === 'audio' || service === 'elevenlabs';
+    const requestIsAudio = selectedEntry.outputType === 'audio';
     const requestIsSuno = providerId === SUNO_PROVIDER_ID;
     submitFlashBoardActiveGenerationRequest(buildFlashBoardGenerationRequest({
       aspectRatio,

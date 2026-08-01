@@ -429,7 +429,9 @@ export function MediaBoardNode({
       </div>
       {!isCompactNode ? (
         <div className="media-board-node-body">
-          <div className="media-board-node-name">{item.name}</div>
+          <div className="media-board-node-name" data-guided-media-name={item.id}>
+            {item.name}
+          </div>
           <div className="media-board-node-meta">
             <span>{getMediaBoardTypeLabel(item)}</span>
             {resolutionLabel ? <span>{resolutionLabel}</span> : null}

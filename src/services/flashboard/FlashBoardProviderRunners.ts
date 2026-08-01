@@ -1,13 +1,15 @@
-import { piApiService } from '../piApiService';
 import { cloudAiService } from '../cloudAiService';
-import type { TextToVideoParams, ImageToVideoParams, GenerationReferenceMedia } from '../piApiService';
+import type {
+  TextToVideoParams,
+  ImageToVideoParams,
+  GenerationReferenceMedia,
+} from '../aiGenerationContracts';
 import type {
   FlashBoardGenerationOutput,
   FlashBoardGenerationRequest,
   FlashBoardJobRefund,
   FlashBoardMediaType,
 } from '../../stores/flashboardStore/types';
-import { useSettingsStore } from '../../stores/settingsStore';
 import { useMediaStore } from '../../stores/mediaStore';
 import { getCatalogEntry } from './FlashBoardModelCatalog';
 import { getFlashBoardImageProvider } from './FlashBoardImageProviders';
@@ -16,9 +18,8 @@ import { getProviderTaskStartedAt } from './FlashBoardJobTiming';
 import {
   DEFAULT_ELEVENLABS_SPEECH_OUTPUT_FORMAT,
   ELEVENLABS_MP3_MIME_TYPE,
-  elevenLabsService,
   isElevenLabsMp3OutputFormat,
-} from '../elevenLabsService';
+} from '../elevenLabs/config';
 import { SUNO_PROVIDER_ID, SUNO_SOUNDS_PROVIDER_ID } from '../sunoContracts';
 
 type FlashBoardProviderProcessingUpdate = {
@@ -116,23 +117,21 @@ function buildSunoAssets(results: SunoTaskResult[] | undefined): FlashBoardProvi
     }));
 }
 
-function applyFlashBoardProviderApiKeys(request: FlashBoardGenerationRequest): void {
-  const { piapi, evolink, elevenlabs } = useSettingsStore.getState().apiKeys;
-  if (request.service === 'piapi') {
-    piApiService.setApiKey(piapi);
+function assertManagedProviderRequest(request: FlashBoardGenerationRequest): void {
+  if (request.service !== 'cloud') {
+    throw new Error('Personal provider routes were retired. Start a new generation through MasterSelects Cloud.');
   }
-  if (request.service === 'evolink') {
-    getFlashBoardImageProvider('evolink')?.setApiKey?.(evolink);
-  }
-  if (request.service === 'elevenlabs') {
-    elevenLabsService.setApiKey(elevenlabs);
-  }
+}
+
+function isElevenLabsSpeechRequest(request: FlashBoardGenerationRequest): boolean {
+  return request.outputType === 'audio'
+    || request.providerId === 'cloud-elevenlabs-tts';
 }
 
 export async function runFlashBoardProviderJob(
   context: FlashBoardProviderRunnerContext,
 ): Promise<FlashBoardProviderRunnerResult> {
-  applyFlashBoardProviderApiKeys(context.request);
+  assertManagedProviderRequest(context.request);
 
   const isSunoMusicRequest = context.request.providerId === SUNO_PROVIDER_ID;
   if (isSunoMusicRequest) {
@@ -143,7 +142,7 @@ export async function runFlashBoardProviderJob(
     return runSunoSoundsJob(context);
   }
 
-  if (context.request.outputType === 'audio' || context.request.service === 'elevenlabs') {
+  if (isElevenLabsSpeechRequest(context.request)) {
     return runSpeechJob(context);
   }
 
@@ -160,7 +159,15 @@ export async function resumeFlashBoardProviderJob({
   abortController,
   onProcessing,
 }: FlashBoardProviderResumeContext): Promise<FlashBoardProviderRunnerResult> {
-  applyFlashBoardProviderApiKeys(request);
+  if (isElevenLabsSpeechRequest(request)) {
+    return {
+      status: 'failed',
+      error: 'Hosted speech cannot be resumed after reload because /api/ai/audio does not expose a durable speech job/status contract. The request was not sent to a direct provider.',
+      remoteTaskId,
+    };
+  }
+
+  assertManagedProviderRequest(request);
   onProcessing({ status: 'processing', remoteTaskId });
 
   if (request.providerId === SUNO_PROVIDER_ID || request.providerId === SUNO_SOUNDS_PROVIDER_ID) {
@@ -200,10 +207,6 @@ export async function resumeFlashBoardProviderJob({
     };
   }
 
-  if (request.outputType === 'audio' || request.service === 'elevenlabs') {
-    return { status: 'failed', error: 'Speech generation cannot be resumed after reload.', remoteTaskId };
-  }
-
   if (request.outputType === 'image' || request.providerId === 'nano-banana-2') {
     const imageProvider = getFlashBoardImageProvider(request.service);
     if (!imageProvider) {
@@ -223,11 +226,7 @@ export async function resumeFlashBoardProviderJob({
     return { status: 'failed', error: result.error || 'Image generation failed', refund: result.refund, remoteTaskId };
   }
 
-  const pollInterval = request.service === 'piapi' ? 5000 : 15000;
-  const service = request.service === 'piapi'
-    ? piApiService
-    : cloudAiService;
-  const task = await service.pollTaskUntilComplete(
+  const task = await cloudAiService.pollTaskUntilComplete(
     remoteTaskId,
     (currentTask) => {
       if (abortController.signal.aborted) throw new Error('Canceled');
@@ -238,7 +237,7 @@ export async function resumeFlashBoardProviderJob({
         startedAt: getProviderTaskStartedAt(currentTask),
       });
     },
-    pollInterval,
+    15000,
   );
 
   if (task.status === 'completed' && task.videoUrl) {
@@ -383,9 +382,6 @@ async function runSpeechJob({
   registerRunningJob,
   onProcessing,
 }: FlashBoardProviderRunnerContext): Promise<FlashBoardProviderRunnerResult> {
-  if (request.service !== 'elevenlabs' && request.service !== 'cloud') {
-    throw new Error('Audio generation is currently only supported through ElevenLabs and Suno');
-  }
   if (!request.voiceId?.trim()) {
     throw new Error('Choose an ElevenLabs voice before generating speech.');
   }
@@ -408,13 +404,11 @@ async function runSpeechJob({
     outputFormat,
     voiceSettings: request.voiceSettings,
   };
-  const speech = request.service === 'cloud'
-    ? await cloudAiService.createElevenLabsSpeech(
-        speechParams,
-        `flashboard-audio:${recordId}:${Date.now()}`,
-        abortController.signal,
-      )
-    : await elevenLabsService.createSpeech(speechParams, abortController.signal);
+  const speech = await cloudAiService.createElevenLabsSpeech(
+    speechParams,
+    request.idempotencyKey ?? `flashboard-audio:${recordId}`,
+    abortController.signal,
+  );
   const voiceSlug = sanitizeForFilename(request.voiceName || request.voiceId, 24);
   const promptSlug = sanitizeForFilename(request.prompt, 32);
   const timestamp = Date.now();
@@ -473,9 +467,7 @@ async function runImageJob({
     outputFormat: 'png' as const,
     imageInputs: referenceImageInputs.length > 0 ? referenceImageInputs : undefined,
   };
-  const remoteTaskId = request.service === 'cloud'
-    ? await cloudAiService.createTextToImage(imageParams, request.idempotencyKey)
-    : await imageProvider.createTextToImage(imageParams);
+  const remoteTaskId = await cloudAiService.createTextToImage(imageParams, request.idempotencyKey);
 
   registerRunningJob(remoteTaskId);
   onProcessing({ status: 'processing', remoteTaskId });
@@ -560,11 +552,7 @@ async function runVideoJob({
       referenceMedia,
     };
 
-    if (request.service === 'piapi') {
-      remoteTaskId = await piApiService.createTextToVideo(params);
-    } else {
-      remoteTaskId = await cloudAiService.createTextToVideo(params, request.idempotencyKey);
-    }
+    remoteTaskId = await cloudAiService.createTextToVideo(params, request.idempotencyKey);
   } else {
     const startImageUrl = await resolveReferenceImage(request.startMediaFileId);
     const endImageUrl = await resolveReferenceImage(request.endMediaFileId);
@@ -584,22 +572,13 @@ async function runVideoJob({
       referenceMedia,
     };
 
-    if (request.service === 'piapi') {
-      remoteTaskId = await piApiService.createImageToVideo(params);
-    } else {
-      remoteTaskId = await cloudAiService.createImageToVideo(params, request.idempotencyKey);
-    }
+    remoteTaskId = await cloudAiService.createImageToVideo(params, request.idempotencyKey);
   }
 
   registerRunningJob(remoteTaskId);
   onProcessing({ status: 'processing', remoteTaskId });
 
-  const pollInterval = request.service === 'piapi' ? 5000 : 15000;
-  const service = request.service === 'piapi'
-    ? piApiService
-    : cloudAiService;
-
-  const task = await service.pollTaskUntilComplete(
+  const task = await cloudAiService.pollTaskUntilComplete(
     remoteTaskId,
     (t) => {
       if (abortController.signal.aborted) throw new Error('Canceled');
@@ -610,7 +589,7 @@ async function runVideoJob({
         startedAt: getProviderTaskStartedAt(t),
       });
     },
-    pollInterval,
+    15000,
   );
 
   if (task.status === 'completed' && task.videoUrl) {

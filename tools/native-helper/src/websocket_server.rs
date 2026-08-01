@@ -61,8 +61,6 @@ fn get_command_id(cmd: &Command) -> &str {
         Command::Auth { id, .. }
         | Command::Info { id }
         | Command::Ping { id }
-        | Command::RegisterClient { id, .. }
-        | Command::AiToolResult { id, .. }
         | Command::DownloadYoutube { id, .. }
         | Command::Download { id, .. }
         | Command::ListFormats { id, .. }
@@ -102,7 +100,6 @@ async fn handle_websocket(
 ) -> Result<()> {
     let (write, mut read) = ws.split();
     let write = Arc::new(tokio::sync::Mutex::new(write));
-    let session_id = uuid::Uuid::new_v4().to_string();
     let mut session = Session::new(state.clone());
 
     // Track authentication state for this connection.
@@ -185,56 +182,6 @@ async fn handle_websocket(
                     // Auth is handled above in the auth gate
                     Command::Auth { .. } => unreachable!(),
 
-                    Command::RegisterClient {
-                        id,
-                        role,
-                        capabilities,
-                        session_name,
-                        app_version,
-                    } => {
-                        if role == "editor" {
-                            state
-                                .register_editor_client(crate::session::EditorClient {
-                                    session_id: session_id.clone(),
-                                    sender: write.clone(),
-                                    role: role.clone(),
-                                    capabilities: capabilities.clone(),
-                                    session_name: session_name.clone(),
-                                    app_version: app_version.clone(),
-                                })
-                                .await;
-                            info!("Registered editor client from {}", addr);
-                        }
-
-                        let response = Response::ok(
-                            &id,
-                            serde_json::json!({
-                                "registered": true,
-                                "role": role,
-                                "session_id": session_id.clone(),
-                            }),
-                        );
-                        let json = serde_json::to_string(&response)?;
-                        let mut w = write.lock().await;
-                        w.send(Message::Text(json)).await?;
-                    }
-                    Command::AiToolResult {
-                        id,
-                        request_id,
-                        result,
-                    } => {
-                        let accepted = state.resolve_ai_request(&request_id, result).await;
-                        let response = Response::ok(
-                            &id,
-                            serde_json::json!({
-                                "accepted": accepted,
-                                "request_id": request_id,
-                            }),
-                        );
-                        let json = serde_json::to_string(&response)?;
-                        let mut w = write.lock().await;
-                        w.send(Message::Text(json)).await?;
-                    }
                     Command::DownloadYoutube {
                         id,
                         url,
@@ -677,7 +624,6 @@ async fn handle_websocket(
         }
     }
 
-    state.unregister_client(&session_id).await;
     info!("Connection closed: {}", addr);
     Ok(())
 }

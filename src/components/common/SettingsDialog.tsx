@@ -1,6 +1,6 @@
 // Settings Dialog - After Effects style preferences with sidebar navigation
 
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useSettingsStore, type SettingsCategoryId } from '../../stores/settingsStore';
 import { useDraggableDialog } from './settings/useDraggableDialog';
 import { AppearanceSettings } from './settings/AppearanceSettings';
@@ -8,7 +8,7 @@ import { AudioSettings } from './settings/AudioSettings';
 import { GeneralSettings } from './settings/GeneralSettings';
 import { MidiSettings } from './settings/MidiSettings';
 import { TranscriptionSettings } from './settings/TranscriptionSettings';
-import { ApiKeysSettings } from './settings/ApiKeysSettings';
+import { IntegrationCredentialsSettings } from './settings/IntegrationCredentialsSettings';
 import { NativeHelperSettings } from './settings/NativeHelperSettings';
 import { ShortcutsSettings } from './settings/ShortcutsSettings';
 import './settings/SettingsDialog.css';
@@ -31,7 +31,7 @@ const categories: CategoryConfig[] = [
   { id: 'audio', label: 'Audio', icon: '\uD83D\uDD0A' },
   { id: 'transcription', label: 'Transcription', icon: '\uD83C\uDFA4' },
   { id: 'nativeHelper', label: 'Native Helper', icon: '\u26A1' },
-  { id: 'apiKeys', label: 'API Keys', icon: '\uD83D\uDD11' },
+  { id: 'integrations', label: 'Integrations', icon: '\uD83D\uDD11' },
 ];
 
 export function SettingsDialog({ onClose }: SettingsDialogProps) {
@@ -40,40 +40,30 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const { position, isDragging, handleMouseDown } = useDraggableDialog(dialogRef);
 
-  const { apiKeys, setApiKey } = useSettingsStore();
-  const apiKeysUnlocked = useSettingsStore((s) => s.apiKeysUnlocked);
-  const visibleCategories = useMemo(
-    () => categories.filter((cat) => apiKeysUnlocked || cat.id !== 'apiKeys'),
-    [apiKeysUnlocked],
-  );
-  const resolvedActiveCategory = !apiKeysUnlocked && activeCategory === 'apiKeys'
-    ? 'general'
-    : activeCategory;
-
-  // Local state for API keys (to avoid saving on every keystroke)
-  const [localKeys, setLocalKeys] = useState<{ [key: string]: string }>({ ...apiKeys });
+  const youtubeApiKey = useSettingsStore((state) => state.youtubeApiKey);
+  const setYouTubeApiKey = useSettingsStore((state) => state.setYouTubeApiKey);
+  const [localYouTubeApiKey, setLocalYouTubeApiKey] = useState(youtubeApiKey);
 
   const handleSave = useCallback(() => {
-    Object.entries(localKeys).forEach(([provider, key]) => {
-      setApiKey(provider as keyof typeof apiKeys, key);
-    });
+    setYouTubeApiKey(localYouTubeApiKey);
     onClose();
-  }, [localKeys, setApiKey, onClose]);
-
-  const handleKeyChange = (provider: string, value: string) => {
-    setLocalKeys((prev) => ({ ...prev, [provider]: value }));
-  };
+  }, [localYouTubeApiKey, setYouTubeApiKey, onClose]);
 
   const renderCategoryContent = () => {
-    switch (resolvedActiveCategory) {
+    switch (activeCategory) {
       case 'general': return <GeneralSettings />;
       case 'midi': return <MidiSettings />;
       case 'shortcuts': return <ShortcutsSettings />;
       case 'appearance': return <AppearanceSettings />;
       case 'audio': return <AudioSettings />;
-      case 'transcription': return <TranscriptionSettings localKeys={localKeys} />;
+      case 'transcription': return <TranscriptionSettings />;
       case 'nativeHelper': return <NativeHelperSettings />;
-      case 'apiKeys': return <ApiKeysSettings localKeys={localKeys} onKeyChange={handleKeyChange} />;
+      case 'integrations': return (
+        <IntegrationCredentialsSettings
+          youtubeApiKey={localYouTubeApiKey}
+          onYouTubeApiKeyChange={setLocalYouTubeApiKey}
+        />
+      );
       default: return null;
     }
   };
@@ -101,10 +91,10 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
         <div className="settings-main">
           {/* Sidebar */}
           <div className="settings-sidebar">
-            {visibleCategories.map((cat) => (
+            {categories.map((cat) => (
               <button
                 key={cat.id}
-                className={`sidebar-item ${resolvedActiveCategory === cat.id ? 'active' : ''}`}
+                className={`sidebar-item ${activeCategory === cat.id ? 'active' : ''}`}
                 onClick={() => setActiveCategory(cat.id)}
               >
                 <span className="sidebar-icon">{cat.icon}</span>

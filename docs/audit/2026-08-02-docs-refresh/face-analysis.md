@@ -1,0 +1,25 @@
+# Face-Analysis.md — audit 2026-08-02
+
+## Verified (spot checks that held)
+
+- YuNet 2026may and SFace 2021dec are the configured ONNX files; their pinned URLs, byte sizes, SHA-256 checks, and Cache Storage reuse are implemented in `src/services/faceAnalysis/modelCatalog.ts` and `src/services/faceAnalysis/FaceAnalysisRuntime.ts`.
+- Face inference is browser-local and worker-based: `src/services/faceAnalysis/faceAnalysisWorker.ts` imports `onnxruntime-web/wasm`, creates both sessions with `['wasm']`, and `FaceAnalysisRuntime.ts` creates a module worker. The worker produces normalized boxes, five landmarks, confidence, and transient SFace embeddings.
+- The source-scoped persistence and sharing claims hold when a project is open. `src/services/project/domains/AnalysisService.ts` and `src/services/project/fileService/nativeBackend.ts` write `Analysis/<mediaId>.json`; `src/services/clipAnalysis/sourceAnalysisSharing.ts` shares by media ID; `src/stores/timeline/clip/videoCachedAnalysisLoader.ts` hydrates the merged source artifact.
+- The documented correction and chat-tool names are current: `getClipFaceAnalysis`, `startClipFaceAnalysis`, `mergeClipFacePeople`, `moveClipFaceAppearance`, and `assignClipFaceReviewCandidate` are defined in `src/services/aiTools/definitions/analysis.ts` and handled under `src/services/aiTools/handlers/`.
+- Face Range controls exist in both places described: `src/components/timeline/TimelineControls.tsx` and `src/components/timeline/TimelineContextMenu.tsx`. Small faces are review-only at the 36-pixel threshold in `src/services/faceAnalysis/faceAnalysisWorker.ts`, and review tracks are formed in `src/services/faceAnalysis/faceReviewCandidates.ts`.
+- Quick and Balanced are 1 fps and 2 fps respectively, while Deep and Custom are blocked for current local visual runs: `src/services/agentTimeline/profiles/analysisProfiles.ts`, `src/services/agentTimeline/jobs/currentClipAnalysisExecution.ts`, and `src/components/panels/properties/analysisScopeProfileExecution.ts`.
+
+## Outdated or wrong (claim → reality, with file evidence)
+
+- “The top of the Analysis tab exposes … Focus & Motion, Faces, Cuts, Transcript, and AI Scenes” → it also exposes **Audio intelligence** (voice activity, speech markers, prosody, and room tone), and that channel feeds the workspace. Evidence: `src/components/panels/properties/AnalysisTab.tsx` and `src/components/panels/properties/analysisWorkspace/analysisWorkspaceAdapter.ts`.
+- “A face-only pass … creates the inexpensive metrics baseline during the same source decode” → the face action calls `analyzeClip` with `target: 'faces'`; it preserves existing metric values but does not run the metrics target. Evidence: `src/components/panels/properties/AnalysisTab.tsx` (`handleAnalyzeFaces`) and `src/services/clipAnalyzer.ts` (face-only frame construction).
+- The optional active-speaker section described a default result and an optional-model path as though available to users → no production caller invokes speaker/person fusion or an ROI model. The repository has policy/types/candidate-planning/evaluation scaffolding only. Evidence: `src/services/agentTimeline/fusion/speakerPersonFusion.ts`, `src/services/agentTimeline/fusion/activeSpeakerModel/`, and no non-fusion caller found under `src/`; `src/types/agentTimeline/activeSpeakerModel.ts` defines the injected model contract.
+- “The durable result is … inside the project folder” needs qualification → persistence is attempted only when `projectFileService.isProjectOpen()`; without an open project the analysis remains runtime state/cache rather than a project sidecar. Evidence: `src/services/clipAnalyzer.ts` guards `saveAnalysis` with `isProjectOpen()`.
+- The garbled “160×90” scene-cut dimension → the implemented scan is 160x90. Evidence: `src/services/agentTimeline/profiles/analysisProfiles.ts` defines `{ width: 160, height: 90 }`.
+
+## Noteworthy / unusual
+
+- `FaceAnalysisBackend` still permits `'webgpu' | 'wasm' | 'cached'` in `src/types/clipMetadata.ts`, but the current face worker imports the WASM package and always initializes both sessions with `['wasm']` in `src/services/faceAnalysis/faceAnalysisWorker.ts`; WebGPU is not a current face-inference backend.
+- The analysis sidecar schema is now version 3 and stores several range-keyed passes under one media JSON file, rather than a single flat analysis result. See `src/services/project/domains/AnalysisService.ts` and `src/services/project/fileService/nativeBackend.ts`.
+- The code contains mojibake in user-facing strings, including the scene-cut dimension label in `src/components/panels/properties/AnalysisTab.tsx` and `personā€¦` in `src/components/panels/properties/analysisWorkspace/AnalysisWorkspace.tsx`. These files are outside this audit’s write scope.
+- The face-thumbnail cache is genuinely two-level: 80 in-memory blobs and, when a project is open, versioned JPEGs in `Cache/face-thumbnails`; it serializes generation and keeps three source-video sessions. Evidence: `src/services/faceAnalysis/faceCropThumbnailCache.ts` and `src/services/project/core/constants.ts`.

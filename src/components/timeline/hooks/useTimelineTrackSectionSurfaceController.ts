@@ -26,6 +26,7 @@ interface UseTimelineTrackSectionSurfaceControllerParams extends Omit<
   gridPlan: TimelineGridPlan;
   marquee: unknown;
   mediaFiles: MediaFiles;
+  onDeleteKeyframes: KeyframeRendererParams['onDeleteKeyframes'];
   onUpdateKeyframe: KeyframeRendererParams['onUpdateKeyframe'];
 }
 
@@ -37,6 +38,7 @@ export function useTimelineTrackSectionSurfaceController({
   gridPlan,
   marquee,
   mediaFiles,
+  onDeleteKeyframes,
   onMoveKeyframe,
   onSelectKeyframe,
   onToggleCurveExpanded,
@@ -56,6 +58,7 @@ export function useTimelineTrackSectionSurfaceController({
     clipDrag,
     clipKeyframes,
     clips,
+    onDeleteKeyframes,
     onMoveKeyframe,
     onSelectKeyframe,
     onToggleCurveExpanded,

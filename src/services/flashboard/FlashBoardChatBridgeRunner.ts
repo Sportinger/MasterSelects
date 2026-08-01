@@ -4,8 +4,6 @@ import {
   useFlashBoardStore,
   type FlashBoardChatMessage,
 } from '../../stores/flashboardStore';
-import { useSettingsStore, type AIProvider } from '../../stores/settingsStore';
-import { DEFAULT_LEMONADE_MODEL } from '../lemonadeProvider';
 import { createAgentActivityEvent } from './FlashBoardChatActivity';
 import { prepareFlashBoardChatVisualReferences } from './FlashBoardChatVisualReferences';
 import {
@@ -32,9 +30,7 @@ import type {
 
 export interface FlashBoardBridgeChatTurnInput {
   idempotencyKey?: string;
-  includeContext?: boolean;
   includeHistory?: boolean;
-  includePlaybook?: boolean;
   model?: string;
   onActivityEvent?: (event: AgentActivityEvent) => void;
   onExecutedToolCalls?: (toolCalls: FlashBoardExecutedToolCall[]) => void;
@@ -44,11 +40,9 @@ export interface FlashBoardBridgeChatTurnInput {
   openAiReasoningEffort?: FlashBoardOpenAiReasoningEffort;
   persistToChat?: boolean;
   prompt: string;
-  promptVersion?: FlashBoardChatPromptVersion;
   provider?: FlashBoardChatProvider;
   referenceMediaFileIds?: string[];
   runSource?: FlashBoardChatRunSource;
-  systemPromptOverride?: string;
   temperature?: number;
   toolExecutionMode?: FlashBoardChatToolExecutionMode;
 }
@@ -56,7 +50,7 @@ export interface FlashBoardBridgeChatTurnInput {
 export interface FlashBoardBridgeChatTurnResult {
   model: string;
   persistedToChat: boolean;
-  promptVersion: FlashBoardChatPromptVersion | 'custom';
+  promptVersion: FlashBoardChatPromptVersion;
   provider: FlashBoardChatProvider;
   response: string;
   run: FlashBoardChatRunRecord;
@@ -69,17 +63,8 @@ export async function runFlashBoardBridgeChatTurn(
   const visiblePrompt = input.prompt.trim();
   if (!visiblePrompt) throw new Error('Missing chat prompt.');
 
-  const settings = useSettingsStore.getState();
-  const provider = input.provider ?? (settings.aiProvider === 'lemonade' ? 'lemonade' : 'kie');
-  const model = resolveModel(provider, input.model, settings.lemonadeModel);
-  const providerSettingsKey: AIProvider = provider === 'lemonade' ? 'lemonade' : 'openai';
-  const hasExplicitPromptSelection = input.promptVersion !== undefined
-    || input.systemPromptOverride !== undefined;
-  const savedPromptOverride = settings.aiSystemPromptOverrides[providerSettingsKey]?.trim();
-  const systemPromptOverride = input.systemPromptOverride?.trim()
-    || (!hasExplicitPromptSelection ? savedPromptOverride : undefined);
-  const includeContext = input.includeContext
-    ?? (settings.aiSystemPromptSendContext[providerSettingsKey] !== false);
+  const provider = input.provider ?? 'kie';
+  const model = resolveModel(provider, input.model);
   const messages = input.includeHistory === false
     ? []
     : useFlashBoardStore.getState().chatMessages;
@@ -117,8 +102,6 @@ export async function runFlashBoardBridgeChatTurn(
     const response = await sendFlashBoardChatMessage({
       hostedAvailable,
       idempotencyKey: input.idempotencyKey,
-      lemonadeContextSize: settings.lemonadeContextSize,
-      lemonadeEndpoint: settings.lemonadeEndpoint,
       model,
       onActivityEvent: (event) => {
         if (messageIds) appendPendingActivity(messageIds.assistantId, event);
@@ -156,12 +139,8 @@ export async function runFlashBoardBridgeChatTurn(
       openAiReasoningEffort: input.openAiReasoningEffort ?? DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT,
       playbookPrompt: visiblePrompt,
       prompt: requestPrompt,
-      promptVersion: input.promptVersion,
       provider,
       runSource: input.runSource ?? 'bridge',
-      systemPromptIncludeContext: includeContext,
-      systemPromptIncludePlaybook: input.includePlaybook,
-      systemPromptOverride,
       temperature: input.temperature ?? DEFAULT_FLASHBOARD_CHAT_TEMPERATURE,
       toolExecutionMode: input.toolExecutionMode ?? 'normal',
       ...(visualReferences.length === 0 ? {} : { visualReferences }),
@@ -199,33 +178,9 @@ export async function runFlashBoardBridgeChatTurn(
   }
 }
 
-export async function compareFlashBoardChatPrompts(
-  input: Omit<FlashBoardBridgeChatTurnInput, 'persistToChat' | 'promptVersion' | 'toolExecutionMode'>,
-): Promise<{
-  legacy: FlashBoardBridgeChatTurnResult;
-  v2: FlashBoardBridgeChatTurnResult;
-}> {
-  const common = {
-    ...input,
-    includeHistory: input.includeHistory ?? false,
-    persistToChat: false,
-    toolExecutionMode: 'read-only' as const,
-  };
-  const legacy = await runFlashBoardBridgeChatTurn({
-    ...common,
-    promptVersion: 'legacy-v1',
-  });
-  const v2 = await runFlashBoardBridgeChatTurn({
-    ...common,
-    promptVersion: 'v2',
-  });
-  return { legacy, v2 };
-}
-
 function resolveModel(
   provider: FlashBoardChatProvider,
   requestedModel: string | undefined,
-  lemonadeModel: string,
 ): string {
   if (provider === 'kernel') {
     const model = requestedModel?.trim() || FLASHBOARD_CHAT_MODEL_OPTIONS.kernel[0]?.id;
@@ -233,9 +188,6 @@ function resolveModel(
       throw new Error(`Unsupported MasterSelectsAI model: ${model ?? 'missing'}`);
     }
     return model;
-  }
-  if (provider === 'lemonade') {
-    return requestedModel?.trim() || lemonadeModel.trim() || DEFAULT_LEMONADE_MODEL;
   }
   const model = requestedModel?.trim() || DEFAULT_FLASHBOARD_CHAT_MODEL;
   if (!FLASHBOARD_CHAT_MODEL_OPTIONS.kie.some((candidate) => candidate.id === model)) {

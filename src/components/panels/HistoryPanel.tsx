@@ -12,8 +12,18 @@ const ROW_HEIGHT = 34;
 const GROUP_HEADER_HEIGHT = 26;
 const MAX_BRANCH_LANES = 6;
 const RAIL_WIDTH_RATIO = 0.28;
+/** Must match --history-time-width in HistoryPanel.css. */
+const TIME_COLUMN_WIDTH = 50;
+/** Description block reserved on the right edge of every row. */
+const ENTRY_COLUMN_WIDTH = 210;
+/** List padding plus the entry's own margin, so the rail math ends where the
+ *  description column actually starts. */
+const LIST_CHROME_WIDTH = 24;
+/** Widest a single lane step may get, so two lanes on a full-width tab do not
+ *  end up half a screen apart. */
+const MAX_LANE_GAP = 140;
 
-interface GraphGeometry { railPadding: number; laneGap: number; }
+interface GraphGeometry { railPadding: number; laneGap: number; railWidth: number; }
 interface HistoryNode { id: string; parentId: string | null; snapshot: { label: string; timestamp: number }; }
 interface HistoryGraphEntry extends HistoryListEntry { lane: number; walked: boolean; }
 interface HistoryGraphRow { id: string; timestamp: number; entry: HistoryGraphEntry; centerY: number; }
@@ -21,7 +31,7 @@ interface HistoryEntryGroup { id: string; title: string; rows: HistoryGraphRow[]
 interface HistoryGraphLine { id: string; d: string; walked: boolean; main: boolean; }
 interface HistoryGraphLines { height: number; railWidth: number; lines: HistoryGraphLine[]; }
 
-const NARROW_GEOMETRY: GraphGeometry = { railPadding: 11, laneGap: 13 };
+const NARROW_GEOMETRY: GraphGeometry = { railPadding: 11, laneGap: 13, railWidth: 63 };
 
 function clamp(min: number, value: number, max: number): number { return Math.min(max, Math.max(min, value)); }
 function laneX(lane: number, geometry: GraphGeometry): number { return geometry.railPadding + lane * geometry.laneGap; }
@@ -30,10 +40,18 @@ function getRowCenterY(rowIndex: number): number { return rowIndex * ROW_HEIGHT 
 function createGeometry(panelWidth: number, maxLane: number): GraphGeometry {
   if (panelWidth <= 0) return NARROW_GEOMETRY;
   const railPadding = Math.round(clamp(10, panelWidth / 40, 15));
+  const available = panelWidth - TIME_COLUMN_WIDTH - ENTRY_COLUMN_WIDTH - LIST_CHROME_WIDTH - railPadding * 2;
+  if (available >= 80) {
+    // Wide panel: the rail owns the whole span between the time column and the
+    // right-pinned description column; lanes spread evenly across it.
+    const laneGap = Math.round(clamp(13, available / Math.max(maxLane, 1), MAX_LANE_GAP));
+    return { railPadding, laneGap, railWidth: railPadding * 2 + available };
+  }
+  // Narrow dock: fall back to the tight gutter so labels keep their room.
   const idealGap = clamp(12, panelWidth / 45, 19);
-  if (maxLane <= 0) return { railPadding, laneGap: Math.round(idealGap) };
   const budget = Math.max(0, panelWidth * RAIL_WIDTH_RATIO - railPadding * 2);
-  return { railPadding, laneGap: Math.round(Math.max(9, Math.min(idealGap, budget / maxLane))) };
+  const laneGap = Math.round(maxLane <= 0 ? idealGap : Math.max(9, Math.min(idealGap, budget / maxLane)));
+  return { railPadding, laneGap, railWidth: railPadding * 2 + Math.max(maxLane, 0) * laneGap };
 }
 
 function formatHistoryLabel(label: string): string { return label.trim() || 'History change'; }
@@ -53,8 +71,15 @@ function formatChunkTitle(timestamp: number): string {
 
 /** Assign side lanes to leaf-to-trunk chains. Intersecting vertical ranges never
  * share a lane; overflow deliberately reuses the outermost lane. */
-function createLaneMap(entries: HistoryListEntry[], nodes: Record<string, HistoryNode>): Map<string, number> {
-  const laneZero = new Set(entries.filter((entry) => entry.onActivePath || entry.kind === 'redoable').map((entry) => entry.nodeId).filter(Boolean) as string[]);
+interface HistoryChain { id: string; nodeIds: string[]; firstNodeId: string; }
+
+function compareEntries(left: HistoryListEntry, right: HistoryListEntry): number {
+  return right.timestamp - left.timestamp || left.id.localeCompare(right.id);
+}
+
+/** Chain identity is deliberately tree-only: a parent's earliest child continues
+ * its rail and every later child begins a new rail. */
+function createChains(nodes: Record<string, HistoryNode>): { chains: HistoryChain[]; chainByNodeId: Map<string, string> } {
   const children = new Map<string, string[]>();
   Object.values(nodes).forEach((node) => {
     if (!node.parentId) return;
@@ -62,43 +87,75 @@ function createLaneMap(entries: HistoryListEntry[], nodes: Record<string, Histor
     siblings.push(node.id);
     children.set(node.parentId, siblings);
   });
-  const rowIndex = new Map(entries
-    .filter((entry) => entry.nodeId)
-    .toSorted((left, right) => right.timestamp - left.timestamp || Number(Boolean(right.onActivePath)) - Number(Boolean(left.onActivePath)) || left.id.localeCompare(right.id))
-    .map((entry, index) => [entry.nodeId!, index]));
-  const assigned = new Set<string>();
-  const chains: Array<{ ids: string[]; start: number; end: number }> = [];
-  Object.values(nodes).filter((node) => !laneZero.has(node.id) && !(children.get(node.id) ?? []).some((child) => !laneZero.has(child))).forEach((leaf) => {
-    const ids: string[] = [];
-    let cursor: string | null = leaf.id;
-    while (cursor && !laneZero.has(cursor) && !assigned.has(cursor)) {
-      ids.push(cursor);
-      assigned.add(cursor);
-      cursor = nodes[cursor]?.parentId ?? null;
-    }
-    const positions = ids.map((id) => rowIndex.get(id)).filter((index): index is number => index !== undefined);
-    if (positions.length) chains.push({ ids, start: Math.min(...positions), end: Math.max(...positions) });
+  children.forEach((siblings) => siblings.sort((left, right) =>
+    nodes[left].snapshot.timestamp - nodes[right].snapshot.timestamp || left.localeCompare(right)));
+
+  const roots = Object.values(nodes).filter((node) => !node.parentId).sort((left, right) =>
+    left.snapshot.timestamp - right.snapshot.timestamp || left.id.localeCompare(right.id));
+  const chains: HistoryChain[] = [];
+  const chainByNodeId = new Map<string, string>();
+  const visit = (node: HistoryNode, chain: HistoryChain) => {
+    chain.nodeIds.push(node.id);
+    chainByNodeId.set(node.id, chain.id);
+    (children.get(node.id) ?? []).forEach((childId, index) => {
+      const child = nodes[childId];
+      if (index === 0) visit(child, chain);
+      else {
+        const fork = { id: child.id, nodeIds: [], firstNodeId: child.id };
+        chains.push(fork);
+        visit(child, fork);
+      }
+    });
+  };
+  roots.forEach((root, index) => {
+    const rootChain = { id: root.id, nodeIds: [], firstNodeId: root.id };
+    if (index === 0) chains.unshift(rootChain);
+    else chains.push(rootChain);
+    visit(root, rootChain);
   });
-  chains.sort((left, right) => left.start - right.start || left.end - right.end);
-  const laneEnd: number[] = [];
-  const lanes = new Map<string, number>();
-  chains.forEach((chain) => {
-    let lane = laneEnd.findIndex((end) => end < chain.start);
-    if (lane === -1) lane = laneEnd.length < MAX_BRANCH_LANES ? laneEnd.length : MAX_BRANCH_LANES - 1;
-    laneEnd[lane] = Math.max(laneEnd[lane] ?? -1, chain.end);
-    chain.ids.forEach((id) => lanes.set(id, lane + 1));
-  });
-  return lanes;
+  return { chains, chainByNodeId };
 }
 
-function createGraphEntries(entries: HistoryListEntry[], nodes: Record<string, HistoryNode>): HistoryGraphEntry[] {
-  const lanes = createLaneMap(entries, nodes);
-  return entries.map((entry) => ({ ...entry, lane: entry.nodeId && (entry.onActivePath || entry.kind === 'redoable') ? 0 : lanes.get(entry.nodeId ?? '') ?? 0, walked: Boolean(entry.onActivePath) }));
+function createLaneMap(entries: HistoryListEntry[], nodes: Record<string, HistoryNode>): { lanes: Map<string, number>; branchCount: number } {
+  const { chains, chainByNodeId } = createChains(nodes);
+  const rowIndex = new Map(entries.filter((entry) => entry.nodeId).toSorted(compareEntries).map((entry, index) => [entry.nodeId!, index]));
+  const lanes = new Map<string, number>();
+  const rootChain = chains[0];
+  rootChain?.nodeIds.forEach((id) => lanes.set(id, 0));
+  const ranges = chains.slice(1).map((chain) => {
+    const positions = chain.nodeIds.map((id) => rowIndex.get(id)).filter((index): index is number => index !== undefined);
+    const parentId = nodes[chain.firstNodeId]?.parentId;
+    const parentRow = parentId ? rowIndex.get(parentId) : undefined;
+    if (parentRow !== undefined) positions.push(parentRow);
+    return { chain, start: Math.min(...positions), end: Math.max(...positions), timestamp: nodes[chain.firstNodeId]?.snapshot.timestamp ?? 0 };
+  }).filter((range) => Number.isFinite(range.start));
+  const assignedByLane = new Map<number, Array<{ start: number; end: number }>>();
+  ranges.sort((left, right) => left.timestamp - right.timestamp || left.chain.firstNodeId.localeCompare(right.chain.firstNodeId)).forEach((range) => {
+    let lane = 1;
+    while (lane < MAX_BRANCH_LANES && (assignedByLane.get(lane) ?? []).some((other) => other.start <= range.end && range.start <= other.end)) lane += 1;
+    (assignedByLane.get(lane) ?? assignedByLane.set(lane, []).get(lane)!).push({ start: range.start, end: range.end });
+    range.chain.nodeIds.forEach((id) => lanes.set(id, lane));
+  });
+  // A node's chain is known even when a persisted entry is temporarily absent.
+  chainByNodeId.forEach((chainId, nodeId) => { if (!lanes.has(nodeId) && chainId === rootChain?.id) lanes.set(nodeId, 0); });
+  return { lanes, branchCount: Math.max(0, chains.length - 1) };
+}
+
+function createWalkedNodeIds(activeNodeId: string | null, nodes: Record<string, HistoryNode>): Set<string> {
+  const walked = new Set<string>();
+  let cursor = activeNodeId;
+  while (cursor && !walked.has(cursor)) { walked.add(cursor); cursor = nodes[cursor]?.parentId ?? null; }
+  return walked;
+}
+
+function createGraphEntries(entries: HistoryListEntry[], nodes: Record<string, HistoryNode>, activeNodeId: string | null): HistoryGraphEntry[] {
+  const { lanes } = createLaneMap(entries, nodes);
+  const walked = createWalkedNodeIds(activeNodeId, nodes);
+  return entries.map((entry) => ({ ...entry, lane: lanes.get(entry.nodeId ?? '') ?? 0, walked: Boolean(entry.nodeId && walked.has(entry.nodeId)) }));
 }
 
 function createGraphRows(entries: HistoryGraphEntry[]): HistoryGraphRow[] {
-  return entries.map((entry) => ({ id: entry.id, timestamp: entry.timestamp, entry, centerY: 0 })).toSorted((left, right) =>
-    right.timestamp - left.timestamp || Number(Boolean(right.entry.onActivePath)) - Number(Boolean(left.entry.onActivePath)) || left.id.localeCompare(right.id));
+  return entries.map((entry) => ({ id: entry.id, timestamp: entry.timestamp, entry, centerY: 0 })).toSorted((left, right) => compareEntries(left.entry, right.entry));
 }
 
 function createHistoryGroups(rows: HistoryGraphRow[]): HistoryEntryGroup[] {
@@ -122,7 +179,6 @@ function createHistoryGroups(rows: HistoryGraphRow[]): HistoryEntryGroup[] {
 function createGraphLines(groups: HistoryEntryGroup[], geometry: GraphGeometry): HistoryGraphLines {
   const rows = groups.flatMap((group) => group.rows);
   const byNodeId = new Map(rows.filter((row) => row.entry.nodeId).map((row) => [row.entry.nodeId!, row]));
-  const maxLane = rows.reduce((max, row) => Math.max(max, row.entry.lane), 0);
   const lines = rows.flatMap((row) => {
     const { entry } = row;
     if (!entry.nodeId || !entry.parentNodeId) return [];
@@ -134,10 +190,10 @@ function createGraphLines(groups: HistoryEntryGroup[], geometry: GraphGeometry):
     const d = parent.entry.lane === entry.lane
       ? `M ${parentX} ${parent.centerY} L ${childX} ${row.centerY}`
       : `M ${parentX} ${parent.centerY} C ${parentX} ${parent.centerY + deltaY * 0.45} ${childX} ${row.centerY - deltaY * 0.45} ${childX} ${row.centerY}`;
-    return [{ id: entry.nodeId, d, walked: Boolean(parent.entry.onActivePath && entry.onActivePath), main: parent.entry.lane === 0 && entry.lane === 0 }];
+    return [{ id: entry.nodeId, d, walked: parent.entry.walked && entry.walked, main: parent.entry.lane === entry.lane }];
   });
   const height = Math.max(ROW_HEIGHT, groups.reduce((total, group) => total + GROUP_HEADER_HEIGHT + group.rows.length * ROW_HEIGHT, 0));
-  return { height, railWidth: geometry.railPadding * 2 + maxLane * geometry.laneGap, lines };
+  return { height, railWidth: geometry.railWidth, lines };
 }
 
 function isJumpableEntry(entry: HistoryListEntry): boolean { return !entry.active && entry.kind !== 'event'; }
@@ -186,16 +242,15 @@ export function HistoryPanel() {
   }, []);
 
   const entries = useMemo(() => useHistoryStore.getState().getHistoryEntries(), [historyState.nodes, historyState.activeNodeId, historyState.eventLog]);
-  const graphEntries = useMemo(() => createGraphEntries(entries, historyState.nodes), [entries, historyState.nodes]);
+  const graphEntries = useMemo(() => createGraphEntries(entries, historyState.nodes, historyState.activeNodeId), [entries, historyState.nodes, historyState.activeNodeId]);
   const graphRows = useMemo(() => createGraphRows(graphEntries), [graphEntries]);
   const groups = useMemo(() => createHistoryGroups(graphRows), [graphRows]);
   const maxLane = useMemo(() => graphEntries.reduce((max, entry) => Math.max(max, entry.lane), 0), [graphEntries]);
   const geometry = useMemo(() => createGeometry(panelWidth, maxLane), [panelWidth, maxLane]);
   const graphLines = useMemo(() => createGraphLines(groups, geometry), [groups, geometry]);
   const counts = useMemo(() => {
-    const children = new Map<string, number>();
-    Object.values(historyState.nodes).forEach((node) => { if (node.parentId) children.set(node.parentId, (children.get(node.parentId) ?? 0) + 1); });
-    return { undoable: entries.filter((entry) => entry.kind === 'undoable').length, redoable: entries.filter((entry) => entry.kind === 'redoable').length, saves: entries.filter((entry) => entry.eventType === 'manual-save').length, branches: entries.filter((entry) => entry.kind === 'branch' && entry.nodeId && !children.has(entry.nodeId)).length };
+    const { branchCount } = createLaneMap(entries, historyState.nodes);
+    return { undoable: entries.filter((entry) => entry.kind === 'undoable').length, redoable: entries.filter((entry) => entry.kind === 'redoable').length, saves: entries.filter((entry) => entry.eventType === 'manual-save').length, branches: branchCount };
   }, [entries, historyState.nodes]);
   const summaryText = [`${counts.undoable} undo`, `${counts.redoable} redo`, `${counts.saves} saves`, counts.branches ? `${counts.branches} branches` : ''].filter(Boolean).join(' · ');
   const graphStyle = { '--history-row-height': `${ROW_HEIGHT}px`, '--history-rail-width': `${graphLines.railWidth}px`, '--history-graph-height': `${graphLines.height}px`, minHeight: graphLines.height } as CSSProperties;

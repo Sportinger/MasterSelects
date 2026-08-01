@@ -4,6 +4,7 @@ import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { PanelType } from '../../types/dock';
 import type { CampaignStep } from './tutorialCampaigns';
+import { ClippyMascot } from './tutorial/ClippyMascot';
 
 const WELCOME_BUTTONS = [
   { id: 'premiere', label: 'Premiere Pro', logo: '/logo-premiere.svg' },
@@ -12,85 +13,6 @@ const WELCOME_BUTTONS = [
   { id: 'aftereffects', label: 'After Effects', logo: '/logo-aftereffects.svg' },
   { id: 'beginner', label: 'Beginner', logo: null },
 ] as const;
-
-function ClippyMascot({ isClosing }: { isClosing: boolean }) {
-  const [useWebP, setUseWebP] = useState(false);
-  const [phase, setPhase] = useState<'intro' | 'loop' | 'outro'>('intro');
-  const introRef = useRef<HTMLVideoElement>(null);
-  const loopRef = useRef<HTMLVideoElement>(null);
-  const outroRef = useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    const intro = introRef.current;
-    if (!intro) return;
-    const source = intro.querySelector('source');
-    if (source) {
-      source.addEventListener('error', () => setUseWebP(true), { once: true });
-    }
-    const onEnded = () => setPhase('loop');
-    intro.addEventListener('ended', onEnded);
-    return () => intro.removeEventListener('ended', onEnded);
-  }, []);
-
-  // Switch to outro when tutorial is closing
-  useEffect(() => {
-    if (!isClosing || phase === 'outro') return;
-
-    const frame = requestAnimationFrame(() => {
-      setPhase('outro');
-      const outro = outroRef.current;
-      if (outro) {
-        outro.currentTime = 0;
-        outro.play().catch(() => {});
-      }
-    });
-
-    return () => cancelAnimationFrame(frame);
-  }, [isClosing, phase]);
-
-  if (useWebP) {
-    return <img src="/clippy.webp" alt="" className="tutorial-clippy" draggable={false} />;
-  }
-
-  return (
-    <>
-      <video
-        ref={introRef}
-        className="tutorial-clippy"
-        autoPlay
-        muted
-        playsInline
-        disablePictureInPicture
-        style={{ display: phase === 'intro' ? undefined : 'none' }}
-      >
-        <source src="/clippy-intro.webm" type="video/webm" />
-      </video>
-      <video
-        ref={loopRef}
-        className="tutorial-clippy"
-        autoPlay
-        loop
-        muted
-        playsInline
-        disablePictureInPicture
-        style={{ display: phase === 'loop' ? undefined : 'none' }}
-      >
-        <source src="/clippy.webm" type="video/webm" />
-      </video>
-      <video
-        ref={outroRef}
-        className="tutorial-clippy"
-        preload="auto"
-        muted
-        playsInline
-        disablePictureInPicture
-        style={{ display: phase === 'outro' ? undefined : 'none' }}
-      >
-        <source src="/clippy-outro.webm" type="video/webm" />
-      </video>
-    </>
-  );
-}
 
 // Legacy step types (kept for part 1/2 backward compat)
 interface PanelStep {
@@ -378,7 +300,7 @@ export function TutorialOverlay({ onClose, onSkip, part = 1, campaignSteps, camp
 
   const handleConfirmationDismiss = useCallback(() => {
     setShortcutConfirmation(null);
-    // Tutorial not yet implemented — close overlay
+    // Hand back to App, which starts the guided interface overview.
     close();
   }, [close]);
 
@@ -446,7 +368,7 @@ export function TutorialOverlay({ onClose, onSkip, part = 1, campaignSteps, camp
                   You can change them anytime in Settings &gt; Shortcuts.
                 </div>
                 <div className="tutorial-welcome-subtitle" style={{ opacity: 0.6, fontSize: 11, marginBottom: 16 }}>
-                  Interactive tutorial coming soon.
+                  Next: a guided tour of the Timeline controls.
                 </div>
                 <button className="tutorial-skip-btn" onClick={handleConfirmationDismiss} style={{ marginTop: 0 }}>
                   Got it!

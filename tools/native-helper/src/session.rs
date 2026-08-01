@@ -3,13 +3,12 @@
 mod file_commands;
 mod matanyone_commands;
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::Mutex;
 use tracing::{info, warn};
 
-use crate::download::{self, WsSender};
+use crate::download;
 use crate::matanyone;
 use crate::muscriptor;
 use crate::protocol::{error_codes, Command, Response, SystemInfo};
@@ -104,21 +103,9 @@ pub fn generate_auth_token() -> String {
         .collect()
 }
 
-#[derive(Clone)]
-pub struct EditorClient {
-    pub session_id: String,
-    pub sender: WsSender,
-    pub role: String,
-    pub capabilities: Vec<String>,
-    pub session_name: Option<String>,
-    pub app_version: Option<String>,
-}
-
 /// Shared application state
 pub struct AppState {
     pub auth_token: Option<String>,
-    editor_client: Mutex<Option<EditorClient>>,
-    pending_ai_requests: Mutex<HashMap<String, oneshot::Sender<serde_json::Value>>>,
     granted_paths: RwLock<Vec<PathBuf>>,
     pub matanyone_process: Mutex<matanyone::process::MatAnyoneProcess>,
     pub muscriptor_process: Mutex<muscriptor::process::MuscriptorProcess>,
@@ -128,8 +115,6 @@ impl AppState {
     pub fn new(auth_token: Option<String>) -> Self {
         Self {
             auth_token,
-            editor_client: Mutex::new(None),
-            pending_ai_requests: Mutex::new(HashMap::new()),
             granted_paths: RwLock::new(Vec::new()),
             matanyone_process: Mutex::new(matanyone::process::MatAnyoneProcess::new()),
             muscriptor_process: Mutex::new(muscriptor::process::MuscriptorProcess::new()),
@@ -160,47 +145,6 @@ impl AppState {
         utils::is_path_allowed_with_extra(path, &scoped_prefixes)
     }
 
-    pub async fn register_editor_client(&self, client: EditorClient) {
-        let mut editor = self.editor_client.lock().await;
-        *editor = Some(client);
-    }
-
-    pub async fn get_editor_client(&self) -> Option<EditorClient> {
-        self.editor_client.lock().await.clone()
-    }
-
-    pub async fn unregister_client(&self, session_id: &str) {
-        let mut editor = self.editor_client.lock().await;
-        if editor
-            .as_ref()
-            .map(|client| client.session_id == session_id)
-            .unwrap_or(false)
-        {
-            *editor = None;
-        }
-    }
-
-    pub async fn add_ai_request(&self, request_id: String, tx: oneshot::Sender<serde_json::Value>) {
-        self.pending_ai_requests.lock().await.insert(request_id, tx);
-    }
-
-    pub async fn remove_ai_request(&self, request_id: &str) {
-        self.pending_ai_requests.lock().await.remove(request_id);
-    }
-
-    pub async fn resolve_ai_request(&self, request_id: &str, result: serde_json::Value) -> bool {
-        let tx = self.pending_ai_requests.lock().await.remove(request_id);
-        if let Some(tx) = tx {
-            let _ = tx.send(result);
-            true
-        } else {
-            false
-        }
-    }
-
-    pub async fn pending_ai_request_count(&self) -> usize {
-        self.pending_ai_requests.lock().await.len()
-    }
 }
 
 /// Per-connection session
@@ -225,7 +169,7 @@ impl Session {
     }
 
     /// Handle a command, return response
-    /// Note: Download/ListFormats and AI bridge commands are handled directly in server.rs.
+    /// Note: Download/ListFormats commands are handled directly in server.rs.
     pub async fn handle_command(&mut self, cmd: Command) -> Option<Response> {
         // Auth required for most commands
         if !self.authenticated {
@@ -357,8 +301,6 @@ impl Session {
             Command::DownloadYoutube { id, .. }
             | Command::Download { id, .. }
             | Command::ListFormats { id, .. }
-            | Command::RegisterClient { id, .. }
-            | Command::AiToolResult { id, .. }
             | Command::MatAnyoneSetup { id, .. }
             | Command::MatAnyoneDownloadModel { id, .. }
             | Command::MatAnyoneStart { id, .. }
@@ -396,13 +338,6 @@ impl Session {
 
     async fn handle_info(&self, id: &str) -> Response {
         let ytdlp_available = download::find_ytdlp().is_some();
-        let editor_connected = self
-            .state
-            .editor_client
-            .try_lock()
-            .map(|guard| guard.is_some())
-            .unwrap_or(false);
-
         // Check MatAnyone2 status
         let env_info = matanyone::get_env_info();
         let model_info = matanyone::get_model_info();
@@ -432,8 +367,6 @@ impl Session {
             download_dir: utils::get_download_dir().to_string_lossy().to_string(),
             project_root: utils::get_project_root().to_string_lossy().to_string(),
             fs_commands: true,
-            ai_bridge: true,
-            editor_connected,
             matanyone_available,
             matanyone_status,
         };

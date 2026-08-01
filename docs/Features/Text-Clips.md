@@ -7,10 +7,10 @@ Text clips are rasterized to a Canvas2D surface, uploaded as a GPU texture, and 
 ## Creation
 
 - Text clips are added through the timeline text action and require a video track.
-- New text clips currently default to a 5 second duration.
+- New text clips default to a 5 second duration.
 - The default content is `Enter text`.
-- New 2D text clips default to area text, with a centered paragraph box that supports wrapping and hard line breaks.
-- New 2D text clips use the active composition resolution for their text canvas. Existing text canvases keep their current source resolution during edits so the layer does not rescale while typing.
+- New 2D text clips default to area text, with a full-composition paragraph box that supports wrapping and hard line breaks.
+- New and edited 2D text clips use the active composition resolution for their text canvas. When that resolution changes, the text bounds and legacy box fields are rescaled during the edit.
 - Text clips use `src/services/textRenderer.ts` to generate their canvas content.
 
 ## Timeline Appearance
@@ -20,7 +20,7 @@ Text clips are rasterized to a Canvas2D surface, uploaded as a GPU texture, and 
 
 ## Properties Panel
 
-`src/components/panels/TextTab.tsx` currently exposes:
+`src/components/panels/TextTab.tsx` exposes:
 
 - Multi-line text input
 - Font family selection
@@ -38,6 +38,7 @@ Text clips are rasterized to a Canvas2D surface, uploaded as a GPU texture, and 
 
 Text content updates are debounced briefly so typing stays responsive.
 Font changes trigger async font loading through `googleFontsService`.
+Area-text bounds can be keyframed from the Area Text section.
 
 ## Preview Editing
 
@@ -65,11 +66,13 @@ When a 2D text clip is selected and the preview is in Edit mode, the preview sho
 - Shadows
 - Text-on-path rendering through `pathEnabled` and `pathPoints`
 
-The path-rendering code exists in the renderer, but there is no dedicated path editing UI in `TextTab` yet.
+## Automation
+
+The AI tool surface can create and update editable text clips, set an area-text box, inspect text properties, add text-bounds keyframes, and supply `pathEnabled` and `pathPoints`.
 
 ## Fonts
 
-`src/services/googleFontsService.ts` currently exposes 50 Google Font families across:
+`src/services/googleFontsService.ts` exposes 50 Google Font families across:
 
 - Sans-serif
 - Serif
@@ -81,8 +84,7 @@ Fonts are loaded by injecting Google Fonts CSS and waiting on `document.fonts.lo
 
 ## Serialization
 
-Text clips persist both the text properties and the generated canvas-backed source data.
-On load, the text properties are restored and the canvas is re-rendered.
+Text clips persist their text properties. On load, the text canvas is recreated from those properties at the active composition resolution.
 
 Relevant files:
 
@@ -92,12 +94,6 @@ Relevant files:
 - `src/services/textLayout.ts`
 - `src/components/panels/TextTab.tsx`
 - `src/components/preview/TextPreviewEditor.tsx`
+- `src/services/aiTools/definitions/text.ts`
+- `src/services/aiTools/handlers/text.ts`
 - `src/types/index.ts`
-
-## Current Limits
-
-- No gradient fill controls.
-- No background box controls.
-- No multiple-shadow UI.
-- No path editor UI, even though the renderer can draw text along a path from stored data.
-

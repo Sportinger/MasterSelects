@@ -18,6 +18,45 @@ import { generateMaskTexture } from '../../utils/maskRenderer';
 const log = Logger.create('Engine');
 const MASK_TEXTURE_DRAG_THROTTLE_MS = 33;
 const MASK_TEXTURE_DRAG_MAX_EDGE = 384;
+const MASK_TEXTURE_PLAYBACK_MAX_EDGE = 960;
+
+export function resolvePreviewMaskTexturePlan(input: {
+  width: number;
+  height: number;
+  isPlaying: boolean;
+  maskDragging: boolean;
+}): {
+  width: number;
+  height: number;
+  scale: number;
+  cacheSuffix: string;
+  maxFeatherQualityScale?: number;
+} {
+  const maxEdge = input.maskDragging
+    ? MASK_TEXTURE_DRAG_MAX_EDGE
+    : input.isPlaying
+      ? MASK_TEXTURE_PLAYBACK_MAX_EDGE
+      : Number.POSITIVE_INFINITY;
+  const scale = Math.min(1, maxEdge / Math.max(1, input.width, input.height));
+  const width = Math.max(1, Math.round(input.width * scale));
+  const height = Math.max(1, Math.round(input.height * scale));
+
+  return {
+    width,
+    height,
+    scale,
+    cacheSuffix: input.maskDragging
+      ? `drag_${width}x${height}`
+      : input.isPlaying
+        ? `playback_${width}x${height}`
+        : 'full',
+    ...(input.maskDragging
+      ? { maxFeatherQualityScale: 0.5 }
+      : input.isPlaying && scale < 1
+        ? { maxFeatherQualityScale: 0.75 }
+        : {}),
+  };
+}
 
 function getMaskShapeHash(masks: ClipMask[]): string {
   return masks.map(m =>
@@ -119,6 +158,7 @@ export function useEngineMaskTextureSync(isEngineReady: boolean): (
       maskDragging,
       maskEditPreview,
       clipDragPreview,
+      isPlaying,
       getInterpolatedMasks,
     } = useTimelineStore.getState();
     const clips = applyClipDragPreview(storeClips, clipDragPreview);
@@ -133,22 +173,22 @@ export function useEngineMaskTextureSync(isEngineReady: boolean): (
     }
 
     const engineDimensions = renderHostPort.getOutputDimensions();
-    const dragScale = maskDragging
-      ? Math.min(1, MASK_TEXTURE_DRAG_MAX_EDGE / Math.max(engineDimensions.width, engineDimensions.height))
-      : 1;
-    const maskDimensions = dragScale < 1
-      ? {
-          width: Math.max(1, Math.round(engineDimensions.width * dragScale)),
-          height: Math.max(1, Math.round(engineDimensions.height * dragScale)),
-        }
-      : engineDimensions;
-    const renderOptions = maskDragging
-      ? {
-          cacheSuffix: `drag_${maskDimensions.width}x${maskDimensions.height}`,
-          featherScale: dragScale,
-          maxFeatherQualityScale: 0.5,
-        }
-      : undefined;
+    const maskTexturePlan = resolvePreviewMaskTexturePlan({
+      ...engineDimensions,
+      isPlaying,
+      maskDragging,
+    });
+    const maskDimensions = {
+      width: maskTexturePlan.width,
+      height: maskTexturePlan.height,
+    };
+    const renderOptions = maskTexturePlan.cacheSuffix === 'full'
+      ? undefined
+      : {
+          cacheSuffix: maskTexturePlan.cacheSuffix,
+          featherScale: maskTexturePlan.scale,
+          maxFeatherQualityScale: maskTexturePlan.maxFeatherQualityScale,
+        };
 
     const clipsAtTime = clips.filter(c =>
       effectivePlayheadPosition >= c.startTime && effectivePlayheadPosition < c.startTime + c.duration

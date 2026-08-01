@@ -359,14 +359,6 @@ class ProjectFileService {
     return this.core.restoreLastProject();
   }
 
-  async saveKeysFile(): Promise<void> {
-    return this.core.saveKeysFile();
-  }
-
-  async loadKeysFile(): Promise<boolean> {
-    return this.core.loadKeysFile();
-  }
-
   updateProjectData(updates: Partial<ProjectFile>): void {
     this.core.updateProjectData(updates);
   }

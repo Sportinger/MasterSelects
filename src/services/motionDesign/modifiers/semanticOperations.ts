@@ -13,7 +13,7 @@ export type MotionModifierSemanticOperation =
   | { type: 'update'; modifierId: string; enabled?: boolean; target?: { path: string; operation: string; amount: number }; fields?: Record<string, unknown> }
   | { type: 'remove'; modifierId: string }
   | { type: 'reorder'; modifierId: string; newIndex: number }
-  | { type: 'set-falloff'; falloff: { shapeClipId: string; shapeRevision: number; feather: number; invert: boolean; clip: boolean } }
+  | { type: 'set-falloff'; falloff: { shapeClipId: string; shapeRevision: number; feather: number; invert: boolean; clip: boolean }; referencedShapeRevision?: number }
   | { type: 'clear-falloff' };
 
 export interface MotionModifierSemanticOperationPlanSuccess { ok: true; operation: MotionModifierSemanticOperation['type']; previousRevision: number; nextRevision: number; changed: true; contract: MotionModifierStackContractV1; diagnostics: []; }
@@ -63,7 +63,13 @@ export function planMotionModifierSemanticOperation(currentValue: MotionModifier
     } else if (operation.type === 'reorder') {
       const index = base.modifiers.findIndex((modifier) => modifier.id === operation.modifierId); if (index < 0) throw new Error(`Modifier not found: ${operation.modifierId}`); if (!Number.isSafeInteger(operation.newIndex) || operation.newIndex < 0 || operation.newIndex >= base.modifiers.length) throw new Error('newIndex is outside the modifier stack');
       const modifiers = [...base.modifiers]; const [modifier] = modifiers.splice(index, 1); modifiers.splice(operation.newIndex, 0, modifier); candidate = { ...base, modifiers: reindex(modifiers) };
-    } else if (operation.type === 'set-falloff') candidate = { ...base, falloff: operation.falloff };
+    } else if (operation.type === 'set-falloff') candidate = {
+      ...base,
+      falloff: {
+        ...operation.falloff,
+        shapeRevision: operation.referencedShapeRevision ?? 0,
+      },
+    };
     else { const { falloff: _falloff, ...withoutFalloff } = base; candidate = withoutFalloff; }
     const contract = parseMotionModifierStackContract({ ...candidate, revision: previousRevision + 1 });
     return { ok: true, operation: operation.type, previousRevision, nextRevision: contract.revision, changed: true, contract, diagnostics: [] };

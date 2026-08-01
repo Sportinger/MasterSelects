@@ -62,11 +62,14 @@ const MODEL_PRICING: Record<string, ModelPricingEntry> = {
   'gpt-5-5':            { creditCost: 5,  tier: 'high' },
   'gpt-5-6-luna':       { creditCost: 3,  tier: 'mid' },
   'gpt-5-6-terra':      { creditCost: 5,  tier: 'high' },
+  // Opaque hosted-kernel billing SKUs. Exact provider models remain private.
+  'masterselects-fast-v2-fast': { creditCost: 5, tier: 'high' },
   'claude-sonnet-5':    { creditCost: 5,  tier: 'high' },
   'o3':                 { creditCost: 5,  tier: 'high' },
 
   // --- Tier: premium (8-50 credits) ---
   'gpt-5-6-sol':        { creditCost: 8,  tier: 'premium' },
+  'masterselects-fast-v2-quality': { creditCost: 8, tier: 'premium' },
   'claude-opus-4-8':    { creditCost: 8,  tier: 'premium' },
   'claude-fable-5':     { creditCost: 10, tier: 'premium' },
   'gpt-5.2':            { creditCost: 8,  tier: 'premium' },

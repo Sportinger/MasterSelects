@@ -89,6 +89,8 @@ type AudioExportPipelineTestAccess = AudioExportPipeline & {
   extractAllAudio(
     clips: TimelineClip[],
     tracks: TimelineTrack[],
+    onProgress?: undefined,
+    exportEndTime?: number,
   ): Promise<Map<string, AudioBuffer>>;
   renderAllClipAudio(
     clips: TimelineClip[],
@@ -377,6 +379,54 @@ describe('AudioExportPipeline audio preflight', () => {
       type: 'audio',
       naturalDuration: 1,
     });
+  });
+
+  it('bounds nested composition PCM at the export end without replacing the reusable mixdown', async () => {
+    const buffer = createSignalAudioBuffer([
+      Array.from({ length: 100 }, (_, index) => index),
+      Array.from({ length: 100 }, (_, index) => index + 100),
+    ], 10);
+    compositionAudioMixerMocks.mixdownComposition.mockResolvedValue({
+      buffer,
+      waveform: [0, 0.5, 0.25],
+      duration: 10,
+      hasAudio: true,
+    });
+    const clip = createClip({
+      id: 'bounded-comp-audio',
+      trackId: audioTrack.id,
+      startTime: 1,
+      duration: 8,
+      inPoint: 2,
+      outPoint: 10,
+      isComposition: true,
+      compositionId: 'comp-bounded',
+      nestedContentHash: 'hash-bounded',
+      source: { type: 'audio', naturalDuration: 10 },
+      hasMixdownAudio: false,
+      mixdownBuffer: undefined,
+    });
+    useTimelineStore.setState({
+      clips: [clip],
+      tracks: [audioTrack],
+      clipKeyframes: new Map(),
+      masterAudioState: undefined,
+    });
+    const pipeline = new AudioExportPipeline() as AudioExportPipelineTestAccess;
+
+    const buffers = await pipeline.extractAllAudio([clip], [audioTrack], undefined, 4);
+
+    const bounded = buffers.get(clip.id);
+    expect(bounded).toBeDefined();
+    expect(bounded).not.toBe(buffer);
+    expect(bounded?.duration).toBe(3);
+    expect(Array.from(bounded?.getChannelData(0) ?? [])).toEqual(
+      Array.from({ length: 30 }, (_, index) => index + 20),
+    );
+    expect(useTimelineStore.getState().clips[0]).toEqual(expect.objectContaining({
+      hasMixdownAudio: false,
+      mixdownBuffer: undefined,
+    }));
   });
 
   it('prepares export send returns as additional mixer entries', () => {

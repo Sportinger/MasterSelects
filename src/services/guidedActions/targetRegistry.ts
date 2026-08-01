@@ -104,7 +104,7 @@ export function getGuidedTargetKey(target: GuidedTargetRef): string {
     case 'timelineClip':
       return `timelineClip:${target.clipId}`;
     case 'timelineTime':
-      return `timelineTime:${target.trackId ?? '*'}:${target.time}`;
+      return `timelineTime:${target.surface === 'ruler' ? 'ruler:' : ''}${target.trackId ?? '*'}:${target.time}`;
     case 'timelineTrimHandle':
       return `timelineTrimHandle:${target.clipId}:${target.edge}`;
     case 'timelineFadeHandle':

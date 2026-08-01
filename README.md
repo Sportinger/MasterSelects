@@ -13,9 +13,9 @@
 
 
 <p>
-  GPU-first media editing with <b>33 effects</b>, <b>74 runtime transitions</b>, <b>37 blend modes</b>, <b>23 audio FX</b>, <b>stem separation</b>, <b>native WebGPU 3D</b>, and <b>19 direct runtime dependencies</b>.<br>
+  GPU-first media editing with <b>34 effects</b>, <b>74 runtime transitions</b>, <b>37 blend modes</b>, <b>23 audio FX</b>, <b>stem separation</b>, <b>native WebGPU 3D</b>, and <b>20 direct runtime dependencies</b>.<br>
   Built from scratch in <b>4.1k+ lines of WGSL</b> and <b>330k+ lines of TypeScript/TSX app code</b>.<br>
-  Import <b>.lottie, .riv, Lottie JSON, OBJ, glTF, GLB, PLY, SPLAT, KSPLAT, SPZ, SOG, LCC</b> assets and play <b>PLY / GLB sequences</b> directly on the timeline. Built with one coding-agent subscription from January to now.
+  Import <b>.lottie, .riv, Lottie JSON, OBJ, glTF, GLB, PLY, SPLAT, KSPLAT, SPZ, SOG, LCC</b> assets and play <b>PLY / GLB sequences</b> directly on the timeline.
 </p>
 
 <p>
@@ -85,7 +85,7 @@ Most browser-based video editors share a pattern: Canvas 2D compositing, heavywe
 
 **GPU-first architecture.** Preview, scrubbing, and export all run through the same **WebGPU ping-pong compositor**. Video textures are imported as `texture_external` (**zero-copy**, no CPU roundtrip). **37 blend modes**, 3D rotation, and inline color effects all execute in a **single WGSL composite shader** per layer. The 3D layer system now renders through the native WebGPU shared-scene path for 3D planes, primitive meshes, 3D text, OBJ/glTF/GLB models, camera clips, and gaussian splats - no GSAP, no Canvas 2D fallback in the hot path.
 
-**Current startup footprint.** A fresh production build currently loads an editor shell of about **2 MB compressed** on the main editor start path. The largest contributors are the native 3D / gaussian-splat render path, browser-side media parsing/runtime code, and AI/media helper modules. Reducing the initial bundle again is an active optimization target.
+**Current startup footprint.** A fresh production build loads an editor shell of about **2 MB compressed** on the main editor start path. The largest contributors are the native 3D / gaussian-splat render path, browser-side media parsing/runtime code, and AI/media helper modules.
 
 **Zero-copy export pipeline.** Frames are captured as `new VideoFrame(offscreenCanvas)` directly from the GPU canvas. **No `readPixels()`**, no `getImageData()`, no staging buffers in the default path. The GPU renders, **WebCodecs encodes**. That's it.
 
@@ -93,7 +93,7 @@ Most browser-based video editors share a pattern: Canvas 2D compositing, heavywe
 
 **Audio workstation in the timeline.** Audio Focus turns the timeline into a detailed waveform and spectrogram editor with non-destructive region edits, gain fades, silence removal, repair operations, spectral selections, image-in-spectrum layers, recording, and bake/unbake. The docked Audio Mixer adds track/master strips, Peak/RMS meters, stereo phase correlation, track sends rendered into the master return mix, FX stacks, limiter controls, and export preflight. Stem separation runs a browser ONNX Demucs/HTDemucs path and publishes Vocals, Drums, Bass, and Other stems as normal WAV media when the project media write succeeds, with artifact-backed fallback state when it cannot.
 
-**19 direct runtime dependencies.** React/React DOM, Zustand, MediaBunny, mp4box, PlayCanvas / splat-transform helpers, dotLottie, Rive WASM, HuggingFace Transformers, ONNX Runtime, SoundTouch, FFmpeg WASM packages, fflate, gifenc, Tabler icons, and WebGPU types. **Everything else is custom-built from scratch**: the WebGPU compositor, all 33 GPU effects, the 23-effect audio registry, the keyframe animation system, the export engine, the audio mixer, the text renderer, the mask engine, the video scope renderers, the dock/panel system, the timeline UI, and the native shared 3D scene path. Zero runtime abstraction layers between your timeline and the GPU.
+**20 direct runtime dependencies.** React/React DOM, Zustand, MediaBunny and its MP3 encoder, mp4box, PlayCanvas / splat-transform helpers, dotLottie, Rive WASM, HuggingFace Transformers, ONNX Runtime, SoundTouch, FFmpeg WASM packages, fflate, gifenc, Tabler icons, and WebGPU types. **Everything else is custom-built from scratch**: the WebGPU compositor, all 34 GPU effects, the 23-effect audio registry, the keyframe animation system, the export engine, the audio mixer, the text renderer, the mask engine, the video scope renderers, the dock/panel system, the timeline UI, and the native shared 3D scene path. Zero runtime abstraction layers between your timeline and the GPU.
 
 **Nested composition rendering.** Compositions within compositions, each with their own resolution. The normal 2D/nested compositor path renders them to **pooled GPU textures** with frame-level caching and composites them in the parent's ping-pong pass. Native 3D and gaussian-splat auxiliary paths can submit their own GPU work when those layer types are active.
 
@@ -103,35 +103,31 @@ Most browser-based video editors share a pattern: Canvas 2D compositing, heavywe
 
 ## Why I Built This
 
-No Adobe subscription, no patience for cracks, and every free online editor felt like garbage. I wanted something that actually works: fast in the browser, GPU-first, built for real editing instead of templates, and open enough that AI can steer the timeline instead of just suggesting ideas.
+No Adobe subscription, no patience for cracks, and no template-first online editor. MasterSelects is fast in the browser, GPU-first, built for real editing, and open enough that AI can steer the timeline instead of just suggesting ideas.
 
-**The vision:** an editor where AI can directly operate the tool. The built-in chat connects to OpenAI/Cloud or a local Lemonade Server and exposes **86 exported model tools** across timeline, media, editing, playback, stats, and node-workspace actions. External agents can steer the running editor over the local/native HTTP bridge, and in development the Vite bridge still exists too. Live outputs still matter too - I've been doing video art for 16 years, so multi-output routing was never optional.
+**The vision:** an editor where AI can directly operate the tool. The built-in chat exposes editor operations across timeline, media, editing, playback, stats, and node-workspace actions. Developers can connect a self-hosted external agent through the token-authenticated local MCP/dev bridge. Multi-output routing is built in.
 
-Built with Claude as my pair-programmer. Every feature gets debugged, refactored, and beaten into shape until it does what I need. ~330k lines of TypeScript/TSX app code, ~4.1k lines of WGSL shader files, and a Rust native helper for the stuff browsers still can't do cleanly.
+~330k lines of TypeScript/TSX app code, ~4.1k lines of WGSL shader files, and a Rust native helper cover the browser gaps that still matter.
 
 ---
 
 ## AI Control
 
-MasterSelects is being built around the idea that AI should be able to *do the edit*, not just talk about it.
+MasterSelects centers on the idea that AI should be able to *do the edit*, not just talk about it.
 
-- **Built-in editor chat:** OpenAI/Cloud or local Lemonade chat, compact provider/model menus, project-saved system prompts, and direct access to 86 exported timeline/media/editing and diagnostics tools
-- **Local Lemonade provider:** OpenAI-compatible Lemonade Server support for local chat models such as `gemma4-it-e2b-FLM`; model discovery comes from `/models`, and the endpoint is restricted to loopback hosts
-- **External agent bridge:** Claude Code or any other local agent can drive the running editor via the Native Helper HTTP bridge, and in development the same tool surface is also available through the Vite bridge and `window.aiTools`
-- **AI video, image, and audio generation:** FlashBoard routes through Kie.ai, hosted cloud, ElevenLabs, Suno, EvoLink, and legacy PiAPI-compatible catalogs depending on account and key setup
-- **Experimental multicam AI:** Claude/Anthropic generates edit decision lists for the multicam workflow
+- **Built-in editor chat:** Hosted agent/kernel execution with a fixed application prompt and the reviewed editor-operation surface
+- **External agents in development:** Claude Code, Codex, or another self-hosted agent can use `npm run mcp`; the local MCP server owns no model, provider key, or billing relationship
+- **AI video, image, and audio generation:** FlashBoard uses hosted generation routes; provider credentials never enter browser settings or project files
+- **Multicam and analysis:** Audio-based sync, manual multicam alignment, and transcript-based sync when transcripts are available
 - **On-device AI:** SAM2 segmentation in-browser via ONNX Runtime, MatAnyone2 via Native Helper, plus local Whisper transcription via Transformers.js
 
-Example Native Helper bridge call:
+Run the development-only MCP adapter while the Vite app is open:
 
 ```bash
-curl -X POST http://127.0.0.1:9877/api/ai-tools \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <startup-token>" \
-  -d '{"tool":"_list","args":{}}'
+npm run mcp
 ```
 
-This requires the Native Helper to be running, a MasterSelects editor tab to be connected, and the helper startup token. The Vite `/api/ai-tools` bridge still exists in development, but it is now gated by a per-session token as well.
+This adapter talks only to the token-authenticated local development bridge. MasterSelects does not ship a production agent harness; users who want another model or agent host it themselves.
 
 ---
 
@@ -140,15 +136,15 @@ This requires the Native Helper to be running, a MasterSelects editor tab to be 
 | Feature | Description |
 |---|---|
 | [**Multi-track Timeline**](docs/Features/Timeline.md) | Cut, copy, paste, multi-select, JKL shuttle, nested compositions |
-| [**33 GPU Effects**](docs/Features/Effects.md) | Color correction, blur, distort, stylize, keying - all real-time |
+| [**34 GPU Effects**](docs/Features/Effects.md) | Color correction, blur, distort, stylize, keying - all real-time |
 | [**Video Scopes**](docs/Features/UI-Panels.md#video-scopes-panels) | GPU-accelerated Histogram, Vectorscope, Waveform monitor |
 | [**Keyframe Animation**](docs/Features/Keyframes.md) | Bezier curves, copy/paste, tick marks, 5 easing modes |
 | [**Vector Masks**](docs/Features/Masks.md) | Pen tool, edge dragging, feathering, multiple masks per clip |
 | [**SAM2 Segmentation**](docs/Features/AI-Integration.md) | AI object selection in preview - click to mask, propagate across frames |
-| [**Transitions**](docs/Features/UI-Panels.md#transitions-panel) | Crossfade transitions with GPU-accelerated rendering *(experimental)* |
-| [**AI Integration**](docs/Features/AI-Integration.md) | Built-in OpenAI/Cloud or local Lemonade chat, 86 exported tool-callable edit/debug actions, and local/native bridges for external agents |
+| [**Transitions**](docs/Features/UI-Panels.md#transitions-panel) | 74 GPU-rendered transitions across 2D and 3D families |
+| [**AI Integration**](docs/Features/AI-Integration.md) | Hosted editor agent plus a development-only MCP adapter for self-hosted external agents |
 | [**FlashBoard**](docs/Features/FlashBoard.md) | Media Panel generation tray for text-to-video, image-to-video, images, speech, and music |
-| [**Multicam AI**](docs/Features/Multicam-AI.md) | Sync cameras, transcribe footage, and generate Claude-powered multicam EDLs *(experimental)* |
+| [**Multicam & Analysis**](docs/Features/Audio.md#multicam-and-analysis) | Sync selected clips by audio and align multicam clips manually or from available transcripts |
 | [**Export Pipeline**](docs/Features/Export.md) | WebCodecs Fast/Precise, FFmpeg intermediates, image/audio-only export, FCPXML, and project-persistent presets |
 | [**Audio Workstation**](docs/Features/Audio.md) | Audio Focus, detailed waveforms and spectrograms, 23 Audio FX, track sends into the master return mix, stem separation, recording, and export preflight |
 | [**Download Panel**](docs/Features/Download-Panel.md) | YouTube, TikTok, Instagram, Twitter/X, Vimeo, and other yt-dlp-supported sites via Native Helper |
@@ -177,7 +173,7 @@ npm install
 npm run dev     # http://localhost:5173
 ```
 
-**Requirements:** Chrome 113+ with WebGPU support is the main target. Dedicated GPU recommended.
+**Requirements:** Chrome or Edge with WebGPU support. A dedicated GPU is recommended.
 
 > **Firefox:** project storage requires the Native Helper backend because Firefox does not support the File System Access API flow used by Chrome.
 
@@ -197,7 +193,7 @@ cargo run --release    # WebSocket :9876, HTTP :9877
 | Capability | Details |
 |---|---|
 | **Storage** | Native project persistence backend for Firefox |
-| **AI Control** | Local HTTP bridge for external agents to steer the running editor |
+| **Local AI** | MatAnyone2 video matting and MuScriptor transcription sidecars |
 | **Download** | yt-dlp integration for YouTube, TikTok, Instagram, Twitter/X, Vimeo, and other supported sites |
 
 **Platforms:** Windows, Linux, macOS. Building the Native Helper requires Rust. The Windows MSI bundles `yt-dlp.exe`; source builds and non-Windows archive installs use `yt-dlp` from the helper folder or PATH. See [Native Helper docs](tools/native-helper/README.md) for platform-specific setup.
@@ -208,13 +204,12 @@ cargo run --release    # WebSocket :9876, HTTP :9877
 
 MasterSelects is a **local-first editor**. Editing, rendering, caching, and most analysis stay in the browser unless you explicitly invoke an external provider or the Native Helper.
 
-- **API keys:** stored in IndexedDB with per-browser Web Crypto encryption
+- **Provider credentials:** hosted AI credentials stay server-side; the optional YouTube integration key is encrypted in browser IndexedDB
 - **Native Helper:** binds to `127.0.0.1` only, requires a random startup Bearer token for HTTP and WebSocket
 - **Dev bridge:** Vite `/api/ai-tools` and local file routes require a per-session token and reject non-loopback origins
-- **Lemonade local chat:** endpoint is restricted to `localhost`, `127.0.0.1`, or `::1`; Lemonade can suggest tool calls but execution still goes through the normal chat approval and dispatcher path
 - **Local file access:** restricted to explicit allowed roots (project root, temp, Desktop, Documents, Downloads, Videos)
 - **AI tool policy:** external bridge calls run through caller restrictions and approval gates
-- **Secret handling:** logs redact common secret/token patterns; `.keys.enc` export disabled
+- **Secret handling:** logs redact common secret/token patterns; AI provider keys are not accepted from browser settings or project files
 - **CI checks:** secret scanning, JS and Rust security audits, dedicated tests for bridge auth and file access policy
 
 **Known boundary:** this is not perfect sandboxing. Same-user local processes, malicious browser extensions, and compromised same-origin code can still be dangerous. The goal is **clear, test-covered local trust boundaries**.
@@ -227,9 +222,7 @@ See [Security.md](docs/Features/Security.md) for the full trust model and limita
 
 This is alpha software. Features get added fast, things break.
 
-- FFmpeg WASM export is still work in progress
-- Multicam AI is experimental
-- Transitions are experimental
+- FFmpeg WASM export is blocking and constrained by browser memory
 - Stem separation downloads a large ONNX model on first use and depends on WebGPU/WASM runtime performance
 - Firefox project storage requires the Native Helper backend
 - Video downloads require Native Helper; the Windows MSI bundles yt-dlp, while source/non-Windows installs need yt-dlp beside the helper or on PATH
@@ -244,10 +237,10 @@ If something breaks, refresh. If it's still broken, [open an issue](https://gith
 
 - **Frontend:** React 19, TypeScript, Zustand, Vite 7.3
 - **Rendering:** WebGPU + 4.1k+ lines of WGSL shader files
-- **Video:** WebCodecs, MediaBunny, mp4box, HTMLVideo fallback, and experimental FFmpeg WASM export path
+- **Video:** WebCodecs, MediaBunny, mp4box, HTMLVideo fallback, and FFmpeg WASM export
 - **Audio:** Web Audio API, AudioWorklet recording, 23 registry-backed Audio FX, flexible EQ, track sends rendered into the master mix, stem separation through ONNX Runtime, artifact-backed waveform/spectrogram/loudness/beat/frequency analysis, and export preflight
-- **AI:** Built-in OpenAI/Cloud or local Lemonade editor chat with 86 exported model tools, Native Helper HTTP bridge for Claude Code / external agents, Claude/Anthropic for experimental multicam EDLs, SAM2 via ONNX Runtime, MatAnyone2 via Native Helper, local Whisper via Hugging Face Transformers, and Kie.ai / hosted cloud / ElevenLabs / Suno / EvoLink / PiAPI-compatible generation flows
-- **Native:** Rust helper for Firefox storage backend, native decode/encode, and bundled/system yt-dlp downloads
+- **AI:** Hosted agent/kernel editor chat, development-only MCP control for self-hosted external agents, hosted multicam analysis and media generation, SAM2 via ONNX Runtime, MatAnyone2 via Native Helper, and local Whisper via Hugging Face Transformers
+- **Native:** Rust helper for Firefox storage backend, local MatAnyone2 and MuScriptor sidecars, and bundled/system yt-dlp downloads
 - **Storage:** File System Access API on Chrome, Native Helper backend on Firefox, IndexedDB, local project folders with raw media
 
 ---
@@ -326,7 +319,7 @@ src/
 │   ├── video/           # VideoFrameManager
 │   ├── stats/           # PerformanceStats
 │   └── structuralSharing/ # SnapshotManager for undo/redo
-├── effects/             # 33 GPU effects (color/, blur/, distort/, stylize/, keying/)
+├── effects/             # 34 GPU effects (color/, blur/, distort/, stylize/, keying/)
 ├── transitions/         # Transition definitions (crossfade)
 ├── artifacts/           # Content-addressed artifact storage
 ├── importers/           # Universal media importers
@@ -373,7 +366,7 @@ tools/
 
 [![FOSSA Status](https://app.fossa.com/api/projects/custom%2b61097%2fmasterselects.svg?type=large)](https://app.fossa.com/projects/custom%2b61097%2fmasterselects)
 
-The linked FOSSA report tracks direct and transitive dependencies across npm, Cargo, and pip. The current npm runtime surface in `package.json` has **19 direct runtime dependencies**.
+The linked FOSSA report tracks direct and transitive dependencies across npm, Cargo, and pip. The current npm runtime surface in `package.json` has **20 direct runtime dependencies**.
 
 | Category | Count | Status |
 |----------|-------|--------|

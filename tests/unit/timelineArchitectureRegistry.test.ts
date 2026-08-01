@@ -2011,6 +2011,7 @@ describe('timeline architecture registry', () => {
     const proxyFrameSource = readRepoFile('src/services/layerBuilder/layerBuilderProxyFrames.ts');
     const videoLayerSource = readRepoFile('src/services/layerBuilder/layerBuilderVideoLayers.ts');
     const nestedBuilderSource = readRepoFile('src/services/layerBuilder/layerBuilderNestedLayerBuilder.ts');
+    const nestedVideoSource = readRepoFile('src/services/layerBuilder/layerBuilderNestedVideoSource.ts');
 
     expect(layerBuilderSource).toContain("from './layerBuilderProxyFrames'");
     expect(layerBuilderSource).toContain('new LayerBuilderProxyFrames');
@@ -2031,11 +2032,13 @@ describe('timeline architecture registry', () => {
     expect(proxyFrameSource).toContain('getExpectedProxyFrameCount');
     expect(proxyFrameSource).toContain('getNearestCachedFrameEntry');
     expect(videoLayerSource).toContain('selectProxyFrame');
-    expect(nestedBuilderSource).toContain('selectProxyFrame');
+    expect(nestedBuilderSource).toContain('buildNestedVideoSourceLayer');
+    expect(nestedVideoSource).toContain('selectProxyFrame');
     expect(lineCount(layerBuilderSource)).toBeLessThanOrEqual(540);
     expect(lineCount(proxyFrameSource)).toBeLessThanOrEqual(270);
     expect(lineCount(videoLayerSource)).toBeLessThanOrEqual(190);
     expect(lineCount(nestedBuilderSource)).toBeLessThanOrEqual(240);
+    expect(lineCount(nestedVideoSource)).toBeLessThanOrEqual(80);
   });
 
   it('keeps LayerBuilderService 2D image and text source layers in a focused helper', () => {
@@ -2132,6 +2135,7 @@ describe('timeline architecture registry', () => {
     const nestedBaseSource = readRepoFile('src/services/layerBuilder/layerBuilderNestedLayers.ts');
     const nestedBuilderSource = readRepoFile('src/services/layerBuilder/layerBuilderNestedLayerBuilder.ts');
     const nestedCompositionLayerSource = readRepoFile('src/services/layerBuilder/layerBuilderNestedCompositionLayer.ts');
+    const nestedVideoSource = readRepoFile('src/services/layerBuilder/layerBuilderNestedVideoSource.ts');
 
     expect(layerBuilderSource).toContain("from './layerBuilderNestedLayerBuilder'");
     expect(layerBuilderSource).toContain('buildLayerBuilderNestedCompLayer');
@@ -2162,10 +2166,11 @@ describe('timeline architecture registry', () => {
     expect(nestedBuilderSource).toContain('buildNestedLayerBase');
     expect(nestedBuilderSource).toContain('buildNestedCompositionSourceLayer');
     expect(nestedBuilderSource).toContain('getNestedClipSourceTime');
-    expect(nestedBuilderSource).toContain('buildNestedProxyImageSourceLayer');
+    expect(nestedBuilderSource).toContain('buildNestedVideoSourceLayer');
     expect(nestedBuilderSource).toContain('buildNestedLayerBuilderCanvasBackedSourceLayer');
     expect(nestedBuilderSource).toContain('buildNestedLayerBuilder3dSourceLayer');
-    expect(nestedBuilderSource).toContain('resolveLayerBuilderVideoSource');
+    expect(nestedVideoSource).toContain('buildNestedProxyImageSourceLayer');
+    expect(nestedVideoSource).toContain('resolveLayerBuilderVideoSource');
     expect(nestedCompositionLayerSource).toContain('buildLayerBuilderNestedCompositionLayer');
     expect(nestedCompositionLayerSource).toContain('NestedCompositionData');
     expect(nestedBaseSource).toContain('buildNestedLayerBase');
@@ -2177,6 +2182,7 @@ describe('timeline architecture registry', () => {
     expect(nestedBaseSource).toContain('buildNestedMotionSourceLayer');
     expect(lineCount(layerBuilderSource)).toBeLessThanOrEqual(540);
     expect(lineCount(nestedBuilderSource)).toBeLessThanOrEqual(240);
+    expect(lineCount(nestedVideoSource)).toBeLessThanOrEqual(80);
     expect(lineCount(nestedCompositionLayerSource)).toBeLessThanOrEqual(100);
     expect(lineCount(nestedBaseSource)).toBeLessThanOrEqual(190);
   });

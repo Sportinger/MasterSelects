@@ -66,9 +66,10 @@ export function ExportBasicsSection({
               <strong>{display.displayOutputName}</strong>
             </div>
             <div className="control-row">
-              <label>Name</label>
+              <label htmlFor="export-output-name">Name</label>
               <div className="export-input-group">
                 <input
+                  id="export-output-name"
                   type="text"
                   value={filename}
                   onChange={(e) => actions.setFilename(e.target.value)}
@@ -220,6 +221,8 @@ export function ExportBasicsSection({
                     type="button"
                     className={`export-chip${mode.encoder === 'webcodecs' ? ' is-active' : ''}`}
                     onClick={() => actions.setEncoder('webcodecs')}
+                    aria-label="Use WebCodecs Fast export"
+                    aria-pressed={mode.encoder === 'webcodecs'}
                   >
                     WebCodecs
                   </button>

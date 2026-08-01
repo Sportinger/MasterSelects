@@ -14,23 +14,6 @@ import {
 } from '../../../flashboard/FlashBoardChatTools';
 import { redactFlashBoardChatImageData } from '../../../flashboard/FlashBoardChatImageData';
 import {
-  compareFlashBoardChatPrompts,
-  runFlashBoardBridgeChatTurn,
-} from '../../../flashboard/FlashBoardChatBridgeRunner';
-import {
-  findFlashBoardChatRunByIdempotencyKey,
-  getFlashBoardChatRun,
-  listFlashBoardChatRuns,
-} from '../../../flashboard/FlashBoardChatRunAudit';
-import { buildFlashBoardChatSystemPrompt } from '../../../flashboard/FlashBoardChatPrompt';
-import type {
-  FlashBoardChatPromptVersion,
-  FlashBoardChatProvider,
-  FlashBoardChatRunSource,
-  FlashBoardChatToolExecutionMode,
-  FlashBoardOpenAiReasoningEffort,
-} from '../../../flashboard/FlashBoardChatTypes';
-import {
   AI_TOOLS,
   executeAITool,
   getQuickTimelineSummary,
@@ -102,117 +85,11 @@ export async function handleAgentControlRequest(
       return getAgentControlHistory(args);
     case 'getCall':
       return getAgentControlCall(args);
-    case 'sendChatTurn':
-      return sendAgentControlChatTurn(args);
-    case 'compareChatPrompts':
-      return compareAgentControlChatPrompts(args);
-    case 'listChatRuns':
-      return listAgentControlChatRuns(args);
-    case 'getChatRun':
-      return getAgentControlChatRun(args);
-    case 'findChatRunByIdempotencyKey':
-      return findAgentControlChatRunByIdempotencyKey(args);
-    case 'getChatPrompt':
-      return getAgentControlChatPrompt(args);
     case 'executeTool':
       return executeAgentControlTool(args);
     default:
       return { success: false, error: `Unknown agent-control operation: ${operation}` };
   }
-}
-
-async function sendAgentControlChatTurn(args: Record<string, unknown>): Promise<unknown> {
-  const prompt = readRequiredString(args.prompt);
-  if (!prompt) return { success: false, error: 'Missing chat prompt.' };
-
-  const result = await runFlashBoardBridgeChatTurn({
-    includeContext: readOptionalBoolean(args.includeContext),
-    includeHistory: readOptionalBoolean(args.includeHistory),
-    includePlaybook: readOptionalBoolean(args.includePlaybook),
-    idempotencyKey: readOptionalString(args.idempotencyKey),
-    model: readOptionalString(args.model),
-    openAiReasoningEffort: normalizeReasoningEffort(args.openAiReasoningEffort),
-    persistToChat: readOptionalBoolean(args.persistToChat),
-    prompt,
-    promptVersion: normalizePromptVersion(args.promptVersion),
-    provider: normalizeProvider(args.provider),
-    referenceMediaFileIds: readOptionalStringArray(args.referenceMediaFileIds),
-    runSource: normalizeRunSource(args.runSource),
-    systemPromptOverride: readOptionalString(args.systemPromptOverride),
-    temperature: readOptionalNumber(args.temperature),
-    toolExecutionMode: normalizeToolExecutionMode(args.toolExecutionMode),
-  });
-  return { success: true, data: redactFlashBoardChatImageData(result) };
-}
-
-async function compareAgentControlChatPrompts(args: Record<string, unknown>): Promise<unknown> {
-  const prompt = readRequiredString(args.prompt);
-  if (!prompt) return { success: false, error: 'Missing chat prompt.' };
-  const result = await compareFlashBoardChatPrompts({
-    includeContext: readOptionalBoolean(args.includeContext),
-    includeHistory: readOptionalBoolean(args.includeHistory),
-    includePlaybook: readOptionalBoolean(args.includePlaybook),
-    model: readOptionalString(args.model),
-    openAiReasoningEffort: normalizeReasoningEffort(args.openAiReasoningEffort),
-    prompt,
-    provider: normalizeProvider(args.provider),
-    runSource: normalizeRunSource(args.runSource),
-    systemPromptOverride: readOptionalString(args.systemPromptOverride),
-    temperature: readOptionalNumber(args.temperature),
-  });
-  return { success: true, data: redactFlashBoardChatImageData(result) };
-}
-
-async function listAgentControlChatRuns(args: Record<string, unknown>): Promise<unknown> {
-  return {
-    success: true,
-    data: {
-      runs: await listFlashBoardChatRuns({
-        limit: normalizeHistoryLimit(args.limit),
-        source: normalizeRunSource(args.source),
-      }),
-    },
-  };
-}
-
-async function getAgentControlChatRun(args: Record<string, unknown>): Promise<unknown> {
-  const runId = readRequiredString(args.runId);
-  if (!runId) return { success: false, error: 'Missing runId.' };
-  const run = await getFlashBoardChatRun(runId);
-  return run
-    ? { success: true, data: run }
-    : { success: false, error: `Chat run "${runId}" was not found.` };
-}
-
-async function findAgentControlChatRunByIdempotencyKey(
-  args: Record<string, unknown>,
-): Promise<unknown> {
-  const idempotencyKey = readRequiredString(args.idempotencyKey);
-  if (!idempotencyKey) return { success: false, error: 'Missing idempotencyKey.' };
-  const run = await findFlashBoardChatRunByIdempotencyKey(idempotencyKey);
-  return { success: true, data: run };
-}
-
-function getAgentControlChatPrompt(args: Record<string, unknown>): unknown {
-  const promptVersion = normalizePromptVersion(args.promptVersion) ?? 'v2';
-  const userPrompt = readOptionalString(args.prompt) ?? '';
-  const systemPrompt = buildFlashBoardChatSystemPrompt(
-    readOptionalString(args.systemPromptOverride),
-    {
-      includeContext: args.includeContext !== false,
-      includePlaybook: args.includePlaybook !== false,
-      promptVersion,
-      userPrompt,
-    },
-  );
-  return {
-    success: true,
-    data: {
-      characterCount: systemPrompt.length,
-      promptVersion,
-      systemPrompt,
-    },
-  };
 }
 
 export function flattenFlashBoardToolHistory(
@@ -386,53 +263,6 @@ function normalizeSurface(value: unknown): AgentControlSurface {
 
 function readRequiredString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
-}
-
-function readOptionalString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
-}
-
-function readOptionalBoolean(value: unknown): boolean | undefined {
-  return typeof value === 'boolean' ? value : undefined;
-}
-
-function readOptionalNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-}
-
-function readOptionalStringArray(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  return [...new Set(value
-    .filter((entry): entry is string => typeof entry === 'string')
-    .map((entry) => entry.trim())
-    .filter(Boolean))].slice(0, 4);
-}
-
-function normalizePromptVersion(value: unknown): FlashBoardChatPromptVersion | undefined {
-  return value === 'v2' || value === 'legacy-v1' ? value : undefined;
-}
-
-function normalizeProvider(value: unknown): FlashBoardChatProvider | undefined {
-  return value === 'kernel' || value === 'kie' || value === 'lemonade'
-    ? value
-    : undefined;
-}
-
-function normalizeRunSource(value: unknown): FlashBoardChatRunSource | undefined {
-  return value === 'ui' || value === 'bridge' || value === 'mcp' || value === 'test'
-    ? value
-    : undefined;
-}
-
-function normalizeToolExecutionMode(value: unknown): FlashBoardChatToolExecutionMode | undefined {
-  return value === 'normal' || value === 'read-only' ? value : undefined;
-}
-
-function normalizeReasoningEffort(value: unknown): FlashBoardOpenAiReasoningEffort | undefined {
-  return value === 'none' || value === 'low' || value === 'medium'
-    || value === 'high' || value === 'xhigh'
-    ? value
-    : undefined;
 }
 
 function normalizeHistoryLimit(value: unknown): number {

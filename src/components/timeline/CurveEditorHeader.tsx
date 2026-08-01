@@ -120,7 +120,7 @@ function formatValue(value: number, property: AnimatableProperty, stateNames: re
   }
   const cameraProperty = parseCameraProperty(property);
   if (cameraProperty === 'fov') {
-    return `${value.toFixed(0)}Â°`;
+    return `${value.toFixed(0)}°`;
   }
   if (cameraProperty === 'near') {
     return value.toFixed(3);

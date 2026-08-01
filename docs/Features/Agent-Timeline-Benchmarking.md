@@ -3,10 +3,12 @@
 `runAgentTimelineLocalBenchmark` is a development-bridge-only tool for
 `scripts/agent-timeline/collect-real-media-benchmark.mjs`. It is deliberately
 absent from the normal AI/chat tool registry. Invoke it through the usual
-authenticated `/api/ai-tools` bridge with the collector's explicit target tab;
-the standard bridge target selection and tab isolation apply unchanged.
+authenticated `/api/ai-tools` bridge; the collector can select a fresh tab
+automatically or target one explicitly with `--target-tab-id`, and standard
+bridge tab isolation applies unchanged.
 
-The runner accepts only the collector's local baseline/analysis request schema.
+The runner accepts the collector's local baseline/analysis request schema and
+the separate `{ "cancel": true }` request.
 It never reads the supplied path from browser JavaScript. Instead, it requires
 exactly one selected local Media panel item whose browser `File` name and size
 match the supplied local fingerprint. Visual/audio passes additionally require
@@ -25,9 +27,11 @@ pass. Both echo the requested `baselineKind` (`standalone-cut` or
 `proxy-piggyback`), and the collector rejects a result whose pass, baseline
 kind, platform, device class, or renderer/backend evidence differs from its
 paired result. The current browser adapter can execute a standalone-cut
-baseline, but it becomes a completed measurement only after an explicit local
-instrumentation capability is registered; proxy-piggyback remains unavailable
-until it has its own instrumented adapter.
+baseline, but it is a completed measurement only when its requested
+cache state is verified and an explicit local instrumentation capability is
+registered; proxy-piggyback has no instrumented adapter. This repository
+defines those capability hooks but does not register them, so the browser
+runner cannot emit a qualifying real-media measurement.
 
 Peak memory, durable artifact bytes, redundant decoded seconds, and optional
 renderer/backend/software-fallback evidence are injected only by a local
@@ -41,3 +45,7 @@ Warm cache is only labelled `warm` when matching local output is visible and
 the pass reports measured `redundantDecodedSeconds: 0`; absent or non-zero
 decoder evidence is blocked. Linux/Mesa policies can require observable
 platform class, Mesa state, renderer backend, and software-canvas fallback.
+
+`npm run agent-timeline:benchmark` also runs the separate deterministic
+synthetic benchmark. Its reports validate benchmark contracts only;
+they never qualify for the production analysis benchmark gate.

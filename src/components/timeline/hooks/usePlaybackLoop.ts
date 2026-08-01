@@ -13,6 +13,7 @@ import {
 } from '../../../services/layerBuilder';
 import { findStopMarkerInPlaybackRange } from '../../../services/timeline/stopMarkers';
 import { hasTimelineVisualRenderDemand } from '../../../services/timeline/timelineVisualDemand';
+import type { TimelineClip, TimelineTrack } from '../../../types';
 
 interface UsePlaybackLoopProps {
   isPlaying: boolean;
@@ -49,8 +50,48 @@ function syncInternalPlaybackPositionToStore(): void {
   });
 }
 
-function getVisualPlaybackStateUpdateInterval(clipCount: number, visibleTrackCount: number): number {
-  const complexity = clipCount + visibleTrackCount * 20;
+type PlaybackNestedComplexity = {
+  clipCount: number;
+  visibleTrackCount: number;
+};
+
+function getNestedPlaybackComplexity(clips: readonly TimelineClip[]): PlaybackNestedComplexity {
+  const visitedClips = new Set<TimelineClip>();
+  const visitedTracks = new Set<TimelineTrack>();
+  let clipCount = 0;
+  let visibleTrackCount = 0;
+
+  const visit = (nestedClips: readonly TimelineClip[]) => {
+    for (const clip of nestedClips) {
+      if (visitedClips.has(clip)) continue;
+      visitedClips.add(clip);
+
+      for (const track of clip.nestedTracks ?? []) {
+        if (visitedTracks.has(track)) continue;
+        visitedTracks.add(track);
+        if (track.type === 'video' ? track.visible !== false : !track.muted) {
+          visibleTrackCount++;
+        }
+      }
+
+      const children = clip.nestedClips ?? [];
+      clipCount += children.length;
+      visit(children);
+    }
+  };
+
+  visit(clips);
+  return { clipCount, visibleTrackCount };
+}
+
+export function getVisualPlaybackStateUpdateInterval(
+  clipCount: number,
+  visibleTrackCount: number,
+  nestedComplexity: PlaybackNestedComplexity = { clipCount: 0, visibleTrackCount: 0 },
+): number {
+  const complexity = clipCount
+    + nestedComplexity.clipCount
+    + (visibleTrackCount + nestedComplexity.visibleTrackCount) * 20;
   if (complexity >= 500) return 125;
   if (complexity >= 250) return 90;
   if (complexity >= 120) return 66;
@@ -89,6 +130,8 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
 
     // Preserve any wall-clock progress already started by timelineStore.play().
     const initialTimelineState = useTimelineStore.getState();
+    let nestedComplexityClips = initialTimelineState.clips;
+    let nestedComplexity = getNestedPlaybackComplexity(initialTimelineState.clips);
     startInternalPosition(
       getPlayheadPosition(initialTimelineState.playheadPosition),
       initialTimelineState.playbackSpeed
@@ -133,6 +176,10 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
           if (track.type === 'video') return track.visible === false ? count : count + 1;
           return track.muted ? count : count + 1;
         }, 0);
+        if (clips !== nestedComplexityClips) {
+          nestedComplexityClips = clips;
+          nestedComplexity = getNestedPlaybackComplexity(clips);
+        }
         const effectiveEnd = op !== null ? op : dur;
         const effectiveStart = ip !== null ? ip : 0;
         const previousPosition = playheadState.position;
@@ -279,7 +326,11 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
           : hasVisualRenderDemand
           ? Math.max(
               VISUAL_STATE_UPDATE_INTERVAL,
-              getVisualPlaybackStateUpdateInterval(clips.length, visibleTrackCount)
+              getVisualPlaybackStateUpdateInterval(
+                clips.length,
+                visibleTrackCount,
+                nestedComplexity,
+              )
             )
           : AUDIO_ONLY_STATE_UPDATE_INTERVAL;
         if (currentTime - lastStateUpdate >= stateUpdateInterval) {

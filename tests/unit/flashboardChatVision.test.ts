@@ -103,6 +103,13 @@ describe('FlashBoard compact-chat vision follow-ups', () => {
     let replayCount = 0;
     const hostedFetch = vi.fn(async (requestInfo: RequestInfo | URL, init?: RequestInit) => {
       const url = String(requestInfo);
+      if (url === '/api/kernel/hosted-agent/protocol') {
+        return new Response(JSON.stringify({
+          availableExecutionProfiles: ['fast'],
+          protocolVersion: 'hosted-agent-k2-v1',
+          reason: 'outside_canary',
+        }), { headers: { 'Content-Type': 'application/json' }, status: 200 });
+      }
       if (url === '/api/kernel/hosted-agent/turns') {
         const request = JSON.parse(String(init?.body)) as Record<string, unknown>;
         hostedTurnId = String(request.turnId);
@@ -180,7 +187,7 @@ describe('FlashBoard compact-chat vision follow-ups', () => {
       temperature: 0.7,
     });
 
-    const hostedToolBody = JSON.parse(String(hostedFetch.mock.calls[2]?.[1]?.body));
+    const hostedToolBody = JSON.parse(String(hostedFetch.mock.calls[3]?.[1]?.body));
     expect(hostedToolBody.results[0].modelContent).toContain(
       '[image data omitted from compact chat context]',
     );
@@ -208,6 +215,13 @@ describe('FlashBoard compact-chat vision follow-ups', () => {
     let replayCount = 0;
     const hostedFetch = vi.fn(async (requestInfo: RequestInfo | URL, init?: RequestInit) => {
       const url = String(requestInfo);
+      if (url === '/api/kernel/hosted-agent/protocol') {
+        return new Response(JSON.stringify({
+          availableExecutionProfiles: ['fast'],
+          protocolVersion: 'hosted-agent-k2-v1',
+          reason: 'outside_canary',
+        }), { headers: { 'Content-Type': 'application/json' }, status: 200 });
+      }
       if (url === '/api/kernel/hosted-agent/turns') {
         const request = JSON.parse(String(init?.body)) as Record<string, unknown>;
         hostedTurnId = String(request.turnId);
@@ -286,7 +300,7 @@ describe('FlashBoard compact-chat vision follow-ups', () => {
     });
 
     expect(mocks.handleCaptureFrame).toHaveBeenCalledTimes(1);
-    const hostedToolBody = JSON.parse(String(hostedFetch.mock.calls[2]?.[1]?.body));
+    const hostedToolBody = JSON.parse(String(hostedFetch.mock.calls[3]?.[1]?.body));
     expect(hostedToolBody.results[0].providerContent.openAiFollowupInput[0].content)
       .toEqual([
         {

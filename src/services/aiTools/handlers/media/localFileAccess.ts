@@ -174,10 +174,6 @@ function getLocalFileBackend(callerContext: CallerContext): LocalFileBackend | n
   const devBridgeAvailable = hasDevBridgeToken();
   const nativeHelperAvailable = NativeHelperClient.isConnected();
 
-  if (callerContext === 'nativeHelper' && nativeHelperAvailable) {
-    return 'nativeHelper';
-  }
-
   if (callerContext === 'devBridge' && devBridgeAvailable) {
     return 'devBridge';
   }

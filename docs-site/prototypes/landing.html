@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MasterSelects — WebGPU video editing for the browser</title>
+<link rel="icon" href="ms-mark.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&display=swap" rel="stylesheet" />
+<style>
+  /* Plate-inspired single-viewport landing, written from scratch.
+     Design system: near-black canvas, one centered column, quiet
+     monospace captions, a single saturated accent. Adapt freely. */
+  :root {
+    --bg: #0a0a0a;
+    --fg: #eaeaea;
+    --fg-dim: rgba(234, 234, 234, 0.55);
+    --fg-faint: rgba(234, 234, 234, 0.28);
+    --line: rgba(255, 255, 255, 0.09);
+    --accent: #4285f4;
+    --radius: 10px;
+    --sans: 'Geist', system-ui, -apple-system, sans-serif;
+    --mono: 'Geist Mono', 'SF Mono', 'Fira Code', monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    text-align: center;
+  }
+
+  .mark {
+    width: 72px;
+    height: 72px;
+    border-radius: 16px;
+    display: block;
+    margin: 0 auto 22px;
+  }
+  h1 {
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.39px;
+  }
+  .tagline {
+    margin-top: 10px;
+    font-size: 15px;
+    color: var(--fg-dim);
+  }
+  .version {
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-faint);
+  }
+
+  .actions {
+    margin-top: 52px;
+    display: grid;
+    grid-template-columns: 1fr 1px 1fr;
+    column-gap: 28px;
+    align-items: start;
+  }
+  .actions .divider {
+    width: 1px;
+    height: 100%;
+    background: var(--line);
+  }
+  .col { display: grid; row-gap: 26px; }
+  .action { width: 236px; }
+
+  .btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 44px;
+    width: 100%;
+    border-radius: var(--radius);
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    border: 1px solid var(--line);
+    color: var(--fg-dim);
+    background: transparent;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  }
+  .btn:hover { color: var(--fg); border-color: rgba(255, 255, 255, 0.22); }
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .btn.primary:hover { background: #5a95f5; border-color: #5a95f5; }
+  .btn.disabled { opacity: 0.45; pointer-events: none; }
+
+  .caption {
+    margin-top: 9px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-faint);
+  }
+
+  footer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 26px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--fg-faint);
+  }
+  footer a { color: inherit; text-decoration: none; }
+  footer a:hover { color: var(--fg-dim); }
+
+  @media (max-width: 640px) {
+    .actions { grid-template-columns: 1fr; }
+    .actions .divider { display: none; }
+    .action { width: min(300px, 84vw); }
+  }
+</style>
+</head>
+<body>
+  <main>
+    <img class="mark" src="ms-mark.png" alt="MasterSelects" />
+    <h1>MasterSelects</h1>
+    <p class="tagline">WebGPU video editing for the browser</p>
+    <p class="version">v2.4.4</p>
+
+    <div class="actions">
+      <div class="col">
+        <div class="action">
+          <a class="btn" href="https://github.com/Sportinger/MasterSelects">GitHub</a>
+          <p class="caption">MIT-licensed source.</p>
+        </div>
+        <div class="action">
+          <a class="btn disabled" href="#">Native Helper</a>
+          <p class="caption">Optional · capture &amp; file access.</p>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="col">
+        <div class="action">
+          <a class="btn primary" href="https://www.masterselects.com">Launch browser app &rarr;</a>
+          <p class="caption">Chrome &amp; Edge &middot; WebGPU required.</p>
+        </div>
+        <div class="action">
+          <a class="btn" href="https://docs.masterselects.com">Documentation</a>
+          <p class="caption">MasterSelects user manual.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    masterselects.com &nbsp;&middot;&nbsp; &copy; 2026 &nbsp;&middot;&nbsp;
+    <a href="https://github.com/Sportinger/MasterSelects">GitHub</a>
+  </footer>
+</body>
+</html>

@@ -74,6 +74,11 @@ const TIMELINE_LANE_REFERENCE_SELECTORS = [
   '.timeline-lane-reference',
 ];
 
+const TIMELINE_RULER_VIEWPORT_SELECTORS = [
+  '[data-guided-target="timeline-ruler"]',
+  '.time-ruler-wrapper',
+];
+
 const TIMELINE_HEADER_WIDTH_FALLBACK = 210;
 const TIMELINE_TIME_TARGET_WIDTH = 8;
 const TIMELINE_TIME_TARGET_HEIGHT = 28;
@@ -212,6 +217,19 @@ export const resolveTimelineTimeTarget: GuidedTargetResolver = (
     };
   }
 
+  const rulerViewport = target.surface === 'ruler'
+    ? findFirstElement(TIMELINE_RULER_VIEWPORT_SELECTORS)
+    : null;
+  if (target.surface === 'ruler' && !rulerViewport) {
+    return {
+      status: 'missing',
+      target,
+      reason: 'not-mounted',
+      message: 'Timeline ruler is not mounted',
+      suggestedAction: { type: 'focusPanel', panel: 'timeline' },
+    };
+  }
+
   const { zoom, scrollX } = useTimelineStore.getState();
   const effectiveZoom = Number.isFinite(zoom) && zoom > 0
     ? zoom
@@ -219,9 +237,14 @@ export const resolveTimelineTimeTarget: GuidedTargetResolver = (
   const effectiveScrollX = Number.isFinite(scrollX)
     ? scrollX
     : readNumberAttribute(timelineSurface, 'data-guided-timeline-scroll-x') ?? 0;
-  const originX = resolveTimelineContentOriginX(timelineSurface, surfaceRect);
+  const targetViewportRect = rulerViewport ? rectFromElement(rulerViewport) : surfaceRect;
+  const originX = rulerViewport
+    ? targetViewportRect.x
+    : resolveTimelineContentOriginX(timelineSurface, surfaceRect);
   const x = originX + target.time * effectiveZoom - effectiveScrollX;
-  const y = resolveTimelineTimeY(timelineSurface, surfaceRect, trackElement);
+  const y = rulerViewport
+    ? targetViewportRect.y + targetViewportRect.height / 2
+    : resolveTimelineTimeY(timelineSurface, surfaceRect, trackElement);
   const point = { x, y };
   const rect = {
     x: point.x - TIMELINE_TIME_TARGET_WIDTH / 2,
@@ -230,11 +253,11 @@ export const resolveTimelineTimeTarget: GuidedTargetResolver = (
     height: TIMELINE_TIME_TARGET_HEIGHT,
   };
 
-  const viewportRight = surfaceRect.x + surfaceRect.width;
-  const viewportBottom = surfaceRect.y + surfaceRect.height;
+  const viewportRight = targetViewportRect.x + targetViewportRect.width;
+  const viewportBottom = targetViewportRect.y + targetViewportRect.height;
   const isOutsideTimelineViewport = point.x < originX
     || point.x > viewportRight
-    || point.y < surfaceRect.y
+    || point.y < targetViewportRect.y
     || point.y > viewportBottom;
 
   if (isOutsideTimelineViewport || isOffscreen(rect)) {
@@ -257,7 +280,7 @@ export const resolveTimelineTimeTarget: GuidedTargetResolver = (
     rect,
     point,
     center: point,
-    element: trackElement ?? timelineSurface,
+    element: rulerViewport ?? trackElement ?? timelineSurface,
   };
 };
 

@@ -1,5 +1,6 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
+import { useMediaStore } from '../../../stores/mediaStore';
 import type { AnimatableProperty } from '../../../types/animationProperties';
 import {
   MOTION_APPEARANCE_BLEND_MODES,
@@ -8,6 +9,7 @@ import {
   createMotionAppearanceId,
   createRadialGradientAppearance,
   createStrokeAppearance,
+  createTextureFillAppearance,
   type AppearanceItem,
   type GradientStop,
   type MotionColor,
@@ -17,6 +19,8 @@ import {
   MOTION_MAX_GRADIENT_STOPS,
 } from '../../../engine/motion/MotionBuffers';
 import { DraggableNumber, KeyframeToggle } from './shared';
+import { applyMotionAppearancePreset, createMotionAppearancePreset } from '../../../services/motionDesign/appearancePresets';
+import { getMotionAppearancePresetFromLibrary, listMotionAppearancePresets, saveMotionAppearancePresetToLibrary } from '../../../services/motionDesign/presetLibrary';
 
 interface MotionAppearanceStackEditorProps {
   clipId: string;
@@ -26,7 +30,16 @@ type AddableAppearanceKind =
   | 'color-fill'
   | 'stroke'
   | 'linear-gradient'
-  | 'radial-gradient';
+  | 'radial-gradient'
+  | 'texture-fill';
+
+const TEXTURE_FILL_FIT_MODES = [
+  'contain',
+  'cover',
+  'fill',
+  'stretch',
+  'tile',
+] as const;
 
 const EMPTY_APPEARANCE_ITEMS: AppearanceItem[] = [];
 
@@ -56,6 +69,7 @@ function createAppearance(kind: AddableAppearanceKind): AppearanceItem {
   if (kind === 'stroke') return { ...createStrokeAppearance(), visible: true };
   if (kind === 'linear-gradient') return createLinearGradientAppearance();
   if (kind === 'radial-gradient') return createRadialGradientAppearance();
+  if (kind === 'texture-fill') return createTextureFillAppearance();
   return createColorFillAppearance();
 }
 
@@ -114,10 +128,33 @@ export function MotionAppearanceStackEditor({
   ));
   const updateMotionLayer = useTimelineStore((state) => state.updateMotionLayer);
   const setPropertyValue = useTimelineStore((state) => state.setPropertyValue);
+  const mediaFiles = useMediaStore((state) => state.files);
   const appearance = clip?.motion?.appearance;
   const items = appearance?.items ?? EMPTY_APPEARANCE_ITEMS;
   const selectedId = appearance?.selectedItemId ?? items[items.length - 1]?.id;
   const selected = items.find((item) => item.id === selectedId) ?? items[items.length - 1];
+  const [presetName, setPresetName] = useState('');
+  const [selectedPresetId, setSelectedPresetId] = useState('');
+  const [presetError, setPresetError] = useState<string | null>(null);
+  const [presetRevision, setPresetRevision] = useState(0);
+  const presets = listMotionAppearancePresets().presets;
+
+  const savePreset = useCallback(() => {
+    try {
+      if (!appearance) return;
+      saveMotionAppearancePresetToLibrary(createMotionAppearancePreset(appearance, presetName));
+      setPresetName('');
+      setPresetError(null);
+      setPresetRevision((revision) => revision + 1);
+    } catch (error) { setPresetError(error instanceof Error ? error.message : 'Could not save appearance preset'); }
+  }, [appearance, presetName]);
+
+  const applyPreset = useCallback(() => {
+    const preset = getMotionAppearancePresetFromLibrary(selectedPresetId);
+    if (!preset) { setPresetError('Choose a saved appearance preset'); return; }
+    updateMotionLayer(clipId, (motion) => applyMotionAppearancePreset(motion, preset).motion);
+    setPresetError(null);
+  }, [clipId, selectedPresetId, updateMotionLayer]);
 
   const replaceItems = useCallback((
     updater: (currentItems: AppearanceItem[]) => AppearanceItem[],
@@ -297,8 +334,21 @@ export function MotionAppearanceStackEditor({
           <option value="stroke">Stroke</option>
           <option value="linear-gradient">Linear Gradient</option>
           <option value="radial-gradient">Radial Gradient</option>
+          <option value="texture-fill">Texture Fill</option>
         </select>
       </div>
+
+      <div className="control-row" data-preset-revision={presetRevision}>
+        <label className="prop-label">Presets</label>
+        <select aria-label="Appearance preset" value={selectedPresetId} onChange={(event) => setSelectedPresetId(event.target.value)}>
+          <option value="">Saved presets…</option>
+          {presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+        </select>
+        <button type="button" onClick={applyPreset} disabled={!selectedPresetId}>Apply</button>
+        <input aria-label="Appearance preset name" value={presetName} placeholder="Save as preset…" onChange={(event) => setPresetName(event.target.value)} />
+        <button type="button" onClick={savePreset} disabled={!presetName.trim()}>Save</button>
+      </div>
+      {presetError && <div className="control-row" role="alert">{presetError}</div>}
 
       {items.map((item, index) => (
         <div className="control-row" key={item.id}>
@@ -457,6 +507,111 @@ export function MotionAppearanceStackEditor({
                 value={selected.radius}
                 min={0.001}
               />
+            </>
+          )}
+
+          {selected.kind === 'texture-fill' && (
+            <>
+              <div className="control-row">
+                <label className="prop-label">Media</label>
+                <select
+                  aria-label="Texture media"
+                  value={selected.mediaFileId ?? ''}
+                  onChange={(event) => updateItem(
+                    selected.id,
+                    (item) => item.kind === 'texture-fill'
+                      ? {
+                          ...item,
+                          ...(event.target.value
+                            ? { mediaFileId: event.target.value }
+                            : { mediaFileId: undefined }),
+                        }
+                      : item,
+                  )}
+                >
+                  <option value="">None</option>
+                  {mediaFiles
+                    .filter((file) => file.type === 'image' || file.type === 'video')
+                    .map((file) => (
+                      <option value={file.id} key={file.id}>{file.name}</option>
+                    ))}
+                </select>
+              </div>
+              <div className="control-row">
+                <label className="prop-label">Fit</label>
+                <select
+                  value={selected.fit}
+                  onChange={(event) => updateItem(
+                    selected.id,
+                    (item) => item.kind === 'texture-fill'
+                      ? {
+                          ...item,
+                          fit: event.target.value as typeof item.fit,
+                        }
+                      : item,
+                  )}
+                >
+                  {TEXTURE_FILL_FIT_MODES.map((fit) => (
+                    <option value={fit} key={fit}>{fit}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="labeled-value">
+                <span className="labeled-value-label">Time</span>
+                <DraggableNumber
+                  value={selected.time ?? 0}
+                  onChange={(time) => updateItem(
+                    selected.id,
+                    (item) => item.kind === 'texture-fill' ? { ...item, time } : item,
+                  )}
+                  min={0}
+                  suffix="s"
+                  defaultValue={selected.time ?? 0}
+                />
+              </div>
+              <div className="control-row">Time applies when the selected media is a video.</div>
+              {([
+                ['Position X', 'position', 'x'],
+                ['Position Y', 'position', 'y'],
+                ['Scale X', 'scale', 'x'],
+                ['Scale Y', 'scale', 'y'],
+              ] as const).map(([label, transformKey, axis]) => (
+                <div className="labeled-value" key={label}>
+                  <span className="labeled-value-label">{label}</span>
+                  <DraggableNumber
+                    value={selected.transform[transformKey][axis]}
+                    onChange={(value) => updateItem(
+                      selected.id,
+                      (item) => item.kind === 'texture-fill'
+                        ? {
+                            ...item,
+                            transform: {
+                              ...item.transform,
+                              [transformKey]: {
+                                ...item.transform[transformKey],
+                                [axis]: value,
+                              },
+                            },
+                          }
+                        : item,
+                    )}
+                    defaultValue={selected.transform[transformKey][axis]}
+                  />
+                </div>
+              ))}
+              <div className="labeled-value">
+                <span className="labeled-value-label">Rotation</span>
+                <DraggableNumber
+                  value={selected.transform.rotation}
+                  onChange={(rotation) => updateItem(
+                    selected.id,
+                    (item) => item.kind === 'texture-fill'
+                      ? { ...item, transform: { ...item.transform, rotation } }
+                      : item,
+                  )}
+                  defaultValue={selected.transform.rotation}
+                />
+              </div>
             </>
           )}
 

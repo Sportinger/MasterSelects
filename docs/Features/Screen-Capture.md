@@ -2,15 +2,15 @@
 
 # Screen Capture
 
-MasterSelects can record a browser tab, application window, or display directly into the open project. Open **View → Panels → Screen Capture**, choose a preferred source type, and complete the browser's sharing picker. The browser remains the authority: the preference is a hint and never bypasses its permission UI.
+MasterSelects can record a browser tab, application window, or display directly into the open project. Open **View → Panels → Capture**, choose **Screen**, **Window**, or **Browser tab**, and complete the browser's sharing picker. The browser remains the authority: the preference is a hint and never bypasses its permission UI.
 
 ## Recording flow
 
 1. Open or create a project. Captures are copied into project storage, so recording is unavailable without one.
-2. Choose **Prefer screen**, **Prefer window**, or **Prefer tab** and inspect the live preview.
+2. Choose **Screen**, **Window**, or **Browser tab** and inspect the live preview.
 3. Set frame rate, quality, cursor, captured audio, microphone, and optional timeline placement. Audio-input changes apply on the next source selection.
 4. Press **Record**. Recording can be paused, resumed, or stopped. Using the browser's **Stop sharing** action also finalizes the session.
-5. The result is imported into the root `Recordings` Media Library folder. With **Place recording on timeline** enabled, one placement history step is added; undo removes the clip without removing the imported media.
+5. The result is imported into the root `Recordings` Media Library folder. With **Place on timeline** enabled, it is placed above the current edit; undoing the placement removes the clip without removing the imported media.
 
 The panel reports storage warnings before recording and shows live elapsed time, estimated size, and audio meters. The debug bridge adds encoder pressure and dropped-frame telemetry. Captured tab muting only prevents local tab playback; it is not echo cancellation.
 
@@ -20,7 +20,7 @@ While capture is recording, a pulsing **REC** button appears immediately left of
 
 The default compatibility tier uses `MediaRecorder`, selecting the first supported VP9, VP8, WebM, H.264/MP4, or MP4 MIME type. Timeslice blobs are retained only while their sequential recovery-artifact write is pending. Pausing flushes the current recorder blob and waits for pending writes so the queue settles before the paused state is reported.
 
-The experimental WebCodecs tier is controlled by `flags.screenCaptureWebCodecs`. It provides crop and output scaling, H.264 video, AAC-with-Opus-fallback audio, a shared pause-aware A/V clock, time-based keyframes, encoder-pressure frame dropping, and fragmented MP4 output. Crop coordinates are mapped through the preview's letterboxing and aligned for 4:2:0 encoding. Scaling follows the Linux/Mesa canvas rules and uses the software timeline-canvas preference where required.
+The WebCodecs tier is controlled by `flags.screenCaptureWebCodecs`, which is disabled by default. When enabled in a supported browser, it provides crop and output scaling, H.264 video, AAC-with-Opus-fallback audio, a shared pause-aware A/V clock, time-based keyframes, encoder-pressure frame dropping, and fragmented MP4 output. Crop coordinates are mapped through the preview's letterboxing and aligned for 4:2:0 encoding. Scaling follows the timeline canvas platform preference where required.
 
 WebCodecs output is streamed through MediaBunny's positioned `StreamTarget` writes. Each `{position, data}` run is persisted before backpressure is released, so long sessions do not accumulate a complete MP4 in RAM. Current telemetry is available through the AI debug bridge's `getCaptureState` tool, including current/peak MediaRecorder pending-write bytes, queued WebCodecs packet bytes, persisted artifact bytes, output bytes, encoder queue size, and dropped frames.
 
@@ -37,7 +37,7 @@ On import, a valid duration probed from the completed recording file remains aut
 Uncommitted sessions reappear in the panel after reload:
 
 - MediaRecorder recovery concatenates persisted chunks in order. A truncated WebM/MP4 prefix is browser-dependent, so the UI labels this path **best-effort** and warns that it may be shorter than the session.
-- WebCodecs recovery replays positioned runs in write order, with later writes overwriting earlier bytes, to reconstruct a fragmented MP4 prefix. Completed fragments remain structurally readable after interruption.
+- WebCodecs recovery replays positioned runs in write order, with later writes overwriting earlier bytes, to reconstruct a fragmented MP4 prefix. The panel offers restoration only after a completely persisted media fragment is detected.
 
 Recovery is durably marked committed before placement. Retrying a committed session cannot import or place a duplicate. Dismissing a recovery entry deletes its capture artifacts.
 
@@ -46,9 +46,8 @@ Recovery is durably marked committed before placement. Retrying a committed sess
 - Screen/window capture always requires browser permission and transient user activation.
 - DRM, elevated windows, or platform compositor restrictions can produce black frames.
 - Wayland capture uses the desktop portal and may deliver lower frame rates. The MediaRecorder tier remains the safe default on Linux.
-- Crop and scale require the feature-flagged WebCodecs tier. Source dimension changes stop a cropped recording rather than silently changing its geometry.
-- WebCodecs capture is blocked while an export is active and suspends automatic preview-quality resets for the session.
-- There is no webcam overlay, scene switching, global hotkey, native-helper capture, or RTMP/WHIP streaming in this release.
+- Crop and scale require the disabled-by-default, feature-flagged WebCodecs tier. Source dimension changes stop a cropped recording rather than silently changing its geometry.
+- When enabled, WebCodecs capture is blocked while an export is active and suspends automatic preview-quality resets for the session.
 
 ## Diagnostics
 

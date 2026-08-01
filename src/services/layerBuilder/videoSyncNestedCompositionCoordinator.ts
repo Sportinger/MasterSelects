@@ -14,6 +14,12 @@ import { resolveTransitionSourceMapTime } from '../timeline/transitionSourceMap'
 import { getNestedClipSourceTiming } from './layerBuilderNestedLayers';
 import type { FrameContext } from './types';
 import { syncNestedFullWebCodecs } from './videoSyncNestedFullWebCodecs';
+import {
+  getNestedClipContinuityKey,
+  getNestedPreviewRootTrackKey,
+  getNestedPreviewSourceKey,
+  getNestedPreviewTrackKey,
+} from './nestedPreviewContinuity';
 
 export type VideoSyncNestedCompositionCoordinatorDeps = {
   getClipHtmlVideoElement: (clip: TimelineClip) => HTMLVideoElement | null;
@@ -60,6 +66,18 @@ export type VideoSyncNestedCompositionCoordinatorDeps = {
   safeSeekTime: (video: HTMLVideoElement, time: number) => number;
   activateFreeRunVideo: (video: HTMLVideoElement) => void;
   stopFreeRunVideo: (video: HTMLVideoElement) => void;
+  getPreviewContinuationVideoElement: (
+    clip: TimelineClip,
+    targetTime: number,
+    trackKey: string,
+    continuityKey: string,
+  ) => HTMLVideoElement | null;
+  rememberPreviewVideo: (
+    trackKey: string,
+    clip: TimelineClip,
+    video: HTMLVideoElement,
+    continuityKey: string,
+  ) => void;
 };
 
 export class VideoSyncNestedCompositionCoordinator {
@@ -77,6 +95,7 @@ export class VideoSyncNestedCompositionCoordinator {
     ctx: FrameContext,
     depth = 0,
     compositionTime?: number,
+    parentTrackKey = getNestedPreviewRootTrackKey(compClip),
   ): void {
     if (!compClip.nestedClips || !compClip.nestedTracks) return;
     if (depth >= MAX_NESTING_DEPTH) return;
@@ -105,6 +124,16 @@ export class VideoSyncNestedCompositionCoordinator {
 
       const timing = getNestedClipSourceTiming(nestedClip, compTime - nestedClip.startTime);
       const nestedClipTime = timing.sourceTime;
+      const trackKey = getNestedPreviewTrackKey(parentTrackKey, compClip, nestedClip);
+      const continuityKey = getNestedClipContinuityKey(compClip, nestedClip);
+      const sourceKey = getNestedPreviewSourceKey(trackKey, continuityKey);
+      this.deps.getPreviewContinuationVideoElement(
+        nestedClip,
+        nestedClipTime,
+        trackKey,
+        continuityKey,
+      );
+      this.deps.rememberPreviewVideo(trackKey, nestedClip, nestedVideo, continuityKey);
 
       const video = nestedVideo;
       if (nestedClip.freeRun) {
@@ -138,7 +167,7 @@ export class VideoSyncNestedCompositionCoordinator {
       // regular HTML clip path and only maintain the paused-frame cache while
       // playback is stopped.
       if (!ctx.isPlaying && !video.seeking && video.readyState >= 2) {
-        renderHostPort.ensureVideoFrameCached(video, nestedClip.id);
+        renderHostPort.ensureVideoFrameCached(video, sourceKey);
       }
 
       if (timing.isHold) {
@@ -257,6 +286,7 @@ export class VideoSyncNestedCompositionCoordinator {
             ctx,
             depth + 1,
             mappedNestedCompTime?.sourceTime ?? compTime + nestedClip.inPoint,
+            getNestedPreviewTrackKey(parentTrackKey, compClip, nestedClip),
           );
         }
       }
