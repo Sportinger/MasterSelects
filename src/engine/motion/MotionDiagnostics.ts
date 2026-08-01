@@ -1,5 +1,6 @@
 import type { TimelineClip } from '../../types/timeline';
-import { getMotionReplicatorRenderState } from './MotionTypes';
+import { normalizeMotionReplicatorBundle } from '../../services/motionDesign/contracts/replicatorTimelineAdapter';
+import { MOTION_REPLICATOR_SHADER_MAX_INSTANCES } from './MotionTypes';
 
 export interface MotionTimelineDiagnostics {
   totalClips: number;
@@ -61,6 +62,33 @@ function isActiveAt(clip: TimelineClip, time: number): boolean {
   return time >= clip.startTime && time < clip.startTime + clip.duration;
 }
 
+function getConfiguredReplicatorInstanceCount(
+  clip: TimelineClip,
+): { enabled: boolean; instanceCount: number } {
+  const motion = clip.motion;
+  if (!motion?.replicator) return { enabled: false, instanceCount: 1 };
+  try {
+    const replicator = normalizeMotionReplicatorBundle(
+      motion.replicator,
+      motion.modifierStack,
+    ).replicator;
+    if (!replicator.enabled) return { enabled: false, instanceCount: 1 };
+    const requestedCount = replicator.layout.mode === 'grid'
+      ? replicator.layout.count.columns * replicator.layout.count.rows
+      : replicator.layout.count;
+    const configuredLimit = Math.min(
+      replicator.userLimit ?? MOTION_REPLICATOR_SHADER_MAX_INSTANCES,
+      MOTION_REPLICATOR_SHADER_MAX_INSTANCES,
+    );
+    return {
+      enabled: true,
+      instanceCount: Math.min(requestedCount, configuredLimit),
+    };
+  } catch {
+    return { enabled: false, instanceCount: 0 };
+  }
+}
+
 export function buildMotionTimelineDiagnostics(
   clips: readonly TimelineClip[],
   playheadPosition: number,
@@ -105,7 +133,9 @@ export function buildMotionTimelineDiagnostics(
       snapshot.unsupportedClips += 1;
     }
 
-    const replicator = getMotionReplicatorRenderState(clip.motion);
+    // Timeline/AI diagnostics describe persisted configuration. They must not
+    // execute the render evaluator outside the admitted MotionFrameState path.
+    const replicator = getConfiguredReplicatorInstanceCount(clip);
     if (replicator.enabled) snapshot.replicatorClips += 1;
     snapshot.effectiveInstances += replicator.instanceCount;
     if (active) snapshot.activeEffectiveInstances += replicator.instanceCount;

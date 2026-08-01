@@ -43,6 +43,7 @@ export const buildTimelineTrackClipShellActiveModules = ({
   specialState,
   spectralImageMediaRefs,
   videoBakeRegionSelection,
+  parentingEnabled,
 }: Pick<
   TimelineTrackProps,
   | 'activeTimelineToolId'
@@ -67,6 +68,7 @@ export const buildTimelineTrackClipShellActiveModules = ({
   showAudioRegionEditMarkers: boolean;
   specialState?: TimelineTrackShellSpecialState;
   spectralImageMediaRefs: readonly ClipInteractionShellSpectralImageMediaRef[];
+  parentingEnabled: boolean;
 }): ClipInteractionShellActiveModules => {
   const clipId = clip.id;
   const audioRegionGainActive = audioRegionGainPreview?.clipId === clipId;
@@ -87,6 +89,12 @@ export const buildTimelineTrackClipShellActiveModules = ({
     null;
 
   return {
+    parenting: {
+      enabled: parentingEnabled,
+      slot: 'parenting',
+      parentClipId: clip.parentClipId,
+      locked: track.locked === true,
+    },
     trim: { enabled: canShowEditHandles, slot: 'trim', state: isTrimGestureActive ? clipTrim : null, activeEdges: isTrimGestureActive ? [clipTrim.edge] : [] },
     fade: {
       enabled: canShowEditHandles,

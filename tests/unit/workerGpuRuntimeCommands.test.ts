@@ -114,6 +114,7 @@ describe('worker GPU runtime command contracts', () => {
       'gpu.unregisterTarget',
       'gpu.presentTestPattern',
       'gpu.presentWebCodecsFrame',
+      'gpu.presentFrameStack',
       'gpu.startWebCodecsStream',
       'gpu.stopWebCodecsStream',
       'gpu.initGraph',
@@ -278,7 +279,7 @@ describe('worker GPU runtime command contracts', () => {
     });
   });
 
-  it('documents that GPU command payloads do not transfer ownership yet', () => {
+  it('keeps legacy GPU commands data-only under the default transfer policy', () => {
     expect(WORKER_GPU_RUNTIME_COMMAND_TRANSFER_POLICY).toEqual({
       acceptsTransferables: false,
       transferableFields: [],

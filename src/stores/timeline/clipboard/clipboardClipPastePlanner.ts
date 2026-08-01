@@ -6,6 +6,12 @@ import {
   clipRequiresAsyncMediaLoad,
   createPastedClipSource as createPastedClipSourceImpl,
 } from './clipboardPastedClipSource';
+import { normalizeMotionLayerDefinition } from '../../../services/motionDesign/contracts/replicatorTimelineAdapter';
+import { applyTimelineMotionWorldTransformAtTime } from '../../../services/motionDesign/contracts/timelineStructureAdapter';
+import {
+  createMotionParentGraphSnapshot,
+  planMotionParentRemap,
+} from '../../../services/motionDesign/structure/parentGraphPlanner';
 
 export interface PastedClipboardClipsPlan {
   idMapping: Map<string, string>;
@@ -22,6 +28,7 @@ export interface CreatePastedClipboardClipsPlanInput {
   timestamp: number;
   createSuffix: () => string;
   onMissingTrack?: (clipData: ClipboardClipData) => void;
+  destinationCompositionId?: string;
 }
 
 export function createPastedClipboardClipsPlan(
@@ -37,6 +44,7 @@ export function createPastedClipboardClipsPlan(
   const timeOffset = playheadPosition - earliestStartTime;
   const newClips: TimelineClip[] = [];
   const newKeyframes = new Map<string, Keyframe[]>(clipKeyframes);
+  const pastedSourceIds = new Set<string>();
 
   for (const clipData of clipboardData) {
     const targetTrackId = resolveTargetTrackId(clipData, tracks, targetTrackIdByType);
@@ -84,6 +92,7 @@ export function createPastedClipboardClipsPlan(
         vertices: m.vertices.map(v => ({ ...v, id: `vertex-${timestamp}-${createSuffix()}` })),
       })),
       linkedClipId: clipData.linkedClipId ? idMapping.get(clipData.linkedClipId) : undefined,
+      parentClipId: undefined,
       reversed: clipData.reversed,
       speed: clipData.speed,
       preservesPitch: clipData.preservesPitch,
@@ -115,7 +124,7 @@ export function createPastedClipboardClipsPlan(
       storyboardProperties: cloneStoryboardClipProperties(clipData.storyboardProperties),
       transitionOverlay: clipData.transitionOverlay ? structuredClone(clipData.transitionOverlay) : undefined,
       mathScene: clipData.mathScene ? structuredClone(clipData.mathScene) : undefined,
-      motion: clipData.motion ? structuredClone(clipData.motion) : undefined,
+      motion: clipData.motion ? normalizeMotionLayerDefinition(clipData.motion) : undefined,
       thumbnails: clipData.thumbnails ? [...clipData.thumbnails] : undefined,
       waveform: clipData.waveform ? [...clipData.waveform] : undefined,
       waveformChannels: clipData.waveformChannels?.map(channel => [...channel]),
@@ -134,6 +143,7 @@ export function createPastedClipboardClipsPlan(
       isLoading: clipData.isComposition || clipData.sourceType === 'text' || clipData.sourceType === 'solid' || requiresAsyncMediaLoad,
       needsReload: requiresAsyncMediaLoad,
     });
+    pastedSourceIds.add(clipData.id);
 
     if (clipData.keyframes && clipData.keyframes.length > 0) {
       newKeyframes.set(newId, clipData.keyframes.map(kf => ({
@@ -144,7 +154,89 @@ export function createPastedClipboardClipsPlan(
     }
   }
 
+  applyClipboardMotionParentRemap({
+    clipboardData,
+    idMapping,
+    pastedSourceIds,
+    newClips,
+    newKeyframes,
+    playheadPosition,
+    destinationCompositionId: input.destinationCompositionId ?? 'timeline:clipboard-destination',
+  });
+
   return { idMapping, newClips, newKeyframes };
+}
+
+interface ApplyClipboardMotionParentRemapInput {
+  readonly clipboardData: readonly ClipboardClipData[];
+  readonly idMapping: ReadonlyMap<string, string>;
+  readonly pastedSourceIds: ReadonlySet<string>;
+  readonly newClips: TimelineClip[];
+  readonly newKeyframes: Map<string, Keyframe[]>;
+  readonly playheadPosition: number;
+  readonly destinationCompositionId: string;
+}
+
+function applyClipboardMotionParentRemap(
+  input: ApplyClipboardMotionParentRemapInput,
+): void {
+  if (input.pastedSourceIds.size === 0) return;
+  const clipboardById = new Map(input.clipboardData.map((clip) => [clip.id, clip]));
+  const sourceNodes = input.clipboardData.map((clip) => ({
+    clipId: clip.id,
+    compositionId: 'timeline:clipboard-source',
+    space: clip.is3D ? '3d' as const : '2d' as const,
+    ...(clip.parentClipId ? { parentClipId: clip.parentClipId } : {}),
+  }));
+  const sourceNodeIds = new Set(sourceNodes.map((node) => node.clipId));
+  for (const clip of input.clipboardData) {
+    if (!clip.parentClipId || sourceNodeIds.has(clip.parentClipId)) continue;
+    sourceNodeIds.add(clip.parentClipId);
+    sourceNodes.push({
+      clipId: clip.parentClipId,
+      compositionId: 'timeline:clipboard-source',
+      space: '2d',
+    });
+  }
+  const targetClipIdsBySourceId = Object.fromEntries(
+    [...input.pastedSourceIds].map((sourceClipId) => [
+      sourceClipId,
+      input.idMapping.get(sourceClipId)!,
+    ]),
+  );
+  const remap = planMotionParentRemap({
+    sourceGraph: createMotionParentGraphSnapshot(sourceNodes),
+    copiedClipIds: [...input.pastedSourceIds],
+    targetClipIdsBySourceId,
+    destinationCompositionId: input.destinationCompositionId,
+  });
+  const assignmentsByTargetId = remap.ok
+    ? new Map(remap.plan.assignments.map((assignment) => [assignment.targetClipId, assignment]))
+    : new Map<string, { readonly parentClipId?: string }>();
+
+  for (let index = 0; index < input.newClips.length; index += 1) {
+    const clip = input.newClips[index];
+    const sourceId = [...input.pastedSourceIds].find(
+      (candidate) => input.idMapping.get(candidate) === clip.id,
+    );
+    if (!sourceId) continue;
+    const source = clipboardById.get(sourceId)!;
+    const assignment = assignmentsByTargetId.get(clip.id);
+    if (assignment?.parentClipId) {
+      input.newClips[index] = { ...clip, parentClipId: assignment.parentClipId };
+      continue;
+    }
+    if (!source.parentClipId || !source.worldTransformAtCopyTime) continue;
+
+    const preserved = applyTimelineMotionWorldTransformAtTime({
+      clip,
+      keyframes: input.newKeyframes.get(clip.id) ?? [],
+      timelineTime: input.playheadPosition,
+      worldTransform: source.worldTransformAtCopyTime,
+    });
+    input.newClips[index] = preserved.clip;
+    input.newKeyframes.set(clip.id, preserved.keyframes);
+  }
 }
 
 function resolveTargetTrackId(

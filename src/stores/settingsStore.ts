@@ -93,6 +93,19 @@ const DEFAULT_PIANO_ROLL_CONTROLLER_AREA: PianoRollControllerAreaState = {
   lanes: ['velocity'],
 };
 
+function sanitizeApiKeyDefaults(value: unknown): ApiKeyDefaults {
+  const stored = value && typeof value === 'object'
+    ? value as Record<string, unknown>
+    : {};
+  const defaults = { ...DEFAULT_API_KEY_DEFAULTS };
+
+  for (const provider of Object.keys(defaults) as ApiKeyDefaultProvider[]) {
+    defaults[provider] = stored[provider] === true;
+  }
+
+  return defaults;
+}
+
 function persistChangelogStateToProject(
   showChangelogOnStartup: boolean,
   lastSeenChangelogVersion: string | null,
@@ -308,7 +321,6 @@ export const useSettingsStore = create<SettingsState>()(
         assemblyai: '',
         deepgram: '',
         piapi: '',
-        kieai: '',
         evolink: '',
         elevenlabs: '',
         youtube: '',
@@ -757,6 +769,14 @@ export const useSettingsStore = create<SettingsState>()(
         pianoRollControllerArea: state.pianoRollControllerArea,
         simpleSynthUserPresets: state.simpleSynthUserPresets,
       }),
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<SettingsState> & { apiKeyDefaults?: unknown };
+        return {
+          ...currentState,
+          ...persisted,
+          apiKeyDefaults: sanitizeApiKeyDefaults(persisted.apiKeyDefaults),
+        };
+      },
       onRehydrateStorage: () => (state) => {
         if (state) {
           // Sync feature flags with persisted setting on app start

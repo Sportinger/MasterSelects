@@ -65,9 +65,13 @@ class WorkerShadowRenderHostPortCore {
     void this.withBridge((bridge) => bridge.sendCommand({ type: 'unregisterTarget', targetId }));
   }
 
-  renderToPreviewCanvas(canvasId: string, layers: Parameters<RenderHostPort['renderToPreviewCanvas']>[1]): void {
+  renderToPreviewCanvas(
+    canvasId: string,
+    layers: Parameters<RenderHostPort['renderToPreviewCanvas']>[1],
+    frameContext?: Parameters<RenderHostPort['renderToPreviewCanvas']>[2],
+  ): void {
     this.sendRenderNow(canvasId, 'render-to-preview-canvas');
-    this.fallback.renderToPreviewCanvas(canvasId, layers);
+    this.fallback.renderToPreviewCanvas(canvasId, layers, frameContext);
   }
 
   requestRender(): void {
@@ -80,9 +84,12 @@ class WorkerShadowRenderHostPortCore {
     this.fallback.requestNewFrameRender();
   }
 
-  render(layers: Parameters<RenderHostPort['render']>[0]): void {
+  render(
+    layers: Parameters<RenderHostPort['render']>[0],
+    frameContext?: Parameters<RenderHostPort['render']>[1],
+  ): void {
     this.sendRenderNow('preview', 'render');
-    this.fallback.render(layers);
+    this.fallback.render(layers, frameContext);
   }
 
   private getBridge(): WorkerRenderHostRuntimeBridge | null {

@@ -25,6 +25,7 @@ export interface CloudMeResponse {
     monthlyCredits: number;
   };
   creditBalance: number;
+  creditMeterReference: number;
   entitlements: Record<string, string>;
   hostedAIEnabled: boolean;
   plan: BillingPlanId | string;
@@ -38,6 +39,7 @@ export interface CloudMeResponse {
 
 export interface BillingSummaryResponse {
   creditBalance: number;
+  creditMeterReference: number;
   entitlements: Record<string, string>;
   hostedAIEnabled: boolean;
   plan: {
@@ -147,10 +149,9 @@ export interface CloudAiGatewayError {
 }
 
 export type CloudAiGatewayKind = 'ai.audio' | 'ai.chat' | 'ai.video';
-export type CloudAiGatewayMode = 'byo' | 'hosted';
+export type CloudAiGatewayMode = 'hosted';
 export type CloudAiGatewayStatus =
   | 'accepted'
-  | 'byo_required'
   | 'completed'
   | 'error'
   | 'processing'
@@ -161,9 +162,9 @@ export type CloudAiGatewayStatus =
   | 'unsupported';
 
 export interface CloudAiGatewayEnvelope<TData = unknown> {
-  byoRequired?: boolean;
   capability?: Record<string, unknown>;
   creditBalance?: number | null;
+  creditMutationId?: string | null;
   creditsCharged?: number | null;
   data?: TData | null;
   error?: CloudAiGatewayError | null;
@@ -312,7 +313,6 @@ export interface CloudAiAudioModelsResponse {
 export type CloudAiAudioVoicesResponse = ElevenLabsVoiceSearchResult;
 
 export interface CloudAiCapabilitiesResponse {
-  byoRequired?: boolean;
   capability?: Record<string, unknown>;
   creditBalance?: number | null;
   data?: {

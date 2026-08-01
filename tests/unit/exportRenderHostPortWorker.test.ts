@@ -32,6 +32,37 @@ const mockFactory = vi.hoisted(() => {
       accepted: true,
       readback: { width: 64, height: 36, pixels },
     })),
+    presentGpuFrameStack: vi.fn(async (command: {
+      readonly commandId: string;
+      readonly stack: {
+        readonly frame: {
+          readonly targetId: string;
+          readonly compositionId: string;
+          readonly timelineTime: number;
+          readonly frameIndex: number;
+        };
+      };
+      readonly readback?: {
+        readonly readbackId: string;
+        readonly width: number;
+        readonly height: number;
+      };
+    }) => ({
+      accepted: true,
+      presentedFrameId: `${command.commandId}:presented`,
+      readback: command.readback ? {
+        width: command.readback.width,
+        height: command.readback.height,
+        pixels,
+        identity: {
+          readbackId: command.readback.readbackId,
+          targetId: command.stack.frame.targetId,
+          compositionId: command.stack.frame.compositionId,
+          timelineTime: command.stack.frame.timelineTime,
+          frameIndex: command.stack.frame.frameIndex,
+        },
+      } : null,
+    })),
     registerTarget: vi.fn(async () => ({ accepted: true })),
   };
   return {
@@ -473,6 +504,24 @@ const patternTransitionLayer: Layer = {
   },
 };
 
+/**
+ * The Worker GPU frame-stack contract validates payload bitmaps with
+ * `isImageBitmapValue`, i.e. `value instanceof ImageBitmap`. jsdom provides no
+ * ImageBitmap constructor, so an object literal is rejected as
+ * MD7_FRAME_STACK_INVALID_PAYLOAD and the whole projection throws before
+ * anything is presented. Stubbing the global keeps `instanceof` meaningful.
+ */
+class FakeImageBitmap {
+  readonly width: number;
+  readonly height: number;
+  readonly close = vi.fn();
+
+  constructor(width: number, height: number) {
+    this.width = width;
+    this.height = height;
+  }
+}
+
 class FakeOffscreenCanvas {
   readonly width: number;
   readonly height: number;
@@ -517,6 +566,7 @@ describe('worker-first export render host port', () => {
     localStorage.clear();
     localStorage.setItem('masterselects.renderHostMode', 'worker-software');
     vi.stubGlobal('OffscreenCanvas', FakeOffscreenCanvas);
+    vi.stubGlobal('ImageBitmap', FakeImageBitmap);
   });
 
   it('keeps the main export fallback cold while explicit worker software readback succeeds', async () => {
@@ -596,7 +646,10 @@ describe('worker-first export render host port', () => {
     expect(mockFactory.engine.setExporting).toHaveBeenCalledWith(true);
     expect(mockFactory.engine.initExportCanvas).toHaveBeenCalledWith(64, 36, false);
     expect(mockFactory.engine.ensureExportLayersReady).toHaveBeenCalledWith([solidLayer]);
-    expect(mockFactory.engine.render).toHaveBeenCalledWith([solidLayer]);
+    expect(mockFactory.engine.render).toHaveBeenCalledWith([solidLayer], {
+      compositionId: 'export',
+      timelineTimeSeconds: 0,
+    });
     expect(mockFactory.engine.readPixels).toHaveBeenCalled();
     expect(exportRenderHostPort.getTelemetry()).toEqual({
       mode: 'main',
@@ -1467,7 +1520,7 @@ describe('worker-first export render host port', () => {
     mockFactory.engine.render.mockClear();
     mockFactory.engine.readPixels.mockClear();
 
-    const bitmap = { width: 64, height: 36, close: vi.fn() } as unknown as ImageBitmap;
+    const bitmap = new FakeImageBitmap(64, 36) as unknown as ImageBitmap;
     const originalCreateImageBitmap = globalThis.createImageBitmap;
     Object.defineProperty(globalThis, 'createImageBitmap', {
       configurable: true,
@@ -1505,14 +1558,123 @@ describe('worker-first export render host port', () => {
       exportRenderHostPort.setExporting(false);
       exportRenderHostPort.setResolution(1920, 1080);
 
-      expect(globalThis.createImageBitmap).toHaveBeenCalled();
-      expect(mockFactory.bridge.presentSoftwareFrame).toHaveBeenCalledTimes(1);
-      expect(mockFactory.bridge.presentSoftwareFrame.mock.calls[0]?.[3].layers[0].source)
-        .toMatchObject({ kind: 'bitmap', bitmap, width: 64, height: 36 });
+      expect(globalThis.createImageBitmap).not.toHaveBeenCalled();
+      expect(mockFactory.bridge.presentSoftwareFrame).not.toHaveBeenCalled();
+      expect(mockFactory.bridge.presentGpuFrameStack).toHaveBeenCalledTimes(1);
+      const [command] = mockFactory.bridge.presentGpuFrameStack.mock.calls[0] ?? [];
+      expect(command).toMatchObject({
+        type: 'gpu.presentFrameStack',
+        stack: {
+          frame: { intent: 'export', targetId: 'export' },
+          bindings: [{
+            layerId: 'nested-export-parent',
+            payload: {
+              kind: 'nested-stack',
+              stack: { frame: { intent: 'export', compositionId: 'nested-export-comp' } },
+            },
+          }],
+        },
+        readback: { width: 64, height: 36, format: 'rgba8unorm' },
+      });
       expect(mockFactory.engine.ensureExportLayersReady).not.toHaveBeenCalled();
       expect(mockFactory.engine.render).not.toHaveBeenCalled();
       expect(mockFactory.engine.readPixels).not.toHaveBeenCalled();
       expect(exportRenderHostPort.getTelemetry().worker?.lastDiagnostics?.skippedLayerCount).toBe(0);
+    } finally {
+      restoreCreateImageBitmap(originalCreateImageBitmap);
+    }
+  });
+
+  it('exports Adjustment stacks atomically and prefers the exact VideoFrame over HTML video', async () => {
+    await expect(exportRenderHostPort.ensureReady()).resolves.toBe(true);
+    mockFactory.bridge.presentSoftwareFrame.mockClear();
+    mockFactory.bridge.presentGpuFrameStack.mockClear();
+    mockFactory.engine.render.mockClear();
+    mockFactory.engine.readPixels.mockClear();
+
+    const videoFrame = {
+      displayWidth: 1280,
+      displayHeight: 720,
+      close: vi.fn(),
+    } as unknown as VideoFrame;
+    const htmlVideo = document.createElement('video');
+    Object.defineProperties(htmlVideo, {
+      readyState: { configurable: true, value: HTMLMediaElement.HAVE_CURRENT_DATA },
+      videoHeight: { configurable: true, value: 360 },
+      videoWidth: { configurable: true, value: 640 },
+    });
+    const bitmap = new FakeImageBitmap(1280, 720) as unknown as ImageBitmap;
+    const originalCreateImageBitmap = globalThis.createImageBitmap;
+    Object.defineProperty(globalThis, 'createImageBitmap', {
+      configurable: true,
+      value: vi.fn().mockResolvedValue(bitmap),
+    });
+    const videoLayer: Layer = {
+      ...solidLayer,
+      id: 'adjustment-video',
+      sourceClipId: 'adjustment-video-clip',
+      source: { type: 'video', videoFrame, videoElement: htmlVideo, mediaTime: 1.25 },
+    };
+    const adjustmentLayer: Layer = {
+      ...solidLayer,
+      id: 'adjustment-export',
+      sourceClipId: 'adjustment-export-clip',
+      source: { type: 'motion-adjustment' },
+      effects: [{
+        id: 'adjustment-export-brightness',
+        name: 'Brightness',
+        type: 'brightness',
+        enabled: true,
+        params: { amount: 0.2 },
+      }],
+    };
+
+    try {
+      exportRenderHostPort.setResolution(64, 36);
+      exportRenderHostPort.setExporting(true);
+      expect(exportRenderHostPort.initExportCanvas(64, 36, false)).toBe(false);
+      exportRenderHostPort.setRenderTimeOverride(1.25);
+      exportRenderHostPort.render([adjustmentLayer, videoLayer], {
+        compositionId: 'export-adjustment-composition',
+        timelineTimeSeconds: 1.25,
+      });
+
+      await expect(exportRenderHostPort.readPixels()).resolves.toEqual(mockFactory.pixels);
+      expect(globalThis.createImageBitmap).toHaveBeenCalledWith(videoFrame);
+      expect(globalThis.createImageBitmap).not.toHaveBeenCalledWith(htmlVideo);
+      expect(mockFactory.bridge.presentSoftwareFrame).not.toHaveBeenCalled();
+      expect(mockFactory.bridge.presentGpuFrameStack).toHaveBeenCalledTimes(1);
+      const [command] = mockFactory.bridge.presentGpuFrameStack.mock.calls[0] ?? [];
+      expect(command).toMatchObject({
+        stack: {
+          frame: {
+            compositionId: 'export-adjustment-composition',
+            timelineTime: 1.25,
+            intent: 'export',
+            exact: true,
+          },
+          execution: { kind: 'frozen-adjustment' },
+          bindings: [{
+            // The projector canonicalizes bindings to the stable clip id
+            // (workerGpuFrameStackProjector.ts: `layer.sourceClipId ?? layer.id`)
+            // so a binding correlates with the adjustment plan's `clip:*` passes.
+            layerId: 'adjustment-video-clip',
+            sourceId: 'export-video:adjustment-video-clip',
+            payload: { kind: 'bitmap', width: 1280, height: 720 },
+          }],
+        },
+        readback: {
+          compositionId: 'export-adjustment-composition',
+          timelineTime: 1.25,
+          width: 64,
+          height: 36,
+        },
+      });
+      expect(mockFactory.engine.render).not.toHaveBeenCalled();
+      expect(mockFactory.engine.readPixels).not.toHaveBeenCalled();
+      exportRenderHostPort.cleanupExportCanvas();
+      exportRenderHostPort.setExporting(false);
+      exportRenderHostPort.setResolution(1920, 1080);
     } finally {
       restoreCreateImageBitmap(originalCreateImageBitmap);
     }
@@ -1537,7 +1699,10 @@ describe('worker-first export render host port', () => {
     expect(mockFactory.engine.setExporting).toHaveBeenCalledWith(true);
     expect(mockFactory.engine.setRenderTimeOverride).toHaveBeenCalledWith(0);
     expect(mockFactory.engine.ensureExportLayersReady).toHaveBeenCalledWith([unsupportedEffectLayer]);
-    expect(mockFactory.engine.render).toHaveBeenCalledWith([unsupportedEffectLayer]);
+    expect(mockFactory.engine.render).toHaveBeenCalledWith([unsupportedEffectLayer], {
+      compositionId: 'export',
+      timelineTimeSeconds: 0,
+    });
     expect(mockFactory.engine.readPixels).toHaveBeenCalled();
     expect(exportRenderHostPort.getTelemetry().worker?.fallbackFrameCount).toBeGreaterThan(0);
     expect(exportRenderHostPort.getTelemetry().worker?.lastDiagnostics?.skippedByReason['unsupported-effects']).toBe(1);

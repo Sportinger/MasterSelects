@@ -118,10 +118,7 @@ All docked panels can be:
 
 ## Available Panels
 
-MasterSelects currently exposes 18 active dockable panel types, plus the Slot Grid overlay that sits on top of the Timeline. The old `ai-video`, `youtube`, and `download` panel types are treated as deprecated saved-layout migration targets; generation and downloads now live inside the Media Panel.
-`AI Scene Description` and `Multi-Cam` remain registered so existing saved
-layouts can load them, but they are hidden from the View, add-panel, and
-change-panel pickers.
+MasterSelects currently exposes 17 active dockable panel types, plus the Slot Grid overlay that sits on top of the Timeline. The old `ai-video`, `youtube`, `download`, and `multicam` panel types are removed from restored saved layouts; generation and downloads now live inside the Media Panel. `AI Scene Description` remains registered for existing layouts but is hidden from the View, add-panel, and change-panel pickers.
 
 | Panel | Type ID | Surface |
 |-------|---------|---------|
@@ -138,7 +135,6 @@ change-panel pickers.
 | **AI Chat** | `ai-chat` | Editing assistant chat |
 | **AI Segment** | `ai-segment` | Local SAM2 segmentation tools |
 | **AI Scene Description** | `scene-description` | Scene list with playback sync |
-| **Multi-Cam** | `multicam` | Multicam sync and EDL tools |
 | **Transitions** | `transitions` | Transition library |
 | **Waveform** | `scope-waveform` | Waveform scope |
 | **Histogram** | `scope-histogram` | Histogram scope |
@@ -234,11 +230,11 @@ change-panel pickers.
 ### Media Generator Tray
 
 - Compact bottom-right prompt entry point inside the Media Panel
-- Expanded tray embeds only the compact FlashBoard prompt composer for video, image, hosted ElevenLabs audio, hosted Suno music, and non-production BYO audio/music generation
+- Expanded tray embeds only the compact FlashBoard prompt composer for video, image, hosted ElevenLabs audio, hosted Suno music, and supported non-production provider-key flows
 - Active generation jobs render as compact preview cards above the prompt, including queued/processing state, elapsed timer, progress, prompt, and failed-job dismissal
 - Service and provider selection reflect the active backend through the FlashBoard composer
 - Image, video, and audio media can be attached as ordered prompt references from the Media Panel context menu or by dragging them onto the expanded composer
-- Current generation backends are MasterSelects Cloud in production, plus Kie.ai, ElevenLabs, EvoLink, and PiAPI BYO paths for non-production development. Hosted ElevenLabs speech and hosted Suno music use Cloud credits; PiAPI remains primarily as legacy compatibility/catalog metadata rather than the main runtime description for the current generator
+- Current generation backends are MasterSelects Cloud in production, plus ElevenLabs, EvoLink, and PiAPI provider-key paths for non-production development. All Kie.ai-backed generation uses the hosted Cloud route. Hosted ElevenLabs speech and hosted Suno music use Cloud credits; PiAPI remains primarily as legacy compatibility/catalog metadata rather than the main runtime description for the current generator
 
 #### FlashBoard Prompt Composer
 
@@ -253,12 +249,6 @@ change-panel pickers.
 - Downloads use the same Media tray queue as generated media
 - Completed downloads are imported back into the Media panel under Downloads/platform folders
 - The old `youtube` and `download` dock panels are deprecated and removed from restored layouts
-
-### Multi-Cam Panel
-
-- Camera sync and role assignment
-- Transcript and EDL-oriented tooling
-- Still marked WIP in the View menu
 
 ### Transitions Panel
 
@@ -659,7 +649,7 @@ Edit menu -> Settings
 | **Audio** | Browser input/output device selection, latency mode, device API status, output-routing status, and AudioContext diagnostics |
 | **Transcription** | Provider selection and pricing |
 | **Native Helper** | Native helper connection, port, helper-backed flows, and decode settings |
-| **API Keys** | OpenAI, AssemblyAI, Deepgram, Kie.ai, PiAPI (legacy/compat), ElevenLabs, and YouTube |
+| **API Keys** | OpenAI, AssemblyAI, Deepgram, PiAPI (legacy/compat), EvoLink, ElevenLabs, and YouTube |
 
 The Preferences dialog drag position is updated at animation-frame cadence during mouse movement so moving the dialog does not force React state updates for every raw mouse event.
 
@@ -667,12 +657,11 @@ The Preferences dialog drag position is updated at animation-frame cadence durin
 
 The current Media generator-relevant keys are:
 
-- `Kie.ai` for non-production local-provider FlashBoard generation flows
-- `Kie.ai` also powers hosted FlashBoard Suno music through the Cloudflare `KIEAI_API_KEY` secret in production
 - `ElevenLabs` for non-production BYO text-to-speech; production hosted speech uses the Cloudflare `ELEVENLABS_API_KEY` secret
+- `EvoLink` for supported non-production image generation
 - `PiAPI` for legacy compatibility and older catalog/pricing paths
 
-Hosted cloud access is account/session based and does not depend on a user-entered API key in this dialog.
+Hosted cloud access is account/session based and does not depend on a user-entered API key in this dialog. Kie.ai is not configurable here; its server secret powers hosted media and Suno routes without reaching browser storage.
 
 ---
 

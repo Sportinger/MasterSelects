@@ -2,7 +2,7 @@ import {
   DEFAULT_FLASHBOARD_PROVIDER_ID,
   DEFAULT_FLASHBOARD_SERVICE,
 } from '../../../stores/flashboardStore/defaults';
-import { SUNO_PROVIDER_ID, SUNO_SOUNDS_PROVIDER_ID } from '../../../services/sunoService';
+import { SUNO_PROVIDER_ID, SUNO_SOUNDS_PROVIDER_ID } from '../../../services/sunoContracts';
 import { getCatalogEntries } from '../../../services/flashboard/FlashBoardModelCatalog';
 import { getCatalogEntryPriceEstimate } from '../../../services/flashboard/FlashBoardPricing';
 import type { CatalogEntry } from '../../../services/flashboard/types';
@@ -33,7 +33,6 @@ interface BuildFlashBoardModelCatalogStateInput {
   useElevenLabsKeyByDefault: boolean;
   useEvolinkKeyByDefault: boolean;
   useHostedProductionProviders: boolean;
-  useKieAiKeyByDefault: boolean;
   usePiApiKeyByDefault: boolean;
 }
 
@@ -93,8 +92,7 @@ export function getFlashBoardModelCategory(entry: CatalogEntry | undefined): Fla
   }
 
   if (
-    entry.service === 'suno'
-    || entry.providerId === SUNO_PROVIDER_ID
+    entry.providerId === SUNO_PROVIDER_ID
     || entry.providerId === SUNO_SOUNDS_PROVIDER_ID
   ) {
     return 'music';
@@ -116,8 +114,6 @@ export function getFlashBoardModelCategory(entry: CatalogEntry | undefined): Fla
 
 function getModelSourceLabel(entry: CatalogEntry): string {
   switch (entry.service) {
-    case 'kieai':
-      return 'Kie.ai';
     case 'evolink':
       return 'EvoLink';
     case 'piapi':
@@ -126,8 +122,6 @@ function getModelSourceLabel(entry: CatalogEntry): string {
       return 'Cloud';
     case 'elevenlabs':
       return 'ElevenLabs';
-    case 'suno':
-      return 'Suno';
     default:
       return entry.service;
   }
@@ -153,7 +147,6 @@ function isCatalogEntryVisible({
   useElevenLabsKeyByDefault,
   useEvolinkKeyByDefault,
   useHostedProductionProviders,
-  useKieAiKeyByDefault,
   usePiApiKeyByDefault,
 }: BuildFlashBoardModelCatalogStateInput & { entry: CatalogEntry }): boolean {
   if (serviceScope && entry.service !== serviceScope) {
@@ -184,20 +177,12 @@ function isCatalogEntryVisible({
     return usePiApiKeyByDefault;
   }
 
-  if (entry.service === 'kieai') {
-    return useKieAiKeyByDefault;
-  }
-
   if (entry.service === 'evolink') {
     return useEvolinkKeyByDefault;
   }
 
   if (entry.service === 'elevenlabs') {
     return useElevenLabsKeyByDefault;
-  }
-
-  if (entry.service === 'suno') {
-    return useKieAiKeyByDefault;
   }
 
   return false;

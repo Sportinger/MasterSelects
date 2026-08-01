@@ -1,4 +1,4 @@
-import { ensureFreePlanCredits, getCreditBalance } from './credits';
+import { ensureFreePlanCredits, getCreditBalance, getCreditMeterReference } from './credits';
 import {
   getEntitlementSnapshot,
   listEntitlements,
@@ -14,6 +14,7 @@ interface SubscriptionRow {
 
 export interface UserBillingSnapshot {
   balance: number;
+  creditMeterReference: number;
   entitlements: Record<string, string>;
   hostedAIEnabled: boolean;
   klingGenerationEnabled: boolean;
@@ -66,9 +67,14 @@ export async function getUserBillingSnapshot(
 
   const balance = await getCreditBalance(db, userId);
   const snapshot = getEntitlementSnapshot(planId, entitlementRows);
+  const creditMeterReference = await getCreditMeterReference(db, userId, {
+    balance,
+    monthlyCredits: snapshot.monthlyCredits,
+  });
 
   return {
     balance,
+    creditMeterReference,
     entitlements: snapshot.values,
     hostedAIEnabled: snapshot.hostedAIEnabled,
     klingGenerationEnabled: snapshot.klingGenerationEnabled,

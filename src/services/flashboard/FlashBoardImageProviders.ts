@@ -1,6 +1,6 @@
 import { cloudAiService } from '../cloudAiService';
 import { evolinkService } from '../evolinkService';
-import { kieAiService, type TextToImageParams } from '../kieAiService';
+import type { TextToImageParams } from '../aiGenerationContracts';
 import type { VideoTask } from '../piApiService';
 import type { FlashBoardService } from '../../stores/flashboardStore/types';
 
@@ -23,7 +23,6 @@ const FLASHBOARD_IMAGE_PROVIDERS: Partial<Record<FlashBoardService, FlashBoardIm
     ),
   },
   evolink: evolinkService,
-  kieai: kieAiService,
 };
 
 export function getFlashBoardImageProvider(service: FlashBoardService): FlashBoardImageProvider | null {

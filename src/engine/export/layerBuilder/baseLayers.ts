@@ -1,18 +1,15 @@
 import { Logger } from '../../../services/logger';
 import type { TimelineClip } from '../../../stores/timeline/types';
 import { useTimelineStore } from '../../../stores/timeline';
-import { DEFAULT_TRANSFORM } from '../../../stores/timeline/constants';
 import type { BlendMode } from '../../../types/blendMode';
 import { compileRuntimeColorGrade } from '../../../types/colorCorrection';
 import type { Effect } from '../../../types/effects';
 import type { Keyframe } from '../../../types/keyframes';
-import type { ClipTransform } from '../../../types/timelineCore';
-import { getInterpolatedClipTransform } from '../../../utils/keyframeInterpolation';
 import { getEffectiveScale } from '../../../utils/transformScale';
 import { evaluateTransitionRenderState } from '../../../utils/transitionRenderInterpolation';
 import { evaluateCompositionClipEffects, evaluateCompositionClipMasks } from '../../../services/compositionRender/keyframeEvaluation';
-import { evaluateTransitionMappedAnimation } from '../../../services/compositionRender/transitionMappedAnimation';
 import { resolveTransitionRecipeBlendMode } from '../../../services/timeline/transitionRecipeBlendWindows';
+import { evaluateParentedClipTransform } from '../../../services/layerBuilder/parentTransformEvaluation';
 import type { BaseLayerPropsLike, FrameContextLike } from './contracts';
 
 const log = Logger.create('ExportLayerBuilder');
@@ -32,14 +29,21 @@ export function buildBaseLayerProps(
 ): BaseLayerPropsLike | null {
   const { getInterpolatedTransform, getInterpolatedEffects, getInterpolatedColorCorrection } = ctx;
   const keyframes = getClipKeyframes(clip);
-  const mappedAnimation = clip.transitionSourceMap?.version === 2
-    ? evaluateTransitionMappedAnimation(clip, keyframes, clipLocalTime)
+  const parentEvaluation = clip.parentClipId || clip.transitionSourceMap?.version === 2
+    ? evaluateParentedClipTransform({
+        clip,
+        clips: ctx.compositionClips ?? ctx.renderClipsAtTime ?? ctx.clipsAtTime,
+        clipLocalTime,
+        parentTimelineTime: ctx.time,
+        getKeyframes: getClipKeyframes,
+      })
     : undefined;
-  if (mappedAnimation === null) return null;
+  if (parentEvaluation && !parentEvaluation.ok) return null;
+  const mappedAnimation = parentEvaluation?.mappedAnimation;
 
   let transform;
-  if (mappedAnimation) {
-    transform = mappedAnimation.transform;
+  if (parentEvaluation) {
+    transform = parentEvaluation.transform;
   } else {
     try {
       transform = getInterpolatedTransform(clip.id, clipLocalTime);
@@ -113,41 +117,26 @@ export function buildBaseLayerProps(
   };
 }
 
-export function buildNestedBaseLayer(nestedClip: TimelineClip, nestedClipLocalTime: number): BaseLayerPropsLike | null {
-  const keyframes = getClipKeyframes(nestedClip);
-
-  const baseTransform: ClipTransform = {
-    opacity: nestedClip.transform?.opacity ?? DEFAULT_TRANSFORM.opacity,
-    blendMode: nestedClip.transform?.blendMode ?? DEFAULT_TRANSFORM.blendMode,
-    position: {
-      x: nestedClip.transform?.position?.x ?? DEFAULT_TRANSFORM.position.x,
-      y: nestedClip.transform?.position?.y ?? DEFAULT_TRANSFORM.position.y,
-      z: nestedClip.transform?.position?.z ?? DEFAULT_TRANSFORM.position.z,
-    },
-    scale: {
-      ...(nestedClip.transform?.scale?.all !== undefined ? { all: nestedClip.transform.scale.all } : {}),
-      x: nestedClip.transform?.scale?.x ?? DEFAULT_TRANSFORM.scale.x,
-      y: nestedClip.transform?.scale?.y ?? DEFAULT_TRANSFORM.scale.y,
-      ...(nestedClip.transform?.scale?.z !== undefined ? { z: nestedClip.transform.scale.z } : {}),
-    },
-    rotation: {
-      x: nestedClip.transform?.rotation?.x ?? DEFAULT_TRANSFORM.rotation.x,
-      y: nestedClip.transform?.rotation?.y ?? DEFAULT_TRANSFORM.rotation.y,
-      z: nestedClip.transform?.rotation?.z ?? DEFAULT_TRANSFORM.rotation.z,
-    },
-  };
-
-  const isV2SourceMap = nestedClip.transitionSourceMap?.version === 2;
-  const mappedAnimation = isV2SourceMap
-    ? evaluateTransitionMappedAnimation(nestedClip, keyframes, nestedClipLocalTime)
-    : null;
-  if (isV2SourceMap && !mappedAnimation) return null;
-
-  const transform = mappedAnimation?.transform ?? (keyframes.length > 0
-    ? getInterpolatedClipTransform(keyframes, nestedClipLocalTime, baseTransform, {
-        rotationMode: nestedClip.source?.type === 'camera' ? 'shortest' : 'linear',
-      })
-    : baseTransform);
+export function buildNestedBaseLayer(
+  nestedClip: TimelineClip,
+  nestedClipLocalTime: number,
+  parentContext: {
+    clips: readonly TimelineClip[];
+    timelineTime: number;
+  } = {
+    clips: [nestedClip],
+    timelineTime: nestedClip.startTime + nestedClipLocalTime,
+  },
+): BaseLayerPropsLike | null {
+  const evaluated = evaluateParentedClipTransform({
+    clip: nestedClip,
+    clips: parentContext.clips,
+    clipLocalTime: nestedClipLocalTime,
+    parentTimelineTime: parentContext.timelineTime,
+    getKeyframes: getClipKeyframes,
+  });
+  if (!evaluated.ok) return null;
+  const { keyframes, mappedAnimation, transform } = evaluated;
 
   const effects = mappedAnimation
     ? mappedAnimation.effects

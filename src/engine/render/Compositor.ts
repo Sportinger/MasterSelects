@@ -8,6 +8,10 @@ import type { MaskTextureManager } from '../texture/MaskTextureManager';
 import { getPixelParticleDisintegrateRenderer } from '../particles/PixelParticleDisintegrateRenderer';
 import { splitLayerEffects } from './layerEffectStack';
 import { Logger } from '../../services/logger';
+import {
+  isSupportedAdjustmentEffectType,
+  UnsupportedAdjustmentEffectError,
+} from '../../services/motionDesign/adjustment/supportedEffects';
 import { calculateSourcePixelScale } from '../../utils/sourcePixelScale';
 
 const log = Logger.create('Compositor');
@@ -27,6 +31,8 @@ export interface CompositorState {
   effectTempView2?: GPUTextureView;
   motionTime?: number;
   particleQuality?: 'preview' | 'export';
+  /** Isolates GPU caches for repeated nested/render-target occurrences. */
+  resourceNamespace?: string;
 }
 
 export class Compositor {
@@ -72,16 +78,50 @@ export class Compositor {
     for (let i = 0; i < layerData.length; i++) {
       const data = layerData[i];
       const layer = data.layer;
+      const isAdjustmentLayer = layer.source?.type === 'motion-adjustment';
+      const resourceLayerId = state.resourceNamespace
+        ? JSON.stringify([state.resourceNamespace, layer.id])
+        : layer.id;
+
+      // An adjustment layer has no source of its own. During scrub fast-paths,
+      // skipping its effects must therefore leave the accumulator untouched.
+      if (isAdjustmentLayer && state.skipEffects) {
+        continue;
+      }
+
+      const unsupportedAdjustmentEffect = isAdjustmentLayer
+        ? layer.effects.find((effect) => !isSupportedAdjustmentEffectType(effect.type))
+        : undefined;
+      if (unsupportedAdjustmentEffect) {
+        const error = new UnsupportedAdjustmentEffectError(
+          layer.id,
+          unsupportedAdjustmentEffect.id,
+          unsupportedAdjustmentEffect.type,
+        );
+        if (state.particleQuality === 'export') {
+          throw error;
+        }
+        log.warn('Skipping adjustment layer with unsupported effect', {
+          layerId: layer.id,
+          effectId: unsupportedAdjustmentEffect.id,
+          effectType: unsupportedAdjustmentEffect.type,
+        });
+        continue;
+      }
+
+      const adjustmentEffects = layer.effects;
 
       // Get uniform buffer
-      const uniformBuffer = this.compositorPipeline.getOrCreateUniformBuffer(layer.id);
+      const uniformBuffer = this.compositorPipeline.getOrCreateUniformBuffer(resourceLayerId);
 
       // Calculate aspect ratios
-      const sourceAspect = data.sourceWidth / data.sourceHeight;
+      const sourceWidth = isAdjustmentLayer ? state.outputWidth : data.sourceWidth;
+      const sourceHeight = isAdjustmentLayer ? state.outputHeight : data.sourceHeight;
+      const sourceAspect = sourceWidth / sourceHeight;
       const outputAspect = state.outputWidth / state.outputHeight;
       const sourcePixelScale = calculateSourcePixelScale(
-        data.sourceWidth,
-        data.sourceHeight,
+        sourceWidth,
+        sourceHeight,
         state.outputWidth,
         state.outputHeight,
       );
@@ -99,12 +139,33 @@ export class Compositor {
         complexEffects,
         renderEffects,
         unsupportedAfterRenderEffect,
-      } = splitLayerEffects(layer.effects, state.skipEffects);
+      } = splitLayerEffects(adjustmentEffects, state.skipEffects);
       if (unsupportedAfterRenderEffect?.length) {
         log.warn('Ignoring effects after terminal render effect', {
           layerId: layer.id,
           effects: unsupportedAfterRenderEffect.map((effect) => effect.type),
         });
+      }
+
+      const requiresEffectTargets = isAdjustmentLayer
+        && (
+          !!complexEffects?.length
+          || !!renderEffects?.length
+        );
+      if (
+        requiresEffectTargets
+        && (!state.effectTempView || !state.effectTempView2)
+      ) {
+        const error = new Error(
+          `Adjustment layer ${layer.id} requires effect render targets`,
+        );
+        if (state.particleQuality === 'export') {
+          throw error;
+        }
+        log.warn('Skipping adjustment layer without effect render targets', {
+          layerId: layer.id,
+        });
+        continue;
       }
 
       // Update uniforms (includes inline effect params)
@@ -122,11 +183,16 @@ export class Compositor {
       const isPingBase = readView === state.pingView;
 
       // Determine the source texture/view to use for compositing
-      let sourceTextureView = data.textureView;
-      let sourceExternalTexture = data.externalTexture;
-      let useExternalTexture = data.isVideo && !!data.externalTexture;
+      // Adjustment layers process the accumulated frame below them. readView
+      // remains the untouched snapshot while effects render into temp views.
+      let sourceTextureView = isAdjustmentLayer ? readView : data.textureView;
+      let sourceExternalTexture = isAdjustmentLayer ? null : data.externalTexture;
+      let useExternalTexture = !isAdjustmentLayer && data.isVideo && !!data.externalTexture;
 
-      const hasColorCorrection = !!this.colorPipeline && !state.skipEffects && !!layer.colorCorrection?.enabled;
+      const hasColorCorrection = !isAdjustmentLayer
+        && !!this.colorPipeline
+        && !state.skipEffects
+        && !!layer.colorCorrection?.enabled;
       const needsSourcePreprocess =
         (hasColorCorrection ||
           !!(complexEffects && complexEffects.length > 0) ||
@@ -144,7 +210,7 @@ export class Compositor {
             ? this.compositorPipeline.createExternalCopyBindGroup?.(
                 state.sampler,
                 sourceExternalTexture,
-                layer.id
+                resourceLayerId
               )
             : null;
 
@@ -182,7 +248,7 @@ export class Compositor {
                 state.sampler,
                 sourceTextureView,
                 state.effectTempView2,
-                layer.id
+                resourceLayerId
               );
               sourceTextureView = colorResult.finalView;
             }
@@ -251,7 +317,7 @@ export class Compositor {
 
       if (useExternalTexture && sourceExternalTexture) {
         if (!isStaticTextureSource) {
-          this.compositorPipeline.invalidateBindGroupCache(layer.id);
+          this.compositorPipeline.invalidateBindGroupCache(resourceLayerId);
         }
         pipeline = this.compositorPipeline.getExternalCompositePipeline()!;
         bindGroup = this.compositorPipeline.createExternalCompositeBindGroup(
@@ -260,7 +326,7 @@ export class Compositor {
           sourceExternalTexture,
           uniformBuffer,
           maskTextureView,
-          layer.id,
+          resourceLayerId,
           isPingBase
         );
       } else if (sourceTextureView) {
@@ -276,9 +342,9 @@ export class Compositor {
           !renderEffects &&
           !hasColorCorrection &&
           !data.isDynamic;
-        const cacheLayerId = canCacheBindGroup ? layer.id : undefined;
+        const cacheLayerId = canCacheBindGroup ? resourceLayerId : undefined;
         if (!canCacheBindGroup) {
-          this.compositorPipeline.invalidateBindGroupCache(layer.id);
+          this.compositorPipeline.invalidateBindGroupCache(resourceLayerId);
         }
         bindGroup = this.compositorPipeline.createCompositeBindGroup(
           state.sampler,

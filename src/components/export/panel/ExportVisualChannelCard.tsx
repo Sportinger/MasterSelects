@@ -1,5 +1,6 @@
 import { ExportImageControls } from './ExportImageControls';
 import { ExportVideoControls } from './ExportVideoControls';
+import type { BatchExportMediaType } from '../../../stores/exportStore';
 import type {
   ExportBasicsActions,
   ExportBasicsDisplayState,
@@ -21,6 +22,7 @@ interface ExportVisualChannelCardProps {
   time: ExportBasicsTimeState;
   useInOut: boolean;
   actions: ExportBasicsActions;
+  sourceMediaType?: BatchExportMediaType;
 }
 
 export function ExportVisualChannelCard({
@@ -33,6 +35,7 @@ export function ExportVisualChannelCard({
   time,
   useInOut,
   actions,
+  sourceMediaType,
 }: ExportVisualChannelCardProps) {
   return (
     <div className={`export-channel-card${!mode.isXmlMode && mode.videoEnabled ? '' : ' is-disabled'}`} data-export-target={mode.isImageMode ? 'image-section' : 'video-section'}>
@@ -47,6 +50,8 @@ export function ExportVisualChannelCard({
           <button
             type="button"
             className={`export-toggle${mode.videoEnabled ? ' is-active' : ''}`}
+            disabled={sourceMediaType !== undefined}
+            title={sourceMediaType ? 'The visual channel is fixed by the source media type' : undefined}
             onClick={() => {
               if (mode.videoEnabled) {
                 actions.setVideoEnabled(false);
@@ -76,6 +81,7 @@ export function ExportVisualChannelCard({
           isImageSequenceMode={mode.isImageSequenceMode}
           imageSequenceOutputLabel={mode.imageSequenceOutputLabel}
           useInOut={useInOut}
+          directSource={sourceMediaType !== undefined}
         />
       ) : mode.videoEnabled ? (
         <ExportVideoControls

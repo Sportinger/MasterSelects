@@ -138,7 +138,18 @@ export interface MotionShapeClipOptions {
 
 export interface MotionClipActions {
   addMotionShapeClip: (trackId: string, startTime: number, options?: MotionShapeClipOptions) => string | null;
-  addMotionNullClip: (trackId: string, startTime: number, duration?: number) => string | null;
+  addMotionNullClip: (
+    trackId: string,
+    startTime: number,
+    duration?: number,
+    name?: string,
+  ) => string | null;
+  addMotionNullAndParentSelected: (
+    trackId: string,
+    timelineTime: number,
+    selectedClipIds?: readonly string[],
+    duration?: number,
+  ) => string | null;
   addMotionAdjustmentClip: (trackId: string, startTime: number, duration?: number) => string | null;
   convertSolidToMotionShape: (clipId: string) => string | null;
   updateMotionLayer: (clipId: string, updater: (motion: MotionLayerDefinition) => MotionLayerDefinition) => void;

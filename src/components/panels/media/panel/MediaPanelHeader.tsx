@@ -48,6 +48,8 @@ export function MediaPanelHeader({
   onImportGaussianSplat,
   onNewMathScene,
   onNewMotionShape,
+  onNewMotionNull,
+  onNewMotionAdjustment,
 }: MediaPanelHeaderProps) {
   const countLabel = isSearchActive
     ? `${searchResultCount} of ${totalItems} items`
@@ -104,6 +106,8 @@ export function MediaPanelHeader({
                 onImportGaussianSplat={onImportGaussianSplat}
                 onNewMathScene={onNewMathScene}
                 onNewMotionShape={onNewMotionShape}
+                onNewMotionNull={onNewMotionNull}
+                onNewMotionAdjustment={onNewMotionAdjustment}
               />
             </div>
           )}

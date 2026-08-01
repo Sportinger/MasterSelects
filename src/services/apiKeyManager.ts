@@ -8,11 +8,13 @@ let hasWarnedKeyFileExportDisabled = false;
 let hasWarnedKeyFileImportDisabled = false;
 
 const DB_NAME = 'multicam-settings';
+const DB_VERSION = 2;
 const STORE_NAME = 'api-keys';
 const ENCRYPTION_KEY_ID = 'encryption-key';
+const DEPRECATED_KIEAI_KEY_ID = 'kieai-api-key';
 
 // Supported API key types
-export type ApiKeyType = 'openai' | 'anthropic' | 'assemblyai' | 'deepgram' | 'piapi' | 'kieai' | 'evolink' | 'elevenlabs' | 'youtube' | 'klingAccessKey' | 'klingSecretKey';
+export type ApiKeyType = 'openai' | 'anthropic' | 'assemblyai' | 'deepgram' | 'piapi' | 'evolink' | 'elevenlabs' | 'youtube' | 'klingAccessKey' | 'klingSecretKey';
 
 // Key IDs for each API key type (stored in IndexedDB)
 const KEY_IDS: Record<ApiKeyType, string> = {
@@ -21,7 +23,6 @@ const KEY_IDS: Record<ApiKeyType, string> = {
   assemblyai: 'assemblyai-api-key',
   deepgram: 'deepgram-api-key',
   piapi: 'piapi-api-key',
-  kieai: 'kieai-api-key',
   evolink: 'evolink-api-key',
   elevenlabs: 'elevenlabs-api-key',
   youtube: 'youtube-api-key',
@@ -95,7 +96,7 @@ async function decrypt(encryptedData: ArrayBuffer, iv: Uint8Array, key: CryptoKe
  */
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result);
@@ -104,6 +105,10 @@ function openDB(): Promise<IDBDatabase> {
       const db = (event.target as IDBOpenDBRequest).result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+      if (event.oldVersion < 2) {
+        const store = request.transaction?.objectStore(STORE_NAME);
+        store?.delete(DEPRECATED_KIEAI_KEY_ID);
       }
     };
   });
@@ -252,7 +257,6 @@ class ApiKeyManager {
       assemblyai: '',
       deepgram: '',
       piapi: '',
-      kieai: '',
       evolink: '',
       elevenlabs: '',
       youtube: '',

@@ -10,12 +10,11 @@ import type { FlashBoardChatMessage } from './FlashBoardChatOutput';
 
 export { buildFlashBoardChatRequestPrompt } from '../../../services/flashboard/FlashBoardChatHistory';
 
-type FlashBoardChatDialogTarget = 'auth' | 'pricing' | 'settings';
+type FlashBoardChatDialogTarget = 'auth' | 'pricing';
 type FlashBoardChatPlannedRequest = Omit<FlashBoardChatRequest, 'signal'>;
 
 interface BuildFlashBoardChatSendPlanInput {
   activeChatModelId: string;
-  canUseByoChat: boolean;
   canUseHostedChat: boolean;
   chatMessages: FlashBoardChatMessage[];
   chatPanelOpen: boolean;
@@ -30,10 +29,7 @@ interface BuildFlashBoardChatSendPlanInput {
   isChatting: boolean;
   lemonadeContextSize: number;
   lemonadeEndpoint: string;
-  kieAiApiKey: string;
   openAiReasoningEffort: FlashBoardOpenAiReasoningEffort;
-  shouldUseHostedChat: boolean;
-  useHostedProductionProviders: boolean;
 }
 
 export type FlashBoardChatSendPlan =
@@ -100,7 +96,6 @@ ${userPrompt}`;
 
 export function buildFlashBoardChatSendPlan({
   activeChatModelId,
-  canUseByoChat,
   canUseHostedChat,
   chatMessages,
   chatPanelOpen,
@@ -115,10 +110,7 @@ export function buildFlashBoardChatSendPlan({
   isChatting,
   lemonadeContextSize,
   lemonadeEndpoint,
-  kieAiApiKey,
   openAiReasoningEffort,
-  shouldUseHostedChat,
-  useHostedProductionProviders,
 }: BuildFlashBoardChatSendPlanInput): FlashBoardChatSendPlan {
   if (!chatPanelOpen) {
     return { action: 'openPanel' };
@@ -132,15 +124,15 @@ export function buildFlashBoardChatSendPlan({
     return { action: 'error', errorMessage: 'Write a chat prompt before starting chat.' };
   }
 
-  if (chatProvider === 'kie' && !canUseHostedChat && !canUseByoChat) {
+  if (chatProvider === 'kie' && !canUseHostedChat) {
     return {
       action: 'error',
-      dialogTarget: useHostedProductionProviders || !hasHostedSession
-        ? 'auth'
-        : !hostedAIEnabled ? 'pricing' : 'settings',
-      errorMessage: useHostedProductionProviders
-        ? 'Sign in and enable hosted credits to use compact chat.'
-        : 'Sign in or add a Kie.ai API key in Settings to use compact chat.',
+      dialogTarget: !hasHostedSession ? 'auth' : 'pricing',
+      errorMessage: !hasHostedSession
+        ? 'Sign in to use AI chat.'
+        : !hostedAIEnabled
+          ? 'Enable hosted credits to use AI chat.'
+          : 'Hosted AI is currently unavailable.',
     };
   }
 
@@ -153,8 +145,7 @@ export function buildFlashBoardChatSendPlan({
   return {
     action: 'send',
     request: {
-      hostedAvailable: shouldUseHostedChat,
-      kieAiApiKey,
+      hostedAvailable: canUseHostedChat,
       lemonadeContextSize: chatProvider === 'lemonade' ? lemonadeContextSize : undefined,
       lemonadeEndpoint,
       model: activeChatModelId,

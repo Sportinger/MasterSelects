@@ -43,6 +43,7 @@ async function runDirectRamPreviewSmokeRange(start: number, end: number): Promis
     const preview = new RamPreviewEngine(renderHostPort.getRamPreviewRenderEngine());
     const result = await preview.generate(
       {
+        compositionId: useMediaStore.getState().activeCompositionId ?? 'timeline:active',
         start,
         end,
         centerTime: (start + end) / 2,

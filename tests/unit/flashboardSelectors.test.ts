@@ -11,7 +11,7 @@ function createState(): FlashBoardStoreState {
         createdAt: 1,
         updatedAt: 1,
         request: {
-          service: 'kieai',
+          service: 'cloud',
           providerId: 'kling-3.0',
           version: '3.0',
           prompt: 'Prompt',
@@ -26,7 +26,7 @@ function createState(): FlashBoardStoreState {
         createdAt: 1,
         updatedAt: 1,
         request: {
-          service: 'kieai',
+          service: 'cloud',
           providerId: 'kling-3.0',
           version: '3.0',
           prompt: 'Second active record',

@@ -141,6 +141,39 @@ describe('VideoSyncManager same-frame sync gate', () => {
     expect(syncClipVideo).toHaveBeenCalledTimes(2);
   });
 
+  it('uses a supplied producer context without resampling the playback clock', () => {
+    const manager = new VideoSyncManager();
+    const exactContext = {
+      isPlaying: false,
+      isDraggingPlayhead: false,
+      hasClipDragPreview: false,
+      frameNumber: 123,
+      playheadPosition: 4.1,
+      now: 1_800,
+      playbackSpeed: 1,
+      clips: [],
+      clipsAtTime: [],
+      clipsByTrackId: new Map(),
+      tracks: [],
+      videoTracks: [],
+      audioTracks: [],
+      visibleVideoTrackIds: new Set(),
+      unmutedAudioTrackIds: new Set(),
+      mediaFiles: [],
+      mediaFileById: new Map(),
+      mediaFileByName: new Map(),
+      compositionById: new Map(),
+      hasKeyframes: () => false,
+      getInterpolatedSpeed: () => 1,
+      getSourceTimeForClip: () => 0,
+    } as unknown as FrameContext;
+
+    manager.syncVideoElements(exactContext);
+
+    expect(hoisted.createFrameContext).not.toHaveBeenCalled();
+    expect(hoisted.syncBackground).toHaveBeenCalledWith(4.1, false);
+  });
+
   it('opts into worker WebCodecs only for reverse playback', () => {
     const manager = new VideoSyncManager() as unknown as VideoSyncManagerTestAccess;
     const provider = {

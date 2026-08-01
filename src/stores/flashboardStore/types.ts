@@ -43,7 +43,7 @@ export const FLASHBOARD_STATE_CLASSIFICATION = {
   retiredBoardWorkspace: FLASHBOARD_RETIRED_BOARD_WORKSPACE_STATE_KEYS,
 } as const satisfies FlashBoardStateClassification;
 
-export type FlashBoardService = 'piapi' | 'kieai' | 'evolink' | 'cloud' | 'elevenlabs' | 'suno';
+export type FlashBoardService = 'piapi' | 'evolink' | 'cloud' | 'elevenlabs';
 export type FlashBoardOutputType = 'video' | 'image' | 'audio';
 export type FlashBoardMediaType = 'video' | 'image' | 'audio';
 export type FlashBoardSunoVocalGender = 'm' | 'f';

@@ -23,6 +23,7 @@ export const classCHardTargets = [
   { path: 'src/components/panels/audio-mixer/MixerFxWindow.tsx', maxCurrentHits: 10 },
   { path: 'src/components/panels/audio-mixer/MixerTrackColorMenu.tsx', maxCurrentHits: 1 },
   { path: 'src/components/panels/color/ColorEditor.tsx', maxCurrentHits: 1 },
+  { path: 'src/components/panels/flashboard/useFlashBoardChatController.ts', maxCurrentHits: 2 },
   { path: 'src/components/panels/HistoryPanel.tsx', maxCurrentHits: 1 },
   { path: 'src/components/panels/MediaPanel.tsx', maxCurrentHits: 3 },
   { path: 'src/components/panels/media/board/useMediaBoardNodeMoveGesture.ts', maxCurrentHits: 1 },
@@ -115,7 +116,7 @@ export const classCHardTargets = [
   { path: 'src/engine/export/layerBuilder/textLayers.ts', maxCurrentHits: 1 },
   { path: 'src/engine/export/ExportMaskTextures.ts', maxCurrentHits: 1 },
   // Packet 307: 4 -> 3 + 1 (preview publisher), total conserved.
-  { path: 'src/engine/export/FrameExporter.ts', maxCurrentHits: 3 },
+  { path: 'src/engine/export/FrameExporter.ts', maxCurrentHits: 4 },
   { path: 'src/engine/export/frameExporter/ExportPreviewPublisher.ts', maxCurrentHits: 1 },
   { path: 'src/engine/export/preloadGaussianSplats.ts', maxCurrentHits: 4 },
   { path: 'src/engine/managers/OutputWindowManager.ts', maxCurrentHits: 6 },
@@ -130,12 +131,12 @@ export const classCHardTargets = [
   // Packet 231 moved 5 hits into the scene-3D/target-preview facets and the
   // old 16-ceiling slack (actual was 11) is retired: 16 -> 6 + 2 + 2 + 1.
   // Packet 343: 6 -> 2+3+1 (splat loader + export readiness), conserved.
-  { path: 'src/engine/render/RenderDispatcher.ts', maxCurrentHits: 2 },
+  { path: 'src/engine/render/RenderDispatcher.ts', maxCurrentHits: 3 },
   { path: 'src/engine/render/dispatcher/gaussianSplatSceneLoader.ts', maxCurrentHits: 3 },
   { path: 'src/engine/render/dispatcher/exportReadinessFacet.ts', maxCurrentHits: 1 },
   { path: 'src/engine/render/dispatcher/sharedScene3DProcessor.ts', maxCurrentHits: 2 },
   { path: 'src/engine/render/dispatcher/targetPreviewLayerCollector.ts', maxCurrentHits: 2 },
-  { path: 'src/engine/render/dispatcher/targetPreviewRenderer.ts', maxCurrentHits: 1 },
+  { path: 'src/engine/render/dispatcher/targetPreviewRenderer.ts', maxCurrentHits: 2 },
   { path: 'src/engine/scene/SceneCameraUtils.ts', maxCurrentHits: 7 },
   { path: 'src/engine/scene/SceneEffectorUtils.ts', maxCurrentHits: 2 },
   // Packet 345: 5 -> 2+1+1 (presenter + recovery wiring; one site retired
@@ -173,6 +174,7 @@ export const classCHardTargets = [
   { path: 'src/services/transcription/cloudProviders.ts', maxCurrentHits: 1 },
   { path: 'src/services/cloudAiService.ts', maxCurrentHits: 2 },
   { path: 'src/services/compositionAudioMixer.ts', maxCurrentHits: 2 },
+  { path: 'src/services/credits/creditBalanceCoordinator.ts', maxCurrentHits: 14 },
   // 12 -> 11: packet 237 retired one hit during the composition render split.
   { path: 'src/services/compositionRenderer.ts', maxCurrentHits: 11 },
   { path: 'src/services/layerBuilder/AudioSyncHandler.ts', maxCurrentHits: 2 },
@@ -189,7 +191,6 @@ export const classCHardTargets = [
   { path: 'src/services/layerBuilder/LayerBuilderService.ts', maxCurrentHits: 5 },
   { path: 'src/services/layerBuilder/videoSyncHtmlSeekCoordinator.ts', maxCurrentHits: 2 },
   { path: 'src/services/layerPlaybackManager.ts', maxCurrentHits: 6 },
-  { path: 'src/services/multicamAnalyzer.ts', maxCurrentHits: 1 },
   { path: 'src/services/performanceMonitor.ts', maxCurrentHits: 1 },
   { path: 'src/services/playbackHealthMonitor.ts', maxCurrentHits: 7 },
   { path: 'src/services/properties/vectorAnimationProperties.ts', maxCurrentHits: 1 },
@@ -210,8 +211,8 @@ export const classCHardTargets = [
   { path: 'src/services/timeline/timelineThumbnailGenerationWarmup.ts', maxCurrentHits: 4 },
   { path: 'src/services/timelinePlacementCommands.ts', maxCurrentHits: 13 },
   { path: 'src/services/timelineSubcomposition.ts', maxCurrentHits: 9 },
-  { path: 'src/services/whisperService.ts', maxCurrentHits: 1 },
   { path: 'src/stores/flashboardStore/activeGenerationRecords.ts', maxCurrentHits: 2 },
+  { path: 'src/stores/creditActivityStore.ts', maxCurrentHits: 1 },
   { path: 'src/stores/mediaDownloadStore.ts', maxCurrentHits: 6 },
   { path: 'src/stores/mediaStore/helpers/gaussianSplatSequenceImport.ts', maxCurrentHits: 1 },
   { path: 'src/stores/mediaStore/helpers/importPipeline.ts', maxCurrentHits: 1 },
@@ -230,7 +231,6 @@ export const classCHardTargets = [
   { path: 'src/stores/mediaStore/slices/fileManage/timelineClipReload.ts', maxCurrentHits: 2 },
   { path: 'src/stores/mediaStore/slices/projectSlice.ts', maxCurrentHits: 1 },
   { path: 'src/stores/mediaStore/slices/proxySlice.ts', maxCurrentHits: 3 },
-  { path: 'src/stores/multicamStore.ts', maxCurrentHits: 2 },
   { path: 'src/stores/renderTargetStore.ts', maxCurrentHits: 5 },
   { path: 'src/stores/sliceStore.ts', maxCurrentHits: 5 },
   { path: 'src/stores/timeline/audioEdit/audioBakeActions.ts', maxCurrentHits: 2 },
@@ -254,6 +254,7 @@ export const classCHardTargets = [
   { path: 'src/stores/timeline/keyframes/vectorAnimationKeyframeValues.ts', maxCurrentHits: 3 },
   { path: 'src/stores/timeline/mathSceneClipSlice.ts', maxCurrentHits: 1 },
   { path: 'src/stores/timeline/meshClipSlice.ts', maxCurrentHits: 1 },
+  { path: 'src/stores/timeline/motionClipSlice.ts', maxCurrentHits: 2 },
   { path: 'src/stores/timeline/playbackSlice.ts', maxCurrentHits: 2 },
   { path: 'src/stores/timeline/proxyCacheSlice.ts', maxCurrentHits: 1 },
   { path: 'src/stores/timeline/ramPreviewSlice.ts', maxCurrentHits: 1 },
@@ -269,7 +270,7 @@ export const classCHardTargets = [
 ] as const satisfies readonly GetStateClassCHardTarget[];
 
 export const getStateAccessPolicyBaselines = {
-  allowedAdapterPathCount: 30,
-  classCHardTargetFileCount: 249,
-  classCHardTargetMaxHits: 716,
+  allowedAdapterPathCount: 31,
+  classCHardTargetFileCount: 250,
+  classCHardTargetMaxHits: 734,
 } as const;

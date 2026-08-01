@@ -16,6 +16,7 @@ interface ExportImageControlsProps {
   isImageSequenceMode: boolean;
   imageSequenceOutputLabel: string;
   useInOut: boolean;
+  directSource?: boolean;
 }
 
 export function ExportImageControls({
@@ -27,11 +28,12 @@ export function ExportImageControls({
   isImageSequenceMode,
   imageSequenceOutputLabel,
   useInOut,
+  directSource = false,
 }: ExportImageControlsProps) {
   return (
     <>
       <div className="export-quick-grid export-quick-grid-stack">
-        <div className="export-field-card export-subcard" data-export-target="image-mode">
+        {!directSource && <div className="export-field-card export-subcard" data-export-target="image-mode">
           <div className="export-field-head">
             <span>Mode</span>
             <strong>{isImageSequenceMode ? `Sequence ${imageSequenceOutputLabel}` : 'Single frame'}</strong>
@@ -52,7 +54,7 @@ export function ExportImageControls({
               Sequence
             </button>
           </div>
-        </div>
+        </div>}
 
         <div className="export-field-card export-subcard" data-export-target="image-resolution">
           <div className="export-field-head">
@@ -209,10 +211,12 @@ export function ExportImageControls({
         <div className="export-field-card export-subcard" data-export-target="image-range">
           <div className="export-field-head">
             <span>Frame</span>
-            <strong>{time.formatTime(time.playheadPosition)}</strong>
+            <strong>{directSource ? 'Full source' : time.formatTime(time.playheadPosition)}</strong>
           </div>
           <div className="export-inline-note">
-            Exports the exact composited frame currently under the playhead.
+            {directSource
+              ? 'Encodes the complete source image at the selected output resolution.'
+              : 'Exports the exact composited frame currently under the playhead.'}
           </div>
         </div>
       )}

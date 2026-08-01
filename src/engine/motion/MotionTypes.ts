@@ -1,7 +1,16 @@
-import type { MotionLayerDefinition, ReplicatorLayout, StrokeAppearance } from '../../types/motionDesign';
+import type { Layer } from '../../types/layers';
+import type { MotionLayerDefinition, StrokeAppearance } from '../../types/motionDesign';
+import { normalizeMotionReplicatorBundle } from '../../services/motionDesign/contracts/replicatorTimelineAdapter';
+import { createReplicatorRenderPacket } from './replicator/rendererAdapter';
+import {
+  MOTION_REPLICATOR_INSTANCE_FLOAT_STRIDE,
+  type ReplicatorRuntimeDiagnostic,
+} from './replicator/runtimeContracts';
+import type { ReplicatorDiagnostic } from '../../services/motionDesign/replicator/contracts';
+import type { MotionFrameReplicatorState } from '../../services/motionDesign/contracts/evaluatedMotionFrame';
 
 export const MOTION_RENDER_TEXTURE_FORMAT: GPUTextureFormat = 'rgba8unorm';
-export const MOTION_REPLICATOR_SHADER_MAX_INSTANCES = 100;
+export const MOTION_REPLICATOR_SHADER_MAX_INSTANCES = 100_000;
 
 export interface MotionRenderSize {
   width: number;
@@ -12,6 +21,9 @@ export interface MotionRenderSize {
 
 export interface MotionReplicatorRenderState {
   enabled: boolean;
+  cacheIdentity: string;
+  instanceData: Float32Array;
+  diagnostics: readonly (ReplicatorDiagnostic | ReplicatorRuntimeDiagnostic)[];
   countX: number;
   countY: number;
   spacingX: number;
@@ -38,6 +50,12 @@ export interface MotionClipGpuCache {
   bindGroup: GPUBindGroup;
   width: number;
   height: number;
+  instanceCapacity: number;
+}
+
+export interface MotionReplicatorSourceGeometry {
+  sourceBounds: { minX: number; minY: number; maxX: number; maxY: number };
+  strokePadding: number;
 }
 
 function getVisibleStrokes(motion: MotionLayerDefinition): StrokeAppearance[] {
@@ -58,60 +76,6 @@ function getStrokePadding(stroke: StrokeAppearance | undefined): number {
 
 function finiteOr(value: number | undefined, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-}
-
-function clampCount(value: number | undefined, max: number): number {
-  return Math.max(1, Math.min(max, Math.round(finiteOr(value, 1))));
-}
-
-function getGridLayout(layout: ReplicatorLayout | undefined): Extract<ReplicatorLayout, { mode: 'grid' }> | undefined {
-  return layout?.mode === 'grid' ? layout : undefined;
-}
-
-function getGridBounds(params: {
-  countX: number;
-  countY: number;
-  spacingX: number;
-  spacingY: number;
-  patternOffsetX: number;
-  patternOffsetY: number;
-}): { centerX: number; centerY: number; width: number; height: number } {
-  const { countX, countY, spacingX, spacingY, patternOffsetX, patternOffsetY } = params;
-  const gridCenterX = (countX - 1) * 0.5;
-  const gridCenterY = (countY - 1) * 0.5;
-  let minX = 0;
-  let maxX = 0;
-  let minY = 0;
-  let maxY = 0;
-  let initialized = false;
-
-  for (let y = 0; y < countY; y += 1) {
-    const rowOffsetX = y % 2 === 1 ? patternOffsetX : 0;
-    const rowOffsetY = y % 2 === 1 ? patternOffsetY : 0;
-    for (let x = 0; x < countX; x += 1) {
-      const offsetX = (x - gridCenterX) * spacingX + rowOffsetX;
-      const offsetY = (y - gridCenterY) * spacingY + rowOffsetY;
-      if (!initialized) {
-        minX = offsetX;
-        maxX = offsetX;
-        minY = offsetY;
-        maxY = offsetY;
-        initialized = true;
-      } else {
-        minX = Math.min(minX, offsetX);
-        maxX = Math.max(maxX, offsetX);
-        minY = Math.min(minY, offsetY);
-        maxY = Math.max(maxY, offsetY);
-      }
-    }
-  }
-
-  return {
-    centerX: (minX + maxX) * 0.5,
-    centerY: (minY + maxY) * 0.5,
-    width: maxX - minX,
-    height: maxY - minY,
-  };
 }
 
 export function getMotionShapeRenderBounds(
@@ -143,12 +107,41 @@ export function getMotionShapeRenderBounds(
   return { width, height };
 }
 
-export function getMotionReplicatorRenderState(motion: MotionLayerDefinition | undefined): MotionReplicatorRenderState {
-  const replicator = motion?.replicator;
-  const layout = getGridLayout(replicator?.layout);
-  if (!replicator?.enabled || !layout) {
+export function getMotionReplicatorSourceGeometry(
+  motion: MotionLayerDefinition | undefined,
+): MotionReplicatorSourceGeometry {
+  const shapeBounds = getMotionShapeRenderBounds(motion);
+  const strokePadding = motion
+    ? getVisibleStrokes(motion).reduce(
+        (maximum, stroke) => Math.max(maximum, getStrokePadding(stroke)),
+        0,
+      )
+    : 0;
+  const halfWidth = shapeBounds.width * 0.5 + strokePadding;
+  const halfHeight = shapeBounds.height * 0.5 + strokePadding;
+  return {
+    sourceBounds: {
+      minX: -halfWidth,
+      minY: -halfHeight,
+      maxX: halfWidth,
+      maxY: halfHeight,
+    },
+    strokePadding,
+  };
+}
+
+export function getMotionReplicatorRenderState(
+  motion: MotionLayerDefinition | undefined,
+  frameReplicator: MotionFrameReplicatorState | null | undefined = undefined,
+): MotionReplicatorRenderState {
+  const { sourceBounds } = getMotionReplicatorSourceGeometry(motion);
+  const replicatorValue = motion?.replicator;
+  if (!replicatorValue) {
     return {
       enabled: false,
+      cacheIdentity: 'motion-replicator:none',
+      instanceData: createIdentityInstanceData(sourceBounds),
+      diagnostics: [],
       countX: 1,
       countY: 1,
       spacingX: 0,
@@ -159,62 +152,194 @@ export function getMotionReplicatorRenderState(motion: MotionLayerDefinition | u
       instanceCount: 1,
       boundsCenterX: 0,
       boundsCenterY: 0,
-      boundsWidth: 0,
-      boundsHeight: 0,
+      boundsWidth: sourceBounds.maxX - sourceBounds.minX,
+      boundsHeight: sourceBounds.maxY - sourceBounds.minY,
     };
   }
+  try {
+    const replicator = normalizeMotionReplicatorBundle(
+      replicatorValue,
+      motion?.modifierStack,
+    ).replicator;
+    if (frameReplicator === null) {
+      return createFailedReplicatorState([{
+        code: 'MOTION_REPLICATOR_INVALID_RENDER_INPUT',
+        severity: 'error',
+        message: 'Motion frame-state admission did not provide this Replicator evaluation',
+      }], sourceBounds);
+    }
+    if (
+      frameReplicator !== undefined
+      && (
+        JSON.stringify(frameReplicator.contract) !== JSON.stringify(replicator)
+        || JSON.stringify(frameReplicator.sourceBounds) !== JSON.stringify(sourceBounds)
+      )
+    ) {
+      return createFailedReplicatorState([{
+        code: 'MOTION_REPLICATOR_INVALID_RENDER_INPUT',
+        severity: 'error',
+        message: 'Motion frame-state Replicator provenance does not match the rendered layer',
+      }], sourceBounds);
+    }
+    if (frameReplicator === undefined) {
+      if (replicator.enabled) {
+        return createFailedReplicatorState([{
+          code: 'MOTION_REPLICATOR_INVALID_RENDER_INPUT',
+          severity: 'error',
+          message: 'Enabled Motion Replicators require an admitted Motion frame state',
+        }], sourceBounds);
+      }
+      return {
+        enabled: false,
+        cacheIdentity: `motion-replicator:v2:r${replicator.revision}|base`,
+        instanceData: createIdentityInstanceData(sourceBounds),
+        diagnostics: [],
+        countX: 1,
+        countY: 1,
+        spacingX: 0,
+        spacingY: 0,
+        patternOffsetX: 0,
+        patternOffsetY: 0,
+        offsetOpacity: 1,
+        instanceCount: 1,
+        boundsCenterX: 0,
+        boundsCenterY: 0,
+        boundsWidth: sourceBounds.maxX - sourceBounds.minX,
+        boundsHeight: sourceBounds.maxY - sourceBounds.minY,
+      };
+    }
+    const evaluation = frameReplicator.evaluation;
+    const grid = replicator.layout.mode === 'grid' ? replicator.layout : null;
+    if (!evaluation.enabled) {
+      return {
+        enabled: false,
+        cacheIdentity: `${evaluation.cacheKey}|base`,
+        instanceData: createIdentityInstanceData(sourceBounds),
+        diagnostics: evaluation.diagnostics,
+        countX: 1,
+        countY: 1,
+        spacingX: 0,
+        spacingY: 0,
+        patternOffsetX: 0,
+        patternOffsetY: 0,
+        offsetOpacity: 1,
+        instanceCount: 1,
+        boundsCenterX: 0,
+        boundsCenterY: 0,
+        boundsWidth: sourceBounds.maxX - sourceBounds.minX,
+        boundsHeight: sourceBounds.maxY - sourceBounds.minY,
+      };
+    }
+    const packet = createReplicatorRenderPacket(evaluation);
+    if (!packet.ok || !packet.contentBounds || !packet.cacheIdentity) {
+      return createFailedReplicatorState(packet.diagnostics, sourceBounds);
+    }
+    const bounds = packet.contentBounds;
+    return {
+      enabled: true,
+      cacheIdentity: packet.cacheIdentity,
+      instanceData: packet.instanceData,
+      diagnostics: packet.diagnostics,
+      countX: grid?.count.columns ?? evaluation.effectiveCount,
+      countY: grid?.count.rows ?? 1,
+      spacingX: grid?.spacing.x ?? 0,
+      spacingY: grid?.spacing.y ?? 0,
+      patternOffsetX: grid?.patternOffset.x ?? 0,
+      patternOffsetY: grid?.patternOffset.y ?? 0,
+      offsetOpacity: replicator.terminalTransform.opacity,
+      instanceCount: packet.stats.visibleInstances,
+      boundsCenterX: (bounds.minX + bounds.maxX) * 0.5,
+      boundsCenterY: (bounds.minY + bounds.maxY) * 0.5,
+      boundsWidth: bounds.maxX - bounds.minX,
+      boundsHeight: bounds.maxY - bounds.minY,
+    };
+  } catch (error) {
+    return createFailedReplicatorState([{
+      code: 'MOTION_REPLICATOR_INVALID_RENDER_INPUT',
+      severity: 'error',
+      message: error instanceof Error ? error.message : 'Unknown Replicator integration failure',
+    }], sourceBounds);
+  }
+}
 
-  const maxInstances = clampCount(replicator.maxInstances, MOTION_REPLICATOR_SHADER_MAX_INSTANCES);
-  const countX = clampCount(layout.count.x, maxInstances);
-  const countY = clampCount(layout.count.y, Math.max(1, Math.floor(maxInstances / countX)));
-  const spacingX = finiteOr(layout.spacing.x, 0) + finiteOr(replicator.offset.position.x, 0);
-  const spacingY = finiteOr(layout.spacing.y, 0) + finiteOr(replicator.offset.position.y, 0);
-  const patternOffsetX = finiteOr(layout.patternOffset?.x, 0);
-  const patternOffsetY = finiteOr(layout.patternOffset?.y, 0);
-  const bounds = getGridBounds({
-    countX,
-    countY,
-    spacingX,
-    spacingY,
-    patternOffsetX,
-    patternOffsetY,
-  });
+function createIdentityInstanceData(
+  bounds: { minX: number; minY: number; maxX: number; maxY: number },
+): Float32Array {
+  const data = new Float32Array(MOTION_REPLICATOR_INSTANCE_FLOAT_STRIDE);
+  data.set([1, 0, 0, 1, 0, 0, 1, 0, bounds.minX, bounds.minY, bounds.maxX, bounds.maxY]);
+  return data;
+}
 
+function createFailedReplicatorState(
+  diagnostics: readonly (ReplicatorDiagnostic | ReplicatorRuntimeDiagnostic)[],
+  sourceBounds: { minX: number; minY: number; maxX: number; maxY: number },
+): MotionReplicatorRenderState {
   return {
-    enabled: true,
-    countX,
-    countY,
-    spacingX,
-    spacingY,
-    patternOffsetX,
-    patternOffsetY,
-    offsetOpacity: Math.max(0, Math.min(1, finiteOr(replicator.offset.opacity, 1))),
-    instanceCount: countX * countY,
-    boundsCenterX: bounds.centerX,
-    boundsCenterY: bounds.centerY,
-    boundsWidth: bounds.width,
-    boundsHeight: bounds.height,
+    enabled: false,
+    cacheIdentity: 'motion-replicator:invalid',
+    instanceData: new Float32Array(0),
+    diagnostics,
+    countX: 0,
+    countY: 0,
+    spacingX: 0,
+    spacingY: 0,
+    patternOffsetX: 0,
+    patternOffsetY: 0,
+    offsetOpacity: 1,
+    instanceCount: 0,
+    boundsCenterX: 0,
+    boundsCenterY: 0,
+    boundsWidth: sourceBounds.maxX - sourceBounds.minX,
+    boundsHeight: sourceBounds.maxY - sourceBounds.minY,
   };
 }
 
-export function getMotionRenderSize(motion: MotionLayerDefinition | undefined): MotionRenderSize {
-  const bounds = getMotionShapeRenderBounds(motion);
-  const width = Math.max(1, Math.ceil(bounds.width));
-  const height = Math.max(1, Math.ceil(bounds.height));
+export function getMotionRenderSize(
+  motion: MotionLayerDefinition | undefined,
+  frameReplicator: MotionFrameReplicatorState | null | undefined = undefined,
+): MotionRenderSize {
   const strokePadding = motion
     ? getVisibleStrokes(motion).reduce(
         (maximum, stroke) => Math.max(maximum, getStrokePadding(stroke)),
         0,
       )
     : 0;
-  const replicator = getMotionReplicatorRenderState(motion);
+  const replicator = getMotionReplicatorRenderState(motion, frameReplicator);
   const replicatedWidth = Math.ceil(replicator.boundsWidth);
   const replicatedHeight = Math.ceil(replicator.boundsHeight);
 
   return {
-    width: width + strokePadding * 2 + replicatedWidth,
-    height: height + strokePadding * 2 + replicatedHeight,
+    width: Math.max(1, replicatedWidth),
+    height: Math.max(1, replicatedHeight),
     strokePadding,
     replicator,
+  };
+}
+
+/**
+ * The Replicator texture is centered on its content bounds. Move the compositor
+ * layer by that local-space center so asymmetric layouts keep their authored
+ * contract-space placement instead of being visually re-centered.
+ */
+export function applyMotionRenderPlacement(
+  layer: Layer,
+  size: MotionRenderSize,
+): Layer {
+  const localX = size.replicator.boundsCenterX * layer.scale.x;
+  const localY = size.replicator.boundsCenterY * layer.scale.y;
+  if (localX === 0 && localY === 0) return layer;
+  const rotationDegrees = typeof layer.rotation === 'number'
+    ? layer.rotation
+    : layer.rotation.z;
+  const radians = rotationDegrees * Math.PI / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  return {
+    ...layer,
+    position: {
+      ...layer.position,
+      x: layer.position.x + localX * cos - localY * sin,
+      y: layer.position.y + localX * sin + localY * cos,
+    },
   };
 }

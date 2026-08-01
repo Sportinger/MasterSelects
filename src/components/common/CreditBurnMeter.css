@@ -1,0 +1,443 @@
+@layer components {
+.credit-burn-meter {
+  --credit-accent: rgba(89, 179, 255, 0.92);
+  --credit-accent-soft: rgba(65, 155, 235, 0.22);
+  position: relative;
+  display: grid;
+  grid-template-columns: 62px minmax(48px, 1fr) 66px;
+  align-items: center;
+  width: 210px;
+  height: 28px;
+  min-width: 210px;
+  padding: 0 10px 2px;
+  overflow: visible;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.035));
+  color: var(--text-primary);
+  cursor: pointer;
+  isolation: isolate;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.credit-burn-meter:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.055));
+}
+
+.credit-burn-meter:focus-visible {
+  outline: 2px solid rgba(92, 184, 255, 0.82);
+  outline-offset: 2px;
+}
+
+.credit-burn-meter[data-credit-level='low'] {
+  --credit-accent: rgba(255, 177, 72, 0.96);
+  --credit-accent-soft: rgba(255, 157, 44, 0.2);
+}
+
+.credit-burn-meter[data-credit-level='critical'] {
+  --credit-accent: rgba(255, 90, 88, 0.98);
+  --credit-accent-soft: rgba(255, 72, 70, 0.22);
+}
+
+.credit-burn-meter.is-grant,
+.credit-burn-meter.is-refund {
+  --credit-accent: rgba(113, 238, 169, 0.96);
+  --credit-accent-soft: rgba(77, 214, 142, 0.2);
+}
+
+.credit-burn-meter.is-debit {
+  --credit-accent: rgb(255, 37, 69);
+  --credit-accent-soft: rgba(255, 24, 61, 0.4);
+}
+
+.credit-burn-meter.is-debit .credit-burn-run {
+  color: rgb(255, 84, 104);
+  text-shadow: 0 0 8px rgba(255, 30, 66, 0.72);
+  animation: credit-run-debit-punch var(--credit-settlement-duration, 720ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.credit-burn-meter.is-debit .credit-odometer-column.is-changing {
+  color: rgb(255, 92, 110);
+  text-shadow: 0 0 7px rgba(255, 28, 64, 0.82);
+}
+
+.credit-burn-status,
+.credit-burn-run {
+  position: relative;
+  z-index: 2;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.47);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.055em;
+  line-height: 1;
+  text-overflow: clip;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.credit-burn-status {
+  text-align: left;
+}
+
+.credit-burn-run {
+  color: rgba(255, 255, 255, 0.68);
+  text-align: right;
+}
+
+.credit-burn-run.is-idle {
+  opacity: 0.42;
+}
+
+.credit-burn-run.is-positive {
+  color: rgba(113, 238, 169, 0.96);
+}
+
+.credit-burn-value {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+  color: rgba(255, 255, 255, 0.93);
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: 690;
+  letter-spacing: -0.015em;
+  line-height: 16px;
+}
+
+.credit-burn-readable {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.credit-odometer {
+  display: inline-flex;
+  justify-content: center;
+}
+
+.credit-odometer-column {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  min-width: 0.56em;
+  height: 16px;
+  overflow: hidden;
+}
+
+.credit-odometer-current,
+.credit-odometer-previous,
+.credit-odometer-trail {
+  grid-area: 1 / 1;
+}
+
+.credit-odometer-column.is-changing .credit-odometer-current {
+  animation: credit-digit-in-down var(--credit-settlement-duration, 680ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.credit-odometer-column.is-changing .credit-odometer-previous {
+  animation: credit-digit-out-down var(--credit-settlement-duration, 680ms) cubic-bezier(0.55, 0, 1, 0.45) both;
+}
+
+.credit-odometer-column.is-changing .credit-odometer-trail {
+  color: var(--credit-accent);
+  opacity: 0;
+  text-shadow: 0 -3px 4px currentColor, 0 -7px 8px currentColor;
+  animation: credit-digit-trail-down var(--credit-settlement-duration, 680ms) ease-out both;
+}
+
+.credit-odometer.is-up .credit-odometer-column.is-changing .credit-odometer-current {
+  animation-name: credit-digit-in-up;
+}
+
+.credit-odometer.is-up .credit-odometer-column.is-changing .credit-odometer-previous {
+  animation-name: credit-digit-out-up;
+}
+
+.credit-odometer.is-up .credit-odometer-column.is-changing .credit-odometer-trail {
+  color: rgba(113, 238, 169, 0.96);
+  animation-name: credit-digit-trail-up;
+}
+
+.credit-burn-track {
+  position: absolute;
+  z-index: 3;
+  right: 10px;
+  bottom: 2px;
+  left: 10px;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.085);
+}
+
+.credit-burn-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--credit-accent) 54%, transparent), var(--credit-accent));
+  box-shadow: 0 0 7px var(--credit-accent-soft);
+  transform-origin: left center;
+  transition: transform 700ms cubic-bezier(0.16, 1, 0.3, 1), background 200ms ease;
+}
+
+.credit-burn-edge {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 24px;
+  opacity: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.95), transparent);
+  transform: translateX(-28px);
+}
+
+.credit-burn-meter.is-settling {
+  animation: credit-meter-heat var(--credit-settlement-duration, 720ms) ease-out both;
+}
+
+.credit-burn-meter.is-settling .credit-burn-edge {
+  animation: credit-edge-travel var(--credit-settlement-duration, 720ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.credit-burn-meter.is-active::after {
+  position: absolute;
+  z-index: 1;
+  inset: 1px;
+  border-radius: inherit;
+  background: linear-gradient(105deg, transparent 18%, rgba(94, 190, 255, 0.1) 46%, transparent 73%);
+  content: '';
+  pointer-events: none;
+  transform: translateX(-80%);
+  animation: credit-active-sheen 2.4s ease-in-out infinite;
+}
+
+.credit-drain-layer {
+  position: absolute;
+  z-index: 1000;
+  top: 68%;
+  left: 66%;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.credit-drain-layer::before {
+  position: absolute;
+  top: -14px;
+  left: -25px;
+  width: 58px;
+  height: 126px;
+  border-radius: 50%;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 31, 67, 0.48) 18%, rgba(255, 14, 53, 0.1) 58%, transparent 82%);
+  content: '';
+  filter: blur(7px);
+  mix-blend-mode: screen;
+  opacity: 0;
+  transform-origin: center top;
+  animation: credit-critical-column var(--credit-settlement-duration, 720ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.credit-drain-particle {
+  --credit-particle-delay: 0ms;
+  --credit-particle-x: -42px;
+  --credit-particle-y: 38px;
+  position: absolute;
+  width: 6px;
+  height: 3px;
+  border-radius: 99px;
+  background: var(--credit-accent);
+  box-shadow: 0 0 7px var(--credit-accent), -7px 0 8px var(--credit-accent-soft);
+  opacity: 0;
+  animation: credit-particle-drain var(--credit-settlement-duration, 780ms) cubic-bezier(0.25, 0.72, 0.35, 1) var(--credit-particle-delay) both;
+}
+
+.credit-drain-amount {
+  --credit-particle-x: -18px;
+  --credit-particle-y: 16px;
+  position: absolute;
+  color: rgb(255, 42, 72);
+  -webkit-text-stroke: 0.45px rgba(255, 236, 240, 0.82);
+  font-size: 31px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  letter-spacing: -0.055em;
+  line-height: 1;
+  text-shadow:
+    0 0 4px rgba(255, 255, 255, 0.62),
+    0 0 13px rgba(255, 22, 58, 1),
+    0 0 34px rgba(255, 10, 48, 0.76);
+  white-space: nowrap;
+  animation: credit-drain-amount var(--credit-settlement-duration, 720ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.credit-drain-amount::before,
+.credit-drain-amount::after {
+  position: absolute;
+  inset: 0;
+  content: attr(data-credit-amount);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.credit-drain-amount::before {
+  color: rgba(255, 16, 55, 0.72);
+  filter: blur(2px);
+  animation: credit-drain-ghost-a var(--credit-settlement-duration, 720ms) ease-out both;
+}
+
+.credit-drain-amount::after {
+  color: rgba(255, 72, 94, 0.48);
+  filter: blur(4px);
+  animation: credit-drain-ghost-b var(--credit-settlement-duration, 720ms) ease-out both;
+}
+
+.credit-burn-live-region {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@keyframes credit-digit-in-down {
+  from { opacity: 0; transform: translateY(-80%) scaleY(1.16); }
+  58% { opacity: 1; }
+  to { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+
+@keyframes credit-digit-out-down {
+  from { opacity: 1; transform: translateY(0) scaleY(1); }
+  to { opacity: 0; transform: translateY(90%) scaleY(1.28); }
+}
+
+@keyframes credit-digit-trail-down {
+  16% { opacity: 0.48; transform: translateY(-12%) scaleY(1.45); }
+  to { opacity: 0; transform: translateY(74%) scaleY(2.1); }
+}
+
+@keyframes credit-digit-in-up {
+  from { opacity: 0; transform: translateY(80%) scaleY(1.16); }
+  58% { opacity: 1; }
+  to { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+
+@keyframes credit-digit-out-up {
+  from { opacity: 1; transform: translateY(0) scaleY(1); }
+  to { opacity: 0; transform: translateY(-90%) scaleY(1.28); }
+}
+
+@keyframes credit-digit-trail-up {
+  16% { opacity: 0.48; transform: translateY(12%) scaleY(1.45); }
+  to { opacity: 0; transform: translateY(-74%) scaleY(2.1); }
+}
+
+@keyframes credit-meter-heat {
+  0% { border-color: rgba(255, 255, 255, 0.11); box-shadow: 0 0 0 transparent; }
+  34% { border-color: var(--credit-accent); box-shadow: 0 0 14px var(--credit-accent-soft); }
+  100% { border-color: rgba(255, 255, 255, 0.11); box-shadow: 0 0 0 transparent; }
+}
+
+@keyframes credit-run-debit-punch {
+  0% { opacity: 0.58; transform: translateX(-3px) scale(0.82); }
+  28% { opacity: 1; transform: translateX(0) scale(1.14); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes credit-edge-travel {
+  0% { opacity: 0; transform: translateX(-28px); }
+  26% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(210px); }
+}
+
+@keyframes credit-active-sheen {
+  0%, 38% { opacity: 0; transform: translateX(-85%); }
+  55% { opacity: 1; }
+  76%, 100% { opacity: 0; transform: translateX(85%); }
+}
+
+@keyframes credit-particle-drain {
+  0% { opacity: 0; transform: translate3d(0, 0, 0) scaleX(0.7); }
+  16% { opacity: 0.94; }
+  62% { opacity: 0.68; }
+  100% { opacity: 0; transform: translate3d(var(--credit-particle-x), var(--credit-particle-y), 0) scaleX(2.2); }
+}
+
+@keyframes credit-critical-column {
+  0% { opacity: 0; transform: translate3d(0, -12px, 0) scale3d(0.28, 0.18, 1); }
+  16% { opacity: 0.92; transform: translate3d(0, 0, 0) scale3d(0.72, 0.3, 1); }
+  42% { opacity: 0.62; transform: translate3d(-4px, 14px, 0) scale3d(1, 0.94, 1); }
+  100% { opacity: 0; transform: translate3d(5px, 58px, 0) scale3d(1.2, 1.22, 1); }
+}
+
+@keyframes credit-drain-amount {
+  0% { opacity: 0; transform: translate3d(0, -16px, 0) scale(0.42); }
+  15% { opacity: 1; transform: translate3d(-8px, 3px, 0) scale(1.34); }
+  43% { opacity: 1; transform: translate3d(-11px, 14px, 0) scale(1.12); }
+  72% { opacity: 0.94; }
+  100% { opacity: 0; transform: translate3d(var(--credit-particle-x), var(--credit-particle-y), 0) scale(0.88); }
+}
+
+@keyframes credit-drain-ghost-a {
+  0%, 10% { opacity: 0; transform: translate3d(0, -16px, 0) scaleY(0.56); }
+  24% { opacity: 0.92; transform: translate3d(-4px, 9px, 0) scaleY(1.55); }
+  100% { opacity: 0; transform: translate3d(7px, 68px, 0) scaleY(2.55); }
+}
+
+@keyframes credit-drain-ghost-b {
+  0%, 16% { opacity: 0; transform: translate3d(2px, -8px, 0) scale(0.7); }
+  32% { opacity: 0.78; transform: translate3d(7px, 14px, 0) scale(1.2); }
+  100% { opacity: 0; transform: translate3d(-10px, 88px, 0) scale(1.48); }
+}
+
+@media (max-width: 1100px) {
+  .credit-burn-meter {
+    grid-template-columns: 34px minmax(44px, 1fr) 58px;
+    width: 166px;
+    min-width: 166px;
+  }
+
+  .credit-burn-status {
+    font-size: 0;
+  }
+
+  .credit-burn-status::after {
+    font-size: 9px;
+    content: attr(data-short-status);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .credit-burn-meter,
+  .credit-burn-meter::after,
+  .credit-burn-fill,
+  .credit-burn-edge,
+  .credit-odometer-current,
+  .credit-odometer-previous,
+  .credit-odometer-trail,
+  .credit-drain-layer,
+  .credit-drain-layer::before,
+  .credit-drain-particle,
+  .credit-drain-amount,
+  .credit-drain-amount::before,
+  .credit-drain-amount::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .credit-odometer-previous,
+  .credit-odometer-trail,
+  .credit-drain-layer {
+    display: none;
+  }
+}
+}

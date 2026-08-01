@@ -508,6 +508,11 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   var uv = input.uv;
   uv = uv - vec2f(0.5);
 
+  // Position is normalized against the composition half-extents. Apply it in
+  // composition space before undoing local rotation, scale, and aspect so the
+  // visible offset is independent of source dimensions and clip scale.
+  uv = uv - vec2f(layer.posX, layer.posY) * 0.5;
+
   // For 3D rotation, work in world coordinates where the panel has its actual aspect ratio
   // posZ sets the initial depth: positive = closer (larger), negative = further (smaller)
   var p = vec3f(uv.x, uv.y / layer.outputAspect, layer.posZ);
@@ -554,7 +559,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     uv.x = uv.x / aspectRatio;
   }
 
-  uv = uv + vec2f(0.5) - vec2f(layer.posX, layer.posY);
+  uv = uv + vec2f(0.5);
 
   let clampedUV = clamp(uv, vec2f(0.0), vec2f(1.0));
   let transitionUV = getTransitionUv(clampedUV);

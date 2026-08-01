@@ -20,6 +20,7 @@ import type { LightClipSettings } from '../../../types/light';
 import type { ModelMaterialSettings } from '../../../types/modelMaterial';
 import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
 import type { MeshPrimitiveType, SceneCameraSettings } from '../../mediaStore/types';
+import type { MotionParentTransform2D } from '../../../services/motionDesign/structure/contracts';
 
 export interface ClipboardClipData {
   id: string;
@@ -44,6 +45,9 @@ export interface ClipboardClipData {
   masks?: ClipMask[];
   keyframes?: Keyframe[];
   linkedClipId?: string;
+  parentClipId?: string;
+  /** World-space snapshot used when paste must clear an uncopied parent edge. */
+  worldTransformAtCopyTime?: MotionParentTransform2D;
   reversed?: boolean;
   speed?: number;
   preservesPitch?: boolean;

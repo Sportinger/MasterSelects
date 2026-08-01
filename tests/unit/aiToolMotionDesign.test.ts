@@ -7,9 +7,12 @@ import { handleExecuteBatch } from '../../src/services/aiTools/handlers/batch';
 import { handleAddKeyframe } from '../../src/services/aiTools/handlers/keyframes';
 import {
   handleConfigureMotionReplicator,
+  handleCreateMotionNull,
+  handleCreateMotionNullAndParent,
   handleCreateMotionShapeClip,
   handleGetMotionCapabilities,
   handleGetMotionDesign,
+  handleSetMotionParent,
   handleUpdateMotionAppearances,
   handleUpdateMotionProperties,
 } from '../../src/services/aiTools/handlers/motionDesign';
@@ -18,6 +21,7 @@ import {
   getToolPolicy,
 } from '../../src/services/aiTools/policy/registry';
 import { MODIFYING_TOOLS } from '../../src/services/aiTools/types';
+import { executeFlashBoardToolCalls } from '../../src/services/flashboard/FlashBoardChatTools';
 import type { MotionDesignClipView } from '../../src/services/motionDesign/mvpCapabilities';
 import {
   initHistoryStoreRefs,
@@ -36,7 +40,12 @@ const MOTION_TOOL_NAMES = [
   'createMotionShapeClip',
   'updateMotionProperties',
   'updateMotionAppearances',
+  'setMotionParent',
+  'createMotionNull',
+  'createMotionNullAndParent',
+  'editMotionAdjustment',
   'configureMotionReplicator',
+  'editMotionModifier',
 ] as const;
 
 function resetTimeline(): void {
@@ -161,13 +170,303 @@ describe('AI Motion Design tools', () => {
         blendModes: ['normal', 'multiply', 'screen', 'add', 'overlay', 'difference'],
       },
       replicator: {
-        layouts: ['grid'],
-        maxCountPerAxis: 10,
-        maxInstances: 100,
+        layouts: ['grid', 'linear', 'radial'],
+        maxCountPerAxis: 10_000,
+        maxInstances: 100_000,
       },
     });
     expect((result.data as { unsupportedUntilLaterPhases: string[] })
       .unsupportedUntilLaterPhases.join(' ')).toContain('texture');
+  });
+
+  it('sets and clears Motion parents through the production graph transaction', async () => {
+    const parent = await createShape({ name: 'AI Parent' });
+    const child = await createShape({ name: 'AI Child' });
+    useTimelineStore.getState().updateClipTransform(parent.clipId, {
+      position: { x: 0.2, y: -0.1, z: 0 },
+      rotation: { x: 0, y: 0, z: 25 },
+    });
+    useTimelineStore.getState().updateClipTransform(child.clipId, {
+      position: { x: -0.3, y: 0.25, z: 0 },
+    });
+    const worldBefore = structuredClone(
+      useTimelineStore.getState().clips.find((clip) => clip.id === child.clipId)?.transform,
+    );
+
+    const setResult = await handleSetMotionParent({
+      operation: 'set',
+      childClipId: child.clipId,
+      parentClipId: parent.clipId,
+    }, useTimelineStore.getState());
+    expect(setResult.success).toBe(true);
+    expect(useTimelineStore.getState().clips.find((clip) => clip.id === child.clipId)?.parentClipId)
+      .toBe(parent.clipId);
+    expect(setResult.data).toMatchObject({
+      operation: 'set',
+      childClipId: child.clipId,
+      parentClipId: parent.clipId,
+      entities: { updated: [{ kind: 'clip', id: child.clipId }] },
+    });
+
+    const clearResult = await handleSetMotionParent({
+      operation: 'clear',
+      childClipId: child.clipId,
+    }, useTimelineStore.getState());
+    expect(clearResult.success).toBe(true);
+    const childAfter = useTimelineStore.getState().clips.find((clip) => clip.id === child.clipId);
+    expect(childAfter?.parentClipId).toBeUndefined();
+    expect(childAfter?.transform.position.x).toBeCloseTo(worldBefore?.position.x ?? 0, 10);
+    expect(childAfter?.transform.position.y).toBeCloseTo(worldBefore?.position.y ?? 0, 10);
+    expect(childAfter?.transform.rotation).toEqual(worldBefore?.rotation);
+    expect(childAfter?.transform.opacity).toBe(worldBefore?.opacity);
+  });
+
+  it('cancels failed/no-op AI parenting history batches instead of adding empty undo steps', async () => {
+    const parent = await createShape({ name: 'History Parent' });
+    const child = await createShape({ name: 'History Child' });
+    const applied = await executeAITool('setMotionParent', {
+      operation: 'set',
+      childClipId: child.clipId,
+      parentClipId: parent.clipId,
+    }, 'internal');
+    expect(applied.success).toBe(true);
+    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+
+    const noOp = await executeAITool('setMotionParent', {
+      operation: 'set',
+      childClipId: child.clipId,
+      parentClipId: parent.clipId,
+    }, 'internal');
+    expect(noOp.success).toBe(false);
+    expect(noOp.error).toContain('already has');
+    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    expect(useTimelineStore.getState().clips.find((clip) => clip.id === child.clipId)?.parentClipId)
+      .toBe(parent.clipId);
+
+    const rejected = await executeAITool('setMotionParent', {
+      operation: 'set',
+      childClipId: child.clipId,
+      parentClipId: 'missing-parent',
+    }, 'internal');
+    expect(rejected.success).toBe(false);
+    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+  });
+
+  it('reports transform keyframes changed by an animated parenting transaction', async () => {
+    const parent = await createShape({ name: 'Animated Parent' });
+    const child = await createShape({ name: 'Animated Child' });
+    useTimelineStore.getState().updateClipTransform(parent.clipId, {
+      position: { x: 0.25, y: 0, z: 0 },
+    });
+    const keyframeResult = await handleAddKeyframe({
+      clipId: child.clipId,
+      property: 'opacity',
+      value: 0.8,
+      time: 2,
+      easing: 'linear',
+    }, useTimelineStore.getState());
+    expect(keyframeResult.success).toBe(true);
+    expect(useTimelineStore.getState().getClipKeyframes(child.clipId)).toHaveLength(1);
+
+    const result = await handleSetMotionParent({
+      operation: 'set',
+      childClipId: child.clipId,
+      parentClipId: parent.clipId,
+    }, useTimelineStore.getState());
+
+    expect(result.success).toBe(true);
+    const entities = (result.data as {
+      entities: {
+        created: Array<{ kind: string }>;
+        updated: Array<{ kind: string }>;
+      };
+    }).entities;
+    expect([...entities.created, ...entities.updated])
+      .toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'keyframe' })]));
+  });
+
+  it('creates a standalone Motion Null with safe defaults and one real undo/redo step', async () => {
+    const result = await executeAITool('createMotionNull', {
+      name: 'Lower Third Controller',
+    }, 'internal');
+
+    expect(result.success).toBe(true);
+    const data = result.data as {
+      clipId: string;
+      affectedClipIds: string[];
+      graphRevisionBefore: string;
+      graphRevisionAfter: string;
+      stateRevisionBefore: number;
+      stateRevisionAfter: number;
+      diagnostics: unknown[];
+      entities: { created: Array<{ kind: string; id: string }> };
+    };
+    expect(data.affectedClipIds).toEqual([data.clipId]);
+    expect(data.graphRevisionAfter).not.toBe(data.graphRevisionBefore);
+    expect(data.stateRevisionAfter).toBeGreaterThan(data.stateRevisionBefore);
+    expect(data.diagnostics).toEqual([]);
+    expect(data.entities.created).toContainEqual({ kind: 'clip', id: data.clipId });
+    expect(useTimelineStore.getState().clips.find((clip) => clip.id === data.clipId)).toMatchObject({
+      trackId: 'video-1',
+      name: 'Lower Third Controller',
+      startTime: 2,
+      duration: 5,
+      source: { type: 'motion-null' },
+    });
+
+    expect(useHistoryStore.getState().undo()).toMatchObject({ operation: 'undo' });
+    expect(useTimelineStore.getState().clips.some((clip) => clip.id === data.clipId)).toBe(false);
+    expect(useHistoryStore.getState().undo()).toBeNull();
+
+    expect(useHistoryStore.getState().redo()).toMatchObject({ operation: 'redo' });
+    expect(useTimelineStore.getState().clips.find((clip) => clip.id === data.clipId)).toMatchObject({
+      trackId: 'video-1',
+      name: 'Lower Third Controller',
+      startTime: 2,
+      duration: 5,
+      source: { type: 'motion-null' },
+    });
+  });
+
+  it('keeps direct standalone Null domain creation undoable without the AI wrapper', () => {
+    const clipId = useTimelineStore.getState().addMotionNullClip(
+      'video-1',
+      3,
+      7,
+      'Direct Controller',
+    );
+    expect(clipId).not.toBeNull();
+    expect(useTimelineStore.getState().clips.find((clip) => clip.id === clipId)).toMatchObject({
+      name: 'Direct Controller',
+      startTime: 3,
+      duration: 7,
+      source: { type: 'motion-null' },
+    });
+
+    expect(useHistoryStore.getState().undo()).toMatchObject({ operation: 'undo' });
+    expect(useTimelineStore.getState().clips.some((clip) => clip.id === clipId)).toBe(false);
+    expect(useHistoryStore.getState().undo()).toBeNull();
+    expect(useHistoryStore.getState().redo()).toMatchObject({ operation: 'redo' });
+    expect(useTimelineStore.getState().clips.find((clip) => clip.id === clipId)).toMatchObject({
+      name: 'Direct Controller',
+      startTime: 3,
+      duration: 7,
+      source: { type: 'motion-null' },
+    });
+  });
+
+  it('returns structured standalone Null failures without creating history', async () => {
+    const result = await handleCreateMotionNull({
+      trackId: 'video-locked',
+      startTime: 1,
+      duration: 3,
+    }, useTimelineStore.getState());
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('locked');
+    expect(result.data).toMatchObject({
+      operation: 'create-motion-null',
+      affectedClipIds: [],
+      diagnostics: [{ code: 'MD6_STRUCTURE_CREATE_NULL_TRACK_INVALID' }],
+    });
+    const failureData = result.data as {
+      graphRevisionBefore: string;
+      graphRevisionAfter: string;
+      stateRevisionBefore: number;
+      stateRevisionAfter: number;
+    };
+    expect(failureData.graphRevisionAfter).toBe(failureData.graphRevisionBefore);
+    expect(failureData.stateRevisionAfter).toBe(failureData.stateRevisionBefore);
+    expect(useTimelineStore.getState().clips).toHaveLength(0);
+    expect(useHistoryStore.getState().undo()).toBeNull();
+  });
+
+  it('rolls standalone Motion Null creation back when a later batch action fails', async () => {
+    const result = await executeAITool('executeBatch', {
+      staggerDelayMs: 0,
+      actions: [
+        {
+          tool: 'createMotionNull',
+          args: { trackId: 'video-1', startTime: 1, duration: 4, name: 'Rolled Back Null' },
+        },
+        {
+          tool: 'createMotionNull',
+          args: { trackId: 'video-locked', startTime: 2, duration: 2 },
+        },
+      ],
+    }, 'internal');
+
+    expect(result.success).toBe(false);
+    expect(result.data).toMatchObject({ totalActions: 2, succeeded: 1, failed: 1 });
+    expect(useTimelineStore.getState().clips).toHaveLength(0);
+    expect(useHistoryStore.getState().undo()).toBeNull();
+  });
+
+  it('creates one Motion Null and parents explicit AI clip ids atomically', async () => {
+    const first = await createShape({ name: 'AI Child A', startTime: 1, duration: 2 });
+    const second = await createShape({ name: 'AI Child B', startTime: 4, duration: 3 });
+
+    const result = await handleCreateMotionNullAndParent({
+      trackId: 'video-1',
+      clipIds: [first.clipId, second.clipId],
+      timelineTime: 2,
+      duration: 2,
+    }, useTimelineStore.getState());
+
+    expect(result.success).toBe(true);
+    const data = result.data as {
+      clipId: string;
+      parentedClipIds: string[];
+      entities: { created: Array<{ kind: string; id: string }> };
+    };
+    const state = useTimelineStore.getState();
+    const nullClip = state.clips.find((clip) => clip.id === data.clipId);
+    expect(nullClip).toMatchObject({
+      trackId: 'video-1',
+      startTime: 1,
+      duration: 6,
+      source: { type: 'motion-null' },
+    });
+    expect(data.parentedClipIds).toEqual([first.clipId, second.clipId]);
+    expect(data.entities.created).toContainEqual({ kind: 'clip', id: data.clipId });
+    expect(state.clips.find((clip) => clip.id === first.clipId)?.parentClipId).toBe(data.clipId);
+    expect(state.clips.find((clip) => clip.id === second.clipId)?.parentClipId).toBe(data.clipId);
+  });
+
+  it('undoes and redoes create-null-and-parent as one exact graph transaction', async () => {
+    const first = await createShape({ name: 'Undo Child A', startTime: 1, duration: 2 });
+    const second = await createShape({ name: 'Undo Child B', startTime: 4, duration: 3 });
+    const readRelevantGraphState = () => useTimelineStore.getState().clips.map((clip) => ({
+      id: clip.id,
+      name: clip.name,
+      trackId: clip.trackId,
+      startTime: clip.startTime,
+      duration: clip.duration,
+      parentClipId: clip.parentClipId,
+      transform: structuredClone(clip.transform),
+    }));
+    const before = readRelevantGraphState();
+    useHistoryStore.getState().clearHistory();
+
+    const result = await executeAITool('createMotionNullAndParent', {
+      trackId: 'video-1',
+      clipIds: [first.clipId, second.clipId],
+      timelineTime: 2,
+      duration: 2,
+    }, 'internal');
+    expect(result.success).toBe(true);
+    const data = result.data as { clipId: string; affectedClipIds: string[] };
+    expect(data.affectedClipIds).toEqual([data.clipId, first.clipId, second.clipId]);
+
+    expect(useHistoryStore.getState().undo()).toMatchObject({ operation: 'undo' });
+    expect(readRelevantGraphState()).toEqual(before);
+    expect(useHistoryStore.getState().undo()).toBeNull();
+
+    expect(useHistoryStore.getState().redo()).toMatchObject({ operation: 'redo' });
+    const redone = useTimelineStore.getState().clips;
+    expect(redone.find((clip) => clip.id === data.clipId)?.source?.type).toBe('motion-null');
+    expect(redone.find((clip) => clip.id === first.clipId)?.parentClipId).toBe(data.clipId);
+    expect(redone.find((clip) => clip.id === second.clipId)?.parentClipId).toBe(data.clipId);
   });
 
   it('creates a styled native motion shape at the playhead with mutation metadata', async () => {
@@ -226,6 +525,43 @@ describe('AI Motion Design tools', () => {
     });
   });
 
+  it('sends compact Motion mutation receipts to the model while preserving the full raw result', async () => {
+    const [executed] = await executeFlashBoardToolCalls([{
+      id: 'create-shape-compact',
+      name: 'createMotionShapeClip',
+      arguments: JSON.stringify({
+        trackId: 'video-1',
+        primitive: 'rectangle',
+        width: 640,
+        height: 180,
+        duration: 5,
+      }),
+    }], Number.POSITIVE_INFINITY);
+
+    expect(executed?.result.success).toBe(true);
+    expect((executed?.result.data as { properties?: unknown[] }).properties?.length)
+      .toBeGreaterThan(10);
+    const modelReceipt = JSON.parse(executed!.modelContent) as {
+      data: {
+        commonEditablePaths?: Record<string, string>;
+        detail?: string;
+        position?: unknown[];
+        properties?: unknown[];
+      };
+    };
+    expect(modelReceipt.data.properties).toBeUndefined();
+    expect(modelReceipt.data.position).toHaveLength(2);
+    expect(modelReceipt.data.commonEditablePaths).toEqual({
+      x: 'position.x',
+      y: 'position.y',
+      width: 'shape.size.w',
+      height: 'shape.size.h',
+      cornerRadius: 'shape.cornerRadius',
+    });
+    expect(modelReceipt.data.detail).toContain('Compact mutation receipt');
+    expect(executed!.modelContent.length).toBeLessThan(3_000);
+  });
+
   it('returns clip-specific stable appearance ids and property descriptors', async () => {
     const created = await createShape({
       stroke: { enabled: true, width: 4 },
@@ -282,11 +618,11 @@ describe('AI Motion Design tools', () => {
       clipId: created.clipId,
       updates: [
         { path: 'shape.size.h', value: 300 },
-        { path: 'replicator.offset.rotation', value: 45 },
+        { path: 'replicator.unsupported', value: 45 },
       ],
     }, useTimelineStore.getState());
     expect(rejected.success).toBe(false);
-    expect(rejected.error).toContain('not supported by the current renderer');
+    expect(rejected.error).toContain('Property not found for clip');
     expect(useTimelineStore.getState().clips.find(
       (clip) => clip.id === created.clipId,
     )?.motion).toEqual(beforeRejected);
@@ -419,13 +755,13 @@ describe('AI Motion Design tools', () => {
     expect(restored?.motion).not.toBe(beforeRoundTrip);
   });
 
-  it('configures the effective Grid Replicator and rejects over-limit settings', async () => {
+  it('configures the effective 40x25 Grid Replicator and rejects over-limit settings', async () => {
     const created = await createShape();
     const configured = await handleConfigureMotionReplicator({
       clipId: created.clipId,
       enabled: true,
-      countX: 10,
-      countY: 10,
+      countX: 40,
+      countY: 25,
       spacingX: 80,
       spacingY: 60,
       fade: 0.92,
@@ -433,23 +769,115 @@ describe('AI Motion Design tools', () => {
     expect(configured.success).toBe(true);
     expect((configured.data as MotionDesignClipView).effectiveReplicator).toMatchObject({
       enabled: true,
-      countX: 10,
-      countY: 10,
-      instanceCount: 100,
-      maxInstances: 100,
+      countX: 40,
+      countY: 25,
+      instanceCount: 1_000,
+      maxInstances: 100_000,
     });
 
     const rejected = await handleConfigureMotionReplicator({
       clipId: created.clipId,
-      countX: 11,
+      countX: 10_001,
     }, useTimelineStore.getState());
     expect(rejected.success).toBe(false);
-    expect(rejected.error).toContain('between 1 and 10');
+    expect(rejected.error).toContain('between 1 and 10000');
     expect((await handleGetMotionDesign(
       { clipId: created.clipId },
       useTimelineStore.getState(),
     )).data).toMatchObject({
-      effectiveReplicator: { countX: 10, countY: 10, instanceCount: 100 },
+      effectiveReplicator: { countX: 40, countY: 25, instanceCount: 1_000 },
+    });
+  });
+
+  it('configures Linear and Radial layouts with revision-bound stale-write protection', async () => {
+    const created = await createShape();
+    const linear = await handleConfigureMotionReplicator({
+      clipId: created.clipId,
+      expectedRevision: 0,
+      enabled: true,
+      layoutMode: 'linear',
+      count: 12,
+      stepX: 42,
+      stepY: -7,
+      offsetMode: 'absolute',
+      rotationDegrees: 15,
+      fade: 0.8,
+    }, useTimelineStore.getState());
+
+    expect(linear.success).toBe(true);
+    expect(linear.data).toMatchObject({
+      effectiveReplicator: {
+        enabled: true,
+        layout: 'linear',
+        countX: 12,
+        countY: 1,
+        instanceCount: 12,
+      },
+      replicatorRevision: { previous: 0, next: 3 },
+      motion: {
+        replicator: {
+          layout: { mode: 'linear', count: 12, step: { x: 42, y: -7 } },
+          terminalTransform: {
+            mode: 'absolute',
+            rotationDegrees: 15,
+            opacity: 0.8,
+          },
+        },
+      },
+    });
+
+    const beforeStaleWrite = structuredClone(
+      useTimelineStore.getState().clips.find((clip) => clip.id === created.clipId)?.motion,
+    );
+    const stale = await handleConfigureMotionReplicator({
+      clipId: created.clipId,
+      expectedRevision: 0,
+      layoutMode: 'radial',
+      count: 8,
+    }, useTimelineStore.getState());
+    expect(stale.success).toBe(false);
+    expect(stale.error).toContain('Stale Motion Replicator revision');
+    expect(useTimelineStore.getState().clips.find(
+      (clip) => clip.id === created.clipId,
+    )?.motion).toEqual(beforeStaleWrite);
+
+    const radial = await handleConfigureMotionReplicator({
+      clipId: created.clipId,
+      expectedRevision: 3,
+      layoutMode: 'radial',
+      count: 8,
+      centerX: 10,
+      centerY: -20,
+      radius: 240,
+      startAngleDegrees: 15,
+      endAngleDegrees: 375,
+      angleSampling: 'exclusive-end',
+      autoOrient: true,
+    }, useTimelineStore.getState());
+    expect(radial.success).toBe(true);
+    expect(radial.data).toMatchObject({
+      effectiveReplicator: {
+        enabled: true,
+        layout: 'radial',
+        countX: 8,
+        countY: 1,
+        instanceCount: 8,
+      },
+      replicatorRevision: { previous: 3, next: 4 },
+      motion: {
+        replicator: {
+          layout: {
+            mode: 'radial',
+            count: 8,
+            center: { x: 10, y: -20 },
+            radius: 240,
+            startAngleDegrees: 15,
+            endAngleDegrees: 375,
+            angleSampling: 'exclusive-end',
+            autoOrient: true,
+          },
+        },
+      },
     });
   });
 
@@ -651,11 +1079,15 @@ describe('AI Motion Design tools', () => {
     expect(text?.textProperties?.text).toBe('Motion Design');
     expect(useTimelineStore.getState().getClipKeyframes(motion!.id)).toHaveLength(2);
     expect(useTimelineStore.getState().getClipKeyframes(text!.id)).toHaveLength(2);
+    expect(useTimelineStore.getState().selectedClipIds).toEqual(new Set([text!.id]));
     expect(useHistoryStore.getState().undoStack).toHaveLength(1);
 
     expect(useHistoryStore.getState().undo()).toMatchObject({ operation: 'undo' });
     expect(useTimelineStore.getState().clips).toHaveLength(0);
     expect(useHistoryStore.getState().undo()).toBeNull();
+    expect(useHistoryStore.getState().redo()).toMatchObject({ operation: 'redo' });
+    expect(useTimelineStore.getState().clips).toHaveLength(2);
+    expect(useTimelineStore.getState().selectedClipIds).toEqual(new Set([text!.id]));
   });
 
   it('rejects locked/non-video creation targets and unsupported primitives', async () => {

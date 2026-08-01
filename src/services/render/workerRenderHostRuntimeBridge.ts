@@ -21,7 +21,12 @@ import type {
   WorkerRenderHostTargetSurfaceCommand,
   WorkerRenderSoftwareFrame,
 } from './workerRenderHostRuntimeCommands';
-import type { WorkerGpuWebCodecsFrameLayer } from './workerGpuRuntimeCommands';
+import {
+  collectWorkerGpuRuntimeCommandTransferables,
+  type WorkerGpuPresentFrameStackCommand,
+  type WorkerGpuWebCodecsFrameLayer,
+} from './workerGpuRuntimeCommands';
+import type { MotionAdjustmentWorkerGpuExecutionPlan } from '../motionDesign/adjustment/workerGpuAdjustmentPlan';
 
 export interface WorkerRenderHostRuntimeBridgeOptions {
   readonly client: RuntimeJobClient;
@@ -167,12 +172,15 @@ export class WorkerRenderHostRuntimeBridge {
       readonly mode?: 'seek' | 'scrub' | 'fast' | 'advance' | 'reverse';
       readonly timeoutMs?: number;
       readonly layers?: readonly WorkerGpuWebCodecsFrameLayer[];
+      readonly adjustmentPlan?: MotionAdjustmentWorkerGpuExecutionPlan;
+      readonly compositionId?: string;
     } = {},
   ): Promise<WorkerRenderHostRuntimeJobOutput> {
     return this.sendCommand({
       type: 'gpu.presentWebCodecsFrame',
       commandId: requestId,
       targetId,
+      compositionId: options.compositionId,
       sourceId,
       timelineTime,
       mediaTime,
@@ -180,7 +188,15 @@ export class WorkerRenderHostRuntimeBridge {
       mode: options.mode ?? 'advance',
       timeoutMs: options.timeoutMs,
       layers: options.layers,
+      adjustmentPlan: options.adjustmentPlan,
     }, undefined, { priority: 20 });
+  }
+
+  presentGpuFrameStack(
+    command: WorkerGpuPresentFrameStackCommand,
+  ): Promise<WorkerRenderHostRuntimeJobOutput> {
+    const transfer = collectWorkerGpuRuntimeCommandTransferables(command);
+    return this.sendCommand(command, [...transfer], { priority: 20 });
   }
 
   startGpuWebCodecsStream(
@@ -195,12 +211,15 @@ export class WorkerRenderHostRuntimeBridge {
       readonly targetFps?: number;
       readonly timeoutMs?: number;
       readonly layers?: readonly WorkerGpuWebCodecsFrameLayer[];
+      readonly adjustmentPlan?: MotionAdjustmentWorkerGpuExecutionPlan;
+      readonly compositionId?: string;
     } = {},
   ): Promise<WorkerRenderHostRuntimeJobOutput> {
     return this.sendCommand({
       type: 'gpu.startWebCodecsStream',
       commandId: requestId,
       targetId,
+      compositionId: options.compositionId,
       sourceId,
       timelineTime,
       mediaTime,
@@ -209,6 +228,7 @@ export class WorkerRenderHostRuntimeBridge {
       targetFps: options.targetFps ?? 60,
       timeoutMs: options.timeoutMs,
       layers: options.layers,
+      adjustmentPlan: options.adjustmentPlan,
     }, undefined, { priority: 30 });
   }
 
@@ -236,14 +256,18 @@ export class WorkerRenderHostRuntimeBridge {
     frameIndex: number,
     layers: readonly WorkerRenderHostGpuTransferredVideoFrameLayer[],
     transfer: Transferable[],
+    adjustmentPlan?: MotionAdjustmentWorkerGpuExecutionPlan,
+    compositionId?: string,
   ): Promise<WorkerRenderHostRuntimeJobOutput> {
     return this.sendCommand({
       type: 'presentGpuTransferredVideoFrames',
       requestId,
       targetId,
+      compositionId,
       timelineTime,
       frameIndex,
       layers,
+      adjustmentPlan,
     }, transfer, { priority: 20 });
   }
 
@@ -251,7 +275,7 @@ export class WorkerRenderHostRuntimeBridge {
     return this.sendCommand({ type: 'dispose', reason });
   }
 
-  async sendCommand(
+  sendCommand(
     command: WorkerRenderHostRuntimeCommand,
     transfer?: Transferable[],
     options: { readonly priority?: number } = {},
@@ -267,7 +291,7 @@ export class WorkerRenderHostRuntimeBridge {
       },
       priority: options.priority,
     }, transfer ? { transfer } : undefined);
-    return (await handle.promise).output;
+    return handle.promise.then((result) => result.output);
   }
 
   dispose(): void {

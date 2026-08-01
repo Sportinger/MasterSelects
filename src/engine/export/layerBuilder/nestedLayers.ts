@@ -30,6 +30,7 @@ import {
 import { buildTextLikeLayer, isTextLikeClipSource } from './textLayers';
 import { buildNestedVideoLayer } from './videoLayers';
 import { getMappedClipSourceTime } from './timing';
+import { buildMotionAdjustmentLayerFromBase } from '../../../services/layerBuilder/layerBuilderMotionAdjustment';
 
 export interface ExportNestedMediaState {
   mediaFiles: MediaFile[];
@@ -128,6 +129,8 @@ export function buildTransitionCompositionLayerForExport(params: {
   outputHeight?: number;
   frameRate?: number;
   depth?: number;
+  parentTransformClips?: readonly TimelineClip[];
+  parentTransformTimelineTime?: number;
 }): Layer | null {
   const {
     activeTransition,
@@ -144,6 +147,8 @@ export function buildTransitionCompositionLayerForExport(params: {
     outputHeight,
     frameRate,
     depth = 0,
+    parentTransformClips,
+    parentTransformTimelineTime,
   } = params;
   const transition = activeTransition.outgoingClip.transitionOut;
   const compositionId = transition?.compositionId;
@@ -159,6 +164,13 @@ export function buildTransitionCompositionLayerForExport(params: {
         height: outputHeight ?? 1080,
         frameRate: frameRate ?? 30,
         getMediaDuration: (mediaFileId) => mediaFileById.get(mediaFileId)?.duration,
+        getClipKeyframes: clipId => {
+          const sourceClip = [
+            activeTransition.outgoingClip,
+            activeTransition.incomingClip,
+          ].find(candidate => candidate.id === clipId);
+          return sourceClip ? getClipKeyframes(sourceClip) : undefined;
+        },
       });
   if (!composition?.timelineData || composition.transitionComp?.kind !== 'transition-comp') return null;
 
@@ -200,6 +212,10 @@ export function buildTransitionCompositionLayerForExport(params: {
     mediaFiles,
     mediaCompositions,
     depth + 1,
+    {
+      clips: [...nestedTimeline.clips, ...(parentTransformClips ?? [])],
+      timelineTime: parentTransformTimelineTime ?? parentTime,
+    },
   );
 
   return createTransitionNestedCompositionLayer({
@@ -224,11 +240,20 @@ export function buildNestedLayersForExport(
   mediaFiles: MediaFile[],
   mediaCompositions: Composition[],
   depth: number = 0,
+  parentTransformContext?: {
+    clips: readonly TimelineClip[];
+    timelineTime: number;
+  },
 ): Layer[] {
   if (!clip.nestedClips || !clip.nestedTracks || depth >= MAX_NESTING_DEPTH) return [];
 
   const nestedVideoTracks = clip.nestedTracks.filter(t => t.type === 'video');
   const nestedAnyVideoSolo = nestedVideoTracks.some(t => t.solo);
+  const composition = mediaCompositions.find((candidate) => candidate.id === clip.compositionId);
+  const compositionSize = {
+    width: composition?.width ?? 1920,
+    height: composition?.height ?? 1080,
+  };
   const layers: Layer[] = [];
 
   for (let i = 0; i < nestedVideoTracks.length; i++) {
@@ -258,6 +283,8 @@ export function buildNestedLayersForExport(
         mediaFiles,
         mediaCompositions,
         depth,
+        parentTransformClips: parentTransformContext?.clips ?? clip.nestedClips,
+        parentTransformTimelineTime: parentTransformContext?.timelineTime ?? nestedTime,
       });
       if (transitionLayer) {
         layers.push(transitionLayer);
@@ -285,6 +312,11 @@ export function buildNestedLayersForExport(
       mediaFiles,
       mediaCompositions,
       depth,
+      compositionSize,
+      parentTransformContext ?? {
+        clips: clip.nestedClips,
+        timelineTime: nestedTime,
+      },
     );
     if (nestedLayer) {
       layers.push(nestedLayer);
@@ -304,8 +336,13 @@ function buildNestedLayerForExport(
   mediaFiles: MediaFile[],
   mediaCompositions: Composition[],
   depth: number,
+  compositionSize: { width: number; height: number },
+  parentTransformContext: {
+    clips: readonly TimelineClip[];
+    timelineTime: number;
+  },
 ): Layer | null {
-  const baseLayer = buildNestedBaseLayer(nestedClip, nestedClipLocalTime);
+  const baseLayer = buildNestedBaseLayer(nestedClip, nestedClipLocalTime, parentTransformContext);
   if (!baseLayer) return null;
 
   if (nestedClip.isComposition && nestedClip.nestedClips && nestedClip.nestedTracks) {
@@ -381,10 +418,16 @@ function buildNestedLayerForExport(
       : null;
   }
 
-  if (
-    nestedClip.source?.type === 'motion-null' ||
-    nestedClip.source?.type === 'motion-adjustment'
-  ) {
+  if (nestedClip.source?.type === 'motion-adjustment') {
+    return buildMotionAdjustmentLayerFromBase({
+      clip: nestedClip,
+      baseLayer,
+      compositionSize,
+      surface: 'export',
+    });
+  }
+
+  if (nestedClip.source?.type === 'motion-null') {
     return null;
   }
 

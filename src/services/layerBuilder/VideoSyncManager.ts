@@ -437,8 +437,8 @@ export class VideoSyncManager {
   /**
    * Sync video elements to current playhead
    */
-  syncVideoElements(): void {
-    const ctx = createFrameContext();
+  syncVideoElements(frameContext?: FrameContext): void {
+    const ctx = frameContext ?? createFrameContext();
     this.handoffs.getRetainedVideoElements(ctx.now).forEach((video) => keepLazyTimelineVideoElementAlive(video, ctx.now));
     hydrateTimelineMediaWindow(ctx);
     const isInteractivePreview = ctx.isDraggingPlayhead || ctx.hasClipDragPreview;

@@ -477,6 +477,12 @@ function chatInputSchema(extraProperties = {}) {
     prompt: { type: 'string' },
     promptVersion: { type: 'string', enum: ['v2', 'legacy-v1'], default: 'v2' },
     provider: { type: 'string', enum: ['kernel', 'kie', 'lemonade'] },
+    referenceMediaFileIds: {
+      type: 'array',
+      items: { type: 'string' },
+      maxItems: 4,
+      description: 'Media-panel image IDs to attach to the first model turn as visual references.',
+    },
     sessionId: { type: 'string' },
     temperature: { type: 'number', minimum: 0, maximum: 2 },
     timeoutMs: { type: 'number', minimum: 1000, maximum: 300000 },
@@ -494,6 +500,12 @@ function readChatArguments(args) {
     prompt: requiredString(args.prompt, 'prompt'),
     promptVersion: args.promptVersion === 'legacy-v1' ? 'legacy-v1' : 'v2',
     provider: optionalString(args.provider),
+    referenceMediaFileIds: Array.isArray(args.referenceMediaFileIds)
+      ? args.referenceMediaFileIds
+        .filter(value => typeof value === 'string' && value.trim())
+        .map(value => value.trim())
+        .slice(0, 4)
+      : undefined,
     temperature: typeof args.temperature === 'number' ? args.temperature : undefined,
   };
 }

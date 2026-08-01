@@ -320,10 +320,173 @@ describe('hosted-agent K2 distributed-loop reliability', () => {
     expect(billing.completions).toEqual([{ turnId: TURN_ID }]);
     expect(deliveredKinds).toEqual([
       'session-ready',
+      'billing-settled',
       'narration-complete',
       'tool-batch-request',
+      'billing-settled',
       'turn-complete',
     ]);
+  });
+
+  it('drains confirmed billing after client abort without executing later tool events', async () => {
+    const controller = new AbortController();
+    let canceled = false;
+    const executeSpy = vi.fn(execute);
+    const deliveredKinds: string[] = [];
+    const lease = {
+      expiresAt: new Date(Date.now() + 30_000).toISOString(),
+      leaseToken: 'lease-cancel-drain',
+      sessionId: SESSION_ID,
+    };
+    const transport: HostedAgentK2ClientTransport = {
+      async cancel() {
+        canceled = true;
+      },
+      async interrupt() {},
+      async postToolResults() {
+        throw new Error('No tool result should be posted after cancellation.');
+      },
+      async replayEvents(input) {
+        const events = canceled
+          ? [
+              {
+                creditBalance: 44,
+                creditsCharged: 6,
+                eventId: '2',
+                kind: 'billing-settled' as const,
+                ledgerEntryId: 'ledger-cancel-drain',
+                roundIndex: 0,
+                sessionId: SESSION_ID,
+                totalCreditsCharged: 6,
+                turnId: TURN_ID,
+              },
+              {
+                eventId: '3',
+                kind: 'turn-canceled' as const,
+                message: 'Canceled after settlement.',
+                recoverable: false,
+                sessionId: SESSION_ID,
+                turnId: TURN_ID,
+              },
+            ]
+          : [{
+              acceptedHistoryFormatVersion: 'history-v1',
+              acceptedPromptVersion: 'prompt-v1',
+              acceptedToolSchemaVersion: 'tools-v1',
+              eventId: '1',
+              kind: 'session-ready' as const,
+              maximumIterations: 400,
+              maximumSpendCredits: 50,
+              sessionId: SESSION_ID,
+              turnId: TURN_ID,
+            }];
+        return {
+          cursor: events.at(-1)?.eventId ?? input.afterEventId,
+          events,
+          leaseExpiresAt: lease.expiresAt,
+          sessionId: SESSION_ID,
+          status: canceled ? 'cancelled' as const : 'active' as const,
+          turnId: TURN_ID,
+        };
+      },
+    };
+    const client = new HostedAgentK2ClientSession({
+      clientInstanceId: CLIENT_ID,
+      lease,
+      toolSchemaVersion: 'tools-v1',
+      transport,
+      turnId: TURN_ID,
+    });
+
+    await expect(client.runUntilTerminal({
+      execute: executeSpy,
+      onEvent: (event) => {
+        deliveredKinds.push(event.kind);
+        if (event.kind === 'session-ready') controller.abort();
+      },
+      reconnectDelayMs: 0,
+      signal: controller.signal,
+    })).rejects.toBeDefined();
+
+    expect(executeSpy).not.toHaveBeenCalled();
+    expect(deliveredKinds).toEqual(['session-ready', 'billing-settled', 'turn-canceled']);
+    expect(client.status).toBe('cancelled');
+  });
+
+  it('still performs the accounting drain when abort happens during the reconnect pause', async () => {
+    const controller = new AbortController();
+    let canceled = false;
+    const deliveredKinds: string[] = [];
+    const lease = {
+      expiresAt: new Date(Date.now() + 30_000).toISOString(),
+      leaseToken: 'lease-reconnect-pause',
+      sessionId: SESSION_ID,
+    };
+    const transport: HostedAgentK2ClientTransport = {
+      async cancel() {
+        canceled = true;
+      },
+      async interrupt() {},
+      async postToolResults() {},
+      async replayEvents(input) {
+        const events = canceled
+          ? [{
+              creditBalance: 48,
+              creditsCharged: 2,
+              eventId: '2',
+              kind: 'billing-settled' as const,
+              ledgerEntryId: 'ledger-reconnect-pause',
+              roundIndex: 0,
+              sessionId: SESSION_ID,
+              totalCreditsCharged: 2,
+              turnId: TURN_ID,
+            }, {
+              eventId: '3',
+              kind: 'turn-canceled' as const,
+              message: 'Canceled during reconnect pause.',
+              recoverable: false,
+              sessionId: SESSION_ID,
+              turnId: TURN_ID,
+            }]
+          : [{
+              acceptedHistoryFormatVersion: 'history-v1',
+              acceptedPromptVersion: 'prompt-v1',
+              acceptedToolSchemaVersion: 'tools-v1',
+              eventId: '1',
+              kind: 'session-ready' as const,
+              maximumIterations: 400,
+              maximumSpendCredits: 50,
+              sessionId: SESSION_ID,
+              turnId: TURN_ID,
+            }];
+        return {
+          cursor: events.at(-1)?.eventId ?? input.afterEventId,
+          events,
+          leaseExpiresAt: lease.expiresAt,
+          sessionId: SESSION_ID,
+          status: canceled ? 'cancelled' as const : 'active' as const,
+          turnId: TURN_ID,
+        };
+      },
+    };
+    const client = new HostedAgentK2ClientSession({
+      clientInstanceId: CLIENT_ID,
+      lease,
+      toolSchemaVersion: 'tools-v1',
+      transport,
+      turnId: TURN_ID,
+    });
+    const run = client.runUntilTerminal({
+      execute,
+      onEvent: (event) => deliveredKinds.push(event.kind),
+      reconnectDelayMs: 100,
+      signal: controller.signal,
+    });
+    await vi.waitFor(() => expect(deliveredKinds).toEqual(['session-ready']));
+    controller.abort();
+
+    await expect(run).rejects.toBeDefined();
+    expect(deliveredKinds).toEqual(['session-ready', 'billing-settled', 'turn-canceled']);
   });
 
   it('cancels during provider wait and prevents every later authorization and tool request', async () => {

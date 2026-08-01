@@ -327,6 +327,9 @@ export interface PickWhipDragState {
   startY: number;
   currentX: number;
   currentY: number;
+  targetClipId: string | null;
+  status: import('./utils/motionParentingUi').MotionParentDropStatus;
+  diagnostic: string;
 }
 
 export interface ClipKeyframeTimeGroup {

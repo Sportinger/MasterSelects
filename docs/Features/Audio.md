@@ -175,7 +175,7 @@ Audio extraction for playback and export uses browser `decodeAudioData`, not MP4
 - A future injected audio model is evaluated only against labelled local reference cases. It cannot be promoted merely because it exists: it must improve both accuracy and macro-F1 over the heuristic and provide observed cold and warm real-media runtime, peak-memory, artifact-size, download/no-download, and zero redundant warm-decode evidence for every required platform and scenario. This packet intentionally records no performance claim or model measurement.
 - `audioSync` uses normalized cross-correlation plus FFT-backed waveform/envelope correlation to compute offsets.
 - The Timeline clip context menu exposes Sync via Audio for selected clips with at least two audible sources; the command realigns the selected audio/video pairs and stores the result as a manual linked group.
-- `MulticamDialog` and `multicamStore` still use the legacy media-id offset path for the experimental multicam flow.
+- The Timeline `MulticamDialog` still uses the legacy media-id offset path for manual multicam alignment. The former AI EDL dock panel and its separate store have been removed.
 - Transcript-based sync exists separately when clip transcripts are available.
 
 ## Composition Mixdown

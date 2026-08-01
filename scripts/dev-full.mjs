@@ -127,6 +127,11 @@ function ensureLocalDevVars() {
     changed = true;
   }
 
+  if (!lines.some(line => getDevVarName(line) === 'KERNEL_HOSTED_AGENT_CALLBACK_ORIGIN')) {
+    lines.push(`KERNEL_HOSTED_AGENT_CALLBACK_ORIGIN=${quoteDevVarValue('http://127.0.0.1:8788')}`);
+    changed = true;
+  }
+
   if (upsertDevVar(
     lines,
     'KERNEL_AUTH_TOKEN',

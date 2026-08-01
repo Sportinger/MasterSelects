@@ -21,6 +21,7 @@ export function applyCommonRestoredClipFields(serializedClip: SerializableClip):
   | 'preservesPitch'
   | 'sourceRect'
   | 'transitionRender'
+  | 'parentClipId'
 > {
   return {
     videoState: restorePersistedClipVideoState(serializedClip),
@@ -38,6 +39,7 @@ export function applyCommonRestoredClipFields(serializedClip: SerializableClip):
     preservesPitch: serializedClip.preservesPitch,
     sourceRect: serializedClip.sourceRect ? { ...serializedClip.sourceRect } : undefined,
     transitionRender: serializedClip.transitionRender ? structuredClone(serializedClip.transitionRender) : undefined,
+    parentClipId: serializedClip.parentClipId,
   };
 }
 

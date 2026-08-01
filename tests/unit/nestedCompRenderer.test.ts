@@ -20,6 +20,8 @@ import {
 } from '../../src/engine/scene/SceneCameraUtils';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
+import { createDefaultMotionLayerDefinition } from '../../src/types/motionDesign';
+import type { MotionFrameRuntimeAdmission } from '../../src/engine/motion/MotionFrameRuntime';
 
 const { mockNativeSceneRenderer } = vi.hoisted(() => ({
   mockNativeSceneRenderer: {
@@ -55,7 +57,16 @@ vi.mock('../../src/engine/render/nestedComp/compositeNestedLayers', () => ({
 const initialMediaState = useMediaStore.getState();
 const initialTimelineState = useTimelineStore.getState();
 type NestedCompRendererTestAccess = NestedCompRenderer & {
-  collectNestedLayerData: (layers: TimelineClip[]) => LayerRenderData[];
+  collectNestedLayerData: (
+    layers: Layer[],
+    commandEncoder?: GPUCommandEncoder,
+    sampler?: GPUSampler,
+    depth?: number,
+    skipEffects?: boolean,
+    particleQuality?: 'preview' | 'export',
+    motionFrameAdmission?: MotionFrameRuntimeAdmission,
+    renderOccurrenceKey?: string,
+  ) => LayerRenderData[];
   process3DLayersForNested: (
     layerData: LayerRenderData[],
     width: number,
@@ -218,6 +229,433 @@ describe('NestedCompRenderer shared-scene integration', () => {
     }
   });
 
+  it('renders an intentionally transparent nested frame instead of deferring it', () => {
+    const previousGPUTextureUsage = (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+    Object.defineProperty(globalThis, 'GPUTextureUsage', {
+      configurable: true,
+      value: { RENDER_ATTACHMENT: 1, TEXTURE_BINDING: 2, COPY_SRC: 4, COPY_DST: 8 },
+    });
+    const renderer = createRenderer({
+      createTexture: vi.fn(() => createSizedMockTexture()),
+    } as unknown as GPUDevice);
+    const renderPass = { end: vi.fn() };
+    const encoder = {
+      beginRenderPass: vi.fn(() => renderPass),
+    } as unknown as GPUCommandEncoder;
+
+    try {
+      const view = renderer.preRender(
+        'transparent-comp',
+        [{
+          id: 'transparent-motion-layer',
+          name: 'Transparent Motion Layer',
+          visible: true,
+          opacity: 0,
+          source: { type: 'motion' },
+        }] as unknown as Layer[],
+        16,
+        16,
+        encoder,
+        {} as GPUSampler,
+        0,
+        [{ id: 'scene-clip' }] as unknown as TimelineClip[],
+      );
+
+      expect(view).not.toBeNull();
+      expect(encoder.beginRenderPass).toHaveBeenCalledWith({
+        colorAttachments: [{
+          view: expect.anything(),
+          clearValue: { r: 0, g: 0, b: 0, a: 0 },
+          loadOp: 'clear',
+          storeOp: 'store',
+        }],
+      });
+      expect(renderPass.end).toHaveBeenCalledOnce();
+      expect(mockCompositeNestedLayers).not.toHaveBeenCalled();
+      expect((renderer as unknown as { lastRenderTime: Map<string, number> }).lastRenderTime.get('transparent-comp')).toBe(0);
+    } finally {
+      if (previousGPUTextureUsage === undefined) {
+        delete (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+      } else {
+        Object.defineProperty(globalThis, 'GPUTextureUsage', {
+          configurable: true,
+          value: previousGPUTextureUsage,
+        });
+      }
+    }
+  });
+
+  it('hides nested preview Motion without invoking its renderer after admission fails', () => {
+    const renderer = createRenderer();
+    const renderLayer = vi.fn();
+    (renderer as unknown as { motionRenderer: { renderLayer: typeof renderLayer } }).motionRenderer = {
+      renderLayer,
+    };
+    const motion = createDefaultMotionLayerDefinition('shape');
+    const failedAdmission: MotionFrameRuntimeAdmission = {
+      ok: false,
+      consumerInput: null,
+      failures: [{ code: 'TEST_FRAME_LIMIT', message: 'test frame limit exceeded' }],
+    };
+
+    const result = renderer.collectNestedLayerData(
+      [{
+        id: 'nested-motion-over-budget',
+        visible: true,
+        opacity: 1,
+        source: { type: 'motion', motion },
+      } as unknown as Layer],
+      {} as GPUCommandEncoder,
+      undefined,
+      0,
+      false,
+      'preview',
+      failedAdmission,
+    );
+
+    expect(result).toEqual([]);
+    expect(renderLayer).not.toHaveBeenCalled();
+  });
+
+  it('fails nested export before drawing when Motion admission fails', () => {
+    const previousGPUTextureUsage = (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+    Object.defineProperty(globalThis, 'GPUTextureUsage', {
+      configurable: true,
+      value: { RENDER_ATTACHMENT: 1, TEXTURE_BINDING: 2, COPY_SRC: 4, COPY_DST: 8 },
+    });
+    const renderer = createRenderer({
+      createTexture: vi.fn(() => createSizedMockTexture()),
+    } as unknown as GPUDevice);
+    const failedAdmission: MotionFrameRuntimeAdmission = {
+      ok: false,
+      consumerInput: null,
+      failures: [{ code: 'TEST_EXPORT_LIMIT', message: 'test export limit exceeded' }],
+    };
+
+    try {
+      expect(() => renderer.preRender(
+        'nested-export-comp',
+        [{
+          id: 'nested-export-motion',
+          visible: true,
+          opacity: 1,
+          source: { type: 'motion', motion: createDefaultMotionLayerDefinition('shape') },
+        } as unknown as Layer],
+        16,
+        16,
+        {} as GPUCommandEncoder,
+        {} as GPUSampler,
+        0,
+        undefined,
+        undefined,
+        0,
+        false,
+        'export',
+        failedAdmission,
+      )).toThrow(/TEST_EXPORT_LIMIT/);
+      expect(mockCompositeNestedLayers).not.toHaveBeenCalled();
+    } finally {
+      renderer.destroy();
+      if (previousGPUTextureUsage === undefined) {
+        delete (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+      } else {
+        Object.defineProperty(globalThis, 'GPUTextureUsage', {
+          configurable: true,
+          value: previousGPUTextureUsage,
+        });
+      }
+    }
+  });
+
+  it('keeps output textures and frame caches separate for repeated composition occurrences', () => {
+    const previousGPUTextureUsage = (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+    Object.defineProperty(globalThis, 'GPUTextureUsage', {
+      configurable: true,
+      value: { RENDER_ATTACHMENT: 1, TEXTURE_BINDING: 2, COPY_SRC: 4, COPY_DST: 8 },
+    });
+    let textureId = 0;
+    const device = {
+      createTexture: vi.fn(() => {
+        const view = { id: `view-${++textureId}` };
+        return {
+          width: 16,
+          height: 16,
+          createView: vi.fn(() => view),
+          destroy: vi.fn(),
+        };
+      }),
+    } as unknown as GPUDevice;
+    const renderer = createRenderer(device);
+    const renderPass = { end: vi.fn() };
+    const encoder = {
+      beginRenderPass: vi.fn(() => renderPass),
+    } as unknown as GPUCommandEncoder;
+    const sampler = {} as GPUSampler;
+    const renderOccurrence = (localTime: number, occurrenceKey: string) => renderer.preRender(
+      'repeated-comp',
+      [],
+      16,
+      16,
+      encoder,
+      sampler,
+      localTime,
+      undefined,
+      undefined,
+      0,
+      false,
+      'preview',
+      undefined,
+      occurrenceKey,
+    );
+
+    try {
+      const firstView = renderOccurrence(1, 'wrapper-layer-a');
+      const secondView = renderOccurrence(4, 'wrapper-layer-b');
+
+      expect(firstView).not.toBe(secondView);
+      expect(renderer.getTexture('repeated-comp', 'wrapper-layer-a')?.view).toBe(firstView);
+      expect(renderer.getTexture('repeated-comp', 'wrapper-layer-b')?.view).toBe(secondView);
+      expect(renderer.getTexture('repeated-comp')).toBeUndefined();
+      expect(renderOccurrence(1, 'wrapper-layer-a')).toBe(firstView);
+      expect(renderOccurrence(4, 'wrapper-layer-b')).toBe(secondView);
+      expect((renderer as unknown as {
+        nestedCompTextures: Map<string, { compositionId: string }>;
+      }).nestedCompTextures.size).toBe(2);
+      expect((renderer as unknown as { lastRenderTime: Map<string, number> }).lastRenderTime.size).toBe(2);
+    } finally {
+      renderer.destroy();
+      if (previousGPUTextureUsage === undefined) {
+        delete (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+      } else {
+        Object.defineProperty(globalThis, 'GPUTextureUsage', {
+          configurable: true,
+          value: previousGPUTextureUsage,
+        });
+      }
+    }
+  });
+
+  it('destroys occurrence textures that were not used in the next render lifecycle', () => {
+    const previousGPUTextureUsage = (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+    Object.defineProperty(globalThis, 'GPUTextureUsage', {
+      configurable: true,
+      value: { RENDER_ATTACHMENT: 1, TEXTURE_BINDING: 2, COPY_SRC: 4, COPY_DST: 8 },
+    });
+    const device = {
+      createTexture: vi.fn(() => createSizedMockTexture()),
+    } as unknown as GPUDevice;
+    const renderer = createRenderer(device);
+    const renderPass = { end: vi.fn() };
+    const encoder = {
+      beginRenderPass: vi.fn(() => renderPass),
+    } as unknown as GPUCommandEncoder;
+    const renderOccurrence = (occurrenceKey: string) => renderer.preRender(
+      'lifecycle-comp',
+      [],
+      16,
+      16,
+      encoder,
+      {} as GPUSampler,
+      1,
+      undefined,
+      undefined,
+      0,
+      false,
+      'preview',
+      undefined,
+      occurrenceKey,
+    );
+
+    try {
+      renderOccurrence('wrapper-a');
+      renderOccurrence('wrapper-b');
+      const entries = Array.from((renderer as unknown as {
+        nestedCompTextures: Map<string, {
+          renderOccurrenceKey?: string;
+          texture: { destroy: ReturnType<typeof vi.fn> };
+        }>;
+      }).nestedCompTextures.values());
+      const first = entries.find((entry) => entry.renderOccurrenceKey === 'wrapper-a')!;
+      const stale = entries.find((entry) => entry.renderOccurrenceKey === 'wrapper-b')!;
+
+      renderer.cleanupPendingTextures();
+      expect(first.texture.destroy).not.toHaveBeenCalled();
+      expect(stale.texture.destroy).not.toHaveBeenCalled();
+
+      renderOccurrence('wrapper-a');
+      renderer.cleanupPendingTextures();
+
+      expect(first.texture.destroy).not.toHaveBeenCalled();
+      expect(stale.texture.destroy).toHaveBeenCalledOnce();
+      expect(renderer.getTexture('lifecycle-comp', 'wrapper-a')).toBeDefined();
+      expect(renderer.getTexture('lifecycle-comp', 'wrapper-b')).toBeUndefined();
+    } finally {
+      renderer.destroy();
+      if (previousGPUTextureUsage === undefined) {
+        delete (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+      } else {
+        Object.defineProperty(globalThis, 'GPUTextureUsage', {
+          configurable: true,
+          value: previousGPUTextureUsage,
+        });
+      }
+    }
+  });
+
+  it('derives separate recursive cache scopes from each parent occurrence', () => {
+    const previousGPUTextureUsage = (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+    Object.defineProperty(globalThis, 'GPUTextureUsage', {
+      configurable: true,
+      value: { RENDER_ATTACHMENT: 1, TEXTURE_BINDING: 2, COPY_SRC: 4, COPY_DST: 8 },
+    });
+    let textureId = 0;
+    const device = {
+      createTexture: vi.fn(() => {
+        const view = { id: `recursive-view-${++textureId}` };
+        return {
+          width: 16,
+          height: 16,
+          createView: vi.fn(() => view),
+          destroy: vi.fn(),
+        };
+      }),
+    } as unknown as GPUDevice;
+    const renderer = createRenderer(device);
+    const renderPass = { end: vi.fn() };
+    const encoder = {
+      beginRenderPass: vi.fn(() => renderPass),
+      copyTextureToTexture: vi.fn(),
+    } as unknown as GPUCommandEncoder;
+    const createNestedWrapper = (localTime: number) => ({
+      id: 'same-inner-wrapper-id',
+      name: 'Nested child',
+      visible: true,
+      opacity: 1,
+      source: {
+        type: 'image',
+        nestedComposition: {
+          compositionId: 'shared-child-comp',
+          layers: [],
+          width: 16,
+          height: 16,
+          currentTime: localTime,
+        },
+      },
+    }) as unknown as Layer;
+
+    try {
+      renderer.preRender(
+        'outer-comp',
+        [createNestedWrapper(1)],
+        16,
+        16,
+        encoder,
+        {} as GPUSampler,
+        1,
+        undefined,
+        undefined,
+        0,
+        false,
+        'preview',
+        undefined,
+        'outer-wrapper-a',
+      );
+      renderer.preRender(
+        'outer-comp',
+        [createNestedWrapper(4)],
+        16,
+        16,
+        encoder,
+        {} as GPUSampler,
+        4,
+        undefined,
+        undefined,
+        0,
+        false,
+        'preview',
+        undefined,
+        'outer-wrapper-b',
+      );
+
+      const nestedTextures = Array.from((renderer as unknown as {
+        nestedCompTextures: Map<string, { compositionId: string; view: GPUTextureView }>;
+      }).nestedCompTextures.values()).filter((texture) => texture.compositionId === 'shared-child-comp');
+      expect(nestedTextures).toHaveLength(2);
+      expect(nestedTextures[0]?.view).not.toBe(nestedTextures[1]?.view);
+    } finally {
+      renderer.destroy();
+      if (previousGPUTextureUsage === undefined) {
+        delete (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+      } else {
+        Object.defineProperty(globalThis, 'GPUTextureUsage', {
+          configurable: true,
+          value: previousGPUTextureUsage,
+        });
+      }
+    }
+  });
+
+  it('invalidates a same-time nested texture when Motion appearance changes', () => {
+    const previousGPUTextureUsage = (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+    Object.defineProperty(globalThis, 'GPUTextureUsage', {
+      configurable: true,
+      value: { RENDER_ATTACHMENT: 1, TEXTURE_BINDING: 2, COPY_SRC: 4, COPY_DST: 8 },
+    });
+    const renderer = createRenderer({
+      limits: { maxBufferSize: 100_000 * 48 },
+      createTexture: vi.fn(() => createSizedMockTexture()),
+    } as unknown as GPUDevice);
+    const encoder = { copyTextureToTexture: vi.fn() } as unknown as GPUCommandEncoder;
+    const firstMotion = createDefaultMotionLayerDefinition('shape');
+    const secondMotion = structuredClone(firstMotion);
+    secondMotion.appearance!.items[0].opacity = 0.25;
+    const createLayer = (motion: typeof firstMotion) => ({
+      id: 'nested-motion',
+      name: 'Nested Motion',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1, z: 1 },
+      rotation: 0,
+      source: { type: 'motion', motion },
+    }) as unknown as Layer;
+
+    try {
+      renderer.preRender(
+        'motion-comp',
+        [createLayer(firstMotion)],
+        16,
+        16,
+        encoder,
+        {} as GPUSampler,
+        1,
+      );
+      renderer.preRender(
+        'motion-comp',
+        [createLayer(secondMotion)],
+        16,
+        16,
+        encoder,
+        {} as GPUSampler,
+        1,
+      );
+
+      expect(mockCompositeNestedLayers).toHaveBeenCalledTimes(2);
+    } finally {
+      renderer.destroy();
+      if (previousGPUTextureUsage === undefined) {
+        delete (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+      } else {
+        Object.defineProperty(globalThis, 'GPUTextureUsage', {
+          configurable: true,
+          value: previousGPUTextureUsage,
+        });
+      }
+    }
+  });
+
   it('recollects dynamic nested video when its target time has not advanced', () => {
     const previousGPUTextureUsage = (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
     Object.defineProperty(globalThis, 'GPUTextureUsage', {
@@ -304,6 +742,42 @@ describe('NestedCompRenderer shared-scene integration', () => {
       textureView: null,
       sourceWidth: 0,
       sourceHeight: 0,
+    });
+  });
+
+  it('keeps textureless motion adjustments in nested stack order', () => {
+    const renderer = createRenderer();
+    const makeLayer = (id: string, type: 'model' | 'motion-adjustment') => ({
+      id,
+      name: id,
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1, z: 1 },
+      rotation: { x: 0, y: 0, z: 0 },
+      source: type === 'motion-adjustment'
+        ? { type, intrinsicWidth: 640, intrinsicHeight: 360 }
+        : { type },
+    }) as unknown as Layer;
+
+    const nestedLayerData = renderer.collectNestedLayerData([
+      makeLayer('top', 'model'),
+      makeLayer('adjustment', 'motion-adjustment'),
+      makeLayer('bottom', 'model'),
+    ]);
+
+    expect(nestedLayerData.map((entry) => entry.layer.id)).toEqual([
+      'bottom',
+      'adjustment',
+      'top',
+    ]);
+    expect(nestedLayerData[1]).toMatchObject({
+      textureView: null,
+      externalTexture: null,
+      sourceWidth: 640,
+      sourceHeight: 360,
     });
   });
 

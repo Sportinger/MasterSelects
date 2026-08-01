@@ -95,7 +95,6 @@ function buildCapabilityResponse(context: AppContext, hostedContext: HostedAiCon
       provider: 'openai',
     },
     suno: {
-      byoExplicit: false,
       models: ['V5_5', 'V5', 'V4_5PLUS', 'V4_5', 'V4'],
       pollingSupported: true,
       provider: 'suno-music',
@@ -104,13 +103,12 @@ function buildCapabilityResponse(context: AppContext, hostedContext: HostedAiCon
   const authenticated = Boolean(hostedContext.user);
 
   return buildRouteEnvelope({
-    byoRequired: !authenticated || !hostedContext.billing?.hostedAIEnabled,
     capability: capabilities,
     creditBalance: hostedContext.billing?.balance ?? 0,
     data: {
       capabilities,
       feature: 'hosted_ai_audio',
-      modes: ['hosted', 'byo'],
+      modes: ['hosted'],
       pollingSupported: false,
     },
     ok: true,
@@ -151,7 +149,6 @@ function requireHostedAudioAccess(
   if (!hostedContext.billing?.hostedAIEnabled) {
     return json(
       buildRouteEnvelope({
-        byoRequired: true,
         error: createGatewayError(
           'feature_not_enabled',
           'Hosted audio features are not enabled for this account.',
@@ -631,6 +628,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
         'X-ElevenLabs-Character-Count': String(providerCredits),
         'X-ElevenLabs-Request-Id': speech.providerRequestId ?? '',
         'X-MasterSelects-Credit-Balance': String(charge.balance),
+        'X-MasterSelects-Credit-Mutation-Id': charge.entry?.id ?? '',
         'X-MasterSelects-Credits-Charged': String(charge.charged ? actualCreditsRequired : 0),
         'X-MasterSelects-Credits-Estimated': String(estimatedCost.creditsRequired),
         'X-MasterSelects-Output-Format': speech.outputFormat,

@@ -27,7 +27,7 @@ import './TextTab.css';
 import './VolumeBlendshapeTabs.css';
 
 // Tab type
-type PropertiesTab = 'storyboard' | 'transform' | 'color' | 'effects' | 'audio-edits' | 'masks' | 'transcript' | 'analysis' | 'text' | 'captions' | '3d-text' | 'model-3d' | 'math' | 'motion' | 'blendshapes' | 'gaussian-splat' | 'camera' | 'light' | 'splat-effector' | 'lottie' | 'live' | 'slot-clip' | 'transition' | 'track-controls' | 'track-effects' | 'track-sends' | 'track-instrument' | 'master-controls' | 'master-effects';
+type PropertiesTab = 'storyboard' | 'transform' | 'color' | 'effects' | 'audio-edits' | 'masks' | 'transcript' | 'analysis' | 'text' | 'captions' | '3d-text' | 'model-3d' | 'math' | 'motion' | 'adjustment' | 'blendshapes' | 'gaussian-splat' | 'camera' | 'light' | 'splat-effector' | 'lottie' | 'live' | 'slot-clip' | 'transition' | 'track-controls' | 'track-effects' | 'track-sends' | 'track-instrument' | 'master-controls' | 'master-effects';
 
 // Lazy load tab components for code splitting
 const TransformTab = lazy(() => import('./TransformTab').then(m => ({ default: m.TransformTab })));
@@ -47,6 +47,7 @@ const LottieTab = lazy(() => import('./LottieTab').then(m => ({ default: m.Lotti
 const SlotClipTab = lazy(() => import('./SlotClipTab').then(m => ({ default: m.SlotClipTab })));
 const MathSceneTab = lazy(() => import('./MathSceneTab').then(m => ({ default: m.MathSceneTab })));
 const MotionShapeTab = lazy(() => import('./MotionShapeTab').then(m => ({ default: m.MotionShapeTab })));
+const MotionAdjustmentTab = lazy(() => import('./MotionAdjustmentTab').then(m => ({ default: m.MotionAdjustmentTab })));
 const TransitionTab = lazy(() => import('./TransitionTab').then(m => ({ default: m.TransitionTab })));
 const LiveInputTab = lazy(() => import('./LiveInputTab').then(m => ({ default: m.LiveInputTab })));
 const StoryboardPropertiesPanel = lazy(() =>
@@ -152,6 +153,7 @@ export function PropertiesPanel() {
   const isSolidClip = selectedClip?.source?.type === 'solid';
   const isMathSceneClip = selectedClip?.source?.type === 'math-scene';
   const isMotionShapeClip = selectedClip?.source?.type === 'motion-shape';
+  const isMotionAdjustmentClip = selectedClip?.source?.type === 'motion-adjustment';
   const isVectorAnimationClip = isVectorAnimationSourceType(selectedClip?.source?.type);
   const vectorAnimationTabLabel = selectedClip?.source?.type === 'rive' ? 'Rive' : 'Lottie';
   const selectedMeshType = selectedClip?.meshType ?? selectedClip?.source?.meshType;
@@ -263,6 +265,8 @@ export function PropertiesPanel() {
         setActiveTab('transform');
       } else if (isGaussianSplat) {
         setActiveTab('transform');
+      } else if (isMotionAdjustmentClip) {
+        setActiveTab('adjustment');
       } else if (isMotionShapeClip) {
         setActiveTab('motion');
       } else if (isMathSceneClip) {
@@ -302,7 +306,7 @@ export function PropertiesPanel() {
         setActiveTab('transform');
       }
     }
-  }, [selectionKey, selectedTransitionSelection, selectedPropertiesTrack, isMasterPropertiesSelected, isAudioClip, isStoryboardClip, selectedClipAudioEditCount, isCaptionClip, isTextClip, is3DTextClip, isModelClip, isMathSceneClip, isMotionShapeClip, isSolidClip, isVectorAnimationClip, isGaussianAvatar, isGaussianSplat, isCameraClip, isLightClip, isSplatEffectorClip, isLiveInputClip, isSlotMode, lastSelectionKey, activeTab]);
+  }, [selectionKey, selectedTransitionSelection, selectedPropertiesTrack, isMasterPropertiesSelected, isAudioClip, isStoryboardClip, selectedClipAudioEditCount, isCaptionClip, isTextClip, is3DTextClip, isModelClip, isMathSceneClip, isMotionShapeClip, isMotionAdjustmentClip, isSolidClip, isVectorAnimationClip, isGaussianAvatar, isGaussianSplat, isCameraClip, isLightClip, isSplatEffectorClip, isLiveInputClip, isSlotMode, lastSelectionKey, activeTab]);
 
   // Listen for external tab navigation requests (e.g. badge clicks in MediaPanel)
   useEffect(() => {
@@ -597,6 +601,16 @@ export function PropertiesPanel() {
               Masks {selectedClip.masks && selectedClip.masks.length > 0 && <span className="badge">{selectedClip.masks.length}</span>}
             </button>
           </>
+        ) : isMotionAdjustmentClip ? (
+          <>
+            <button className={`tab-btn ${activeTab === 'adjustment' ? 'active' : ''}`} onClick={() => setActiveTab('adjustment')}>Adjustment</button>
+            <button className={`tab-btn ${activeTab === 'effects' ? 'active' : ''}`} onClick={() => setActiveTab('effects')}>
+              Effects {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
+            </button>
+            <button className={`tab-btn ${activeTab === 'masks' ? 'active' : ''}`} {...getGuidedPropertiesTabAttributes('masks')} onClick={() => setActiveTab('masks')}>
+              Masks {selectedClip.masks && selectedClip.masks.length > 0 && <span className="badge">{selectedClip.masks.length}</span>}
+            </button>
+          </>
         ) : isMotionShapeClip ? (
           <>
             <button className={`tab-btn ${activeTab === 'motion' ? 'active' : ''}`} onClick={() => setActiveTab('motion')}>Motion</button>
@@ -739,9 +753,16 @@ export function PropertiesPanel() {
           {activeTab === 'motion' && isMotionShapeClip && (
             <MotionShapeTab clipId={selectedClip.id} />
           )}
-          {activeTab === 'transform' && !isAudioClip && <TransformTab clipId={selectedClip.id} transform={transform} speed={interpolatedSpeed} is3D={selectedClip.is3D} hasKeyframes={hasKeyframes} cameraSettings={cameraSettings} />}
+          {activeTab === 'adjustment' && isMotionAdjustmentClip && (
+            <MotionAdjustmentTab
+              clipId={selectedClip.id}
+              opacity={transform.opacity}
+              blendMode={transform.blendMode}
+            />
+          )}
+          {activeTab === 'transform' && !isAudioClip && !isMotionAdjustmentClip && <TransformTab clipId={selectedClip.id} transform={transform} speed={interpolatedSpeed} is3D={selectedClip.is3D} hasKeyframes={hasKeyframes} cameraSettings={cameraSettings} />}
           {activeTab === 'model-3d' && isModelClip && <Model3DTab clipId={selectedClip.id} />}
-          {activeTab === 'color' && !isAudioClip && !isCameraClip && !isLightClip && !isSplatEffectorClip && <ColorTab clipId={selectedClip.id} />}
+          {activeTab === 'color' && !isAudioClip && !isCameraClip && !isLightClip && !isSplatEffectorClip && !isMotionAdjustmentClip && <ColorTab clipId={selectedClip.id} />}
           {activeTab === 'blendshapes' && isGaussianAvatar && <BlendshapesTab clipId={selectedClip.id} />}
           {activeTab === 'gaussian-splat' && isGaussianSplat && <GaussianSplatTab clipId={selectedClip.id} />}
           {activeTab === 'light' && isLightClip && <LightTab clipId={selectedClip.id} />}

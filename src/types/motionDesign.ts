@@ -1,4 +1,5 @@
 import type { BlendMode } from './index';
+import type { MotionModifierStackContractV1 } from '../services/motionDesign/modifiers/contracts';
 
 export type MotionLayerKind = 'shape' | 'null' | 'adjustment' | 'group';
 export type ShapePrimitive = 'rectangle' | 'ellipse' | 'polygon' | 'star';
@@ -21,6 +22,12 @@ export interface MotionLayerDefinition {
   shape?: ShapeDefinition;
   appearance?: AppearanceStack;
   replicator?: ReplicatorDefinition;
+  modifierStack?: MotionModifierStackContractV1;
+  /** Quarantined legacy payload retained for recovery after a failed migration. */
+  replicatorRecovery?: {
+    raw: unknown;
+    diagnostic: string;
+  };
   ui?: MotionLayerUiState;
 }
 
@@ -128,64 +135,45 @@ export interface AppearanceStack {
 }
 
 export interface ReplicatorDefinition {
+  contract: 'masterselects.motion-replicator';
+  version: 2;
   enabled: boolean;
+  revision: number;
   layout: ReplicatorLayout;
-  offset: ReplicatorOffset;
-  distribution?: ReplicatorDistribution;
-  modifiers: ReplicatorModifier[];
-  falloff?: ReplicatorFalloff;
-  maxInstances?: number;
+  terminalTransform: ReplicatorTerminalTransform;
+  /** Persisted author cap. Device and render-target caps remain runtime-only. */
+  userLimit?: number;
 }
 
 export type ReplicatorLayout =
   | {
       mode: 'grid';
-      count: { x: number; y: number };
+      count: { columns: number; rows: number };
       spacing: MotionVector2;
-      patternOffset?: MotionVector2;
+      patternOffset: MotionVector2;
     }
   | {
       mode: 'linear';
       count: number;
-      spacing: number;
-      direction: MotionVector2;
+      step: MotionVector2;
     }
   | {
       mode: 'radial';
       count: number;
+      center: MotionVector2;
       radius: number;
-      startAngle: number;
-      endAngle: number;
+      startAngleDegrees: number;
+      endAngleDegrees: number;
+      angleSampling: 'inclusive-end' | 'exclusive-end';
       autoOrient: boolean;
     };
 
-export interface ReplicatorOffset {
+export interface ReplicatorTerminalTransform {
+  mode: 'cumulative' | 'absolute';
   position: MotionVector2;
-  rotation: number;
+  rotationDegrees: number;
   scale: MotionVector2;
   opacity: number;
-  mode: 'cumulative' | 'absolute';
-}
-
-export interface ReplicatorDistribution {
-  seed?: number;
-  randomizeOrder?: boolean;
-}
-
-export interface ReplicatorModifier {
-  id: string;
-  kind: 'random' | 'noise' | 'oscillator' | 'field';
-  enabled: boolean;
-  seed?: number;
-  targetProperties: string[];
-  params: Record<string, number | boolean | string>;
-}
-
-export interface ReplicatorFalloff {
-  shapeClipId: string;
-  feather: number;
-  invert: boolean;
-  clip: boolean;
 }
 
 export type MotionShapeProperty =
@@ -230,12 +218,27 @@ export type MotionReplicatorProperty =
   | 'replicator.count.y'
   | 'replicator.spacing.x'
   | 'replicator.spacing.y'
+  | 'replicator.patternOffset.x'
+  | 'replicator.patternOffset.y'
+  | 'replicator.linear.count'
+  | 'replicator.linear.step.x'
+  | 'replicator.linear.step.y'
+  | 'replicator.radial.count'
+  | 'replicator.radial.center.x'
+  | 'replicator.radial.center.y'
+  | 'replicator.radial.radius'
+  | 'replicator.radial.startAngleDegrees'
+  | 'replicator.radial.endAngleDegrees'
+  | 'replicator.radial.angleSampling'
+  | 'replicator.radial.autoOrient'
+  | 'replicator.offset.mode'
   | 'replicator.offset.position.x'
   | 'replicator.offset.position.y'
   | 'replicator.offset.rotation'
   | 'replicator.offset.scale.x'
   | 'replicator.offset.scale.y'
-  | 'replicator.offset.opacity';
+  | 'replicator.offset.opacity'
+  | 'replicator.userLimit';
 
 export type MotionProperty = MotionShapeProperty | MotionAppearanceProperty | MotionReplicatorProperty;
 
@@ -348,22 +351,24 @@ export function createDefaultShapeDefinition(
 
 export function createDefaultReplicatorDefinition(): ReplicatorDefinition {
   return {
+    contract: 'masterselects.motion-replicator',
+    version: 2,
     enabled: false,
+    revision: 0,
     layout: {
       mode: 'grid',
-      count: { x: 3, y: 3 },
+      count: { columns: 3, rows: 3 },
       spacing: { x: 120, y: 120 },
       patternOffset: { x: 0, y: 0 },
     },
-    offset: {
+    terminalTransform: {
+      mode: 'cumulative',
       position: { x: 0, y: 0 },
-      rotation: 0,
+      rotationDegrees: 0,
       scale: { x: 1, y: 1 },
       opacity: 1,
-      mode: 'cumulative',
     },
-    modifiers: [],
-    maxInstances: 10000,
+    userLimit: 10000,
   };
 }
 
@@ -400,6 +405,6 @@ export function isMotionProperty(property: string): property is MotionProperty {
     property === 'shape.cornerRadius' ||
     /^shape\.(polygon\.(points|radius|cornerRadius)|star\.(points|outerRadius|innerRadius|cornerRadius))$/.test(property) ||
     /^appearance\.[^.]+\.(opacity|visible|blendMode|color\.(r|g|b|a)|stroke\.(width|alignment)|gradient\.(start\.(x|y)|end\.(x|y)|center\.(x|y)|radius|stop\.[^.]+\.(offset|color\.(r|g|b|a))))$/.test(property) ||
-    /^replicator\.(enabled|layout\.mode|count\.(x|y)|spacing\.(x|y)|offset\.(position\.(x|y)|rotation|scale\.(x|y)|opacity))$/.test(property)
+    /^replicator\.(enabled|layout\.mode|count\.(x|y)|spacing\.(x|y)|patternOffset\.(x|y)|linear\.(count|step\.(x|y))|radial\.(count|center\.(x|y)|radius|startAngleDegrees|endAngleDegrees|angleSampling|autoOrient)|offset\.(mode|position\.(x|y)|rotation|scale\.(x|y)|opacity)|userLimit)$/.test(property)
   );
 }

@@ -32,6 +32,7 @@ import { applyKeyframeTransactionOperation, isKeyframeTransactionOperation } fro
 import { applyKeyboardEditCommandOperation, isKeyboardEditCommandOperation } from './keyboardEditCommandOperations';
 import { applyResolvedMoveClipsOperation } from './resolvedMoveApplyOperation';
 import { ensureTransitionCompositionsForChangedClips, getChangedClipIdsAfterReplacement, removeDetachedTransitionCompositions, setClipsAndCleanupTransitionComps } from './transitionCompositionMaintenance';
+import { getPlayheadPosition } from '../../../services/layerBuilder/PlayheadState';
 export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperationActions> = (set, get) => ({
   applyTimelineEditOperation: (operation: TimelineEditOperation, options): TimelineEditResult => {
     const operationId = operation.id;
@@ -204,6 +205,10 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
         operation,
         previousClips,
         get().tracks,
+        {
+          clipKeyframes: get().clipKeyframes,
+          timelineTime: getPlayheadPosition(get().playheadPosition),
+        },
       );
       if (result.changedClipIds.length === 0) return resultFromWarnings(operationId, result.warnings);
 
@@ -211,6 +216,7 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
       try {
         setClipsAndCleanupTransitionComps(set, previousClips, {
           clips: result.clips,
+          ...(result.clipKeyframes ? { clipKeyframes: result.clipKeyframes } : {}),
           selectedClipIds: result.selectedClipIds,
           primarySelectedClipId: [...result.selectedClipIds][0] ?? null,
         });
@@ -274,6 +280,10 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
         previousClips,
         get().tracks,
         get().selectedClipIds,
+        {
+          clipKeyframes: get().clipKeyframes,
+          timelineTime: getPlayheadPosition(get().playheadPosition),
+        },
       );
       if (result.changedClipIds.length === 0) return resultFromWarnings(operationId, result.warnings);
       const prunedTransitions = pruneInvalidClipTransitions(result.clips);
@@ -285,6 +295,7 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
         cleanupDeletedClipResources(result.deletedClips);
         setClipsAndCleanupTransitionComps(set, previousClips, {
           clips: nextClips,
+          ...(result.clipKeyframes ? { clipKeyframes: result.clipKeyframes } : {}),
           selectedClipIds: result.selectedClipIds,
           primarySelectedClipId: [...result.selectedClipIds][0] ?? null,
         });

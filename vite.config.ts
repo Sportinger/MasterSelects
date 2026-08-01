@@ -9,16 +9,6 @@ import {
   createDevBridgePlugin,
 } from './tools/devBridge/vitePlugin.ts'
 
-const KIEAI_PROXY_BASE_URL = 'https://api.kie.ai';
-const KIEAI_PROXY_UPLOAD_URL = 'https://kieai.redpandaai.co/api/file-stream-upload';
-const KIEAI_PROXY_MAX_JSON_BYTES = 32 * 1024 * 1024;
-const KIEAI_PROXY_ALLOWED_ENDPOINTS = new Set([
-  '/api/v1/chat/credit',
-  '/api/v1/jobs/createTask',
-  '/api/v1/jobs/recordInfo',
-  '/claude/v1/messages',
-  '/codex/v1/responses',
-]);
 const EVOLINK_PROXY_BASE_URL = 'https://api.evolink.ai';
 const EVOLINK_PROXY_UPLOAD_URL = 'https://files-api.evolink.ai/api/v1/files/upload/stream';
 
@@ -26,12 +16,6 @@ function writeJsonResponse(res: ServerResponse, statusCode: number, payload: unk
   res.statusCode = statusCode;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.end(JSON.stringify(payload));
-}
-
-function getByoKieAiKey(req: IncomingMessage): string | null {
-  const raw = req.headers['x-kieai-api-key'];
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
 function getByoEvolinkKey(req: IncomingMessage): string | null {
@@ -76,25 +60,6 @@ function readRequestBody(req: IncomingMessage, maxBytes = 1024 * 1024): Promise<
   });
 }
 
-function resolveAllowedKieAiProxyUrl(endpoint: unknown): URL | null {
-  if (typeof endpoint !== 'string' || !endpoint.trim()) {
-    return null;
-  }
-
-  try {
-    const target = new URL(endpoint, KIEAI_PROXY_BASE_URL);
-    const base = new URL(KIEAI_PROXY_BASE_URL);
-
-    if (target.origin !== base.origin || !KIEAI_PROXY_ALLOWED_ENDPOINTS.has(target.pathname)) {
-      return null;
-    }
-
-    return target;
-  } catch {
-    return null;
-  }
-}
-
 function isAllowedEvolinkProxyPath(pathname: string): boolean {
   return pathname === '/v1/images/generations'
     || pathname === '/v1/credits'
@@ -120,126 +85,10 @@ function resolveAllowedEvolinkProxyUrl(endpoint: unknown): URL | null {
   }
 }
 
-function kieAiByoProxy(): Plugin {
+function evolinkByoProxy(): Plugin {
   return {
-    name: 'kieai-byo-proxy',
+    name: 'evolink-byo-proxy',
     configureServer(server) {
-      server.middlewares.use('/api/kieai/byo/request', async (req, res) => {
-        if (req.method === 'OPTIONS') {
-          res.statusCode = 204;
-          res.end();
-          return;
-        }
-
-        if (req.method !== 'POST') {
-          res.statusCode = 405;
-          res.setHeader('Allow', 'POST, OPTIONS');
-          res.end('Method not allowed');
-          return;
-        }
-
-        if (!isSameOriginDevRequest(req)) {
-          writeJsonResponse(res, 403, { error: 'invalid_origin' });
-          return;
-        }
-
-        const apiKey = getByoKieAiKey(req);
-        if (!apiKey) {
-          writeJsonResponse(res, 401, { error: 'missing_kieai_key' });
-          return;
-        }
-
-        let body: { body?: unknown; endpoint?: unknown; method?: unknown };
-        try {
-          body = JSON.parse(await readRequestBody(req, KIEAI_PROXY_MAX_JSON_BYTES)) as typeof body;
-        } catch (error) {
-          writeJsonResponse(res, 400, {
-            error: 'invalid_json',
-            message: error instanceof Error ? error.message : 'Invalid JSON body',
-          });
-          return;
-        }
-
-        const target = resolveAllowedKieAiProxyUrl(body.endpoint);
-        const method = body.method === 'POST' ? 'POST' : body.method === 'GET' ? 'GET' : null;
-        if (!target || !method) {
-          writeJsonResponse(res, 400, { error: 'invalid_kieai_proxy_request' });
-          return;
-        }
-
-        try {
-          const upstream = await fetch(target, {
-            method,
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: method === 'POST' && body.body !== undefined ? JSON.stringify(body.body) : undefined,
-          });
-          const responseBody = await upstream.arrayBuffer();
-
-          res.statusCode = upstream.status;
-          res.setHeader('Content-Type', upstream.headers.get('Content-Type') ?? 'application/json; charset=utf-8');
-          res.end(Buffer.from(responseBody));
-        } catch (error) {
-          writeJsonResponse(res, 502, {
-            error: 'kieai_proxy_failed',
-            message: error instanceof Error ? error.message : 'Failed to reach Kie.ai',
-          });
-        }
-      });
-
-      server.middlewares.use('/api/kieai/byo/upload', async (req, res) => {
-        if (req.method === 'OPTIONS') {
-          res.statusCode = 204;
-          res.end();
-          return;
-        }
-
-        if (req.method !== 'POST') {
-          res.statusCode = 405;
-          res.setHeader('Allow', 'POST, OPTIONS');
-          res.end('Method not allowed');
-          return;
-        }
-
-        if (!isSameOriginDevRequest(req)) {
-          writeJsonResponse(res, 403, { error: 'invalid_origin' });
-          return;
-        }
-
-        const apiKey = getByoKieAiKey(req);
-        const contentType = req.headers['content-type'];
-        if (!apiKey || typeof contentType !== 'string') {
-          writeJsonResponse(res, apiKey ? 400 : 401, {
-            error: apiKey ? 'missing_content_type' : 'missing_kieai_key',
-          });
-          return;
-        }
-
-        try {
-          const upstream = await fetch(KIEAI_PROXY_UPLOAD_URL, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              'Content-Type': contentType,
-            },
-            body: req,
-            duplex: 'half',
-          } as RequestInit & { duplex: 'half' });
-          const responseBody = await upstream.arrayBuffer();
-
-          res.statusCode = upstream.status;
-          res.setHeader('Content-Type', upstream.headers.get('Content-Type') ?? 'application/json; charset=utf-8');
-          res.end(Buffer.from(responseBody));
-        } catch (error) {
-          writeJsonResponse(res, 502, {
-            error: 'kieai_upload_proxy_failed',
-            message: error instanceof Error ? error.message : 'Failed to upload to Kie.ai',
-          });
-        }
-      });
-
       server.middlewares.use('/api/evolink/byo/request', async (req, res) => {
         if (req.method === 'OPTIONS') {
           res.statusCode = 204;
@@ -409,7 +258,7 @@ export default defineConfig(({ command, mode }) => {
   return {
     plugins: [
       react(),
-      kieAiByoProxy(),
+      evolinkByoProxy(),
       createDevBridgePlugin({ enableAiToolsBridge: enableDevBridge }),
       splatTransformWebpWasmPathFix(),
       // Replace __APP_VERSION__ in index.html during build

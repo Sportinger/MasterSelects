@@ -1,4 +1,5 @@
 import { useAccountStore } from '../../stores/accountStore';
+import { useMediaStore } from '../../stores/mediaStore';
 import {
   useFlashBoardStore,
   type FlashBoardChatMessage,
@@ -6,6 +7,7 @@ import {
 import { useSettingsStore, type AIProvider } from '../../stores/settingsStore';
 import { DEFAULT_LEMONADE_MODEL } from '../lemonadeProvider';
 import { createAgentActivityEvent } from './FlashBoardChatActivity';
+import { prepareFlashBoardChatVisualReferences } from './FlashBoardChatVisualReferences';
 import {
   DEFAULT_FLASHBOARD_CHAT_MODEL,
   DEFAULT_FLASHBOARD_CHAT_TEMPERATURE,
@@ -44,6 +46,7 @@ export interface FlashBoardBridgeChatTurnInput {
   prompt: string;
   promptVersion?: FlashBoardChatPromptVersion;
   provider?: FlashBoardChatProvider;
+  referenceMediaFileIds?: string[];
   runSource?: FlashBoardChatRunSource;
   systemPromptOverride?: string;
   temperature?: number;
@@ -90,20 +93,30 @@ export async function runFlashBoardBridgeChatTurn(
     : null;
 
   try {
-    const kieAiApiKey = settings.apiKeysUnlocked
-      ? normalizeApiKey(settings.apiKeys.kieai)
-      : '';
     const hostedAvailable = provider === 'kie'
-      ? resolveHostedAvailability(kieAiApiKey)
+      ? resolveHostedAvailability()
       : false;
-    if (provider === 'kie' && !hostedAvailable && !kieAiApiKey) {
-      throw new Error('No hosted AI access or unlocked Kie.ai API key is available for chat.');
+    if (provider === 'kie' && !hostedAvailable) {
+      throw new Error('Sign in and enable hosted credits to use AI chat.');
     }
+
+    const visualReferences = provider === 'kie'
+      ? await prepareFlashBoardChatVisualReferences({
+          composer: input.referenceMediaFileIds === undefined
+            ? useFlashBoardStore.getState().composer
+            : {
+                ...useFlashBoardStore.getState().composer,
+                startMediaFileId: undefined,
+                endMediaFileId: undefined,
+                referenceMediaFileIds: input.referenceMediaFileIds,
+              },
+          mediaFiles: useMediaStore.getState().files,
+        })
+      : [];
 
     const response = await sendFlashBoardChatMessage({
       hostedAvailable,
       idempotencyKey: input.idempotencyKey,
-      kieAiApiKey,
       lemonadeContextSize: settings.lemonadeContextSize,
       lemonadeEndpoint: settings.lemonadeEndpoint,
       model,
@@ -151,6 +164,7 @@ export async function runFlashBoardBridgeChatTurn(
       systemPromptOverride,
       temperature: input.temperature ?? DEFAULT_FLASHBOARD_CHAT_TEMPERATURE,
       toolExecutionMode: input.toolExecutionMode ?? 'normal',
+      ...(visualReferences.length === 0 ? {} : { visualReferences }),
     });
     const completedRun = completedRunRef.current;
     if (!completedRun) throw new Error('Chat completed without a run trace.');
@@ -230,18 +244,9 @@ function resolveModel(
   return model;
 }
 
-function resolveHostedAvailability(kieAiApiKey: string): boolean {
-  const settings = useSettingsStore.getState();
+function resolveHostedAvailability(): boolean {
   const account = useAccountStore.getState();
-  const hasHostedAccess = account.session?.authenticated === true && account.hostedAIEnabled;
-  const useKieKeyByDefault = settings.apiKeysUnlocked
-    && settings.apiKeyDefaults.kieai
-    && Boolean(kieAiApiKey);
-  return hasHostedAccess && (import.meta.env.PROD || !useKieKeyByDefault);
-}
-
-function normalizeApiKey(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
+  return account.session?.authenticated === true && account.hostedAIEnabled;
 }
 
 function appendPendingMessages(

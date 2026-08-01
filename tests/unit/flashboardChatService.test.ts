@@ -1,11 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  FLASHBOARD_CHAT_MODEL_OPTIONS,
   getFlashBoardChatCreditCost,
   getFlashBoardChatCreditLabel,
   sendFlashBoardChatMessage,
 } from '../../src/services/flashboard/FlashBoardChatService';
-import { findFlashBoardChatRunByIdempotencyKey } from '../../src/services/flashboard/FlashBoardChatRunAudit';
 import { normalizeHostedKieChatRequest } from '../../functions/lib/providers/kieChat';
 import { FLASHBOARD_CHAT_MAX_OUTPUT_TOKENS } from '../../src/services/flashboard/FlashBoardChatConfig';
 
@@ -24,26 +22,15 @@ describe('FlashBoardChatService', () => {
     vi.unstubAllGlobals();
   });
 
-  it('routes AI directly to Kie.ai without invoking the kernel', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      output: [{
-        type: 'message',
-        content: [{ type: 'output_text', text: 'Kie response.' }],
-      }],
-    }), { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-
+  it('rejects managed Kie chat when no hosted session is available', async () => {
     await expect(sendFlashBoardChatMessage({
-      kieAiApiKey: 'kie-test',
       model: 'gpt-5-6-luna',
       prompt: 'Inspect this timeline',
       provider: 'kie',
       temperature: 0.7,
-    })).resolves.toBe('Kie response.');
+    })).rejects.toThrow(/hosted/i);
 
     expect(kernelGatewayMocks.tryKernelFirst).not.toHaveBeenCalled();
-    const proxyBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-    expect(proxyBody.body.reasoning).toEqual({ effort: 'medium' });
   });
 
   it('routes MasterSelectsAI exclusively through the selected kernel', async () => {
@@ -122,69 +109,6 @@ describe('FlashBoardChatService', () => {
     expect(onKernelDecision).toHaveBeenCalledWith(returnedDecision);
   });
 
-  it('sends Kie.ai GPT chat through Responses with reasoning effort', async () => {
-    let completedRun: import('../../src/services/flashboard/FlashBoardChatService').FlashBoardChatRunRecord | null = null;
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      output: [{
-        type: 'message',
-        content: [{ type: 'output_text', text: 'A better prompt.' }],
-      }],
-    }), { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const response = await sendFlashBoardChatMessage({
-      kieAiApiKey: 'kie-test',
-      model: 'gpt-5-6-luna',
-      idempotencyKey: 'chat-service-test-run',
-      onRunCompleted: (run) => {
-        completedRun = run;
-      },
-      openAiReasoningEffort: 'xhigh',
-      prompt: 'Make this more cinematic',
-      provider: 'kie',
-      systemPromptOverride: 'Custom compact editor prompt.',
-      temperature: 1.2,
-    });
-
-    expect(response).toBe('A better prompt.');
-    expect(completedRun).toMatchObject({
-      idempotencyKey: 'chat-service-test-run',
-      promptVersion: 'custom',
-      response: 'A better prompt.',
-      source: 'ui',
-      status: 'succeeded',
-    });
-    await expect(findFlashBoardChatRunByIdempotencyKey('chat-service-test-run'))
-      .resolves.toMatchObject({
-        response: 'A better prompt.',
-        status: 'succeeded',
-      });
-    expect(fetchMock).toHaveBeenCalledWith('/api/kieai/byo/request', expect.objectContaining({
-      method: 'POST',
-      headers: expect.objectContaining({
-        'x-kieai-api-key': 'kie-test',
-      }),
-    }));
-
-    const proxyBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-    expect(proxyBody.endpoint).toBe('/codex/v1/responses');
-    expect(proxyBody.body).toMatchObject({
-      input: [{ role: 'user', content: 'Make this more cinematic' }],
-      max_output_tokens: FLASHBOARD_CHAT_MAX_OUTPUT_TOKENS,
-      model: 'gpt-5-6-luna',
-      reasoning: { effort: 'xhigh' },
-      store: false,
-    });
-    expect(proxyBody.body.instructions).toContain('Custom compact editor prompt.');
-    expect(proxyBody.body.instructions).toContain('Current MasterSelects context:');
-    expect(proxyBody.body).not.toHaveProperty('temperature');
-    expect(proxyBody.body.tools.length).toBeLessThanOrEqual(128);
-    expect(proxyBody.body.tools.map((tool: { name: string }) => tool.name)).toEqual(expect.arrayContaining([
-      'getClipFaceAnalysis',
-      'cutRangesFromClip',
-    ]));
-  });
-
   it('uses the kernel fast-agent when a signed-in cloud session is available', async () => {
     let turnId = '';
     const sessionId = 'ha_test_session';
@@ -217,7 +141,7 @@ describe('FlashBoardChatService', () => {
           eventId: '1', kind: 'session-ready', sessionId, turnId,
           acceptedPromptVersion: 'flashboard-chat-v2',
           acceptedHistoryFormatVersion: 'flashboard-provider-history-v1',
-          acceptedToolSchemaVersion: 'flashboard-chat-tools-v1',
+          acceptedToolSchemaVersion: 'flashboard-chat-tools-v2',
           maximumIterations: 400, maximumSpendCredits: 100,
         })}\n\n`,
         `id: 2\nevent: turn-complete\ndata: ${JSON.stringify({
@@ -345,47 +269,4 @@ describe('FlashBoardChatService', () => {
     expect(getFlashBoardChatCreditLabel('unknown-chat-model')).toBe('usage × 6');
   });
 
-  it('uses Kie.ai Messages for tool-capable Claude models', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      content: [{ type: 'text', text: 'Try a lower angle.' }],
-    }), { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const model = FLASHBOARD_CHAT_MODEL_OPTIONS.kie.find((option) => option.id === 'claude-opus-4-8')?.id ?? '';
-    const response = await sendFlashBoardChatMessage({
-      kieAiApiKey: 'kie-test',
-      model,
-      prompt: 'Suggest a camera angle',
-      provider: 'kie',
-      temperature: 0.6,
-    });
-
-    expect(response).toBe('Try a lower angle.');
-    const proxyBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-    expect(proxyBody.endpoint).toBe('/claude/v1/messages');
-    expect(proxyBody.body).toMatchObject({
-      max_tokens: FLASHBOARD_CHAT_MAX_OUTPUT_TOKENS,
-      model: 'claude-opus-4-8',
-      temperature: 0.6,
-    });
-    expect(proxyBody.body.tools.length).toBeGreaterThan(0);
-  });
-
-  it('does not expose editor tools to Kie.ai Fable 5', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      content: [{ type: 'text', text: 'I can discuss the edit.' }],
-    }), { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    await sendFlashBoardChatMessage({
-      kieAiApiKey: 'kie-test',
-      model: 'claude-fable-5',
-      prompt: 'Discuss this edit',
-      provider: 'kie',
-      temperature: 0.6,
-    });
-
-    const proxyBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-    expect(proxyBody.body).not.toHaveProperty('tools');
-  });
 });

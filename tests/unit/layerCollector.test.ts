@@ -97,6 +97,49 @@ describe('LayerCollector', () => {
     expect(result[0]?.textureView).toBeNull();
   });
 
+  it('keeps textureless motion adjustments in bottom-to-top stack order', () => {
+    const makeLayer = (id: string, type: 'model' | 'motion-adjustment') => ({
+      id,
+      name: id,
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1, z: 1 },
+      rotation: { x: 0, y: 0, z: 0 },
+      source: type === 'motion-adjustment'
+        ? { type, intrinsicWidth: 1920, intrinsicHeight: 1080 }
+        : { type },
+    }) as unknown as Layer;
+    const layers = [
+      makeLayer('top', 'model'),
+      makeLayer('adjustment', 'motion-adjustment'),
+      makeLayer('bottom', 'model'),
+    ];
+
+    const result = new LayerCollector().collect(layers, {
+      textureManager: {} as TextureManager,
+      scrubbingCache: null,
+      getLastVideoTime: () => undefined,
+      setLastVideoTime: () => {},
+      isExporting: false,
+      isPlaying: false,
+    });
+
+    expect(result.map((entry) => entry.layer.id)).toEqual([
+      'bottom',
+      'adjustment',
+      'top',
+    ]);
+    expect(result[1]).toMatchObject({
+      textureView: null,
+      externalTexture: null,
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+    });
+  });
+
   it('uses the clip WebCodecs frame while a separate scrub runtime session is still cold', () => {
     const clipFrame = {
       timestamp: 2_000_000,

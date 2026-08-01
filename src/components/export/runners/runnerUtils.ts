@@ -17,7 +17,7 @@ export interface ExportRenderSessionRef {
 }
 
 export type ExportRenderSessionFactory = (
-  options: ExportRenderSessionOptions,
+  options: Omit<ExportRenderSessionOptions, 'compositionId'>,
 ) => ExportRenderSessionImpl;
 
 export function attachRenderSession(

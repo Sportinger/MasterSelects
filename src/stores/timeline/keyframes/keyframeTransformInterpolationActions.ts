@@ -22,7 +22,7 @@ type KeyframeTransformInterpolationActions = Pick<
 
 export const createKeyframeTransformInterpolationActions: SliceCreator<KeyframeTransformInterpolationActions> = (_set, get) => ({
   getInterpolatedTransform: (clipId, clipLocalTime) => {
-    const { clips, clipKeyframes, playheadPosition } = get();
+    const { clips, clipKeyframes } = get();
     const clip = clips.find(c => c.id === clipId);
     if (!clip) {
       return { ...DEFAULT_TRANSFORM };
@@ -59,7 +59,11 @@ export const createKeyframeTransformInterpolationActions: SliceCreator<KeyframeT
     if (clip.parentClipId) {
       const parentClip = clips.find(c => c.id === clip.parentClipId);
       if (parentClip) {
-        const parentLocalTime = playheadPosition - parentClip.startTime;
+        // The caller's local time is the authoritative requested frame. Using
+        // the live store playhead here makes Target/RAM/Export evaluation drift
+        // whenever they render a frame other than the editor playhead.
+        const requestedTimelineTime = clip.startTime + clipLocalTime;
+        const parentLocalTime = requestedTimelineTime - parentClip.startTime;
         const parentTransform = get().getInterpolatedTransform(clip.parentClipId, parentLocalTime);
         return composeTransforms(parentTransform, ownTransform);
       }

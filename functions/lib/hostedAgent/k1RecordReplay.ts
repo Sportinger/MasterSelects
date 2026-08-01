@@ -112,6 +112,7 @@ export function createHostedAgentK1RecordedBilling(): HostedAgentK1RecordedBilli
         return {
           creditBalance: maximumSpendCredits - totalCreditsCharged,
           creditsCharged: replay,
+          ledgerEntryId: replay > 0 ? `recorded-ledger:${input.idempotencyKey}` : null,
           replayed: true,
           totalCreditsCharged,
         };
@@ -133,6 +134,7 @@ export function createHostedAgentK1RecordedBilling(): HostedAgentK1RecordedBilli
       return {
         creditBalance: maximumSpendCredits - totalCreditsCharged,
         creditsCharged: credits,
+        ledgerEntryId: credits > 0 ? `recorded-ledger:${input.idempotencyKey}` : null,
         replayed: false,
         totalCreditsCharged,
       };

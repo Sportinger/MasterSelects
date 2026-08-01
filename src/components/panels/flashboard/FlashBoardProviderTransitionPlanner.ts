@@ -95,7 +95,7 @@ export function buildFlashBoardProviderTransition({
   clampReferenceMediaFileIds,
 }: BuildFlashBoardProviderTransitionInput): FlashBoardProviderTransitionPlan {
   const nextVersion = entry.versions[0] ?? '';
-  const isAudio = entry.outputType === 'audio' || entry.service === 'elevenlabs' || entry.service === 'suno';
+  const isAudio = entry.outputType === 'audio' || entry.service === 'elevenlabs';
   const isSuno = entry.providerId === sunoProviderId;
   const isElevenLabs = isAudio && (
     entry.service === 'elevenlabs'

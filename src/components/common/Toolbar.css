@@ -1,6 +1,8 @@
 @layer components {
 /* Toolbar */
 .toolbar {
+  position: relative;
+  z-index: 200;
   display: flex;
   align-items: center;
   gap: 0;
@@ -8,6 +10,7 @@
   background: var(--bg-tertiary);
   border-bottom: 1px solid var(--border-color);
   min-height: 28px;
+  overflow: visible;
   flex-shrink: 0;
 }
 
@@ -113,40 +116,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .toolbar-capture-rec.recording { animation: none; }
-}
-
-.toolbar-credit-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary);
-  cursor: pointer;
-  transition:
-    border-color var(--transition-fast),
-    background var(--transition-fast);
-}
-
-.toolbar-credit-pill:hover {
-  border-color: rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.09);
-}
-
-.toolbar-credit-pill-label {
-  color: rgba(255, 255, 255, 0.45);
-  font-size: var(--font-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.toolbar-credit-pill-value {
-  color: rgba(255, 255, 255, 0.85);
-  font-size: var(--font-sm);
-  font-variant-numeric: tabular-nums;
 }
 
 .toolbar-right .version {

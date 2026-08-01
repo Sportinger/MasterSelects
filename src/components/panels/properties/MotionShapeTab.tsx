@@ -2,13 +2,21 @@ import { useCallback } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { AnimatableProperty } from '../../../types';
 import type {
+  MotionLayerDefinition,
+  ReplicatorDefinition,
   ReplicatorLayout,
   ShapePrimitive,
 } from '../../../types/motionDesign';
 import { createDefaultReplicatorDefinition } from '../../../types/motionDesign';
+import { normalizeMotionReplicatorBundle } from '../../../services/motionDesign/contracts/replicatorTimelineAdapter';
+import {
+  planMotionReplicatorSemanticOperation,
+  type MotionReplicatorSemanticOperation,
+} from '../../../services/motionDesign/replicator/semanticOperations';
 import { DraggableNumber, KeyframeToggle } from './shared';
 import { MotionAppearanceStackEditor } from './MotionAppearanceStackEditor';
 import { MotionPropertyBrowser } from './MotionPropertyBrowser';
+import { MotionModifiersSection } from './MotionModifiersSection';
 
 interface MotionShapeTabProps {
   clipId: string;
@@ -60,6 +68,50 @@ function getGridLayout(layout: ReplicatorLayout | undefined): Extract<Replicator
   return createDefaultReplicatorDefinition().layout as Extract<ReplicatorLayout, { mode: 'grid' }>;
 }
 
+function createLayoutForMode(
+  mode: ReplicatorLayout['mode'],
+  current: ReplicatorLayout,
+): ReplicatorLayout {
+  if (current.mode === mode) return structuredClone(current);
+  if (mode === 'linear') {
+    return { mode, count: 3, step: { x: 120, y: 0 } };
+  }
+  if (mode === 'radial') {
+    return {
+      mode,
+      count: 8,
+      center: { x: 0, y: 0 },
+      radius: 180,
+      startAngleDegrees: 0,
+      endAngleDegrees: 360,
+      angleSampling: 'exclusive-end',
+      autoOrient: false,
+    };
+  }
+  return getGridLayout(current);
+}
+
+function applyReplicatorOperation(
+  motion: MotionLayerDefinition,
+  createOperation: (replicator: ReplicatorDefinition) => MotionReplicatorSemanticOperation,
+): MotionLayerDefinition {
+  const bundle = motion.replicator
+    ? normalizeMotionReplicatorBundle(motion.replicator, motion.modifierStack)
+    : { replicator: createDefaultReplicatorDefinition(), modifierStack: motion.modifierStack };
+  const plan = planMotionReplicatorSemanticOperation(
+    bundle.replicator,
+    createOperation(bundle.replicator),
+  );
+  if (!plan.ok) return motion;
+  return {
+    ...motion,
+    replicator: plan.contract,
+    ...(bundle.modifierStack === undefined
+      ? {}
+      : { modifierStack: bundle.modifierStack }),
+  };
+}
+
 export function MotionShapeTab({ clipId }: MotionShapeTabProps) {
   const clip = useTimelineStore(state => state.clips.find(candidate => candidate.id === clipId));
   const updateMotionLayer = useTimelineStore(state => state.updateMotionLayer);
@@ -67,8 +119,15 @@ export function MotionShapeTab({ clipId }: MotionShapeTabProps) {
 
   const motion = clip?.motion;
   const shape = motion?.shape;
-  const replicator = motion?.replicator ?? createDefaultReplicatorDefinition();
+  const replicator = motion?.replicator
+    ? normalizeMotionReplicatorBundle(
+        motion.replicator,
+        motion.modifierStack,
+      ).replicator
+    : createDefaultReplicatorDefinition();
   const gridLayout = getGridLayout(replicator.layout);
+  const linearLayout = replicator.layout.mode === 'linear' ? replicator.layout : null;
+  const radialLayout = replicator.layout.mode === 'radial' ? replicator.layout : null;
 
   const updatePrimitive = useCallback((primitive: ShapePrimitive) => {
     updateMotionLayer(clipId, (current) => ({
@@ -84,17 +143,65 @@ export function MotionShapeTab({ clipId }: MotionShapeTabProps) {
   }, [clipId, updateMotionLayer]);
 
   const setReplicatorEnabled = useCallback((enabled: boolean) => {
-    updateMotionLayer(clipId, (current) => {
-      const currentReplicator = current.replicator ?? createDefaultReplicatorDefinition();
-      return {
-        ...current,
-        replicator: {
-          ...currentReplicator,
-          enabled,
-          layout: getGridLayout(currentReplicator.layout),
-        },
-      };
-    });
+    updateMotionLayer(clipId, (current) => applyReplicatorOperation(
+      current,
+      (currentReplicator) => ({
+        type: 'set-enabled',
+        expectedRevision: currentReplicator.revision,
+        enabled,
+      }),
+    ));
+  }, [clipId, updateMotionLayer]);
+
+  const setReplicatorMode = useCallback((mode: ReplicatorLayout['mode']) => {
+    updateMotionLayer(clipId, (current) => applyReplicatorOperation(
+      current,
+      (currentReplicator) => ({
+        type: 'set-layout',
+        expectedRevision: currentReplicator.revision,
+        layout: createLayoutForMode(mode, currentReplicator.layout),
+      }),
+    ));
+  }, [clipId, updateMotionLayer]);
+
+  const setRadialOption = useCallback((option: {
+    angleSampling?: 'inclusive-end' | 'exclusive-end';
+    autoOrient?: boolean;
+  }) => {
+    updateMotionLayer(clipId, (current) => applyReplicatorOperation(
+      current,
+      (currentReplicator) => {
+        const layout = createLayoutForMode('radial', currentReplicator.layout);
+        if (layout.mode !== 'radial') throw new Error('Expected radial layout');
+        return {
+          type: 'set-layout',
+          expectedRevision: currentReplicator.revision,
+          layout: { ...layout, ...option },
+        };
+      },
+    ));
+  }, [clipId, updateMotionLayer]);
+
+  const setOffsetMode = useCallback((mode: 'cumulative' | 'absolute') => {
+    updateMotionLayer(clipId, (current) => applyReplicatorOperation(
+      current,
+      (currentReplicator) => ({
+        type: 'set-terminal-transform',
+        expectedRevision: currentReplicator.revision,
+        terminalTransform: { ...currentReplicator.terminalTransform, mode },
+      }),
+    ));
+  }, [clipId, updateMotionLayer]);
+
+  const setUserLimit = useCallback((userLimit: number) => {
+    updateMotionLayer(clipId, (current) => applyReplicatorOperation(
+      current,
+      (currentReplicator) => ({
+        type: 'set-user-limit',
+        expectedRevision: currentReplicator.revision,
+        userLimit: Math.max(1, Math.min(100000, Math.round(userLimit))),
+      }),
+    ));
   }, [clipId, updateMotionLayer]);
 
   if (!clip || !motion || !shape) {
@@ -230,58 +337,97 @@ export function MotionShapeTab({ clipId }: MotionShapeTabProps) {
           <label className="prop-label">Replicator</label>
           <input
             type="checkbox"
+            aria-label="Enable Replicator"
             checked={replicator.enabled}
             onChange={(event) => setReplicatorEnabled(event.target.checked)}
           />
-          <select value="grid" onChange={() => undefined} disabled={!replicator.enabled}>
+          <select
+            aria-label="Replicator layout"
+            value={replicator.layout.mode}
+            onChange={(event) => setReplicatorMode(event.target.value as ReplicatorLayout['mode'])}
+            disabled={!replicator.enabled}
+          >
             <option value="grid">Grid</option>
+            <option value="linear">Linear</option>
+            <option value="radial">Radial</option>
           </select>
         </div>
         {replicator.enabled && (
           <>
-            <NumberRow
-              clipId={clipId}
-              label="Count X"
-              property="replicator.count.x"
-              value={gridLayout.count.x}
-              min={1}
-              max={10}
-              defaultValue={3}
-            />
-            <NumberRow
-              clipId={clipId}
-              label="Count Y"
-              property="replicator.count.y"
-              value={gridLayout.count.y}
-              min={1}
-              max={10}
-              defaultValue={3}
-            />
-            <NumberRow
-              clipId={clipId}
-              label="Spacing X"
-              property="replicator.spacing.x"
-              value={gridLayout.spacing.x}
-              suffix="px"
-              defaultValue={120}
-            />
-            <NumberRow
-              clipId={clipId}
-              label="Spacing Y"
-              property="replicator.spacing.y"
-              value={gridLayout.spacing.y}
-              suffix="px"
-              defaultValue={120}
-            />
+            {replicator.layout.mode === 'grid' && (
+              <>
+                <NumberRow clipId={clipId} label="Columns" property="replicator.count.x" value={gridLayout.count.columns} min={1} max={10000} defaultValue={3} />
+                <NumberRow clipId={clipId} label="Rows" property="replicator.count.y" value={gridLayout.count.rows} min={1} max={10000} defaultValue={3} />
+                <NumberRow clipId={clipId} label="Spacing X" property="replicator.spacing.x" value={gridLayout.spacing.x} suffix="px" defaultValue={120} />
+                <NumberRow clipId={clipId} label="Spacing Y" property="replicator.spacing.y" value={gridLayout.spacing.y} suffix="px" defaultValue={120} />
+                <NumberRow clipId={clipId} label="Pattern X" property="replicator.patternOffset.x" value={gridLayout.patternOffset.x} suffix="px" defaultValue={0} />
+                <NumberRow clipId={clipId} label="Pattern Y" property="replicator.patternOffset.y" value={gridLayout.patternOffset.y} suffix="px" defaultValue={0} />
+              </>
+            )}
+            {linearLayout && (
+              <>
+                <NumberRow clipId={clipId} label="Count" property="replicator.linear.count" value={linearLayout.count} min={1} max={100000} defaultValue={3} />
+                <NumberRow clipId={clipId} label="Step X" property="replicator.linear.step.x" value={linearLayout.step.x} suffix="px" defaultValue={120} />
+                <NumberRow clipId={clipId} label="Step Y" property="replicator.linear.step.y" value={linearLayout.step.y} suffix="px" defaultValue={0} />
+              </>
+            )}
+            {radialLayout && (
+              <>
+                <NumberRow clipId={clipId} label="Count" property="replicator.radial.count" value={radialLayout.count} min={1} max={100000} defaultValue={8} />
+                <NumberRow clipId={clipId} label="Center X" property="replicator.radial.center.x" value={radialLayout.center.x} suffix="px" defaultValue={0} />
+                <NumberRow clipId={clipId} label="Center Y" property="replicator.radial.center.y" value={radialLayout.center.y} suffix="px" defaultValue={0} />
+                <NumberRow clipId={clipId} label="Radius" property="replicator.radial.radius" value={radialLayout.radius} min={0} suffix="px" defaultValue={180} />
+                <NumberRow clipId={clipId} label="Start" property="replicator.radial.startAngleDegrees" value={radialLayout.startAngleDegrees} suffix="°" defaultValue={0} />
+                <NumberRow clipId={clipId} label="End" property="replicator.radial.endAngleDegrees" value={radialLayout.endAngleDegrees} suffix="°" defaultValue={360} />
+                <div className="control-row">
+                  <label className="prop-label">Sampling</label>
+                  <select
+                    aria-label="Radial angle sampling"
+                    value={radialLayout.angleSampling}
+                    onChange={(event) => setRadialOption({
+                      angleSampling: event.target.value as 'inclusive-end' | 'exclusive-end',
+                    })}
+                  >
+                    <option value="exclusive-end">Exclusive end</option>
+                    <option value="inclusive-end">Inclusive end</option>
+                  </select>
+                  <label>
+                    <input
+                      type="checkbox"
+                      aria-label="Radial auto orient"
+                      checked={radialLayout.autoOrient}
+                      onChange={(event) => setRadialOption({ autoOrient: event.target.checked })}
+                    />
+                    Auto orient
+                  </label>
+                </div>
+              </>
+            )}
+            <div className="control-row">
+              <label className="prop-label">Offset</label>
+              <select
+                aria-label="Replicator offset mode"
+                value={replicator.terminalTransform.mode}
+                onChange={(event) => setOffsetMode(event.target.value as 'cumulative' | 'absolute')}
+              >
+                <option value="cumulative">Cumulative</option>
+                <option value="absolute">Absolute</option>
+              </select>
+            </div>
+            <NumberRow clipId={clipId} label="Offset X" property="replicator.offset.position.x" value={replicator.terminalTransform.position.x} suffix="px" defaultValue={0} />
+            <NumberRow clipId={clipId} label="Offset Y" property="replicator.offset.position.y" value={replicator.terminalTransform.position.y} suffix="px" defaultValue={0} />
+            <NumberRow clipId={clipId} label="Rotation" property="replicator.offset.rotation" value={replicator.terminalTransform.rotationDegrees} suffix="°" defaultValue={0} />
+            <NumberRow clipId={clipId} label="Scale X" property="replicator.offset.scale.x" value={replicator.terminalTransform.scale.x} defaultValue={1} />
+            <NumberRow clipId={clipId} label="Scale Y" property="replicator.offset.scale.y" value={replicator.terminalTransform.scale.y} defaultValue={1} />
             <div className="labeled-value with-keyframe-toggle">
               <KeyframeToggle
                 clipId={clipId}
                 property="replicator.offset.opacity"
-                value={replicator.offset.opacity}
+                value={replicator.terminalTransform.opacity}
               />
               <span className="labeled-value-label">Fade</span>
               <DraggableNumber
-                value={Math.round(replicator.offset.opacity * 100)}
+                value={Math.round(replicator.terminalTransform.opacity * 100)}
                 onChange={(value) => setPropertyValue(clipId, 'replicator.offset.opacity', clamp01(value / 100))}
                 min={0}
                 max={100}
@@ -289,9 +435,21 @@ export function MotionShapeTab({ clipId }: MotionShapeTabProps) {
                 defaultValue={100}
               />
             </div>
+            <div className="labeled-value">
+              <span className="labeled-value-label">Instance limit</span>
+              <DraggableNumber
+                value={replicator.userLimit ?? 10000}
+                onChange={setUserLimit}
+                min={1}
+                max={100000}
+                defaultValue={10000}
+              />
+            </div>
           </>
         )}
       </div>
+
+      <MotionModifiersSection clipId={clipId} motion={motion} />
     </div>
   );
 }

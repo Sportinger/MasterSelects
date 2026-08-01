@@ -24,6 +24,7 @@ import type {
 import { MODIFYING_TOOLS } from './types';
 import { executeToolInternal } from './handlers';
 import {
+  containsBatchResultReference,
   handleExecuteBatch,
   preflightBatchToolAccess,
 } from './handlers/batch';
@@ -302,8 +303,11 @@ async function _executeAIToolInternal(
     const ownedBatchId = options.suppressHistory
       ? null
       : startOwnedHistoryBatch('AI: batch');
+    let batchSucceeded = false;
     try {
-      return await handleExecuteBatch(args, callerContext, options);
+      const result = await handleExecuteBatch(args, callerContext, options);
+      batchSucceeded = result.success;
+      return result;
     } catch (error) {
       log.error('Error executing batch', error);
       return {
@@ -311,7 +315,8 @@ async function _executeAIToolInternal(
         error: error instanceof Error ? error.message : 'Unknown error occurred',
       };
     } finally {
-      endOwnedHistoryBatch(ownedBatchId);
+      if (batchSucceeded) endOwnedHistoryBatch(ownedBatchId);
+      else cancelOwnedHistoryBatch(ownedBatchId);
     }
   }
 
@@ -325,6 +330,7 @@ async function _executeAIToolInternal(
   const ownedBatchId = isModifying
     ? startOwnedHistoryBatch(`AI: ${toolName}`)
     : null;
+  let mutationSucceeded = false;
 
   // Set fresh 3s stagger budget for standalone tool calls
   // (batch handler sets its own budget before calling tools)
@@ -337,8 +343,7 @@ async function _executeAIToolInternal(
       return createCancelledToolResult(toolName);
     }
     const result = await executeToolInternal(toolName, args, timelineStore, mediaStore, callerContext);
-
-
+    mutationSucceeded = result.success;
     return result;
   } catch (error) {
     log.error(`Error executing ${toolName}`, error);
@@ -347,7 +352,8 @@ async function _executeAIToolInternal(
       error: error instanceof Error ? error.message : 'Unknown error occurred',
     };
   } finally {
-    endOwnedHistoryBatch(ownedBatchId);
+    if (mutationSucceeded) endOwnedHistoryBatch(ownedBatchId);
+    else cancelOwnedHistoryBatch(ownedBatchId);
   }
 }
 
@@ -377,13 +383,17 @@ async function executeGuidedAITool(
     );
     if (accessFailure) return accessFailure;
   }
+  const dependentBatchExecution = inlineBatchExecution
+    && containsBatchResultReference(args.actions);
   const shouldManageGuidedHistory = !options.suppressHistory
     && (inlineBatchExecution || MODIFYING_TOOLS.has(toolName));
   const compiled = compileGuidedToolCall({
     tool: toolName,
     args,
   }, {
-    batchMode: inlineBatchExecution ? 'inlineExecutions' : 'singleExecution',
+    batchMode: inlineBatchExecution && !dependentBatchExecution
+      ? 'inlineExecutions'
+      : 'singleExecution',
   });
   const adapter = new SemanticExecutionAdapter({
     defaultCallerContext: callerContext,
@@ -424,7 +434,7 @@ async function executeGuidedAITool(
     });
     guidedCompleted = result.status === 'completed';
     consumeGuidedReplayBudget(options, result);
-    return inlineBatchExecution
+    return inlineBatchExecution && !dependentBatchExecution
       ? batchToolResultFromGuidedSession(args, result)
       : toolResultFromGuidedSession(toolName, result);
   } finally {

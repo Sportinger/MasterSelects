@@ -22,6 +22,7 @@ import type {
 import type { Composition } from '../../stores/mediaStore';
 import {
   useExportStore,
+  type ExportSettings,
   type ExportEncoderType,
   type ExportImageFormat,
   type ExportImageMode,
@@ -34,14 +35,24 @@ const log = Logger.create('ExportState');
 
 export type EncoderType = ExportEncoderType;
 
-export function useExportState(_composition: Composition | undefined) {
+export interface UseExportStateOptions {
+  settings?: ExportSettings;
+  setSettings?: (patch: Partial<ExportSettings>) => void;
+}
+
+export function useExportState(
+  _composition: Composition | undefined,
+  options: UseExportStateOptions = {},
+) {
   const {
-    settings,
-    setSettings,
+    settings: storeSettings,
+    setSettings: setStoreSettings,
   } = useExportStore(useShallow((state) => ({
     settings: state.settings,
     setSettings: state.setSettings,
   })));
+  const settings = options.settings ?? storeSettings;
+  const setSettings = options.setSettings ?? setStoreSettings;
 
   const {
     encoder,

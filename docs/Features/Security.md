@@ -33,7 +33,7 @@ The main trust boundaries are:
 - OPFS for the SAM 2 model cache
 - Cloudflare D1 for hosted account, billing, usage, and credit-claim records
 
-External services are only contacted when the user enables a feature that needs them, such as AI chat, transcription, AI video generation, Google Fonts, model downloads, or multicam EDL generation. The startup demo is served from the MasterSelects origin and does not embed YouTube.
+External services are only contacted when the user enables a feature that needs them, such as AI chat, transcription, AI media generation, Google Fonts, or model downloads. The startup demo is served from the MasterSelects origin and does not embed YouTube.
 
 The German and English legal information is directly reachable at `/impressum`, `/datenschutz`, `/imprint`, and `/privacy`. The website checks for the browser-bound free-credit offer only after the user clicks the offer button; the corresponding necessary cookie lasts no longer than the one-hour offer window.
 
@@ -56,6 +56,7 @@ API keys are stored encrypted in IndexedDB using the Web Crypto API:
 - This blocks casual inspection, but not same-origin scripts or browser extensions with storage access
 - The API-key settings panel is hidden by default. The internal shortcut `Ctrl+Shift+8`, then `Ctrl+Shift+7`, toggles visibility.
 - Stored personal keys do not replace hosted Cloud credits unless the key's provider is explicitly marked as the default.
+- Kie.ai is managed server-side only. IndexedDB schema version 2 deletes any legacy `kieai-api-key` record during upgrade.
 
 ### File Export
 
@@ -70,7 +71,6 @@ The `.keys.enc` export/import path remains disabled. The previous implementation
 | `assemblyai` | AssemblyAI | Encrypted IndexedDB |
 | `deepgram` | Deepgram | Encrypted IndexedDB |
 | `piapi` | PiAPI gateway | Encrypted IndexedDB |
-| `kieai` | Kie.ai | Encrypted IndexedDB |
 | `evolink` | EvoLink | Encrypted IndexedDB |
 | `elevenlabs` | ElevenLabs | Encrypted IndexedDB |
 | `youtube` | YouTube Data API | Encrypted IndexedDB |

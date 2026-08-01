@@ -153,6 +153,7 @@ import {
   handlePurgePlaybackPath,
 } from './stats';
 import { handleSamplePlaybackFramePacing } from './framePacing';
+import { handleRunMotionDesignMd0Evidence } from '../motionDesignMd0Evidence';
 import { handleSetRenderHostMode } from './renderHost';
 import { handleGetCaptureState } from './capture';
 import { handleRunWorkerFirstRenderCapabilityProbe } from '../workerFirstCapabilityProbeBridge';
@@ -267,6 +268,8 @@ const selfContainedHandlers: Record<string, (args: Record<string, unknown>, call
   getPlaybackTrace: handleGetPlaybackTrace,
   samplePlaybackFramePacing: handleSamplePlaybackFramePacing,
   purgePlaybackPath: handlePurgePlaybackPath,
+  runMotionDesignMd0Evidence: async (args: Record<string, unknown>) =>
+    handleRunMotionDesignMd0Evidence(args),
   runWorkerFirstRenderCapabilityProbe: async (args: Record<string, unknown>) =>
     handleRunWorkerFirstRenderCapabilityProbe(args),
   runWorkerFirstSolidTextImageGoldenFixture: async (args: Record<string, unknown>) =>

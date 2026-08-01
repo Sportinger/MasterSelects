@@ -26,6 +26,7 @@ import { useTimelineInteractionController } from './hooks/useTimelineInteraction
 import { useTimelineSurfaceController } from './hooks/useTimelineSurfaceController';
 import { useTimelineTrackStackController } from './hooks/useTimelineTrackStackController';
 import { useTimelineGraphHostController } from './hooks/useTimelineGraphHostController';
+import { TimelinePickWhipProvider } from './TimelinePickWhipContext';
 
 export function Timeline() {
   const timelineRootState = useTimelineRootStoreState();
@@ -407,11 +408,13 @@ export function Timeline() {
     handleInOutMarkerContextMenu,
     handleTimelineClipMouseDown,
     handleTimelineMarkerContextMenu,
+    pickWhipContextValue,
     handleTrackPickWhipDragEnd,
     handleTrackPickWhipDragStart,
   } = useTimelineAuxiliaryInteractionController({
     cancelRamPreview: timelineActions.cancelRamPreview,
     clipMap,
+    clips,
     clipStemSeparationJobs,
     convertSolidToMotionShape: timelineActions.convertSolidToMotionShape,
     copyClipColor: timelineActions.copyClipColor,
@@ -449,6 +452,7 @@ export function Timeline() {
     setOutPoint: timelineActions.setOutPoint,
     setPlayheadPosition: timelineActions.setPlayheadPosition,
     setTrackParent: timelineActions.setTrackParent,
+    tracks,
     showInExplorer,
     splitClipAtPlayhead: timelineActions.splitClipAtPlayhead,
     startClipStemSeparation: timelineActions.startClipStemSeparation,
@@ -672,18 +676,20 @@ export function Timeline() {
   });
 
   return (
-    <TimelineRootShell {...rootShellProps}>
-      <TimelineToolbarChrome {...timelineToolbarProps} />
-      <TimelineSlotGridChrome {...slotGridChromeProps} />
-      <TimelineBodySurface
-        {...bodySurfaceProps}
-        timelineCurveMode={timelineCurveMode}
-        globalCurveEditor={globalCurveEditor}
-      />
+    <TimelinePickWhipProvider value={pickWhipContextValue}>
+      <TimelineRootShell {...rootShellProps}>
+        <TimelineToolbarChrome {...timelineToolbarProps} />
+        <TimelineSlotGridChrome {...slotGridChromeProps} />
+        <TimelineBodySurface
+          {...bodySurfaceProps}
+          timelineCurveMode={timelineCurveMode}
+          globalCurveEditor={globalCurveEditor}
+        />
 
-      <TimelineNavigatorChrome {...navigatorChromeProps} />
+        <TimelineNavigatorChrome {...navigatorChromeProps} />
 
-      <TimelineAuxiliaryLayer {...auxiliaryLayerProps} />
-    </TimelineRootShell>
+        <TimelineAuxiliaryLayer {...auxiliaryLayerProps} />
+      </TimelineRootShell>
+    </TimelinePickWhipProvider>
   );
 }

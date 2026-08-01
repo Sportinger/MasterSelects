@@ -17,8 +17,6 @@ interface BuildFlashBoardChatOptionsStateInput {
   chatProvider: FlashBoardChatProvider;
   isChatting: boolean;
   lemonadeModels: LemonadeModelInfo[];
-  useHostedProductionProviders: boolean;
-  useKieAiKeyByDefault: boolean;
 }
 
 export interface FlashBoardChatOptionsState {
@@ -75,8 +73,6 @@ export function buildFlashBoardChatOptionsState({
   chatProvider,
   isChatting,
   lemonadeModels,
-  useHostedProductionProviders,
-  useKieAiKeyByDefault,
 }: BuildFlashBoardChatOptionsStateInput): FlashBoardChatOptionsState {
   const chatModelOptions = buildFlashBoardChatModelOptions({ chatModel, chatProvider, lemonadeModels });
   const activeChatModel = chatModelOptions.find((model) => model.id === chatModel) ?? chatModelOptions[0];
@@ -86,7 +82,7 @@ export function buildFlashBoardChatOptionsState({
   const chatReasoningEffortOptions = chatReasoningSupported ? getOpenAiReasoningEffortOptions(activeChatModelId) : [];
   const chatProviderOptions = FLASHBOARD_CHAT_PROVIDERS;
   const chatProviderLabel = chatProviderOptions.find((provider) => provider.id === chatProvider)?.label ?? 'Chat';
-  const chatCreditLabel = chatProvider === 'kie' && (useHostedProductionProviders || !useKieAiKeyByDefault)
+  const chatCreditLabel = chatProvider === 'kie'
     ? getFlashBoardChatCreditLabel(activeChatModelId)
     : null;
 

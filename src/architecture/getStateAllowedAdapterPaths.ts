@@ -18,6 +18,7 @@ export const allowedAdapterPaths = [
   'src/services/flashboard/**',
   'src/services/mediaArtifacts/**',
   'src/services/mediaRuntime/**',
+  'src/services/motionDesign/adjustment/timelineMutationAdapter.ts',
   'src/services/timeline/timelineRuntimeCoordinator.ts',
   'src/services/timeline/runtimeCoordinatorTypes.ts',
   'src/services/timeline/runtimeCoordinatorContracts.ts',

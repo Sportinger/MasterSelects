@@ -9,6 +9,15 @@ import {
   MIN_CLIP_DURATION,
 } from '../../../../stores/timeline/editOperations/trimOperations';
 
+export function insertedClipAlreadyMatchesRequestedSegment(
+  clip: { inPoint: number; outPoint: number },
+  inPoint: number,
+  outPoint: number,
+): boolean {
+  return Math.abs(clip.inPoint - inPoint) < 1e-6
+    && Math.abs(clip.outPoint - outPoint) < 1e-6;
+}
+
 /**
  * Add a clip segment from the media pool with specific in/out points.
  * Self-contained handler — fetches both stores internally.
@@ -73,6 +82,12 @@ export async function handleAddClipSegment(
   const trimmedClipIds = new Set<string>();
   for (const clip of newClips) {
     if (trimmedClipIds.has(clip.id)) continue;
+    const insertedClip = useTimelineStore.getState().clips.find((candidate) => candidate.id === clip.id);
+    if (insertedClip && insertedClipAlreadyMatchesRequestedSegment(insertedClip, inPoint, outPoint)) {
+      trimmedClipIds.add(clip.id);
+      if (clip.linkedClipId) trimmedClipIds.add(clip.linkedClipId);
+      continue;
+    }
     const trimResult = useTimelineStore.getState().applyTimelineEditOperation({
       id: `ai-insert-media-trim:${clip.id}:${inPoint}:${outPoint}`,
       type: 'trim-clip',

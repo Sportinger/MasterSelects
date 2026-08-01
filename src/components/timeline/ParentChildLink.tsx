@@ -17,7 +17,6 @@ interface ParentChildLinkProps {
 // Physics constants for cable simulation
 const SPRING_STIFFNESS = 0.15;  // How quickly cable catches up
 const DAMPING = 0.75;           // Energy loss (0-1, higher = more damping)
-const GRAVITY = 0.5;            // Downward sag force
 const MAX_SAG = 60;             // Maximum sag in pixels
 
 interface PhysicsState {
@@ -114,9 +113,6 @@ export function ParentChildLink({
       physics.vx += endpointVelX * 0.3;
       physics.vy += endpointVelY * 0.3;
 
-      // Apply gravity
-      physics.vy += GRAVITY;
-
       // Apply damping
       physics.vx *= DAMPING;
       physics.vy *= DAMPING;
@@ -141,7 +137,7 @@ export function ParentChildLink({
 
       // Continue animation if there's still movement
       const totalVelocity = Math.abs(physics.vx) + Math.abs(physics.vy);
-      const distanceFromTarget = Math.abs(dx) + Math.abs(dySag - naturalSag);
+      const distanceFromTarget = Math.abs(dx) + Math.abs(dySag);
 
       if (totalVelocity > 0.1 || distanceFromTarget > 1) {
         animationRef.current = requestAnimationFrame(simulate);

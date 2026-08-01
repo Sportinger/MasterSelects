@@ -155,13 +155,12 @@ function buildCapabilityResponse(context: AppContext, hostedContext: HostedAiCon
   const authenticated = Boolean(hostedContext.user);
 
   return buildRouteEnvelope({
-    byoRequired: !authenticated,
     capability: capabilities as unknown as Record<string, unknown>,
     creditBalance: hostedContext.billing?.balance ?? 0,
     data: {
       capabilities,
       feature: 'hosted_media_generation',
-      modes: ['hosted', 'byo'],
+      modes: ['hosted'],
       pollingSupported: true,
     },
     ok: true,
@@ -822,6 +821,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     return json(
       buildRouteEnvelope({
         creditBalance: charge.balance,
+        creditMutationId: charge.entry?.id ?? null,
         creditsCharged: charge.charged ? creditsRequired : 0,
         data: {
           outputType: generation.outputType,

@@ -6,6 +6,9 @@ import {
   captureMutationEntitySnapshot,
   describeMutationEntities,
 } from './mutationEntityResults';
+import type { JsonObject } from '../../motionDesign/adjustment/contracts';
+import { adaptTimelineEffectsToMotionAdjustmentContracts } from '../../motionDesign/adjustment/supportedEffectContractAdapter';
+import { isSupportedAdjustmentEffectType } from '../../motionDesign/adjustment/supportedEffects';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
@@ -48,6 +51,14 @@ export async function handleAddEffect(
   if (!hasEffect(effectType)) {
     const available = getAllEffects().map(e => e.id).join(', ');
     return { success: false, error: `Unknown effect type: ${effectType}. Available: ${available}` };
+  }
+  if (clip.source?.type === 'motion-adjustment') {
+    const adjustmentFailure = validateGenericAdjustmentEffect(
+      clip.id,
+      effectType,
+      { ...getDefaultParams(effectType), ...customParams },
+    );
+    if (adjustmentFailure) return adjustmentFailure;
   }
 
   const mutationSnapshot = captureMutationEntitySnapshot('effect', clip.effects);
@@ -132,6 +143,17 @@ export async function handleUpdateEffect(
   const effect = clip.effects.find(e => e.id === effectId);
   if (!effect) return { success: false, error: `Effect not found: ${effectId}` };
 
+  if (clip.source?.type === 'motion-adjustment') {
+    const adjustmentFailure = validateGenericAdjustmentEffect(
+      clip.id,
+      effect.type,
+      { ...effect.params, ...params },
+      effect.id,
+      effect.enabled,
+    );
+    if (adjustmentFailure) return adjustmentFailure;
+  }
+
   const mutationSnapshot = captureMutationEntitySnapshot('effect', clip.effects);
   const { updateClipEffect, invalidateCache } = useTimelineStore.getState();
   updateClipEffect(clipId, effectId, params as Partial<Record<string, string | number | boolean>>);
@@ -156,4 +178,48 @@ export async function handleUpdateEffect(
 
 function getClipEffects(clipId: string) {
   return useTimelineStore.getState().clips.find((clip) => clip.id === clipId)?.effects ?? [];
+}
+
+function validateGenericAdjustmentEffect(
+  clipId: string,
+  effectType: string,
+  params: Record<string, unknown>,
+  effectId = 'effect:ai-preflight',
+  enabled = true,
+): ToolResult | null {
+  if (!isSupportedAdjustmentEffectType(effectType)) {
+    return {
+      success: false,
+      error: `Unsupported Adjustment 1.0 effect: ${effectType}`,
+      data: {
+        code: 'MD7_ADJUSTMENT_UNSUPPORTED_EFFECT',
+        clipId,
+        effectType,
+      },
+    };
+  }
+  try {
+    adaptTimelineEffectsToMotionAdjustmentContracts({
+      layerId: clipId,
+      effects: [{
+        id: effectId,
+        name: effectType,
+        type: effectType,
+        enabled,
+        params: params as JsonObject,
+      }],
+    });
+    return null;
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+      data: {
+        code: 'MD7_ADJUSTMENT_INVALID_EFFECT',
+        clipId,
+        effectId,
+        effectType,
+      },
+    };
+  }
 }

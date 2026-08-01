@@ -64,6 +64,8 @@
   flex-direction: column;
   gap: 8px;
   width: min(340px, calc(100% - 20px));
+  min-width: 0;
+  max-width: calc(100% - 20px);
   pointer-events: none;
 }
 
@@ -73,7 +75,9 @@
 }
 
 .media-ai-tray-loading {
-  width: min(340px, calc(100vw - 20px));
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   height: 72px;
   border: 1px solid var(--border-color);
   border-radius: 18px;
@@ -116,6 +120,8 @@
   position: relative;
   align-self: flex-end;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   max-height: min(420px, calc(100vh - 96px));
   overflow: visible;
   transform-origin: right bottom;
@@ -594,10 +600,14 @@
   flex-direction: column;
   gap: 7px;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   max-height: min(280px, calc(100vh - 190px));
   margin-top: -18px;
   padding-top: 18px;
+  overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   overscroll-behavior: contain;
   pointer-events: none;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 100%);

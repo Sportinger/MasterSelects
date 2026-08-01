@@ -85,6 +85,8 @@ export interface MediaContextActionsMenuProps {
   onImportGaussianSplat: () => void;
   onNewMathScene: () => void;
   onNewMotionShape: (shapeType: ShapePrimitive) => void;
+  onNewMotionNull: () => void;
+  onNewMotionAdjustment: () => void;
 }
 
 export function MediaContextActionsMenu({
@@ -153,6 +155,8 @@ export function MediaContextActionsMenu({
   onImportGaussianSplat,
   onNewMathScene,
   onNewMotionShape,
+  onNewMotionNull,
+  onNewMotionAdjustment,
 }: MediaContextActionsMenuProps) {
   const generationPrompt = mediaFile ? (flashBoardMediaBridge.getMetadata(mediaFile.id)?.prompt.trim() ?? '') : '';
   const canCopyGenerationPrompt = !multiSelect && generationPrompt.length > 0;
@@ -188,6 +192,8 @@ export function MediaContextActionsMenu({
             onImportGaussianSplat={onImportGaussianSplat}
             onNewMathScene={onNewMathScene}
             onNewMotionShape={onNewMotionShape}
+            onNewMotionNull={onNewMotionNull}
+            onNewMotionAdjustment={onNewMotionAdjustment}
           />
         </div>
       </div>

@@ -270,7 +270,7 @@ describe('AI stats timeline runtime coordinator bridge field', () => {
     const motion = createDefaultMotionLayerDefinition('shape');
     if (motion.replicator?.layout.mode === 'grid') {
       motion.replicator.enabled = true;
-      motion.replicator.layout.count = { x: 4, y: 3 };
+      motion.replicator.layout.count = { columns: 4, rows: 3 };
     }
     useTimelineStore.setState({
       playheadPosition: 1,

@@ -26,7 +26,7 @@ describe('FlashBoard parameter options planner', () => {
         modes: ['std', 'pro', '4K'],
         modeLabels: { std: '720p', pro: '1080p', '4K': '4K' },
       },
-      service: 'kieai',
+      service: 'cloud',
     });
 
     expect(options.modeOptions.map((option) => option.label)).toEqual(['720p', '1080p', '4K']);
@@ -44,7 +44,7 @@ describe('FlashBoard parameter options planner', () => {
       multiShots: false,
       providerId: 'runway-video',
       selectedEntry: baseEntry,
-      service: 'kieai',
+      service: 'cloud',
     }).modeOptions;
 
     const durationOptions = buildFlashBoardParameterOptions({
@@ -58,7 +58,7 @@ describe('FlashBoard parameter options planner', () => {
       multiShots: false,
       providerId: 'runway-video',
       selectedEntry: baseEntry,
-      service: 'kieai',
+      service: 'cloud',
     }).durationOptions;
 
     expect(modeOptions.map((option) => option.id)).toEqual(['720p']);

@@ -8,7 +8,7 @@ import {
   MAX_SUNO_DURATION,
   MIN_SUNO_DURATION,
   SUNO_PROVIDER_ID,
-} from '../../../services/sunoService';
+} from '../../../services/sunoContracts';
 import { RUNWAY_VIDEO_PROVIDER_ID } from '../../../services/kieAi/config';
 import { isProjectPromptStorageAvailable } from '../../../services/aiPromptLibrary';
 import { FLASHBOARD_CHAT_SYSTEM_PROMPT } from '../../../services/flashboard/FlashBoardChatService';
@@ -63,14 +63,14 @@ export function FlashBoardComposer({
   const setHoveredComposerReference = useFlashBoardStore((s) => s.setHoveredComposerReference);
   const mediaFiles = useMediaStore((s) => s.files);
   const {
-    accountSession, aiProvider, canUseByoPromptRefiner,
+    accountSession, aiProvider,
     aiSystemPromptOverrides, aiSystemPromptSendContext, canUseHostedPromptRefiner, elevenLabsApiKey,
     hasElevenLabsKey, hasEvolinkKey, hasHostedAudioAccess, hasHostedSession,
-    hasKieAiKey, hostedAIEnabled, kieAiApiKey, lemonadeContextSize, lemonadeEndpoint, lemonadeModel,
-    openAuthDialog, openPricingDialog, openSettings,
+    hostedAIEnabled, lemonadeContextSize, lemonadeEndpoint, lemonadeModel,
+    openAuthDialog, openPricingDialog,
     setAiProvider, setAiSystemPromptOverride, setAiSystemPromptSendContext, setLemonadeModel,
     useElevenLabsKeyByDefault, useEvolinkKeyByDefault, useHostedProductionProviders,
-    useKieAiKeyByDefault, usePiApiKeyByDefault,
+    usePiApiKeyByDefault,
   } = useFlashBoardComposerAccessState();
 
   const modelCatalogState = useMemo(() => buildFlashBoardModelCatalogState({
@@ -82,7 +82,6 @@ export function FlashBoardComposer({
     useElevenLabsKeyByDefault,
     useEvolinkKeyByDefault,
     useHostedProductionProviders,
-    useKieAiKeyByDefault,
     usePiApiKeyByDefault,
   }), [
     allowedServices,
@@ -93,7 +92,6 @@ export function FlashBoardComposer({
     useElevenLabsKeyByDefault,
     useEvolinkKeyByDefault,
     useHostedProductionProviders,
-    useKieAiKeyByDefault,
     usePiApiKeyByDefault,
   ]);
   const {
@@ -154,21 +152,16 @@ export function FlashBoardComposer({
     aiSystemPromptOverrides,
     closePopover,
     hasHostedSession,
-    hasKieAiKey,
     hostedAIEnabled,
     initialChatPrompt,
     initialMode,
-    kieAiApiKey,
     lemonadeContextSize,
     lemonadeEndpoint,
     lemonadeModel,
     openAuthDialog,
     openPricingDialog,
-    openSettings,
     setAiProvider,
     setLemonadeModel,
-    useHostedProductionProviders,
-    useKieAiKeyByDefault,
   });
   const activeChatSystemPromptOverride = aiSystemPromptOverrides[chatSystemPromptProvider]?.trim()
     ? aiSystemPromptOverrides[chatSystemPromptProvider]!
@@ -256,7 +249,7 @@ export function FlashBoardComposer({
     selectedEntry,
     selectedModelCategory,
   } = modelOptionsState;
-  const isAudioMode = selectedEntry?.outputType === 'audio' || service === 'elevenlabs' || service === 'suno';
+  const isAudioMode = selectedEntry?.outputType === 'audio' || service === 'elevenlabs';
   const isSunoMode = selectedEntry?.providerId === SUNO_PROVIDER_ID || providerId === SUNO_PROVIDER_ID;
   const isElevenLabsMode = isAudioMode && (
     service === 'elevenlabs'
@@ -404,7 +397,6 @@ export function FlashBoardComposer({
     hasGenerationBoard,
     hasHostedSession,
     hasImageReferenceInput,
-    hasKieAiKey,
     hasReferenceMediaInput: hasVisualReferenceInput,
     hasVideoReferenceInput,
     hostedAIEnabled,
@@ -442,7 +434,6 @@ export function FlashBoardComposer({
     hasGenerationBoard,
     hasHostedSession,
     hasImageReferenceInput,
-    hasKieAiKey,
     hasVisualReferenceInput,
     hasVideoReferenceInput,
     hostedAIEnabled,
@@ -521,7 +512,6 @@ export function FlashBoardComposer({
     promptBeforeAiRewrite, promptRefineError, promptRefineTitle,
   } = useFlashBoardPromptRefineController({
     aspectRatio,
-    canUseByoPromptRefiner,
     canUseHostedPromptRefiner,
     closePopover,
     duration,
@@ -534,10 +524,8 @@ export function FlashBoardComposer({
     isSunoMode,
     mode,
     multiShots,
-    kieAiApiKey,
     openAuthDialog,
     openPricingDialog,
-    openSettings,
     prompt: isSunoMode && sunoInstrumental ? '' : prompt,
     providerId,
     referenceBadges: composerReferenceBadges,
@@ -653,6 +641,7 @@ export function FlashBoardComposer({
 
   return (
     <div
+      id="flashboard-credit-activity-anchor"
       className={`fb-bubble ${isSunoMode ? 'is-suno-composer' : ''} ${showComposerReferences ? 'has-references' : ''} ${chatPanelOpen ? 'has-chat-panel' : ''} ${isReferenceDragOver ? 'reference-drop-active' : ''} ${isRefiningPrompt ? 'is-refining-prompt' : ''}`}
       style={composerStyle}
       onKeyDown={handleKeyDown}

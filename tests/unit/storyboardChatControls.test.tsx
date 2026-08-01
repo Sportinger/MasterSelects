@@ -35,8 +35,7 @@ describe('Storyboard directing controls', () => {
   it('builds a Plan request that is enforced by the shared tool boundary', () => {
     const plan = buildFlashBoardChatSendPlan({
       activeChatModelId: 'gpt-5-6-luna',
-      canUseByoChat: true,
-      canUseHostedChat: false,
+      canUseHostedChat: true,
       chatIntent: 'plan',
       chatMessages: [],
       chatPanelOpen: true,
@@ -44,16 +43,13 @@ describe('Storyboard directing controls', () => {
       chatTemperature: 0.7,
       decisionPolicy: 'milestones',
       effectiveChatPrompt: 'Draft three scenes.',
-      hasHostedSession: false,
-      hostedAIEnabled: false,
+      hasHostedSession: true,
+      hostedAIEnabled: true,
       isChatting: false,
-      kieAiApiKey: 'test-key',
       lemonadeContextSize: 8_192,
       lemonadeEndpoint: 'http://localhost:13305/api/v1',
       openAiReasoningEffort: 'medium',
       planThreeEnabled: false,
-      shouldUseHostedChat: false,
-      useHostedProductionProviders: false,
     });
 
     expect(plan.action).toBe('send');
@@ -69,8 +65,7 @@ describe('Storyboard directing controls', () => {
   it('turns Plan 3 into non-materialized storyboard options while Plan mode is active', () => {
     const plan = buildFlashBoardChatSendPlan({
       activeChatModelId: 'gpt-5-6-luna',
-      canUseByoChat: true,
-      canUseHostedChat: false,
+      canUseHostedChat: true,
       chatIntent: 'plan',
       chatMessages: [],
       chatPanelOpen: true,
@@ -78,16 +73,13 @@ describe('Storyboard directing controls', () => {
       chatTemperature: 0.7,
       decisionPolicy: 'milestones',
       effectiveChatPrompt: 'Improve the marked range.',
-      hasHostedSession: false,
-      hostedAIEnabled: false,
+      hasHostedSession: true,
+      hostedAIEnabled: true,
       isChatting: false,
-      kieAiApiKey: 'test-key',
       lemonadeContextSize: 8_192,
       lemonadeEndpoint: 'http://localhost:13305/api/v1',
       openAiReasoningEffort: 'medium',
       planThreeEnabled: true,
-      shouldUseHostedChat: false,
-      useHostedProductionProviders: false,
     });
 
     expect(plan.action).toBe('send');

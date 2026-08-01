@@ -17,6 +17,7 @@ import type { NestedCompRenderer } from './NestedCompRenderer';
 import type { PerformanceStats } from '../stats/PerformanceStats';
 import type { RenderLoop } from './RenderLoop';
 import { useTimelineStore } from '../../stores/timeline';
+import { useMediaStore } from '../../stores/mediaStore';
 import { reportRenderTime } from '../../services/performanceMonitor';
 import { Logger } from '../../services/logger';
 import { scrubSettleState } from '../../services/scrubSettleState';
@@ -27,9 +28,19 @@ import { collectActiveSceneSplatEffectors } from '../scene/SceneEffectorUtils';
 import type { SceneCameraConfig, SceneSplatEffectorRuntimeData } from '../scene/types';
 import { resolveSharedSplatSceneKey } from '../scene/runtime/SharedSplatRuntimeUtils';
 import type { MotionRenderer } from '../motion/MotionRenderer';
-import { getMotionRenderSize } from '../motion/MotionTypes';
+import { applyMotionRenderPlacement } from '../motion/MotionTypes';
+import {
+  createMotionFrameRuntimeAdmission,
+  describeMotionFrameRuntimeFailure,
+  getMotionDeviceMaxInstances,
+  getMotionDeviceTextureLimits,
+  getMotionRenderSizeForAdmission,
+  hasMotionFrameLayers,
+  rebindMotionFrameRuntimeAdmission,
+} from '../motion/MotionFrameRuntime';
 import { RenderOutputRouterAdapter } from './RenderOutputRouterAdapter';
 import type { RenderOutputRouter } from './contracts';
+import type { RenderSurfaceFrameContext } from '../../services/render/renderHostTypes';
 import { CachedFrameRenderer } from './dispatcher/cachedFrameRenderer';
 import { DispatcherDebugSnapshotFacet, type RenderDispatcherDebugSnapshot } from './dispatcher/dispatcherDebugSnapshot';
 import { DispatcherTelemetry } from './dispatcher/dispatcherTelemetry';
@@ -278,7 +289,7 @@ export class RenderDispatcher {
 
   // === MAIN RENDER ===
 
-  render(layers: Layer[]): void {
+  render(layers: Layer[], frameContext?: RenderSurfaceFrameContext): void {
     const d = this.deps;
     if (d.isRecovering()) return;
     const device = d.getDevice();
@@ -296,6 +307,8 @@ export class RenderDispatcher {
     const { width, height } = d.renderTargetManager.getResolution();
     const skipEffects = false;
     const isExporting = d.exportCanvasManager.getIsExporting();
+    const frameTimelineTime = frameContext?.timelineTimeSeconds
+      ?? this.getEffectiveTimelineTime();
     const timelineState = useTimelineStore.getState();
     const isPlaying =
       (d.renderLoop?.getIsPlaying() ?? false) &&
@@ -397,6 +410,7 @@ export class RenderDispatcher {
       this.lastRenderHadContent = false;
       this.lastCompositeView = null;
       this.renderEmptyFrame(device);
+      d.nestedCompRenderer?.cleanupPendingTextures();
       this.recordMainPreviewFrame('empty', undefined, previewFallback);
       d.performanceStats.setLayerCount(0);
       return;
@@ -415,14 +429,43 @@ export class RenderDispatcher {
     let hasNestedComps = false;
     let hasDeferredNestedComp = false;
     let hasMotionLayers = false;
+    const motionFrameLayers = layerData.map((data) => data.layer);
+    const motionFrameAdmission = hasMotionFrameLayers(motionFrameLayers)
+      ? createMotionFrameRuntimeAdmission({
+          consumer: isExporting ? 'export' : 'preview',
+          compositionId: frameContext?.compositionId
+            ?? useMediaStore.getState().activeCompositionId
+            ?? 'timeline:active',
+          timelineTimeSeconds: frameTimelineTime,
+          layers: motionFrameLayers,
+          deviceMaxInstances: getMotionDeviceMaxInstances(device),
+          ...getMotionDeviceTextureLimits(device),
+        })
+      : undefined;
+    if (motionFrameAdmission && !motionFrameAdmission.ok) {
+      const failure = describeMotionFrameRuntimeFailure(motionFrameAdmission);
+      if (isExporting) {
+        throw new Error(`Export Motion frame admission failed: ${failure}`);
+      }
+      log.warn('Motion frame admission failed; affected Motion layers are hidden', { failure });
+    }
 
     const preRenderEncoder = device.createCommandEncoder();
     for (let i = layerData.length - 1; i >= 0; i--) {
       const data = layerData[i];
       if (data.layer.source?.type === 'motion') {
+        if (!motionFrameAdmission?.ok) {
+          layerData.splice(i, 1);
+          continue;
+        }
         hasMotionLayers = true;
-        const rendered = d.motionRenderer?.renderLayer(data.layer, preRenderEncoder);
-        const size = rendered ?? getMotionRenderSize(data.layer.source.motion);
+        const rendered = d.motionRenderer?.renderLayer(
+          data.layer,
+          preRenderEncoder,
+          motionFrameAdmission,
+        );
+        const size = rendered ?? getMotionRenderSizeForAdmission(data.layer, motionFrameAdmission);
+        data.layer = applyMotionRenderPlacement(data.layer, size);
         data.textureView = rendered?.textureView ?? null;
         data.sourceWidth = size.width;
         data.sourceHeight = size.height;
@@ -444,6 +487,11 @@ export class RenderDispatcher {
           0,
           skipEffects,
           isExporting ? 'export' : 'preview',
+          rebindMotionFrameRuntimeAdmission(
+            motionFrameAdmission,
+            isExporting ? 'export' : 'nested-preview',
+          ),
+          data.layer.id,
         );
         if (view) {
           data.textureView = view;
@@ -491,7 +539,7 @@ export class RenderDispatcher {
       device, sampler: d.sampler, pingView, pongView, outputWidth: width, outputHeight: height,
       skipEffects,
       effectTempTexture, effectTempView, effectTempTexture2, effectTempView2,
-      motionTime: this.getEffectiveTimelineTime(),
+      motionTime: frameTimelineTime,
       particleQuality: isExporting ? 'export' : 'preview',
     });
     const renderTime = performance.now() - t2;
@@ -543,7 +591,7 @@ export class RenderDispatcher {
       const totalCompletion = device.queue.onSubmittedWorkDone();
       submitTime = performance.now() - submittedAt;
       exportGpuPhaseDiagnostics.trackFrame({
-        timelineTime: this.getEffectiveTimelineTime(),
+        timelineTime: frameTimelineTime,
         submittedAt,
         compositeCompletion,
         totalCompletion,
@@ -583,10 +631,9 @@ export class RenderDispatcher {
     }
     this.lastCompositeView = result.finalView;
 
-    // Cleanup after submit
-    if (hasNestedComps) {
-      d.nestedCompRenderer!.cleanupPendingTextures();
-    }
+    // The main render pass owns occurrence-cache cleanup. Running this for empty
+    // nested sets as well releases wrappers removed since the previous frame.
+    d.nestedCompRenderer?.cleanupPendingTextures();
 
     // Stats
     const totalTime = performance.now() - t0;
@@ -655,8 +702,12 @@ export class RenderDispatcher {
    * Render specific layers to a specific target canvas
    * Used for multi-composition preview where each preview shows different content
    */
-  renderToPreviewCanvas(canvasId: string, layers: Layer[]): void {
-    this.targetPreviewRenderer.renderToPreviewCanvas(canvasId, layers);
+  renderToPreviewCanvas(
+    canvasId: string,
+    layers: Layer[],
+    frameContext?: RenderSurfaceFrameContext,
+  ): void {
+    this.targetPreviewRenderer.renderToPreviewCanvas(canvasId, layers, frameContext);
   }
 
   releasePreviewTarget(canvasId: string): void {

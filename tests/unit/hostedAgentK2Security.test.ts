@@ -273,6 +273,34 @@ describe('hosted-agent K2 lease, payload, and redaction security', () => {
     })).rejects.toThrow(/invalid, unsafe/i);
   });
 
+  it('accepts a strictly shaped inline visual result on the authenticated tool-result channel', async () => {
+    const sessions = new HostedAgentK2MemorySessionStore();
+    const lease = await createSession(sessions);
+    sessions.appendRuntimeEvent(SESSION_ID, toolEvent());
+    const visual = batch('{"success":true,"data":{"dataUrl":"[image omitted]"}}');
+    visual.results[0].providerContent = {
+      openAiFollowupInput: [{
+        content: [
+          { text: 'Visual output from captureFrame:', type: 'input_text' },
+          {
+            detail: 'high',
+            image_url: 'data:image/png;base64,iVBORw0KGgo=',
+            type: 'input_image',
+          },
+        ],
+        role: 'user',
+      }],
+    };
+
+    await expect(sessions.postToolResults({
+      batch: visual,
+      clientInstanceId: CLIENT_ID,
+      leaseToken: lease.leaseToken,
+      sessionId: SESSION_ID,
+      turnId: TURN_ID,
+    })).resolves.toMatchObject({ accepted: true, replayed: false });
+  });
+
   it('bounds and purges a load of short-lived terminal sessions', async () => {
     let now = 5_000_000;
     const sessions = new HostedAgentK2MemorySessionStore({ now: () => now });

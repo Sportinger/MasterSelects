@@ -1,6 +1,6 @@
 import { BILLING_PLANS, getLowestPaidCreditEur } from './billingPlans';
 import { estimateHostedElevenLabsSpeechCredits } from './elevenLabsService';
-import { calculateKieAiCost } from './kieAiService';
+import { calculateKieAiCost } from './kieAi/catalog';
 import {
   HOSTED_KIE_CREDIT_MULTIPLIER,
   KIEAI_IMAGE_USD_PRICING,

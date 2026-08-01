@@ -1,10 +1,13 @@
 import { getTimelineRevision } from '../../stores/timeline/revisionMiddleware';
+import { useTimelineStore } from '../../stores/timeline';
+import { handleCaptureFrame } from '../aiTools/handlers/preview';
 import {
   HOSTED_AGENT_MAXIMUM_ITERATIONS,
   HostedAgentK2ClientSession,
   clearHostedAgentReloadSnapshot,
   createHostedAgentK2FetchTransport,
   getHostedAgentClientInstanceId,
+  hostedAgentRoundIdempotencyKey,
   readHostedAgentReloadSnapshot,
   saveHostedAgentReloadSnapshot,
   startHostedAgentK2Turn,
@@ -15,6 +18,12 @@ import {
   type HostedAgentToolExecutionMode,
   type HostedAgentTurnAccepted,
 } from '../kernelClient/hostedAgent';
+import {
+  applyConfirmedCreditUpdate,
+  beginCreditActivity,
+  endCreditActivity,
+  recordCreditActivityTotal,
+} from '../credits/creditBalanceCoordinator';
 import {
   FLASHBOARD_CHAT_MAX_OUTPUT_TOKENS,
   clampTemperature,
@@ -33,16 +42,24 @@ import {
   emitAgentActivity,
   safeToolActivityLabel,
 } from './FlashBoardChatActivity';
+import {
+  appendFlashBoardChatRunToolCalls,
+  completeFlashBoardChatRun,
+  reactivateFlashBoardChatRunByIdempotencyKey,
+} from './FlashBoardChatRunAudit';
+import { findFlashBoardChatImageData } from './FlashBoardChatImageData';
 import type {
   FlashBoardChatRequest,
   FlashBoardChatToolExecutionMode,
+  FlashBoardChatVisualReference,
+  FlashBoardExecutedToolCall,
   FlashBoardKieChatProtocol,
   FlashBoardToolCall,
 } from './FlashBoardChatTypes';
 
 const HOSTED_AGENT_PROMPT_VERSION = 'flashboard-chat-v2';
 const HOSTED_AGENT_HISTORY_VERSION = 'flashboard-provider-history-v1';
-const HOSTED_AGENT_TOOL_SCHEMA_VERSION = 'flashboard-chat-tools-v1';
+const HOSTED_AGENT_TOOL_SCHEMA_VERSION = 'flashboard-chat-tools-v2';
 const HOSTED_AGENT_MAX_TURN_SPEND_CREDITS = 500;
 const HOSTED_AGENT_MAXIMUM_INLINE_RESULT_CHARACTERS = 32 * 1024 * 1024;
 
@@ -68,10 +85,23 @@ function providerInput(
   protocol: FlashBoardKieChatProtocol,
   prompt: string,
   supportsTools: boolean,
+  visualReferences: FlashBoardChatVisualReference[],
 ): HostedAgentK1TurnRequest['providerInput'] {
   if (protocol === 'openai-responses') {
     return {
-      input: [{ role: 'user', content: prompt }],
+      input: [{
+        role: 'user',
+        content: visualReferences.length === 0
+          ? prompt
+          : [
+              { text: prompt, type: 'input_text' },
+              ...visualReferences.map((reference) => ({
+                detail: 'high',
+                image_url: reference.dataUrl,
+                type: 'input_image',
+              })),
+            ],
+      }],
       protocol,
       store: false,
       toolChoice: 'auto',
@@ -79,13 +109,58 @@ function providerInput(
     };
   }
   return {
-    messages: [{ role: 'user', content: prompt }],
+    messages: [{
+      role: 'user',
+      content: visualReferences.length === 0
+        ? prompt
+        : [
+            { text: prompt, type: 'text' },
+            ...visualReferences.map((reference) => {
+              const image = getVisualReferenceImage(reference);
+              return {
+                source: {
+                  data: image.base64,
+                  media_type: image.mediaType,
+                  type: 'base64',
+                },
+                type: 'image',
+              };
+            }),
+          ],
+    }],
     protocol,
     tools: supportsTools ? ANTHROPIC_TOOLS : [],
   };
 }
 
-function buildTurnRequest(input: {
+function getVisualReferenceImage(reference: FlashBoardChatVisualReference): {
+  base64: string;
+  mediaType: string;
+} {
+  const image = findFlashBoardChatImageData(reference.dataUrl);
+  if (!image) {
+    throw new Error('A chat reference is not a supported PNG, JPEG, GIF, or WebP image.');
+  }
+  return { base64: image.base64.replace(/\s+/g, ''), mediaType: image.mediaType };
+}
+
+function hostedVisualReferences(
+  protocol: FlashBoardKieChatProtocol,
+  visualReferences: FlashBoardChatVisualReference[],
+): HostedAgentK1TurnRequest['visualReferences'] {
+  return visualReferences.map((reference, index) => {
+    const image = getVisualReferenceImage(reference);
+    return {
+      id: `initial-reference-${index + 1}`,
+      mediaType: image.mediaType,
+      role: 'initial',
+      source: protocol === 'openai-responses' ? reference.dataUrl : image.base64,
+      transport: 'data-url',
+    };
+  });
+}
+
+export function buildHostedAgentTurnRequest(input: {
   protocol: FlashBoardKieChatProtocol;
   request: FlashBoardChatRequest;
   supportsTools: boolean;
@@ -94,6 +169,7 @@ function buildTurnRequest(input: {
   const tools = input.supportsTools
     ? (input.protocol === 'openai-responses' ? OPENAI_RESPONSES_TOOLS : ANTHROPIC_TOOLS)
     : [];
+  const visualReferences = input.request.visualReferences ?? [];
   const request: HostedAgentK1TurnRequest = {
     clientCapabilities: {
       maximumInlineResultCharacters: HOSTED_AGENT_MAXIMUM_INLINE_RESULT_CHARACTERS,
@@ -109,7 +185,12 @@ function buildTurnRequest(input: {
     modelPrompt: input.request.prompt,
     playbookPrompt: input.request.playbookPrompt ?? input.request.prompt,
     promptVersion: HOSTED_AGENT_PROMPT_VERSION,
-    providerInput: providerInput(input.protocol, input.request.prompt, input.supportsTools),
+    providerInput: providerInput(
+      input.protocol,
+      input.request.prompt,
+      input.supportsTools,
+      visualReferences,
+    ),
     request: input.request.prompt,
     routePreference: 'auto',
     runSource: input.request.runSource === 'bridge' || input.request.runSource === 'mcp'
@@ -119,7 +200,7 @@ function buildTurnRequest(input: {
     toolExecutionMode: hostedExecutionMode(input.request.toolExecutionMode),
     toolSchemaVersion: HOSTED_AGENT_TOOL_SCHEMA_VERSION,
     turnId: turnId(input.request),
-    visualReferences: [],
+    visualReferences: hostedVisualReferences(input.protocol, visualReferences),
   };
   if (isTemperatureSupported('kie', input.request.model)) {
     request.temperature = clampTemperature(input.request.temperature);
@@ -145,8 +226,47 @@ function toolCallsForEvent(
   }));
 }
 
+function hostedToolResultProviderContent(
+  protocol: FlashBoardKieChatProtocol,
+  image: { base64: string; dataUrl: string; mediaType: string },
+  label: string,
+  modelContent: string,
+) {
+  if (protocol === 'openai-responses') {
+    return {
+      openAiFollowupInput: [{
+        content: [
+          { text: label, type: 'input_text' },
+          { detail: 'high', image_url: image.dataUrl, type: 'input_image' },
+        ],
+        role: 'user',
+      }],
+    };
+  }
+  return {
+    claudeToolResultContent: [
+      {
+        source: {
+          data: image.base64,
+          media_type: image.mediaType,
+          type: 'base64',
+        },
+        type: 'image',
+      },
+      { text: modelContent, type: 'text' },
+    ],
+  };
+}
+
+const VISUAL_RESULT_TOOL_NAMES = new Set([
+  'captureFrame',
+  'getCutPreviewQuad',
+  'getFramesAtTimes',
+]);
+
 async function executeKernelToolBatch(
   request: FlashBoardChatRequest,
+  protocol: FlashBoardKieChatProtocol,
   executionMode: HostedAgentToolExecutionMode,
   event: Extract<HostedAgentEvent, { kind: 'tool-batch-request' }>,
 ): Promise<HostedAgentK2BatchExecutorResult> {
@@ -156,6 +276,7 @@ async function executeKernelToolBatch(
       kind: 'operation',
       phase: 'started',
       safeLabel: safeToolActivityLabel(toolCall.name),
+      operationId: toolCall.id,
       toolName: toolCall.name,
     });
   }
@@ -171,10 +292,31 @@ async function executeKernelToolBatch(
       kind: 'operation',
       phase: toolResult.result.success ? 'completed' : 'failed',
       safeLabel: safeToolActivityLabel(toolResult.toolCall.name),
+      operationId: toolResult.toolCall.id,
       toolName: toolResult.toolCall.name,
     });
   }
   request.onExecutedToolCalls?.(prepareFlashBoardToolCallsForHistory(executed));
+  const includesRequestedVisualResult = executed.some((toolResult) => (
+    toolResult.result.success && VISUAL_RESULT_TOOL_NAMES.has(toolResult.toolCall.name)
+  ));
+  let automaticPostEditPreview: ReturnType<typeof findFlashBoardChatImageData> = null;
+  if (stateRevisionAfter !== stateRevisionBefore && !includesRequestedVisualResult) {
+    try {
+      const capture = await handleCaptureFrame(
+        { mode: 'auto', settleMs: 180 },
+        useTimelineStore.getState(),
+      );
+      if (capture.success) {
+        automaticPostEditPreview = findFlashBoardChatImageData(capture.data);
+      }
+    } catch {
+      // The edit result remains authoritative when a best-effort preview cannot render.
+    }
+  }
+  const automaticPreviewResultIndex = automaticPostEditPreview && executed.length > 0
+    ? executed.length - 1
+    : -1;
   return {
     authority: {
       approval: 'not-required',
@@ -184,35 +326,22 @@ async function executeKernelToolBatch(
       stateRevisionBefore: `timeline:${stateRevisionBefore}`,
       validationPassed: true,
     },
-    results: executed.map((toolResult) => {
-      const image = getFlashBoardToolResultImage(toolResult);
+    results: executed.map((toolResult, index) => {
+      const requestedImage = getFlashBoardToolResultImage(toolResult);
+      const image = requestedImage
+        ?? (index === automaticPreviewResultIndex ? automaticPostEditPreview : null);
       return {
         ...(toolResult.result.error === undefined ? {} : { error: toolResult.result.error }),
         modelContent: toolResult.modelContent,
         ...(image ? {
-          providerContent: {
-            claudeToolResultContent: [
-              {
-                source: {
-                  data: image.base64,
-                  media_type: image.mediaType,
-                  type: 'base64',
-                },
-                type: 'image',
-              },
-              { text: toolResult.modelContent, type: 'text' },
-            ],
-            openAiFollowupInput: [{
-              content: [
-                {
-                  text: `Visual output from ${toolResult.toolCall.name}:`,
-                  type: 'input_text',
-                },
-                { detail: 'high', image_url: image.dataUrl, type: 'input_image' },
-              ],
-              role: 'user',
-            }],
-          },
+          providerContent: hostedToolResultProviderContent(
+            protocol,
+            image,
+            requestedImage
+              ? `Visual output from ${toolResult.toolCall.name}:`
+              : 'Automatic post-edit preview after this tool batch. This current frame is valid visual evidence; do not call captureFrame again unless you need another time or the image reveals a problem:',
+            toolResult.modelContent,
+          ),
         } : {}),
         success: toolResult.result.success,
         toolCallId: toolResult.toolCall.id,
@@ -227,7 +356,7 @@ export async function sendHostedKieAgentChat(input: {
   supportsTools: boolean;
   systemPrompt: string;
 }): Promise<string> {
-  const turnRequest = buildTurnRequest(input);
+  const turnRequest = buildHostedAgentTurnRequest(input);
   if (input.request.resumeMessageId) {
     saveHostedAgentReloadSnapshot({
       assistantMessageId: input.request.resumeMessageId,
@@ -279,6 +408,18 @@ async function runHostedAgentSession(input: {
   restoredState?: Pick<HostedAgentK2ClientPersistedState, 'completedBatches' | 'cursor'>;
   turnRequest: HostedAgentK1TurnRequest;
 }): Promise<string> {
+  const activityId = input.turnRequest.turnId;
+  beginCreditActivity({
+    feature: 'AI agent',
+    id: activityId,
+    targetId: 'flashboard-credit-activity-anchor',
+  });
+  let activityEnded = false;
+  const finishActivity = (status: 'completed' | 'failed' | 'canceled') => {
+    if (activityEnded) return;
+    activityEnded = true;
+    endCreditActivity({ id: activityId, status });
+  };
   const persist = (state: HostedAgentK2ClientPersistedState) => {
     if (!input.assistantMessageId) return;
     if (state.status !== 'active') {
@@ -302,16 +443,22 @@ async function runHostedAgentSession(input: {
     });
   }
 
-  const client = new HostedAgentK2ClientSession({
-    clientInstanceId: input.turnRequest.clientInstanceId,
-    completedBatches: input.restoredState?.completedBatches,
-    cursor: input.restoredState?.cursor,
-    lease: input.accepted.pageLease,
-    onStateChange: persist,
-    toolSchemaVersion: input.turnRequest.toolSchemaVersion,
-    transport: createHostedAgentK2FetchTransport({ signal: input.callbackRequest.signal }),
-    turnId: input.turnRequest.turnId,
-  });
+  let client: HostedAgentK2ClientSession;
+  try {
+    client = new HostedAgentK2ClientSession({
+      clientInstanceId: input.turnRequest.clientInstanceId,
+      completedBatches: input.restoredState?.completedBatches,
+      cursor: input.restoredState?.cursor,
+      lease: input.accepted.pageLease,
+      onStateChange: persist,
+      toolSchemaVersion: input.turnRequest.toolSchemaVersion,
+      transport: createHostedAgentK2FetchTransport({ signal: input.callbackRequest.signal }),
+      turnId: input.turnRequest.turnId,
+    });
+  } catch (error) {
+    finishActivity('failed');
+    throw error;
+  }
   let finalMessage = '';
   let terminalError = '';
   let detachingForReload = false;
@@ -324,6 +471,7 @@ async function runHostedAgentSession(input: {
     const result = await client.runUntilTerminal({
       execute: (event) => executeKernelToolBatch(
         input.callbackRequest,
+        input.turnRequest.providerInput.protocol,
         input.turnRequest.toolExecutionMode,
         event,
       ),
@@ -335,14 +483,29 @@ async function runHostedAgentSession(input: {
             roundIndex: event.roundIndex,
             text: event.text,
           });
+        } else if (event.kind === 'billing-settled') {
+          applyConfirmedCreditUpdate({
+            activityId,
+            activityTotalCredits: event.totalCreditsCharged,
+            balance: event.creditBalance,
+            credits: event.creditsCharged,
+            kind: 'debit',
+            mutationId: event.ledgerEntryId
+              ? `debit:hosted:ai_chat:${event.ledgerEntryId}`
+              : `debit:hosted:ai_chat:${hostedAgentRoundIdempotencyKey(event.turnId, event.roundIndex)}`,
+            source: 'hosted:ai_chat',
+          });
         } else if (event.kind === 'turn-complete') {
+          recordCreditActivityTotal(activityId, event.creditsCharged);
           finalMessage = event.message;
+          finishActivity('completed');
         } else if (
           event.kind === 'turn-failed'
           || event.kind === 'turn-canceled'
           || event.kind === 'turn-interrupted'
         ) {
           terminalError = event.message;
+          finishActivity(event.kind === 'turn-canceled' ? 'canceled' : 'failed');
         }
       },
       signal: input.callbackRequest.signal,
@@ -358,6 +521,9 @@ async function runHostedAgentSession(input: {
     }
     return finalMessage;
   } catch (error) {
+    if (!detachingForReload) {
+      finishActivity(input.callbackRequest.signal?.aborted ? 'canceled' : 'failed');
+    }
     if (!detachingForReload && input.assistantMessageId) {
       clearHostedAgentReloadSnapshot(input.assistantMessageId);
     }
@@ -378,20 +544,47 @@ export async function resumeHostedKieAgentChat(input: {
     return null;
   }
 
-  const accepted = await startHostedAgentK2Turn({
-    request: snapshot.request,
-    signal: input.request.signal,
-  });
-  assertCompatibleAcceptedTurn(snapshot.request, accepted);
-  input.request.onPhase?.('provider');
-  return runHostedAgentSession({
-    accepted,
-    assistantMessageId: input.assistantMessageId,
-    callbackRequest: input.request,
-    restoredState: {
-      completedBatches: snapshot.completedBatches,
-      cursor: snapshot.cursor,
+  const auditRun = await reactivateFlashBoardChatRunByIdempotencyKey(snapshot.request.turnId);
+  const resumedToolCalls: FlashBoardExecutedToolCall[] = [];
+  const callbackRequest: FlashBoardChatRequest = {
+    ...input.request,
+    onExecutedToolCalls: (toolCalls) => {
+      resumedToolCalls.push(...toolCalls);
+      if (auditRun) appendFlashBoardChatRunToolCalls(auditRun.runId, toolCalls);
+      input.request.onExecutedToolCalls?.(toolCalls);
     },
-    turnRequest: snapshot.request,
-  });
+  };
+  try {
+    const accepted = await startHostedAgentK2Turn({
+      request: snapshot.request,
+      signal: input.request.signal,
+    });
+    assertCompatibleAcceptedTurn(snapshot.request, accepted);
+    input.request.onPhase?.('provider');
+    const response = await runHostedAgentSession({
+      accepted,
+      assistantMessageId: input.assistantMessageId,
+      callbackRequest,
+      restoredState: {
+        completedBatches: snapshot.completedBatches,
+        cursor: snapshot.cursor,
+      },
+      turnRequest: snapshot.request,
+    });
+    if (auditRun) {
+      completeFlashBoardChatRun(auditRun.runId, {
+        executedToolCalls: [...auditRun.executedToolCalls, ...resumedToolCalls],
+        response,
+      });
+    }
+    return response;
+  } catch (error) {
+    if (auditRun) {
+      completeFlashBoardChatRun(auditRun.runId, {
+        error,
+        executedToolCalls: [...auditRun.executedToolCalls, ...resumedToolCalls],
+      });
+    }
+    throw error;
+  }
 }

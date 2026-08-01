@@ -120,6 +120,9 @@ export interface ProjectClip {
   isComposition?: boolean;
   compositionId?: string;
 
+  // Motion Design structure support. This is a same-composition stable clip id.
+  parentClipId?: string;
+
   // Additional clip metadata (for restoration)
   sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'light' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector' | 'math-scene' | 'transition-overlay' | 'motion-shape' | 'motion-null' | 'motion-adjustment' | 'storyboard' | 'lottie' | 'rive' | 'midi';
   // MIDI clip note data (issue #182); wired into save/load in the persistence phase

@@ -49,6 +49,7 @@ export interface FrameContextLike {
   outputHeight?: number;
   clipsAtTime: TimelineClip[];
   renderClipsAtTime?: TimelineClip[];
+  compositionClips?: readonly TimelineClip[];
   trackMap: Map<string, TimelineTrack>;
   clipsByTrack: Map<string, TimelineClip>;
   transitionParticipantsByTrack?: Map<string, ActiveTransitionPlan>;

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, type Dispatch, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type SetStateAction } from 'react';
 import { Logger } from '../../../../services/logger';
 import { mediaNeedsRelink } from '../../../../services/project/relinkMedia';
-import type { MediaFolder, ProjectItem } from '../../../../stores/mediaStore';
+import { useMediaStore, type MediaFolder, type ProjectItem } from '../../../../stores/mediaStore';
 import {
+  applyExportMediaIdsToDataTransfer,
   applyExternalDragPayloadToDataTransfer,
   clearExternalDragPayload,
   createExternalDragPayloadForProjectItem,
@@ -10,6 +11,7 @@ import {
 } from '../../../timeline/utils/externalDragSession';
 import { collectDroppedMediaFiles, importDroppedMediaFiles } from '../dropImport';
 import { isImportedMediaFileItem } from '../itemTypeGuards';
+import { planBatchExportMediaDragIds } from './batchExportMediaDrag';
 
 const log = Logger.create('MediaPanel');
 
@@ -80,6 +82,7 @@ export function useMediaPanelDragDropMarquee({
   clearMediaBoardInsertionPreview,
   getSlotGridProgress,
 }: UseMediaPanelDragDropMarqueeInput) {
+  const mediaFiles = useMediaStore(state => state.files);
   const marqueeRef = useRef<{ startX: number; startY: number; initialSelection: string[] } | null>(null);
   const nativeDragGuardsRef = useRef<(() => void) | null>(null);
   const externalOverGuardsRef = useRef<(() => void) | null>(null);
@@ -379,12 +382,14 @@ export function useMediaPanelDragDropMarquee({
 
     setExternalDragPayload(payload);
     applyExternalDragPayloadToDataTransfer(e.dataTransfer, payload);
+    const exportMediaIds = planBatchExportMediaDragIds(item, selectedIds, mediaFiles, mediaNeedsRelink);
+    applyExportMediaIdsToDataTransfer(e.dataTransfer, exportMediaIds);
     e.dataTransfer.effectAllowed = 'copyMove';
 
     if (e.currentTarget instanceof HTMLElement) {
       e.dataTransfer.setDragImage(e.currentTarget, 10, 10);
     }
-  }, [activeCompositionId, getSlotGridProgress, installNativeDragGuards, renameTimerRef, setInternalDragId]);
+  }, [activeCompositionId, getSlotGridProgress, installNativeDragGuards, mediaFiles, renameTimerRef, selectedIds, setInternalDragId]);
 
   const handleDragEnd = useCallback(() => {
     finishNativeDragSession();

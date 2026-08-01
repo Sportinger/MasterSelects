@@ -76,6 +76,88 @@ describe('FlashBoard narrated activity UI', () => {
     ]);
   });
 
+  it('keeps a dedicated running indicator available outside the scrollable work log', () => {
+    const { container } = render(
+      <FlashBoardChatOutput
+        chatError={null}
+        chatHistoryRef={createRef<HTMLDivElement>()}
+        copiedChatMessageId={null}
+        isChatting
+        messages={[{
+          id: 'assistant-running',
+          role: 'assistant',
+          text: 'AI thinking...',
+          isPending: true,
+          activityEvents,
+        }]}
+        onAuthClick={vi.fn()}
+        onMessageDoubleClick={vi.fn()}
+        onPricingClick={vi.fn()}
+        showChatCloudActions={false}
+      />,
+    );
+
+    const indicator = screen.getByRole('status', {
+      name: /AI working: The edit is ready; I am verifying the result\., \d+(:\d{2}|s)/,
+    });
+    expect(indicator).toHaveClass('fb-chat-running-indicator');
+    expect(indicator).toHaveTextContent('The edit is ready; I am verifying the result.');
+    expect(container.querySelector('.fb-chat-running-elapsed')).toBeInTheDocument();
+    expect(container.querySelector('.fb-chat-activity-log')).toBeInTheDocument();
+  });
+
+  it('pairs operation lifecycle events and groups repeated parallel tools', () => {
+    const operationEvents: AgentActivityEvent[] = [
+      ...activityEvents.slice(0, 1),
+      ...['shape-a', 'shape-b'].flatMap((operationId, index): AgentActivityEvent[] => ([
+        {
+          id: `started-${operationId}`,
+          runId: 'run-1',
+          kind: 'operation',
+          source: 'runtime',
+          phase: 'started',
+          safeLabel: 'Create motion shape clip',
+          operationId,
+          toolName: 'createMotionShapeClip',
+          createdAt: 10 + index,
+        },
+      ])),
+      ...['shape-a', 'shape-b'].map((operationId, index): AgentActivityEvent => ({
+        id: `completed-${operationId}`,
+        runId: 'run-1',
+        kind: 'operation',
+        source: 'runtime',
+        phase: 'completed',
+        safeLabel: 'Create motion shape clip',
+        operationId,
+        toolName: 'createMotionShapeClip',
+        createdAt: 20 + index,
+      })),
+    ];
+    const { container } = render(
+      <FlashBoardChatOutput
+        chatError={null}
+        chatHistoryRef={createRef<HTMLDivElement>()}
+        copiedChatMessageId={null}
+        messages={[{
+          id: 'assistant-grouped',
+          role: 'assistant',
+          text: 'Done.',
+          activityEvents: operationEvents,
+        }]}
+        onAuthClick={vi.fn()}
+        onMessageDoubleClick={vi.fn()}
+        onPricingClick={vi.fn()}
+        showChatCloudActions={false}
+      />,
+    );
+
+    const rows = Array.from(container.querySelectorAll('.fb-chat-activity-entries li'));
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toHaveTextContent('Create motion shape clip completed ×2');
+    expect(container).not.toHaveTextContent('Create motion shape clip started');
+  });
+
   it('keeps final text visible and collapses the work log after completion', () => {
     const { container } = renderOutput(false);
 

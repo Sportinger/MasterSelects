@@ -177,8 +177,19 @@ export function attachGroupedPartialFailure(
       ...entry,
       result: {
         ...entry.result,
+        ...(partialFailure.rolledBack
+          && MODIFYING_TOOLS.has(entry.tool)
+          && entry.result.success
+          ? {
+              success: false,
+              error: 'Mutation was rolled back because another modifying tool failed',
+            }
+          : {}),
         data: {
           ...data,
+          ...(partialFailure.rolledBack && MODIFYING_TOOLS.has(entry.tool)
+            ? { applied: false, rolledBack: true }
+            : {}),
           partialFailure,
         },
       },

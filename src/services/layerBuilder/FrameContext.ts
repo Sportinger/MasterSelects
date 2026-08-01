@@ -11,6 +11,15 @@ import { getPlayheadPosition } from './PlayheadState';
 import type { Composition, MediaFile } from '../../stores/mediaStore/types';
 import { getTrackAudioMuted, getTrackAudioSolo, hasAnyAudibleSolo } from '../audio/audioGraphRouteSettings';
 import { resolveTransitionSourceMapTime } from '../timeline/transitionSourceMap';
+import {
+  applyMotionParentTransformToClipTransform,
+  createTimelineMotionParentEvaluation,
+  getTimelineMotionLocalTransformAtTime,
+} from '../motionDesign/contracts/timelineStructureAdapter';
+import {
+  createMotionParentGraphSnapshot,
+  evaluateMotionParentGraphWorldTransforms,
+} from '../motionDesign/structure/parentGraphPlanner';
 
 function getClipsAtTime(clips: TimelineClip[], playheadPosition: number): TimelineClip[] {
   const EPSILON = 1e-6;
@@ -74,7 +83,7 @@ function getClipsAtTime(clips: TimelineClip[], playheadPosition: number): Timeli
  * Create a FrameContext with lazy-computed cached values
  * All store reads happen once here, then values are reused
  */
-export function createFrameContext(): FrameContext {
+export function createFrameContext(playheadPositionOverride?: number): FrameContext {
   // === SINGLE STORE READS ===
   const timelineState = useTimelineStore.getState();
   const mediaState = useMediaStore.getState();
@@ -90,6 +99,7 @@ export function createFrameContext(): FrameContext {
     masterAudioState,
     clipDragPreview,
     layerTransformPreview,
+    clipKeyframes,
     getInterpolatedTransform,
     getInterpolatedEffects,
     getInterpolatedNodeGraphParams,
@@ -103,25 +113,87 @@ export function createFrameContext(): FrameContext {
     getClipKeyframes,
   } = timelineState;
 
-  const playheadPosition = getPlayheadPosition(storePlayheadPosition);
+  if (playheadPositionOverride !== undefined && !Number.isFinite(playheadPositionOverride)) {
+    throw new RangeError('playheadPositionOverride must be finite');
+  }
+  const playheadPosition = playheadPositionOverride
+    ?? getPlayheadPosition(storePlayheadPosition);
   const clips = applyClipDragPreview(storeClips, clipDragPreview);
   const hasClipDragPreview = clipDragPreview != null;
-  const getPreviewedInterpolatedTransform = (clipId: string, localTime: number) => {
-    const transform = getInterpolatedTransform(clipId, localTime);
-    if (layerTransformPreview?.clipId !== clipId) return transform;
-
-    const preview = layerTransformPreview.transform;
-    return {
-      ...transform,
-      position: preview.position
-        ? { ...transform.position, ...preview.position }
-        : transform.position,
-      scale: preview.scale
-        ? { ...transform.scale, ...preview.scale }
-        : transform.scale,
-    };
-  };
   const activeCompId = mediaState.activeCompositionId || 'default';
+  const previewWorldsByTimelineTime = new Map<number, ReturnType<
+    typeof evaluateMotionParentGraphWorldTransforms
+  >['worlds']>();
+  const resolvePreviewWorlds = (timelineTime: number) => {
+    if (!layerTransformPreview) return null;
+    if (previewWorldsByTimelineTime.has(timelineTime)) {
+      return previewWorldsByTimelineTime.get(timelineTime) ?? null;
+    }
+    const graph = createMotionParentGraphSnapshot(clips.map((clip) => ({
+      clipId: clip.id,
+      compositionId: activeCompId,
+      space: clip.is3D ? '3d' as const : '2d' as const,
+      ...(clip.parentClipId ? { parentClipId: clip.parentClipId } : {}),
+    })));
+    const baseEvaluation = createTimelineMotionParentEvaluation(clips, clipKeyframes, timelineTime);
+    const preview = layerTransformPreview.transform;
+    const evaluation = {
+      ...baseEvaluation,
+      localTransforms: baseEvaluation.localTransforms.map((entry) => (
+        entry.clipId !== layerTransformPreview.clipId
+          ? entry
+          : {
+              ...entry,
+              transform: {
+                ...entry.transform,
+                position: preview.position
+                  ? {
+                      x: preview.position.x ?? entry.transform.position.x,
+                      y: preview.position.y ?? entry.transform.position.y,
+                    }
+                  : entry.transform.position,
+                scale: preview.scale
+                  ? {
+                      all: preview.scale.all ?? entry.transform.scale.all,
+                      x: preview.scale.x ?? entry.transform.scale.x,
+                      y: preview.scale.y ?? entry.transform.scale.y,
+                    }
+                  : entry.transform.scale,
+              },
+            }
+      )),
+    };
+    const worlds = evaluateMotionParentGraphWorldTransforms(graph, evaluation).worlds;
+    previewWorldsByTimelineTime.set(timelineTime, worlds);
+    return worlds ?? null;
+  };
+  const getPreviewedInterpolatedTransform = (clipId: string, localTime: number) => {
+    if (!layerTransformPreview) return getInterpolatedTransform(clipId, localTime);
+    const clip = clips.find((candidate) => candidate.id === clipId);
+    if (!clip) return getInterpolatedTransform(clipId, localTime);
+    const timelineTime = clip.startTime + localTime;
+    let localTransform = getTimelineMotionLocalTransformAtTime(
+      clip,
+      clipKeyframes.get(clip.id) ?? [],
+      timelineTime,
+    );
+    if (layerTransformPreview.clipId === clipId) {
+      const preview = layerTransformPreview.transform;
+      localTransform = {
+        ...localTransform,
+        position: preview.position
+          ? { ...localTransform.position, ...preview.position }
+          : localTransform.position,
+        scale: preview.scale
+          ? { ...localTransform.scale, ...preview.scale }
+          : localTransform.scale,
+      };
+    }
+    const world = resolvePreviewWorlds(timelineTime)?.get(clipId);
+    return world
+      ? applyMotionParentTransformToClipTransform(localTransform, world)
+      : localTransform;
+  };
   const activeComposition = mediaState.compositions.find((composition) => composition.id === activeCompId);
   const contextFrameRate =
     typeof activeComposition?.frameRate === 'number' &&

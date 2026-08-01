@@ -18,9 +18,14 @@ import {
   MOTION_MAX_APPEARANCES,
   MOTION_MAX_GRADIENT_STOPS,
 } from '../../../engine/motion/MotionBuffers';
+import { MOTION_REPLICATOR_SHADER_MAX_INSTANCES } from '../../../engine/motion/MotionTypes';
 import type { TimelineClip } from '../../../types/timeline';
+import type { Keyframe } from '../../../types/keyframes';
 import type { PropertyDescriptor } from '../../../types/propertyRegistry';
 import { useTimelineStore } from '../../../stores/timeline';
+import { useMediaStore } from '../../../stores/mediaStore';
+import { getTimelineRevision } from '../../../stores/timeline/revisionMiddleware';
+import { getPlayheadPosition } from '../../layerBuilder/PlayheadState';
 import {
   MOTION_DESIGN_MVP_MAX_COUNT_PER_AXIS,
   MOTION_DESIGN_MVP_PRIMITIVES,
@@ -43,7 +48,14 @@ import { resolveClipPositionAuthoringContext } from './keyframePositionUnits';
 import {
   captureMutationEntitySnapshot,
   describeMutationEntities,
+  type MutationEntitySnapshot,
 } from './mutationEntityResults';
+import { normalizeMotionReplicatorBundle } from '../../motionDesign/contracts/replicatorTimelineAdapter';
+import { planMotionReplicatorSemanticOperation } from '../../motionDesign/replicator/semanticOperations';
+import { getTimelineMotionStructureGraphRevision } from '../../motionDesign/contracts/timelineStructureAdapter';
+import { applyTimelineMotionAdjustmentMutation } from '../../motionDesign/adjustment/timelineMutationAdapter';
+import { planMotionModifierSemanticOperation, type MotionModifierSemanticOperation } from '../../motionDesign/modifiers/semanticOperations';
+import { MOTION_MODIFIER_MAX_ABS_AMOUNT, MOTION_MODIFIER_TARGET_PATHS, parseMotionModifierStackContract } from '../../motionDesign/modifiers/contracts';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
@@ -94,6 +106,311 @@ export async function handleGetMotionDesign(
   };
 }
 
+export async function handleSetMotionParent(
+  args: Record<string, unknown>,
+  timelineStore: TimelineStore,
+): Promise<ToolResult> {
+  try {
+    const operation = requiredNonEmptyString(args.operation, 'operation');
+    if (operation instanceof Error) return failure(operation.message);
+    if (operation !== 'set' && operation !== 'clear') {
+      return failure('operation must be one of: set, clear');
+    }
+    const childClipId = requiredNonEmptyString(args.childClipId, 'childClipId');
+    if (childClipId instanceof Error) return failure(childClipId.message);
+    const child = timelineStore.clips.find((clip) => clip.id === childClipId);
+    if (!child) return failure(`Clip not found: ${childClipId}`);
+    const childTrack = timelineStore.tracks.find((track) => track.id === child.trackId);
+    if (childTrack?.locked === true) return failure(`Track is locked: ${childTrack.id}`);
+
+    let parentClipId: string | null = null;
+    if (operation === 'set') {
+      const parsedParentId = requiredNonEmptyString(args.parentClipId, 'parentClipId');
+      if (parsedParentId instanceof Error) return failure(parsedParentId.message);
+      if (!timelineStore.clips.some((clip) => clip.id === parsedParentId)) {
+        return failure(`Clip not found: ${parsedParentId}`);
+      }
+      parentClipId = parsedParentId;
+    } else if (args.parentClipId !== undefined) {
+      return failure('parentClipId must be omitted when operation is clear');
+    }
+    if ((child.parentClipId ?? null) === parentClipId) {
+      return failure(`Clip ${childClipId} already has the requested parent state`);
+    }
+
+    const mutationSnapshot = captureMutationEntitySnapshot('clip', timelineStore.clips);
+    const keyframeSnapshot = captureMutationEntitySnapshot(
+      'keyframe',
+      flattenTimelineKeyframes(timelineStore.clipKeyframes),
+    );
+    useTimelineStore.getState().setClipParent(childClipId, parentClipId);
+    const clipsAfter = useTimelineStore.getState().clips;
+    const childAfter = clipsAfter.find((clip) => clip.id === childClipId);
+    const appliedParentId = childAfter?.parentClipId ?? null;
+    if (!childAfter || appliedParentId !== parentClipId) {
+      return failure('Motion parent operation was rejected by the timeline graph');
+    }
+
+    return {
+      success: true,
+      data: {
+        operation,
+        childClipId,
+        parentClipId,
+        ...describeMotionParentMutationEntities({
+          clipSnapshot: mutationSnapshot,
+          keyframeSnapshot,
+          clipsAfter,
+          keyframesAfter: useTimelineStore.getState().clipKeyframes,
+          updatedClipIds: [childClipId],
+        }),
+      },
+    };
+  } catch (error) {
+    return failure(error instanceof Error ? error.message : String(error));
+  }
+}
+
+export async function handleCreateMotionNullAndParent(
+  args: Record<string, unknown>,
+  timelineStore: TimelineStore,
+): Promise<ToolResult> {
+  try {
+    const compositionId = useMediaStore.getState().activeCompositionId ?? 'timeline:active';
+    const graphRevisionBefore = getTimelineMotionStructureGraphRevision(
+      compositionId,
+      timelineStore.clips,
+    );
+    const trackResult = resolveVideoTrack(args.trackId, timelineStore);
+    if (!trackResult.success) return trackResult.result;
+    if (!Array.isArray(args.clipIds) || args.clipIds.length < 1 || args.clipIds.length > 100) {
+      return failure('clipIds must be an array containing between 1 and 100 clip ids');
+    }
+    const clipIds: string[] = [];
+    const seenClipIds = new Set<string>();
+    for (let index = 0; index < args.clipIds.length; index += 1) {
+      const clipId = requiredNonEmptyString(args.clipIds[index], `clipIds[${index}]`);
+      if (clipId instanceof Error) return failure(clipId.message);
+      if (seenClipIds.has(clipId)) return failure(`clipIds contains duplicate id: ${clipId}`);
+      seenClipIds.add(clipId);
+      clipIds.push(clipId);
+    }
+    for (const clipId of clipIds) {
+      const clip = timelineStore.clips.find((candidate) => candidate.id === clipId);
+      if (!clip) return failure(`Clip not found: ${clipId}`);
+      const track = timelineStore.tracks.find((candidate) => candidate.id === clip.trackId);
+      if (track?.locked === true) return failure(`Track is locked: ${track.id}`);
+    }
+    const timelineTime = args.timelineTime === undefined
+      ? getPlayheadPosition(timelineStore.playheadPosition)
+      : validateFiniteNumber(args.timelineTime, 'timelineTime', 0, Number.MAX_SAFE_INTEGER);
+    const duration = args.duration === undefined
+      ? 5
+      : validateFiniteNumber(args.duration, 'duration', 0.001, Number.MAX_SAFE_INTEGER);
+    const mutationSnapshot = captureMutationEntitySnapshot('clip', timelineStore.clips);
+    const keyframeSnapshot = captureMutationEntitySnapshot(
+      'keyframe',
+      flattenTimelineKeyframes(timelineStore.clipKeyframes),
+    );
+    const clipId = useTimelineStore.getState().addMotionNullAndParentSelected(
+      trackResult.track.id,
+      timelineTime,
+      clipIds,
+      duration,
+    );
+    if (!clipId) return failure('The timeline could not create and apply the Motion Null transaction');
+
+    const clipsAfter = useTimelineStore.getState().clips;
+    const nullClip = clipsAfter.find((clip) => clip.id === clipId);
+    if (
+      !nullClip
+      || nullClip.source?.type !== 'motion-null'
+      || clipIds.some((childId) => (
+        clipsAfter.find((clip) => clip.id === childId)?.parentClipId !== clipId
+      ))
+    ) {
+      return failure('The Motion Null transaction did not reach its requested final state');
+    }
+
+    return {
+      success: true,
+      data: {
+        operation: 'create-motion-null-and-parent',
+        clipId,
+        affectedClipIds: [clipId, ...clipIds],
+        parentedClipIds: clipIds,
+        trackId: nullClip.trackId,
+        startTime: nullClip.startTime,
+        duration: nullClip.duration,
+        timelineTime,
+        graphRevisionBefore,
+        graphRevisionAfter: getTimelineMotionStructureGraphRevision(compositionId, clipsAfter),
+        diagnostics: [],
+        history: {
+          mode: 'single-entry',
+          label: 'Create Null and Parent Selection',
+          atomic: true,
+        },
+        ...describeMotionParentMutationEntities({
+          clipSnapshot: mutationSnapshot,
+          keyframeSnapshot,
+          clipsAfter,
+          keyframesAfter: useTimelineStore.getState().clipKeyframes,
+          updatedClipIds: clipIds,
+        }),
+      },
+    };
+  } catch (error) {
+    return failure(error instanceof Error ? error.message : String(error));
+  }
+}
+
+export async function handleCreateMotionNull(
+  args: Record<string, unknown>,
+  timelineStore: TimelineStore,
+): Promise<ToolResult> {
+  const operation = 'create-motion-null';
+  const compositionId = useMediaStore.getState().activeCompositionId ?? 'timeline:active';
+  const stateRevisionBefore = getTimelineRevision();
+  const graphRevisionBefore = getTimelineMotionStructureGraphRevision(
+    compositionId,
+    timelineStore.clips,
+  );
+  const reject = (code: string, message: string, affectedClipIds: readonly string[] = []): ToolResult => ({
+    success: false,
+    error: message,
+    data: {
+      operation,
+      affectedClipIds: [...affectedClipIds],
+      graphRevisionBefore,
+      graphRevisionAfter: getTimelineMotionStructureGraphRevision(
+        compositionId,
+        useTimelineStore.getState().clips,
+      ),
+      stateRevisionBefore,
+      stateRevisionAfter: getTimelineRevision(),
+      diagnostics: [{ code, message, affectedClipIds: [...affectedClipIds] }],
+    },
+  });
+
+  try {
+    const trackResult = resolveVideoTrack(args.trackId, timelineStore);
+    if (!trackResult.success) {
+      return reject(
+        'MD6_STRUCTURE_CREATE_NULL_TRACK_INVALID',
+        trackResult.result.error ?? 'No unlocked video track is available for a Motion Null',
+      );
+    }
+    const startTime = args.startTime === undefined
+      ? getPlayheadPosition(timelineStore.playheadPosition)
+      : validateFiniteNumber(args.startTime, 'startTime', 0, Number.MAX_SAFE_INTEGER);
+    const duration = args.duration === undefined
+      ? 5
+      : validateFiniteNumber(args.duration, 'duration', 0.001, Number.MAX_SAFE_INTEGER);
+    const parsedName = args.name === undefined
+      ? 'Null'
+      : requiredNonEmptyString(args.name, 'name');
+    if (parsedName instanceof Error) {
+      return reject('MD6_STRUCTURE_CREATE_NULL_NAME_INVALID', parsedName.message);
+    }
+    if (parsedName.length > 120) {
+      return reject(
+        'MD6_STRUCTURE_CREATE_NULL_NAME_INVALID',
+        'name must contain at most 120 characters',
+      );
+    }
+
+    const mutationSnapshot = captureMutationEntitySnapshot('clip', timelineStore.clips);
+    const clipId = useTimelineStore.getState().addMotionNullClip(
+      trackResult.track.id,
+      startTime,
+      duration,
+      parsedName,
+    );
+    if (!clipId) {
+      return reject(
+        'MD6_STRUCTURE_CREATE_NULL_REJECTED',
+        'The timeline could not create the Motion Null',
+      );
+    }
+    const clipsAfter = useTimelineStore.getState().clips;
+    const nullClip = clipsAfter.find((clip) => clip.id === clipId);
+    if (
+      !nullClip
+      || nullClip.source?.type !== 'motion-null'
+      || nullClip.trackId !== trackResult.track.id
+      || nullClip.startTime !== startTime
+      || nullClip.duration !== duration
+      || nullClip.name !== parsedName
+    ) {
+      return reject(
+        'MD6_STRUCTURE_CREATE_NULL_POSTCONDITION_FAILED',
+        'The Motion Null did not reach its requested final state',
+        [clipId],
+      );
+    }
+    const mutationReceipt = describeMutationEntities(mutationSnapshot, clipsAfter);
+    return {
+      success: true,
+      data: {
+        operation,
+        clipId,
+        affectedClipIds: [clipId],
+        trackId: nullClip.trackId,
+        startTime: nullClip.startTime,
+        duration: nullClip.duration,
+        name: nullClip.name,
+        graphRevisionBefore,
+        graphRevisionAfter: getTimelineMotionStructureGraphRevision(compositionId, clipsAfter),
+        diagnostics: [],
+        history: { mode: 'single-entry', label: 'Create Null', atomic: true },
+        ...mutationReceipt,
+      },
+    };
+  } catch (error) {
+    return reject(
+      'MD6_STRUCTURE_CREATE_NULL_INVALID_INPUT',
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
+export async function handleEditMotionAdjustment(
+  args: Record<string, unknown>,
+  timelineStore: TimelineStore,
+): Promise<ToolResult> {
+  const clipSnapshot = captureMutationEntitySnapshot('clip', timelineStore.clips);
+  const effectSnapshot = captureMutationEntitySnapshot(
+    'effect',
+    timelineStore.clips.flatMap((clip) => clip.effects),
+  );
+  const result = applyTimelineMotionAdjustmentMutation(args);
+  if (!result.ok) {
+    return {
+      success: false,
+      error: result.failure.message,
+      data: result.failure,
+    };
+  }
+
+  const clipsAfter = useTimelineStore.getState().clips;
+  const effectMutation = describeMutationEntities(
+    effectSnapshot,
+    clipsAfter.flatMap((clip) => clip.effects),
+  );
+  if (result.receipt.operation !== 'remove') {
+    selectClipAndOpenTab(result.receipt.clipId, 'adjustment');
+  }
+  return {
+    success: true,
+    data: {
+      ...result.receipt,
+      ...describeMutationEntities(clipSnapshot, clipsAfter),
+      effectEntities: effectMutation.entities,
+    },
+  };
+}
+
 export async function handleCreateMotionShapeClip(
   args: Record<string, unknown>,
   timelineStore: TimelineStore,
@@ -107,6 +424,12 @@ export async function handleCreateMotionShapeClip(
     const duration = args.duration === undefined
       ? 5
       : validateFiniteNumber(args.duration, 'duration', Number.EPSILON, Number.MAX_SAFE_INTEGER);
+    const x = args.x === undefined
+      ? undefined
+      : validateFiniteNumber(args.x, 'x', -100000, 100000);
+    const y = args.y === undefined
+      ? undefined
+      : validateFiniteNumber(args.y, 'y', -100000, 100000);
     const primitive = args.primitive === undefined ? 'rectangle' : args.primitive;
     if (
       typeof primitive !== 'string'
@@ -242,15 +565,43 @@ export async function handleCreateMotionShapeClip(
       });
     }
 
-    const finalClip = useTimelineStore.getState().clips.find((clip) => clip.id === clipId);
+    let finalClip = useTimelineStore.getState().clips.find((clip) => clip.id === clipId);
     if (!finalClip || !isMotionShapeClip(finalClip)) {
       return failure(`Created motion shape could not be resolved: ${clipId}`);
+    }
+    if (x !== undefined || y !== undefined) {
+      const context = resolveClipPositionAuthoringContext(finalClip);
+      let positionedClip: TimelineClip = finalClip;
+      for (const [path, value] of [['position.x', x], ['position.y', y]] as const) {
+        if (value === undefined) continue;
+        positionedClip = writePropertyAuthoringValue(
+          propertyRegistry,
+          positionedClip,
+          path,
+          value,
+          context,
+        );
+      }
+      useTimelineStore.getState().updateClip(clipId, {
+        transform: structuredClone(positionedClip.transform),
+      });
+      finalClip = useTimelineStore.getState().clips.find((clip) => clip.id === clipId);
+      if (!finalClip || !isMotionShapeClip(finalClip)) {
+        return failure(`Positioned motion shape could not be resolved: ${clipId}`);
+      }
     }
     selectClipAndOpenTab(clipId, 'motion');
     return {
       success: true,
       data: {
         ...describeMotionDesignForAi(finalClip),
+        commonEditablePaths: {
+          x: 'position.x',
+          y: 'position.y',
+          width: 'shape.size.w',
+          height: 'shape.size.h',
+          cornerRadius: 'shape.cornerRadius',
+        },
         ...describeMutationEntities(
           mutationSnapshot,
           useTimelineStore.getState().clips,
@@ -436,6 +787,56 @@ export async function handleUpdateMotionAppearances(
   }
 }
 
+export async function handleEditMotionModifier(
+  args: Record<string, unknown>,
+  timelineStore: TimelineStore,
+): Promise<ToolResult> {
+  const clipResult = findMotionShapeClip(args.clipId, timelineStore);
+  if (!clipResult.success) return clipResult.result;
+  try {
+    const operationName = requiredNonEmptyString(args.operation, 'operation');
+    if (operationName instanceof Error) return failure(operationName.message);
+    if (!['add', 'update', 'remove', 'reorder', 'set-falloff', 'clear-falloff'].includes(operationName)) return failure('operation must be add, update, remove, reorder, set-falloff, or clear-falloff');
+    const current = clipResult.clip.motion?.modifierStack;
+    const revision = current ? parseMotionModifierStackContract(current).revision : 0;
+    const expectedRevision = optionalInteger(args.expectedRevision, 'expectedRevision', 0, Number.MAX_SAFE_INTEGER);
+    if (expectedRevision !== undefined && expectedRevision !== revision) return failure(`Stale Motion Modifier revision: expected ${expectedRevision}, current ${revision}`);
+    const fields = Object.fromEntries(['seed', 'indexFrequency', 'timeFrequencyHz', 'octaves', 'lacunarity', 'persistence', 'waveform', 'frequencyHz', 'cyclesAcrossInstances', 'phaseDegrees', 'field', 'centerX', 'centerY', 'radius', 'exponent'].filter((key) => args[key] !== undefined).map((key) => [key, args[key]]));
+    for (const key of ['seed', 'octaves']) if (fields[key] !== undefined) fields[key] = validateInteger(fields[key], key, key === 'seed' ? 0 : 1, key === 'seed' ? 0xffff_ffff : 8);
+    for (const key of ['indexFrequency', 'timeFrequencyHz']) if (fields[key] !== undefined) fields[key] = validateFiniteNumber(fields[key], key, 0, 1000);
+    for (const key of ['lacunarity']) if (fields[key] !== undefined) fields[key] = validateFiniteNumber(fields[key], key, 1, 8);
+    for (const key of ['persistence']) if (fields[key] !== undefined) fields[key] = validateFiniteNumber(fields[key], key, 0, 1);
+    for (const key of ['frequencyHz']) if (fields[key] !== undefined) fields[key] = validateFiniteNumber(fields[key], key, 0, 1000);
+    for (const key of ['cyclesAcrossInstances']) if (fields[key] !== undefined) fields[key] = validateFiniteNumber(fields[key], key, -1000, 1000);
+    for (const key of ['phaseDegrees', 'centerX', 'centerY']) if (fields[key] !== undefined) fields[key] = validateFiniteNumber(fields[key], key, -1_000_000, 1_000_000);
+    if (fields.radius !== undefined) fields.radius = validateFiniteNumber(fields.radius, 'radius', Number.MIN_VALUE, 1_000_000);
+    if (fields.exponent !== undefined) fields.exponent = validateFiniteNumber(fields.exponent, 'exponent', 0.01, 32);
+    if (fields.waveform !== undefined && !['sine', 'triangle', 'square'].includes(fields.waveform as string)) return failure('waveform must be sine, triangle, or square');
+    if (fields.field !== undefined && fields.field !== 'radial-distance') return failure('field must be radial-distance');
+    const target = args.targetPath === undefined && args.targetOperation === undefined && args.targetAmount === undefined ? undefined : (() => {
+      if (!MOTION_MODIFIER_TARGET_PATHS.includes(args.targetPath as never)) throw new Error(`targetPath must be one of: ${MOTION_MODIFIER_TARGET_PATHS.join(', ')}`);
+      if (args.targetOperation !== 'add' && args.targetOperation !== 'multiply') throw new Error('targetOperation must be add or multiply');
+      return { path: args.targetPath as string, operation: args.targetOperation as string, amount: validateFiniteNumber(args.targetAmount, 'targetAmount', -MOTION_MODIFIER_MAX_ABS_AMOUNT, MOTION_MODIFIER_MAX_ABS_AMOUNT) };
+    })();
+    let operation: MotionModifierSemanticOperation;
+    if (operationName === 'add') { if (!['random', 'noise', 'oscillator', 'field'].includes(args.kind as string)) return failure('kind must be random, noise, oscillator, or field'); if (!target) return failure('add requires targetPath, targetOperation, and targetAmount'); operation = { type: 'add', kind: args.kind as 'random' | 'noise' | 'oscillator' | 'field', enabled: optionalBoolean(args.enabled, 'enabled'), target, fields }; }
+    else if (operationName === 'update') { const modifierId = requiredNonEmptyString(args.modifierId, 'modifierId'); if (modifierId instanceof Error) return failure(modifierId.message); operation = { type: 'update', modifierId, enabled: optionalBoolean(args.enabled, 'enabled'), target, fields }; }
+    else if (operationName === 'remove') { const modifierId = requiredNonEmptyString(args.modifierId, 'modifierId'); if (modifierId instanceof Error) return failure(modifierId.message); operation = { type: 'remove', modifierId }; }
+    else if (operationName === 'reorder') { const modifierId = requiredNonEmptyString(args.modifierId, 'modifierId'); if (modifierId instanceof Error) return failure(modifierId.message); operation = { type: 'reorder', modifierId, newIndex: validateInteger(args.newIndex, 'newIndex', 0, Number.MAX_SAFE_INTEGER) }; }
+    else if (operationName === 'set-falloff') { const shapeClipId = requiredNonEmptyString(args.falloffShapeClipId, 'falloffShapeClipId'); if (shapeClipId instanceof Error) return failure(shapeClipId.message); operation = { type: 'set-falloff', falloff: { shapeClipId, shapeRevision: 0, feather: validateFiniteNumber(args.falloffFeather ?? 0, 'falloffFeather', 0, 10), invert: optionalBoolean(args.falloffInvert, 'falloffInvert') ?? false, clip: optionalBoolean(args.falloffClip, 'falloffClip') ?? false } }; }
+    else operation = { type: 'clear-falloff' };
+    const plan = planMotionModifierSemanticOperation(current, operation);
+    if (!plan.ok) return { success: false, error: plan.diagnostics[0].message, data: plan };
+    const plannedStack = parseMotionModifierStackContract(plan.contract);
+    const beforeIds = new Set(current?.modifiers.map((modifier) => modifier.id) ?? []);
+    useTimelineStore.getState().updateMotionLayer(clipResult.clip.id, (motion) => ({ ...motion, modifierStack: plannedStack }));
+    const finalClip = useTimelineStore.getState().clips.find((clip) => clip.id === clipResult.clip.id);
+    if (!finalClip || !isMotionShapeClip(finalClip)) return failure(`Motion shape disappeared: ${clipResult.clip.id}`);
+    const afterIds = new Set(plannedStack.modifiers.map((modifier) => modifier.id));
+    return { success: true, data: { ...describeMotionDesignForAi(finalClip), modifierStackRevision: { previous: revision, next: plannedStack.revision }, entities: { created: [...afterIds].filter((id) => !beforeIds.has(id)).map((id) => ({ id, kind: 'modifier' })), updated: operationName === 'update' ? [{ id: (operation as any).modifierId, kind: 'modifier' }] : [], removed: [...beforeIds].filter((id) => !afterIds.has(id)).map((id) => ({ id, kind: 'modifier' })) }, history: { mode: 'single-entry', label: 'Edit Motion Modifier' }, stateRevisions: { timeline: getTimelineRevision() } } };
+  } catch (error) { return failure(errorMessage(error)); }
+}
+
 export async function handleConfigureMotionReplicator(
   args: Record<string, unknown>,
   timelineStore: TimelineStore,
@@ -443,62 +844,199 @@ export async function handleConfigureMotionReplicator(
   const clipResult = findMotionShapeClip(args.clipId, timelineStore);
   if (!clipResult.success) return clipResult.result;
 
-  const suppliedKeys = ['enabled', 'countX', 'countY', 'spacingX', 'spacingY', 'fade']
+  const suppliedKeys = [
+    'enabled', 'layoutMode', 'countX', 'countY', 'spacingX', 'spacingY',
+    'patternOffsetX', 'patternOffsetY', 'count', 'stepX', 'stepY', 'centerX',
+    'centerY', 'radius', 'startAngleDegrees', 'endAngleDegrees',
+    'angleSampling', 'autoOrient', 'offsetMode', 'offsetX', 'offsetY',
+    'rotationDegrees', 'scaleX', 'scaleY', 'fade', 'userLimit',
+  ]
     .filter((key) => args[key] !== undefined);
   if (suppliedKeys.length === 0) {
-    return failure('Provide at least one Grid Replicator setting');
+    return failure('Provide at least one Motion Replicator setting');
   }
 
   try {
     const enabled = optionalBoolean(args.enabled, 'enabled');
-    const countX = optionalInteger(
-      args.countX,
-      'countX',
-      1,
-      MOTION_DESIGN_MVP_MAX_COUNT_PER_AXIS,
-    );
-    const countY = optionalInteger(
-      args.countY,
-      'countY',
-      1,
-      MOTION_DESIGN_MVP_MAX_COUNT_PER_AXIS,
-    );
-    const spacingX = optionalFiniteNumber(args.spacingX, 'spacingX', -100000, 100000);
-    const spacingY = optionalFiniteNumber(args.spacingY, 'spacingY', -100000, 100000);
+    const countX = optionalInteger(args.countX, 'countX', 1, MOTION_DESIGN_MVP_MAX_COUNT_PER_AXIS);
+    const countY = optionalInteger(args.countY, 'countY', 1, MOTION_DESIGN_MVP_MAX_COUNT_PER_AXIS);
+    const spacingX = optionalFiniteNumber(args.spacingX, 'spacingX', -1_000_000, 1_000_000);
+    const spacingY = optionalFiniteNumber(args.spacingY, 'spacingY', -1_000_000, 1_000_000);
+    const patternOffsetX = optionalFiniteNumber(args.patternOffsetX, 'patternOffsetX', -1_000_000, 1_000_000);
+    const patternOffsetY = optionalFiniteNumber(args.patternOffsetY, 'patternOffsetY', -1_000_000, 1_000_000);
+    const count = optionalInteger(args.count, 'count', 1, MOTION_REPLICATOR_SHADER_MAX_INSTANCES);
+    const stepX = optionalFiniteNumber(args.stepX, 'stepX', -1_000_000, 1_000_000);
+    const stepY = optionalFiniteNumber(args.stepY, 'stepY', -1_000_000, 1_000_000);
+    const centerX = optionalFiniteNumber(args.centerX, 'centerX', -1_000_000, 1_000_000);
+    const centerY = optionalFiniteNumber(args.centerY, 'centerY', -1_000_000, 1_000_000);
+    const radius = optionalFiniteNumber(args.radius, 'radius', 0, 1_000_000);
+    const startAngleDegrees = optionalFiniteNumber(args.startAngleDegrees, 'startAngleDegrees', -1_000_000, 1_000_000);
+    const endAngleDegrees = optionalFiniteNumber(args.endAngleDegrees, 'endAngleDegrees', -1_000_000, 1_000_000);
+    const autoOrient = optionalBoolean(args.autoOrient, 'autoOrient');
+    const offsetX = optionalFiniteNumber(args.offsetX, 'offsetX', -1_000_000, 1_000_000);
+    const offsetY = optionalFiniteNumber(args.offsetY, 'offsetY', -1_000_000, 1_000_000);
+    const rotationDegrees = optionalFiniteNumber(args.rotationDegrees, 'rotationDegrees', -1_000_000, 1_000_000);
+    const scaleX = optionalFiniteNumber(args.scaleX, 'scaleX', -10_000, 10_000);
+    const scaleY = optionalFiniteNumber(args.scaleY, 'scaleY', -10_000, 10_000);
     const fade = optionalFiniteNumber(args.fade, 'fade', 0, 1);
+    const userLimit = optionalInteger(args.userLimit, 'userLimit', 1, MOTION_REPLICATOR_SHADER_MAX_INSTANCES);
     const currentReplicator = clipResult.clip.motion?.replicator
-      ?? createDefaultReplicatorDefinition();
-    const currentGrid = currentReplicator.layout.mode === 'grid'
-      ? currentReplicator.layout
-      : createDefaultReplicatorDefinition().layout;
-    if (currentGrid.mode !== 'grid') {
-      return failure('Only the Grid Replicator is supported in Motion Design MD0');
+      ? normalizeMotionReplicatorBundle(
+          clipResult.clip.motion.replicator,
+          clipResult.clip.motion.modifierStack,
+        ).replicator
+      : createDefaultReplicatorDefinition();
+    const expectedRevision = optionalInteger(
+      args.expectedRevision,
+      'expectedRevision',
+      0,
+      Number.MAX_SAFE_INTEGER,
+    );
+    if (expectedRevision !== undefined && expectedRevision !== currentReplicator.revision) {
+      return failure(
+        `Stale Motion Replicator revision: expected ${expectedRevision}, current ${currentReplicator.revision}`,
+      );
     }
-    const nextCountX = countX ?? currentGrid.count.x;
-    const nextCountY = countY ?? currentGrid.count.y;
-    if (nextCountX * nextCountY > 100) {
-      return failure('The current Grid Replicator supports at most 100 instances');
+
+    const layoutMode = args.layoutMode === undefined
+      ? currentReplicator.layout.mode
+      : args.layoutMode;
+    if (layoutMode !== 'grid' && layoutMode !== 'linear' && layoutMode !== 'radial') {
+      return failure('layoutMode must be grid, linear, or radial');
+    }
+    const angleSampling = args.angleSampling;
+    if (
+      angleSampling !== undefined
+      && angleSampling !== 'inclusive-end'
+      && angleSampling !== 'exclusive-end'
+    ) {
+      return failure('angleSampling must be inclusive-end or exclusive-end');
+    }
+    const offsetMode = args.offsetMode;
+    if (offsetMode !== undefined && offsetMode !== 'cumulative' && offsetMode !== 'absolute') {
+      return failure('offsetMode must be cumulative or absolute');
+    }
+
+    let plannedReplicator = currentReplicator;
+    const applyPlan = (
+      operation: Parameters<typeof planMotionReplicatorSemanticOperation>[1],
+    ): boolean => {
+      const plan = planMotionReplicatorSemanticOperation(plannedReplicator, operation);
+      if (!plan.ok) return false;
+      plannedReplicator = plan.contract;
+      return true;
+    };
+
+    const hasLayoutInput = args.layoutMode !== undefined
+      || [
+        countX, countY, spacingX, spacingY, patternOffsetX, patternOffsetY,
+        count, stepX, stepY, centerX, centerY, radius, startAngleDegrees,
+        endAngleDegrees, angleSampling, autoOrient,
+      ].some((value) => value !== undefined);
+    let nextLayout = currentReplicator.layout;
+    if (layoutMode === 'grid') {
+      const current = currentReplicator.layout.mode === 'grid'
+        ? currentReplicator.layout
+        : createDefaultReplicatorDefinition().layout;
+      if (current.mode !== 'grid') throw new Error('Default Replicator layout must be Grid');
+      nextLayout = {
+        ...current,
+        count: {
+          columns: countX ?? current.count.columns,
+          rows: countY ?? current.count.rows,
+        },
+        spacing: {
+          x: spacingX ?? current.spacing.x,
+          y: spacingY ?? current.spacing.y,
+        },
+        patternOffset: {
+          x: patternOffsetX ?? current.patternOffset.x,
+          y: patternOffsetY ?? current.patternOffset.y,
+        },
+      };
+    } else if (layoutMode === 'linear') {
+      const current = currentReplicator.layout.mode === 'linear'
+        ? currentReplicator.layout
+        : { mode: 'linear' as const, count: 3, step: { x: 120, y: 0 } };
+      nextLayout = {
+        ...current,
+        count: count ?? current.count,
+        step: { x: stepX ?? current.step.x, y: stepY ?? current.step.y },
+      };
+    } else {
+      const current = currentReplicator.layout.mode === 'radial'
+        ? currentReplicator.layout
+        : {
+            mode: 'radial' as const,
+            count: 8,
+            center: { x: 0, y: 0 },
+            radius: 180,
+            startAngleDegrees: 0,
+            endAngleDegrees: 360,
+            angleSampling: 'exclusive-end' as const,
+            autoOrient: false,
+          };
+      nextLayout = {
+        ...current,
+        count: count ?? current.count,
+        center: { x: centerX ?? current.center.x, y: centerY ?? current.center.y },
+        radius: radius ?? current.radius,
+        startAngleDegrees: startAngleDegrees ?? current.startAngleDegrees,
+        endAngleDegrees: endAngleDegrees ?? current.endAngleDegrees,
+        angleSampling: angleSampling ?? current.angleSampling,
+        autoOrient: autoOrient ?? current.autoOrient,
+      };
+    }
+    if (hasLayoutInput && !applyPlan({
+      type: 'set-layout',
+      expectedRevision: plannedReplicator.revision,
+      layout: nextLayout,
+    })) {
+      return failure('Motion Replicator layout failed contract validation');
+    }
+
+    const hasTerminalInput = [
+      offsetMode, offsetX, offsetY, rotationDegrees, scaleX, scaleY, fade,
+    ].some((value) => value !== undefined);
+    if (hasTerminalInput && !applyPlan({
+      type: 'set-terminal-transform',
+      expectedRevision: plannedReplicator.revision,
+      terminalTransform: {
+        ...plannedReplicator.terminalTransform,
+        mode: offsetMode ?? plannedReplicator.terminalTransform.mode,
+        position: {
+          x: offsetX ?? plannedReplicator.terminalTransform.position.x,
+          y: offsetY ?? plannedReplicator.terminalTransform.position.y,
+        },
+        rotationDegrees: rotationDegrees ?? plannedReplicator.terminalTransform.rotationDegrees,
+        scale: {
+          x: scaleX ?? plannedReplicator.terminalTransform.scale.x,
+          y: scaleY ?? plannedReplicator.terminalTransform.scale.y,
+        },
+        opacity: fade ?? plannedReplicator.terminalTransform.opacity,
+      },
+    })) {
+      return failure('Motion Replicator terminal transform failed contract validation');
+    }
+    if (userLimit !== undefined && !applyPlan({
+      type: 'set-user-limit',
+      expectedRevision: plannedReplicator.revision,
+      userLimit,
+    })) {
+      return failure('Motion Replicator user limit failed contract validation');
+    }
+    if (enabled !== undefined && !applyPlan({
+      type: 'set-enabled',
+      expectedRevision: plannedReplicator.revision,
+      enabled,
+    })) {
+      return failure('Motion Replicator enabled state failed contract validation');
     }
 
     const mutationSnapshot = captureMutationEntitySnapshot('clip', [clipResult.clip]);
     useTimelineStore.getState().updateMotionLayer(clipResult.clip.id, (motion) => ({
       ...motion,
-      replicator: {
-        ...currentReplicator,
-        enabled: enabled ?? currentReplicator.enabled,
-        layout: {
-          ...currentGrid,
-          count: { x: nextCountX, y: nextCountY },
-          spacing: {
-            x: spacingX ?? currentGrid.spacing.x,
-            y: spacingY ?? currentGrid.spacing.y,
-          },
-        },
-        offset: {
-          ...currentReplicator.offset,
-          opacity: fade ?? currentReplicator.offset.opacity,
-        },
-      },
+      replicator: plannedReplicator,
     }));
 
     const finalClip = useTimelineStore.getState().clips.find(
@@ -513,6 +1051,10 @@ export async function handleConfigureMotionReplicator(
       data: {
         ...describeMotionDesignForAi(finalClip),
         configuredProperties: suppliedKeys,
+        replicatorRevision: {
+          previous: currentReplicator.revision,
+          next: plannedReplicator.revision,
+        },
         ...describeMutationEntities(
           mutationSnapshot,
           [finalClip],
@@ -1224,6 +1766,50 @@ function requiredNonEmptyString(value: unknown, fieldName: string): string | Err
     return new Error(`${fieldName} must be a non-empty string`);
   }
   return value.trim();
+}
+
+function flattenTimelineKeyframes(
+  keyframes: TimelineStore['clipKeyframes'],
+): Keyframe[] {
+  return [...keyframes.values()].flat();
+}
+
+function describeMotionParentMutationEntities(input: {
+  clipSnapshot: MutationEntitySnapshot<TimelineClip>;
+  keyframeSnapshot: MutationEntitySnapshot<Keyframe>;
+  clipsAfter: readonly TimelineClip[];
+  keyframesAfter: TimelineStore['clipKeyframes'];
+  updatedClipIds: readonly string[];
+}) {
+  const clipReceipt = describeMutationEntities(
+    input.clipSnapshot,
+    input.clipsAfter,
+    { updatedEntityIds: input.updatedClipIds },
+  );
+  const keyframeReceipt = describeMutationEntities(
+    input.keyframeSnapshot,
+    flattenTimelineKeyframes(input.keyframesAfter),
+    {
+      updatedEntityIds: flattenTimelineKeyframes(input.keyframesAfter)
+        .filter((keyframe) => input.updatedClipIds.includes(keyframe.clipId))
+        .map((keyframe) => keyframe.id),
+    },
+  );
+  return {
+    stateRevisionBefore: Math.min(
+      clipReceipt.stateRevisionBefore,
+      keyframeReceipt.stateRevisionBefore,
+    ),
+    stateRevisionAfter: Math.max(
+      clipReceipt.stateRevisionAfter,
+      keyframeReceipt.stateRevisionAfter,
+    ),
+    entities: {
+      created: [...clipReceipt.entities.created, ...keyframeReceipt.entities.created],
+      updated: [...clipReceipt.entities.updated, ...keyframeReceipt.entities.updated],
+      deleted: [...clipReceipt.entities.deleted, ...keyframeReceipt.entities.deleted],
+    },
+  };
 }
 
 function optionalNonEmptyString(

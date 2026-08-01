@@ -37,7 +37,7 @@ describe('dock panel configs', () => {
 
   it('excludes retired dock panel ids from the active panel contract', () => {
     const activePanelTypes = Object.keys(PANEL_CONFIGS);
-    const retiredPanelTypes = ['ai-chat', 'ai-video', 'youtube', 'download'];
+    const retiredPanelTypes = ['ai-chat', 'ai-video', 'youtube', 'download', 'multicam'];
 
     retiredPanelTypes.forEach((type) => {
       expect(activePanelTypes).not.toContain(type);
@@ -47,12 +47,11 @@ describe('dock panel configs', () => {
     });
   });
 
-  it('keeps layout-only and legacy panels out of panel pickers', () => {
+  it('keeps layout-only and hidden panels out of panel pickers', () => {
     expect(PANEL_PICKER_HIDDEN_TYPES).toEqual(
-      expect.arrayContaining(['start', 'multicam', 'scene-description']),
+      expect.arrayContaining(['start', 'scene-description']),
     );
     expect(PANEL_CONFIGS.start).toBeDefined();
-    expect(PANEL_CONFIGS.multicam).toBeDefined();
     expect(PANEL_CONFIGS['scene-description']).toBeDefined();
   });
 });

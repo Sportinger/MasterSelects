@@ -7,6 +7,8 @@ interface DragState {
   startY: number;
   currentX: number;
   currentY: number;
+  status?: 'idle' | 'valid' | 'blocked';
+  diagnostic?: string;
 }
 
 interface PickWhipCablesProps {
@@ -20,7 +22,7 @@ export function PickWhipCables({ pickWhipDrag, trackPickWhipDrag }: PickWhipCabl
       {/* Pick whip drag line - physics cable (clip parenting) */}
       {pickWhipDrag && (
         <svg
-          className="pick-whip-drag-overlay"
+          className={`pick-whip-drag-overlay ${pickWhipDrag.status ?? 'idle'}`}
           style={{
             position: 'fixed',
             top: 0,
@@ -39,6 +41,16 @@ export function PickWhipCables({ pickWhipDrag, trackPickWhipDrag }: PickWhipCabl
             isPreview={true}
           />
         </svg>
+      )}
+      {pickWhipDrag?.diagnostic && (
+        <div
+          className={`pick-whip-diagnostic ${pickWhipDrag.status ?? 'idle'}`}
+          role="status"
+          aria-live="polite"
+          style={{ left: pickWhipDrag.currentX + 14, top: pickWhipDrag.currentY + 14 }}
+        >
+          {pickWhipDrag.diagnostic}
+        </div>
       )}
 
       {/* Track pick whip drag line - physics cable (layer parenting) */}

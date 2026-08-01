@@ -97,4 +97,52 @@ describe('MotionShapeTab MD1 authoring', () => {
         .not.toEqual(gradients[0].stops.map((stop) => stop.id));
     }
   });
+
+  it('authors Grid, Linear, and Radial Replicator modes through semantic revisions', () => {
+    render(<MotionShapeTab clipId={clipId} />);
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Enable Replicator' }));
+    let replicator = useTimelineStore.getState().clips.find(
+      (clip) => clip.id === clipId,
+    )?.motion?.replicator;
+    expect(replicator).toMatchObject({ enabled: true, revision: 1 });
+    expect(screen.getByText('Columns')).toBeInTheDocument();
+    expect(screen.getByText('Rows')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Replicator layout' }), {
+      target: { value: 'linear' },
+    });
+    replicator = useTimelineStore.getState().clips.find(
+      (clip) => clip.id === clipId,
+    )?.motion?.replicator;
+    expect(replicator).toMatchObject({
+      revision: 2,
+      layout: { mode: 'linear', count: 3, step: { x: 120, y: 0 } },
+    });
+    expect(screen.getByText('Step X')).toBeInTheDocument();
+    expect(screen.getByText('Step Y')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Replicator layout' }), {
+      target: { value: 'radial' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Radial angle sampling' }), {
+      target: { value: 'inclusive-end' },
+    });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Radial auto orient' }));
+
+    replicator = useTimelineStore.getState().clips.find(
+      (clip) => clip.id === clipId,
+    )?.motion?.replicator;
+    expect(replicator).toMatchObject({
+      revision: 5,
+      layout: {
+        mode: 'radial',
+        count: 8,
+        angleSampling: 'inclusive-end',
+        autoOrient: true,
+      },
+    });
+    expect(screen.getByText('Center X')).toBeInTheDocument();
+    expect(screen.getAllByText('Radius').length).toBeGreaterThan(0);
+  });
 });

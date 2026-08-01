@@ -1,5 +1,4 @@
 export type HostedAgentK3ProviderRoute =
-  | 'kie-byo-direct'
   | 'kie-managed-hosted'
   | 'local-ai';
 
@@ -18,7 +17,6 @@ export interface HostedAgentK3RouteDecision {
   canaryBucket: number | null;
   executionRoute: HostedAgentK3ExecutionRoute;
   reason:
-    | 'byo_stays_direct'
     | 'canary_cohort'
     | 'canary_not_selected'
     | 'emergency_rollback'
@@ -44,8 +42,8 @@ function validCanaryPercent(value: number): boolean {
 /**
  * Provider routing truth for the hosted-agent canary.
  *
- * BYO credentials never move to the kernel and Local AI remains client-owned.
- * Turning `hostedAgentEnabled` off is the one-flag rollback for every managed
+ * Local AI remains client-owned. Turning `hostedAgentEnabled` off is the
+ * one-flag rollback for every managed
  * Kie.ai cohort and requires no project-data migration.
  */
 export function decideHostedAgentK3Route(input: {
@@ -60,13 +58,6 @@ export function decideHostedAgentK3Route(input: {
       canaryBucket: null,
       executionRoute: 'local-direct',
       reason: 'local_stays_local',
-    };
-  }
-  if (input.providerRoute === 'kie-byo-direct') {
-    return {
-      canaryBucket: null,
-      executionRoute: 'legacy-direct',
-      reason: 'byo_stays_direct',
     };
   }
   if (input.config.emergencyRollback) {

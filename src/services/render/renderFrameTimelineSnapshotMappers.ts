@@ -13,6 +13,10 @@ import type {
   TimelineClipDataSource,
   TimelineTrack,
 } from '../../types/timeline';
+import {
+  normalizeMotionLayerDefinition,
+  normalizeMotionLayerDefinitionForLoad,
+} from '../motionDesign/contracts/replicatorTimelineAdapter';
 
 export function cloneData<T>(value: T | undefined): T | undefined {
   return value === undefined ? undefined : JSON.parse(JSON.stringify(value)) as T;
@@ -121,7 +125,8 @@ export function mapTimelineClip(
     masks: cloneData(clip.masks),
     textProperties: cloneData(clip.textProperties),
     text3DProperties: cloneData(clip.text3DProperties),
-    motion: cloneData(clip.motion),
+    motion: clip.motion ? normalizeMotionLayerDefinition(clip.motion) : undefined,
+    keyframes: cloneData((clip as TimelineClip & { keyframes?: readonly Keyframe[] }).keyframes),
     transitionIn: cloneData(clip.transitionIn),
     transitionOut: cloneData(clip.transitionOut),
     is3D: clip.is3D,
@@ -179,7 +184,8 @@ export function mapSerializableClip(
     masks: cloneData(clip.masks),
     textProperties: cloneData(clip.textProperties),
     text3DProperties: cloneData(clip.text3DProperties),
-    motion: cloneData(clip.motion),
+    motion: clip.motion ? normalizeMotionLayerDefinitionForLoad(clip.motion) : undefined,
+    keyframes: cloneData(clip.keyframes),
     transitionIn: cloneData(clip.transitionIn),
     transitionOut: cloneData(clip.transitionOut),
     is3D: clip.is3D,

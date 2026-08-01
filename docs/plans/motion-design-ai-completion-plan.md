@@ -1,6 +1,6 @@
 # MasterSelects Motion Design + AI Completion Plan
 
-Status: Active implementation plan
+Status: Active implementation plan; MD0-MD2 complete, MD3-MD9 open
 Date: 2026-07-31
 Historical plan: [`../completed/plans/motion-design-system-plan.md`](../completed/plans/motion-design-system-plan.md)
 Current implementation reference: [`../Features/Motion-Design.md`](../Features/Motion-Design.md)
@@ -21,8 +21,8 @@ The original work was not removed. The current tree already contains:
 | Area | Current state |
 |---|---|
 | Motion schema | Versioned shape, null, adjustment, group, appearance, and replicator contracts exist |
-| Shape rendering | Rectangle, ellipse, polygon, and star rendering is an implementation candidate through the native WebGPU Motion path |
-| Appearance | Ordered color fill, stroke, linear/radial gradient, opacity, visibility, and supported blend behavior is an implementation candidate |
+| Shape rendering | Rectangle, ellipse, polygon, and star render through the native WebGPU Motion path with recorded direct/nested preview/export evidence |
+| Appearance | Ordered color fill, stroke, linear/radial gradient, opacity, visibility, and supported blend behavior is complete for the MD1 scope |
 | Animation | Numeric shape, appearance, and Grid Replicator properties use the shared property/keyframe system |
 | Grid Replicator | Count, spacing, pattern offset data, position spacing contribution, and opacity fade render through instanced draws, currently capped at 100 instances |
 | Editor creation | Motion Rectangle and Motion Ellipse media items can be created and placed on video tracks |
@@ -32,8 +32,8 @@ The original work was not removed. The current tree already contains:
 | Tests | Motion helper, property registry, timeline restore, and architecture coverage exists |
 | AI | The MD0 semantic tool group is exposed for capability/state reads, rectangle/ellipse creation, current properties/appearances, and Grid configuration; later-phase capabilities remain intentionally unavailable |
 | Structural layers | Null, adjustment, and group data is scaffolded, but no complete authoring/render workflows exist |
-| Advanced appearance | MD1 primitive/appearance work is an implementation candidate pending pixel goldens; texture fills remain deferred to MD5 |
-| Advanced animation | Property browser/pins, unified global graph mode, shared keyframe transactions, and viewport motion paths are implementation candidates; disposable Wave D parity evidence remains |
+| Advanced appearance | MD1 primitives/appearances and four-surface pixel goldens are complete; texture fills remain deferred to MD5 |
+| Advanced animation | MD2 property browser/pins, unified global graph mode, shared keyframe transactions, viewport motion-path nodes/onions, scalar-handle-backed spatial handles, and disposable Wave D parity evidence are complete |
 | Advanced replicators | Linear/radial layouts, transform offsets, modifiers, falloffs, direct media replication, and 10k-instance performance are not complete |
 | Feature flags | The stale `useMotionDesignSystem` and `useMotionReplicators` placeholders were retired in MD0; the existing Shape/Grid MVP is always part of the native layer path |
 
@@ -216,9 +216,11 @@ Implementation and automated gates are complete:
 
 Evidence: [`../evidence/motion-design/md0-existing-mvp.md`](../evidence/motion-design/md0-existing-mvp.md).
 
-One evidence item remains before checking `MD0_EXISTING_MVP_COMPLETE`: capture the visual lower-third fixture in a disposable browser/project and compare a representative preview/export frame. The connected editor contained user media and storyboard work, so the implementation run deliberately performed read-only bridge checks only; no live project content was changed.
-
-A later final typecheck rerun was blocked by concurrently added, out-of-scope Transition Preview imports whose modules were not yet present. The earlier green MD0 typecheck and all targeted Motion/AI regressions remain recorded; the unrelated transition files were not modified.
+The final exact-target report and direct/nested lower-third PNGs are recorded
+under [`../evidence/motion-design/md0/`](../evidence/motion-design/md0/).
+The report proves one-batch undo/redo, composition save/reopen, preview/export
+parity, successful encoded exports, and state restoration in an unsaved,
+chat-free disposable session. `MD0_EXISTING_MVP_COMPLETE` is closed.
 
 ## Phase 1 — Complete Shape Primitives and Appearance Stacks
 
@@ -251,12 +253,11 @@ Goal: turn the Shape MVP into a useful graphics layer.
 - Copy/paste, split, duplicate, nesting, and project round-trip preserve the full stack.
 - Golden tests cover every primitive and appearance family.
 
-Implementation candidate: the engine, UI, AI, registry, persistence, split
-cloning, preset serialization, shader compilation, and preview/nested/export
-state-parity work is in place. Evidence is recorded in
+The engine, UI, AI, registry, persistence, split cloning, preset serialization,
+shader compilation, and preview/nested/export parity work is complete for MD1.
+The four-surface report and pixel goldens are recorded in
 [`../evidence/motion-design/md1-shapes-appearances.md`](../evidence/motion-design/md1-shapes-appearances.md).
-The final gate remains unchecked until disposable-browser preview/export pixel
-goldens are captured; the connected editor project was not mutated for evidence.
+`MD1_SHAPES_AND_APPEARANCES_COMPLETE` is closed.
 
 ### Required scenario
 
@@ -299,6 +300,11 @@ Detailed execution plan:
 ### Required scenario
 
 The AI creates a two-stage slide-and-overshoot entrance, while a human can immediately inspect and adjust the same position/opacity curves in global graph mode.
+
+The exact-target Wave D report plus six Graph, Motion Path, preview, nested, and
+export baselines are recorded in
+[`../evidence/motion-design/md2-authoring-animation.md`](../evidence/motion-design/md2-authoring-animation.md).
+`MD2_AUTHORING_AND_ANIMATION_COMPLETE` is closed.
 
 ## Phase 3 — Complete the Core Replicator
 
@@ -580,9 +586,9 @@ MD1–MD7 stable schemas ─> MD8 presets/templates/expressions ─> MD9 release
 
 MD0 is mandatory before expanding scope. It proves the vertical-slice rule and gives the AI access to the already working implementation.
 
-## First Implementation Packet
+## Completed First Implementation Packet
 
-The first packet should be deliberately narrow:
+The first packet was deliberately narrow and is complete:
 
 1. Add shared capability and validation contracts for the existing rectangle/ellipse MVP.
 2. Add `getMotionCapabilities` and `getMotionDesign`.
@@ -593,13 +599,15 @@ The first packet should be deliberately narrow:
 7. Update the FlashBoard tool selection and prompt.
 8. Add one bridge-driven lower-third fixture with save/reload and preview/export evidence.
 
-Do not start polygon/star, gradients, or a larger Replicator rewrite until gate `MD0_EXISTING_MVP_COMPLETE` is green.
+The original expansion guard is satisfied: `MD0_EXISTING_MVP_COMPLETE` is green.
+Current work proceeds through the multilane plan's ownership and contract-freeze
+gates before the larger Replicator rewrite.
 
 ## Completion Checklist
 
-- [ ] `MD0_EXISTING_MVP_COMPLETE`
-- [ ] `MD1_SHAPES_AND_APPEARANCES_COMPLETE`
-- [ ] `MD2_AUTHORING_AND_ANIMATION_COMPLETE`
+- [x] `MD0_EXISTING_MVP_COMPLETE`
+- [x] `MD1_SHAPES_AND_APPEARANCES_COMPLETE`
+- [x] `MD2_AUTHORING_AND_ANIMATION_COMPLETE`
 - [ ] `MD3_REPLICATOR_CORE_COMPLETE`
 - [ ] `MD4_MODIFIERS_AND_FALLOFFS_COMPLETE`
 - [ ] `MD5_MEDIA_MOTION_COMPLETE`

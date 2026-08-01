@@ -11,6 +11,7 @@ import { sanitizePlayheadPosition } from '../../../services/layerBuilder/Playhea
 import { cloneClipNodeGraph } from '../../../services/nodeGraph';
 import { cloneStoryboardClipProperties } from '../../../services/storyboard/core';
 import { normalizeTransitionInstanceParams } from '../../../transitions';
+import { normalizeMotionLayerDefinition } from '../../../services/motionDesign/contracts/replicatorTimelineAdapter';
 import { useMediaStore } from '../../mediaStore';
 import { getDataOnlyTimelineSource } from '../sourceRuntimeSanitizer';
 import { serializeVideoBakeRegion } from '../videoBakeSlice';
@@ -93,6 +94,7 @@ function createSerializableClip(
     thumbnails: clip.thumbnails,
     linkedClipId: clip.linkedClipId,
     linkedGroupId: clip.linkedGroupId,
+    parentClipId: clip.parentClipId,
     videoState: clip.videoState
       ? {
           ...clip.videoState,
@@ -147,7 +149,7 @@ function createSerializableClip(
     mathScene: dataOnlySource?.type === 'math-scene' && clip.mathScene
       ? structuredClone(clip.mathScene)
       : undefined,
-    motion: clip.motion ? structuredClone(clip.motion) : undefined,
+    motion: clip.motion ? normalizeMotionLayerDefinition(clip.motion) : undefined,
     is3D: clip.is3D || undefined,
     threeDEffectorsEnabled: dataOnlySource?.threeDEffectorsEnabled,
     meshType: clip.meshType ?? dataOnlySource?.meshType,

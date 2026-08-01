@@ -1622,6 +1622,99 @@ describe('addCompClip nested restore', () => {
     expect(nestedClips[0].motion).not.toBe(motion);
   });
 
+  it('remaps nested Motion parent ids into the generated clip-id scope', async () => {
+    const videoTrack = track('video-1', 'video');
+    const motion = {
+      version: 1,
+      kind: 'shape',
+      shape: { primitive: 'rectangle', size: { w: 320, h: 180 } },
+    } satisfies NonNullable<SerializableClip['motion']>;
+    const parent = {
+      ...serializedClip('clip-parent', 'motion-shape', '', videoTrack.id),
+      motion,
+    } as SerializableClip;
+    const child = {
+      ...serializedClip('clip-child', 'motion-shape', '', videoTrack.id),
+      parentClipId: 'clip-parent',
+      motion,
+    } as SerializableClip;
+    const comp = composition('comp', [child, parent], [videoTrack]);
+    const harness = createStoreHarness();
+    vi.mocked(useMediaStore.getState).mockReturnValue({
+      files: [],
+      compositions: [comp],
+    } as ReturnType<typeof useMediaStore.getState>);
+
+    const nestedClips = await loadNestedClips({
+      compClipId: 'parent-comp-clip',
+      composition: comp,
+      get: harness.get,
+      set: harness.set,
+    });
+
+    expect(nestedClips.find((clip) => clip.id === 'nested-parent-comp-clip-clip-child')?.parentClipId)
+      .toBe('nested-parent-comp-clip-clip-parent');
+  });
+
+  it('sanitizes invalid parent graphs after lazy nested id remapping', async () => {
+    const videoTrack = track('video-1', 'video');
+    const motion = {
+      version: 1,
+      kind: 'shape',
+      shape: { primitive: 'rectangle', size: { w: 320, h: 180 } },
+    } satisfies NonNullable<SerializableClip['motion']>;
+    const clips = [
+      {
+        ...serializedClip('missing-child', 'motion-shape', '', videoTrack.id),
+        parentClipId: 'missing-parent',
+        motion,
+      },
+      {
+        ...serializedClip('cycle-a', 'motion-shape', '', videoTrack.id),
+        parentClipId: 'cycle-b',
+        motion,
+      },
+      {
+        ...serializedClip('cycle-b', 'motion-shape', '', videoTrack.id),
+        parentClipId: 'cycle-a',
+        motion,
+      },
+      {
+        ...serializedClip('three-d-parent', 'motion-shape', '', videoTrack.id),
+        is3D: true,
+        motion,
+      },
+      {
+        ...serializedClip('mixed-child', 'motion-shape', '', videoTrack.id),
+        parentClipId: 'three-d-parent',
+        motion,
+      },
+    ] as SerializableClip[];
+    const comp = composition('comp-invalid-parent-graph', clips, [videoTrack]);
+    const harness = createStoreHarness();
+    vi.mocked(useMediaStore.getState).mockReturnValue({
+      files: [],
+      compositions: [comp],
+    } as ReturnType<typeof useMediaStore.getState>);
+
+    const nestedClips = await loadNestedClips({
+      compClipId: 'parent-comp-clip',
+      composition: comp,
+      get: harness.get,
+      set: harness.set,
+    });
+
+    expect(nestedClips).toHaveLength(5);
+    expect(nestedClips.find((clip) => clip.id.endsWith('missing-child'))?.parentClipId)
+      .toBeUndefined();
+    expect(nestedClips.find((clip) => clip.id.endsWith('cycle-a'))?.parentClipId)
+      .toBeUndefined();
+    expect(nestedClips.find((clip) => clip.id.endsWith('cycle-b'))?.parentClipId)
+      .toBeUndefined();
+    expect(nestedClips.find((clip) => clip.id.endsWith('mixed-child'))?.parentClipId)
+      .toBeUndefined();
+  });
+
   it('skips stale nested keyframe merges', async () => {
     const videoTrack = track('video-1', 'video');
     const video = {

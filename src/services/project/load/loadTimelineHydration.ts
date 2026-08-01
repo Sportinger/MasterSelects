@@ -5,6 +5,7 @@ import type { TimelineClip } from '../../../stores/timeline/types';
 import { cloneClipNodeGraph } from '../../nodeGraph';
 import { cloneStoryboardClipProperties } from '../../storyboard/core';
 import { normalizeTransitionInstanceParams } from '../../../transitions';
+import { normalizeMotionLayerDefinitionForLoad } from '../../motionDesign/contracts/replicatorTimelineAdapter';
 import { fromProjectTransform } from '../transformSerialization';
 import { normalizeRulerLaneState } from '../../../timeline/tempo/rulerDefaults';
 import { hydrateMaskEdgeFeathers, hydrateMaskKeyframeProperty } from '../maskSerialization';
@@ -348,6 +349,7 @@ export function convertProjectCompositionToStore(
         freeRun: c.freeRun,
         isComposition: c.isComposition,
         compositionId: c.compositionId,
+        parentClipId: c.parentClipId,
         textProperties: c.textProperties,
         captionProperties: c.captionProperties
           ? structuredClone(c.captionProperties)
@@ -360,7 +362,7 @@ export function convertProjectCompositionToStore(
         storyboardProperties: cloneStoryboardClipProperties(c.storyboardProperties),
         transitionOverlay: c.transitionOverlay ? structuredClone(c.transitionOverlay) : undefined,
         mathScene: c.mathScene ? structuredClone(c.mathScene) : undefined,
-        motion: c.motion ? structuredClone(c.motion) : undefined,
+        motion: c.motion ? normalizeMotionLayerDefinitionForLoad(c.motion) : undefined,
         vectorAnimationSettings: c.vectorAnimationSettings,
         is3D: c.is3D,
         transcript: c.transcript,

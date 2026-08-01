@@ -499,19 +499,19 @@ describe('hosted Kie.ai pricing', () => {
     expect(getModelCreditCost('gpt-5.5')).toBe(5);
   });
 
-  it('keeps Cloud labels separate from BYO Kie.ai vendor credits', () => {
+  it('labels hosted Kling prices exclusively in MasterSelects credits', () => {
     expect(getFlashBoardPriceEstimate({
       duration: 10,
       outputType: 'video',
-      providerId: 'kling-3.0',
+      providerId: 'cloud-kling',
       service: 'cloud',
     })?.compactLabel).toBe('840 cr');
 
     expect(getFlashBoardPriceEstimate({
       duration: 10,
       outputType: 'video',
-      providerId: 'kling-3.0',
-      service: 'kieai',
-    })?.fullLabel).toBe('140 Kie credits');
+      providerId: 'cloud-kling',
+      service: 'cloud',
+    })?.fullLabel).toBe('840 credits');
   });
 });

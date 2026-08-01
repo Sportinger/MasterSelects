@@ -60,15 +60,15 @@ describe('storyboard generation capability and prepare gate', () => {
     const capabilities = resolveStoryboardGenerationCapabilities({
       availability: {
         hostedAvailable: true,
-        byoServices: { kieai: true },
+        byoServices: { piapi: true },
       },
       brief: brief(),
       catalogEntries: [
         entry(),
         entry({
-          service: 'kieai',
-          providerId: 'kling-3.0',
-          name: 'Kling BYO',
+          service: 'piapi',
+          providerId: 'piapi-video',
+          name: 'PiAPI video',
         }),
       ],
     });
@@ -86,9 +86,9 @@ describe('storyboard generation capability and prepare gate', () => {
         submissionSupported: true,
       },
       {
-        providerId: 'kling-3.0',
+        providerId: 'piapi-video',
         route: 'byo',
-        service: 'kieai',
+        service: 'piapi',
         submissionSupported: false,
       },
     ]);

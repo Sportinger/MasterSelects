@@ -3,9 +3,13 @@
 import { useCallback, useState, useEffect, useRef } from 'react';
 import type { DockSplit } from '../../types/dock';
 import { useDockStore } from '../../stores/dockStore';
-import { startBatch, endBatch } from '../../stores/historyStore';
 import { DockNode } from './DockNode';
 import { nodeContainsPanel } from '../../utils/dockLayout';
+import {
+  registerDockResizeHandle,
+  startDockResize,
+  type DockResizePointer,
+} from './dockResizeSession';
 
 interface DockSplitPaneProps {
   split: DockSplit;
@@ -24,10 +28,8 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
   const secondChildRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<HTMLDivElement>(null);
   const liveRatioRef = useRef(split.ratio);
-  const pendingLiveRatioRef = useRef<number | null>(null);
   const liveRatioFrameRef = useRef<number | null>(null);
-  const resizeBatchActiveRef = useRef(false);
-  const pendingPointerRef = useRef<{ clientX: number; clientY: number } | null>(null);
+  const pendingPointerRef = useRef<DockResizePointer | null>(null);
 
   const isHorizontal = split.direction === 'horizontal';
   const maximizedChildIndex = maximizedPanelId
@@ -45,118 +47,121 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
     secondChild.style.setProperty(sizeProperty, `calc(${(1 - ratio) * 100}% - 2px)`);
   }, [isHorizontal, isMaximizedPath]);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    startBatch('Resize dock split');
-    resizeBatchActiveRef.current = true;
+  useEffect(() => {
+    if (isResizing) return;
     liveRatioRef.current = split.ratio;
-    pendingLiveRatioRef.current = null;
+  }, [isResizing, split.ratio]);
+
+  const readRatioFromPointer = useCallback((pointer: DockResizePointer): number | null => {
+    const container = containerRef.current;
+    if (!container) return null;
+
+    const rect = container.getBoundingClientRect();
+    const dimension = isHorizontal ? rect.width : rect.height;
+    if (dimension <= 0) return null;
+
+    const ratio = isHorizontal
+      ? (pointer.clientX - rect.left) / rect.width
+      : (pointer.clientY - rect.top) / rect.height;
+
+    // Calculate min ratios based on pixel constraints
+    const minSize = isHorizontal ? MIN_PANEL_SIZE : MIN_PREVIEW_HEIGHT;
+    const minRatio = minSize / dimension;
+    const maxRatio = 1 - (MIN_PANEL_SIZE / dimension);
+
+    // Clamp ratio to respect minimum sizes
+    return Math.max(minRatio, Math.min(maxRatio, ratio));
+  }, [isHorizontal]);
+
+  const commitLiveRatioFrame = useCallback(() => {
+    liveRatioFrameRef.current = null;
+    const pointer = pendingPointerRef.current;
+    pendingPointerRef.current = null;
+    if (!pointer) return;
+
+    const nextRatio = readRatioFromPointer(pointer);
+    if (nextRatio === null) return;
+    liveRatioRef.current = nextRatio;
+    applyLiveRatioToDom(nextRatio);
+  }, [applyLiveRatioToDom, readRatioFromPointer]);
+
+  const scheduleLiveRatio = useCallback((pointer: DockResizePointer) => {
+    pendingPointerRef.current = pointer;
+    if (liveRatioFrameRef.current !== null) return;
+    liveRatioFrameRef.current = window.requestAnimationFrame(commitLiveRatioFrame);
+  }, [commitLiveRatioFrame]);
+
+  const flushLiveRatio = useCallback((pointer: DockResizePointer): number => {
+    if (liveRatioFrameRef.current !== null) {
+      window.cancelAnimationFrame(liveRatioFrameRef.current);
+      liveRatioFrameRef.current = null;
+    }
+
+    pendingPointerRef.current = null;
+    const finalRatio = readRatioFromPointer(pointer) ?? liveRatioRef.current;
+    liveRatioRef.current = finalRatio;
+    applyLiveRatioToDom(finalRatio);
+    return finalRatio;
+  }, [applyLiveRatioToDom, readRatioFromPointer]);
+
+  const handleResizeStart = useCallback(() => {
+    liveRatioRef.current = split.ratio;
+    pendingPointerRef.current = null;
     applyLiveRatioToDom(split.ratio);
     setIsResizing(true);
   }, [applyLiveRatioToDom, split.ratio]);
 
-  useEffect(() => {
-    if (isResizing) return;
-    liveRatioRef.current = split.ratio;
-    pendingLiveRatioRef.current = null;
-  }, [isResizing, split.ratio]);
+  const handleResizeMove = useCallback((pointer: DockResizePointer) => {
+    scheduleLiveRatio(pointer);
+  }, [scheduleLiveRatio]);
+
+  const handleResizeEnd = useCallback((pointer: DockResizePointer) => {
+    const finalRatio = flushLiveRatio(pointer);
+    setSplitRatio(split.id, finalRatio);
+    setIsResizing(false);
+  }, [flushLiveRatio, setSplitRatio, split.id]);
 
   useEffect(() => {
-    if (!isResizing) return;
+    const element = handleRef.current;
+    if (!element || isMaximizedPath) return;
 
-    const readRatioFromPointer = (pointer: { clientX: number; clientY: number }): number | null => {
-      const container = containerRef.current;
-      if (!container) return null;
+    return registerDockResizeHandle({
+      id: split.id,
+      axis: isHorizontal ? 'x' : 'y',
+      element,
+      onStart: handleResizeStart,
+      onMove: handleResizeMove,
+      onEnd: handleResizeEnd,
+    });
+  }, [
+    handleResizeEnd,
+    handleResizeMove,
+    handleResizeStart,
+    isHorizontal,
+    isMaximizedPath,
+    split.id,
+  ]);
 
-      const rect = container.getBoundingClientRect();
-      const dimension = isHorizontal ? rect.width : rect.height;
-      let ratio: number;
-
-      if (isHorizontal) {
-        ratio = (pointer.clientX - rect.left) / rect.width;
-      } else {
-        ratio = (pointer.clientY - rect.top) / rect.height;
-      }
-
-      // Calculate min ratios based on pixel constraints
-      const minSize = isHorizontal ? MIN_PANEL_SIZE : MIN_PREVIEW_HEIGHT;
-      const minRatio = minSize / dimension;
-      const maxRatio = 1 - (MIN_PANEL_SIZE / dimension);
-
-      // Clamp ratio to respect minimum sizes
-      return Math.max(minRatio, Math.min(maxRatio, ratio));
-    };
-
-    const commitLiveRatioFrame = () => {
+  useEffect(() => () => {
+    if (liveRatioFrameRef.current !== null) {
+      window.cancelAnimationFrame(liveRatioFrameRef.current);
       liveRatioFrameRef.current = null;
-      const pointer = pendingPointerRef.current;
-      pendingPointerRef.current = null;
-      const nextRatio = pointer ? readRatioFromPointer(pointer) : pendingLiveRatioRef.current;
-      if (nextRatio === null) return;
-      pendingLiveRatioRef.current = null;
-      liveRatioRef.current = nextRatio;
-      applyLiveRatioToDom(nextRatio);
-    };
+    }
+    pendingPointerRef.current = null;
+  }, []);
 
-    const scheduleLiveRatio = (ratio: number) => {
-      pendingLiveRatioRef.current = ratio;
-      if (liveRatioFrameRef.current !== null) return;
-      liveRatioFrameRef.current = window.requestAnimationFrame(commitLiveRatioFrame);
-    };
+  const handlePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || !event.isPrimary) return;
+    if (!startDockResize(event.nativeEvent, split.id)) return;
 
-    const flushLiveRatio = (): number => {
-      if (liveRatioFrameRef.current !== null) {
-        window.cancelAnimationFrame(liveRatioFrameRef.current);
-        liveRatioFrameRef.current = null;
-      }
-      const pointer = pendingPointerRef.current;
-      const finalRatio = (pointer ? readRatioFromPointer(pointer) : pendingLiveRatioRef.current) ?? liveRatioRef.current;
-      pendingPointerRef.current = null;
-      pendingLiveRatioRef.current = null;
-      liveRatioRef.current = finalRatio;
-      applyLiveRatioToDom(finalRatio);
-      return finalRatio;
-    };
-
-    const handleMouseMove = (e: MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      pendingPointerRef.current = { clientX: e.clientX, clientY: e.clientY };
-      scheduleLiveRatio(liveRatioRef.current);
-    };
-
-    const handleMouseUp = (e: MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      const finalRatio = flushLiveRatio();
-      setSplitRatio(split.id, finalRatio);
-      setIsResizing(false);
-      if (resizeBatchActiveRef.current) {
-        resizeBatchActiveRef.current = false;
-        endBatch();
-      }
-    };
-
-    window.addEventListener('mousemove', handleMouseMove, true);
-    window.addEventListener('mouseup', handleMouseUp, true);
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove, true);
-      window.removeEventListener('mouseup', handleMouseUp, true);
-      if (liveRatioFrameRef.current !== null) {
-        window.cancelAnimationFrame(liveRatioFrameRef.current);
-        liveRatioFrameRef.current = null;
-      }
-      pendingPointerRef.current = null;
-      if (resizeBatchActiveRef.current) {
-        resizeBatchActiveRef.current = false;
-        endBatch();
-      }
-    };
-  }, [applyLiveRatioToDom, isResizing, isHorizontal, split.id, setSplitRatio]);
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Window-level capture listeners keep the resize session alive if capture is unavailable.
+    }
+  }, [split.id]);
 
   const effectiveRatio = split.ratio;
   const firstChildStyle = isMaximizedPath
@@ -196,7 +201,7 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
         <div
           ref={handleRef}
           className={`dock-resize-handle ${isHorizontal ? 'horizontal' : 'vertical'} ${isResizing ? 'active' : ''}`}
-          onMouseDown={handleMouseDown}
+          onPointerDown={handlePointerDown}
         />
       )}
       <div ref={secondChildRef} className={`dock-split-child ${isMaximizedPath && maximizedChildIndex !== 1 ? 'is-collapsed' : ''}`} style={secondChildStyle}>

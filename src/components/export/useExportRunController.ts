@@ -55,6 +55,9 @@ export function useExportRunController({
   const storyboardClips = useTimelineStore((state) => state.clips);
   const storyboardTracks = useTimelineStore((state) => state.tracks);
   const storyboardMediaFiles = useMediaStore((state) => state.files);
+  const activeCompositionId = useMediaStore((state) => (
+    state.activeCompositionId ?? 'timeline:active'
+  ));
 
   const {
     encoder, width, height, customWidth, customHeight, useCustomResolution,
@@ -207,6 +210,7 @@ export function useExportRunController({
         frameRendererRef: ffmpegFrameRendererRef, renderSessionRef: exportRenderSessionRef,
         createRenderSession: (options) => new ExportRenderSessionImpl({
           ...options,
+          compositionId: activeCompositionId,
           frameDecorator: createStoryboardFrameDecorator(options.width, options.height),
         }),
         onProgress: setProgress, onTimelineProgress: setExportProgress,
@@ -221,7 +225,7 @@ export function useExportRunController({
       setIsExporting(false);
       endExport();
     }
-  }, [createStoryboardFrameDecorator, customFps, customHeight, customWidth, encoder, endExport, filename, fps, getCurrentExportRange, gifAlphaThreshold, gifBayerScale, gifColors, gifDither, gifLoop, gifLoopCount, gifOptimize, gifPaletteMode, gifTransparency, height, isExporting, setError, setExportProgress, setIsExporting, setProgress, startExport, useCustomFps, useCustomResolution, width]);
+  }, [activeCompositionId, createStoryboardFrameDecorator, customFps, customHeight, customWidth, encoder, endExport, filename, fps, getCurrentExportRange, gifAlphaThreshold, gifBayerScale, gifColors, gifDither, gifLoop, gifLoopCount, gifOptimize, gifPaletteMode, gifTransparency, height, isExporting, setError, setExportProgress, setIsExporting, setProgress, startExport, useCustomFps, useCustomResolution, width]);
 
   const handleFFmpegExport = useCallback(async () => {
     if (isExporting) return;
@@ -257,6 +261,7 @@ export function useExportRunController({
         renderSessionRef: exportRenderSessionRef,
         createRenderSession: (options) => new ExportRenderSessionImpl({
           ...options,
+          compositionId: activeCompositionId,
           frameDecorator: createStoryboardFrameDecorator(options.width, options.height),
         }),
         onFfmpegProgress: setFfmpegProgress, onTimelineProgress: setExportProgress, onPhase: setExportPhase,
@@ -280,7 +285,7 @@ export function useExportRunController({
       setExportPhase('idle');
       endExport();
     }
-  }, [audioBitrate, audioSampleRate, createStoryboardFrameDecorator, customFps, customHeight, customWidth, dnxhrProfile, endExport, ffmpegCodec, ffmpegContainer, ffmpegQuality, filename, fps, getCurrentExportRange, gifAlphaThreshold, gifBayerScale, gifColors, gifDither, gifLoop, gifLoopCount, gifOptimize, gifPaletteMode, gifTransparency, height, includeAudio, isExporting, isFFmpegReady, loadFFmpeg, normalizeAudio, proresProfile, setError, setExportPhase, setExportProgress, setFfmpegProgress, setIsExporting, startExport, useCustomFps, useCustomResolution, visualMode, width]);
+  }, [activeCompositionId, audioBitrate, audioSampleRate, createStoryboardFrameDecorator, customFps, customHeight, customWidth, dnxhrProfile, endExport, ffmpegCodec, ffmpegContainer, ffmpegQuality, filename, fps, getCurrentExportRange, gifAlphaThreshold, gifBayerScale, gifColors, gifDither, gifLoop, gifLoopCount, gifOptimize, gifPaletteMode, gifTransparency, height, includeAudio, isExporting, isFFmpegReady, loadFFmpeg, normalizeAudio, proresProfile, setError, setExportPhase, setExportProgress, setFfmpegProgress, setIsExporting, startExport, useCustomFps, useCustomResolution, visualMode, width]);
 
   const handleExportAudioOnly = useCallback(async () => {
     if (isExporting) return;
@@ -354,6 +359,7 @@ export function useExportRunController({
         renderSessionRef: exportRenderSessionRef,
         createRenderSession: (options) => new ExportRenderSessionImpl({
           ...options,
+          compositionId: activeCompositionId,
           frameDecorator: createStoryboardFrameDecorator(options.width, options.height),
         }),
       });
@@ -364,7 +370,7 @@ export function useExportRunController({
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Frame render failed');
     }
-  }, [createStoryboardFrameDecorator, customFps, customHeight, customWidth, filename, fps, height, imageFormat, imageQuality, isExporting, playheadPosition, selectedImageFormat, setError, useCustomFps, useCustomResolution, width]);
+  }, [activeCompositionId, createStoryboardFrameDecorator, customFps, customHeight, customWidth, filename, fps, height, imageFormat, imageQuality, isExporting, playheadPosition, selectedImageFormat, setError, useCustomFps, useCustomResolution, width]);
 
   const handleRenderImageSequence = useCallback(async () => {
     if (isExporting) return;
@@ -388,6 +394,7 @@ export function useExportRunController({
         frameRendererRef: ffmpegFrameRendererRef, renderSessionRef: exportRenderSessionRef,
         createRenderSession: (options) => new ExportRenderSessionImpl({
           ...options,
+          compositionId: activeCompositionId,
           frameDecorator: createStoryboardFrameDecorator(options.width, options.height),
         }),
         onTimelineStart: (rangeStart, rangeEnd) => {
@@ -409,7 +416,7 @@ export function useExportRunController({
         endExport();
       }
     }
-  }, [createStoryboardFrameDecorator, customFps, customHeight, customWidth, encoder, endExport, filename, fps, getCurrentExportRange, height, imageFormat, imageQuality, isExporting, selectedImageFormat, setError, setExportPhase, setExportProgress, setIsExporting, setProgress, startExport, useCustomFps, useCustomResolution, width]);
+  }, [activeCompositionId, createStoryboardFrameDecorator, customFps, customHeight, customWidth, encoder, endExport, filename, fps, getCurrentExportRange, height, imageFormat, imageQuality, isExporting, selectedImageFormat, setError, setExportPhase, setExportProgress, setIsExporting, setProgress, startExport, useCustomFps, useCustomResolution, width]);
 
   const handlePrimaryExport = useCallback(() => {
     if (isXmlMode) {

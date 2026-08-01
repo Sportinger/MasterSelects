@@ -14,6 +14,8 @@ export interface WorkerGpuVideoPresentationSource {
   readonly file: File;
   readonly mediaTime: number;
   readonly timelineTime: number;
+  readonly width: number;
+  readonly height: number;
   readonly mediaFileId?: string;
   readonly runtimeSourceId?: string;
   readonly runtimeSessionKey?: string;
@@ -91,12 +93,14 @@ export interface WorkerGpuVideoPresentationLayerStyle {
 
 export interface WorkerGpuVideoPresentationLayer extends WorkerGpuVideoPresentationSource, WorkerGpuVideoPresentationLayerStyle {
   readonly layerId: string;
+  /** Exact evaluated occurrence; never serialized across the Worker boundary. */
+  readonly sourceLayer: Layer;
   readonly renderLayer: WorkerGpuWebCodecsRenderLayer;
 }
 
 export type WorkerGpuVideoSourceLoadResult =
-  | { readonly status: 'already-loaded' }
-  | { readonly status: 'loaded' }
+  | { readonly status: 'already-loaded'; readonly width: number; readonly height: number }
+  | { readonly status: 'loaded'; readonly width: number; readonly height: number }
   | { readonly status: 'failed' };
 
 function createFileSignature(file: File): string {
@@ -115,7 +119,7 @@ function createSourceKey(layer: Layer): string {
   return `layer:${layer.sourceClipId ?? layer.id}`;
 }
 
-function cloneRenderLayer(layer: Layer): WorkerGpuWebCodecsRenderLayer {
+export function cloneWorkerGpuRenderLayer(layer: Layer): WorkerGpuWebCodecsRenderLayer {
   return {
     id: layer.id,
     name: layer.name,
@@ -128,6 +132,7 @@ function cloneRenderLayer(layer: Layer): WorkerGpuWebCodecsRenderLayer {
     rotation: typeof layer.rotation === 'number'
       ? layer.rotation
       : { ...layer.rotation },
+    videoRotation: layer.source?.videoRotation,
     sourceRect: layer.sourceRect ? { ...layer.sourceRect } : undefined,
     effects: layer.effects.map((effect) => ({
       ...effect,
@@ -414,7 +419,7 @@ function workerGpuEffectParams(effects: ReturnType<typeof splitLayerEffects>['co
 }
 
 export class WorkerGpuMediaSourceRegistry {
-  private readonly loadedSourceIds = new Set<string>();
+  private readonly loadedSourceDimensions = new Map<string, { readonly width: number; readonly height: number }>();
   private readonly pendingSourceLoads = new Map<string, Promise<WorkerGpuVideoSourceLoadResult>>();
   private readonly warnedUnsupportedRenderEffectKeys = new Set<string>();
   private unsupportedRenderEffectFallbacks: Array<{
@@ -426,11 +431,17 @@ export class WorkerGpuMediaSourceRegistry {
   }> = [];
 
   get loadedSourceCount(): number {
-    return this.loadedSourceIds.size;
+    return this.loadedSourceDimensions.size;
   }
 
   get pendingLoadCount(): number {
     return this.pendingSourceLoads.size;
+  }
+
+  getLoadedSourceDimensions(
+    sourceId: string,
+  ): { readonly width: number; readonly height: number } | null {
+    return this.loadedSourceDimensions.get(sourceId) ?? null;
   }
 
   get unsupportedRenderEffectFallbackCount(): number {
@@ -496,9 +507,12 @@ export class WorkerGpuMediaSourceRegistry {
         sourceKey,
         file,
         layerId: layer.id,
-        renderLayer: cloneRenderLayer(layer),
+        sourceLayer: layer,
+        renderLayer: cloneWorkerGpuRenderLayer(layer),
         mediaTime,
         timelineTime: mediaTime,
+        width: source.intrinsicWidth ?? mediaFile?.width ?? source.videoElement?.videoWidth ?? 0,
+        height: source.intrinsicHeight ?? mediaFile?.height ?? source.videoElement?.videoHeight ?? 0,
         ...style,
         mediaFileId: source.mediaFileId,
         runtimeSourceId: source.runtimeSourceId,
@@ -513,8 +527,9 @@ export class WorkerGpuMediaSourceRegistry {
     source: WorkerGpuVideoPresentationSource,
     requestId: string,
   ): Promise<WorkerGpuVideoSourceLoadResult> {
-    if (this.loadedSourceIds.has(source.sourceId)) {
-      return Promise.resolve({ status: 'already-loaded' });
+    const loadedDimensions = this.loadedSourceDimensions.get(source.sourceId);
+    if (loadedDimensions) {
+      return Promise.resolve({ status: 'already-loaded', ...loadedDimensions });
     }
     const pending = this.pendingSourceLoads.get(source.sourceId);
     if (pending) {
@@ -533,12 +548,19 @@ export class WorkerGpuMediaSourceRegistry {
             returnBitmap: false,
           },
         );
-        const loaded = !runtimeOutputHasError(output) && output.webCodecs?.status.ready === true;
-        if (!loaded) {
+        const status = output.webCodecs?.status;
+        const loaded = !runtimeOutputHasError(output)
+          && status?.ready === true
+          && Number.isSafeInteger(status.width)
+          && status.width > 0
+          && Number.isSafeInteger(status.height)
+          && status.height > 0;
+        if (!loaded || !status) {
           return { status: 'failed' };
         }
-        this.loadedSourceIds.add(source.sourceId);
-        return { status: 'loaded' };
+        const dimensions = { width: status.width, height: status.height };
+        this.loadedSourceDimensions.set(source.sourceId, dimensions);
+        return { status: 'loaded', ...dimensions };
       } catch {
         return { status: 'failed' };
       } finally {
@@ -551,7 +573,7 @@ export class WorkerGpuMediaSourceRegistry {
   }
 
   clear(): void {
-    this.loadedSourceIds.clear();
+    this.loadedSourceDimensions.clear();
     this.pendingSourceLoads.clear();
     this.unsupportedRenderEffectFallbacks = [];
     this.warnedUnsupportedRenderEffectKeys.clear();

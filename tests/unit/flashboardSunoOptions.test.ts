@@ -8,7 +8,7 @@ import {
   DEFAULT_SUNO_AUDIO_WEIGHT,
   DEFAULT_SUNO_STYLE_WEIGHT,
   DEFAULT_SUNO_WEIRDNESS_CONSTRAINT,
-} from '../../src/services/sunoService';
+} from '../../src/services/sunoContracts';
 
 describe('FlashBoardSunoOptionsPlanner', () => {
   it('normalizes slider weights to stable two-decimal values', () => {

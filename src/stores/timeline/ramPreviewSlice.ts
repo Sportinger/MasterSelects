@@ -101,9 +101,11 @@ export const createRamPreviewSlice: SliceCreator<RamPreviewActions> = (set, get)
     reportRamPreviewRunJob(runJobReport);
 
     try {
+      const mediaState = useMediaStore.getState();
       const preview = new RamPreviewEngine(renderHostPort.getRamPreviewRenderEngine());
       const result = await preview.generate(
         {
+          compositionId: mediaState.activeCompositionId ?? 'timeline:active',
           start: rangeStart,
           end: rangeEnd,
           centerTime: Math.max(rangeStart, Math.min(rangeEnd, centerTime)),
@@ -127,7 +129,7 @@ export const createRamPreviewSlice: SliceCreator<RamPreviewActions> = (set, get)
           getSourceTimeForClip: (id, t) => get().getSourceTimeForClip(id, t),
           getInterpolatedSpeed: (id, t) => get().getInterpolatedSpeed(id, t),
           getCompositionDimensions: (compId) => {
-            const comp = useMediaStore.getState().compositions.find(c => c.id === compId);
+            const comp = mediaState.compositions.find(c => c.id === compId);
             return { width: comp?.width || 1920, height: comp?.height || 1080 };
           },
           onFrameCached: (time) => addCachedFrame(time),

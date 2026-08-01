@@ -9,6 +9,7 @@ import type { KieChatProtocol } from './providers/kieChat';
 const MAX_CHAT_TURN_ID_LENGTH = 200;
 export const MAX_CHAT_TURN_ROUNDS = 400;
 export const HOSTED_CHAT_MAX_TURN_SPEND_CREDITS = 500;
+export const HOSTED_CHAT_DEVELOPMENT_MAX_TURN_SPEND_CREDITS = 2_000;
 const FLOATING_POINT_ROUNDING_EPSILON = 1e-9;
 
 export type HostedChatTurnStatus = 'active' | 'completed' | 'cancelled' | 'provider_failed';
@@ -214,6 +215,9 @@ export function resolveHostedChatRoundTerminalAction(
 export function extractKieChatProviderUsage(payload: unknown): KieChatProviderUsage {
   const response = isRecord(payload) ? payload : {};
   const usage = isRecord(response.usage) ? response.usage : {};
+  const hostedAgentUsage = isRecord(response.hosted_agent_k0)
+    ? response.hosted_agent_k0
+    : {};
   const inputDetails = isRecord(usage.input_tokens_details) ? usage.input_tokens_details : {};
   const outputDetails = isRecord(usage.output_tokens_details) ? usage.output_tokens_details : {};
   const openAiToolCalls = Array.isArray(response.output)
@@ -222,7 +226,8 @@ export function extractKieChatProviderUsage(payload: unknown): KieChatProviderUs
   const claudeToolCalls = Array.isArray(response.content)
     ? response.content.filter((item) => isRecord(item) && item.type === 'tool_use')
     : [];
-  const toolCallCount = openAiToolCalls.length + claudeToolCalls.length;
+  const toolCallCount = finiteNonNegativeInteger(hostedAgentUsage.tool_call_count)
+    ?? openAiToolCalls.length + claudeToolCalls.length;
 
   return {
     cachedInputTokens: finiteNonNegativeInteger(inputDetails.cached_tokens)

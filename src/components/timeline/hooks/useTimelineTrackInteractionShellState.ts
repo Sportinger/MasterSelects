@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
+import { useTimelinePickWhipContext } from '../TimelinePickWhipContext';
 import type { TimelineTrackProps } from '../types';
 import type { ClipInteractionShellSpectralImageMediaRef } from '../interactionShell';
 import { buildTimelineTrackClipShellActiveModules } from '../utils/timelineTrackShellActiveModules';
@@ -66,6 +67,8 @@ export function useTimelineTrackInteractionShellState({
   const hasAudioRegionClipboard = useTimelineStore((state) => state.audioRegionClipboard !== null);
   const mediaFilesState = useMediaStore((state) => state.files);
   const selectedMediaIdsState = useMediaStore((state) => state.selectedIds);
+  const pickWhipContext = useTimelinePickWhipContext();
+  const parentingEnabled = pickWhipContext !== null && track.type === 'video';
   const mediaFiles = useMemo(() => (Array.isArray(mediaFilesState) ? mediaFilesState : []), [mediaFilesState]);
   const selectedMediaIds = useMemo(
     () => (Array.isArray(selectedMediaIdsState) ? selectedMediaIdsState : []),
@@ -129,6 +132,7 @@ export function useTimelineTrackInteractionShellState({
     hoveredClipId,
     keyframeStateByClipId,
     specialStateByClipId,
+    parentingEnabled,
   }), [
     allTrackClips,
     trackClips,
@@ -140,6 +144,7 @@ export function useTimelineTrackInteractionShellState({
     hoveredClipId,
     keyframeStateByClipId,
     specialStateByClipId,
+    parentingEnabled,
   ]);
 
   const domControlClips = useMemo(
@@ -154,7 +159,8 @@ export function useTimelineTrackInteractionShellState({
     clipContextMenu,
     keyframeStateByClipId,
     specialStateByClipId,
-  }), [clipContextMenu, clipFade, clipTrim, domControlClips, keyframeStateByClipId, specialStateByClipId]);
+    parentingEnabled,
+  }), [clipContextMenu, clipFade, clipTrim, domControlClips, keyframeStateByClipId, parentingEnabled, specialStateByClipId]);
 
   const getClipShellMountState = useCallback((clipId: string) => buildTimelineTrackClipShellMountState({
     clipId,
@@ -165,7 +171,8 @@ export function useTimelineTrackInteractionShellState({
     hoveredClipId,
     keyframeStateByClipId,
     specialStateByClipId,
-  }), [clipContextMenu, clipDrag, clipFade, clipTrim, hoveredClipId, keyframeStateByClipId, specialStateByClipId]);
+    parentingEnabled,
+  }), [clipContextMenu, clipDrag, clipFade, clipTrim, hoveredClipId, keyframeStateByClipId, parentingEnabled, specialStateByClipId]);
 
   const getClipShellActiveModules = useCallback((clip: TimelineTrackShellClip) => buildTimelineTrackClipShellActiveModules({
     clip,
@@ -189,6 +196,7 @@ export function useTimelineTrackInteractionShellState({
     specialState: specialStateByClipId.get(clip.id),
     spectralImageMediaRefs,
     videoBakeRegionSelection,
+    parentingEnabled,
   }), [
     activeTimelineToolId,
     allTrackClips,
@@ -210,6 +218,7 @@ export function useTimelineTrackInteractionShellState({
     spectralImageMediaRefs,
     track,
     videoBakeRegionSelection,
+    parentingEnabled,
   ]);
 
   return {

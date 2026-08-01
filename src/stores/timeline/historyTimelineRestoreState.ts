@@ -15,8 +15,11 @@ import type {
 } from './historyTimelineEditState';
 import { getClipAnalysisSourceId } from '../../services/clipAnalysis/sourceAnalysisSharing';
 import { resolveClipTranscriptWords } from '../../services/transcription/clipTranscriptResolver';
+import { normalizeMotionLayerDefinitionForLoad } from '../../services/motionDesign/contracts/replicatorTimelineAdapter';
 
 export interface HistoryTimelineRestoreCurrentState {
+  duration?: number;
+  durationLocked?: boolean;
   clips?: readonly TimelineClip[];
   tracks?: readonly TimelineTrack[];
   selectedClipIds?: ReadonlySet<string>;
@@ -31,6 +34,8 @@ export interface HistoryTimelineRestoreCurrentState {
 }
 
 export interface HistoryTimelineRestoreState {
+  duration?: number;
+  durationLocked?: boolean;
   clips: TimelineClip[];
   tracks: TimelineTrack[];
   selectedClipIds: Set<string>;
@@ -209,7 +214,9 @@ function createRestoredClip(
       midiData: clonePlain(clip.midiData),
       automation: clonePlain(clip.automation),
       mathScene: clonePlain(clip.mathScene),
-      motion: clonePlain(clip.motion),
+      motion: clip.motion
+        ? normalizeMotionLayerDefinitionForLoad(clip.motion)
+        : undefined,
       isComposition: clip.isComposition,
       compositionId: clip.compositionId ?? clip.runtimeRef.compositionId,
       transitionIn: clonePlain(clip.transitionIn),
@@ -347,6 +354,8 @@ export function createHistoryTimelineRestoreState(
 
   return {
     state: {
+      duration: historyState.timeline.duration ?? currentTimeline.duration,
+      durationLocked: historyState.timeline.durationLocked ?? currentTimeline.durationLocked,
       clips: restoredClipEntries,
       tracks: historyState.timeline.tracks.map(createRestoredTrack),
       selectedClipIds: new Set(historyState.timeline.selectedClipIds),

@@ -1,5 +1,9 @@
 import { json, methodNotAllowed } from '../db';
 import type { AppContext, Env } from '../env';
+import {
+  HOSTED_CHAT_DEVELOPMENT_MAX_TURN_SPEND_CREDITS,
+  HOSTED_CHAT_MAX_TURN_SPEND_CREDITS,
+} from '../chatBilling';
 import { getKieChatModelCapability } from '../providers/kieChat';
 import {
   buildHostedAgentAssertionClaims,
@@ -32,6 +36,7 @@ import {
   type HostedAgentK1ToolBatchResult,
   type HostedAgentK1TurnRequest,
 } from '../../../src/services/kernelClient/hostedAgent/contracts';
+import { validHostedAgentInlineProviderContent } from '../../../src/services/kernelClient/hostedAgent/inlineProviderContent';
 
 const MAX_START_BODY_BYTES = 1_500_000;
 // Transport abuse guard only, not a product-level inline-result budget. K0 must
@@ -108,7 +113,16 @@ function validProviderInput(value: unknown): boolean {
     && value.messages.length > 0;
 }
 
-function parseTurnRequest(value: unknown): HostedAgentK1TurnRequest {
+export function maximumHostedAgentTurnSpendCredits(environment?: string): number {
+  return environment === 'development'
+    ? HOSTED_CHAT_DEVELOPMENT_MAX_TURN_SPEND_CREDITS
+    : HOSTED_CHAT_MAX_TURN_SPEND_CREDITS;
+}
+
+function parseTurnRequest(
+  value: unknown,
+  maximumTurnSpendCredits: number,
+): HostedAgentK1TurnRequest {
   if (!isRecord(value) || !isRecord(value.clientCapabilities)) {
     throw new HostedAgentRouteError('invalid_request', 'A hosted-agent turn request is required.');
   }
@@ -139,7 +153,7 @@ function parseTurnRequest(value: unknown): HostedAgentK1TurnRequest {
     || typeof value.maxTurnSpendCredits !== 'number'
     || !Number.isInteger(value.maxTurnSpendCredits)
     || value.maxTurnSpendCredits <= 0
-    || value.maxTurnSpendCredits > 500
+    || value.maxTurnSpendCredits > maximumTurnSpendCredits
     || !validString(value.modelPrompt, 400_000)
     || !validString(value.systemPrompt, 200_000)
     || !validString(value.playbookPrompt, 100_000)
@@ -184,6 +198,17 @@ function containsDataUrl(value: unknown): boolean {
   return isRecord(value) && Object.values(value).some(containsDataUrl);
 }
 
+function containsUnexpectedToolResultDataUrl(value: Record<string, unknown>): boolean {
+  const results = Array.isArray(value.results)
+    ? value.results.map((result) => {
+        if (!isRecord(result)) return result;
+        const { providerContent: _providerContent, ...rest } = result;
+        return rest;
+      })
+    : value.results;
+  return containsDataUrl({ ...value, results });
+}
+
 function parseToolResult(value: unknown, turn: HostedAgentK0TurnRow): HostedAgentK1ToolBatchResult {
   if (!isRecord(value) || !Array.isArray(value.results)) {
     throw new HostedAgentRouteError('invalid_tool_result', 'A tool-result batch is required.');
@@ -198,7 +223,10 @@ function parseToolResult(value: unknown, turn: HostedAgentK0TurnRow): HostedAgen
         && typeof result.success === 'boolean'
         && validString(result.modelContent, MAX_TOOL_RESULT_BODY_BYTES, true)
         && (result.error === undefined || validString(result.error, 20_000, true))
-        && (result.providerContent === undefined || isRecord(result.providerContent))
+        && (
+          result.providerContent === undefined
+          || validHostedAgentInlineProviderContent(result.providerContent, turn.provider_protocol)
+        )
         && (
           result.imageResultRefs === undefined
           || (
@@ -227,7 +255,7 @@ function parseToolResult(value: unknown, turn: HostedAgentK0TurnRow): HostedAgen
     || typeof value.authority.stateRevisionBefore !== 'string'
     || typeof value.authority.stateRevisionAfter !== 'string'
     || !resultsAreValid
-    || containsDataUrl(value)
+    || containsUnexpectedToolResultDataUrl(value)
   ) {
     throw new HostedAgentRouteError(
       'invalid_tool_result',
@@ -366,13 +394,17 @@ async function handleStart(context: AppContext): Promise<Response> {
   assertMethod(context, 'POST');
   const user = requireUser(context);
   const { parsed } = await readJsonBody(context.request, MAX_START_BODY_BYTES);
-  const request = parseTurnRequest(parsed);
+  const maximumTurnSpendCredits = maximumHostedAgentTurnSpendCredits(
+    context.env.ENVIRONMENT,
+  );
+  const request = parseTurnRequest(parsed, maximumTurnSpendCredits);
   const capability = getKieChatModelCapability(request.model);
   if (!capability) {
     throw new HostedAgentRouteError('unsupported_model', 'The hosted Kie.ai model is unsupported.');
   }
 
   const { replayed, turn } = await createHostedAgentK0Turn(context.env.DB, {
+    maximumTurnSpendCredits,
     providerProtocol: capability.protocol,
     request,
     userId: user.id,
@@ -548,6 +580,7 @@ function parseSettlementRequest(
     || !validOptionalInteger(value.cachedInputTokens)
     || !validOptionalInteger(value.outputTokens)
     || !validOptionalInteger(value.reasoningTokens)
+    || !validOptionalInteger(value.toolCallCount)
   ) {
     throw new HostedAgentRouteError(
       'invalid_round_settlement',

@@ -9,7 +9,7 @@ import {
   DEFAULT_SUNO_INSTRUMENTAL,
   DEFAULT_SUNO_STYLE_WEIGHT,
   DEFAULT_SUNO_WEIRDNESS_CONSTRAINT,
-} from '../../../services/sunoService';
+} from '../../../services/sunoContracts';
 import { getSunoStyleLimit } from './FlashBoardGenerationActionStatePlanner';
 import {
   buildFallbackPrompt,

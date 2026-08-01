@@ -27,6 +27,7 @@ import { flashBoardMediaBridge } from '../flashboard/FlashBoardMediaBridge';
 import { cloneClipNodeGraph } from '../nodeGraph';
 import { cloneStoryboardClipProperties } from '../storyboard/core';
 import { normalizeTransitionInstanceParams } from '../../transitions';
+import { normalizeMotionLayerDefinition } from '../motionDesign/contracts/replicatorTimelineAdapter';
 import { syncTransitionCompositionTimelineToParent } from '../../stores/mediaStore/slices/composition/transitionCompositionSync';
 import type {
   ProjectFlashBoardComposerState,
@@ -250,6 +251,8 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       // Nested composition support
       isComposition: c.isComposition || undefined,
       compositionId: c.compositionId || undefined,
+      // Motion Design structure support
+      parentClipId: c.parentClipId || undefined,
       // Text clip support
       textProperties: c.textProperties || undefined,
       captionProperties: c.captionProperties
@@ -268,7 +271,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       // Math scene clip support
       mathScene: c.mathScene ? structuredClone(c.mathScene) : undefined,
       // Motion design clip support
-      motion: c.motion ? structuredClone(c.motion) : undefined,
+      motion: c.motion ? normalizeMotionLayerDefinition(c.motion) : undefined,
       vectorAnimationSettings: c.source?.vectorAnimationSettings || c.vectorAnimationSettings || undefined,
       // Transcript, visual analysis, face analysis, and scene descriptions are
       // media-scoped artifacts. They must never be duplicated into compositions.

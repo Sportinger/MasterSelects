@@ -1,6 +1,6 @@
 import type { Layer, LayerRenderData } from '../../core/types';
 import { flags } from '../../featureFlags';
-import { getMotionRenderSize } from '../../motion/MotionTypes';
+import { getMotionReplicatorSourceGeometry } from '../../motion/MotionTypes';
 import { scrubSettleState } from '../../../services/scrubSettleState';
 import { useTimelineStore } from '../../../stores/timeline';
 import { getCopiedHtmlVideoPreviewFrame } from '../htmlVideoPreviewFallback';
@@ -387,14 +387,24 @@ export class TargetPreviewLayerCollector {
         });
       }
       if (layer.source.type === 'motion') {
-        const size = getMotionRenderSize(layer.source.motion);
+        const geometry = getMotionReplicatorSourceGeometry(layer.source.motion);
         layerData.push({
           layer,
           isVideo: false,
           externalTexture: null,
           textureView: null,
-          sourceWidth: size.width,
-          sourceHeight: size.height,
+          sourceWidth: geometry.sourceBounds.maxX - geometry.sourceBounds.minX,
+          sourceHeight: geometry.sourceBounds.maxY - geometry.sourceBounds.minY,
+        });
+      }
+      if (layer.source.type === 'motion-adjustment') {
+        layerData.push({
+          layer,
+          isVideo: false,
+          externalTexture: null,
+          textureView: null,
+          sourceWidth: layer.source.intrinsicWidth ?? 0,
+          sourceHeight: layer.source.intrinsicHeight ?? 0,
         });
       }
     }

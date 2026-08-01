@@ -163,7 +163,7 @@ describe('worker shadow render host port', () => {
     expect(fallback.initialize).toHaveBeenCalledTimes(1);
     expect(fallback.registerTargetCanvas).toHaveBeenCalledWith('preview', canvas);
     expect(fallback.requestRender).toHaveBeenCalledTimes(1);
-    expect(fallback.renderToPreviewCanvas).toHaveBeenCalledWith('preview', []);
+    expect(fallback.renderToPreviewCanvas).toHaveBeenCalledWith('preview', [], undefined);
     await vi.waitFor(() => {
       expect(bridge.initialize).toHaveBeenCalledWith('worker-shadow-render-host', 'worker-cpu-present');
       expect(bridge.registerTarget).toHaveBeenCalledWith(expect.objectContaining({

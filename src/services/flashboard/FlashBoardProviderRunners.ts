@@ -1,5 +1,4 @@
 import { piApiService } from '../piApiService';
-import { kieAiService } from '../kieAiService';
 import { cloudAiService } from '../cloudAiService';
 import type { TextToVideoParams, ImageToVideoParams, GenerationReferenceMedia } from '../piApiService';
 import type {
@@ -20,7 +19,7 @@ import {
   elevenLabsService,
   isElevenLabsMp3OutputFormat,
 } from '../elevenLabsService';
-import { SUNO_PROVIDER_ID, SUNO_SOUNDS_PROVIDER_ID, sunoService } from '../sunoService';
+import { SUNO_PROVIDER_ID, SUNO_SOUNDS_PROVIDER_ID } from '../sunoContracts';
 
 type FlashBoardProviderProcessingUpdate = {
   status: 'processing';
@@ -58,7 +57,6 @@ interface FlashBoardProviderRunnerContext {
   registerRunningJob: (remoteTaskId: string) => void;
   onProcessing: (update: FlashBoardProviderProcessingUpdate) => void;
   resolveReferenceImage: (mediaFileId: string | undefined) => Promise<string | undefined>;
-  resolveReferenceMedia: (mediaFileId: string) => GenerationReferenceMedia;
   resolveHostedReferenceMedia: (mediaFileId: string) => Promise<GenerationReferenceMedia>;
 }
 
@@ -119,18 +117,12 @@ function buildSunoAssets(results: SunoTaskResult[] | undefined): FlashBoardProvi
 }
 
 function applyFlashBoardProviderApiKeys(request: FlashBoardGenerationRequest): void {
-  const { piapi, kieai, evolink, elevenlabs } = useSettingsStore.getState().apiKeys;
+  const { piapi, evolink, elevenlabs } = useSettingsStore.getState().apiKeys;
   if (request.service === 'piapi') {
     piApiService.setApiKey(piapi);
   }
-  if (request.service === 'kieai') {
-    kieAiService.setApiKey(kieai);
-  }
   if (request.service === 'evolink') {
     getFlashBoardImageProvider('evolink')?.setApiKey?.(evolink);
-  }
-  if (request.service === 'suno') {
-    sunoService.setApiKey(kieai);
   }
   if (request.service === 'elevenlabs') {
     elevenLabsService.setApiKey(elevenlabs);
@@ -173,37 +165,21 @@ export async function resumeFlashBoardProviderJob({
 
   if (request.providerId === SUNO_PROVIDER_ID || request.providerId === SUNO_SOUNDS_PROVIDER_ID) {
     const pollInterval = request.providerId === SUNO_SOUNDS_PROVIDER_ID ? 30000 : 10000;
-    const task = request.service === 'cloud'
-      ? await cloudAiService.pollSunoMusicTaskUntilComplete(
-        remoteTaskId,
-        (currentTask) => {
-          if (abortController.signal.aborted) throw new Error('Canceled');
-          onProcessing({
-            status: 'processing',
-            progress: currentTask.progress,
-            remoteTaskId,
-            outputs: buildSunoOutputs(currentTask.results, false),
-          });
-        },
-        pollInterval,
-        900000,
-        abortController.signal,
-      )
-      : await sunoService.pollMusicTaskUntilComplete(
-        remoteTaskId,
-        (currentTask) => {
-          if (abortController.signal.aborted) throw new Error('Canceled');
-          onProcessing({
-            status: 'processing',
-            progress: currentTask.progress,
-            remoteTaskId,
-            outputs: buildSunoOutputs(currentTask.results, false),
-          });
-        },
-        pollInterval,
-        900000,
-        abortController.signal,
-      );
+    const task = await cloudAiService.pollSunoMusicTaskUntilComplete(
+      remoteTaskId,
+      (currentTask) => {
+        if (abortController.signal.aborted) throw new Error('Canceled');
+        onProcessing({
+          status: 'processing',
+          progress: currentTask.progress,
+          remoteTaskId,
+          outputs: buildSunoOutputs(currentTask.results, false),
+        });
+      },
+      pollInterval,
+      900000,
+      abortController.signal,
+    );
     const assets = buildSunoAssets(task.results);
     if (task.status === 'completed' && assets.length > 0) {
       return {
@@ -250,9 +226,7 @@ export async function resumeFlashBoardProviderJob({
   const pollInterval = request.service === 'piapi' ? 5000 : 15000;
   const service = request.service === 'piapi'
     ? piApiService
-    : request.service === 'kieai'
-      ? kieAiService
-      : cloudAiService;
+    : cloudAiService;
   const task = await service.pollTaskUntilComplete(
     remoteTaskId,
     (currentTask) => {
@@ -288,70 +262,39 @@ async function runSunoMusicJob({
     throw new Error('Describe the music before generating with Suno.');
   }
 
-  const remoteTaskId = request.service === 'cloud'
-    ? await cloudAiService.createSunoMusic({
-        audioWeight: request.sunoAudioWeight,
-        customMode: request.sunoCustomMode,
-        duration: request.duration,
-        instrumental: request.sunoInstrumental,
-        model: request.version,
-        negativeTags: request.sunoNegativeTags,
-        prompt: request.prompt,
-        style: request.sunoStyle,
-        styleWeight: request.sunoStyleWeight,
-        title: request.sunoTitle,
-        vocalGender: request.sunoVocalGender,
-        weirdnessConstraint: request.sunoWeirdnessConstraint,
-      }, `flashboard-suno:${recordId}:${Date.now()}`, abortController.signal)
-    : await sunoService.createMusic({
-        audioWeight: request.sunoAudioWeight,
-        customMode: request.sunoCustomMode,
-        duration: request.duration,
-        instrumental: request.sunoInstrumental,
-        model: request.version,
-        negativeTags: request.sunoNegativeTags,
-        prompt: request.prompt,
-        style: request.sunoStyle,
-        styleWeight: request.sunoStyleWeight,
-        title: request.sunoTitle,
-        vocalGender: request.sunoVocalGender,
-        weirdnessConstraint: request.sunoWeirdnessConstraint,
-      }, abortController.signal);
+  const remoteTaskId = await cloudAiService.createSunoMusic({
+    audioWeight: request.sunoAudioWeight,
+    customMode: request.sunoCustomMode,
+    duration: request.duration,
+    instrumental: request.sunoInstrumental,
+    model: request.version,
+    negativeTags: request.sunoNegativeTags,
+    prompt: request.prompt,
+    style: request.sunoStyle,
+    styleWeight: request.sunoStyleWeight,
+    title: request.sunoTitle,
+    vocalGender: request.sunoVocalGender,
+    weirdnessConstraint: request.sunoWeirdnessConstraint,
+  }, `flashboard-suno:${recordId}:${Date.now()}`, abortController.signal);
 
   registerRunningJob(remoteTaskId);
   onProcessing({ status: 'processing', progress: 0.05, remoteTaskId });
 
-  const task = request.service === 'cloud'
-    ? await cloudAiService.pollSunoMusicTaskUntilComplete(
-      remoteTaskId,
-      (currentTask) => {
-        if (abortController.signal.aborted) throw new Error('Canceled');
-        onProcessing({
-          status: 'processing',
-          progress: currentTask.progress,
-          remoteTaskId,
-          outputs: buildSunoOutputs(currentTask.results, false),
-        });
-      },
-      10000,
-      900000,
-      abortController.signal,
-    )
-    : await sunoService.pollMusicTaskUntilComplete(
+  const task = await cloudAiService.pollSunoMusicTaskUntilComplete(
+    remoteTaskId,
+    (currentTask) => {
+      if (abortController.signal.aborted) throw new Error('Canceled');
+      onProcessing({
+        status: 'processing',
+        progress: currentTask.progress,
         remoteTaskId,
-        (currentTask) => {
-          if (abortController.signal.aborted) throw new Error('Canceled');
-          onProcessing({
-            status: 'processing',
-            progress: currentTask.progress,
-            remoteTaskId,
-            outputs: buildSunoOutputs(currentTask.results, false),
-          });
-        },
-        10000,
-        900000,
-        abortController.signal,
-      );
+        outputs: buildSunoOutputs(currentTask.results, false),
+      });
+    },
+    10000,
+    900000,
+    abortController.signal,
+  );
 
   const assets = buildSunoAssets(task.results);
   if (task.status === 'completed' && assets.length > 0) {
@@ -390,46 +333,29 @@ async function runSunoSoundsJob({
     prompt: request.prompt,
     soundLoop: request.mode === 'loop',
   };
-  const remoteTaskId = request.service === 'cloud'
-    ? await cloudAiService.createSunoSounds(
-      soundParams,
-      `flashboard-suno-sounds:${recordId}:${Date.now()}`,
-      abortController.signal,
-    )
-    : await sunoService.createSounds(soundParams, abortController.signal);
+  const remoteTaskId = await cloudAiService.createSunoSounds(
+    soundParams,
+    `flashboard-suno-sounds:${recordId}:${Date.now()}`,
+    abortController.signal,
+  );
 
   registerRunningJob(remoteTaskId);
   onProcessing({ status: 'processing', progress: 0.05, remoteTaskId });
 
-  const task = request.service === 'cloud'
-    ? await cloudAiService.pollSunoMusicTaskUntilComplete(
-      remoteTaskId,
-      (currentTask) => {
-        if (abortController.signal.aborted) throw new Error('Canceled');
-        onProcessing({
-          status: 'processing',
-          progress: currentTask.progress,
-          remoteTaskId,
-        });
-      },
-      30000,
-      900000,
-      abortController.signal,
-    )
-    : await sunoService.pollMusicTaskUntilComplete(
-      remoteTaskId,
-      (currentTask) => {
-        if (abortController.signal.aborted) throw new Error('Canceled');
-        onProcessing({
-          status: 'processing',
-          progress: currentTask.progress,
-          remoteTaskId,
-        });
-      },
-      30000,
-      900000,
-      abortController.signal,
-    );
+  const task = await cloudAiService.pollSunoMusicTaskUntilComplete(
+    remoteTaskId,
+    (currentTask) => {
+      if (abortController.signal.aborted) throw new Error('Canceled');
+      onProcessing({
+        status: 'processing',
+        progress: currentTask.progress,
+        remoteTaskId,
+      });
+    },
+    30000,
+    900000,
+    abortController.signal,
+  );
 
   const audioUrl = task.results?.[0]?.audioUrl;
   if (task.status === 'completed' && audioUrl) {
@@ -586,7 +512,6 @@ async function runVideoJob({
   registerRunningJob,
   onProcessing,
   resolveReferenceImage,
-  resolveReferenceMedia,
   resolveHostedReferenceMedia,
 }: FlashBoardProviderRunnerContext): Promise<FlashBoardProviderRunnerResult> {
   const hasStartImage = !!request.startMediaFileId;
@@ -604,9 +529,7 @@ async function runVideoJob({
       || request.providerId === 'runway-video'
       || request.providerId === 'topaz/video-upscale'
     );
-  const referenceMedia = request.service === 'kieai'
-    ? effectiveVideoReferenceMediaFileIds.map((mediaFileId) => resolveReferenceMedia(mediaFileId))
-    : isHostedSeedanceRequest || isHostedKlingRequest || isHostedSpecialKieVideoRequest
+  const referenceMedia = isHostedSeedanceRequest || isHostedKlingRequest || isHostedSpecialKieVideoRequest
       ? await Promise.all(
           effectiveVideoReferenceMediaFileIds.map((mediaFileId) => resolveHostedReferenceMedia(mediaFileId)),
         )
@@ -639,8 +562,6 @@ async function runVideoJob({
 
     if (request.service === 'piapi') {
       remoteTaskId = await piApiService.createTextToVideo(params);
-    } else if (request.service === 'kieai') {
-      remoteTaskId = await kieAiService.createTextToVideo(params);
     } else {
       remoteTaskId = await cloudAiService.createTextToVideo(params, request.idempotencyKey);
     }
@@ -665,8 +586,6 @@ async function runVideoJob({
 
     if (request.service === 'piapi') {
       remoteTaskId = await piApiService.createImageToVideo(params);
-    } else if (request.service === 'kieai') {
-      remoteTaskId = await kieAiService.createImageToVideo(params);
     } else {
       remoteTaskId = await cloudAiService.createImageToVideo(params, request.idempotencyKey);
     }
@@ -678,9 +597,7 @@ async function runVideoJob({
   const pollInterval = request.service === 'piapi' ? 5000 : 15000;
   const service = request.service === 'piapi'
     ? piApiService
-    : request.service === 'kieai'
-      ? kieAiService
-      : cloudAiService;
+    : cloudAiService;
 
   const task = await service.pollTaskUntilComplete(
     remoteTaskId,

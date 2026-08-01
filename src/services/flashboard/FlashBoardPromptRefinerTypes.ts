@@ -13,7 +13,6 @@ export interface FlashBoardPromptRefinerReference {
 }
 
 export interface RefineFlashBoardPromptInput {
-  apiKey?: string;
   prompt: string;
   entry: CatalogEntry;
   service: CatalogEntry['service'];

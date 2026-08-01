@@ -68,6 +68,7 @@ Every successful free-offer claim sends that recipient an email with the claiman
 1. User opens `/credits/claim?code=...`.
 2. The page reads claim metadata from `GET /api/credits/claim`.
 3. A normal claim is redeemed on that page after magic-link sign-in.
+4. A newly created claim ledger entry updates the toolbar meter with the distinct positive-credit treatment; replaying an already claimed code only reconciles the balance and does not replay the animation.
 
 The automatic website-offer flow currently has no in-app entry point because
 its promotional banner is disabled.

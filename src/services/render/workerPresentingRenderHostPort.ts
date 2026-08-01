@@ -35,6 +35,7 @@ import type {
   RenderHostLayerCollector,
   RenderHostPort,
   RenderHostTelemetry,
+  RenderSurfaceFrameContext,
 } from './renderHostTypes';
 import type { WorkerRenderHostRuntimeJobOutput } from './workerRenderHostRuntimeHandlers';
 import type {
@@ -42,7 +43,11 @@ import type {
   WorkerRenderHostWebCodecsSeekMode,
   WorkerRenderSoftwareLayer,
 } from './workerRenderHostRuntimeCommands';
-import type { WorkerGpuWebCodecsFrameLayer } from './workerGpuRuntimeCommands';
+import type {
+  WorkerGpuPresentFrameStackCommand,
+  WorkerGpuRenderIntent,
+  WorkerGpuWebCodecsFrameLayer,
+} from './workerGpuRuntimeCommands';
 import {
   createBrowserWorkerRenderHostRuntimeBridge,
   isBrowserWorkerRenderHostRuntimeSupported,
@@ -77,10 +82,18 @@ import {
 } from './workerSoftwareHtmlVideoSnapshotCache';
 import {
   WorkerGpuMediaSourceRegistry,
+  cloneWorkerGpuRenderLayer,
   resolveWorkerGpuVideoPresentationLayerStyle,
   type WorkerGpuVideoPresentationLayer,
   type WorkerGpuVideoPresentationSource,
 } from './workerGpuMediaSourceRegistry';
+import { buildWorkerGpuAdjustmentExecutionPlan } from './workerGpuAdjustmentPlanAdapter';
+import {
+  buildWorkerGpuFrameStackProjectionRequest,
+  type WorkerGpuFrameStackResolvedSource,
+} from './workerGpuFrameStackHostProjection';
+import { projectWorkerGpuFrameStack } from './workerGpuFrameStackProjector';
+import { closeWorkerGpuFrameStackTransferables } from './workerGpuFrameStackContract';
 
 const log = Logger.create('WorkerPresentingRenderHostPort');
 const WORKER_PRESENTING_TARGET_FPS = 60;
@@ -128,6 +141,7 @@ interface WorkerGpuPresentationRequest {
   readonly targetKey: string;
   readonly streamQueue: boolean;
   readonly exactSeekQueue: boolean;
+  readonly frameContext?: RenderSurfaceFrameContext;
 }
 
 interface WorkerGpuActiveStreamPresentation {
@@ -272,7 +286,7 @@ class WorkerPresentingRenderHostPortCore {
   private readonly lastTargetKeyByTarget = new Map<string, string>();
   private readonly compositeCache = new WorkerPresentingCompositeCache();
   private readonly ramPreviewRenderEngine: RamPreviewRenderEngine = {
-    render: (layers) => this.render(layers),
+    render: (layers, frameContext) => this.render(layers, frameContext),
     cacheCompositeFrame: (time) => this.cacheCompositeFrame(time),
   };
   private latestRenderedLayers: readonly Layer[] = [];
@@ -291,6 +305,8 @@ class WorkerPresentingRenderHostPortCore {
   private lastGpuOnlyVideoFrameStats: Record<string, unknown> | null = null;
   private gpuOnlyVideoSourceLoadCount = 0;
   private gpuOnlyVideoSourceLoadFailureCount = 0;
+  private gpuOnlyFrameStackCount = 0;
+  private gpuOnlyFrameStackFailureCount = 0;
   private coalescedGpuFrameCount = 0;
   private readonly inFlightGpuPresentationTargets = new Set<string>();
   private readonly pendingGpuPresentationsByTarget = new Map<string, WorkerGpuPresentationRequest[]>();
@@ -512,29 +528,36 @@ class WorkerPresentingRenderHostPortCore {
     }
   }
 
-  render(_layers: Layer[]): void {
+  render(
+    _layers: Layer[],
+    frameContext?: Parameters<RenderHostPort['render']>[1],
+  ): void {
     this.latestRenderedLayers = _layers;
     if (this.fallbackTargetIds.has('preview')) {
       if (this.strictWorkerOnly) {
         this.blockMainFallback('render:fallback-target');
         return;
       }
-      this.fallback.render(_layers);
+      this.fallback.render(_layers, frameContext);
       return;
     }
-    this.presentLayers('preview', _layers, 'render');
+    this.presentLayers('preview', _layers, 'render', frameContext);
   }
 
-  renderToPreviewCanvas(canvasId: string, layers: Layer[]): void {
+  renderToPreviewCanvas(
+    canvasId: string,
+    layers: Layer[],
+    frameContext?: Parameters<RenderHostPort['renderToPreviewCanvas']>[2],
+  ): void {
     if (this.fallbackTargetIds.has(canvasId)) {
       if (this.strictWorkerOnly) {
         this.blockMainFallback(`renderToPreviewCanvas:fallback-target:${canvasId}`);
         return;
       }
-      this.fallback.renderToPreviewCanvas(canvasId, layers);
+      this.fallback.renderToPreviewCanvas(canvasId, layers, frameContext);
       return;
     }
-    this.presentLayers(canvasId, layers, 'render-to-preview-canvas');
+    this.presentLayers(canvasId, layers, 'render-to-preview-canvas', frameContext);
   }
 
   getIsExporting(): boolean {
@@ -1055,6 +1078,9 @@ class WorkerPresentingRenderHostPortCore {
     requestedSource: string | undefined,
     diagnostics: WorkerSoftwarePreviewFrameDiagnostics | null | undefined,
   ): string {
+    if (output.presentedFrameId?.includes(':gpu-frame-stack:')) {
+      return 'worker-gpu-only:frame-stack';
+    }
     if (output.presentedFrameId?.includes(':gpu-video-composite:')) {
       return 'worker-gpu-only:video-frame-compositor';
     }
@@ -1095,6 +1121,7 @@ class WorkerPresentingRenderHostPortCore {
       output.commandType === 'presentSoftwareFrame' ||
       output.commandType === 'gpu.presentTestPattern' ||
       output.commandType === 'gpu.presentWebCodecsFrame' ||
+      output.commandType === 'gpu.presentFrameStack' ||
       output.commandType === 'RenderNow' ||
       output.commandType === 'renderFrame' ||
       output.commandType === 'scrub' ||
@@ -1136,10 +1163,15 @@ class WorkerPresentingRenderHostPortCore {
     }, Date.now());
   }
 
-  private presentLayers(targetId: string, layers: readonly Layer[], source: string): void {
+  private presentLayers(
+    targetId: string,
+    layers: readonly Layer[],
+    source: string,
+    frameContext?: RenderSurfaceFrameContext,
+  ): void {
     this.lastLayerCount = layers.length;
     if (this.isGpuOnlyPresentation) {
-      this.presentGpuOnlyPattern(targetId, layers, source);
+      this.presentGpuOnlyPattern(targetId, layers, source, frameContext);
       this.publishEngineStats();
       return;
     }
@@ -1167,7 +1199,12 @@ class WorkerPresentingRenderHostPortCore {
     this.startSoftwarePresentation(request);
   }
 
-  private presentGpuOnlyPattern(targetId: string, layers: readonly Layer[], source: string): void {
+  private presentGpuOnlyPattern(
+    targetId: string,
+    layers: readonly Layer[],
+    source: string,
+    frameContext?: RenderSurfaceFrameContext,
+  ): void {
     const record = this.resolvePresentationRecord(targetId);
     if (!record) {
       this.gpuOnlyTestPatternFailureCount += 1;
@@ -1183,6 +1220,7 @@ class WorkerPresentingRenderHostPortCore {
       targetKey: workerPresentationTargetKey(layers),
       streamQueue: this.shouldQueueGpuStreamPresentation(layers),
       exactSeekQueue: this.shouldQueueGpuExactSeekPresentation(layers),
+      frameContext,
     };
     if (request.streamQueue) {
       const videoSources = this.resolveGpuOnlyVideoPresentationSources(layers);
@@ -1224,6 +1262,7 @@ class WorkerPresentingRenderHostPortCore {
       this.isPlaying &&
       !this.isScrubbing &&
       this.isWorkerGpuStreamPlaybackSpeed() &&
+      !this.layersRequireGpuFrameStack(layers) &&
       this.hasVisibleGpuOnlyVideoLayer(layers);
   }
 
@@ -1235,6 +1274,7 @@ class WorkerPresentingRenderHostPortCore {
     return this.isGpuOnlyPresentation &&
       !this.isPlaying &&
       !this.isScrubbing &&
+      !this.layersRequireGpuFrameStack(layers) &&
       this.hasVisibleGpuOnlyVideoLayer(layers);
   }
 
@@ -1318,6 +1358,328 @@ class WorkerPresentingRenderHostPortCore {
       layers,
       useMediaStore.getState().files,
     );
+  }
+
+  private resolveGpuOnlyFrameStackVideoSources(
+    layers: readonly Layer[],
+  ): {
+    readonly byLayer: ReadonlyMap<Layer, WorkerGpuVideoPresentationLayer>;
+    readonly loadSources: readonly WorkerGpuVideoPresentationLayer[];
+  } {
+    const flattened: Layer[] = [];
+    const visitedLayerArrays = new Set<readonly Layer[]>();
+    const visit = (nextLayers: readonly Layer[]): void => {
+      if (visitedLayerArrays.has(nextLayers)) return;
+      visitedLayerArrays.add(nextLayers);
+      for (const layer of nextLayers) {
+        flattened.push(layer);
+        const nestedLayers = layer.source?.nestedComposition?.layers;
+        if (nestedLayers) visit(nestedLayers);
+      }
+    };
+    visit(layers);
+    const resolved = this.resolveGpuOnlyVideoPresentationSources(flattened);
+    const byLayer = new Map<Layer, WorkerGpuVideoPresentationLayer>();
+    const loadSourcesById = new Map<string, WorkerGpuVideoPresentationLayer>();
+    for (const source of resolved) {
+      byLayer.set(source.sourceLayer, source);
+      loadSourcesById.set(source.sourceId, source);
+    }
+    return { byLayer, loadSources: [...loadSourcesById.values()] };
+  }
+
+  private resolveGpuFrameStackIntent(): WorkerGpuRenderIntent {
+    if (this.isScrubbing) return 'scrub';
+    if (this.isPlaying) return 'playback';
+    return 'preview';
+  }
+
+  private layersRequireGpuFrameStack(layers: readonly Layer[]): boolean {
+    const visibleSources = layers.filter((layer) => (
+      layer.visible
+      && layer.opacity > 0
+      && layer.source
+      && layer.source.type !== 'motion-adjustment'
+    ));
+    const visibleVideoMechanisms = new Set(visibleSources.flatMap((layer) => {
+      const source = layer.source;
+      if (source?.type !== 'video') return [];
+      const workerWebCodecs = flags.useFullWebCodecsPlayback
+        && !!(source.file || source.mediaFileId);
+      return [workerWebCodecs ? 'worker-webcodecs' : 'host-bitmap'];
+    }));
+    return this.hasGpuOnlyAdjustmentLayer(layers)
+      || visibleVideoMechanisms.size > 1
+      || visibleSources.some((layer) => (
+        layer.source?.type !== 'video'
+        || layer.is3D === true
+        || layer.wireframe === true
+        || layer.maskClipId !== undefined
+        || (layer.masks?.length ?? 0) > 0
+        || !!layer.source?.nestedComposition
+      ));
+  }
+
+  private shouldUseGpuFrameStack(request: WorkerGpuPresentationRequest): boolean {
+    return this.layersRequireGpuFrameStack(request.layers);
+  }
+
+  private resolveGpuFrameStackSource(
+    layer: Layer,
+    webCodecsSources: ReadonlyMap<Layer, WorkerGpuVideoPresentationLayer>,
+    loadedDimensions: ReadonlyMap<string, { readonly width: number; readonly height: number }>,
+    targetWidth: number,
+    targetHeight: number,
+  ): WorkerGpuFrameStackResolvedSource | null {
+    const source = layer.source;
+    if (!source) return null;
+    if (source.type === 'image' && source.imageElement) {
+      const width = source.imageElement.naturalWidth;
+      const height = source.imageElement.naturalHeight;
+      if (width <= 0 || height <= 0) return null;
+      return {
+        kind: 'bitmap', sourceId: `image:${layer.sourceClipId ?? layer.id}`,
+        runtimeSourceKind: 'image', source: source.imageElement, width, height,
+      };
+    }
+    if (source.type === 'text' && source.textCanvas) {
+      const width = source.textCanvas.width;
+      const height = source.textCanvas.height;
+      if (width <= 0 || height <= 0) return null;
+      return {
+        kind: 'bitmap', sourceId: `text:${layer.sourceClipId ?? layer.id}`,
+        runtimeSourceKind: 'text', source: source.textCanvas, width, height,
+      };
+    }
+    if (source.type === 'solid' || source.type === 'color') {
+      const intrinsicWidth = source.intrinsicWidth;
+      const intrinsicHeight = source.intrinsicHeight;
+      if (typeof source.color !== 'string') return null;
+      const width = typeof intrinsicWidth === 'number' && Number.isSafeInteger(intrinsicWidth) && intrinsicWidth > 0
+        ? intrinsicWidth
+        : targetWidth;
+      const height = typeof intrinsicHeight === 'number' && Number.isSafeInteger(intrinsicHeight) && intrinsicHeight > 0
+        ? intrinsicHeight
+        : targetHeight;
+      return {
+        kind: 'solid', sourceId: `${source.type}:${layer.sourceClipId ?? layer.id}`,
+        runtimeSourceKind: source.type, color: source.color, width, height,
+      };
+    }
+    if (source.type !== 'video') return null;
+    // A runtime VideoFrame is already the collector's exact decoded frame and
+    // must win over both a concurrently attached HTML element and a file-backed
+    // decoder candidate (notably on export/target collectors).
+    if (source.videoFrame) {
+      const width = source.videoFrame.displayWidth || source.videoFrame.codedWidth;
+      const height = source.videoFrame.displayHeight || source.videoFrame.codedHeight;
+      if (width <= 0 || height <= 0) return null;
+      return {
+        kind: 'bitmap',
+        sourceId: `video-frame:${layer.sourceClipId ?? layer.id}`,
+        source: source.videoFrame,
+        width,
+        height,
+      };
+    }
+    const webCodecs = flags.useFullWebCodecsPlayback
+      ? webCodecsSources.get(layer)
+      : undefined;
+    const dimensions = webCodecs
+      ? loadedDimensions.get(webCodecs.sourceId)
+      : undefined;
+    if (webCodecs && dimensions) {
+      return {
+        kind: 'webcodecs',
+        sourceId: webCodecs.sourceId,
+        mediaTime: webCodecs.mediaTime,
+        width: dimensions.width,
+        height: dimensions.height,
+      };
+    }
+    const video = source.videoElement;
+    if (
+      !video
+      || video.readyState < 2
+      || video.seeking
+      || video.videoWidth <= 0
+      || video.videoHeight <= 0
+    ) {
+      return null;
+    }
+    if (
+      typeof source.mediaTime === 'number'
+      && Number.isFinite(source.mediaTime)
+      && Number.isFinite(video.currentTime)
+    ) {
+      const maxDriftSeconds = this.isPlaying
+        ? WORKER_PRESENTING_PLAYBACK_SNAPSHOT_MAX_DRIFT_SECONDS
+        : 0.18;
+      if (Math.abs(video.currentTime - source.mediaTime) > maxDriftSeconds) return null;
+    }
+    return {
+      kind: 'bitmap',
+      sourceId: `html-video:${layer.sourceClipId ?? layer.id}`,
+      source: video,
+      width: video.videoWidth,
+      height: video.videoHeight,
+    };
+  }
+
+  private async runGpuFrameStackPresentation(
+    request: WorkerGpuPresentationRequest,
+    bridge: WorkerRenderHostRuntimeBridge,
+    requestId: string,
+    targetMoved: boolean,
+  ): Promise<void> {
+    const { record, sequence } = request;
+    const targetId = record.target.id;
+    const frameContext = request.frameContext;
+    if (!frameContext) {
+      throw new Error('Worker GPU frame-stack presentation requires an exact render frame context');
+    }
+    this.stopGpuOnlyStreamPresentation(targetId, 'exact atomic frame stack');
+    const videoSources = this.resolveGpuOnlyFrameStackVideoSources(request.layers);
+    const webCodecsSourcesUsed = flags.useFullWebCodecsPlayback
+      ? videoSources.loadSources.filter((source) => !source.sourceLayer.source?.videoFrame)
+      : [];
+    if (
+      webCodecsSourcesUsed.length > 0
+      && !(await this.ensureGpuOnlyVideoSourcesLoaded(bridge, webCodecsSourcesUsed, sequence))
+    ) {
+      throw new Error('Worker GPU frame-stack WebCodecs sources could not be loaded');
+    }
+    const loadedDimensions = new Map(webCodecsSourcesUsed.map((source) => {
+      const dimensions = this.workerGpuMediaSources.getLoadedSourceDimensions(source.sourceId);
+      if (!dimensions) {
+        throw new Error(`Worker GPU frame-stack source '${source.sourceId}' has no authoritative dimensions`);
+      }
+      return [source.sourceId, dimensions] as const;
+    }));
+    const nowMs = Date.now();
+    const intent = this.resolveGpuFrameStackIntent();
+    const frame = {
+      requestId,
+      targetId,
+      compositionId: frameContext.compositionId,
+      timelineTime: frameContext.timelineTimeSeconds,
+      frameIndex: sequence,
+      intent,
+      submitByMs: nowMs,
+      expireAfterMs: nowMs + 1_000,
+      graphVersion: sequence,
+      exact: true as const,
+    };
+    const projectionRequest = buildWorkerGpuFrameStackProjectionRequest({
+      layers: request.layers,
+      width: record.canvas.width,
+      height: record.canvas.height,
+      frame,
+      occurrenceNamespace: `${frameContext.compositionId}:${targetId}:frame-stack`,
+      intent,
+      surface: intent === 'export'
+        ? 'export'
+        : targetId === 'preview'
+          ? 'preview'
+          : 'target-preview',
+      nowMs,
+      resolveVideoSource: (layer) => {
+        const resolved = this.resolveGpuFrameStackSource(
+          layer,
+          videoSources.byLayer,
+          loadedDimensions,
+          record.canvas.width,
+          record.canvas.height,
+        );
+        if (!resolved || resolved.kind === 'solid') return null;
+        if (resolved.kind === 'bitmap' && 'runtimeSourceKind' in resolved) return null;
+        return resolved;
+      },
+      resolveSource: (layer) => this.resolveGpuFrameStackSource(
+        layer,
+        videoSources.byLayer,
+        loadedDimensions,
+        record.canvas.width,
+        record.canvas.height,
+      ),
+    });
+    const stack = await projectWorkerGpuFrameStack(projectionRequest);
+    if (
+      this.latestPresentationSequenceByTarget.get(targetId) !== sequence
+      || this.currentTargetSurfaceGeneration(targetId) !== record.targetSurfaceGeneration
+      || !this.attachedWorkerTargetIds.has(targetId)
+    ) {
+      closeWorkerGpuFrameStackTransferables(stack);
+      return;
+    }
+    const admissionNowMs = Date.now();
+    const command: WorkerGpuPresentFrameStackCommand = {
+      type: 'gpu.presentFrameStack',
+      commandId: requestId,
+      admission: {
+        nowMs: admissionNowMs,
+        requestId,
+        targetId,
+        intent,
+        graphVersion: sequence,
+      },
+      stack,
+    };
+    let output: WorkerRenderHostRuntimeJobOutput;
+    let ownershipDelegated = false;
+    try {
+      const presentation = bridge.presentGpuFrameStack(command);
+      ownershipDelegated = true;
+      output = await presentation;
+    } catch (error) {
+      // Only a synchronous collection/postMessage failure leaves the source
+      // snapshots owned by Main. Once a Promise is returned, transfer has
+      // succeeded and Worker owns their lifecycle even if the job rejects.
+      if (!ownershipDelegated) closeWorkerGpuFrameStackTransferables(stack);
+      throw error;
+    }
+    this.lastGpuOnlyVideoFrameStats = this.runtimeOutputStats(output);
+    const presented = this.runtimeOutputPresentedRequest(output, requestId);
+    this.recordRuntimeOutput(output, {
+      changed: presented,
+      targetMoved,
+      source: 'worker-gpu-only:frame-stack',
+    });
+    if (!presented) {
+      this.presentationFailures += 1;
+      this.gpuOnlyFrameStackFailureCount += 1;
+    } else {
+      this.gpuOnlyFrameStackCount += 1;
+      if (webCodecsSourcesUsed.length > 0) this.gpuOnlyVideoFrameCount += 1;
+      this.lastTargetKeyByTarget.set(targetId, request.targetKey);
+    }
+    this.publishEngineStats();
+  }
+
+  private hasGpuOnlyAdjustmentLayer(layers: readonly Layer[]): boolean {
+    return layers.some((layer) => layer.visible && layer.source?.type === 'motion-adjustment');
+  }
+
+  private buildGpuOnlyAdjustmentPlan(
+    request: WorkerGpuPresentationRequest,
+    videoSources: readonly Pick<WorkerGpuVideoPresentationLayer, 'layerId' | 'sourceId'>[],
+    requestId: string,
+  ) {
+    if (!this.hasGpuOnlyAdjustmentLayer(request.layers)) return null;
+    if (!request.frameContext) {
+      throw new Error('Worker GPU adjustment presentation requires an exact render frame context');
+    }
+    return buildWorkerGpuAdjustmentExecutionPlan({
+      layers: request.layers,
+      videoSources,
+      frameContext: request.frameContext,
+      requestId,
+      targetId: request.record.target.id,
+      frameIndex: request.sequence,
+      intent: this.isScrubbing ? 'scrub' : this.isPlaying ? 'playback' : 'preview',
+      nowMs: Date.now(),
+      resourceNamespace: `${request.frameContext.compositionId}:${request.record.target.id}`,
+    });
   }
 
   private createGpuOnlyVideoFrameLayers(
@@ -1425,6 +1787,7 @@ class WorkerPresentingRenderHostPortCore {
           mediaTime,
           frame,
           timestampSeconds,
+          renderLayer: cloneWorkerGpuRenderLayer(layer),
           ...resolveWorkerGpuVideoPresentationLayerStyle(layer),
         };
       } catch (error) {
@@ -2033,6 +2396,16 @@ class WorkerPresentingRenderHostPortCore {
     try {
       const previousTargetKey = this.lastTargetKeyByTarget.get(record.target.id);
       const targetMoved = previousTargetKey !== undefined && previousTargetKey !== request.targetKey;
+      if (this.shouldUseGpuFrameStack(request)) {
+        attemptedVideoFrame = this.hasVisibleGpuOnlyVideoLayer(request.layers);
+        try {
+          await this.runGpuFrameStackPresentation(request, bridge, requestId, targetMoved);
+        } catch (error) {
+          this.gpuOnlyFrameStackFailureCount += 1;
+          throw error;
+        }
+        return;
+      }
       const hasHtmlVideoLayer = request.layers.some((layer) => !!layer.source?.videoElement);
       const htmlFramePacket = !flags.useFullWebCodecsPlayback || hasHtmlVideoLayer
         ? await this.createGpuOnlyHtmlVideoFrameLayers(request.layers)
@@ -2040,13 +2413,26 @@ class WorkerPresentingRenderHostPortCore {
       if (htmlFramePacket && htmlFramePacket.layers.length > 0) {
         attemptedVideoFrame = true;
         this.stopGpuOnlyStreamPresentation(record.target.id, 'transferred HTMLVideo frame');
+        const adjustmentPlan = this.buildGpuOnlyAdjustmentPlan(
+          request,
+          htmlFramePacket.layers.map((layer) => ({
+            layerId: layer.renderLayer?.id ?? layer.sourceId,
+            sourceId: layer.sourceId,
+          })),
+          requestId,
+        );
         const output = await bridge.presentGpuTransferredVideoFrames(
           requestId,
           record.target.id,
-          request.layers[0]?.source?.mediaTime ?? 0,
+          adjustmentPlan?.frame.timelineTime
+            ?? htmlFramePacket.layers[0]?.mediaTime
+            ?? request.frameContext?.timelineTimeSeconds
+            ?? 0,
           sequence,
           htmlFramePacket.layers,
           htmlFramePacket.transfer,
+          adjustmentPlan ?? undefined,
+          request.frameContext?.compositionId,
         );
         this.lastGpuOnlyVideoFrameStats = this.runtimeOutputStats(output);
         const presented = this.runtimeOutputPresentedRequest(output, requestId);
@@ -2084,7 +2470,14 @@ class WorkerPresentingRenderHostPortCore {
       const videoSource = videoSources[0] ?? null;
       if (videoSource) {
         attemptedVideoFrame = true;
-        const mode = this.resolveGpuOnlyWebCodecsMode(videoSource);
+        const adjustmentPlan = this.buildGpuOnlyAdjustmentPlan(
+          request,
+          videoSources,
+          requestId,
+        );
+        const mode = adjustmentPlan
+          ? (this.isScrubbing ? 'scrub' : 'advance')
+          : this.resolveGpuOnlyWebCodecsMode(videoSource);
         if (mode === 'stream') {
           await this.startOrKeepGpuOnlyStreamPresentation({
             bridge,
@@ -2108,13 +2501,15 @@ class WorkerPresentingRenderHostPortCore {
           requestId,
           record.target.id,
           videoSource.sourceId,
-          videoSource.timelineTime,
+          adjustmentPlan?.frame.timelineTime ?? videoSource.timelineTime,
           mediaTime,
           sequence,
           {
             mode,
             timeoutMs: this.timeoutForGpuOnlyWebCodecsMode(mode),
             layers: this.createGpuOnlyVideoFrameLayers(videoSources),
+            adjustmentPlan: adjustmentPlan ?? undefined,
+            compositionId: request.frameContext?.compositionId,
           },
         );
         this.lastGpuOnlyVideoFrameStats = this.runtimeOutputStats(output);
@@ -2715,6 +3110,8 @@ class WorkerPresentingRenderHostPortCore {
       lastGpuOnlyVideoFrameStats: this.lastGpuOnlyVideoFrameStats,
       gpuOnlyVideoSourceLoadCount: this.gpuOnlyVideoSourceLoadCount,
       gpuOnlyVideoSourceLoadFailureCount: this.gpuOnlyVideoSourceLoadFailureCount,
+      gpuOnlyFrameStackCount: this.gpuOnlyFrameStackCount,
+      gpuOnlyFrameStackFailureCount: this.gpuOnlyFrameStackFailureCount,
       gpuOnlyUnsupportedRenderEffectFallbackCount: this.workerGpuMediaSources.unsupportedRenderEffectFallbackCount,
       gpuOnlyUnsupportedRenderEffectFallbacks: this.workerGpuMediaSources.lastUnsupportedRenderEffectFallbacks,
       loadedGpuVideoSourceCount: this.workerGpuMediaSources.loadedSourceCount,

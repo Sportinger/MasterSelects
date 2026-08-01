@@ -33,8 +33,70 @@ import {
 import { collectNestedClipKeyframes, mergeNestedClipKeyframes } from './nestedComposition/nestedCompositionKeyframes';
 import { appendNestedTextClip } from './nestedComposition/nestedCompositionTextClip';
 import { Logger } from '../../services/logger';
+import { sanitizeTimelineParentRestoreTree } from '../../services/motionDesign/structure/timelineParentRestoreAdapter';
 
 const log = Logger.create('NestedCompositionLoader');
+
+function remapNestedParentClipIds(
+  scopeClipId: string,
+  serializedClips: readonly SerializableClip[],
+  restoredClips: readonly TimelineClip[],
+): TimelineClip[] {
+  const parentIdByRestoredClipId = new Map(serializedClips.map((clip) => [
+    generateNestedClipId(scopeClipId, clip.id),
+    clip.parentClipId
+      ? generateNestedClipId(scopeClipId, clip.parentClipId)
+      : undefined,
+  ]));
+  return restoredClips.map((clip) => {
+    const parentClipId = parentIdByRestoredClipId.get(clip.id);
+    if (parentClipId !== clip.parentClipId) {
+      // These are newly restored runtime objects. Preserve their identity so
+      // pending image/vector restore callbacks keep patching the returned clip.
+      clip.parentClipId = parentClipId;
+    }
+    return clip;
+  });
+}
+
+function applySanitizedParentAssignmentsInPlace(
+  targetClips: readonly TimelineClip[],
+  sanitizedClips: readonly TimelineClip[],
+): void {
+  const sanitizedById = new Map(sanitizedClips.map((clip) => [clip.id, clip]));
+  for (const target of targetClips) {
+    const sanitized = sanitizedById.get(target.id);
+    if (!sanitized) continue;
+    target.parentClipId = sanitized.parentClipId;
+    if (target.nestedClips && sanitized.nestedClips) {
+      applySanitizedParentAssignmentsInPlace(target.nestedClips, sanitized.nestedClips);
+    }
+  }
+}
+
+function sanitizeRemappedNestedParentGraph(
+  compositionId: string,
+  clips: readonly TimelineClip[],
+): TimelineClip[] {
+  const restored = sanitizeTimelineParentRestoreTree(compositionId, clips);
+  if (restored.diagnostics.length > 0) {
+    log.warn('Sanitized invalid Motion parent relationships during nested restore', {
+      compositionId,
+      failures: restored.diagnostics.map((item) => ({
+        nestedCompositionId: item.compositionId,
+        clipPath: item.clipPath,
+        code: item.failure.code,
+        clipIds: item.failure.clipIds,
+      })),
+    });
+  }
+  if (restored.changed) {
+    // Runtime-backed nested clips can still have async restore work in flight.
+    // Apply only the sanitized relationship fields onto those same objects.
+    applySanitizedParentAssignmentsInPlace(clips, restored.clips);
+  }
+  return clips as TimelineClip[];
+}
 
 export { collectNestedClipKeyframes, mergeNestedClipKeyframes } from './nestedComposition/nestedCompositionKeyframes';
 export { buildAndApplyNestedClipSegments, buildClipSegments, calculateNestedClipBoundaries, scheduleNestedClipSegmentBuild } from './nestedComposition/nestedCompositionSegments';
@@ -365,7 +427,14 @@ async function loadSubNestedClips(
     }
   }
 
-  return result;
+  return sanitizeRemappedNestedParentGraph(
+    composition.id,
+    remapNestedParentClipIds(
+      parentClipId,
+      composition.timelineData.clips,
+      result,
+    ),
+  );
 }
 
 export async function loadNestedClips(params: LoadNestedClipsParams): Promise<TimelineClip[]> {
@@ -605,6 +674,16 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
     }
   }
 
+  const nestedClipsWithRemappedParents = remapNestedParentClipIds(
+    compClipId,
+    composition.timelineData.clips,
+    nestedClips,
+  );
+  const sanitizedNestedClips = sanitizeRemappedNestedParentGraph(
+    composition.id,
+    nestedClipsWithRemappedParents,
+  );
+
   if (!mergeNestedClipKeyframes({
     compClipId,
     nestedKeyframes,
@@ -612,7 +691,7 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
     set,
     isCurrentTimelineSession,
   })) {
-    return nestedClips;
+    return sanitizedNestedClips;
   }
 
   if (nestedKeyframes.size > 0) {
@@ -622,7 +701,7 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
     });
   }
 
-  return nestedClips;
+  return sanitizedNestedClips;
 }
 
 function loadVectorAnimationNestedClip(

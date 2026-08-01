@@ -1,7 +1,5 @@
 import {
   refineFlashBoardPromptHostedTransport,
-  refineFlashBoardPromptTransport,
-  streamRefineFlashBoardPromptTransport,
 } from './FlashBoardPromptRefinerTransport';
 import type {
   RefineFlashBoardPromptInput,
@@ -31,15 +29,4 @@ export async function refineFlashBoardPromptHosted(
   options: Pick<RefineFlashBoardPromptStreamOptions, 'signal'> = {},
 ): Promise<string> {
   return refineFlashBoardPromptHostedTransport(input, options);
-}
-
-export async function streamRefineFlashBoardPrompt(
-  input: RefineFlashBoardPromptInput,
-  options: RefineFlashBoardPromptStreamOptions = {},
-): Promise<string> {
-  return streamRefineFlashBoardPromptTransport(input, options);
-}
-
-export async function refineFlashBoardPrompt(input: RefineFlashBoardPromptInput): Promise<string> {
-  return refineFlashBoardPromptTransport(input);
 }

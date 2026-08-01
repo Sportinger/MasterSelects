@@ -1,6 +1,5 @@
 import type { BlendMode, Layer, TimelineClip } from '../../types';
 import { canUseSharedPreviewRuntimeSession } from '../mediaRuntime/runtimePlayback';
-import { evaluateTransitionMappedAnimation } from '../compositionRender/transitionMappedAnimation';
 import { resolveTransitionRecipeBlendMode } from '../timeline/transitionRecipeBlendWindows';
 import { evaluateTransitionRenderState } from '../../utils/transitionRenderInterpolation';
 import type { NativeDecoder } from '../nativeHelper/NativeDecoder';
@@ -16,6 +15,8 @@ import { getFinalOpacity, getLayerSourceMetadata } from './layerBuilderVideoSour
 import { addLayerBuilderMaskProperties, withLayerBuilderMaskProperties } from './layerBuilderLayerPostProcessing';
 import type { TransformCache } from './TransformCache';
 import type { FrameContext } from './types';
+import { getNestedClipKeyframes } from './layerBuilderNestedLayers';
+import { evaluateParentedClipTransform } from './parentTransformEvaluation';
 
 type BuildVideoLayerParams = {
   clip: TimelineClip;
@@ -78,10 +79,20 @@ export function buildLayerBuilderVideoLayer(params: BuildTimelineVideoLayerParam
   const timeInfo = getClipTimeInfo(ctx, clip);
   const visualClipTime = timeInfo.visualClipTime;
   const visualClipLocalTime = timeInfo.visualClipLocalTime;
-  const mappedAnimation = clip.transitionSourceMap?.version === 2
-    ? evaluateTransitionMappedAnimation(clip, ctx.getClipKeyframes?.(clip.id), visualClipLocalTime)
+  const mappedEvaluation = clip.transitionSourceMap?.version === 2
+    ? evaluateParentedClipTransform({
+        clip,
+        clips: ctx.clips ?? [clip],
+        clipLocalTime: visualClipLocalTime,
+        parentTimelineTime: clip.startTime + visualClipLocalTime,
+        getKeyframes: candidate => {
+          const contextKeyframes = ctx.getClipKeyframes?.(candidate.id);
+          return contextKeyframes?.length ? contextKeyframes : getNestedClipKeyframes(candidate);
+        },
+      })
     : undefined;
-  if (mappedAnimation === null) return null;
+  if (mappedEvaluation && !mappedEvaluation.ok) return null;
+  const mappedAnimation = mappedEvaluation?.mappedAnimation;
   const mediaFile = getMediaFileForClip(ctx, clip);
   const videoSource = resolveLayerBuilderVideoSource({
     clip,
@@ -110,7 +121,7 @@ export function buildLayerBuilderVideoLayer(params: BuildTimelineVideoLayerParam
       previewPathBase: 'proxy-image-frame',
     });
     if (proxyFrame) {
-      return withLayerBuilderMaskProperties(buildLayerBuilderProxyImageLayer({
+      const proxyLayer = withLayerBuilderMaskProperties(buildLayerBuilderProxyImageLayer({
         clip,
         layerIndex,
         ctx,
@@ -124,12 +135,43 @@ export function buildLayerBuilderVideoLayer(params: BuildTimelineVideoLayerParam
         }),
         timing: proxyFrame,
       }), clip, visualClipLocalTime, ctx.getClipKeyframes?.(clip.id));
+      if (!mappedEvaluation || !mappedAnimation) return proxyLayer;
+
+      const mappedTransform = transformCache.getTransform(
+        `${ctx.activeCompId}_${layerIndex}`,
+        mappedEvaluation.transform,
+      );
+      proxyLayer.opacity = getFinalOpacity(mappedTransform.opacity, opacityOverride);
+      proxyLayer.blendMode = resolveTransitionRecipeBlendMode(
+        clip.transitionRecipeBlendWindows,
+        clip.startTime + visualClipLocalTime,
+        mappedTransform.blendMode as BlendMode,
+      );
+      proxyLayer.effects = mappedAnimation.effects;
+      proxyLayer.position = mappedTransform.position;
+      proxyLayer.scale = mappedTransform.scale;
+      proxyLayer.rotation = mappedTransform.rotation;
+      delete proxyLayer.maskClipId;
+      delete proxyLayer.maskInvert;
+      delete proxyLayer.masks;
+      if (mappedAnimation.masks?.some(mask => mask.enabled !== false)) {
+        proxyLayer.maskClipId = clip.id;
+        proxyLayer.maskInvert = false;
+        proxyLayer.masks = mappedAnimation.masks;
+      }
+      const proxyTransitionRender = evaluateTransitionRenderState(
+        clip.transitionRender,
+        ctx.getClipKeyframes?.(clip.id),
+        visualClipLocalTime,
+      );
+      if (proxyTransitionRender) proxyLayer.transitionRender = proxyTransitionRender;
+      return proxyLayer;
     }
   }
 
   const transform = transformCache.getTransform(
     `${ctx.activeCompId}_${layerIndex}`,
-    mappedAnimation?.transform ?? ctx.getInterpolatedTransform(clip.id, visualClipLocalTime),
+    mappedEvaluation?.transform ?? ctx.getInterpolatedTransform(clip.id, visualClipLocalTime),
   );
   const transitionRender = mappedAnimation
     ? evaluateTransitionRenderState(

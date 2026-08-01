@@ -136,6 +136,7 @@ export const buildTimelineTrackShellDomControlClipIds = ({
   hoveredClipId,
   keyframeStateByClipId,
   specialStateByClipId,
+  parentingEnabled,
 }: Pick<TimelineTrackProps, 'clipDrag' | 'clipTrim' | 'clipFade' | 'clipContextMenu'> & {
   allTrackClips: readonly TimelineTrackShellClip[];
   trackClips: readonly TimelineTrackShellClip[];
@@ -143,6 +144,7 @@ export const buildTimelineTrackShellDomControlClipIds = ({
   hoveredClipId: string | null;
   keyframeStateByClipId: ReadonlyMap<string, TimelineTrackShellKeyframeState>;
   specialStateByClipId: ReadonlyMap<string, TimelineTrackShellSpecialState>;
+  parentingEnabled: boolean;
 }): Set<string> => {
   const ids = new Set<string>();
   const trackClipIds = new Set(allTrackClips.map((clip) => clip.id));
@@ -156,6 +158,7 @@ export const buildTimelineTrackShellDomControlClipIds = ({
   if (clipContextMenu?.clipId && trackClipIds.has(clipContextMenu.clipId)) ids.add(clipContextMenu.clipId);
   if (clipRenameId && trackClipIds.has(clipRenameId)) ids.add(clipRenameId);
   trackClips.forEach((clip) => {
+    if (parentingEnabled) ids.add(clip.id);
     if (keyframeStateByClipId.has(clip.id)) ids.add(clip.id);
     if (specialStateByClipId.has(clip.id)) ids.add(clip.id);
   });
@@ -169,16 +172,19 @@ export const countTimelineTrackShellSlots = ({
   clipContextMenu,
   keyframeStateByClipId,
   specialStateByClipId,
+  parentingEnabled,
 }: Pick<TimelineTrackProps, 'clipTrim' | 'clipFade' | 'clipContextMenu'> & {
   clips: readonly TimelineTrackShellClip[];
   keyframeStateByClipId: ReadonlyMap<string, TimelineTrackShellKeyframeState>;
   specialStateByClipId: ReadonlyMap<string, TimelineTrackShellSpecialState>;
+  parentingEnabled: boolean;
 }): Partial<Record<ClipInteractionShellModuleSlot, number>> => {
   const counts: Partial<Record<ClipInteractionShellModuleSlot, number>> = {};
   const countSlot = (slot: ClipInteractionShellModuleSlot) => {
     counts[slot] = (counts[slot] ?? 0) + 1;
   };
   clips.forEach((clip) => {
+    if (parentingEnabled) countSlot('parenting');
     if (clipTrim?.clipId === clip.id) countSlot('trim');
     if (clipFade?.clipId === clip.id) countSlot('fade');
     if (keyframeStateByClipId.has(clip.id)) countSlot('keyframe');
@@ -201,13 +207,16 @@ export const buildTimelineTrackClipShellMountState = ({
   hoveredClipId,
   keyframeStateByClipId,
   specialStateByClipId,
+  parentingEnabled,
 }: Pick<TimelineTrackProps, 'clipDrag' | 'clipTrim' | 'clipFade' | 'clipContextMenu'> & {
   clipId: string;
   hoveredClipId: string | null;
   keyframeStateByClipId: ReadonlyMap<string, TimelineTrackShellKeyframeState>;
   specialStateByClipId: ReadonlyMap<string, TimelineTrackShellSpecialState>;
+  parentingEnabled: boolean;
 }): ClipInteractionShellMountState => {
   const reasons: ClipInteractionShellMountReason[] = [];
+  if (parentingEnabled) reasons.push('parenting');
   if (hoveredClipId === clipId) reasons.push('hover');
   if (clipDrag?.clipId === clipId) reasons.push('drag');
   if (clipDrag?.multiSelectClipIds?.includes(clipId)) reasons.push('multi-drag');

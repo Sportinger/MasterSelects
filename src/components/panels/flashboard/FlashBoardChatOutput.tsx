@@ -1,4 +1,4 @@
-import type { RefObject } from 'react';
+import { useEffect, useState, type RefObject } from 'react';
 import type { FlashBoardChatMessage as StoredFlashBoardChatMessage } from '../../../stores/flashboardStore';
 import type { AgentActivityEvent } from '../../../services/flashboard/FlashBoardChatTypes';
 import type { StoryboardDecisionSelection } from '../../../services/storyboard/decisions';
@@ -40,16 +40,85 @@ function activityMeta(event: AgentActivityEvent): string {
   return 'progress';
 }
 
+interface CompactActivityEntry {
+  count: number;
+  event: AgentActivityEvent;
+}
+
+function compactActivityEntries(events: AgentActivityEvent[]): CompactActivityEntry[] {
+  const resolved: AgentActivityEvent[] = [];
+  const operationIndexes = new Map<string, number>();
+
+  for (const event of events) {
+    if (event.kind !== 'operation' || !event.operationId) {
+      resolved.push(event);
+      continue;
+    }
+    const existingIndex = operationIndexes.get(event.operationId);
+    if (existingIndex === undefined) {
+      operationIndexes.set(event.operationId, resolved.length);
+      resolved.push(event);
+    } else {
+      resolved[existingIndex] = event;
+    }
+  }
+
+  const compact: CompactActivityEntry[] = [];
+  for (const event of resolved) {
+    const previous = compact.at(-1);
+    if (
+      event.kind === 'operation'
+      && previous?.event.kind === 'operation'
+      && previous.event.phase === event.phase
+      && previous.event.safeLabel === event.safeLabel
+    ) {
+      previous.count += 1;
+    } else {
+      compact.push({ count: 1, event });
+    }
+  }
+  return compact;
+}
+
 function ActivityEntries({ events }: { events: AgentActivityEvent[] }) {
   return (
     <ol className="fb-chat-activity-entries">
-      {events.map((event) => (
+      {compactActivityEntries(events).map(({ count, event }) => (
         <li className={`is-${event.kind} is-${activityMeta(event)}`} key={event.id}>
           <span className="fb-chat-activity-meta">{activityMeta(event)}</span>
-          <span>{activityText(event)}</span>
+          <span>{activityText(event)}{count > 1 ? ` ×${count}` : ''}</span>
         </li>
       ))}
     </ol>
+  );
+}
+
+function formatElapsed(milliseconds: number): string {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1_000));
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  return `${minutes}:${String(totalSeconds % 60).padStart(2, '0')}`;
+}
+
+function RunningIndicator({ detail, startedAt }: { detail?: string; startedAt?: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(interval);
+  }, []);
+  const elapsed = formatElapsed(startedAt === undefined ? 0 : now - startedAt);
+
+  return (
+    <div
+      className="fb-chat-running-indicator"
+      role="status"
+      aria-label={detail ? `AI working: ${detail}, ${elapsed}` : `AI working, ${elapsed}`}
+      title={detail}
+    >
+      <span className="fb-chat-activity-spinner" aria-hidden="true" />
+      <span className="fb-chat-running-detail">{detail ?? 'Working'}</span>
+      <span className="fb-chat-running-elapsed">{elapsed}</span>
+    </div>
   );
 }
 
@@ -102,6 +171,11 @@ export function FlashBoardChatOutput({
   }
 
   const lastIndex = messages.length - 1;
+  const pendingMessage = [...messages].reverse().find((message) => message.isPending);
+  const latestActivity = pendingMessage?.activityEvents?.at(-1);
+  const runningDetail = latestActivity
+    ? activityText(latestActivity)
+    : pendingMessage?.kernelProgress?.label;
 
   return (
     <div className="fb-chat-output" ref={chatHistoryRef} aria-label="Chat history">
@@ -170,6 +244,12 @@ export function FlashBoardChatOutput({
             </div>
           )}
         </div>
+      )}
+      {isChatting && (
+        <RunningIndicator
+          detail={runningDetail}
+          startedAt={pendingMessage?.activityEvents?.[0]?.createdAt}
+        />
       )}
     </div>
   );

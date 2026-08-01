@@ -26,6 +26,7 @@ import {
   validatePropertyAuthoringValue,
   writePropertyAuthoringValue,
 } from '../properties/propertyAuthoring';
+import { normalizeMotionReplicatorBundle } from './contracts/replicatorTimelineAdapter';
 
 export const MOTION_DESIGN_MVP_CAPABILITY_VERSION = 2;
 export const MOTION_DESIGN_MVP_PRIMITIVES = [
@@ -40,8 +41,8 @@ export const MOTION_DESIGN_MVP_APPEARANCES = [
   'linear-gradient',
   'radial-gradient',
 ] as const;
-export const MOTION_DESIGN_MVP_REPLICATOR_LAYOUTS = ['grid'] as const;
-export const MOTION_DESIGN_MVP_MAX_COUNT_PER_AXIS = 10;
+export const MOTION_DESIGN_MVP_REPLICATOR_LAYOUTS = ['grid', 'linear', 'radial'] as const;
+export const MOTION_DESIGN_MVP_MAX_COUNT_PER_AXIS = 10_000;
 
 const SUPPORTED_STATIC_PROPERTY_PATHS = new Set([
   'shape.size.w',
@@ -59,7 +60,27 @@ const SUPPORTED_STATIC_PROPERTY_PATHS = new Set([
   'replicator.count.y',
   'replicator.spacing.x',
   'replicator.spacing.y',
+  'replicator.patternOffset.x',
+  'replicator.patternOffset.y',
+  'replicator.linear.count',
+  'replicator.linear.step.x',
+  'replicator.linear.step.y',
+  'replicator.radial.count',
+  'replicator.radial.center.x',
+  'replicator.radial.center.y',
+  'replicator.radial.radius',
+  'replicator.radial.startAngleDegrees',
+  'replicator.radial.endAngleDegrees',
+  'replicator.radial.angleSampling',
+  'replicator.radial.autoOrient',
+  'replicator.offset.mode',
+  'replicator.offset.position.x',
+  'replicator.offset.position.y',
+  'replicator.offset.rotation',
+  'replicator.offset.scale.x',
+  'replicator.offset.scale.y',
   'replicator.offset.opacity',
+  'replicator.userLimit',
 ]);
 
 const SUPPORTED_APPEARANCE_PROPERTY_PATTERN =
@@ -127,7 +148,7 @@ export interface MotionDesignClipView {
   properties: MotionPropertyDescriptorView[];
   effectiveReplicator: {
     enabled: boolean;
-    layout: 'grid';
+    layout: 'grid' | 'linear' | 'radial';
     countX: number;
     countY: number;
     instanceCount: number;
@@ -171,15 +192,36 @@ export function getMotionMvpCapabilities(clip?: TimelineClip): MotionMvpCapabili
         'replicator.count.y',
         'replicator.spacing.x',
         'replicator.spacing.y',
+        'replicator.patternOffset.x',
+        'replicator.patternOffset.y',
+        'replicator.linear.count',
+        'replicator.linear.step.x',
+        'replicator.linear.step.y',
+        'replicator.radial.count',
+        'replicator.radial.center.x',
+        'replicator.radial.center.y',
+        'replicator.radial.radius',
+        'replicator.radial.startAngleDegrees',
+        'replicator.radial.endAngleDegrees',
+        'replicator.radial.angleSampling',
+        'replicator.radial.autoOrient',
+        'replicator.offset.mode',
+        'replicator.offset.position.x',
+        'replicator.offset.position.y',
+        'replicator.offset.rotation',
+        'replicator.offset.scale.x',
+        'replicator.offset.scale.y',
         'replicator.offset.opacity',
+        'replicator.userLimit',
       ],
     },
     unsupportedUntilLaterPhases: [
       'texture appearances',
-      'linear and radial replicators',
-      'replicator rotation and scale offsets',
       'replicator modifiers and falloffs',
-      'null, adjustment, and group authoring',
+      // Null (createMotionNull/setMotionParent) and Adjustment
+      // (editMotionAdjustment) authoring shipped with MD6/MD7. Motion groups
+      // are deliberately outside 1.0 (MOTION_PARENT_GROUPS_SUPPORTED = false).
+      'motion group authoring',
     ],
     ...(clip ? { properties: getMotionPropertyViews(clip) } : {}),
   };
@@ -197,23 +239,26 @@ export function describeMotionDesignClip(clip: TimelineClip): MotionDesignClipVi
   const stroke = appearanceItems.find(
     (item): item is StrokeAppearance => item.kind === 'stroke',
   );
-  const grid = clip.motion.replicator?.layout.mode === 'grid'
-    ? clip.motion.replicator.layout
+  const replicator = clip.motion.replicator
+    ? normalizeMotionReplicatorBundle(
+        clip.motion.replicator,
+        clip.motion.modifierStack,
+      ).replicator
     : null;
-  const countX = grid
-    ? clampInteger(grid.count.x, 1, MOTION_DESIGN_MVP_MAX_COUNT_PER_AXIS)
-    : 1;
-  const countY = grid
-    ? clampInteger(
-        grid.count.y,
-        1,
-        Math.min(
-          MOTION_DESIGN_MVP_MAX_COUNT_PER_AXIS,
-          Math.floor(MOTION_REPLICATOR_SHADER_MAX_INSTANCES / countX),
-        ),
-      )
-    : 1;
-  const enabled = clip.motion.replicator?.enabled === true && grid !== null;
+  const layout = replicator?.layout;
+  const countX = layout?.mode === 'grid'
+    ? layout.count.columns
+    : layout?.mode === 'linear' || layout?.mode === 'radial'
+      ? layout.count
+      : 1;
+  const countY = layout?.mode === 'grid' ? layout.count.rows : 1;
+  const requestedCount = countX * countY;
+  const enabled = replicator?.enabled === true;
+  const effectiveCount = Math.min(
+    requestedCount,
+    replicator?.userLimit ?? MOTION_REPLICATOR_SHADER_MAX_INSTANCES,
+    MOTION_REPLICATOR_SHADER_MAX_INSTANCES,
+  );
 
   return {
     clipId: clip.id,
@@ -231,10 +276,10 @@ export function describeMotionDesignClip(clip: TimelineClip): MotionDesignClipVi
     properties: getMotionPropertyViews(clip),
     effectiveReplicator: {
       enabled,
-      layout: 'grid',
+      layout: layout?.mode ?? 'grid',
       countX: enabled ? countX : 1,
       countY: enabled ? countY : 1,
-      instanceCount: enabled ? countX * countY : 1,
+      instanceCount: enabled ? effectiveCount : 1,
       maxInstances: MOTION_REPLICATOR_SHADER_MAX_INSTANCES,
     },
   };
@@ -280,7 +325,7 @@ export function applyValidatedMotionPropertyUpdates(
     );
   }
 
-  validateEffectiveGrid(workingClip.motion);
+  validateEffectiveReplicator(workingClip.motion);
   return workingClip;
 }
 
@@ -399,17 +444,18 @@ function validatePropertyValue(
   }
 }
 
-function validateEffectiveGrid(motion: MotionLayerDefinition | undefined): void {
+function validateEffectiveReplicator(motion: MotionLayerDefinition | undefined): void {
   const replicator = motion?.replicator;
   if (!replicator?.enabled) return;
-  if (replicator.layout.mode !== 'grid') {
-    throw new Error('Only the Grid Replicator is supported in Motion Design MD0');
-  }
-  const instanceCount = replicator.layout.count.x * replicator.layout.count.y;
-  if (instanceCount > MOTION_REPLICATOR_SHADER_MAX_INSTANCES) {
-    throw new Error(
-      `Grid Replicator requests ${instanceCount} instances; the current limit is ${MOTION_REPLICATOR_SHADER_MAX_INSTANCES}`,
-    );
+  const normalized = normalizeMotionReplicatorBundle(
+    replicator,
+    motion?.modifierStack,
+  ).replicator;
+  const instanceCount = normalized.layout.mode === 'grid'
+    ? normalized.layout.count.columns * normalized.layout.count.rows
+    : normalized.layout.count;
+  if (!Number.isSafeInteger(instanceCount) || instanceCount < 1) {
+    throw new Error('Replicator requested instance count must be a positive safe integer');
   }
 }
 
@@ -492,8 +538,4 @@ function describeAppearance(item: AppearanceItem): MotionAppearanceView {
     opacity: item.opacity,
     blendMode: item.blendMode ?? 'normal',
   };
-}
-
-function clampInteger(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, Math.round(Number.isFinite(value) ? value : min)));
 }

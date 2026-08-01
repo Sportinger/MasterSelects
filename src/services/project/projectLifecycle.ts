@@ -367,7 +367,7 @@ export function setupAutoSync(): void {
   }));
 
   registerAutoSyncDisposer(useExportStore.subscribe(
-    (state) => [state.settings, state.presets, state.selectedPresetId] as const,
+    (state) => [state.settings, state.presets, state.selectedPresetId, state.batch] as const,
     () => {
       markProjectDirtyAndMaybeSave();
     },

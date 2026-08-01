@@ -24,7 +24,6 @@ interface BuildFlashBoardGenerationActionStateInput {
   hasGenerationBoard: boolean;
   hasHostedSession: boolean;
   hasImageReferenceInput: boolean;
-  hasKieAiKey: boolean;
   hasReferenceMediaInput: boolean;
   hasVideoReferenceInput: boolean;
   hostedAIEnabled: boolean;
@@ -122,7 +121,6 @@ function buildAudioValidationError({
   accountAuthenticated,
   effectivePrompt,
   hasElevenLabsKey,
-  hasKieAiKey,
   hostedAIEnabled,
   isAudioMode,
   isHostedAudioMode,
@@ -149,8 +147,6 @@ function buildAudioValidationError({
       if (!hostedAIEnabled) {
         return 'Enable hosted credits to generate cloud music.';
       }
-    } else if (!hasKieAiKey) {
-      return 'Add a Kie.ai API key in Settings to generate Suno music.';
     }
 
     const promptLimit = getSunoPromptLimit(version, sunoCustomMode);
@@ -168,14 +164,6 @@ function buildAudioValidationError({
       if (sunoStyle.length > styleLimit) {
         return `Style exceeds the selected Suno limit of ${styleLimit.toLocaleString()} characters.`;
       }
-    }
-
-    return null;
-  }
-
-  if (service === 'suno') {
-    if (!hasKieAiKey) {
-      return 'Add a Kie.ai API key in Settings to generate Suno sounds.';
     }
 
     return null;
@@ -219,7 +207,6 @@ function buildBackendValidationError({
   hasEvolinkKey,
   hasHostedSession,
   hasImageReferenceInput,
-  hasKieAiKey,
   hasReferenceMediaInput,
   hasVideoReferenceInput,
   isHostedAudioMode,
@@ -249,16 +236,8 @@ function buildBackendValidationError({
     return 'Enable a PiAPI key as default in Settings to generate with PiAPI.';
   }
 
-  if (service === 'kieai' && !hasKieAiKey) {
-    return 'Enable a Kie.ai key as default in Settings to generate with Kie.ai.';
-  }
-
   if (service === 'evolink' && !hasEvolinkKey) {
     return 'Enable an EvoLink key as default in Settings to generate with EvoLink.';
-  }
-
-  if (service === 'suno' && !hasKieAiKey) {
-    return 'Enable a Kie.ai key as default in Settings to generate with Suno.';
   }
 
   if (service === 'cloud' && !isHostedAudioMode && !hasHostedSession) {
@@ -288,7 +267,7 @@ export function buildFlashBoardGenerationActionState(input: BuildFlashBoardGener
       hasVideoInput: input.hasVideoReferenceInput,
     })
     : null;
-  const generateActionLabel = input.isSunoMode ? 'Compose' : input.service === 'suno' ? 'Generate' : input.isAudioMode ? 'Speak' : 'Generate';
+  const generateActionLabel = input.isSunoMode ? 'Compose' : input.isAudioMode ? 'Speak' : 'Generate';
   const generateButtonLabel = currentPrice
     ? `${generateActionLabel} - ${currentPrice.compactLabel}`
     : generateActionLabel;

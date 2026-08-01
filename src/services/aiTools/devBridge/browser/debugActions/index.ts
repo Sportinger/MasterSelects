@@ -21,8 +21,11 @@ import {
   startCurrentExportFromPanel,
 } from './exportPanel';
 import { measureTimelineInteraction } from './interaction';
+import { inspectLayoutOverflow } from './layoutOverflow';
 import { probeMediaBitstream } from './mediaBitstream';
 import { probeMediaPipeline } from './mediaPipelineProbe';
+import { runMotionDesignMd1EvidenceDebugAction } from './motionDesignMd1Evidence';
+import { runMotionDesignMd2EvidenceDebugAction } from './motionDesignMd2Evidence';
 import {
   armMixerFaderRecording,
   clearMixerFaderRecording,
@@ -356,6 +359,10 @@ export async function runDebugAction(action: string, args: Record<string, unknow
       return probeMediaBitstream(args);
     case 'probe-media-pipeline':
       return probeMediaPipeline(args);
+    case 'run-motion-design-md1-evidence':
+      return runMotionDesignMd1EvidenceDebugAction(args);
+    case 'run-motion-design-md2-evidence':
+      return runMotionDesignMd2EvidenceDebugAction(args);
     case 'pause-playback': {
       timelineState.pause();
       return {
@@ -389,6 +396,8 @@ export async function runDebugAction(action: string, args: Record<string, unknow
       return measureScheduledCallbacks(args);
     case 'measure-timeline-interaction':
       return measureTimelineInteraction(args);
+    case 'inspect-layout-overflow':
+      return inspectLayoutOverflow(args);
     case 'measure-clip-drag-interaction':
       return measureClipDragInteraction(args);
     case 'arm-real-clip-drag-recording': {
@@ -538,17 +547,47 @@ export async function runDebugAction(action: string, args: Record<string, unknow
       };
     }
     case 'get-history-debug-state':
+      {
+        const history = useHistoryStore.getState();
+        // Tree model: "undo stack" = ancestors of the active node (root first),
+        // "redo stack" = the last-visited child chain below the active node.
+        const undoLabels: string[] = [];
+        let ancestor = history.activeNodeId ? history.nodes[history.activeNodeId] : undefined;
+        while (ancestor?.parentId) {
+          const parent = history.nodes[ancestor.parentId];
+          if (!parent) break;
+          undoLabels.unshift(parent.snapshot.label);
+          ancestor = parent;
+        }
+        const redoLabels: string[] = [];
+        let redoCursor = history.activeNodeId;
+        while (redoCursor) {
+          const childId = history.lastVisitedChildByNodeId[redoCursor];
+          const child = childId ? history.nodes[childId] : undefined;
+          if (!child) break;
+          redoLabels.push(child.snapshot.label);
+          redoCursor = child.id;
+        }
+        const activeNode = history.activeNodeId ? history.nodes[history.activeNodeId] : undefined;
       return {
         success: true,
         data: {
           action,
           disabled: isHistoryDisabledForDebug(),
           storageKey: HISTORY_DEBUG_DISABLE_STORAGE_KEY,
-          undoStackLength: useHistoryStore.getState().undoStack.length,
-          redoStackLength: useHistoryStore.getState().redoStack.length,
-          hasCurrentSnapshot: useHistoryStore.getState().currentSnapshot !== null,
+          undoStackLength: undoLabels.length,
+          redoStackLength: redoLabels.length,
+          hasCurrentSnapshot: activeNode !== undefined,
+          nodeCount: Object.keys(history.nodes).length,
+          activeNodeId: history.activeNodeId,
+          batchId: history.batchId,
+          batchLabel: history.batchLabel,
+          undoLabels,
+          redoLabels,
+          currentLabel: activeNode?.snapshot.label ?? null,
         },
       };
+      }
     case 'get-project-file-debug-state':
       return {
         success: true,

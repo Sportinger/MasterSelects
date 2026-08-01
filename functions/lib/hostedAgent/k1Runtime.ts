@@ -42,6 +42,7 @@ export interface HostedAgentK1BillingPort {
   }): Promise<{
     creditBalance: number;
     creditsCharged: number;
+    ledgerEntryId: string | null;
     replayed: boolean;
     totalCreditsCharged: number;
   }>;
@@ -304,6 +305,14 @@ export async function runHostedAgentK1(
         usage: toUsage(providerResponse.raw),
       });
       totalCreditsCharged = settlement.totalCreditsCharged;
+      emit({
+        creditBalance: settlement.creditBalance,
+        creditsCharged: settlement.creditsCharged,
+        kind: 'billing-settled',
+        ledgerEntryId: settlement.ledgerEntryId,
+        roundIndex,
+        totalCreditsCharged,
+      });
       // A provider that cannot abort transport-level work may still finish
       // after cancellation. Settle that already-authorized work honestly, then
       // stop before emitting a tool request or authorizing another round.

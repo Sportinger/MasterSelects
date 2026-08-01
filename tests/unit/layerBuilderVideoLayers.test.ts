@@ -4,6 +4,7 @@ import { useTimelineStore } from '../../src/stores/timeline';
 import type { FrameContext } from '../../src/services/layerBuilder/types';
 import type { TransformCache } from '../../src/services/layerBuilder/TransformCache';
 import type { LayerBuilderProxyFrames } from '../../src/services/layerBuilder/layerBuilderProxyFrames';
+import type { TransitionSourceMapV2 } from '../../src/types/timelineCore';
 
 const hoisted = vi.hoisted(() => ({
   resolveLayerBuilderVideoSource: vi.fn((input: { targetTime: number }) => ({
@@ -144,5 +145,78 @@ describe('buildLayerBuilderVideoLayer', () => {
     });
 
     expect(layer?.transitionRender).toBeUndefined();
+  });
+
+  it('composes mapped animation with the exact-frame parent transform', () => {
+    const ctx = createFrameContext();
+    const parent = createMockClip({
+      id: 'mapped-video-parent',
+      startTime: 0,
+      duration: 10,
+      source: { type: 'motion-null' },
+    });
+    const childTransform = {
+      ...createMockClip().transform,
+      position: { x: 5, y: 0, z: 0 },
+    };
+    const transitionSourceMap: TransitionSourceMapV2 = {
+      version: 2,
+      mediaDuration: 10,
+      parent: {
+        duration: 10,
+        inPoint: 0,
+        outPoint: 10,
+        defaultSpeed: 1,
+        animation: {
+          baseTransform: childTransform,
+          keyframes: [],
+          sourceEffectIds: [],
+          sourceMaskIds: [],
+        },
+      },
+      segments: [{
+        kind: 'parent-linear',
+        compStart: 0,
+        compEnd: 10,
+        parentStart: 0,
+        parentEnd: 10,
+      }],
+    };
+    const child = createMockClip({
+      ...ctx.clips[0],
+      id: 'mapped-video-child',
+      parentClipId: parent.id,
+      transform: childTransform,
+      transitionSourceMap,
+    });
+    useTimelineStore.setState({
+      clipKeyframes: new Map([[
+        parent.id,
+        [
+          { id: 'parent-x-a', clipId: parent.id, property: 'position.x', time: 0, value: 0, easing: 'linear' },
+          { id: 'parent-x-b', clipId: parent.id, property: 'position.x', time: 1, value: 100, easing: 'linear' },
+        ],
+      ]]),
+    });
+    const mappedContext = {
+      ...ctx,
+      clips: [parent, child],
+      clipsAtTime: [parent, child],
+      getInterpolatedTransform: vi.fn(() => ({
+        ...childTransform,
+        position: { x: 999, y: 0, z: 0 },
+      })),
+    };
+
+    const layer = buildLayerBuilderVideoLayer({
+      clip: child,
+      layerIndex: 0,
+      ctx: mappedContext,
+      transformCache: { getTransform: vi.fn((_key, transform) => transform) } as unknown as TransformCache,
+      proxyFrames: { selectProxyFrame: vi.fn() } as unknown as LayerBuilderProxyFrames,
+    });
+
+    expect(layer?.position.x).toBe(105);
+    expect(mappedContext.getInterpolatedTransform).not.toHaveBeenCalled();
   });
 });

@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
@@ -365,6 +367,19 @@ describe('hosted-agent K2 public boundary', () => {
       clientInstanceId: CLIENT_ID,
       results: [{
         modelContent: largeModelContent,
+        providerContent: {
+          openAiFollowupInput: [{
+            content: [
+              { text: 'Visual output from captureFrame:', type: 'input_text' },
+              {
+                detail: 'high',
+                image_url: 'data:image/png;base64,iVBORw0KGgo=',
+                type: 'input_image',
+              },
+            ],
+            role: 'user',
+          }],
+        },
         success: true,
         toolCallId: 'tool-call-1',
       }],
@@ -417,6 +432,7 @@ describe('hosted-agent K2 public boundary', () => {
       providerResultDigest: 'a'.repeat(64),
       reasoningTokens: 4,
       roundIndex: 0,
+      toolCallCount: 1,
     };
     const settled = await onRequest(context({
       body: settlementBody,
@@ -513,7 +529,7 @@ describe('hosted-agent K2 public boundary', () => {
 
     const persisted = await db.prepare(
       `SELECT h.*, t.provider_credits, t.credits_charged, t.status AS billing_status,
-              r.response_json
+              r.response_json, r.tool_call_count, r.has_more_tools
        FROM hosted_agent_k0_turns h
        JOIN ai_chat_turns t ON t.id = h.billing_turn_id
        JOIN ai_chat_turn_rounds r ON r.turn_id = t.id
@@ -531,6 +547,8 @@ describe('hosted-agent K2 public boundary', () => {
       model: 'gpt-5-6-terra',
       provider_protocol: 'openai-responses',
       status: 'completed',
+      tool_call_count: 1,
+      has_more_tools: 1,
       user_id: USER_ID,
     });
 

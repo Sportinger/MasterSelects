@@ -1,6 +1,9 @@
 import { clearAINodeRuntimeCache } from '../../services/nodeGraph';
 import { stopTimelineAudioPlayback } from '../../services/audio/timelineAudioPlaybackStopper';
-import { syncHistoryRehydratedTimelineRuntimeResources } from '../../services/timeline/historyRuntimeRehydration';
+import {
+  rehydrateHistoryGeneratedTimelineRuntimes,
+  syncHistoryRehydratedTimelineRuntimeResources,
+} from '../../services/timeline/historyRuntimeRehydration';
 import type { Keyframe } from '../../types/keyframes';
 import { createDefaultFlashBoardComposer } from '../flashboardStore/defaults';
 import { createHistoryTimelineRestoreState } from '../timeline/historyTimelineRestoreState';
@@ -14,6 +17,10 @@ import {
   deepClone,
 } from './snapshotCloning';
 import { flashBoardMediaBridge } from '../../services/flashboard/FlashBoardMediaBridge';
+import { Logger } from '../../services/logger';
+import { sanitizeTimelineParentRestoreTree } from '../../services/motionDesign/structure/timelineParentRestoreAdapter';
+
+const log = Logger.create('HistorySnapshotApply');
 
 export interface ApplyHistorySnapshotOptions {
   afterApply?: () => void;
@@ -77,6 +84,52 @@ export function applyHistorySnapshot(
       timelineState.masterAudioState = snapshot.timelineEditState
         ? cloneMasterAudioState(snapshot.timelineEditState.timeline.masterAudioState)
         : cloneMasterAudioState(snapshot.timeline.masterAudioState);
+    }
+
+    const currentMedia = refs.getMediaState?.();
+    const activeCompositionId = currentMedia?.activeCompositionId;
+    const activeComposition = snapshot.media.compositions.find(
+      (composition) => composition.id === activeCompositionId,
+    ) ?? currentMedia?.compositions.find(
+      (composition) => composition.id === currentMedia.activeCompositionId,
+    );
+    if (timelineState.clips) {
+      timelineState.clips = rehydrateHistoryGeneratedTimelineRuntimes(
+        timelineState.clips,
+        activeComposition
+          ? { width: activeComposition.width, height: activeComposition.height }
+          : undefined,
+      );
+      const parentRestore = sanitizeTimelineParentRestoreTree(
+        activeCompositionId ?? 'timeline:active',
+        timelineState.clips,
+      );
+      timelineState.clips = parentRestore.clips;
+      if (parentRestore.diagnostics.length > 0) {
+        log.warn('Sanitized invalid Motion parent relationships during history restore', {
+          failures: parentRestore.diagnostics.map((item) => ({
+            compositionId: item.compositionId,
+            clipPath: item.clipPath,
+            code: item.failure.code,
+            clipIds: item.failure.clipIds,
+          })),
+        });
+      }
+    }
+
+    // Selection is view state, but restoring it with an edit keeps graph and
+    // viewport keyframe authoring coherent across undo/redo. Old persisted
+    // history entries do not contain this field, so leave their live selection
+    // untouched. Drop IDs whose keyframes no longer exist after the restore.
+    if (snapshot.timeline.selectedKeyframeIds !== undefined) {
+      const restoredKeyframes = timelineState.clipKeyframes ?? currentTimeline.clipKeyframes;
+      const restoredKeyframeIds = new Set<string>();
+      restoredKeyframes?.forEach((keyframes) => {
+        keyframes.forEach((keyframe) => restoredKeyframeIds.add(keyframe.id));
+      });
+      timelineState.selectedKeyframeIds = new Set(
+        snapshot.timeline.selectedKeyframeIds.filter((id) => restoredKeyframeIds.has(id)),
+      );
     }
 
     stopTimelineAudioPlayback();

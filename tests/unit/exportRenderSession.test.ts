@@ -93,6 +93,7 @@ const layers = [{ id: 'layer-a' }] as unknown as Layer[];
 function createSession(preferZeroCopy = true): ExportRenderSessionImpl {
   return new ExportRenderSessionImpl({
     runId: 'export-run-a',
+    compositionId: 'composition-a',
     width: 1920,
     height: 1080,
     stackedAlpha: true,
@@ -173,6 +174,10 @@ describe('ExportRenderSessionImpl', () => {
         getOutputDimensions: expect.any(Function),
       }),
     );
+    expect(mockFactory.engine.render).toHaveBeenCalledWith(layers, {
+      compositionId: 'composition-a',
+      timelineTimeSeconds: 1.25,
+    });
     expect(mockFactory.calls).toEqual([
       'isDeviceValid',
       'setRenderTimeOverride:1.25',
@@ -212,6 +217,7 @@ describe('ExportRenderSessionImpl', () => {
     const host = createInjectedHost();
     const session = new ExportRenderSessionImpl({
       runId: 'export-run-host',
+      compositionId: 'composition-host',
       width: 320,
       height: 180,
       stackedAlpha: false,
@@ -228,6 +234,10 @@ describe('ExportRenderSessionImpl', () => {
     });
 
     expect(mockFactory.syncExportMaskTextures).toHaveBeenCalledWith(layers, 320, 180, 5, host);
+    expect(host.render).toHaveBeenCalledWith(layers, {
+      compositionId: 'composition-host',
+      timelineTimeSeconds: 5,
+    });
   });
 
   it('retries a deferred nested composition render before capture', async () => {
@@ -239,6 +249,7 @@ describe('ExportRenderSessionImpl', () => {
       .mockImplementationOnce(() => undefined);
     const session = new ExportRenderSessionImpl({
       runId: 'export-run-nested-retry',
+      compositionId: 'composition-nested',
       width: 320,
       height: 180,
       stackedAlpha: false,
@@ -270,6 +281,7 @@ describe('ExportRenderSessionImpl', () => {
     });
     const session = new ExportRenderSessionImpl({
       runId: 'export-run-recover',
+      compositionId: 'composition-recover',
       width: 320,
       height: 180,
       stackedAlpha: false,
@@ -289,7 +301,10 @@ describe('ExportRenderSessionImpl', () => {
 
     expect(capture.kind).toBe('rgba-pixels');
     expect(host.ensureReady).toHaveBeenCalledTimes(1);
-    expect(host.render).toHaveBeenCalledWith(layers);
+    expect(host.render).toHaveBeenCalledWith(layers, {
+      compositionId: 'composition-recover',
+      timelineTimeSeconds: 2,
+    });
   });
 
   it('reports the active export host when frame render cannot recover', async () => {
@@ -303,6 +318,7 @@ describe('ExportRenderSessionImpl', () => {
     vi.mocked(host.ensureReady).mockResolvedValueOnce(true);
     const session = new ExportRenderSessionImpl({
       runId: 'export-run-invalid',
+      compositionId: 'composition-invalid',
       width: 320,
       height: 180,
       stackedAlpha: false,

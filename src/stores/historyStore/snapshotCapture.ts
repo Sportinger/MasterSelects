@@ -31,6 +31,9 @@ function createTimelineSnapshot(refs: HistoryStoreRefs): StateSnapshot['timeline
     clips: (timeline?.clips || []).map(cloneClipForHistory),
     tracks: (timeline?.tracks || []).map(cloneTrackForHistory),
     selectedClipIds: timeline?.selectedClipIds ? [...timeline.selectedClipIds] : [],
+    selectedKeyframeIds: timeline?.selectedKeyframeIds
+      ? [...timeline.selectedKeyframeIds]
+      : [],
     zoom: timeline?.zoom || 50,
     scrollX: timeline?.scrollX || 0,
     layers: deepClone((timeline?.layers || []).filter(Boolean)),
@@ -54,6 +57,8 @@ function createTimelineEditStateSnapshot(
     id: `history:${timestamp}:${label}`,
     label,
     timestamp,
+    duration: timeline.duration,
+    durationLocked: timeline.durationLocked,
     tracks: timeline.tracks || [],
     clips: timeline.clips || [],
     selectedClipIds: timeline.selectedClipIds || new Set<string>(),
@@ -70,6 +75,7 @@ function createTimelineEditStateSnapshot(
 
 function createTimelineSnapshotFromEditState(
   timelineEditState: HistoryTimelineEditState,
+  selectedKeyframeIds: ReadonlySet<string> | undefined,
 ): StateSnapshot['timeline'] {
   const restored = createHistoryTimelineRestoreState(timelineEditState, {}, {
     placeholderFileMode: 'plain-data',
@@ -78,6 +84,7 @@ function createTimelineSnapshotFromEditState(
     clips: restored.clips.map(cloneClipForHistory),
     tracks: restored.tracks.map(cloneTrackForHistory),
     selectedClipIds: [...restored.selectedClipIds],
+    selectedKeyframeIds: selectedKeyframeIds ? [...selectedKeyframeIds] : [],
     zoom: restored.zoom,
     scrollX: restored.scrollX,
     layers: deepClone(restored.layers),
@@ -150,12 +157,13 @@ export function createHistorySnapshot(
   _previousSnapshot?: StateSnapshot | null
 ): StateSnapshot {
   const timestamp = Date.now();
+  const timeline = refs.getTimelineState?.() || null;
   const timelineEditState = createTimelineEditStateSnapshot(refs, label, timestamp);
   return {
     timestamp,
     label,
     timeline: timelineEditState
-      ? createTimelineSnapshotFromEditState(timelineEditState)
+      ? createTimelineSnapshotFromEditState(timelineEditState, timeline?.selectedKeyframeIds)
       : createTimelineSnapshot(refs),
     timelineEditState,
     media: createMediaSnapshot(refs),

@@ -44,6 +44,22 @@ describe('FlashBoard chat v2 prompt harness', () => {
     expect(withoutContext).toBe('Custom editor prompt.');
   });
 
+  it('describes attached references as already available to the model', () => {
+    const prompt = buildFlashBoardChatSystemPrompt(undefined, {
+      visualReferences: [{
+        dataUrl: 'data:image/png;base64,AAAA',
+        id: 'reference-1',
+        mediaType: 'image/png',
+        name: 'Reference.png',
+        width: 464,
+        height: 649,
+      }],
+    });
+
+    expect(prompt).toContain('Reference.png [id=reference-1, image/png, 464x649]');
+    expect(prompt).toContain('do not call getMediaItems');
+  });
+
   it('injects only task-relevant playbooks for v2', () => {
     const montage = buildFlashBoardChatSystemPrompt(undefined, {
       includeContext: false,

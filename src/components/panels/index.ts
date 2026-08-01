@@ -1,7 +1,6 @@
 // Panels component exports
 export { MediaPanel } from './MediaPanel';
 export { PropertiesPanel } from './properties';
-export { MultiCamPanel } from './MultiCamPanel';
 export { TranscriptPanel } from './TranscriptPanel';
 export { AnalysisPanel } from './AnalysisPanel';
 export { MIDIMappingPanel } from './MIDIMappingPanel';

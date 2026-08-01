@@ -8,7 +8,7 @@ import type {
 
 // Panel types that can be docked
 // Note: Effects, Transcript, Analysis are now integrated into Properties panel
-export type PanelType = 'start' | 'preview' | 'multi-preview' | 'timeline' | 'clip-properties' | 'history' | 'audio-mixer' | 'node-workspace' | 'media' | 'export' | 'midi-mapping' | 'multicam' | 'capture' | 'ai-segment' | 'scene-description' | 'transitions' | 'scope-waveform' | 'scope-histogram' | 'scope-vectorscope';
+export type PanelType = 'start' | 'preview' | 'multi-preview' | 'timeline' | 'clip-properties' | 'history' | 'audio-mixer' | 'node-workspace' | 'media' | 'export' | 'midi-mapping' | 'capture' | 'ai-segment' | 'scene-description' | 'transitions' | 'scope-waveform' | 'scope-histogram' | 'scope-vectorscope';
 export type DockLayoutTransitionStaggerMode = 'puzzle' | 'sequence';
 export type DockLayoutStartTransitionDirection = 'to-start' | 'from-start';
 
@@ -16,7 +16,7 @@ export type DockLayoutStartTransitionDirection = 'to-start' | 'from-start';
 export const SCOPE_PANEL_TYPES: PanelType[] = ['scope-waveform', 'scope-histogram', 'scope-vectorscope'];
 
 // WIP panel types — shown grayed out with bug icon in View menu
-export const WIP_PANEL_TYPES: PanelType[] = ['multicam'];
+export const WIP_PANEL_TYPES: PanelType[] = [];
 
 // Panel types that may exist more than once at the same time. These spawn a fresh,
 // independent instance (unique id) from the tab-bar "+" instead of focusing the
@@ -27,7 +27,7 @@ export const MULTI_INSTANCE_PANEL_TYPES: PanelType[] = ['preview'];
 export const AI_PANEL_TYPES: PanelType[] = ['ai-segment', 'scene-description'];
 
 // Registered for saved-layout compatibility, but intentionally absent from panel pickers.
-export const PANEL_PICKER_HIDDEN_TYPES: PanelType[] = ['start', 'multicam', 'scene-description'];
+export const PANEL_PICKER_HIDDEN_TYPES: PanelType[] = ['start', 'scene-description'];
 
 export type PreviewPanelSource =
   | RenderSourceActiveComp
@@ -259,13 +259,6 @@ export const PANEL_CONFIGS: Record<PanelType, PanelConfig> = {
     title: 'MIDI Mapping',
     minWidth: 280,
     minHeight: 240,
-    closable: false,
-  },
-  multicam: {
-    type: 'multicam',
-    title: 'Multi-Cam',
-    minWidth: 300,
-    minHeight: 400,
     closable: false,
   },
   capture: {

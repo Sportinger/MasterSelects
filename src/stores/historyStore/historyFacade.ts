@@ -25,7 +25,7 @@ export function createHistoryFacade(useHistoryStore: HistoryStoreAccessor) {
     restoreHistoryBranch: (branchId: string, snapshotIndex?: number) => (
       useHistoryStore.getState().restoreBranch(branchId, snapshotIndex)
     ),
-    serializeHistoryStateForProject: () => useHistoryStore.getState().serializeForProject(),
+    serializeHistoryStateForProject: () => useHistoryStore.getState().serializeForProject()!,
     hydrateHistoryStateFromProject: (history: ProjectHistoryState | null | undefined) => {
       useHistoryStore.getState().hydrateFromProject(history);
     },

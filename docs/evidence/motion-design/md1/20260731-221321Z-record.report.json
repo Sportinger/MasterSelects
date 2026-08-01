@@ -1,0 +1,492 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-31T22:13:21.526Z",
+  "gate": "MD1_PIXEL_GOLDENS",
+  "mode": "record",
+  "disposableSession": {
+    "url": "http://motion-md0-c4e8d2f7.localhost:5173/?motionDesignEvidenceSession=c4e8d2f7",
+    "sessionId": "60e47cc0-9955-4f17-9e36-58e9c50c2f95",
+    "exactUrlMatch": true,
+    "focusedSessionFallbackAllowed": false,
+    "explicitTargeting": true
+  },
+  "baselineDir": "C:\\Users\\admin\\Documents\\MasterSelects\\docs\\evidence\\motion-design\\md1\\baselines",
+  "result": {
+    "success": true,
+    "data": {
+      "fixtureId": "motion-design-md1-shapes-appearances-v1",
+      "sessionUrl": "http://motion-md0-c4e8d2f7.localhost:5173/?motionDesignEvidenceSession=c4e8d2f7",
+      "surfaces": {
+        "direct-preview": "[PNG data URL omitted: 107574 chars]",
+        "direct-export": "[PNG data URL omitted: 107562 chars]",
+        "nested-preview": "[PNG data URL omitted: 107574 chars]",
+        "nested-export": "[PNG data URL omitted: 107558 chars]"
+      },
+      "parity": {
+        "direct-preview-vs-export": {
+          "passed": true,
+          "width": 640,
+          "height": 360,
+          "pixelCount": 230400,
+          "changedPixelCount": 1997,
+          "changedPixelRatio": 0.008667534722222222,
+          "meanAbsoluteChannelDelta": 0.08894422743055555,
+          "p99ChannelDelta": 0,
+          "maxChannelDelta": 81,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": []
+        },
+        "nested-preview-vs-export": {
+          "passed": true,
+          "width": 640,
+          "height": 360,
+          "pixelCount": 230400,
+          "changedPixelCount": 1997,
+          "changedPixelRatio": 0.008667534722222222,
+          "meanAbsoluteChannelDelta": 0.08894965277777778,
+          "p99ChannelDelta": 0,
+          "maxChannelDelta": 81,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": []
+        },
+        "direct-vs-nested-preview": {
+          "passed": true,
+          "width": 640,
+          "height": 360,
+          "pixelCount": 230400,
+          "changedPixelCount": 0,
+          "changedPixelRatio": 0,
+          "meanAbsoluteChannelDelta": 0.01517578125,
+          "p99ChannelDelta": 0,
+          "maxChannelDelta": 5,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": []
+        }
+      },
+      "staticSampleTime": 0,
+      "animatedSampleTime": 0.5,
+      "staticParity": {
+        "direct-preview-vs-export": {
+          "passed": true,
+          "width": 640,
+          "height": 360,
+          "pixelCount": 230400,
+          "changedPixelCount": 1997,
+          "changedPixelRatio": 0.008667534722222222,
+          "meanAbsoluteChannelDelta": 0.08894422743055555,
+          "p99ChannelDelta": 0,
+          "maxChannelDelta": 81,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": []
+        },
+        "nested-preview-vs-export": {
+          "passed": true,
+          "width": 640,
+          "height": 360,
+          "pixelCount": 230400,
+          "changedPixelCount": 1997,
+          "changedPixelRatio": 0.008667534722222222,
+          "meanAbsoluteChannelDelta": 0.08894965277777778,
+          "p99ChannelDelta": 0,
+          "maxChannelDelta": 81,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": []
+        },
+        "direct-vs-nested-preview": {
+          "passed": true,
+          "width": 640,
+          "height": 360,
+          "pixelCount": 230400,
+          "changedPixelCount": 0,
+          "changedPixelRatio": 0,
+          "meanAbsoluteChannelDelta": 0.01517578125,
+          "p99ChannelDelta": 0,
+          "maxChannelDelta": 5,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": []
+        }
+      },
+      "temporalDifferentials": {
+        "direct-preview:rectangle": {
+          "passed": false,
+          "width": 272,
+          "height": 144,
+          "pixelCount": 39168,
+          "changedPixelCount": 22882,
+          "changedPixelRatio": 0.5842013888888888,
+          "meanAbsoluteChannelDelta": 16.115610957924837,
+          "p99ChannelDelta": 58,
+          "maxChannelDelta": 64,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": [
+            "changedPixelRatio 0.5842013888888888 exceeds 0.04",
+            "meanAbsoluteChannelDelta 16.115610957924837 exceeds 2",
+            "p99ChannelDelta 58 exceeds 12"
+          ]
+        },
+        "direct-preview:star": {
+          "passed": false,
+          "width": 272,
+          "height": 144,
+          "pixelCount": 39168,
+          "changedPixelCount": 1840,
+          "changedPixelRatio": 0.046977124183006536,
+          "meanAbsoluteChannelDelta": 0.36324933619281047,
+          "p99ChannelDelta": 11,
+          "maxChannelDelta": 25,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": [
+            "changedPixelRatio 0.046977124183006536 exceeds 0.04"
+          ]
+        },
+        "direct-export:rectangle": {
+          "passed": false,
+          "width": 272,
+          "height": 144,
+          "pixelCount": 39168,
+          "changedPixelCount": 22882,
+          "changedPixelRatio": 0.5842013888888888,
+          "meanAbsoluteChannelDelta": 16.115610957924837,
+          "p99ChannelDelta": 58,
+          "maxChannelDelta": 64,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": [
+            "changedPixelRatio 0.5842013888888888 exceeds 0.04",
+            "meanAbsoluteChannelDelta 16.115610957924837 exceeds 2",
+            "p99ChannelDelta 58 exceeds 12"
+          ]
+        },
+        "direct-export:star": {
+          "passed": false,
+          "width": 272,
+          "height": 144,
+          "pixelCount": 39168,
+          "changedPixelCount": 1840,
+          "changedPixelRatio": 0.046977124183006536,
+          "meanAbsoluteChannelDelta": 0.36324933619281047,
+          "p99ChannelDelta": 11,
+          "maxChannelDelta": 25,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": [
+            "changedPixelRatio 0.046977124183006536 exceeds 0.04"
+          ]
+        },
+        "nested-preview:rectangle": {
+          "passed": false,
+          "width": 272,
+          "height": 144,
+          "pixelCount": 39168,
+          "changedPixelCount": 22882,
+          "changedPixelRatio": 0.5842013888888888,
+          "meanAbsoluteChannelDelta": 16.115610957924837,
+          "p99ChannelDelta": 58,
+          "maxChannelDelta": 64,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": [
+            "changedPixelRatio 0.5842013888888888 exceeds 0.04",
+            "meanAbsoluteChannelDelta 16.115610957924837 exceeds 2",
+            "p99ChannelDelta 58 exceeds 12"
+          ]
+        },
+        "nested-preview:star": {
+          "passed": false,
+          "width": 272,
+          "height": 144,
+          "pixelCount": 39168,
+          "changedPixelCount": 1840,
+          "changedPixelRatio": 0.046977124183006536,
+          "meanAbsoluteChannelDelta": 0.36324933619281047,
+          "p99ChannelDelta": 11,
+          "maxChannelDelta": 25,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": [
+            "changedPixelRatio 0.046977124183006536 exceeds 0.04"
+          ]
+        },
+        "nested-export:rectangle": {
+          "passed": false,
+          "width": 272,
+          "height": 144,
+          "pixelCount": 39168,
+          "changedPixelCount": 22882,
+          "changedPixelRatio": 0.5842013888888888,
+          "meanAbsoluteChannelDelta": 16.115610957924837,
+          "p99ChannelDelta": 58,
+          "maxChannelDelta": 64,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": [
+            "changedPixelRatio 0.5842013888888888 exceeds 0.04",
+            "meanAbsoluteChannelDelta 16.115610957924837 exceeds 2",
+            "p99ChannelDelta 58 exceeds 12"
+          ]
+        },
+        "nested-export:star": {
+          "passed": false,
+          "width": 272,
+          "height": 144,
+          "pixelCount": 39168,
+          "changedPixelCount": 1840,
+          "changedPixelRatio": 0.046977124183006536,
+          "meanAbsoluteChannelDelta": 0.36324933619281047,
+          "p99ChannelDelta": 11,
+          "maxChannelDelta": 25,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": [
+            "changedPixelRatio 0.046977124183006536 exceeds 0.04"
+          ]
+        }
+      },
+      "baselineComparisons": {},
+      "cropCoverage": {
+        "rectangle": {
+          "alphaCoverage": 1,
+          "nonBlackCoverage": 1,
+          "lumaRange": 223
+        },
+        "ellipse": {
+          "alphaCoverage": 1,
+          "nonBlackCoverage": 1,
+          "lumaRange": 200
+        },
+        "polygon": {
+          "alphaCoverage": 1,
+          "nonBlackCoverage": 1,
+          "lumaRange": 122
+        },
+        "star": {
+          "alphaCoverage": 1,
+          "nonBlackCoverage": 1,
+          "lumaRange": 15
+        }
+      },
+      "differentialControls": {
+        "ordered-appearance-stack": {
+          "passed": false,
+          "width": 272,
+          "height": 144,
+          "pixelCount": 39168,
+          "changedPixelCount": 23509,
+          "changedPixelRatio": 0.6002093545751634,
+          "meanAbsoluteChannelDelta": 38.6652752246732,
+          "p99ChannelDelta": 191,
+          "maxChannelDelta": 225,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": [
+            "changedPixelRatio 0.6002093545751634 exceeds 0.04",
+            "meanAbsoluteChannelDelta 38.6652752246732 exceeds 2",
+            "p99ChannelDelta 191 exceeds 12",
+            "maxChannelDelta 225 exceeds 96"
+          ]
+        },
+        "mask-enabled": {
+          "passed": false,
+          "width": 272,
+          "height": 144,
+          "pixelCount": 39168,
+          "changedPixelCount": 1452,
+          "changedPixelRatio": 0.03707107843137255,
+          "meanAbsoluteChannelDelta": 2.1285871119281046,
+          "p99ChannelDelta": 100,
+          "maxChannelDelta": 130,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": [
+            "meanAbsoluteChannelDelta 2.1285871119281046 exceeds 2",
+            "p99ChannelDelta 100 exceeds 12",
+            "maxChannelDelta 130 exceeds 96"
+          ]
+        },
+        "effect-enabled": {
+          "passed": false,
+          "width": 272,
+          "height": 144,
+          "pixelCount": 39168,
+          "changedPixelCount": 9308,
+          "changedPixelRatio": 0.23764297385620914,
+          "meanAbsoluteChannelDelta": 8.92770246119281,
+          "p99ChannelDelta": 91,
+          "maxChannelDelta": 97,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": [
+            "changedPixelRatio 0.23764297385620914 exceeds 0.04",
+            "meanAbsoluteChannelDelta 8.92770246119281 exceeds 2",
+            "p99ChannelDelta 91 exceeds 12",
+            "maxChannelDelta 97 exceeds 96"
+          ]
+        },
+        "clip-opacity": {
+          "passed": false,
+          "width": 272,
+          "height": 144,
+          "pixelCount": 39168,
+          "changedPixelCount": 19948,
+          "changedPixelRatio": 0.5092933006535948,
+          "meanAbsoluteChannelDelta": 34.87980621936274,
+          "p99ChannelDelta": 178,
+          "maxChannelDelta": 178,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": [
+            "changedPixelRatio 0.5092933006535948 exceeds 0.04",
+            "meanAbsoluteChannelDelta 34.87980621936274 exceeds 2",
+            "p99ChannelDelta 178 exceeds 12",
+            "maxChannelDelta 178 exceeds 96"
+          ]
+        },
+        "clip-blend-mode": {
+          "passed": false,
+          "width": 272,
+          "height": 144,
+          "pixelCount": 39168,
+          "changedPixelCount": 8161,
+          "changedPixelRatio": 0.20835886437908496,
+          "meanAbsoluteChannelDelta": 19.736098345588236,
+          "p99ChannelDelta": 183,
+          "maxChannelDelta": 186,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": [
+            "changedPixelRatio 0.20835886437908496 exceeds 0.04",
+            "meanAbsoluteChannelDelta 19.736098345588236 exceeds 2",
+            "p99ChannelDelta 183 exceeds 12",
+            "maxChannelDelta 186 exceeds 96"
+          ]
+        },
+        "appearance-opacity": {
+          "passed": false,
+          "width": 272,
+          "height": 144,
+          "pixelCount": 39168,
+          "changedPixelCount": 9040,
+          "changedPixelRatio": 0.23080065359477125,
+          "meanAbsoluteChannelDelta": 11.19348064746732,
+          "p99ChannelDelta": 100,
+          "maxChannelDelta": 100,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": [
+            "changedPixelRatio 0.23080065359477125 exceeds 0.04",
+            "meanAbsoluteChannelDelta 11.19348064746732 exceeds 2",
+            "p99ChannelDelta 100 exceeds 12",
+            "maxChannelDelta 100 exceeds 96"
+          ]
+        },
+        "appearance-blend-mode": {
+          "passed": false,
+          "width": 272,
+          "height": 144,
+          "pixelCount": 39168,
+          "changedPixelCount": 21796,
+          "changedPixelRatio": 0.5564746732026143,
+          "meanAbsoluteChannelDelta": 7.975528492647059,
+          "p99ChannelDelta": 33,
+          "maxChannelDelta": 35,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": [
+            "changedPixelRatio 0.5564746732026143 exceeds 0.04",
+            "meanAbsoluteChannelDelta 7.975528492647059 exceeds 2",
+            "p99ChannelDelta 33 exceeds 12"
+          ]
+        },
+        "appearance-visibility": {
+          "passed": false,
+          "width": 272,
+          "height": 144,
+          "pixelCount": 39168,
+          "changedPixelCount": 22935,
+          "changedPixelRatio": 0.5855545343137255,
+          "meanAbsoluteChannelDelta": 18.82284645629085,
+          "p99ChannelDelta": 69,
+          "maxChannelDelta": 71,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": [
+            "changedPixelRatio 0.5855545343137255 exceeds 0.04",
+            "meanAbsoluteChannelDelta 18.82284645629085 exceeds 2",
+            "p99ChannelDelta 69 exceeds 12"
+          ]
+        },
+        "gradient-rendering": {
+          "passed": false,
+          "width": 272,
+          "height": 144,
+          "pixelCount": 39168,
+          "changedPixelCount": 15604,
+          "changedPixelRatio": 0.3983864379084967,
+          "meanAbsoluteChannelDelta": 30.66460503472222,
+          "p99ChannelDelta": 226,
+          "maxChannelDelta": 226,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": [
+            "changedPixelRatio 0.3983864379084967 exceeds 0.04",
+            "meanAbsoluteChannelDelta 30.66460503472222 exceeds 2",
+            "p99ChannelDelta 226 exceeds 12",
+            "maxChannelDelta 226 exceeds 96"
+          ]
+        },
+        "stroke-rendering": {
+          "passed": false,
+          "width": 272,
+          "height": 144,
+          "pixelCount": 39168,
+          "changedPixelCount": 12276,
+          "changedPixelRatio": 0.3134191176470588,
+          "meanAbsoluteChannelDelta": 6.119038500816994,
+          "p99ChannelDelta": 128,
+          "maxChannelDelta": 193,
+          "referenceAlphaCoverage": 1,
+          "candidateAlphaCoverage": 1,
+          "alphaCoverageDelta": 0,
+          "failures": [
+            "changedPixelRatio 0.3134191176470588 exceeds 0.04",
+            "meanAbsoluteChannelDelta 6.119038500816994 exceeds 2",
+            "p99ChannelDelta 128 exceeds 12",
+            "maxChannelDelta 193 exceeds 96"
+          ]
+        }
+      },
+      "failures": []
+    }
+  }
+}

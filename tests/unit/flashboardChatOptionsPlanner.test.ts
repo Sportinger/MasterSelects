@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildFlashBoardChatModelFallback,
   buildFlashBoardChatModelOptions,
+  buildFlashBoardChatProviderFallback,
 } from '../../src/components/panels/flashboard/FlashBoardChatOptionsPlanner';
 import {
   DEFAULT_FLASHBOARD_CHAT_MODEL,
@@ -14,9 +15,8 @@ import {
 } from '../../src/services/flashboard/FlashBoardChatService';
 
 describe('FlashBoard chat options planner', () => {
-  it('offers MasterSelectsAI, AI, and Local AI with AI as the default', () => {
+  it('offers AI and Local AI with AI as the default', () => {
     expect(FLASHBOARD_CHAT_PROVIDERS).toEqual([
-      { id: 'kernel', label: 'MasterSelectsAI' },
       { id: 'kie', label: 'AI' },
       { id: 'lemonade', label: 'Local AI' },
     ]);
@@ -39,6 +39,10 @@ describe('FlashBoard chat options planner', () => {
         provider: 'kernel',
       }),
     ]);
+    expect(buildFlashBoardChatProviderFallback({
+      chatProvider: 'kernel',
+      chatProviderOptions: FLASHBOARD_CHAT_PROVIDERS,
+    })).toBe('kie');
   });
 
   it('falls back from the stale Lemonade default when discovered models are available', () => {

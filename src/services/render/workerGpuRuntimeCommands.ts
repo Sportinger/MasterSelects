@@ -16,12 +16,21 @@ import type {
   TransitionWipeDirection,
 } from '../../transitions/types';
 import type { BlendMode } from '../../types/blendMode';
+import type { VideoRotationDegrees } from '../../engine/webcodecs/videoTrackOrientation';
+import type { MotionAdjustmentWorkerGpuExecutionPlan } from '../motionDesign/adjustment/workerGpuAdjustmentPlan';
+import type { MotionAdjustmentSourceKind } from '../motionDesign/adjustment/sourceContracts';
+import {
+  collectWorkerGpuFrameStackTransferables,
+  type WorkerGpuFrameStackAdmission,
+  type WorkerGpuFrameStackContractV1,
+} from './workerGpuFrameStackContract';
 
 export type WorkerGpuRuntimeCommandType =
   | 'gpu.registerTarget'
   | 'gpu.unregisterTarget'
   | 'gpu.presentTestPattern'
   | 'gpu.presentWebCodecsFrame'
+  | 'gpu.presentFrameStack'
   | 'gpu.startWebCodecsStream'
   | 'gpu.stopWebCodecsStream'
   | 'gpu.initGraph'
@@ -37,6 +46,7 @@ export const WORKER_GPU_RUNTIME_COMMAND_TYPES = [
   'gpu.unregisterTarget',
   'gpu.presentTestPattern',
   'gpu.presentWebCodecsFrame',
+  'gpu.presentFrameStack',
   'gpu.startWebCodecsStream',
   'gpu.stopWebCodecsStream',
   'gpu.initGraph',
@@ -48,10 +58,20 @@ export const WORKER_GPU_RUNTIME_COMMAND_TYPES = [
   'gpu.dispose',
 ] as const satisfies readonly WorkerGpuRuntimeCommandType[];
 
+/** Default policy for every command except the explicit frame-stack transport. */
 export const WORKER_GPU_RUNTIME_COMMAND_TRANSFER_POLICY = {
   acceptsTransferables: false,
   transferableFields: [],
   payloadKind: 'structured-clone-data-only',
+} as const;
+
+export const WORKER_GPU_FRAME_STACK_COMMAND_TRANSFER_POLICY = {
+  acceptsTransferables: true,
+  transferableFields: [
+    'stack.bindings[].payload.bitmap',
+    'stack.bindings[].payload.stack (recursive)',
+  ] as const,
+  payloadKind: 'validated-exact-one-shot-frame-stack',
 } as const;
 
 export interface WorkerGpuRuntimeCommandBase {
@@ -171,6 +191,7 @@ export interface WorkerGpuWebCodecsRenderLayer {
   readonly position: { readonly x: number; readonly y: number; readonly z: number };
   readonly scale: { readonly x: number; readonly y: number; readonly z?: number };
   readonly rotation: number | { readonly x: number; readonly y: number; readonly z: number };
+  readonly videoRotation?: VideoRotationDegrees;
   readonly sourceRect?: WorkerGpuLayerSourceRect;
   readonly effects: readonly Effect[];
   readonly colorCorrection?: RuntimeColorGrade;
@@ -183,6 +204,8 @@ export interface WorkerGpuWebCodecsRenderLayer {
 
 export interface WorkerGpuWebCodecsFrameLayer {
   readonly sourceId: string;
+  /** Frozen kind for generic WebCodecs-backed sources; legacy video omits it. */
+  readonly sourceKind?: MotionAdjustmentSourceKind;
   readonly mediaTime: number;
   readonly opacity: number;
   readonly blendMode: string;
@@ -253,6 +276,7 @@ export interface WorkerGpuWebCodecsFrameLayer {
 export interface WorkerGpuPresentWebCodecsFrameCommand extends WorkerGpuRuntimeCommandBase {
   readonly type: 'gpu.presentWebCodecsFrame';
   readonly targetId: WorkerGpuGraphId;
+  readonly compositionId?: string;
   readonly sourceId: string;
   readonly timelineTime: number;
   readonly mediaTime: number;
@@ -260,11 +284,34 @@ export interface WorkerGpuPresentWebCodecsFrameCommand extends WorkerGpuRuntimeC
   readonly mode: WorkerGpuWebCodecsFrameSeekMode;
   readonly timeoutMs?: number;
   readonly layers?: readonly WorkerGpuWebCodecsFrameLayer[];
+  readonly adjustmentPlan?: MotionAdjustmentWorkerGpuExecutionPlan;
+}
+
+/** Atomic mixed-source frame transport. The Worker rebinds admission.nowMs to its own clock. */
+export interface WorkerGpuPresentFrameStackCommand extends WorkerGpuRuntimeCommandBase {
+  readonly type: 'gpu.presentFrameStack';
+  readonly admission: WorkerGpuFrameStackAdmission;
+  readonly stack: WorkerGpuFrameStackContractV1;
+  /** Optional exact export readback, identity-bound to the frozen frame stack. */
+  readonly readback?: WorkerGpuFrameStackReadbackRequest;
+}
+
+export interface WorkerGpuFrameStackReadbackRequest {
+  readonly readbackId: string;
+  readonly targetId: WorkerGpuGraphId;
+  readonly compositionId: WorkerGpuGraphId;
+  readonly timelineTime: number;
+  readonly frameIndex: number;
+  readonly width: number;
+  readonly height: number;
+  readonly format: 'rgba8unorm';
+  readonly colorSpace: 'srgb' | 'display-p3';
 }
 
 export interface WorkerGpuStartWebCodecsStreamCommand extends WorkerGpuRuntimeCommandBase {
   readonly type: 'gpu.startWebCodecsStream';
   readonly targetId: WorkerGpuGraphId;
+  readonly compositionId?: string;
   readonly sourceId: string;
   readonly timelineTime: number;
   readonly mediaTime: number;
@@ -273,6 +320,8 @@ export interface WorkerGpuStartWebCodecsStreamCommand extends WorkerGpuRuntimeCo
   readonly targetFps: number;
   readonly timeoutMs?: number;
   readonly layers?: readonly WorkerGpuWebCodecsFrameLayer[];
+  /** Transport-compatible only; the Worker boundary rejects this on autonomous streams. */
+  readonly adjustmentPlan?: MotionAdjustmentWorkerGpuExecutionPlan;
 }
 
 export interface WorkerGpuStopWebCodecsStreamCommand extends WorkerGpuRuntimeCommandBase {
@@ -361,6 +410,7 @@ export type WorkerGpuRuntimeCommand =
   | WorkerGpuUnregisterTargetCommand
   | WorkerGpuPresentTestPatternCommand
   | WorkerGpuPresentWebCodecsFrameCommand
+  | WorkerGpuPresentFrameStackCommand
   | WorkerGpuStartWebCodecsStreamCommand
   | WorkerGpuStopWebCodecsStreamCommand
   | WorkerGpuInitGraphCommand
@@ -371,8 +421,47 @@ export type WorkerGpuRuntimeCommand =
   | WorkerGpuReadbackCommand
   | WorkerGpuDisposeCommand;
 
+export function assertWorkerGpuPresentFrameStackCommand(
+  command: WorkerGpuPresentFrameStackCommand,
+): void {
+  void collectPresentFrameStackTransferables(command);
+}
+
+function collectPresentFrameStackTransferables(
+  command: WorkerGpuPresentFrameStackCommand,
+): readonly Transferable[] {
+  if (command.commandId !== command.admission.requestId) {
+    throw new Error(
+      '[MD7_FRAME_STACK_COMMAND_ENVELOPE_INVALID] Frame-stack command id does not match admission',
+    );
+  }
+  const readback = command.readback;
+  if (readback) {
+    const frame = command.stack.frame;
+    if (
+      readback.readbackId.length === 0
+      || readback.targetId !== frame.targetId
+      || readback.compositionId !== frame.compositionId
+      || readback.timelineTime !== frame.timelineTime
+      || readback.frameIndex !== frame.frameIndex
+      || readback.width !== command.stack.dimensions.width
+      || readback.height !== command.stack.dimensions.height
+      || readback.format !== 'rgba8unorm'
+      || (readback.colorSpace !== 'srgb' && readback.colorSpace !== 'display-p3')
+    ) {
+      throw new Error(
+        '[MD7_FRAME_STACK_READBACK_IDENTITY_INVALID] Frame-stack readback does not match its exact frame identity',
+      );
+    }
+  }
+  return collectWorkerGpuFrameStackTransferables(command.stack, command.admission);
+}
+
 export function collectWorkerGpuRuntimeCommandTransferables(
-  _command: WorkerGpuRuntimeCommand,
-): readonly [] {
+  command: WorkerGpuRuntimeCommand,
+): readonly Transferable[] {
+  if (command.type === 'gpu.presentFrameStack') {
+    return collectPresentFrameStackTransferables(command);
+  }
   return [];
 }

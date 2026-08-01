@@ -27,7 +27,7 @@ describe('FlashBoardComposerSyncPlanner', () => {
         outputType: 'video',
         supportsImageToVideo: true,
       },
-      service: 'kieai',
+      service: 'cloud',
       sunoAudioWeight: 0.5,
       sunoCustomMode: false,
       sunoInstrumental: false,
@@ -53,7 +53,7 @@ describe('FlashBoardComposerSyncPlanner', () => {
       imageSize: '2K',
       generateAudio: true,
       modelSettingsByKey: {
-        'kieai:kling-3.0': {
+        'cloud:kling-3.0': {
           version: '3.0',
           mode: '1080p',
           duration: 10,

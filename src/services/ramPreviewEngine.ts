@@ -1,4 +1,5 @@
 import type { Layer, LayerSource, NestedCompositionData, TimelineClip, TimelineTrack } from '../types';
+import type { RenderSurfaceFrameContext } from './render/renderHostTypes';
 import { RAM_PREVIEW_FPS } from '../stores/timeline/constants';
 import {
   getNestedRamPreviewClipTime,
@@ -34,11 +35,12 @@ import {
 
 // Minimal engine interface — avoids importing WebGPUEngine class directly
 export interface RamPreviewRenderEngine {
-  render: (layers: Layer[]) => void;
+  render: (layers: Layer[], frameContext: RenderSurfaceFrameContext) => void;
   cacheCompositeFrame: (time: number) => Promise<void>;
 }
 
 export interface RamPreviewOptions {
+  compositionId: string;
   start: number;
   end: number;
   centerTime: number;
@@ -427,9 +429,10 @@ export class RamPreviewEngine {
         }
 
         // Render and cache
-        if (layers.length > 0) {
-          this.engine.render(layers);
-        }
+        this.engine.render(layers, {
+          compositionId: options.compositionId,
+          timelineTimeSeconds: time,
+        });
         await this.engine.cacheCompositeFrame(time);
         deps.onFrameCached(time);
 

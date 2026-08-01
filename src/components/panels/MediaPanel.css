@@ -285,6 +285,13 @@
   overscroll-behavior: contain;
 }
 
+/* Chromium reveals an overlay scrollbar whenever async media/progress rows
+   mutate. Keep horizontal trackpad/Shift+wheel scrolling, but never allocate
+   or flash the native horizontal bar. The vertical scrollbar is unaffected. */
+.media-panel-table-wrapper::-webkit-scrollbar:horizontal {
+  height: 0;
+}
+
 .media-panel-table-wrapper .media-column-headers,
 .media-panel-table-wrapper .media-item-list {
   width: max-content;
@@ -647,8 +654,11 @@
 /* Grid View */
 .media-grid-wrapper {
   flex: 1;
+  min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
   padding: 8px;
   user-select: none;
 }

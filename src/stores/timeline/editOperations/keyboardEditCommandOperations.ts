@@ -5,6 +5,7 @@ import type { TimelineEditOperationApplyContext } from './editOperationContext';
 import { isClipTrackLocked, resultFromWarnings, uniqueIds } from './editOperationResults';
 import type { KeyboardEditCommandOperation } from './transactionTypes';
 import type { TimelineEditOperation, TimelineEditResult, TimelineEditWarning } from './types';
+import { getPlayheadPosition } from '../../../services/layerBuilder/PlayheadState';
 
 export function isKeyboardEditCommandOperation(operation: TimelineEditOperation): operation is KeyboardEditCommandOperation {
   return operation.type === 'keyboard-delete-command' || operation.type === 'keyboard-cycle-blend-mode-command';
@@ -37,6 +38,10 @@ export function applyKeyboardEditCommandOperation(
         get().clips,
         get().tracks,
         get().selectedClipIds,
+        {
+          clipKeyframes: get().clipKeyframes,
+          timelineTime: getPlayheadPosition(get().playheadPosition),
+        },
       );
       if (result.changedClipIds.length === 0) return resultFromWarnings(operationId, result.warnings);
 
@@ -45,6 +50,7 @@ export function applyKeyboardEditCommandOperation(
         cleanupDeletedClipResources(result.deletedClips);
         set({
           clips: result.clips,
+          ...(result.clipKeyframes ? { clipKeyframes: result.clipKeyframes } : {}),
           selectedClipIds: result.selectedClipIds,
           primarySelectedClipId: [...result.selectedClipIds][0] ?? null,
         });

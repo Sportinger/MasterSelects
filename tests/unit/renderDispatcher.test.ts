@@ -8,6 +8,7 @@ import { DEFAULT_PRIMARY_COLOR_PARAMS } from '../../src/types';
 import type { RenderDeps } from '../../src/engine/render/RenderDispatcher';
 import type { Layer, LayerRenderData } from '../../src/engine/core/types';
 import type { SceneCameraConfig } from '../../src/engine/scene/types';
+import { createDefaultMotionLayerDefinition } from '../../src/types/motionDesign';
 
 const mockGaussianSplatRenderer = vi.hoisted(() => ({
   isInitialized: true,
@@ -308,6 +309,166 @@ describe('RenderDispatcher empty playback hold', () => {
     }]);
 
     expect(() => dispatcher.render([{} as Layer])).toThrow(/nested composition was not ready/);
+  });
+
+  it('fails export before drawing when aggregate Motion admission is over budget', () => {
+    const { dispatcher, deps, collect } = createDispatcher(false);
+    deps.getDevice = vi.fn(() => ({
+      limits: { maxBufferSize: 100_000 * 48 },
+    })) as RenderDeps['getDevice'];
+    deps.exportCanvasManager.getIsExporting = vi.fn(() => true);
+    const createLargeMotionLayer = (id: string): Layer => {
+      const motion = createDefaultMotionLayerDefinition('shape');
+      if (motion.replicator?.layout.mode !== 'grid') throw new Error('Expected grid');
+      motion.replicator.enabled = true;
+      motion.replicator.userLimit = 100_000;
+      motion.replicator.layout.count = { columns: 300, rows: 200 };
+      return {
+        id,
+        visible: true,
+        opacity: 1,
+        source: { type: 'motion', motion },
+      } as unknown as Layer;
+    };
+    const layers = [createLargeMotionLayer('motion-a'), createLargeMotionLayer('motion-b')];
+    collect.mockReturnValueOnce(layers.map((layer) => ({
+      layer,
+      textureView: null,
+      sourceWidth: 100,
+      sourceHeight: 100,
+    })));
+
+    expect(() => dispatcher.render(layers, {
+      compositionId: 'composition-export',
+      timelineTimeSeconds: 4.5,
+    })).toThrow(/MOTION_FRAME_RUNTIME_FRAME_BUDGET_EXCEEDED/);
+  });
+
+  it('fails export before drawing when Motion texture resources exceed device limits', () => {
+    const { dispatcher, deps, collect } = createDispatcher(false);
+    deps.getDevice = vi.fn(() => ({
+      limits: {
+        maxBufferSize: 100_000 * 48,
+        maxTextureDimension2D: 4096,
+      },
+    })) as RenderDeps['getDevice'];
+    deps.exportCanvasManager.getIsExporting = vi.fn(() => true);
+    const motion = createDefaultMotionLayerDefinition('shape');
+    if (motion.replicator?.layout.mode !== 'grid') throw new Error('Expected grid');
+    motion.replicator.enabled = true;
+    motion.replicator.layout.count = { columns: 2, rows: 1 };
+    motion.replicator.layout.spacing.x = 10_000;
+    const layer = {
+      id: 'oversized-motion',
+      visible: true,
+      opacity: 1,
+      source: { type: 'motion', motion },
+    } as unknown as Layer;
+    collect.mockReturnValueOnce([{
+      layer,
+      textureView: null,
+      sourceWidth: 100,
+      sourceHeight: 100,
+    }]);
+
+    expect(() => dispatcher.render([layer], {
+      compositionId: 'composition-export',
+      timelineTimeSeconds: 4.5,
+    })).toThrow(/MOTION_REPLICATOR_TEXTURE_DIMENSION_EXCEEDED/);
+  });
+
+  it('hides preview Motion layers without invoking the renderer when admission fails', () => {
+    const { dispatcher, deps, collect } = createDispatcher(false);
+    deps.getDevice = vi.fn(() => ({
+      limits: {
+        maxBufferSize: 100_000 * 48,
+        maxTextureDimension2D: 4096,
+      },
+      createCommandEncoder: vi.fn(() => ({ finish: vi.fn() })),
+    })) as RenderDeps['getDevice'];
+    const motion = createDefaultMotionLayerDefinition('shape');
+    if (motion.replicator?.layout.mode !== 'grid') throw new Error('Expected grid');
+    motion.replicator.enabled = true;
+    motion.replicator.layout.count = { columns: 2, rows: 1 };
+    motion.replicator.layout.spacing.x = 10_000;
+    const layer = {
+      id: 'oversized-preview-motion',
+      visible: true,
+      opacity: 1,
+      source: { type: 'motion', motion },
+    } as unknown as Layer;
+    collect.mockReturnValueOnce([{
+      layer,
+      textureView: null,
+      sourceWidth: 100,
+      sourceHeight: 100,
+    }]);
+    const renderLayer = vi.fn();
+    deps.motionRenderer = { renderLayer } as unknown as RenderDeps['motionRenderer'];
+    Object.assign(deps.renderTargetManager, {
+      getEffectTempTexture: vi.fn(() => null),
+      getEffectTempView: vi.fn(() => null),
+      getEffectTempTexture2: vi.fn(() => null),
+      getEffectTempView2: vi.fn(() => null),
+    });
+    const compositeStop = new Error('preview-composite-stop');
+    const composite = vi.fn(() => { throw compositeStop; });
+    deps.compositor = { composite } as unknown as RenderDeps['compositor'];
+
+    expect(() => dispatcher.render([layer], {
+      compositionId: 'composition-preview',
+      timelineTimeSeconds: 4.5,
+    })).toThrow(compositeStop);
+    expect(renderLayer).not.toHaveBeenCalled();
+    expect(composite.mock.calls[0]?.[0]).toEqual([]);
+  });
+
+  it('uses the supplied frame time for main compositor motion evaluation', () => {
+    const { dispatcher, deps, collect } = createDispatcher(false);
+    const layer = {
+      id: 'solid-layer',
+      name: 'Solid Layer',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      source: { type: 'solid', color: '#ffffff' },
+    } as unknown as Layer;
+    collect.mockReturnValueOnce([{
+      layer,
+      textureView: {} as GPUTextureView,
+      sourceWidth: 16,
+      sourceHeight: 16,
+    }]);
+    deps.getDevice = vi.fn(() => ({
+      createCommandEncoder: vi.fn(() => ({ finish: vi.fn() })),
+    })) as RenderDeps['getDevice'];
+    Object.assign(deps.renderTargetManager, {
+      getEffectTempTexture: vi.fn(() => null),
+      getEffectTempView: vi.fn(() => null),
+      getEffectTempTexture2: vi.fn(() => null),
+      getEffectTempView2: vi.fn(() => null),
+    });
+    const compositeStop = new Error('composite-stop');
+    const composite = vi.fn(() => {
+      throw compositeStop;
+    });
+    deps.compositor = { composite } as unknown as RenderDeps['compositor'];
+    useTimelineStore.setState({ playheadPosition: 99 });
+
+    expect(() => dispatcher.render([layer], {
+      compositionId: 'composition-frame-context',
+      timelineTimeSeconds: 4.25,
+    })).toThrow(compositeStop);
+
+    expect(composite).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.anything(),
+      expect.objectContaining({ motionTime: 4.25 }),
+    );
   });
 
   it('holds the last frame during large drag teleports instead of flashing black', () => {

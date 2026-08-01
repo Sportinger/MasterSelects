@@ -16,6 +16,7 @@ interface ExportAdvancedSummarySectionsProps {
   estimatedSizeLabel: string;
   error: string | null;
   formatTime: (seconds: number) => string;
+  fixedSourceRange?: boolean;
 }
 
 export function ExportAdvancedSummarySections({
@@ -34,10 +35,11 @@ export function ExportAdvancedSummarySections({
   estimatedSizeLabel,
   error,
   formatTime,
+  fixedSourceRange = false,
 }: ExportAdvancedSummarySectionsProps) {
   return (
     <>
-      {(encoder === 'webcodecs' || encoder === 'htmlvideo') && !isGifMode && (
+      {!fixedSourceRange && (encoder === 'webcodecs' || encoder === 'htmlvideo') && !isGifMode && (
         <div className="export-section export-advanced-section">
           <div className="export-section-header">Advanced Alpha</div>
 
@@ -72,7 +74,7 @@ export function ExportAdvancedSummarySections({
       <div className="export-section export-advanced-section">
         <div className="export-section-header">Range & Summary</div>
 
-        <div className="control-row">
+        {!fixedSourceRange && <div className="control-row">
           <label>
             <input
               type="checkbox"
@@ -81,11 +83,11 @@ export function ExportAdvancedSummarySections({
             />
             Use In/Out Markers
           </label>
-        </div>
+        </div>}
 
         <div className="export-summary">
           <div>Output: {actualWidth}x{outputHeight}{stackedAlpha && !isGifMode ? ' (stacked alpha)' : ''}</div>
-          <div>Range: {formatTime(startTime)} - {formatTime(endTime)}</div>
+          <div>Range: {fixedSourceRange ? 'Full source' : `${formatTime(startTime)} - ${formatTime(endTime)}`}</div>
           <div>Duration: {formatTime(endTime - startTime)}</div>
           <div>Frames: {frameCount}</div>
           <div>Est. Size: {estimatedSizeLabel}</div>

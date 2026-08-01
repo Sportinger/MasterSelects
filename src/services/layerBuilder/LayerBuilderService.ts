@@ -44,6 +44,7 @@ import {
   withLayerBuilderMaskProperties,
 } from './layerBuilderLayerPostProcessing';
 import { buildLayerBuilderMotionShapeLayer } from './layerBuilderMotionLayers';
+import { buildLayerBuilderMotionAdjustmentLayer } from './layerBuilderMotionAdjustment';
 import { buildLayerBuilderNestedCompLayer } from './layerBuilderNestedLayerBuilder';
 import {
   DEFAULT_TRANSITION_PLACEMENT,
@@ -105,10 +106,10 @@ export class LayerBuilderService {
   }
 
   /**
-   * Build layers for the current frame
-   * Main entry point - called from render loop
+   * Capture the store-backed context for one producer frame. When an exact
+   * playhead is supplied, the advancing playback clock is not sampled again.
    */
-  buildLayersFromStore(): Layer[] {
+  captureFrameContext(playheadPosition?: number): FrameContext {
     const repairedTransitionComps = ensureTransitionCompositionsForActiveTimeline(
       useTimelineStore.setState,
       useTimelineStore.getState,
@@ -117,8 +118,17 @@ export class LayerBuilderService {
       this.invalidateCache();
     }
 
-    // Create frame context (single store read)
-    const ctx = createFrameContext();
+    return createFrameContext(playheadPosition);
+  }
+
+  /**
+   * Build layers for the current frame.
+   * Main entry point - called from render loop.
+   */
+  buildLayersFromStore(frameContext?: FrameContext): Layer[] {
+    // The render producer passes one captured context through video sync, layer
+    // evaluation, and presentation. Legacy callers still get an atomic capture.
+    const ctx = frameContext ?? this.captureFrameContext();
     hydrateTimelineMediaWindow(ctx);
     syncLayerBuilderCanvasRuntimeSources(ctx);
     const { activeLayerSlots = {}, activeCompositionId } = useMediaStore.getState();
@@ -432,8 +442,23 @@ export class LayerBuilderService {
         opacityOverride,
       });
     }
-    // Motion null and adjustment clips are timeline/controller data for now.
-    else if (clip.source?.type === 'motion-null' || clip.source?.type === 'motion-adjustment') {
+    // Adjustment clips are ordered compositor operations over lower layers.
+    else if (clip.source?.type === 'motion-adjustment') {
+      const composition = ctx.compositionById.get(ctx.activeCompId);
+      layer = buildLayerBuilderMotionAdjustmentLayer({
+        clip,
+        layerIndex,
+        ctx,
+        transformCache: this.transformCache,
+        opacityOverride,
+        compositionSize: {
+          width: composition?.width ?? 1920,
+          height: composition?.height ?? 1080,
+        },
+      });
+    }
+    // Motion null clips remain non-rendering transform controllers.
+    else if (clip.source?.type === 'motion-null') {
       layer = null;
     }
     // Camera clip (non-rendering scene controller)
@@ -475,7 +500,7 @@ export class LayerBuilderService {
       });
     }
 
-    if (layer?.source) {
+    if (layer?.source && layer.source.type !== 'motion-adjustment') {
       layer = applyLayerBuilderAINodesToLayer(clip, layer, ctx);
     }
 
@@ -496,15 +521,15 @@ export class LayerBuilderService {
   /**
    * Sync video elements to current playhead
    */
-  syncVideoElements(): void {
-    const ctx = createFrameContext();
+  syncVideoElements(frameContext?: FrameContext): void {
+    const ctx = frameContext ?? createFrameContext();
     if (this.getActiveCompositionVideoBakeRegion(ctx)) {
       this.pausePrimaryCompositionVideoSources(ctx);
       layerPlaybackManager.syncVideoElements(ctx.playheadPosition, ctx.isPlaying);
       return;
     }
 
-    this.videoSyncManager.syncVideoElements();
+    this.videoSyncManager.syncVideoElements(ctx);
   }
 
   /**

@@ -103,7 +103,11 @@ export const createCompositionCrudActions: MediaSliceCreator<Pick<
       frameRate: settings?.frameRate ?? 30,
       duration,
       backgroundColor: settings?.backgroundColor ?? '#000000',
-      timelineData: settings?.timelineData ?? createDefaultCompositionTimelineData(duration),
+      timelineData: settings?.timelineData ?? createDefaultCompositionTimelineData(duration, {
+        // Passing an explicit composition duration is an authoring decision,
+        // so clip edits must not replace it with the auto-duration minimum.
+        durationLocked: settings?.duration !== undefined,
+      }),
       transitionComp: settings?.transitionComp ? structuredClone(settings.transitionComp) : undefined,
       captionComp: settings?.captionComp ? structuredClone(settings.captionComp) : undefined,
     };

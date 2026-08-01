@@ -22,6 +22,7 @@ import { normalizeFlashBoardChatMessages } from '../flashBoardChatProjectCodec';
 import { readFlashBoardChatJournal } from '../flashBoardChatProjectJournal';
 import type {
   FlashBoardGenerationRequest,
+  FlashBoardGenerationMetadata,
   FlashBoardChatMessage,
   FlashBoardComposerModelSettings,
   FlashBoardComposerState,
@@ -35,6 +36,8 @@ import type {
 import type {
   ProjectFlashBoardComposerModelSettings,
   ProjectFlashBoardComposerState,
+  ProjectFlashBoardGenerationMetadata,
+  ProjectFlashBoardGenerationRequest,
   ProjectFlashBoardGenerationRecord,
   ProjectFlashBoardPromptHistoryEntry,
   ProjectFlashBoardState,
@@ -43,7 +46,7 @@ import type { ProjectFile } from '../../projectFileService';
 
 const log = Logger.create('ProjectSync');
 const MEDIA_PANEL_PROJECT_UI_LOADED_EVENT = 'media-panel-project-ui-loaded';
-const FLASHBOARD_SERVICES = new Set<FlashBoardService>(['piapi', 'kieai', 'evolink', 'cloud', 'elevenlabs', 'suno']);
+const FLASHBOARD_SERVICES = new Set<FlashBoardService>(['piapi', 'evolink', 'cloud', 'elevenlabs']);
 const FLASHBOARD_OUTPUT_TYPES = new Set<FlashBoardOutputType>(['video', 'image', 'audio']);
 const FLASHBOARD_MEDIA_TYPES = new Set<FlashBoardMediaType>(['video', 'image', 'audio']);
 
@@ -57,9 +60,12 @@ function removeLocalStorageKey(key: string): void {
 }
 
 function normalizeFlashBoardService(value: unknown): FlashBoardService {
+  if (value === 'kieai' || value === 'suno') {
+    return 'cloud';
+  }
   return typeof value === 'string' && FLASHBOARD_SERVICES.has(value as FlashBoardService)
     ? value as FlashBoardService
-    : 'kieai';
+    : 'cloud';
 }
 
 function normalizeFlashBoardOutputType(
@@ -70,7 +76,7 @@ function normalizeFlashBoardOutputType(
     return value as FlashBoardOutputType;
   }
 
-  return service === 'elevenlabs' || service === 'suno' ? 'audio' : undefined;
+  return service === 'elevenlabs' ? 'audio' : undefined;
 }
 
 function normalizeFlashBoardMediaType(value: unknown): FlashBoardMediaType {
@@ -80,14 +86,19 @@ function normalizeFlashBoardMediaType(value: unknown): FlashBoardMediaType {
 }
 
 function normalizeFlashBoardRequest(
-  request: FlashBoardGenerationRequest | undefined,
+  request: ProjectFlashBoardGenerationRequest | undefined,
 ): FlashBoardGenerationRequest | undefined {
   if (!request) return undefined;
+  const legacyService = request.service;
   const service = normalizeFlashBoardService(request.service);
 
   return {
     ...request,
     service,
+    providerId: legacyService === 'kieai' && request.providerId === 'kling-3.0'
+      ? 'cloud-kling'
+      : request.providerId,
+    version: legacyService === 'kieai' ? 'latest' : request.version,
     outputType: normalizeFlashBoardOutputType(request.outputType, service),
     referenceMediaFileIds: Array.isArray(request.referenceMediaFileIds)
       ? request.referenceMediaFileIds.filter((id): id is string => typeof id === 'string')
@@ -210,6 +221,36 @@ function normalizeFlashBoardJob(
   };
 }
 
+function normalizeFlashBoardGenerationMetadata(
+  metadata: ProjectFlashBoardGenerationMetadata,
+): FlashBoardGenerationMetadata {
+  const legacyService = metadata.service;
+  const service = metadata.service ? normalizeFlashBoardService(metadata.service) : undefined;
+
+  return {
+    ...metadata,
+    service,
+    providerId: legacyService === 'kieai' && metadata.providerId === 'kling-3.0'
+      ? 'cloud-kling'
+      : metadata.providerId,
+    version: legacyService === 'kieai' ? 'latest' : metadata.version,
+    outputType: normalizeFlashBoardOutputType(metadata.outputType, service ?? 'cloud'),
+    mediaType: metadata.mediaType ? normalizeFlashBoardMediaType(metadata.mediaType) : undefined,
+    referenceMediaFileIds: normalizeStringArray(metadata.referenceMediaFileIds),
+  };
+}
+
+function normalizeFlashBoardGenerationMetadataRecord(
+  metadataByMediaId: Record<string, ProjectFlashBoardGenerationMetadata>,
+): Record<string, FlashBoardGenerationMetadata> {
+  return Object.fromEntries(
+    Object.entries(metadataByMediaId).map(([mediaFileId, metadata]) => [
+      mediaFileId,
+      normalizeFlashBoardGenerationMetadata(metadata),
+    ]),
+  );
+}
+
 function normalizeFlashBoardGenerationRecord(
   record: ProjectFlashBoardGenerationRecord,
 ): FlashBoardActiveGenerationRecord {
@@ -261,7 +302,9 @@ export async function hydrateDockFlashboardAndWorkspaceFromProject(projectData: 
       journalMessages,
       projectData.createdAt,
     );
-    flashBoardMediaBridge.hydrateMetadata(projectData.flashboard.generationMetadataByMediaId ?? {});
+    flashBoardMediaBridge.hydrateMetadata(normalizeFlashBoardGenerationMetadataRecord(
+      projectData.flashboard.generationMetadataByMediaId ?? {},
+    ));
     log.info(' Restored FlashBoard state from project');
   } else if (journalMessages) {
     hydrateFlashBoardActiveGenerationRecords(

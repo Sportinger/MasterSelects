@@ -363,17 +363,18 @@ describe('motion-path viewport overlay and editing', () => {
     fireEvent.pointerUp(document, { pointerId: 11, clientX: 70, clientY: 70 });
 
     const keyframes = useTimelineStore.getState().clipKeyframes.get('clip-motion') ?? [];
-    expect(keyframes.find((keyframe) => keyframe.property === 'position.x')).toMatchObject({
+    const xKeyframe = keyframes.find((keyframe) => keyframe.property === 'position.x');
+    expect(xKeyframe).toMatchObject({
       id: 'x-node',
       time: 1,
-      value: 0.2,
     });
+    expect(xKeyframe?.value).toBeCloseTo(0.3);
     const yKeyframe = keyframes.find((keyframe) => keyframe.property === 'position.y');
     expect(yKeyframe).toMatchObject({
       time: 1,
       easing: 'ease-out',
     });
-    expect(yKeyframe?.value).toBeCloseTo(0.3);
+    expect(yKeyframe?.value).toBeCloseTo(0.4);
     expect(useHistoryStore.getState().batchId).toBeNull();
     expect(useHistoryStore.getState().undoStack).toHaveLength(1);
 

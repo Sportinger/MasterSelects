@@ -1,6 +1,8 @@
 # Motion Design MD1 Shapes and Appearances Evidence
 
 Date: 2026-07-31
+Gate: `MD1_SHAPES_AND_APPEARANCES_COMPLETE`
+Status: complete; disposable four-surface pixel goldens recorded
 
 ## Implemented
 
@@ -38,10 +40,48 @@ Date: 2026-07-31
 - A local hardware render probe produced non-empty polygon and star coverage with
   the two-stop gradient. It was diagnostic-only and did not touch editor state.
 
-## Remaining Gate Evidence
+## Wave 0 adversarial closeout
 
-`MD1_SHAPES_AND_APPEARANCES_COMPLETE` stays unchecked until a disposable project
-captures representative preview and export pixels for all four primitives,
-both gradient families, multiple strokes, and blend ordering. The connected
-editor contained user work, so this implementation run deliberately made no
-live-project edits.
+The disposable MD1 evidence packet now contains a deterministic four-primitive
+fixture, crop-scoped RGBA comparisons, and an exact-session runner. It verifies:
+
+- direct preview, direct export, nested preview, and nested export;
+- ordered appearances, masks, effects, clip/appearance opacity and blend,
+  visibility, gradients, and multiple strokes through isolated differential
+  controls;
+- a static-versus-animated sample on rectangle appearance opacity and star
+  geometry for all four render surfaces, so parity cannot pass while both paths
+  ignore nested keyframes;
+- copy/paste, production store duplicate, split isolation, project save codec +
+  JSON + load codec, stable ids, and full error-path state restoration;
+- loopback validation before token access, exact project-free target selection,
+  explicit tab targeting, read-only verify mode, and structured PNG chunk
+  validation before record writes.
+
+Current focused result:
+
+```text
+3 test files passed
+22 tests passed
+targeted ESLint, runner syntax, and scoped diff check passed
+```
+
+The shared app TypeScript check and production build also pass. The final
+combined Wave 0 Motion/AI/Graph/Render matrix passes all 506 tests in 34 files,
+including the later MD2 exact-target evidence packet.
+
+## Recorded gate evidence
+
+The exact-target record
+[`20260731-221321Z-record.report.json`](./md1/20260731-221321Z-record.report.json)
+completed with top-level `success=true` and no failures. The four 640x360
+baselines are [`direct-preview.png`](./md1/baselines/direct-preview.png),
+[`direct-export.png`](./md1/baselines/direct-export.png),
+[`nested-preview.png`](./md1/baselines/nested-preview.png), and
+[`nested-export.png`](./md1/baselines/nested-export.png).
+
+They cover rectangle, ellipse, polygon, and star together with every required
+appearance/mask/effect differential, and prove direct/export/nested parity.
+The apparent `passed=false` values inside differential comparisons are expected:
+those controls must visibly differ from their reference state. The record was
+captured only in the isolated disposable session; no user project was mutated.

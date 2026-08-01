@@ -37,6 +37,7 @@ export interface StateSnapshot {
     clips: TimelineClip[];
     tracks: TimelineTrack[];
     selectedClipIds: string[];
+    selectedKeyframeIds?: string[];
     zoom: number;
     scrollX: number;
     layers: Layer[];
@@ -81,16 +82,19 @@ export interface HistoryBatchStartResult {
   batchId: number | null;
 }
 
+export interface HistoryNode {
+  id: string;
+  parentId: string | null;
+  snapshot: StateSnapshot;
+}
+
 export interface HistoryState {
-  undoStack: StateSnapshot[];
-  redoStack: StateSnapshot[];
+  nodes: Record<string, HistoryNode>;
+  rootId: string | null;
+  activeNodeId: string | null;
+  lastVisitedChildByNodeId: Record<string, string>;
   eventLog: HistoryTimelineEvent[];
-  branches: HistoryBranch[];
-  navigationEntries: HistoryListEntry[] | null;
-  navigationSnapshotsByEntryId: Record<string, StateSnapshot>;
-  activeEntryId: string | null;
-  currentSnapshot: StateSnapshot | null;
-  maxHistorySize: number;
+  maxHistoryNodes: number;
   isApplying: boolean;
   batchId: number | null;
   batchLabel: string | null;
@@ -99,11 +103,12 @@ export interface HistoryState {
   // trailing debounced auto-capture that the SAME edit's store mutation schedules
   // — otherwise one explicit edit yields TWO undo steps (immediate + fallback).
   captureSnapshot: (label: string, options?: { isAutoCapture?: boolean }) => void;
-  undo: () => HistoryOperationResult | null;
-  redo: () => HistoryOperationResult | null;
+  undo: () => HistoryRestoreResult | null;
+  redo: () => HistoryRestoreResult | null;
   canUndo: () => boolean;
   canRedo: () => boolean;
   getHistoryEntries: () => HistoryListEntry[];
+  getActiveSnapshot: () => StateSnapshot | null;
   recordEvent: (type: HistoryEventType, label: string) => void;
   restoreEntry: (entry: HistoryListEntry) => HistoryRestoreResult | null;
   restoreBranch: (branchId: string, snapshotIndex?: number) => HistoryRestoreResult | null;
@@ -112,38 +117,22 @@ export interface HistoryState {
   cancelBatch: () => void;
   setIsApplying: (value: boolean) => void;
   clearHistory: () => void;
-  serializeForProject: () => ProjectHistoryState;
+  serializeForProject: () => ProjectHistoryState | null;
   hydrateFromProject: (history: ProjectHistoryState | null | undefined) => void;
 }
 
-export interface HistoryOperationResult {
-  operation: 'undo' | 'redo';
-  label: string;
-}
-
 export interface HistoryRestoreResult {
-  operation: 'restore-branch';
+  operation: 'undo' | 'redo' | 'restore-branch';
   label: string;
-}
-
-export interface HistoryBranch {
-  id: string;
-  label: string;
-  createdAt: number;
-  baseSnapshot: StateSnapshot | null;
-  baseUndoStack: StateSnapshot[];
-  snapshots: StateSnapshot[];
-}
-
-export interface HistoryNavigationState {
-  entries: HistoryListEntry[];
-  snapshotsByEntryId: Record<string, StateSnapshot>;
 }
 
 export interface TimelineStoreState {
+  duration?: number;
+  durationLocked?: boolean;
   clips: TimelineClip[];
   tracks: TimelineTrack[];
   selectedClipIds: Set<string>;
+  selectedKeyframeIds?: Set<string>;
   zoom: number;
   scrollX: number;
   layers: Layer[];
@@ -156,6 +145,7 @@ export interface TimelineStoreState {
 }
 
 export interface MediaStoreState {
+  activeCompositionId?: string | null;
   files: MediaFile[];
   compositions: Composition[];
   folders: MediaFolder[];

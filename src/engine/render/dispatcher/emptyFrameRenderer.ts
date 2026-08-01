@@ -21,17 +21,20 @@ export class EmptyFrameRenderer {
     const d = this.deps;
     const commandEncoder = device.createCommandEncoder();
     const pingView = d.renderTargetManager?.getPingView();
+    const pongView = d.renderTargetManager?.getPongView();
 
     // Use output pipeline to render empty frame (allows shader to generate checkerboard)
     if (pingView && d.outputPipeline && d.sampler) {
-      // Clear ping texture to transparent
+      // Pixel readback follows the compositor's last ping/pong target. Clear
+      // both so an intentionally empty frame cannot expose the previous
+      // composite when the last rendered target happened to be pong.
       const clearPass = commandEncoder.beginRenderPass({
-        colorAttachments: [{
-          view: pingView,
+        colorAttachments: [pingView, pongView].filter((view): view is GPUTextureView => !!view).map((view) => ({
+          view,
           clearValue: { r: 0, g: 0, b: 0, a: 0 },
-          loadOp: 'clear',
-          storeOp: 'store',
-        }],
+          loadOp: 'clear' as const,
+          storeOp: 'store' as const,
+        })),
       });
       clearPass.end();
     }

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fireEvent, render } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import {
   CLIP_INTERACTION_SHELL_MODULE_SLOTS,
@@ -12,6 +12,7 @@ import {
   type ClipInteractionShellProps,
   type ClipInteractionShellRect,
 } from '../../src/components/timeline/interactionShell';
+import { TimelinePickWhipProvider } from '../../src/components/timeline/TimelinePickWhipContext';
 
 const repoRoot = process.cwd();
 const videoBakeControlsPath = path.join(
@@ -172,6 +173,7 @@ describe('ClipInteractionShell contract', () => {
 
   it('defines the Phase 0 active module slots in stable render order', () => {
     expect(CLIP_INTERACTION_SHELL_MODULE_SLOTS).toEqual([
+      'parenting',
       'trim',
       'fade',
       'keyframe',
@@ -234,6 +236,39 @@ describe('ClipInteractionShell contract', () => {
     };
 
     expect(getClipInteractionShellActiveSlots(activeModules)).toEqual(['keyframe', 'audio-region']);
+  });
+
+  it('renders the parenting module through the shared interaction shell', () => {
+    const clearParent = vi.fn();
+    const props = createShellProps({
+      mountState: {
+        clipId: 'clip-a',
+        shouldMount: true,
+        reasons: ['parenting'],
+      },
+      activeModules: {
+        parenting: {
+          slot: 'parenting',
+          enabled: true,
+          parentClipId: 'parent-a',
+          parentClipName: 'Parent A',
+          locked: false,
+        },
+      },
+    });
+    render(
+      <TimelinePickWhipProvider value={{
+        drag: null,
+        startDrag: vi.fn(),
+        cancelDrag: vi.fn(),
+        clearParent,
+      }}>
+        <ClipInteractionShell {...props} />
+      </TimelinePickWhipProvider>,
+    );
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Clear parent for Clip A' }));
+    expect(clearParent).toHaveBeenCalledWith('clip-a');
   });
 
   it('renders a lightweight shell scaffold with built-in fade controls and remaining placeholders', () => {

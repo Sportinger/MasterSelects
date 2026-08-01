@@ -65,24 +65,10 @@ describe('FlashBoard audio catalog contract', () => {
     ).toBeNull();
   });
 
-  it('exposes Kie.ai Seedance 2.0 Fast as a video provider with current Kie credit estimates', () => {
+  it('exposes hosted Seedance 2.0 Fast with MasterSelects credit estimates', () => {
     const entry = getCatalogEntries().find((candidate) => candidate.providerId === 'bytedance/seedance-2-fast');
-    const cloudEntry = getCatalogEntries().find((candidate) => (
-      candidate.service === 'cloud' && candidate.providerId === 'bytedance/seedance-2-fast'
-    ));
 
     expect(entry).toMatchObject({
-      service: 'kieai',
-      providerId: 'bytedance/seedance-2-fast',
-      outputType: 'video',
-      supportsTextToVideo: true,
-      supportsImageToVideo: true,
-      supportsGenerateAudio: true,
-      modes: ['480p', '720p'],
-      maxReferenceMedia: 0,
-      referenceInputKinds: ['start-frame', 'end-frame'],
-    });
-    expect(cloudEntry).toMatchObject({
       service: 'cloud',
       providerId: 'bytedance/seedance-2-fast',
       outputType: 'video',
@@ -100,9 +86,9 @@ describe('FlashBoard audio catalog contract', () => {
         mode: '720p',
         outputType: 'video',
         providerId: 'bytedance/seedance-2-fast',
-        service: 'kieai',
+        service: 'cloud',
       })?.fullLabel,
-    ).toBe('330 Kie credits');
+    ).toBe('1980 credits');
 
     expect(
       getFlashBoardPriceEstimate({
@@ -111,18 +97,18 @@ describe('FlashBoard audio catalog contract', () => {
         mode: '720p',
         outputType: 'video',
         providerId: 'bytedance/seedance-2-fast',
-        service: 'kieai',
+        service: 'cloud',
       })?.fullLabel,
-    ).toBe('200 Kie credits');
+    ).toBe('1200 credits');
   });
 
-  it('exposes current Kie.ai image generation and edit models', () => {
+  it('exposes current hosted image generation and edit models', () => {
     const entries = getCatalogEntries();
     const findImageEntry = (providerId: string) => entries.find((candidate) => (
-      candidate.service === 'kieai' && candidate.providerId === providerId
+      candidate.service === 'cloud' && candidate.providerId === providerId
     ));
     const providerIds = entries
-      .filter((candidate) => candidate.service === 'kieai' && candidate.outputType === 'image')
+      .filter((candidate) => candidate.service === 'cloud' && candidate.outputType === 'image')
       .map((candidate) => candidate.providerId);
 
     expect(providerIds).toEqual(expect.arrayContaining([
@@ -183,11 +169,11 @@ describe('FlashBoard audio catalog contract', () => {
     });
   });
 
-  it('exposes current Kie.ai video utilities and premium video providers', () => {
+  it('exposes current hosted video utilities and premium video providers', () => {
     const entries = getCatalogEntries();
 
     expect(entries.find((candidate) => (
-      candidate.service === 'kieai' && candidate.providerId === 'kling-3.0'
+      candidate.service === 'cloud' && candidate.providerId === 'cloud-kling'
     ))).toMatchObject({
       outputType: 'video',
       modes: ['std', 'pro', '4K'],
@@ -197,16 +183,8 @@ describe('FlashBoard audio catalog contract', () => {
       referenceInputKinds: ['start-frame', 'end-frame', 'image-reference', 'video-reference'],
       maxReferenceMedia: 3,
     });
-    expect(entries.find((candidate) => (
-      candidate.service === 'cloud' && candidate.providerId === 'cloud-kling'
-    ))).toMatchObject({
-      modes: ['std', 'pro', '4K'],
-      durations: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-      modeLabels: { std: '720p', pro: '1080p', '4K': '4K' },
-      referenceInputKinds: ['start-frame', 'end-frame', 'image-reference', 'video-reference'],
-    });
     expect(entries.find((candidate) => candidate.providerId === 'veo-3.1')).toMatchObject({
-      service: 'kieai',
+      service: 'cloud',
       outputType: 'video',
       supportsTextToVideo: true,
       supportsImageToVideo: true,
@@ -217,7 +195,7 @@ describe('FlashBoard audio catalog contract', () => {
       promptRefinerProfile: 'veo',
     });
     expect(entries.find((candidate) => candidate.providerId === 'runway-video')).toMatchObject({
-      service: 'kieai',
+      service: 'cloud',
       outputType: 'video',
       durations: [5, 10],
       modes: ['720p', '1080p'],
@@ -226,13 +204,8 @@ describe('FlashBoard audio catalog contract', () => {
       maxReferenceMedia: 1,
       promptRefinerProfile: 'runway',
     });
-    expect(entries.find((candidate) => (
-      candidate.service === 'cloud' && candidate.providerId === 'runway-video'
-    ))).toMatchObject({
-      aspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4'],
-    });
     expect(entries.find((candidate) => candidate.providerId === 'topaz/video-upscale')).toMatchObject({
-      service: 'kieai',
+      service: 'cloud',
       outputType: 'video',
       modes: ['2x', '4x'],
       requiresPrompt: false,
@@ -242,13 +215,13 @@ describe('FlashBoard audio catalog contract', () => {
     });
   });
 
-  it('exposes Suno Sounds separately from Suno Music', () => {
+  it('exposes hosted Suno Sounds separately from Suno Music', () => {
     const entry = getCatalogEntries().find((candidate) => (
-      candidate.service === 'suno' && candidate.providerId === 'suno-sounds'
+      candidate.service === 'cloud' && candidate.providerId === 'suno-sounds'
     ));
 
     expect(entry).toMatchObject({
-      service: 'suno',
+      service: 'cloud',
       providerId: 'suno-sounds',
       outputType: 'audio',
       supportsTextToAudio: true,

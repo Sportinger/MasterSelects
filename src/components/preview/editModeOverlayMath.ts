@@ -263,8 +263,8 @@ export function calculateLayerOverlayBounds({
   const sinZ = Math.sin(-rotationZ);
 
   const sourceToCanvas = (sampleX: number, sampleY: number): OverlayPoint => {
-    let correctedX = sampleX - 0.5 + posX;
-    let correctedY = sampleY - 0.5 + posY;
+    let correctedX = sampleX - 0.5;
+    let correctedY = sampleY - 0.5;
 
     if (aspectRatio > 1) {
       correctedY /= aspectRatio;
@@ -278,8 +278,12 @@ export function calculateLayerOverlayBounds({
     const rotatedY = scaledY / outputAspect;
     const unrotatedX = rotatedX * cosZ - rotatedY * sinZ;
     const unrotatedY = rotatedX * sinZ + rotatedY * cosZ;
-    const outputX = unrotatedX;
-    const outputY = unrotatedY * outputAspect;
+    // The compositor stores position against the composition half-extents and
+    // applies it before undoing local rotation and scale. In the equivalent
+    // forward projection it is therefore the final composition-space offset,
+    // independent of the layer's scale, rotation, aspect, or source size.
+    const outputX = unrotatedX + (posX * 0.5);
+    const outputY = (unrotatedY * outputAspect) + (posY * 0.5);
 
     return {
       x: (0.5 + outputX) * safeCanvasWidth,

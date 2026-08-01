@@ -48,7 +48,6 @@ export interface FlashBoardPromptRefineDeltaUpdate {
 }
 
 interface BuildFlashBoardPromptRefineInputInput {
-  apiKey: string;
   aspectRatio: string;
   duration: number;
   entry: CatalogEntry;
@@ -86,7 +85,6 @@ export function hasFlashBoardPromptRefineInput({
 }
 
 export function buildFlashBoardPromptRefineInput({
-  apiKey,
   aspectRatio,
   duration,
   entry,
@@ -111,7 +109,6 @@ export function buildFlashBoardPromptRefineInput({
   version,
 }: BuildFlashBoardPromptRefineInputInput): RefineFlashBoardPromptInput {
   return {
-    apiKey,
     prompt,
     entry,
     service,

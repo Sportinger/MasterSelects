@@ -2,7 +2,6 @@ import { DEFAULT_LEMONADE_MODEL } from '../lemonadeProvider';
 import type { FlashBoardChatModelOption, FlashBoardChatProvider, FlashBoardChatProviderOption, FlashBoardOpenAiReasoningEffort } from './FlashBoardChatTypes';
 
 export const FLASHBOARD_CHAT_PROVIDERS: FlashBoardChatProviderOption[] = [
-  { id: 'kernel', label: 'MasterSelectsAI' },
   { id: 'kie', label: 'AI' },
   { id: 'lemonade', label: 'Local AI' },
 ];

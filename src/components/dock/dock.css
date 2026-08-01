@@ -135,6 +135,26 @@
   cursor: row-resize;
 }
 
+html[data-dock-resize-axis='x'],
+html[data-dock-resize-axis='x'] * {
+  cursor: col-resize !important;
+}
+
+html[data-dock-resize-axis='y'],
+html[data-dock-resize-axis='y'] * {
+  cursor: row-resize !important;
+}
+
+html[data-dock-resize-axis='xy'],
+html[data-dock-resize-axis='xy'] * {
+  cursor: move !important;
+}
+
+html[data-dock-resize-hover-axis='xy'],
+html[data-dock-resize-hover-axis='xy'] * {
+  cursor: move !important;
+}
+
 .dock-split.resizing > .dock-split-child {
   pointer-events: none;
 }
@@ -155,7 +175,16 @@
   flex-shrink: 0;
   background: transparent;
   position: relative;
-  z-index: 1;
+  z-index: 3;
+  touch-action: none;
+}
+
+/* Large invisible target; the handle itself still occupies only 2px in layout. */
+.dock-resize-handle::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  background: transparent;
 }
 
 /* Visible thin line centered in the handle */
@@ -187,28 +216,42 @@
 }
 
 .dock-resize-handle.horizontal {
-  width: 8px;
-  margin: 0 -3px;
+  width: 2px;
   cursor: col-resize;
+}
+
+.dock-resize-handle.horizontal::before {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 24px;
+  transform: translateX(-50%);
 }
 
 .dock-resize-handle.horizontal::after {
   top: 0;
   bottom: 0;
-  left: 3px;
+  left: 0;
   width: 2px;
 }
 
 .dock-resize-handle.vertical {
-  height: 8px;
-  margin: -3px 0;
+  height: 2px;
   cursor: row-resize;
+}
+
+.dock-resize-handle.vertical::before {
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 24px;
+  transform: translateY(-50%);
 }
 
 .dock-resize-handle.vertical::after {
   left: 0;
   right: 0;
-  top: 3px;
+  top: 0;
   height: 2px;
 }
 
@@ -219,6 +262,7 @@
 }
 
 .dock-resize-handle:hover::after,
+.dock-resize-handle[data-dock-resize-hovered='true']::after,
 .dock-resize-handle.active::after {
   background: var(--accent);
 }

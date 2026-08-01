@@ -242,6 +242,7 @@ export async function createLoadStateGeneratedClip(params: {
       transitionSourceMap: serializedClip.transitionSourceMap ? structuredClone(serializedClip.transitionSourceMap) : undefined,
       transitionRecipeBlendWindows: serializedClip.transitionRecipeBlendWindows ? structuredClone(serializedClip.transitionRecipeBlendWindows) : undefined,
       masks: serializedClip.masks,
+      parentClipId: serializedClip.parentClipId,
       isLoading: false,
     };
   }

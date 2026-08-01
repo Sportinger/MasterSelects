@@ -5,7 +5,7 @@ import {
   DEFAULT_SUNO_INSTRUMENTAL,
   DEFAULT_SUNO_STYLE_WEIGHT,
   DEFAULT_SUNO_WEIRDNESS_CONSTRAINT,
-} from '../../services/sunoService';
+} from '../../services/sunoContracts';
 
 export const DEFAULT_ELEVENLABS_MODEL_ID = 'eleven_multilingual_v2';
 export const DEFAULT_ELEVENLABS_OUTPUT_FORMAT = 'mp3_44100_128';

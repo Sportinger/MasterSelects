@@ -1,4 +1,5 @@
 import type { Keyframe } from '../../types/keyframes';
+import type { BezierHandle } from '../../types/animationProperties';
 import type { TimelineClip } from '../../types/timeline';
 import type { ClipTransform } from '../../types/timelineCore';
 import type { Layer } from '../../types/layers';
@@ -16,6 +17,7 @@ import {
 const POSITION_X = 'position.x' as const;
 const POSITION_Y = 'position.y' as const;
 const DEFAULT_SAMPLES_PER_SEGMENT = 12;
+const HANDLE_TIME_EPSILON = 0.000001;
 
 export interface MotionPathPosition {
   x: number;
@@ -34,6 +36,20 @@ export interface MotionPathNode extends MotionPathPosition {
   yKeyframeId: string | null;
   xEasing: Keyframe['easing'] | null;
   yEasing: Keyframe['easing'] | null;
+}
+
+export type MotionPathHandleDirection = 'in' | 'out';
+
+export interface MotionPathSpatialHandle {
+  id: string;
+  nodeId: string;
+  nodeTime: number;
+  direction: MotionPathHandleDirection;
+  nodePosition: MotionPathPosition;
+  position: MotionPathPosition;
+  temporalOffset: number;
+  xKeyframeId: string;
+  yKeyframeId: string;
 }
 
 export interface MotionPathSample extends MotionPathPosition {
@@ -173,6 +189,157 @@ export function buildMotionPathNodes(
       xEasing: xKeyframe?.easing ?? null,
       yEasing: yKeyframe?.easing ?? null,
     };
+  });
+}
+
+function finiteBezierHandle(handle: BezierHandle | undefined): BezierHandle | null {
+  return handle && Number.isFinite(handle.x) && Number.isFinite(handle.y)
+    ? handle
+    : null;
+}
+
+function clampHandleTime(
+  direction: MotionPathHandleDirection,
+  value: number,
+  segmentDuration: number,
+): number {
+  const duration = Math.max(0, segmentDuration);
+  return direction === 'in'
+    ? Math.max(-duration, Math.min(0, value))
+    : Math.max(0, Math.min(duration, value));
+}
+
+/**
+ * Scalar position curves store their temporal handle offset independently.
+ * A viewport spatial handle needs one shared time, so disagreement is resolved
+ * deterministically and written back to both axes on the first drag update.
+ */
+export function resolveMotionPathHandleTemporalOffset({
+  direction,
+  segmentDuration,
+  xSegmentDuration,
+  ySegmentDuration,
+  xHandle,
+  yHandle,
+}: {
+  direction: MotionPathHandleDirection;
+  segmentDuration?: number;
+  xSegmentDuration?: number;
+  ySegmentDuration?: number;
+  xHandle?: BezierHandle;
+  yHandle?: BezierHandle;
+}): number {
+  const fallbackDuration = Number.isFinite(segmentDuration) ? Math.max(0, segmentDuration ?? 0) : 0;
+  const xDuration = Number.isFinite(xSegmentDuration)
+    ? Math.max(0, xSegmentDuration ?? 0)
+    : fallbackDuration;
+  const yDuration = Number.isFinite(ySegmentDuration)
+    ? Math.max(0, ySegmentDuration ?? 0)
+    : fallbackDuration;
+  const commonDuration = Math.min(xDuration, yDuration);
+  const finiteX = finiteBezierHandle(xHandle);
+  const finiteY = finiteBezierHandle(yHandle);
+  const clampedX = finiteX ? clampHandleTime(direction, finiteX.x, xDuration) : null;
+  const clampedY = finiteY ? clampHandleTime(direction, finiteY.x, yDuration) : null;
+  const fallback = (direction === 'in' ? -1 : 1) * commonDuration / 3;
+  let resolved = fallback;
+
+  if (clampedX !== null && clampedY !== null) {
+    resolved = Math.abs(clampedX - clampedY) <= HANDLE_TIME_EPSILON
+      ? clampedX
+      : (clampedX + clampedY) / 2;
+  } else if (clampedX !== null) {
+    resolved = clampedX;
+  } else if (clampedY !== null) {
+    resolved = clampedY;
+  }
+
+  return clampHandleTime(direction, resolved, commonDuration);
+}
+
+function keyframeIndexAtTime(keyframes: readonly Keyframe[], time: number): number {
+  return keyframes.findIndex((keyframe) => keyframe.time === time);
+}
+
+function buildSpatialHandle(
+  node: MotionPathNode,
+  direction: MotionPathHandleDirection,
+  groups: MotionPathKeyframeGroups,
+): MotionPathSpatialHandle | null {
+  if (!node.xKeyframeId || !node.yKeyframeId) return null;
+  const xIndex = keyframeIndexAtTime(groups.x, node.time);
+  const yIndex = keyframeIndexAtTime(groups.y, node.time);
+  if (xIndex < 0 || yIndex < 0) return null;
+
+  const xKeyframe = groups.x[xIndex]!;
+  const yKeyframe = groups.y[yIndex]!;
+  const neighborOffset = direction === 'in' ? -1 : 1;
+  const xNeighbor = groups.x[xIndex + neighborOffset];
+  const yNeighbor = groups.y[yIndex + neighborOffset];
+  if (!xNeighbor || !yNeighbor) return null;
+
+  const xDuration = Math.abs(xNeighbor.time - node.time);
+  const yDuration = Math.abs(yNeighbor.time - node.time);
+  if (!(xDuration > 0) || !(yDuration > 0)) return null;
+
+  const xHandle = finiteBezierHandle(direction === 'in' ? xKeyframe.handleIn : xKeyframe.handleOut);
+  const yHandle = finiteBezierHandle(direction === 'in' ? yKeyframe.handleIn : yKeyframe.handleOut);
+  const xValueOffset = xHandle?.y ?? (xNeighbor.value - xKeyframe.value) / 3;
+  const yValueOffset = yHandle?.y ?? (yNeighbor.value - yKeyframe.value) / 3;
+  const xTemporalOffset = xHandle
+    ? clampHandleTime(direction, xHandle.x, xDuration)
+    : (direction === 'in' ? -xDuration : xDuration) / 3;
+  const yTemporalOffset = yHandle
+    ? clampHandleTime(direction, yHandle.x, yDuration)
+    : (direction === 'in' ? -yDuration : yDuration) / 3;
+  const temporalOffset = resolveMotionPathHandleTemporalOffset({
+    direction,
+    xSegmentDuration: xDuration,
+    ySegmentDuration: yDuration,
+    xHandle: xHandle ?? undefined,
+    yHandle: yHandle ?? undefined,
+  });
+  const alignValueOffset = (valueOffset: number, scalarTemporalOffset: number) => {
+    if (Math.abs(scalarTemporalOffset) <= HANDLE_TIME_EPSILON) {
+      // A zero/opposite-sign scalar time has no finite spatial derivative.
+      // Keep its visible endpoint continuous; the first edit explicitly aligns
+      // that value offset to the valid shared temporal coordinate.
+      return Math.abs(temporalOffset) <= HANDLE_TIME_EPSILON ? 0 : valueOffset;
+    }
+    return valueOffset * (temporalOffset / scalarTemporalOffset);
+  };
+
+  return {
+    id: `${node.id}:${direction}`,
+    nodeId: node.id,
+    nodeTime: node.time,
+    direction,
+    nodePosition: { x: node.x, y: node.y },
+    position: {
+      x: node.x + alignValueOffset(xValueOffset, xTemporalOffset),
+      y: node.y + alignValueOffset(yValueOffset, yTemporalOffset),
+    },
+    temporalOffset,
+    xKeyframeId: node.xKeyframeId,
+    yKeyframeId: node.yKeyframeId,
+  };
+}
+
+/** Build spatial handles only for selected nodes with a complete X/Y pair. */
+export function buildMotionPathSpatialHandles(
+  keyframes: readonly Keyframe[],
+  basePosition: MotionPathPosition,
+  selectedKeyframeIds: ReadonlySet<string>,
+): MotionPathSpatialHandle[] {
+  const groups = groupMotionPathPositionKeyframes(keyframes);
+  return buildMotionPathNodes(keyframes, basePosition).flatMap((node) => {
+    const selected = (node.xKeyframeId !== null && selectedKeyframeIds.has(node.xKeyframeId))
+      || (node.yKeyframeId !== null && selectedKeyframeIds.has(node.yKeyframeId));
+    if (!selected || !node.xKeyframeId || !node.yKeyframeId) return [];
+    return [
+      buildSpatialHandle(node, 'in', groups),
+      buildSpatialHandle(node, 'out', groups),
+    ].filter((handle): handle is MotionPathSpatialHandle => handle !== null);
   });
 }
 

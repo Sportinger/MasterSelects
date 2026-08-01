@@ -50,6 +50,7 @@ function safeStoredActivityEvents(value: unknown): AgentActivityEvent[] | undefi
         source: 'runtime',
         phase: event.phase,
         safeLabel: event.safeLabel,
+        ...(event.operationId === undefined ? {} : { operationId: event.operationId }),
         ...(event.toolName === undefined ? {} : { toolName: event.toolName }),
         createdAt: event.createdAt,
       };

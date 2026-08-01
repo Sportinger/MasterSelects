@@ -509,6 +509,23 @@ describe('AI Tool Policy Registry', () => {
     expect(checkToolAccess('runWorkerFirstRuntimeExportPlaybackSmoke', 'nativeHelper').allowed).toBe(false);
   });
 
+  it('MD0 evidence is hidden controlled automation, not a chat or helper tool', () => {
+    const policy = getToolPolicy('runMotionDesignMd0Evidence');
+    expect(policy).toEqual({
+      readOnly: false,
+      riskLevel: 'medium',
+      requiresConfirmation: false,
+      sensitiveDataAccess: true,
+      localFileAccess: false,
+      allowedCallers: ['devBridge', 'internal'],
+    });
+    expect(checkToolAccess('runMotionDesignMd0Evidence', 'devBridge').allowed).toBe(true);
+    expect(checkToolAccess('runMotionDesignMd0Evidence', 'internal').allowed).toBe(true);
+    expect(checkToolAccess('runMotionDesignMd0Evidence', 'chat').allowed).toBe(false);
+    expect(checkToolAccess('runMotionDesignMd0Evidence', 'console').allowed).toBe(false);
+    expect(checkToolAccess('runMotionDesignMd0Evidence', 'nativeHelper').allowed).toBe(false);
+  });
+
   it('worker-first real-video runtime smoke is controlled devBridge automation', () => {
     const policy = getToolPolicy('runWorkerFirstRealVideoRuntimeSmoke');
     expect(policy).toBeDefined();

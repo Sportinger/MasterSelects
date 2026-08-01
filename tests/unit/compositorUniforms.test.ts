@@ -96,6 +96,23 @@ describe('compositor uniforms', () => {
     }
   });
 
+  it('applies normalized 2D position in composition space in both compositor shaders', () => {
+    const normalShader = normalizeWgsl(readRepoText('src/shaders/composite.wgsl'));
+    const externalShader = normalizeWgsl(
+      readRepoText('src/engine/pipeline/compositor/externalCompositeShader.ts'),
+    );
+    const compositionTranslation = 'uv = uv - vec2f(layer.posX, layer.posY) * 0.5;';
+    const legacyLocalTranslation = 'uv = uv + vec2f(0.5) - vec2f(layer.posX, layer.posY);';
+
+    for (const shader of [normalShader, externalShader]) {
+      expect(shader).toContain(compositionTranslation);
+      expect(shader).not.toContain(legacyLocalTranslation);
+      expect(shader.indexOf(compositionTranslation)).toBeLessThan(
+        shader.indexOf('var p = vec3f'),
+      );
+    }
+  });
+
   it('encodes source rect metadata with full-source defaults', () => {
     const buffer = new ArrayBuffer(COMPOSITOR_UNIFORM_FLOAT_COUNT * 4);
     const floats = new Float32Array(buffer);

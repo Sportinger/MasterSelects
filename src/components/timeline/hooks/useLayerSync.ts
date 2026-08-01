@@ -1,7 +1,7 @@
 // useLayerSync - Syncs timeline clips to mixer layers for rendering
 import { useEffect, useRef, useCallback } from 'react';
 import type { TimelineClip, TimelineTrack, Layer, Effect, NestedCompositionData, Keyframe, ClipTransform } from '../../../types';
-import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
+import { isVectorAnimationSourceType, type VectorAnimationClipSettings } from '../../../types/vectorAnimation';
 import type { ClipDragState } from '../types';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
@@ -9,27 +9,17 @@ import { renderHostPort } from '../../../services/render/renderHostPort';
 import { ensureMidiPlaybackScheduler } from '../../../services/audio/midiPlaybackScheduler';
 import { getEffectiveScale } from '../../../utils/transformScale';
 import { vectorAnimationRuntimeManager } from '../../../services/vectorAnimation/VectorAnimationRuntimeManager';
-import { isVectorAnimationSourceType } from '../../../types/vectorAnimation';
-import {
-  getLazyImageElementForClip,
-  type LazyImageLookupContext,
-} from '../../../services/timeline/lazyImageElements';
+import { getLazyImageElementForClip, type LazyImageLookupContext } from '../../../services/timeline/lazyImageElements';
 import { getNativeDecoderForTimelineClip } from '../../../services/timeline/nativeDecoderRuntimeRegistry';
 import { syncLayerAudioPlayback } from '../utils/layerSyncAudioPlayback';
 import { buildLayerSyncNestedLayers } from '../utils/layerSyncNestedLayers';
-import {
-  syncLayerProxyFrame,
-  type LayerSyncProxyFrameCacheEntry,
-} from '../utils/layerSyncProxyFrames';
+import { syncLayerProxyFrame, type LayerSyncProxyFrameCacheEntry } from '../utils/layerSyncProxyFrames';
+import { buildLayerSyncMotionShape } from '../utils/layerSyncMotionShape';
 
 function isLayerScaleChanged(layerScale: Layer['scale'] | undefined, transformScale: ClipTransform['scale']): boolean {
   const renderScale = getEffectiveScale(transformScale);
-  return (
-    !layerScale ||
-    layerScale.x !== renderScale.x ||
-    layerScale.y !== renderScale.y ||
-    layerScale.z !== renderScale.z
-  );
+  return !layerScale || layerScale.x !== renderScale.x ||
+    layerScale.y !== renderScale.y || layerScale.z !== renderScale.z;
 }
 
 function createLayerSyncImageLookupContext(
@@ -52,8 +42,6 @@ function createLayerSyncImageLookupContext(
 }
 
 interface UseLayerSyncProps {
-  // Refs
-  // State
   playheadPosition: number;
   clips: TimelineClip[];
   tracks: TimelineTrack[];
@@ -475,6 +463,19 @@ export function useLayerSync({
               z: (transform.rotation.z * Math.PI) / 180,
             },
           };
+          layersChanged = true;
+        }
+      } else if (clip?.source?.type === 'motion-shape') {
+        const clipLocalTime = playheadPosition - clip.startTime;
+        const motionLayer = buildLayerSyncMotionShape({
+          clip, clipLocalTime, layerIndex,
+          effects: getInterpolatedEffects(clip.id, clipLocalTime),
+          keyframes: clipKeyframes.get(clip.id) ?? [],
+          trackVisible: isVideoTrackVisible(track),
+          transform: getInterpolatedTransform(clip.id, clipLocalTime),
+        });
+        if (motionLayer || layer?.source) {
+          newLayers[layerIndex] = motionLayer ?? undefined as unknown as (typeof newLayers)[0];
           layersChanged = true;
         }
       } else if (clip?.source?.textCanvas) {

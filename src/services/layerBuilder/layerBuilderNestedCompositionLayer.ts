@@ -1,6 +1,7 @@
 import type { BlendMode } from '../../types/blendMode';
 import type { Layer, NestedCompositionData } from '../../types/layers';
 import type { TimelineClip } from '../../types/timeline';
+import type { ClipTransform } from '../../types/timelineCore';
 import { evaluateTransitionMappedAnimation } from '../compositionRender/transitionMappedAnimation';
 import { resolveTransitionRecipeBlendMode } from '../timeline/transitionRecipeBlendWindows';
 import { addLayerBuilderMaskProperties } from './layerBuilderLayerPostProcessing';
@@ -22,6 +23,7 @@ export function buildLayerBuilderNestedCompositionLayer(input: BuildNestedCompLa
   timeInfo: ClipTimeInfo;
   nestedLayers: Layer[];
   mappedAnimation: ReturnType<typeof evaluateTransitionMappedAnimation> | undefined;
+  transformOverride?: ClipTransform;
 }): Layer {
   const {
     clip,
@@ -32,11 +34,12 @@ export function buildLayerBuilderNestedCompositionLayer(input: BuildNestedCompLa
     timeInfo,
     nestedLayers,
     mappedAnimation,
+    transformOverride,
   } = input;
   const compositionLocalTime = timeInfo.visualClipLocalTime;
   const transform = transformCache.getTransform(
     `${ctx.activeCompId}_${layerIndex}`,
-    mappedAnimation?.transform ?? ctx.getInterpolatedTransform(clip.id, timeInfo.clipTime),
+    transformOverride ?? ctx.getInterpolatedTransform(clip.id, timeInfo.clipTime),
   );
   const effects = mappedAnimation?.effects ?? ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime);
   const colorCorrection = ctx.getInterpolatedColorCorrection(clip.id, timeInfo.clipTime);

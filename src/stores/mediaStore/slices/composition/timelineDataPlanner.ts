@@ -10,7 +10,10 @@ export type NestedCompReferenceClip =
   Partial<Pick<SerializableClip, 'sourceType' | 'naturalDuration' | 'waveform'>> &
   Partial<Pick<TimelineClip, 'source'>>;
 
-export function createDefaultCompositionTimelineData(duration: number): CompositionTimelineData {
+export function createDefaultCompositionTimelineData(
+  duration: number,
+  options: { durationLocked?: boolean } = {},
+): CompositionTimelineData {
   return {
     tracks: [
       { id: `video-1-${generateId()}`, name: 'Video 1', type: 'video' as const, height: 60, muted: false, visible: true, solo: false },
@@ -19,6 +22,7 @@ export function createDefaultCompositionTimelineData(duration: number): Composit
     clips: [],
     playheadPosition: 0,
     duration,
+    ...(options.durationLocked ? { durationLocked: true } : {}),
     zoom: 50,
     scrollX: 0,
     inPoint: null,

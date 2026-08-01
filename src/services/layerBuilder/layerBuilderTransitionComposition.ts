@@ -302,6 +302,9 @@ function hydrateTransitionClip(
     signalRenderAdapterId: clip.signalRenderAdapterId,
     linkedClipId: clip.linkedClipId,
     linkedGroupId: clip.linkedGroupId,
+    ...((runtimeClip?.parentClipId ?? clip.parentClipId)
+      ? { parentClipId: runtimeClip?.parentClipId ?? clip.parentClipId }
+      : {}),
     videoState: optionalClone(clip.videoState),
     audioState: optionalClone(clip.audioState),
     waveform: clip.waveform,
@@ -431,6 +434,8 @@ export function buildLayerBuilderTransitionCompositionLayer(
     clipTime: compositionTime,
     ctx,
     proxyFrames,
+    parentTransformClips: [...nestedTimeline.clips, ...ctx.clips],
+    parentTransformTimelineTime: ctx.playheadPosition,
   });
 
   return createTransitionNestedCompositionLayer({

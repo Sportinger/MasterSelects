@@ -10,6 +10,7 @@ import {
   type ExportRenderHostPort,
 } from './exportRenderHostPort';
 import { seekVideo } from './VideoSeeker';
+import type { RenderSurfaceFrameContext } from '../../services/render/renderHostTypes';
 
 const MAX_EXPORT_VIDEO_SOURCE_NESTING_DEPTH = 8;
 const EXPORT_NESTED_DEFER_RETRY_LIMIT = 3;
@@ -17,6 +18,8 @@ const EXPORT_NESTED_DEFER_RETRY_DELAY_MS = 16;
 
 export interface ExportRenderSessionOptions {
   readonly runId: string;
+  /** Frozen when the export run is created; never read again from live UI state. */
+  readonly compositionId: string;
   readonly width: number;
   readonly height: number;
   readonly stackedAlpha: boolean;
@@ -177,6 +180,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
   private readonly abortController = new AbortController();
   private readonly width: number;
   private readonly height: number;
+  private readonly compositionId: string;
   private readonly stackedAlpha: boolean;
   private readonly preferZeroCopy: boolean;
   private readonly host: ExportRenderHostPort;
@@ -187,6 +191,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
 
   constructor(options: ExportRenderSessionOptions) {
     this.runId = options.runId;
+    this.compositionId = options.compositionId;
     this.width = options.width;
     this.height = options.height;
     this.stackedAlpha = options.stackedAlpha;
@@ -235,7 +240,11 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
     for (let attempt = 0; ; attempt += 1) {
       const renderStart = performance.now();
       try {
-        this.host.render(layers);
+        const frameContext: RenderSurfaceFrameContext = {
+          compositionId: this.compositionId,
+          timelineTimeSeconds: input.time,
+        };
+        this.host.render(layers, frameContext);
         renderMs += performance.now() - renderStart;
         break;
       } catch (error) {

@@ -701,6 +701,11 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   // Center the UV coordinates
   uv = uv - vec2f(0.5);
 
+  // Position is normalized against the composition half-extents. Apply it in
+  // composition space before undoing local rotation, scale, and aspect so the
+  // visible offset is independent of source dimensions and clip scale.
+  uv = uv - vec2f(layer.posX, layer.posY) * 0.5;
+
   // For 3D rotation, we need to work in world coordinates where the panel
   // has its actual aspect ratio. The panel spans -0.5 to 0.5 in both U and V,
   // but in world space, a 16:9 panel is wider than tall.
@@ -768,7 +773,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     uv.x = uv.x / aspectRatio;
   }
 
-  uv = uv + vec2f(0.5) - vec2f(layer.posX, layer.posY);
+  uv = uv + vec2f(0.5);
 
   // Clamp UV to valid range for sampling
   let clampedUV = clamp(uv, vec2f(0.0), vec2f(1.0));

@@ -33,8 +33,7 @@ describe('storyboard release journey', () => {
     const baseBefore = structuredClone(fixture.baseComposition);
     const plan = buildFlashBoardChatSendPlan({
       activeChatModelId: 'gpt-5-6-luna',
-      canUseByoChat: true,
-      canUseHostedChat: false,
+      canUseHostedChat: true,
       chatIntent: 'plan',
       chatMessages: [],
       chatPanelOpen: true,
@@ -42,16 +41,13 @@ describe('storyboard release journey', () => {
       chatTemperature: 0.7,
       decisionPolicy: 'milestones',
       effectiveChatPrompt: 'Prepare three options for the marked range.',
-      hasHostedSession: false,
-      hostedAIEnabled: false,
+      hasHostedSession: true,
+      hostedAIEnabled: true,
       isChatting: false,
-      kieAiApiKey: 'release-test-key',
       lemonadeContextSize: 8_192,
       lemonadeEndpoint: 'http://localhost:13305/api/v1',
       openAiReasoningEffort: 'medium',
       planThreeEnabled: true,
-      shouldUseHostedChat: false,
-      useHostedProductionProviders: false,
     });
 
     expect(plan.action).toBe('send');

@@ -1,4 +1,5 @@
 import type { CompleteArchitectureGate } from './types';
+import { motionDesignArchitectureGates } from './motionDesignGateRegistry';
 import { storyboardArchitectureGates } from './storyboardGateRegistry';
 
 const completeRefactorArchitectureGates = [
@@ -276,6 +277,7 @@ const completeRefactorArchitectureGates = [
 export const completeArchitectureGates = [
   ...completeRefactorArchitectureGates,
   ...storyboardArchitectureGates,
+  ...motionDesignArchitectureGates,
 ] as const satisfies readonly CompleteArchitectureGate[];
 
 export const completeArchitectureGateIds = completeArchitectureGates.map(

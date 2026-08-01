@@ -58,12 +58,8 @@ function getServiceLabel(request: FlashBoardGenerationRequest): string {
       return 'ElevenLabs';
     case 'evolink':
       return 'EvoLink';
-    case 'kieai':
-      return 'Kie.ai';
     case 'piapi':
       return 'PiAPI';
-    case 'suno':
-      return 'Suno';
     default:
       return request.service;
   }
@@ -98,7 +94,7 @@ function getOutputLabel(request: FlashBoardGenerationRequest): string {
   if (request.outputType === 'image') {
     return 'Image';
   }
-  if (request.outputType === 'audio' || request.service === 'elevenlabs' || request.service === 'suno') {
+  if (request.outputType === 'audio' || request.service === 'elevenlabs') {
     return 'Audio';
   }
   return 'Video';
@@ -114,7 +110,7 @@ function getModeLabel(request: FlashBoardGenerationRequest): string | undefined 
 }
 
 function getPreviewAspectRatio(request: FlashBoardGenerationRequest): string {
-  if (request.outputType === 'audio' || request.service === 'elevenlabs' || request.service === 'suno') {
+  if (request.outputType === 'audio' || request.service === 'elevenlabs') {
     return '2.4 / 1';
   }
 

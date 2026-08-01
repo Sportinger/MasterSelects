@@ -121,7 +121,7 @@ export const motionDesignToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'getMotionDesign',
-      description: 'Read a motion-shape clip, its stable appearance ids, current Grid Replicator state, renderer-effective instance count, and editable Motion plus Transform property descriptors.',
+      description: 'Read a motion-shape clip, stable appearance ids, current Grid/Linear/Radial Replicator state and revision, renderer-effective instance count, and editable Motion plus Transform descriptors.',
       parameters: {
         type: 'object',
         properties: {
@@ -135,7 +135,7 @@ export const motionDesignToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'createMotionShapeClip',
-      description: 'Create a native editable Motion Design rectangle, ellipse, polygon, or star on an unlocked video track. Omitted timing uses the playhead and a five-second duration.',
+      description: 'Create and position a native editable Motion Design rectangle, ellipse, polygon, or star on an unlocked video track. x/y use the same centered composition pixels as setTransform. Omitted timing uses the playhead and a five-second duration.',
       parameters: {
         type: 'object',
         properties: {
@@ -146,6 +146,14 @@ export const motionDesignToolDefinitions: ToolDefinition[] = [
           startTime: {
             type: 'number',
             description: 'Timeline start in seconds. Defaults to the playhead.',
+          },
+          x: {
+            type: 'number',
+            description: 'Horizontal center position in composition pixels (0 = composition center).',
+          },
+          y: {
+            type: 'number',
+            description: 'Vertical center position in composition pixels (0 = composition center, negative = up).',
           },
           duration: {
             type: 'number',
@@ -196,7 +204,7 @@ export const motionDesignToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'updateMotionProperties',
-      description: 'Atomically update one or more clip-valid Motion or Transform property-registry paths on a motion-shape clip. Call getMotionDesign first for exact paths, authoring units, ranges, and stable appearance ids.',
+      description: 'Atomically update one or more clip-valid Motion or Transform property-registry paths on a motion-shape clip. Common shape/position paths come directly from createMotionShapeClip.commonEditablePaths; call getMotionDesign only for uncommon clip-specific paths or stable appearance ids.',
       parameters: {
         type: 'object',
         properties: {
@@ -255,20 +263,207 @@ export const motionDesignToolDefinitions: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'setMotionParent',
+      description: 'Atomically set or clear a 2D clip parent at the current playhead while preserving the child world transform. Cycles, missing clips, locked children, mixed 2D/3D relationships, and singular parent transforms fail closed.',
+      parameters: {
+        type: 'object',
+        properties: {
+          operation: {
+            type: 'string',
+            enum: ['set', 'clear'],
+            description: 'Set a parent or clear the current parent relationship.',
+          },
+          childClipId: {
+            type: 'string',
+            description: 'Clip whose parent relationship will change.',
+          },
+          parentClipId: {
+            type: 'string',
+            description: 'Required for operation=set and omitted for operation=clear.',
+          },
+        },
+        required: ['operation', 'childClipId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'createMotionNull',
+      description: 'Create one native non-rendering 2D Motion Null through the shared parent-graph transaction. Returns the new clip id, affected clip ids, and graph/state revision receipts.',
+      parameters: {
+        type: 'object',
+        properties: {
+          trackId: {
+            type: 'string',
+            description: 'Unlocked video track for the Motion Null. Defaults to the first visible unlocked video track.',
+          },
+          startTime: {
+            type: 'number',
+            description: 'Timeline start in seconds. Defaults to the current playhead.',
+          },
+          duration: {
+            type: 'number',
+            description: 'Positive duration in seconds. Defaults to five seconds.',
+          },
+          name: {
+            type: 'string',
+            maxLength: 120,
+            description: 'Optional non-empty clip name. Defaults to Null.',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'createMotionNullAndParent',
+      description: 'Create one native Motion Null and atomically parent the specified clips to it while preserving their world transforms. The null spans the selected clips and at least the requested duration.',
+      parameters: {
+        type: 'object',
+        properties: {
+          trackId: {
+            type: 'string',
+            description: 'Unlocked video track for the Motion Null. Defaults to the first visible unlocked video track.',
+          },
+          clipIds: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 100,
+            uniqueItems: true,
+            items: { type: 'string' },
+            description: 'Existing unlocked clips to parent to the new Motion Null.',
+          },
+          timelineTime: {
+            type: 'number',
+            description: 'Operation time in timeline seconds. Defaults to the current playhead.',
+          },
+          duration: {
+            type: 'number',
+            description: 'Minimum null duration in seconds. Defaults to five seconds.',
+          },
+        },
+        required: ['clipIds'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'editMotionAdjustment',
+      description: 'Create, configure, move, trim, or remove a native Adjustment 1.0 layer as one atomic timeline edit. Configuration replaces the ordered effect list and accepts only Brightness, Contrast, Saturation, Invert, and Gaussian Blur plus the frozen blend-mode set.',
+      parameters: {
+        type: 'object',
+        properties: {
+          operation: {
+            type: 'string',
+            enum: ['create', 'configure', 'move', 'trim', 'remove'],
+          },
+          expectedRevision: {
+            type: 'integer',
+            description: 'Optional exact timeline revision for stale-write protection.',
+          },
+          clipId: {
+            type: 'string',
+            description: 'Required for configure, move, trim, and remove.',
+          },
+          trackId: {
+            type: 'string',
+            description: 'Unlocked video track for create or move. Create defaults to the first visible unlocked video track.',
+          },
+          startTime: {
+            type: 'number',
+            description: 'Non-negative timeline start for create, move, or trim.',
+          },
+          duration: {
+            type: 'number',
+            description: 'Positive timeline duration for create or trim.',
+          },
+          name: {
+            type: 'string',
+            maxLength: 120,
+            description: 'Optional create name. Defaults to Adjustment.',
+          },
+          opacity: {
+            type: 'number',
+            description: 'Adjustment mix opacity from 0 to 1 for create or configure.',
+          },
+          blendMode: {
+            type: 'string',
+            enum: ['normal', 'multiply', 'screen', 'overlay', 'add'],
+            description: 'Frozen Adjustment 1.0 mix blend mode for create or configure.',
+          },
+          effects: {
+            type: 'array',
+            description: 'Ordered replacement effect list for create or configure. Omitted parameters receive frozen defaults.',
+            items: {
+              type: 'object',
+              properties: {
+                id: {
+                  type: 'string',
+                  description: 'Optional stable effect id. Omit to create one.',
+                },
+                type: {
+                  type: 'string',
+                  enum: ['brightness', 'contrast', 'saturation', 'invert', 'gaussian-blur'],
+                },
+                enabled: { type: 'boolean' },
+                parameters: {
+                  type: 'object',
+                  description: 'Effect parameters from the frozen compatibility matrix.',
+                  properties: {
+                    amount: { type: 'number' },
+                    radius: { type: 'number' },
+                    samples: { type: 'integer' },
+                  },
+                  required: [],
+                },
+              },
+              required: ['type'],
+            },
+          },
+        },
+        required: ['operation'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'editMotionModifier',
+      description: 'Add, update, remove, reorder Motion Replicator modifiers, or set/clear its falloff. Use getMotionDesign to inspect current stacks and revisions. Modifier targets are one flat target per add/update call; further update calls accumulate targets.',
+      parameters: {
+        type: 'object',
+        properties: {
+          operation: { type: 'string', enum: ['add', 'update', 'remove', 'reorder', 'set-falloff', 'clear-falloff'] }, clipId: { type: 'string' }, expectedRevision: { type: 'integer' }, modifierId: { type: 'string' }, kind: { type: 'string', enum: ['random', 'noise', 'oscillator', 'field'] }, enabled: { type: 'boolean' }, newIndex: { type: 'integer' },
+          seed: { type: 'integer' }, indexFrequency: { type: 'number' }, timeFrequencyHz: { type: 'number' }, octaves: { type: 'integer' }, lacunarity: { type: 'number' }, persistence: { type: 'number' }, waveform: { type: 'string', enum: ['sine', 'triangle', 'square'] }, frequencyHz: { type: 'number' }, cyclesAcrossInstances: { type: 'number' }, phaseDegrees: { type: 'number' }, field: { type: 'string', enum: ['radial-distance'] }, centerX: { type: 'number' }, centerY: { type: 'number' }, radius: { type: 'number' }, exponent: { type: 'number' },
+          targetPath: { type: 'string', enum: ['replicator.offset.position.x', 'replicator.offset.position.y', 'replicator.offset.rotation', 'replicator.offset.scale.x', 'replicator.offset.scale.y', 'replicator.offset.opacity'], description: 'Numeric Motion Replicator path to modify.' }, targetOperation: { type: 'string', enum: ['add', 'multiply'] }, targetAmount: { type: 'number' },
+          falloffShapeClipId: { type: 'string' }, falloffFeather: { type: 'number', minimum: 0 }, falloffInvert: { type: 'boolean' }, falloffClip: { type: 'boolean' },
+        }, required: ['operation', 'clipId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'configureMotionReplicator',
-      description: 'Enable, disable, or configure the currently rendered Grid Replicator. MD0 supports up to 10 per axis and 100 effective instances.',
+      description: 'Configure the revision-bound Grid, Linear, or Radial Motion Replicator, including terminal transform and author instance cap.',
       parameters: {
         type: 'object',
         properties: {
           clipId: { type: 'string', description: 'The motion-shape clip id.' },
+          expectedRevision: { type: 'integer', description: 'Optional exact Replicator revision for stale-write protection.' },
           enabled: { type: 'boolean', description: 'Enable or disable replication.' },
+          layoutMode: { type: 'string', enum: ['grid', 'linear', 'radial'] },
           countX: {
             type: 'integer',
-            description: 'Horizontal instance count from 1 to 10.',
+            description: 'Grid column count.',
           },
           countY: {
             type: 'integer',
-            description: 'Vertical instance count from 1 to 10.',
+            description: 'Grid row count.',
           },
           spacingX: {
             type: 'number',
@@ -278,10 +473,29 @@ export const motionDesignToolDefinitions: ToolDefinition[] = [
             type: 'number',
             description: 'Vertical center-to-center spacing in pixels.',
           },
+          patternOffsetX: { type: 'number', description: 'Grid odd-row X offset.' },
+          patternOffsetY: { type: 'number', description: 'Grid odd-row Y offset.' },
+          count: { type: 'integer', description: 'Linear or Radial item count.' },
+          stepX: { type: 'number', description: 'Linear per-index X step.' },
+          stepY: { type: 'number', description: 'Linear per-index Y step.' },
+          centerX: { type: 'number', description: 'Radial center X.' },
+          centerY: { type: 'number', description: 'Radial center Y.' },
+          radius: { type: 'number', description: 'Radial radius.' },
+          startAngleDegrees: { type: 'number' },
+          endAngleDegrees: { type: 'number' },
+          angleSampling: { type: 'string', enum: ['inclusive-end', 'exclusive-end'] },
+          autoOrient: { type: 'boolean' },
+          offsetMode: { type: 'string', enum: ['cumulative', 'absolute'] },
+          offsetX: { type: 'number' },
+          offsetY: { type: 'number' },
+          rotationDegrees: { type: 'number' },
+          scaleX: { type: 'number' },
+          scaleY: { type: 'number' },
           fade: {
             type: 'number',
             description: 'Per-instance cumulative opacity multiplier from 0 to 1.',
           },
+          userLimit: { type: 'integer', description: 'Persisted author cap from 1 to 100000.' },
         },
         required: ['clipId'],
       },

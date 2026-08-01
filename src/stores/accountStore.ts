@@ -7,6 +7,7 @@ export interface AccountState {
   applyHostedCreditBalance: (creditBalance: number) => void;
   billingSummary: BillingSummaryResponse | null;
   creditBalance: number;
+  creditMeterReference: number;
   dialog: AccountDialogKind;
   entitlements: Record<string, string>;
   error: string | null;
@@ -38,6 +39,7 @@ function applyDevMock(set: (partial: Partial<AccountState>) => void): void {
   set({
     billingSummary: null,
     creditBalance: 0,
+    creditMeterReference: 0,
     dialog: 'account',
     entitlements: {},
     error: 'Local API backend is not running. Start npm run dev:full to test hosted AI with env keys.',
@@ -56,13 +58,16 @@ export const useAccountStore = create<AccountState>((set, get) => ({
         ? {
             ...state.billingSummary,
             creditBalance,
+            creditMeterReference: Math.max(state.billingSummary.creditMeterReference, creditBalance),
           }
         : null,
       creditBalance,
+      creditMeterReference: Math.max(state.creditMeterReference, creditBalance),
     }));
   },
   billingSummary: null,
   creditBalance: 0,
+  creditMeterReference: 0,
   dialog: null,
   entitlements: {},
   error: null,
@@ -78,6 +83,10 @@ export const useAccountStore = create<AccountState>((set, get) => ({
       set({
         billingSummary,
         creditBalance: billingSummary.creditBalance ?? me.creditBalance ?? 0,
+        creditMeterReference: Math.max(
+          billingSummary.creditMeterReference ?? me.creditMeterReference ?? 0,
+          billingSummary.creditBalance ?? me.creditBalance ?? 0,
+        ),
         entitlements: billingSummary.entitlements ?? me.entitlements ?? {},
         hostedAIEnabled: billingSummary.hostedAIEnabled ?? me.hostedAIEnabled ?? false,
         isInitialized: true,
@@ -88,6 +97,7 @@ export const useAccountStore = create<AccountState>((set, get) => ({
       set({
         billingSummary: null,
         creditBalance: 0,
+        creditMeterReference: 0,
         entitlements: {},
         error: error instanceof Error ? error.message : 'Failed to load account state',
         hostedAIEnabled: false,
@@ -161,6 +171,7 @@ export const useAccountStore = create<AccountState>((set, get) => ({
       set({
         billingSummary: null,
         creditBalance: 0,
+        creditMeterReference: 0,
         dialog: null,
         entitlements: {},
         hostedAIEnabled: false,

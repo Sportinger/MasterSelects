@@ -1,4 +1,5 @@
 import { useMediaStore } from '../../../../stores/mediaStore';
+import { useTimelineStore } from '../../../../stores/timeline';
 import {
   useFlashBoardStore,
   type FlashBoardChatExecutedToolCall,
@@ -39,6 +40,7 @@ import {
 import { getAIToolAuditEntry, listAIToolAuditEntries } from '../../audit';
 import type { CallerContext, ToolPolicyEntry } from '../../policy';
 import { isRecord, resolveBridgeToolExecution } from './guidedOptions';
+import { projectFileService } from '../../../projectFileService';
 
 export type AgentControlSurface = 'chat' | 'devBridge';
 
@@ -65,6 +67,7 @@ interface AgentControlHistoryCall {
 
 export function describeAgentControlSession(): Record<string, unknown> {
   const media = useMediaStore.getState();
+  const timeline = useTimelineStore.getState();
   const messages = useFlashBoardStore.getState().chatMessages;
   const toolCallCount = messages.reduce((sum, message) => sum + (message.toolCalls?.length ?? 0), 0);
 
@@ -75,6 +78,9 @@ export function describeAgentControlSession(): Record<string, unknown> {
     chatToolCount: getSurfaceToolDefinitions('chat').length,
     projectId: media.currentProjectId,
     projectName: media.currentProjectName,
+    projectFileOpen: projectFileService.isProjectOpen(),
+    projectFileName: projectFileService.getProjectData()?.name ?? null,
+    timelineClipCount: timeline.clips.length,
     timelineSummary: getQuickTimelineSummary(),
     title: typeof document !== 'undefined' ? document.title : 'MasterSelects',
     url: typeof location !== 'undefined' ? location.href : null,
@@ -130,6 +136,7 @@ async function sendAgentControlChatTurn(args: Record<string, unknown>): Promise<
     prompt,
     promptVersion: normalizePromptVersion(args.promptVersion),
     provider: normalizeProvider(args.provider),
+    referenceMediaFileIds: readOptionalStringArray(args.referenceMediaFileIds),
     runSource: normalizeRunSource(args.runSource),
     systemPromptOverride: readOptionalString(args.systemPromptOverride),
     temperature: readOptionalNumber(args.temperature),
@@ -391,6 +398,14 @@ function readOptionalBoolean(value: unknown): boolean | undefined {
 
 function readOptionalNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function readOptionalStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return [...new Set(value
+    .filter((entry): entry is string => typeof entry === 'string')
+    .map((entry) => entry.trim())
+    .filter(Boolean))].slice(0, 4);
 }
 
 function normalizePromptVersion(value: unknown): FlashBoardChatPromptVersion | undefined {

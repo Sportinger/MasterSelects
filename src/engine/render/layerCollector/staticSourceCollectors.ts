@@ -1,5 +1,5 @@
 import type { Layer, LayerRenderData } from '../../core/types';
-import { getMotionRenderSize } from '../../motion/MotionTypes';
+import { getMotionReplicatorSourceGeometry } from '../../motion/MotionTypes';
 import type { LayerCollectorDeps } from '../LayerCollector';
 
 function collectImageElementLayer(
@@ -102,14 +102,25 @@ export function collectStaticLayerData(
   }
 
   if (source.type === 'motion') {
-    const size = getMotionRenderSize(source.motion);
+    const geometry = getMotionReplicatorSourceGeometry(source.motion);
     return {
       layer,
       isVideo: false,
       externalTexture: null,
       textureView: null,
-      sourceWidth: size.width,
-      sourceHeight: size.height,
+      sourceWidth: geometry.sourceBounds.maxX - geometry.sourceBounds.minX,
+      sourceHeight: geometry.sourceBounds.maxY - geometry.sourceBounds.minY,
+    };
+  }
+
+  if (source.type === 'motion-adjustment') {
+    return {
+      layer,
+      isVideo: false,
+      externalTexture: null,
+      textureView: null,
+      sourceWidth: source.intrinsicWidth ?? 0,
+      sourceHeight: source.intrinsicHeight ?? 0,
     };
   }
 

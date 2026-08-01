@@ -117,6 +117,10 @@ export function renderTimelineTextCanvasRuntime(params: {
     ? params.currentCanvas
     : textRenderer.createCanvas(width, height);
 
+  // Keep the runtime contract explicit even when a renderer adapter returns a
+  // default-sized canvas.
+  canvas.width = width;
+  canvas.height = height;
   textRenderer.render(params.textProperties, canvas);
   return canvas;
 }

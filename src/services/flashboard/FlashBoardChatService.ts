@@ -2,6 +2,7 @@ import { tryKernelFirst } from '../kernelClient/kernelChatGateway';
 import { buildFlashBoardChatSystemPrompt } from './FlashBoardChatPrompt';
 import { sendKieChat, sendLemonadeChat } from './FlashBoardChatProviderTransport';
 import {
+  appendFlashBoardChatRunToolCalls,
   beginFlashBoardChatRun,
   completeFlashBoardChatRun,
 } from './FlashBoardChatRunAudit';
@@ -26,6 +27,7 @@ export type {
   FlashBoardChatRequest,
   FlashBoardChatRunSource,
   FlashBoardChatToolExecutionMode,
+  FlashBoardChatVisualReference,
   FlashBoardOpenAiReasoningEffort,
 } from './FlashBoardChatTypes';
 export {
@@ -133,6 +135,7 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
     includePlaybook: request.systemPromptIncludePlaybook,
     promptVersion: request.promptVersion,
     userPrompt: request.playbookPrompt ?? prompt,
+    visualReferences: request.visualReferences,
   });
   const executedToolCalls: Parameters<typeof completeFlashBoardChatRun>[1]['executedToolCalls'] = [];
   const run = beginFlashBoardChatRun({ ...request, prompt }, systemPrompt);
@@ -142,6 +145,7 @@ export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest):
     prompt,
     onExecutedToolCalls: (toolCalls) => {
       executedToolCalls.push(...toolCalls);
+      appendFlashBoardChatRunToolCalls(run.runId, toolCalls);
       request.onExecutedToolCalls?.(toolCalls);
     },
     onActivityEvent: request.onActivityEvent,

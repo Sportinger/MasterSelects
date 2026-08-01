@@ -7,7 +7,13 @@ import { buildNestedImageSourceLayer, buildNestedProxyImageSourceLayer, getLayer
 import { buildNestedLayerBuilder3dSourceLayer } from './layerBuilder3dLayers';
 import { buildNestedLayerBuilderCanvasBackedSourceLayer } from './layerBuilderCanvasSources';
 import type { LayerBuilderProxyFrames } from './layerBuilderProxyFrames';
-import { buildNestedCompositionSourceLayer, buildNestedLayerBase, buildNestedMotionSourceLayer, getNestedClipSourceTime } from './layerBuilderNestedLayers';
+import {
+  buildNestedCompositionSourceLayer,
+  buildNestedLayerBase,
+  buildNestedMotionSourceLayer,
+  getNestedClipKeyframes,
+  getNestedClipSourceTime,
+} from './layerBuilderNestedLayers';
 import {
   getLayerBuilderVideoSourceDebugInfo,
   hasLayerBuilderRenderableVideoSource,
@@ -15,11 +21,12 @@ import {
 } from './layerBuilderVideoSources';
 import type { FrameContext } from './types';
 import { buildLayerBuilderNestedTransitionLayer } from './layerBuilderNestedTransitionLayer';
-import { evaluateTransitionMappedAnimation } from '../compositionRender/transitionMappedAnimation';
 import {
   buildLayerBuilderNestedCompositionLayer,
   type BuildNestedCompLayerParams,
 } from './layerBuilderNestedCompositionLayer';
+import { buildMotionAdjustmentLayerFromBase } from './layerBuilderMotionAdjustment';
+import { evaluateParentedClipTransform } from './parentTransformEvaluation';
 
 const log = Logger.create('LayerBuilderNestedLayers');
 
@@ -29,6 +36,8 @@ type BuildNestedLayersParams = {
   ctx: FrameContext;
   proxyFrames: LayerBuilderProxyFrames;
   depth?: number;
+  parentTransformClips?: readonly TimelineClip[];
+  parentTransformTimelineTime?: number;
 };
 
 function buildNestedClipLayer(
@@ -37,7 +46,10 @@ function buildNestedClipLayer(
   params: BuildNestedLayersParams,
 ): Layer | null {
   const { ctx, proxyFrames, depth = 0 } = params;
-  const nestedLayerBase = buildNestedLayerBase(nestedClip, nestedClipLocalTime);
+  const nestedLayerBase = buildNestedLayerBase(nestedClip, nestedClipLocalTime, {
+    clips: params.parentTransformClips ?? params.clip.nestedClips ?? [],
+    timelineTime: params.parentTransformTimelineTime ?? params.clipTime,
+  });
   if (!nestedLayerBase) return null;
   const { baseLayer, keyframes } = nestedLayerBase;
   let nestedCanvasLayer: Layer | null = null;
@@ -105,10 +117,20 @@ function buildNestedClipLayer(
     return buildNestedMotionSourceLayer(baseLayer, nestedClip, keyframes, nestedClipLocalTime);
   }
 
-  if (
-    nestedClip.source?.type === 'motion-null' ||
-    nestedClip.source?.type === 'motion-adjustment'
-  ) {
+  if (nestedClip.source?.type === 'motion-adjustment') {
+    const composition = ctx.compositionById.get(params.clip.compositionId || '');
+    return buildMotionAdjustmentLayerFromBase({
+      clip: nestedClip,
+      baseLayer,
+      compositionSize: {
+        width: composition?.width ?? 1920,
+        height: composition?.height ?? 1080,
+      },
+      surface: 'nested-preview',
+    });
+  }
+
+  if (nestedClip.source?.type === 'motion-null') {
     return null;
   }
 
@@ -185,10 +207,20 @@ export function buildLayerBuilderNestedLayers(params: BuildNestedLayersParams): 
 export function buildLayerBuilderNestedCompLayer(params: BuildNestedCompLayerParams): Layer | null {
   const { clip, ctx } = params;
   const timeInfo = getClipTimeInfo(ctx, clip);
-  const mappedAnimation = clip.transitionSourceMap?.version === 2
-    ? evaluateTransitionMappedAnimation(clip, ctx.getClipKeyframes?.(clip.id), timeInfo.visualClipLocalTime)
+  const mappedEvaluation = clip.transitionSourceMap?.version === 2
+    ? evaluateParentedClipTransform({
+        clip,
+        clips: ctx.clips ?? [clip],
+        clipLocalTime: timeInfo.visualClipLocalTime,
+        parentTimelineTime: clip.startTime + timeInfo.visualClipLocalTime,
+        getKeyframes: candidate => {
+          const contextKeyframes = ctx.getClipKeyframes?.(candidate.id);
+          return contextKeyframes?.length ? contextKeyframes : getNestedClipKeyframes(candidate);
+        },
+      })
     : undefined;
-  if (mappedAnimation === null) return null;
+  if (mappedEvaluation && !mappedEvaluation.ok) return null;
+  const mappedAnimation = mappedEvaluation?.mappedAnimation;
   const nestedLayers = buildLayerBuilderNestedLayers({
     clip,
     clipTime: timeInfo.clipTime,
@@ -202,5 +234,6 @@ export function buildLayerBuilderNestedCompLayer(params: BuildNestedCompLayerPar
     timeInfo,
     nestedLayers,
     mappedAnimation,
+    transformOverride: mappedEvaluation?.transform,
   });
 }

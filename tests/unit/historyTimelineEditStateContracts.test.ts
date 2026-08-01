@@ -9,6 +9,8 @@ import {
 import { createHistoryTimelineRestoreState } from '../../src/stores/timeline/historyTimelineRestoreState';
 import { cloneDefaultCaptionProperties } from '../../src/services/captions/captionDefaults';
 import type { HistoryRuntimeRehydrationAdapter } from '../../src/stores/timeline/historyTimelineContracts';
+import { createDefaultMotionLayerDefinition } from '../../src/types/motionDesign';
+import { createLegacyReplicatorContractFixture } from '../../src/services/motionDesign/replicator/contractFixtures';
 
 function makeTransform(): TimelineClip['transform'] {
   return {
@@ -127,6 +129,23 @@ function collectKeys(value: unknown, keys = new Set<string>()): Set<string> {
 }
 
 describe('HistoryTimelineEditState contracts', () => {
+  it('normalizes legacy Replicators before they enter undo history', () => {
+    const clip = makeRuntimeClip();
+    clip.source = { type: 'motion-shape', naturalDuration: clip.duration };
+    clip.motion = createDefaultMotionLayerDefinition('shape');
+    clip.motion.replicator = createLegacyReplicatorContractFixture() as unknown as
+      NonNullable<TimelineClip['motion']>['replicator'];
+
+    const editState = toHistoryTimelineClipEditState(clip);
+
+    expect(editState.motion?.replicator).toMatchObject({
+      contract: 'masterselects.motion-replicator',
+      version: 2,
+      enabled: true,
+      layout: { mode: 'grid', count: { columns: 3, rows: 2 } },
+    });
+  });
+
   it('creates undo timeline state as JSON-serializable plain data', () => {
     const keyframes: Keyframe[] = [
       {
@@ -143,6 +162,8 @@ describe('HistoryTimelineEditState contracts', () => {
       id: 'history-state-1',
       label: 'Move clip',
       timestamp: 12345,
+      duration: 6,
+      durationLocked: true,
       tracks: [makeTrack()],
       clips: [makeRuntimeClip()],
       selectedClipIds: new Set(['clip-1']),
@@ -157,6 +178,8 @@ describe('HistoryTimelineEditState contracts', () => {
     expect(findHistoryStateBoundaryViolations(state)).toEqual([]);
     expect(JSON.parse(JSON.stringify(state))).toEqual(state);
     expect(state.kind).toBe('history-timeline-edit-state');
+    expect(state.timeline.duration).toBe(6);
+    expect(state.timeline.durationLocked).toBe(true);
     expect(state.timeline.clips[0].runtimeRef).toEqual({
       kind: 'media-file',
       sourceType: 'video',
@@ -186,6 +209,37 @@ describe('HistoryTimelineEditState contracts', () => {
     expect(keys.has('mixdownBuffer')).toBe(false);
     expect(keys.has('nestedClips')).toBe(false);
     expect(keys.has('nestedTracks')).toBe(false);
+  });
+
+  it('restores composition duration and preserves it for legacy entries that omit the fields', () => {
+    const history = createHistoryTimelineEditState({
+      id: 'duration-history',
+      label: 'Edit six-second composition',
+      timestamp: 12347,
+      duration: 6,
+      durationLocked: true,
+      tracks: [makeTrack()],
+      clips: [],
+      selectedClipIds: [],
+      zoom: 50,
+      scrollX: 0,
+    });
+
+    const restored = createHistoryTimelineRestoreState(history, {
+      duration: 60,
+      durationLocked: false,
+    });
+    expect(restored.state.duration).toBe(6);
+    expect(restored.state.durationLocked).toBe(true);
+
+    delete history.timeline.duration;
+    delete history.timeline.durationLocked;
+    const legacy = createHistoryTimelineRestoreState(history, {
+      duration: 12,
+      durationLocked: false,
+    });
+    expect(legacy.state.duration).toBe(12);
+    expect(legacy.state.durationLocked).toBe(false);
   });
 
   it('round-trips caption styling through undo history', () => {

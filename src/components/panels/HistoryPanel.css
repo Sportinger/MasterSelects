@@ -1,93 +1,167 @@
+/* History Panel — git-style graph rail + fluid entry rows.
+   The rail is a narrow fixed gutter; entries take whatever width is left, so
+   the panel stays readable from ~180px docked up to a full-width tab. */
+
 .history-panel {
+  container-type: inline-size;
   height: 100%;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: #101114;
-  color: #e7e9ee;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+
+  /* Width of the leading timestamp column; collapsed in narrow containers. */
+  --history-time-width: 50px;
+  --history-row-height: 34px;
 }
 
+/* ── Toolbar ─────────────────────────────────────────────────────────── */
+
 .history-panel-toolbar {
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: #15171b;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-2-5);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
 }
 
 .history-panel-heading {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .history-panel-heading h2 {
   margin: 0;
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 1.2;
+  font-size: var(--font-lg);
+  font-weight: var(--font-semibold);
+  line-height: var(--leading-tight);
+  color: var(--text-primary);
 }
 
 .history-panel-heading span {
-  color: #8f96a3;
-  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  font-variant-numeric: tabular-nums;
 }
 
 .history-panel-actions {
+  flex: none;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-1);
 }
 
 .history-panel-actions button {
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
-  background: #20232a;
-  color: #dce0e8;
-  font-size: 11px;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  height: 24px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
   cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 
 .history-panel-actions button:hover:not(:disabled) {
-  background: #2a2e37;
-  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.history-panel-actions button:active:not(:disabled) {
+  background: var(--bg-active);
+}
+
+.history-panel-actions button:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .history-panel-actions button:disabled {
   cursor: default;
-  opacity: 0.45;
+  opacity: 0.4;
 }
+
+/* ── Empty state ─────────────────────────────────────────────────────── */
 
 .history-panel-empty {
   flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #858b96;
-  font-size: 12px;
+  gap: var(--sp-1-5);
+  padding: var(--sp-5) var(--sp-4);
+  color: var(--text-muted);
+  text-align: center;
 }
+
+.history-panel-empty svg {
+  color: var(--gray-400);
+  margin-bottom: var(--sp-1);
+}
+
+.history-panel-empty strong {
+  color: var(--text-secondary);
+  font-size: var(--font-md);
+  font-weight: var(--font-medium);
+}
+
+.history-panel-empty span {
+  max-width: 220px;
+  font-size: var(--font-sm);
+  line-height: var(--leading-normal);
+}
+
+/* ── List ────────────────────────────────────────────────────────────── */
 
 .history-panel-list {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   margin: 0;
-  padding: 8px;
+  padding: 0 var(--sp-2) var(--sp-2);
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+.history-panel-list::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+}
+
+.history-panel-list::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--radius-full);
+}
+
+.history-panel-list::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .history-panel-group {
   content-visibility: auto;
-  contain-intrinsic-size: 420px;
 }
 
-.history-panel-group + .history-panel-group {
-  margin-top: 10px;
+.history-panel-timeline {
+  position: relative;
+  min-height: var(--history-graph-height);
 }
 
 .history-panel-group-header {
@@ -96,32 +170,57 @@
   z-index: 4;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 7px 8px 5px;
-  background: #101114;
-  color: #7f8794;
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: 0.04em;
+  gap: var(--sp-2);
+  height: 26px;
+  padding: 0 var(--sp-0-5);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-size: var(--font-2xs);
+  font-weight: var(--font-bold);
+  letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
 }
 
+.history-panel-group-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Hairline filling the space between the title and the count. */
+.history-panel-group-header::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--gray-600);
+}
+
+.history-panel-group-count {
+  flex: none;
+  order: 3;
+  padding: 1px 5px;
+  border-radius: var(--radius-full);
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+/* ── Graph ───────────────────────────────────────────────────────────── */
+
 .history-panel-graph {
   position: relative;
-  width: 826px;
-  min-width: 826px;
   margin: 0;
-  padding: 0 0 4px;
+  padding: 0;
   list-style: none;
 }
 
 .history-panel-graph-lines {
   position: absolute;
   top: 0;
-  left: 0;
-  width: 826px;
-  height: 100%;
+  left: var(--history-time-width);
+  width: var(--history-rail-width);
+  height: var(--history-graph-height);
   overflow: visible;
   pointer-events: none;
   z-index: 0;
@@ -135,79 +234,136 @@
 }
 
 .history-panel-graph-line-main {
-  stroke: rgba(118, 130, 152, 0.62);
-  stroke-width: 4px;
+  stroke: var(--gray-450);
+  stroke-width: 2px;
 }
 
 .history-panel-graph-line-branch {
-  stroke: rgba(104, 126, 218, 0.78);
-  stroke-width: 5px;
+  stroke: var(--blue-700);
+  stroke-width: 2px;
+}
+
+/* The route from the root to the state on screen remains visible even where
+   later side branches cross it. */
+.history-panel-graph-line-walked {
+  stroke: var(--accent);
+  stroke-width: 2.5px;
 }
 
 .history-panel-graph-row {
   position: relative;
-  display: grid;
-  grid-template-columns: 56px repeat(5, 148px);
-  gap: 6px;
-  height: 52px;
-  min-height: 52px;
-  padding: 0;
-  isolation: isolate;
-  contain: layout paint style;
   z-index: 1;
+  display: grid;
+  grid-template-columns: var(--history-time-width) var(--history-rail-width) minmax(0, 1fr);
+  align-items: center;
+  height: var(--history-row-height);
+  contain: layout style;
 }
 
 .history-panel-row-time {
-  grid-column: 1;
-  grid-row: 1;
-  align-self: center;
-  color: #6f7784;
-  font-size: 9px;
+  padding-right: var(--sp-2);
+  color: var(--text-muted);
+  font-size: var(--font-2xs);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
+/* ── Node ────────────────────────────────────────────────────────────── */
+
 .history-panel-node {
   position: relative;
-  grid-row: 1;
-  align-self: center;
-  z-index: 2;
+  align-self: stretch;
 }
 
-.history-panel-node.history-panel-lane-main {
-  grid-column: 4;
+.history-panel-node-dot {
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--gray-300);
+  /* The ring punches the graph line out from behind the dot. */
+  box-shadow: 0 0 0 3px var(--bg-secondary);
+  transform: translate(-50%, -50%);
+  transition: background var(--transition-fast), box-shadow var(--transition-fast),
+    left var(--transition-slow);
 }
 
-.history-panel-node.history-panel-lane-left-2 {
-  grid-column: 2;
+@media (prefers-reduced-motion: reduce) {
+  .history-panel-node-dot {
+    transition: background var(--transition-fast), box-shadow var(--transition-fast);
+  }
 }
 
-.history-panel-node.history-panel-lane-left-1 {
-  grid-column: 3;
+.history-panel-node-redoable {
+  background: var(--bg-secondary);
+  box-shadow: 0 0 0 3px var(--bg-secondary), inset 0 0 0 2px var(--gray-400);
 }
 
-.history-panel-node.history-panel-lane-right-1 {
-  grid-column: 5;
+.history-panel-node-branch {
+  background: var(--info);
 }
 
-.history-panel-node.history-panel-lane-right-2 {
-  grid-column: 6;
+.history-panel-node-manual-save {
+  background: var(--success);
 }
+
+.history-panel-node-autosave,
+.history-panel-node-system {
+  background: var(--gray-350);
+}
+
+/* Main line tip while parked on a branch: reachable-looking but not the
+   highlighted state. */
+.history-panel-node-current {
+  background: var(--gray-200);
+}
+
+.history-panel-node-walked {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--bg-secondary), inset 0 0 0 1px var(--accent-hover);
+}
+
+.history-panel-node-active {
+  width: 9px;
+  height: 9px;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--bg-secondary), 0 0 0 5px var(--accent-dim);
+}
+
+/* Hovering anywhere on the row lights up its timestamp and node together, so
+   the eye can follow one row across the full width. */
+.history-panel-graph-row:hover .history-panel-row-time {
+  color: var(--text-secondary);
+}
+
+.history-panel-graph-row:hover .history-panel-node-dot {
+  background: var(--text-secondary);
+}
+
+.history-panel-graph-row:hover .history-panel-node-active {
+  background: var(--accent);
+}
+
+.history-panel-graph-row:hover .history-panel-node-walked {
+  background: var(--accent);
+}
+
+/* ── Entry ───────────────────────────────────────────────────────────── */
 
 .history-panel-entry {
   position: relative;
-  display: grid;
-  grid-template-columns: 7px minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
-  gap: 7px;
-  min-height: 34px;
-  padding: 5px 7px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: #15171c;
-  color: #cfd4dc;
+  gap: var(--sp-1-5);
+  min-width: 0;
+  height: calc(var(--history-row-height) - 4px);
+  margin-left: var(--sp-1);
+  padding: 0 var(--sp-1-5) 0 var(--sp-2);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
   cursor: default;
-  contain: layout paint style;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .history-panel-entry[role='button'] {
@@ -215,130 +371,160 @@
 }
 
 .history-panel-entry[role='button']:hover {
-  border-color: rgba(255, 255, 255, 0.18);
-  background-color: #1c2028;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 .history-panel-entry[role='button']:focus-visible {
-  outline: 2px solid rgba(145, 169, 224, 0.7);
-  outline-offset: 2px;
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+  background: var(--bg-tertiary);
 }
 
-.history-panel-entry::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 13px;
-  height: 13px;
-  border: 2px solid #101114;
-  border-radius: 999px;
-  background: #838d9f;
-  transform: translate(-50%, -50%);
-  z-index: -1;
-}
-
-.history-panel-entry-current {
-  background: #18243a;
-  border-color: rgba(76, 141, 255, 0.26);
-  color: #ffffff;
-}
-
-.history-panel-entry-branch {
-  background: #192136;
-  border-color: rgba(145, 169, 224, 0.25);
-  color: #f3f6ff;
+/* Accent bar for the state you are actually looking at. Driven by `active`
+   only — kind 'current' is the main line's tip, which is a different thing
+   whenever you are parked on a branch. */
+.history-panel-entry-active {
+  background: var(--accent-subtle);
+  box-shadow: inset 2px 0 0 var(--accent);
+  color: var(--text-primary);
 }
 
 .history-panel-entry-redoable {
-  color: #929aa8;
+  color: var(--text-disabled);
 }
 
-.history-panel-entry-highlighted {
-  background: #16261f;
-  border-color: rgba(74, 222, 168, 0.24);
-  color: #f1fff9;
+.history-panel-entry-redoable .history-panel-entry-label {
+  font-weight: var(--font-normal);
 }
 
+.history-panel-entry-highlighted,
 .history-panel-entry-manual-save {
-  background: #16261f;
-  border-color: rgba(74, 222, 168, 0.22);
+  color: var(--text-primary);
 }
 
-.history-panel-entry-branch-tip {
-  border-color: rgba(145, 169, 224, 0.4);
-}
-
-.history-panel-entry-marker {
-  width: 5px;
-  height: 20px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
-}
-
-.history-panel-entry-current .history-panel-entry-marker {
-  background: #4c8dff;
-}
-
-.history-panel-entry-manual-save .history-panel-entry-marker {
-  background: #44d7a8;
-}
-
-.history-panel-entry-branch .history-panel-entry-marker {
-  background: #91a9e0;
-}
+/* Branch identity is carried by the lane colour and the meta line — tinting
+   the label too just adds another colour to scan past. */
 
 .history-panel-entry-main {
+  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  justify-content: center;
+  gap: 1px;
 }
 
 .history-panel-entry-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
-  font-weight: 650;
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
+  line-height: var(--leading-tight);
 }
 
-.history-panel-entry-time {
+.history-panel-entry-active .history-panel-entry-label {
+  font-weight: var(--font-semibold);
+}
+
+.history-panel-entry-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-2xs);
+  line-height: var(--leading-tight);
+}
+
+.history-panel-entry-detail {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #7f8794;
-  font-size: 9px;
+}
+
+/* Ties a branch row back to its coloured lane in the rail. */
+.history-panel-entry-branch .history-panel-entry-detail {
+  color: var(--info);
+}
+
+/* Only surfaced when the timestamp column is collapsed. */
+.history-panel-entry-clock {
+  display: none;
+  flex: none;
   font-variant-numeric: tabular-nums;
 }
 
-.history-panel-entry-kind {
-  justify-self: end;
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.07);
-  color: #9ca4b2;
-  font-size: 9px;
-  font-weight: 750;
+.history-panel-entry-badge {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: var(--font-2xs);
+  font-weight: var(--font-semibold);
+  letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
 }
 
-.history-panel-entry-current .history-panel-entry-kind {
-  background: rgba(76, 141, 255, 0.25);
-  color: #cfe0ff;
+/* Undo / Redo / Jump affordance — quiet until the row is hovered. */
+.history-panel-entry-badge-hint {
+  opacity: 0;
+  transition: opacity var(--transition-fast);
 }
 
-.history-panel-entry-manual-save .history-panel-entry-kind,
-.history-panel-entry-highlighted .history-panel-entry-kind {
-  background: rgba(74, 222, 168, 0.18);
-  color: #aff7dd;
+.history-panel-entry:hover .history-panel-entry-badge-hint,
+.history-panel-entry:focus-visible .history-panel-entry-badge-hint {
+  opacity: 1;
 }
 
-.history-panel-entry-branch .history-panel-entry-kind {
-  background: rgba(145, 169, 224, 0.18);
-  color: #dbe5ff;
+.history-panel-entry-active .history-panel-entry-badge {
+  background: var(--accent-dim);
+  color: var(--accent-hover);
 }
 
-.history-panel-entry-redoable .history-panel-entry-kind {
-  color: #8c94a2;
+.history-panel-entry-manual-save .history-panel-entry-badge,
+.history-panel-entry-highlighted .history-panel-entry-badge {
+  background: var(--success-dim);
+  color: var(--success-light);
+}
+
+/* ── Narrow dock column ──────────────────────────────────────────────── */
+
+@container (max-width: 300px) {
+  /* Set on the list, not on .history-panel — a container query never matches
+     the container element itself, only its descendants. */
+  .history-panel-list {
+    --history-time-width: 0px;
+  }
+
+  /* The hidden time cell leaves the grid, so drop its track too — otherwise
+     every remaining cell shifts one column to the left. */
+  .history-panel-row-time {
+    display: none;
+  }
+
+  .history-panel-graph-row {
+    grid-template-columns: var(--history-rail-width) minmax(0, 1fr);
+  }
+
+  .history-panel-entry-clock {
+    display: inline;
+  }
+
+  /* No room for a decorative hover hint; it would still reserve its box. */
+  .history-panel-entry-badge-hint {
+    display: none;
+  }
+}
+
+@container (max-width: 240px) {
+  .history-panel-actions button {
+    padding: 0 var(--sp-1-5);
+  }
+
+  .history-panel-actions button span {
+    display: none;
+  }
 }

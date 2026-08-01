@@ -20,6 +20,10 @@ export const previewToolDefinitions: ToolDefinition[] = [
             enum: ['auto', 'gpu', 'dom'],
             description: 'Capture mode. auto tries GPU readback first and falls back to the visible preview canvas (default: auto).',
           },
+          settleMs: {
+            type: 'number',
+            description: 'Minimum milliseconds to let newly edited layers reach the renderer before stabilization checks (default: 120, automatic post-edit preview uses 180).',
+          },
         },
         required: [],
       },

@@ -11,6 +11,7 @@ export class MaskTextureManager {
   private maskTextures: Map<string, GPUTexture> = new Map();
   private maskTextureViews: Map<string, GPUTextureView> = new Map();
   private maskTextureSizes: Map<string, { width: number; height: number }> = new Map();
+  private externalMaskTextureViews: Map<string, GPUTextureView> = new Map();
   private lastMaskDebugLog: number | null = null;
 
   // Fallback mask texture (fully white = no masking)
@@ -105,10 +106,18 @@ export class MaskTextureManager {
 
   // Get mask info in single lookup (avoids double Map access)
   getMaskInfo(layerId: string): { hasMask: boolean; view: GPUTextureView } {
-    const view = this.maskTextureViews.get(layerId);
+    const view = this.externalMaskTextureViews.get(layerId) ?? this.maskTextureViews.get(layerId);
     return view
       ? { hasMask: true, view }
       : { hasMask: false, view: this.whiteMaskView! };
+  }
+
+  setExternalMaskTextureView(layerId: string, view: GPUTextureView): void {
+    this.externalMaskTextureViews.set(layerId, view);
+  }
+
+  removeExternalMaskTextureView(layerId: string): void {
+    this.externalMaskTextureViews.delete(layerId);
   }
 
   // Log mask state for debugging (throttled)
@@ -127,6 +136,7 @@ export class MaskTextureManager {
     this.maskTextures.clear();
     this.maskTextureViews.clear();
     this.maskTextureSizes.clear();
+    this.externalMaskTextureViews.clear();
   }
 
   destroy(): void {

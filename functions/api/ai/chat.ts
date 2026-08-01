@@ -89,13 +89,12 @@ function buildCapabilityResponse(context: AppContext, hostedContext: HostedAiCon
   const authenticated = Boolean(hostedContext.user);
 
   return buildRouteEnvelope({
-    byoRequired: !authenticated || !hostedContext.billing?.hostedAIEnabled,
     capability: capabilities,
     creditBalance: hostedContext.billing?.balance ?? 0,
     data: {
       capabilities: models,
       feature: 'hosted_ai_chat',
-      modes: ['hosted', 'byo'],
+      modes: ['hosted'],
       streamSupported: false,
     },
     ok: true,
@@ -216,7 +215,6 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   if (!hostedContext.billing?.hostedAIEnabled) {
     return json(
       buildRouteEnvelope({
-        byoRequired: true,
         error: createGatewayError(
           'feature_not_enabled',
           'Hosted AI chat is not enabled for this account.',
@@ -518,6 +516,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     return json(
       buildRouteEnvelope({
         creditBalance: settlement.balance,
+        creditMutationId: settlement.ledgerEntryId,
         creditsCharged: settlement.creditsCharged,
         data: settlement.response,
         ok: true,

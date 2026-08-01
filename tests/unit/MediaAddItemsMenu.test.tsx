@@ -24,6 +24,8 @@ function renderMenu(overrides: Partial<MediaAddItemsMenuComponentProps> = {}) {
     onImportGaussianSplat: vi.fn(),
     onNewMathScene: vi.fn(),
     onNewMotionShape: vi.fn(),
+    onNewMotionNull: vi.fn(),
+    onNewMotionAdjustment: vi.fn(),
     ...overrides,
   };
 
@@ -52,5 +54,24 @@ describe('MediaAddItemsMenu import surface', () => {
     fireEvent.click(screen.getByText('Star'));
     expect(props.onNewMotionShape).toHaveBeenCalledWith('star');
     expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('creates a Motion Null through the shared add command', () => {
+    const props = renderMenu();
+
+    fireEvent.click(screen.getByText('Motion Null'));
+
+    expect(props.onNewMotionNull).toHaveBeenCalledTimes(1);
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('creates an Adjustment Layer through the shared add command', () => {
+    const props = renderMenu();
+
+    fireEvent.click(screen.getByText('Adjustment Layer'));
+
+    expect(props.onNewMotionAdjustment).toHaveBeenCalledTimes(1);
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Coming soon')).not.toBeInTheDocument();
   });
 });

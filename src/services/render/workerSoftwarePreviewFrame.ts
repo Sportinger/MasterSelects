@@ -544,6 +544,35 @@ function solidLayerFromLayer(layer: Layer): WorkerRenderSoftwareLayer | null {
   };
 }
 
+function adjustmentLayerFromLayer(layer: Layer): WorkerRenderSoftwareLayer | null {
+  if (layer.source?.type !== 'motion-adjustment') return null;
+  const rotation = layerRotationZ(layer);
+  if (
+    finiteNumber(layer.position?.x, 0) !== 0
+    || finiteNumber(layer.position?.y, 0) !== 0
+    || finiteNumber(layer.scale?.x, 1) !== 1
+    || finiteNumber(layer.scale?.y, 1) !== 1
+    || rotation !== 0
+    || layer.transitionRender
+  ) {
+    return null;
+  }
+  const compositeOperation = canvasCompositeOperationForBlendMode(layer.blendMode);
+  if (!compositeOperation) return null;
+  const effectPlan = workerSoftwareEffectPlanForLayer(layer);
+  if (!effectPlan) return null;
+  return {
+    id: layer.id,
+    visible: layer.visible,
+    opacity: layer.opacity,
+    compositeOperation,
+    filter: effectPlan.filter,
+    pixelEffects: effectPlan.pixelEffects,
+    geometry: geometryFromLayer(layer),
+    source: { kind: 'adjustment' },
+  };
+}
+
 function isTransientVideoSkipReason(reason: WorkerSoftwarePreviewSkipReason): boolean {
   return reason === 'createImageBitmap-failed' ||
     reason === 'runtime-frame-missing' ||
@@ -781,6 +810,11 @@ async function buildWorkerSoftwarePreviewFrameInternal(
     if (solidLayer) {
       workerLayers.push(solidLayer);
       solidLayerCount += 1;
+      continue;
+    }
+    const adjustmentLayer = adjustmentLayerFromLayer(layer);
+    if (adjustmentLayer) {
+      workerLayers.push(adjustmentLayer);
       continue;
     }
     const bitmapSource = layerBitmapSource(layer, options, depth);

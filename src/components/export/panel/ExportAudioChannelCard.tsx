@@ -6,6 +6,7 @@ import type {
   ExportBasicsOptionState,
   ExportBasicsTimeState,
 } from './exportBasicsTypes';
+import type { BatchExportMediaType } from '../../../stores/exportStore';
 
 interface ExportAudioChannelCardProps {
   mode: ExportBasicsModeState;
@@ -15,6 +16,7 @@ interface ExportAudioChannelCardProps {
   time: ExportBasicsTimeState;
   useInOut: boolean;
   actions: ExportBasicsActions;
+  sourceMediaType?: BatchExportMediaType;
 }
 
 export function ExportAudioChannelCard({
@@ -25,6 +27,7 @@ export function ExportAudioChannelCard({
   time,
   useInOut,
   actions,
+  sourceMediaType,
 }: ExportAudioChannelCardProps) {
   return (
     <div className={`export-channel-card${mode.isImageMode || mode.isGifMode || (!audio.includeAudio && !mode.isXmlMode) ? ' is-disabled' : ''}`} data-export-target="audio-section">
@@ -37,7 +40,8 @@ export function ExportAudioChannelCard({
           type="button"
           className={`export-toggle${!mode.isGifMode && (mode.isXmlMode ? audio.includeAudio : !mode.isImageMode && audio.includeAudio) ? ' is-active' : ''}`}
           onClick={() => actions.setIncludeAudio(!audio.includeAudio)}
-          disabled={mode.isImageMode || mode.isGifMode || (!mode.isXmlMode && mode.browserAudioUnavailable)}
+          disabled={mode.isImageMode || mode.isGifMode || (!mode.isXmlMode && mode.browserAudioUnavailable) || (sourceMediaType !== undefined && sourceMediaType !== 'video')}
+          title={sourceMediaType && sourceMediaType !== 'video' ? 'The audio channel is fixed by the source media type' : undefined}
         >
           {!mode.isGifMode && (mode.isXmlMode ? audio.includeAudio : !mode.isImageMode && audio.includeAudio) ? 'On' : 'Off'}
         </button>
@@ -139,6 +143,8 @@ export function ExportAudioChannelCard({
                 type="button"
                 className={`export-toggle${audio.normalizeAudio ? ' is-active' : ''}`}
                 onClick={() => actions.setNormalizeAudio(!audio.normalizeAudio)}
+                disabled={sourceMediaType !== undefined}
+                title={sourceMediaType ? 'Direct source normalization is not available yet' : undefined}
               >
                 Normalize
               </button>

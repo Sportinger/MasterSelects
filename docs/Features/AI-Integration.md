@@ -2,7 +2,7 @@
 
 [← Back to Index](./README.md)
 
-Model-powered editing with the shared editor tool catalog, Kie.ai Cloud or local Lemonade chat providers, multi-provider AI video/image/audio generation, transcription, multicam EDL generation, browser-local SAM 2 segmentation, native-helper MatAnyone2 matting, and local MuScriptor music-to-MIDI.
+Model-powered editing with the shared editor tool catalog, managed Kie.ai Cloud or local Lemonade chat providers, multi-provider AI video/image/audio generation, transcription, browser-local SAM 2 segmentation, native-helper MatAnyone2 matting, and local MuScriptor music-to-MIDI.
 
 ---
 
@@ -18,7 +18,6 @@ Model-powered editing with the shared editor tool catalog, Kie.ai Cloud or local
 - [AI Bridge Architecture](#ai-bridge-architecture)
 - [Hosted AI Safety And Audit](#hosted-ai-safety-and-audit)
 - [Transcription](#transcription)
-- [Multicam EDL](#multicam-edl)
 - [Configuration](#configuration)
 
 ---
@@ -47,10 +46,10 @@ Model-powered editing with the shared editor tool catalog, Kie.ai Cloud or local
 
 | Provider | Runtime | Configuration |
 |---|---|---|
-| `Kie.ai` | MasterSelects hosted chat when available, otherwise a user-supplied Kie.ai API key in development | Preferences -> API Keys for BYO Kie.ai key |
+| `Kie.ai` | MasterSelects hosted chat through the hosted agent kernel | Signed-in account with hosted AI enabled |
 | `Lemonade Local` | OpenAI-compatible Lemonade Server running on the user's machine | Preferences -> General -> AI Features |
 
-Hosted Kie.ai chat keeps the provider key on the Cloudflare backend. Development BYO calls use the same-origin Kie proxy, so GPT and Claude models share one configured Kie.ai key instead of separate OpenAI and Anthropic chat keys.
+Hosted Kie.ai chat keeps the provider key on the Cloudflare backend. The browser has no Kie.ai key setting, credential header, or direct provider fallback; unavailable hosted access fails closed with an account or credit prompt.
 
 Lemonade defaults to `http://localhost:13305/api/v1` and sends chat completions to `/chat/completions`. The endpoint, model, and optional context size are stored in local settings, and the settings panel can check `/models` to verify the server and discover locally available models. Lemonade endpoints are restricted to loopback hosts (`localhost`, `127.0.0.1`, or `::1`) so timeline context and tool results are not sent to a remote URL by mistake.
 
@@ -72,7 +71,7 @@ Manually imported Lemonade models may be exposed with a `user.` prefix, for exam
 
 Lemonade is a provider, not an editor bridge. It can return OpenAI-compatible tool-call suggestions, but MasterSelects still applies the chat approval mode and routes execution through the shared AI tool dispatcher.
 
-Because local FLM models have a smaller practical prompt budget than hosted models, Lemonade editor mode sends a compact high-use tool set. Kie.ai chat receives up to 128 definitions, with timeline and face-analysis editing tools prioritized to stay within the provider limit. The full exported catalog remains available to the local/native bridge.
+Because local FLM models have a smaller practical prompt budget than hosted models, Lemonade editor mode sends a compact high-use tool set. Hosted Kie.ai chat receives up to 128 definitions, with timeline and face-analysis editing tools prioritized to stay within the provider limit. The full exported catalog remains available to the local/native bridge.
 
 Lemonade chat responses use the OpenAI-compatible SSE streaming endpoint, so text appears incrementally in FlashBoard Chat while the local model is generating. Tool calls are collected from the streamed deltas and executed after the assistant response finishes. The initial response timeout is 180 seconds and only covers reaching the SSE stream; once streaming starts, a 90-second idle timeout catches stalled local models without cutting off active long-running generations. Lemonade uses a shorter editor system prompt, compact tool results, and a lower completion-token limit than hosted models. Empty Lemonade streams include the model `finish_reason` when available, so output/context-limit stops are reported as actionable local-model errors instead of a generic empty response. If a local model still stalls after a tool result, MasterSelects times out the follow-up request and shows a deterministic tool-result summary instead of leaving the chat empty.
 
@@ -143,16 +142,16 @@ The old dock-level AI Generative tab is deprecated and removed from default and 
 - Compact setting buttons such as model, aspect ratio, duration, image size, and mode open as inline submenus: the standard control row slides out, submenu pills stagger in, and the default row returns after selection
 - Reference cards use pointer-proximity magnification in the compact Media tray, with previews scaling visually outside the tray without changing the prompt box height; crowded trays switch the reference cards into a vertical scroll strip
 - Media Panel image, video, and audio files can be referenced by right-clicking them or dragging them onto the expanded prompt composer
-- Kie.ai image generation includes Nano Banana 2, Nano Banana Pro, Imagen 4 Fast/Ultra, GPT Image 2, Flux 2 Pro, Seedream 5 Lite, and Flux Kontext Pro/Max through the shared async image-provider adapter. GPT Image 2 Edit, Flux 2 Pro Edit, Seedream 5 Lite Edit, Recraft Remove Background, Recraft Crisp Upscale, and Topaz Image Upscale require at least one reference image before generation is enabled.
+- Hosted Kie.ai-backed image generation includes Nano Banana 2, Nano Banana Pro, GPT Image 2, Flux 2 Pro, Seedream 5 Lite, and Flux Kontext Pro/Max through the shared async image-provider adapter. GPT Image 2 Edit, Flux 2 Pro Edit, Seedream 5 Lite Edit, Recraft Remove Background, Recraft Crisp Upscale, and Topaz Image Upscale require at least one reference image before generation is enabled.
 - Kie.ai utility image/video models are exposed in the same Image and Video category chips. Recraft and Topaz image utilities can run without a prompt but require image input; Topaz Video Upscale can run without a prompt but requires a video reference and uses the mode button for `2x` / `4x`.
 - Kie.ai video generation includes hosted Kling 3.0, Seedance 2.0 / Fast, Veo 3.1, and Runway through MasterSelects Cloud. Veo and Runway use their dedicated Kie endpoints and polling schemas rather than the generic Market `recordInfo` schema.
 - The compact composer shows empty dashed capability slots for the selected video model's available inputs (`IN`, `OUT`, `REF`, `VID`, `AUD`) next to real reference cards. Resolution-capable models label their mode control with actual outputs such as `720p`, `1080p`, and `4K`; Runway hides `1080p` when `10s` is selected because Kie.ai does not allow that combination.
 - Nano Banana 2 and Nano Banana Pro accept up to 14 ordered reference images through Kie.ai; Nano Banana 2 is also available through EvoLink. Kie.ai and Cloud Seedance 2.0 / Fast accept multimodal image/video/audio references and send audio references as `reference_audio_urls` for lip-sync / performance timing; the composer labels generic references as `REF 1`, `REF 2`, ... so prompts can refer to them explicitly
 - Seedance 2.0 standard and Fast cannot combine strict `first_frame_url` / `last_frame_url` with multimodal references in the same Kie.ai request, so IN / OUT cards are converted to image references when REF media is present. Audio references are passed separately as input drivers through `reference_audio_urls`; adding one to Seedance automatically enables the `Sound` toggle so the Kie.ai request also sends `generate_audio: true`. Audio-only Seedance references are blocked locally because Seedance requires audio references to be paired with at least one image or video anchor.
 - Suno Music and Suno Sounds are separate Music-category targets. Suno Music keeps the lyrics/style/negative-tags controls; Suno Sounds uses the normal prompt box plus the mode button for one-shot/loop sounds. Both run through hosted Cloud credits from the Media generator tray.
-- The wand button in the composer refines the current prompt with GPT 5.6 Luna through Kie.ai. Hosted use goes through Cloudflare `/api/ai/chat`; non-production BYO use goes through the same-origin Kie proxy with the user's default Kie.ai key. The Original and Magic prompt boxes expand on focus for full reading/editing, and the Original text remains selectable for copying. The Magic prompt opens at full height briefly after refinement, then collapses to a compact scrollable height so the Generate controls stay anchored. Suno Music, Suno Sounds, Nano Banana, GPT Image, Flux, Flux Kontext, Recraft/Topaz utilities, Seedream, Imagen, Kling, Seedance, Veo, and Runway targets use model-specific guidance so the refined prompt follows the selected model's input style and constraints.
+- The wand button in the composer refines the current prompt with GPT 5.6 Luna through the hosted Kie.ai route. It requires hosted access and has no direct-key fallback. The Original and Magic prompt boxes expand on focus for full reading/editing, and the Original text remains selectable for copying. The Magic prompt opens at full height briefly after refinement, then collapses to a compact scrollable height so the Generate controls stay anchored. Suno Music, Suno Sounds, Nano Banana, GPT Image, Flux, Flux Kontext, Recraft/Topaz utilities, Seedream, Imagen, Kling, Seedance, Veo, and Runway targets use model-specific guidance so the refined prompt follows the selected model's input style and constraints.
 - The collapsed Media tray shows separate `Chat` and `Generate` launch buttons. `Chat` opens a compact chat prompt window with Kie.ai model selection, reasoning effort for GPT models, a visible per-round credit estimate, a provider-scoped `PromptBook`, and a temperature slider when the selected model accepts temperature. GPT calls use Kie's Responses protocol; Claude calls use Kie's Messages protocol. Lemonade remains available for local testing outside production. The selected Kie.ai/Lemonade provider survives minimize/reopen, app restart, and HMR remount.
-- Compact chat requests include the Media-chat system prompt, current timeline summary by default, and callable AI tools. For visual questions and content-aware edits such as funny, highlight, storytelling, or scene-based cuts, the agent samples 3-8 timeline moments with `getFramesAtTimes`; captured frame grids are attached as real multimodal image inputs on Kie.ai GPT and tool-capable Claude follow-up rounds instead of being reduced to text metadata. Transcript remixes convert source-word timestamps through the clip's placement, trim, speed, and reverse state, then continue from `splitClipAtTimes` through a fresh timeline read to `reorderClips` in the same turn because the split creates the IDs needed for the final arrangement. Fable 5 is deliberately discussion-only because its Kie.ai route does not support function calls. The PromptBook system-prompt editor can disable and save live context per provider preset. Tool calls route through the shared `executeAIToolCalls(..., 'chat')` dispatcher; actions that require confirmation are denied in the compact flow and reported back to the model unless the approval mode allows them automatically. Chat approval defaults to `Auto`, so editor actions can run immediately; users can toggle it from the left `Auto` segment of the `Chat` split-button, while the main button area still sends the prompt.
+- Compact chat requests include the Media-chat system prompt, current timeline summary by default, and callable AI tools. After a hosted-agent tool batch changes the timeline, the editor automatically captures one current preview frame and returns it as a validated multimodal tool result; explicit `getFramesAtTimes` remains available for comparing 3-8 moments. For visual questions and content-aware edits such as funny, highlight, storytelling, or scene-based cuts, captured frame grids are returned to the hosted provider as real multimodal image inputs instead of being reduced to text metadata. Transcript remixes convert source-word timestamps through the clip's placement, trim, speed, and reverse state, then continue from `splitClipAtTimes` through a fresh timeline read to `reorderClips` in the same turn because the split creates the IDs needed for the final arrangement. Fable 5 is deliberately discussion-only because its Kie.ai route does not support function calls. The PromptBook system-prompt editor can disable and save live context per provider preset. Tool calls route through the shared `executeAIToolCalls(..., 'chat')` dispatcher; actions that require confirmation are denied in the compact flow and reported back to the model unless the approval mode allows them automatically. Chat approval defaults to `Auto`, so editor actions can run immediately; users can toggle it from the left `Auto` segment of the `Chat` split-button, while the main button area still sends the prompt.
 - Queued and running generations appear as Media Panel preview cards with output type, status, elapsed timer, prompt, metadata, and progress when the provider reports it. The tray can keep 100 local jobs active; hosted Kie.ai task starts are globally paced through a Cloudflare Durable Object at 19 starts per 10 seconds, so image, video, and Suno bursts share one provider-safe lane instead of producing 429s.
 - The tray reuses the FlashBoard queue/import runtime without showing the full node canvas
 
@@ -162,9 +161,9 @@ The current generator stack is no longer best described as "PiAPI as one unified
 
 | Backend | Where it is used | Notes |
 |---------|------------------|-------|
-| `Kie.ai` | Hosted and development-BYO FlashBoard media, compact chat, prompt refinement, and AI node authoring | Chat routes use `/codex/v1/responses` or `/claude/v1/messages`; media uses Kie Market jobs plus dedicated provider routes |
+| `Kie.ai` | Server-side provider behind hosted FlashBoard media, compact chat, prompt refinement, and AI node authoring | Browser requests enter authenticated MasterSelects Cloud routes; the provider key never enters client settings or storage |
 | `EvoLink` | FlashBoard image generation | User-supplied key must be unlocked and marked as default; Nano Banana 2 uses EvoLink's async `gemini-3.1-flash-image-preview` task flow with up to 14 reference images |
-| `MasterSelects Cloud` | FlashBoard production and hosted development | Hosted credits/account flow; production uses server secrets only. Managed Kie.ai editor chat enters the private kernel through `/api/kernel/hosted-agent/*` with an `auto` route preference; the kernel currently resolves that to its default fast-agent route because Story is disabled. Media remains on `/api/ai/video`, speech/transcription/music keep their existing hosted routes, and BYO Kie keys remain browser-side. |
+| `MasterSelects Cloud` | FlashBoard production and hosted development | Hosted credits/account flow; server secrets only. Managed Kie.ai editor chat enters the private kernel through `/api/kernel/hosted-agent/*`; media remains on `/api/ai/video`, while speech, transcription, and music keep their hosted routes. |
 | `ElevenLabs` | FlashBoard audio generation in development/BYO flows | User-supplied keys are development-only when explicitly unlocked and marked as default; production text-to-speech uses the Cloudflare `ELEVENLABS_API_KEY` secret |
 | `Suno` | FlashBoard music and sound generation | Suno Music and Suno Sounds use the hosted Cloud path from the Media generator tray |
 | `OpenAI` | Hosted moderation and transcription only | `OPENAI_API_KEY` is no longer used for generative chat, prompt refinement, or AI node authoring |
@@ -173,13 +172,13 @@ The current generator stack is no longer best described as "PiAPI as one unified
 
 The practical rule for the current branch is:
 - Production is Cloudflare-secret-only for hosted AI. User-entered provider keys are hidden from production generation/chat paths.
-- The Media generator tray is hosted Cloud only. Personal/BYO provider keys do not replace the Kie.ai-backed Cloud media path there.
-- Cloud media pricing is shown in the Account dialog's scrollable price view only as MasterSelects Cloud credits. Its Change Plan action opens the full plan selector. Hosted Kie.ai media uses a `6x` vendor-credit conversion for margin after VAT, Stripe, and FX; BYO API-key pricing is intentionally not shown in that Cloud price list.
+- The Media generator tray routes Kie.ai-backed media through hosted Cloud only. Other supported development providers retain their own explicit key paths.
+- Cloud media pricing is shown in the Account dialog's scrollable price view only as MasterSelects Cloud credits. Its Change Plan action opens the full plan selector. Hosted Kie.ai media uses a `6x` vendor-credit conversion for margin after VAT, Stripe, and FX.
 - Hosted compact chat charges by model round and allows each hosted model round to run for up to 180 seconds. If a tool call requires another hosted model follow-up, that follow-up request is charged separately; local tool execution itself is not a separate hosted charge unless the tool calls another hosted media route.
 - Image generation providers implement the shared FlashBoard image-provider adapter, so adding another async image service is a catalog entry plus a provider adapter instead of another hardcoded job-service branch.
 - ElevenLabs-only access opens the composer on the audio text-to-speech target.
 - Service/provider labels in the tray reflect that active backend instead of a permanent PiAPI abstraction layer.
-- BYO provider keys are stored through the encrypted local API-key path for development compatibility and are not persisted in Zustand localStorage. Hosted ElevenLabs uses the Cloudflare `ELEVENLABS_API_KEY` secret; hosted Suno uses the Cloudflare `KIEAI_API_KEY` secret. Both charge logged-in users by hosted credits.
+- Supported non-Kie provider keys are stored through the encrypted local API-key path for development compatibility and are not persisted in Zustand localStorage. Hosted ElevenLabs uses the Cloudflare `ELEVENLABS_API_KEY` secret; hosted Suno uses the Cloudflare `KIEAI_API_KEY` secret. Both charge logged-in users by hosted credits.
 
 ### Timeline Integration
 - FlashBoard generated media imports under `AI Gen / Video`, `AI Gen / Images`, or `AI Gen / Audio`
@@ -559,57 +558,18 @@ from overwriting a newer run.
 
 ---
 
-## Multicam EDL
-
-### Kie.ai Claude Integration
-```typescript
-// Endpoint
-/claude/v1/messages
-
-// Model
-claude-sonnet-5
-
-// Max tokens
-4096
-```
-
-### Edit Style Presets
-| Style | Description |
-|-------|-------------|
-| `podcast` | Cut to speaker, reaction shots, 3s min |
-| `interview` | Show speaker, cut for questions, 2s min |
-| `music` | Beat-driven, fast pacing, 1-2s min |
-| `documentary` | Long cuts, B-roll, wide establishing |
-| `custom` | User-provided instructions |
-
-### Multicam Panel
-A dedicated `MultiCamPanel` component provides the workflow UI:
-- Add cameras from the media panel
-- Set a master camera for audio reference
-- Audio-based sync between cameras
-- CV analysis per camera
-- Transcript generation via local Whisper
-- EDL generation via Claude Sonnet 5 on Kie.ai
-- Apply EDL directly to the timeline
-
----
-
 ## Configuration
 
 ### API Keys
 Settings dialog -> API Keys:
 - OpenAI API key
-- Kie.ai API key
 - PiAPI key (legacy compatibility)
 - Kling access and secret keys (legacy compatibility)
 - AssemblyAI key
 - Deepgram key
 - YouTube Data API v3 key
 
-Multicam panel -> Settings:
-- Kie.ai API key for multicam EDL generation
-
-Hosted cloud access for chat/video does not use a user-entered API key in the desktop settings panel. It comes from the signed-in hosted account and credit balance.
+Hosted cloud access for chat/video does not use a user-entered API key in the desktop settings panel. It comes from the signed-in hosted account and credit balance. Kie.ai is server-managed only.
 
 ### No API Key Required
 - SAM 2 AI Segmentation runs entirely in the browser
@@ -655,7 +615,7 @@ See [Security](./Security.md) for the full security model.
 ## Related Features
 
 - [Timeline](./Timeline.md) - Editing interface
-- [Audio](./Audio.md) - Multicam sync
+- [Audio](./Audio.md) - Manual Timeline audio sync
 - [Media Panel](./Media-Panel.md) - Organization
 - [Keyboard Shortcuts](./Keyboard-Shortcuts.md)
 
@@ -667,4 +627,4 @@ Tool definition integrity is covered by the unit tests in `tests/unit/aiToolDefi
 
 ---
 
-*Source: `src/main.tsx`, `src/components/panels/media/MediaAIGenerativeTray.tsx`, `src/components/panels/flashboard/FlashBoardComposer.tsx`, `src/components/panels/SAM2Panel.tsx`, `src/components/panels/MultiCamPanel.tsx`, `src/components/panels/SceneDescriptionPanel.tsx`, `src/components/preview/SAM2Overlay.tsx`, `src/services/sam2/SAM2Service.ts`, `src/services/sam2/SAM2ModelManager.ts`, `src/services/sam2/sam2Worker.ts`, `src/stores/sam2Store.ts`, `src/services/aiTools/`, `src/services/aiTools/aiFeedback.ts`, `src/services/aiTools/executionState.ts`, `src/services/aiTools/bridge.ts`, `src/services/sceneDescriber.ts`, `src/services/claudeService.ts`, `src/services/kieAiService.ts`, `src/services/cloudAiService.ts`, `src/services/flashboard/`, `src/stores/multicamStore.ts`, `src/services/multicamAnalyzer.ts`, `functions/api/ai/chat.ts`, `functions/api/ai/chat-history.ts`, `functions/lib/chatLog.ts`*
+*Source: `src/main.tsx`, `src/components/panels/media/MediaAIGenerativeTray.tsx`, `src/components/panels/flashboard/FlashBoardComposer.tsx`, `src/components/panels/SAM2Panel.tsx`, `src/components/panels/SceneDescriptionPanel.tsx`, `src/components/preview/SAM2Overlay.tsx`, `src/services/sam2/SAM2Service.ts`, `src/services/sam2/SAM2ModelManager.ts`, `src/services/sam2/sam2Worker.ts`, `src/stores/sam2Store.ts`, `src/services/aiTools/`, `src/services/aiTools/aiFeedback.ts`, `src/services/aiTools/executionState.ts`, `src/services/aiTools/bridge.ts`, `src/services/sceneDescriber.ts`, `src/services/cloudAiService.ts`, `src/services/flashboard/`, `functions/api/ai/chat.ts`, `functions/api/ai/chat-history.ts`, `functions/lib/chatLog.ts`*

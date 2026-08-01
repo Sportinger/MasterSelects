@@ -2,6 +2,7 @@ import type { Keyframe, TimelineClip } from '../types';
 import type { MotionLayerDefinition } from '../types/motionDesign';
 import { isMotionProperty } from '../types/motionDesign';
 import { propertyRegistry } from '../services/properties';
+import { normalizeMotionReplicatorBundle } from '../services/motionDesign/contracts/replicatorTimelineAdapter';
 import { interpolateKeyframes } from './keyframeInterpolation';
 
 export function getInterpolatedMotionLayer(
@@ -27,6 +28,12 @@ export function getInterpolatedMotionLayer(
     ...clip,
     motion: structuredClone(clip.motion),
   };
+  const persistedReplicatorRevision = clip.motion.replicator
+    ? normalizeMotionReplicatorBundle(
+        clip.motion.replicator,
+        clip.motion.modifierStack,
+      ).replicator.revision
+    : null;
 
   for (const property of motionProperties) {
     const descriptor = propertyRegistry.getDescriptor(property, workingClip);
@@ -41,6 +48,19 @@ export function getInterpolatedMotionLayer(
 
     const value = interpolateKeyframes(keyframes, property, clipLocalTime, defaultValue);
     workingClip = propertyRegistry.writeValue(workingClip, property, value);
+  }
+
+  if (workingClip.motion?.replicator && persistedReplicatorRevision !== null) {
+    workingClip = {
+      ...workingClip,
+      motion: {
+        ...workingClip.motion,
+        replicator: {
+          ...workingClip.motion.replicator,
+          revision: persistedReplicatorRevision,
+        },
+      },
+    };
   }
 
   return workingClip.motion;

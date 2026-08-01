@@ -1,7 +1,5 @@
 import { cloudAiService } from '../cloudAiService';
-import { requestKieChatByo } from '../kieAi/chatTransport';
 import {
-  FLASHBOARD_PROMPT_REFINER_KIE_RESPONSES_ENDPOINT,
   FLASHBOARD_PROMPT_REFINER_MODEL,
 } from './FlashBoardPromptRefinerConfig';
 import {
@@ -10,10 +8,7 @@ import {
   buildFlashBoardPromptRefinerUserText,
   isSunoTarget,
 } from './FlashBoardPromptRefinerPrompt';
-import {
-  extractRefinedPromptFromOpenAIResponse,
-  getResponseOutputText,
-} from './FlashBoardPromptRefinerResponseMapping';
+import { getResponseOutputText } from './FlashBoardPromptRefinerResponseMapping';
 import { prepareReferenceImages } from './FlashBoardPromptRefinerReferences';
 import type {
   PreparedPromptReference,
@@ -99,78 +94,4 @@ export async function refineFlashBoardPromptHostedTransport(
   }
 
   return refinedPrompt;
-}
-
-export async function streamRefineFlashBoardPromptTransport(
-  input: RefineFlashBoardPromptInput,
-  options: RefineFlashBoardPromptStreamOptions = {},
-): Promise<string> {
-  const apiKey = input.apiKey?.trim() ?? '';
-  if (!apiKey) {
-    throw new Error('Add a Kie.ai API key in Settings to refine prompts.');
-  }
-
-  const preparedReferences = await prepareReferenceImages(input.references);
-  const payload = await requestKieChatByo({
-    apiKey,
-    endpoint: FLASHBOARD_PROMPT_REFINER_KIE_RESPONSES_ENDPOINT,
-    signal: options.signal,
-    body: {
-      ...buildOpenAIRefinerBaseBody(input, buildOpenAIRefinerContent(input, preparedReferences, true)),
-      stream: false,
-      text: {
-        verbosity: 'low',
-      },
-    },
-  });
-  const trimmedPrompt = getResponseOutputText(payload).trim();
-  if (!trimmedPrompt) {
-    throw new Error('Kie.ai returned an empty prompt refinement.');
-  }
-
-  options.onDelta?.(trimmedPrompt, trimmedPrompt);
-  return trimmedPrompt;
-}
-
-export async function refineFlashBoardPromptTransport(input: RefineFlashBoardPromptInput): Promise<string> {
-  const apiKey = input.apiKey?.trim() ?? '';
-  if (!apiKey) {
-    throw new Error('Add a Kie.ai API key in Settings to refine prompts.');
-  }
-
-  const preparedReferences = await prepareReferenceImages(input.references);
-  const content = buildOpenAIRefinerContent(input, preparedReferences, false);
-
-  const payload = await requestKieChatByo({
-    apiKey,
-    endpoint: FLASHBOARD_PROMPT_REFINER_KIE_RESPONSES_ENDPOINT,
-    body: {
-      ...buildOpenAIRefinerBaseBody(input, content),
-      text: {
-        verbosity: 'low',
-        format: {
-          type: 'json_schema',
-          name: 'flashboard_prompt_refinement',
-          strict: true,
-          schema: {
-            type: 'object',
-            additionalProperties: false,
-            properties: {
-              prompt: {
-                type: 'string',
-                description: 'The refined English generation prompt.',
-              },
-            },
-            required: ['prompt'],
-          },
-        },
-      },
-    },
-  });
-
-  if (!payload) {
-    throw new Error('Kie.ai returned an empty response.');
-  }
-
-  return extractRefinedPromptFromOpenAIResponse(payload);
 }

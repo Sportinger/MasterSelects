@@ -273,6 +273,15 @@ function isBatchResultReference(value: unknown): value is BatchResultReference {
     && (reference.path === undefined || typeof reference.path === 'string');
 }
 
+export function containsBatchResultReference(value: unknown): boolean {
+  if (isBatchResultReference(value)) return true;
+  if (Array.isArray(value)) return value.some(containsBatchResultReference);
+  if (isRecord(value)) {
+    return Object.values(value).some(containsBatchResultReference);
+  }
+  return false;
+}
+
 function resolveBatchResultReferences(
   value: unknown,
   results: readonly BatchActionResult[],

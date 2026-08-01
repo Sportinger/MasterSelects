@@ -2,11 +2,17 @@
 // Delegates to specialized modules in ./clip/ and ./helpers/
 // Reduced from ~2031 LOC to ~650 LOC (68% reduction)
 
-import type { TimelineClip, TimelineTrack } from '../../types';
+import type { Keyframe, TimelineClip, TimelineTrack } from '../../types';
 import type { CoreClipActions, SliceCreator } from './types';
 import { DEFAULT_TRANSFORM } from './constants';
 import { Logger } from '../../services/logger';
 import { cloneClipNodeGraph } from '../../services/nodeGraph';
+import { getPlayheadPosition } from '../../services/layerBuilder/PlayheadState';
+import { captureSnapshot } from '../historyStore';
+import {
+  applyTimelineMotionStructurePlan,
+  planTimelineMotionParentMutation,
+} from '../../services/motionDesign/contracts/timelineStructureAdapter';
 
 const log = Logger.create('ClipSlice');
 
@@ -90,9 +96,13 @@ import {
 import {
   cloneLinkedSourceForPart,
   cloneSourceForPart,
+  collectMotionParentClipIdsDetachedBySplit,
   getSourceForFirstSplitPart,
+  remapMotionParentLinksForSplitReplacements,
   remapTransitionLinksForSplitReplacements,
 } from './editOperations/splitBatchOperations';
+import { applyDeleteClipsOperation } from './editOperations/deleteOperations';
+import { clearMotionParentsPreservingWorld } from './editOperations/motionParentWorldPreservation';
 import { cloneStoryboardPropertiesForSplit } from '../../services/storyboard/core';
 import {
   clearTransitionsLinkedToRemovedClips,
@@ -108,7 +118,15 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
   addCompClip: (...args) => applyAddCompClipAction({ set, get }, ...args),
 
   removeClip: (id) => {
-    const { clips, tracks, selectedClipIds, updateDuration, invalidateCache } = get();
+    const {
+      clips,
+      tracks,
+      selectedClipIds,
+      clipKeyframes,
+      playheadPosition,
+      updateDuration,
+      invalidateCache,
+    } = get();
     const clipToRemove = clips.find(c => c.id === id);
     if (!clipToRemove) return;
 
@@ -123,25 +141,30 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       return;
     }
 
-    cleanupDeletedClipResources(clips.filter(clip => idsToRemove.has(clip.id)));
+    const result = applyDeleteClipsOperation({
+      id: `remove-clip:${id}`,
+      type: 'delete-clips',
+      clipIds: [...idsToRemove],
+      includeLinked: false,
+    }, clips, tracks, selectedClipIds, {
+      clipKeyframes,
+      timelineTime: getPlayheadPosition(playheadPosition),
+    });
+    if (result.changedClipIds.length === 0) {
+      log.warn('Cannot remove clip while preserving Motion parent world transforms', {
+        id,
+        warnings: result.warnings.map((warning) => warning.message),
+      });
+      return;
+    }
 
-    const newSelectedIds = new Set(selectedClipIds);
-    for (const removeId of idsToRemove) newSelectedIds.delete(removeId);
-
-    // Build updated clips: remove the clip(s) and clear linkedClipId on the survivor
-    const updatedClips = clearTransitionsLinkedToRemovedClips(clips
-      .filter(c => !idsToRemove.has(c.id))
-      .map(c => {
-        // If a surviving clip was linked to a removed clip, clear the link
-        if (c.linkedClipId && idsToRemove.has(c.linkedClipId)) {
-          return { ...c, linkedClipId: undefined };
-        }
-        return c;
-      }), idsToRemove);
+    cleanupDeletedClipResources(result.deletedClips);
+    const updatedClips = clearTransitionsLinkedToRemovedClips(result.clips, idsToRemove);
 
     setClipsAndCleanupTransitionComps(set, clips, {
       clips: updatedClips,
-      selectedClipIds: newSelectedIds,
+      ...(result.clipKeyframes ? { clipKeyframes: result.clipKeyframes } : {}),
+      selectedClipIds: result.selectedClipIds,
     });
     const referencedCompositionIds = new Set(
       updatedClips.map(clip => clip.compositionId).filter(Boolean),
@@ -286,7 +309,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
   },
 
   splitClip: (clipId, splitTime) => {
-    const { clips, tracks, updateDuration, invalidateCache } = get();
+    const { clips, tracks, clipKeyframes, updateDuration, invalidateCache } = get();
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return;
     if (isClipOnLockedTrack(clips, tracks, clipId) || (clip.linkedClipId && isClipOnLockedTrack(clips, tracks, clip.linkedClipId))) {
@@ -397,8 +420,6 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       storyboardProperties: cloneStoryboardPropertiesForSplit(clip.storyboardProperties, 1),
     };
 
-    const newClips: TimelineClip[] = clips.filter(c => c.id !== clipId && c.id !== clip.linkedClipId);
-
     let linkedFirstClip: TimelineClip | undefined;
     let linkedSecondClip: TimelineClip | undefined;
     if (clip.linkedClipId) {
@@ -430,12 +451,60 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
         };
         firstClip.linkedClipId = linkedFirstClip.id;
         secondClip.linkedClipId = linkedSecondClip.id;
-        newClips.push(linkedFirstClip, linkedSecondClip);
       }
     }
 
+    const removedIds = new Set([clipId, ...(clip.linkedClipId ? [clip.linkedClipId] : [])]);
+    const parentReplacements = [{
+      originalClipId: clip.id,
+      replacementClipIds: [firstClip.id, secondClip.id],
+    }, ...(linkedFirstClip && linkedSecondClip && clip.linkedClipId
+      ? [{
+          originalClipId: clip.linkedClipId,
+          replacementClipIds: [linkedFirstClip.id, linkedSecondClip.id],
+        }]
+      : [])];
+    const detachedChildIds = collectMotionParentClipIdsDetachedBySplit([
+      ...clips.filter((candidate) => !removedIds.has(candidate.id)),
+      firstClip,
+      secondClip,
+      ...(linkedFirstClip && linkedSecondClip ? [linkedFirstClip, linkedSecondClip] : []),
+    ], parentReplacements);
+    const lockedDetachedChildId = detachedChildIds.find((childId) => (
+      isClipOnLockedTrack(clips, tracks, childId)
+    ));
+    if (lockedDetachedChildId) {
+      log.warn('Cannot split while a detached Motion child is on a locked track', {
+        clipId,
+        childClipId: lockedDetachedChildId,
+      });
+      return;
+    }
+    let sourceClips = clips;
+    let preservedClipKeyframes: Map<string, Keyframe[]> | undefined;
+    if (detachedChildIds.length > 0) {
+      const preserved = clearMotionParentsPreservingWorld(
+        clips,
+        detachedChildIds,
+        { clipKeyframes, timelineTime: splitTime },
+      );
+      if (!preserved.ok) {
+        log.warn('Cannot split clip while preserving Motion child world transforms', {
+          clipId,
+          message: preserved.message,
+        });
+        return;
+      }
+      sourceClips = preserved.clips;
+      preservedClipKeyframes = preserved.clipKeyframes;
+    }
+
+    const newClips: TimelineClip[] = sourceClips.filter((candidate) => !removedIds.has(candidate.id));
+    if (linkedFirstClip && linkedSecondClip) {
+      newClips.push(linkedFirstClip, linkedSecondClip);
+    }
     newClips.push(firstClip, secondClip);
-    const remappedClips = remapTransitionLinksForSplitReplacements(newClips, [
+    const transitionRemappedClips = remapTransitionLinksForSplitReplacements(newClips, [
       {
         originalClipId: clip.id,
         incomingReplacementClipId: firstClip.id,
@@ -447,8 +516,12 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
             incomingReplacementClipId: linkedFirstClip.id,
             outgoingReplacementClipId: linkedSecondClip.id,
           }]
-        : []),
+      : []),
     ]);
+    const remappedClips = remapMotionParentLinksForSplitReplacements(
+      transitionRemappedClips,
+      parentReplacements,
+    );
     const changedClipIds = [
       clip.id,
       firstClip.id,
@@ -459,6 +532,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     ];
     setClipsAndCleanupTransitionComps(set, clips, {
       clips: remappedClips,
+      ...(preservedClipKeyframes ? { clipKeyframes: preservedClipKeyframes } : {}),
       selectedClipIds: new Set([secondClip.id]),
     });
     ensureTransitionCompositionsForChangedClips(set, get, changedClipIds, clips);
@@ -566,30 +640,52 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
   // ========== PARENTING (PICK WHIP) ==========
 
   setClipParent: (clipId: string, parentClipId: string | null) => {
-    const { clips, tracks } = get();
+    const {
+      clips,
+      tracks,
+      clipKeyframes,
+      playheadPosition,
+      invalidateCache,
+    } = get();
     if (isClipOnLockedTrack(clips, tracks, clipId)) {
       log.warn('Cannot parent clip on locked track', { clipId });
       return;
     }
-    if (parentClipId === clipId) {
-      log.warn('Cannot parent clip to itself');
+    const compositionId = clips.find((candidate) => candidate.id === clipId)?.compositionId
+      ?? 'timeline:active';
+    const result = planTimelineMotionParentMutation({
+      compositionId,
+      clips,
+      clipKeyframes,
+      timelineTime: getPlayheadPosition(playheadPosition),
+      childClipId: clipId,
+      ...(parentClipId ? { parentClipId } : {}),
+    });
+    if (!result.ok) {
+      log.warn('Cannot apply Motion parent relationship', {
+        clipId,
+        parentClipId: parentClipId ?? 'none',
+        failures: result.failures.map((failure) => failure.code),
+      });
+      return;
+    }
+    const applied = applyTimelineMotionStructurePlan({
+      compositionId,
+      clips,
+      clipKeyframes,
+      plan: result.plan,
+    });
+    if (!applied.ok) {
+      log.warn('Motion parent plan failed during atomic application', {
+        clipId,
+        message: applied.message,
+      });
       return;
     }
 
-    if (parentClipId) {
-      const wouldCreateCycle = (checkId: string): boolean => {
-        const check = clips.find(c => c.id === checkId);
-        if (!check?.parentClipId) return false;
-        if (check.parentClipId === clipId) return true;
-        return wouldCreateCycle(check.parentClipId);
-      };
-      if (wouldCreateCycle(parentClipId)) {
-        log.warn('Cannot create circular parent reference');
-        return;
-      }
-    }
-
-    set({ clips: clips.map(c => c.id === clipId ? { ...c, parentClipId: parentClipId || undefined } : c) });
+    captureSnapshot(result.plan.history.label);
+    set({ clips: applied.clips, clipKeyframes: applied.clipKeyframes });
+    invalidateCache();
     log.debug('Set clip parent', { clipId, parentClipId: parentClipId || 'none' });
   },
 
@@ -626,6 +722,24 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     }
 
     const nowIs3D = !clip.is3D;
+    const parent = clip.parentClipId
+      ? clips.find((candidate) => candidate.id === clip.parentClipId)
+      : undefined;
+    const children = clips.filter((candidate) => candidate.parentClipId === clip.id);
+    const linkedClips = [...(parent ? [parent] : []), ...children];
+    const wouldKeepSupportedParentSpace = linkedClips.every((linkedClip) => (
+      nowIs3D === false && linkedClip.is3D !== true
+    ));
+    if (linkedClips.length > 0 && !wouldKeepSupportedParentSpace) {
+      log.warn('Cannot toggle 3D while it would invalidate motion parenting', {
+        clipId,
+        parentClipId: clip.parentClipId,
+        childClipIds: children.map((child) => child.id),
+        requestedSpace: nowIs3D ? '3d' : '2d',
+      });
+      return;
+    }
+
     set({
       clips: clips.map(c => {
         if (c.id !== clipId) return c;

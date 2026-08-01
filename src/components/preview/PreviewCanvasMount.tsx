@@ -24,6 +24,10 @@ import {
 } from './PreviewStatusOverlays';
 import { StoryboardAnimaticPreviewOverlay } from './storyboard/StoryboardAnimaticPreviewOverlay';
 import { MotionPathOverlay, type MotionPathOverlayProps } from './MotionPathOverlay';
+import {
+  MotionNullViewportOverlay,
+  type MotionNullViewportOverlayProps,
+} from './MotionNullViewportOverlay';
 
 interface PreviewCanvasMountProps {
   activeSharedSceneOverlayContent: boolean;
@@ -65,6 +69,7 @@ interface PreviewCanvasMountProps {
   maskNavigationMode: boolean;
   maskPanelActive: boolean;
   motionPathOverlayProps: Omit<MotionPathOverlayProps, 'width' | 'height'>;
+  motionNullViewportOverlayProps: Omit<MotionNullViewportOverlayProps, 'width' | 'height'>;
   overlayRef: React.RefObject<HTMLCanvasElement | null>;
   playbackWaiterVideoCount: number;
   previewCameraOverride: SceneCameraConfig | null;
@@ -166,6 +171,7 @@ export function PreviewCanvasMount({
   maskNavigationMode,
   maskPanelActive,
   motionPathOverlayProps,
+  motionNullViewportOverlayProps,
   overlayRef,
   playbackWaiterVideoCount,
   previewCameraOverride,
@@ -388,6 +394,28 @@ export function PreviewCanvasMount({
               pointerEvents: 'auto',
             }}
           />
+        )}
+
+        {isEngineReady && (
+          motionNullViewportOverlayProps.controller
+          || motionNullViewportOverlayProps.diagnostics.length > 0
+        ) && (
+          <div
+            className="preview-motion-null-overlay-host"
+            style={{
+              ...viewTransform,
+              position: 'absolute',
+              inset: 0,
+              zIndex: 20,
+              pointerEvents: 'none',
+            }}
+          >
+            <MotionNullViewportOverlay
+              width={canvasSize.width}
+              height={canvasSize.height}
+              {...motionNullViewportOverlayProps}
+            />
+          </div>
         )}
 
         {isEngineReady && motionPathOverlayProps.visible && (

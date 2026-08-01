@@ -2,7 +2,7 @@
 // Docs: https://docs.evolink.ai/en/api-manual/image-series/nanobanana/nanobanana-2-image-generate
 
 import { Logger } from './logger';
-import type { TextToImageParams } from './kieAiService';
+import type { TextToImageParams } from './aiGenerationContracts';
 import type {
   AccountInfo,
   GenerationReferenceMedia,

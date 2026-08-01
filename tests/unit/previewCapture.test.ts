@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
     readPixels: vi.fn(),
     getOutputDimensions: vi.fn(() => ({ width: 320, height: 180 })),
     getCaptureCanvas: vi.fn(),
+    requestRender: vi.fn(),
   },
 }));
 
@@ -12,7 +13,10 @@ vi.mock('../../src/services/render/renderHostPort', () => ({
   renderHostPort: mocks.renderHostPort,
 }));
 
-import { captureRenderHostFrame } from '../../src/services/aiTools/previewCapture';
+import {
+  captureRenderHostFrame,
+  captureStableRenderHostFrame,
+} from '../../src/services/aiTools/previewCapture';
 
 function createCanvas(dataUrl: string): HTMLCanvasElement {
   return {
@@ -79,5 +83,36 @@ describe('preview capture', () => {
       dataUrl: 'data:image/png;base64,dom',
     }));
     expect(mocks.renderHostPort.readPixels).not.toHaveBeenCalled();
+  });
+
+  it('waits until a newly edited frame repeats after the minimum observation window', async () => {
+    for (const dataUrl of [
+      'data:image/png;base64,partial',
+      'data:image/png;base64,partial',
+      'data:image/png;base64,complete',
+      'data:image/png;base64,complete',
+    ]) {
+      mocks.renderHostPort.getCaptureCanvas.mockReturnValueOnce({
+        canvas: createCanvas(dataUrl),
+        source: 'workerRenderHost:preview',
+      });
+    }
+
+    const result = await captureStableRenderHostFrame('dom', {
+      settleMs: 0,
+      pollIntervalMs: 1,
+      minimumStableWindowMs: 2,
+      maximumWaitMs: 10,
+    });
+
+    expect(result).toMatchObject({
+      attempts: 4,
+      stable: true,
+      capture: {
+        success: true,
+        dataUrl: 'data:image/png;base64,complete',
+      },
+    });
+    expect(mocks.renderHostPort.requestRender).toHaveBeenCalledTimes(4);
   });
 });

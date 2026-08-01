@@ -29,6 +29,7 @@ interface WorkerGpuVideoFrameDimensions {
 type WorkerGpuVideoFrameSource = VideoFrame | ImageBitmap;
 
 export interface WorkerGpuVideoFramePresentLayer {
+  readonly sourceId: string;
   readonly frame: WorkerGpuVideoFrameSource;
   readonly timestampSeconds?: number | null;
   readonly mediaTime?: number | null;
@@ -71,6 +72,27 @@ export interface WorkerGpuVideoFrameLayerPresentOptions extends WorkerGpuPresent
 }
 
 const layerPresenterResourcesBySurface = new WeakMap<WorkerGpuTargetSurface, WorkerGpuVideoFrameLayerPresenterResources>();
+
+/** Release transient layer-presenter textures when a Worker target detaches. */
+export function releaseWorkerGpuVideoFrameLayerPresenterResources(
+  surface: WorkerGpuTargetSurface,
+): void {
+  const resources = layerPresenterResourcesBySurface.get(surface);
+  if (!resources) return;
+  layerPresenterResourcesBySurface.delete(surface);
+  const textures = [resources.textureA, resources.textureB];
+  resources.textureA = null;
+  resources.textureB = null;
+  resources.width = 0;
+  resources.height = 0;
+  for (const texture of textures) {
+    try {
+      texture?.destroy();
+    } catch {
+      // Teardown must continue after one resource reports a cleanup failure.
+    }
+  }
+}
 
 const BITMAP_LAYER_COMPOSITE_SHADER = VIDEO_FRAME_LAYER_COMPOSITE_SHADER
   .replace(
@@ -387,6 +409,7 @@ export async function presentGpuVideoFrameLayers(
           format: 'rgba8unorm',
           usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING,
         });
+        uploadedBitmapTextures.push(bitmapTexture);
         surface.device.queue.copyExternalImageToTexture(
           { source: layer.frame },
           {
@@ -396,7 +419,6 @@ export async function presentGpuVideoFrameLayers(
           },
           { width: dimensions.width, height: dimensions.height },
         );
-        uploadedBitmapTextures.push(bitmapTexture);
         frameResource = bitmapTexture.createView();
       } else {
         frameResource = surface.device.importExternalTexture({

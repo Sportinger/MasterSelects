@@ -69,7 +69,7 @@ export function PrivacyDE() {
         Referenzen und technischen Metadaten an den jeweiligen Anbieter übermittelt. Abhängig von der gewählten Funktion
         sind Empfänger insbesondere <strong>OpenAI</strong>, <strong>Kie.ai</strong> und dessen ausgewählte Modell- oder
         Upload-Anbieter sowie <strong>ElevenLabs</strong>. Bei Verwendung eigener API-Schlüssel kann die Übermittlung direkt
-        aus Ihrem Browser unter anderem an OpenAI, Anthropic, AssemblyAI, Deepgram, PiAPI, Kie.ai, Evolink, ElevenLabs
+        aus Ihrem Browser unter anderem an OpenAI, Anthropic, AssemblyAI, Deepgram, PiAPI, Evolink, ElevenLabs
         oder die YouTube Data API erfolgen. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO; Sicherheits- und
         Missbrauchsprotokolle beruhen ergänzend auf Art. 6 Abs. 1 lit. f DSGVO.
       </p>

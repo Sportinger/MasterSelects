@@ -6,12 +6,22 @@ import {
   createMotionUniformArray,
 } from './MotionBuffers';
 import {
-  getMotionRenderSize,
   MOTION_RENDER_TEXTURE_FORMAT,
   type MotionClipGpuCache,
   type MotionRenderResult,
 } from './MotionTypes';
+import {
+  getMotionRenderSizeForAdmission,
+  type MotionFrameRuntimeAdmission,
+} from './MotionFrameRuntime';
 import { MotionPipeline } from './MotionPipeline';
+import { ReplicatorInstanceBufferState } from './replicator/instanceBufferState';
+import { planReplicatorSourceTexture } from './replicator/resourcePlanning';
+import {
+  MOTION_REPLICATOR_DEFAULT_MAX_BUFFER_CAPACITY,
+  MOTION_REPLICATOR_INSTANCE_BYTE_STRIDE,
+  MOTION_REPLICATOR_MIN_BUFFER_CAPACITY,
+} from './replicator/runtimeContracts';
 import {
   recordMotionRender,
   setMotionRendererCacheCount,
@@ -32,25 +42,73 @@ export class MotionRenderer {
   private device: GPUDevice;
   private pipeline: MotionPipeline;
   private caches = new Map<string, MotionClipGpuCache>();
+  private instanceBufferStates = new Map<string, ReplicatorInstanceBufferState>();
 
   constructor(device: GPUDevice) {
     this.device = device;
     this.pipeline = new MotionPipeline(device);
   }
 
-  renderLayer(layer: Layer, commandEncoder: GPUCommandEncoder): MotionRenderResult | null {
+  renderLayer(
+    layer: Layer,
+    commandEncoder: GPUCommandEncoder,
+    frameAdmission: MotionFrameRuntimeAdmission,
+  ): MotionRenderResult | null {
     const motion = layer.source?.motion;
     if (!isRenderableMotionShape(motion)) {
       return null;
     }
 
     const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    const size = getMotionRenderSize(motion);
-    const cache = this.getOrCreateCache(layer, size.width, size.height);
+    const size = getMotionRenderSizeForAdmission(layer, frameAdmission);
+    const maxTextureDimension2D = this.device.limits?.maxTextureDimension2D ?? 8192;
+    const texturePlan = planReplicatorSourceTexture({
+      sourceWidth: size.width,
+      sourceHeight: size.height,
+      strokePadding: 0,
+      maxTextureDimension2D,
+      maxTexturePixels: Math.min(
+        maxTextureDimension2D * maxTextureDimension2D,
+        64 * 1024 * 1024,
+      ),
+    });
+    if (!texturePlan.ok) {
+      throw new Error(texturePlan.diagnostics
+        .map((diagnostic) => `${diagnostic.code}: ${diagnostic.message}`)
+        .join('; '));
+    }
+    if (size.replicator.instanceCount === 0) {
+      return null;
+    }
+    const cache = this.getOrCreateCache(
+      layer,
+      size.width,
+      size.height,
+      size.replicator.instanceCount,
+    );
     const uniforms = createMotionUniformArray(motion, size);
     const instances = createMotionInstanceArray(size);
+    const cacheKey = this.getCacheKey(layer);
+    let instanceBufferState = this.instanceBufferStates.get(cacheKey);
+    if (!instanceBufferState) {
+      instanceBufferState = new ReplicatorInstanceBufferState();
+      this.instanceBufferStates.set(cacheKey, instanceBufferState);
+    }
+    const bufferUpdate = instanceBufferState.prepare(
+      size.replicator.cacheIdentity,
+      instances,
+      size.replicator.instanceCount,
+    );
     this.device.queue.writeBuffer(cache.uniformBuffer, 0, uniforms as GPUAllowSharedBufferSource);
-    this.device.queue.writeBuffer(cache.instanceBuffer, 0, instances as GPUAllowSharedBufferSource);
+    for (const range of bufferUpdate.dirtyRanges) {
+      const floatStart = range.byteOffset / Float32Array.BYTES_PER_ELEMENT;
+      const floatEnd = floatStart + range.byteLength / Float32Array.BYTES_PER_ELEMENT;
+      this.device.queue.writeBuffer(
+        cache.instanceBuffer,
+        range.byteOffset,
+        instances.subarray(floatStart, floatEnd) as GPUAllowSharedBufferSource,
+      );
+    }
 
     const pass = commandEncoder.beginRenderPass({
       label: 'motion-shape-render-pass',
@@ -71,8 +129,8 @@ export class MotionRenderer {
       layerId: layer.id,
       sourceClipId: layer.sourceClipId,
       instanceCount: size.replicator.instanceCount,
-      bufferUploads: 2,
-      bufferUploadBytes: uniforms.byteLength + instances.byteLength,
+      bufferUploads: 1 + bufferUpdate.dirtyRanges.length,
+      bufferUploadBytes: uniforms.byteLength + bufferUpdate.stats.uploadedBytes,
       encodeTimeMs: finishedAt - startedAt,
       renderedAt: Date.now(),
     });
@@ -90,6 +148,7 @@ export class MotionRenderer {
       cache.instanceBuffer.destroy();
     }
     this.caches.clear();
+    this.instanceBufferStates.clear();
     setMotionRendererCacheCount(0);
   }
 
@@ -97,10 +156,20 @@ export class MotionRenderer {
     return layer.sourceClipId ? `${layer.id}:${layer.sourceClipId}` : layer.id;
   }
 
-  private getOrCreateCache(layer: Layer, width: number, height: number): MotionClipGpuCache {
+  private getOrCreateCache(
+    layer: Layer,
+    width: number,
+    height: number,
+    requiredInstances: number,
+  ): MotionClipGpuCache {
     const key = this.getCacheKey(layer);
     const existing = this.caches.get(key);
-    if (existing && existing.width === width && existing.height === height) {
+    if (
+      existing
+      && existing.width === width
+      && existing.height === height
+      && existing.instanceCapacity >= requiredInstances
+    ) {
       return existing;
     }
 
@@ -110,6 +179,9 @@ export class MotionRenderer {
       existing.instanceBuffer.destroy();
       this.caches.delete(key);
     }
+
+    const instanceCapacity = resolveInstanceCapacity(requiredInstances);
+    this.instanceBufferStates.get(key)?.invalidate();
 
     const texture = this.device.createTexture({
       label: `motion-shape-texture-${key}`,
@@ -125,7 +197,7 @@ export class MotionRenderer {
     });
     const instanceBuffer = this.device.createBuffer({
       label: `motion-shape-instances-${key}`,
-      size: 4 * 4 * 100,
+      size: MOTION_REPLICATOR_INSTANCE_BYTE_STRIDE * instanceCapacity,
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
     });
     const bindGroup = this.device.createBindGroup({
@@ -137,9 +209,31 @@ export class MotionRenderer {
       }],
     });
 
-    const cache = { texture, view, uniformBuffer, instanceBuffer, bindGroup, width, height };
+    const cache = {
+      texture,
+      view,
+      uniformBuffer,
+      instanceBuffer,
+      bindGroup,
+      width,
+      height,
+      instanceCapacity,
+    };
     this.caches.set(key, cache);
     setMotionRendererCacheCount(this.caches.size);
     return cache;
   }
+}
+
+function resolveInstanceCapacity(requiredInstances: number): number {
+  if (
+    !Number.isSafeInteger(requiredInstances)
+    || requiredInstances < 0
+    || requiredInstances > MOTION_REPLICATOR_DEFAULT_MAX_BUFFER_CAPACITY
+  ) {
+    throw new RangeError('Motion Replicator instance count exceeds GPU buffer capacity');
+  }
+  let capacity = MOTION_REPLICATOR_MIN_BUFFER_CAPACITY;
+  while (capacity < requiredInstances) capacity *= 2;
+  return Math.min(capacity, MOTION_REPLICATOR_DEFAULT_MAX_BUFFER_CAPACITY);
 }

@@ -140,11 +140,13 @@ export function createHostedAgentK2FetchTransport(input: {
   async function terminalRequest(
     binding: HostedAgentK2BoundRequest,
     keepalive: boolean,
+    signal?: AbortSignal,
   ): Promise<void> {
     const response = await request(`${turnPath(binding.turnId)}/cancel`, {
       headers: boundHeaders(binding),
       keepalive,
       method: 'POST',
+      signal,
     });
     if (!response.ok) {
       throw responseError(response);
@@ -152,8 +154,8 @@ export function createHostedAgentK2FetchTransport(input: {
   }
 
   return {
-    async cancel(binding) {
-      await terminalRequest(binding, false);
+    async cancel({ signal, ...binding }) {
+      await terminalRequest(binding, false, signal);
     },
     async interrupt(binding) {
       await terminalRequest(binding, true);
@@ -171,7 +173,7 @@ export function createHostedAgentK2FetchTransport(input: {
       }
       return await response.json() as HostedAgentK2BatchPostResponse;
     },
-    async replayEvents({ afterEventId, ...binding }): Promise<HostedAgentK2EventReplay> {
+    async replayEvents({ afterEventId, signal, ...binding }): Promise<HostedAgentK2EventReplay> {
       const headers = boundHeaders(binding);
       headers.set('Accept', 'text/event-stream');
       if (afterEventId) {
@@ -180,7 +182,7 @@ export function createHostedAgentK2FetchTransport(input: {
       const response = await request(`${turnPath(binding.turnId)}/events`, {
         headers,
         method: 'GET',
-        signal: input.signal,
+        signal: signal ?? input.signal,
       });
       if (!response.ok) {
         throw responseError(response);

@@ -13,13 +13,11 @@ FlashBoard is the AI generation runtime behind the Media Panel's bottom-right pr
 FlashBoard is not a separate model backend. It is a composer/runtime layer on top of the existing AI services:
 
 - `piapi` for the PiAPI catalog
-- `kieai` for Kie.ai Kling 3.0, Seedance 2.0, Seedance 2.0 Fast, and Nano Banana 2
-- `cloud` for hosted Kling 3.0, hosted Seedance 2.0 / Fast, hosted Nano Banana 2, hosted ElevenLabs speech, and hosted Suno music
+- `cloud` for all Kie.ai-backed Kling, Seedance, Veo, Runway, image, Suno, and chat routes, plus hosted ElevenLabs speech
 - `elevenlabs` for lower-level development compatibility; the Media generator tray uses hosted speech
-- `suno` for lower-level development compatibility; the Media generator tray uses hosted Kie.ai-backed Suno generation
-- compact chat for prompt discussion and editor actions through hosted Kie.ai in production, with a personal Kie.ai key or local Lemonade available in non-production development; requests include the Media-chat system prompt, current timeline summary, and callable AI tools routed through the shared chat dispatcher. When an agent-kernel service is configured, mechanical editing requests are handled kernel-first before any provider call (see `docs/Features/Kernel-Client.md`)
+- compact chat for prompt discussion and editor actions through managed Kie.ai or local Lemonade; requests include the Media-chat system prompt, current timeline summary, and callable AI tools routed through the shared chat dispatcher. Managed Kie.ai chat requires a signed-in hosted session and enters the hosted agent kernel (see `docs/Features/Kernel-Client.md`)
 
-The Media Panel generator tray offers two collapsed launch actions: `Generate` opens the normal generation prompt, while `Chat` opens a separate chat prompt window with provider/model/temperature controls and reasoning effort for Kie.ai GPT models. The chat model menu includes GPT 5.6 Luna/Terra/Sol, GPT 5.5/5.4, Claude Opus 4.8, Claude Sonnet 5, and chat-only Claude Fable 5. The generator tray uses hosted Cloud entries for Kie.ai-backed media; local/BYO Kie.ai keys do not replace that generation path. `Generate` remains the only action that queues media generation.
+The Media Panel generator tray offers two collapsed launch actions: `Generate` opens the normal generation prompt, while `Chat` opens a separate chat prompt window with provider/model/temperature controls and reasoning effort for Kie.ai GPT models. The chat model menu includes GPT 5.6 Luna/Terra/Sol, GPT 5.5/5.4, Claude Opus 4.8, Claude Sonnet 5, and chat-only Claude Fable 5. The generator tray exposes Kie.ai-backed media only as hosted Cloud entries. `Generate` remains the only action that queues media generation.
 
 ---
 
@@ -74,17 +72,12 @@ Generation nodes can include:
 The composer uses the shared catalog from `FlashBoardModelCatalog`:
 
 - PiAPI video providers from the shared PiAPI catalog
-- Kie.ai Kling 3.0 video
-- Kie.ai Seedance 2.0 and Seedance 2.0 Fast video with image, video, and audio references, including audio-driven lip-sync reference mode
-- Kie.ai Veo 3.1 and Runway video generation
-- Kie.ai Topaz Video Upscale with required video reference input
-- Kie.ai Nano Banana 2, Nano Banana Pro, Imagen 4, GPT Image 2, Flux 2, Seedream 5 Lite, Flux Kontext, Recraft, and Topaz image generation/edit/utility entries
-- Cloud Kling 3.0 video
-- Cloud Seedance 2.0 and Seedance 2.0 Fast video with image, video, and audio references
-- Cloud Nano Banana 2 image generation
+- Hosted Cloud Kling 3.0 video
+- Hosted Cloud Seedance 2.0 and Seedance 2.0 Fast video with image, video, and audio references
+- Hosted Cloud Veo 3.1, Runway, and Topaz Video Upscale
+- Hosted Cloud Nano Banana, GPT Image, Flux, Seedream, Flux Kontext, Recraft, and Topaz image generation/edit/utility entries
 - Cloud ElevenLabs text-to-speech audio generation
-- Cloud Suno music generation
-- BYO catalog entries remain available for lower-level development compatibility, but the Media generator tray exposes the hosted Cloud path only
+- Cloud Suno music and sound generation
 
 The compact composer exposes the richer FlashBoard catalog.
 
@@ -96,7 +89,7 @@ The compact composer exposes the richer FlashBoard catalog.
 2. The store captures the current request on that node.
 3. `FlashBoardJobService` queues the node.
 4. The Media Panel queue renders a preview card with status and elapsed time while the job is queued or processing.
-5. Jobs run with a concurrency cap of 3 overall, but only 1 Kie.ai job at a time.
+5. Jobs run with a concurrency cap of 3 overall; hosted task creation is additionally paced at the Cloudflare boundary.
 6. The selected media service submits the remote task and polls until completion when the provider is asynchronous.
 7. ElevenLabs audio jobs create speech through `/api/ai/audio` and return an audio `File` without remote polling.
 8. Suno music and Suno Sounds jobs use Cloudflare `/api/ai/audio`, where the server calls Kie.ai with `KIEAI_API_KEY`, spends hosted credits, and polls the task. At Kie.ai `FIRST_SUCCESS`, every currently available Suno result is exposed in the running generation card with cover art and an inline player using `streamAudioUrl`. Polling continues until the full job completes.
@@ -116,7 +109,7 @@ Suno controls follow the provider request matrix. The composer shows the availab
 - the duration slider is available only for custom `V5_5` music and clamps whole seconds to Kie.ai's documented 10–360 second range
 - the small Magic Wand lives inside the active dark input: inside lyrics/song description for vocal modes and inside style for instrumental mode
 
-Image generation is handled alongside video generation. The code path resolves previewable reference images from media files, including thumbnails for video sources or a captured frame when needed. The compact composer also accepts media-panel image, video, and audio references through right-click or drag-and-drop; Kie.ai and Cloud Seedance jobs upload local files through Kie.ai file hosting and map them to provider-specific inputs such as Nano Banana `image_input`, Kling `kling_elements`, or Seedance multimodal reference URL arrays. Seedance 2.0 standard exposes 480p, 720p, and 1080p; Seedance 2.0 Fast exposes 480p and 720p. Both use `reference_audio_urls` for audio-driven sync. Because Kie.ai treats Seedance first/last-frame mode and multimodal reference mode as mutually exclusive, any Seedance request with generic references sends IN/OUT images as image references with prompt guidance instead of `first_frame_url` / `last_frame_url`.
+Image generation is handled alongside video generation. The code path resolves previewable reference images from media files, including thumbnails for video sources or a captured frame when needed. The compact composer accepts media-panel image, video, and audio references through right-click or drag-and-drop; hosted routes resolve and upload those inputs server-side into provider-specific fields such as Nano Banana `image_input`, Kling `kling_elements`, or Seedance multimodal reference URL arrays. Seedance 2.0 standard exposes 480p, 720p, and 1080p; Seedance 2.0 Fast exposes 480p and 720p. Both use `reference_audio_urls` for audio-driven sync. Because Kie.ai treats Seedance first/last-frame mode and multimodal reference mode as mutually exclusive, any Seedance request with generic references sends IN/OUT images as image references with prompt guidance instead of `first_frame_url` / `last_frame_url`.
 
 The composer wand has Seedance-specific prompt-refiner guidance. When Seedance is selected it asks the refiner to write concise cinematic motion, camera, continuity, and final-state instructions; preserve explicit REF labels; and treat audio references as performance, speech, mouth-shape, rhythm, or timing drivers rather than background music. Seedance reference-to-video mode sends `generate_audio: false` because Kie.ai treats multimodal reference audio as an input driver, not the native audio-generation switch. The composer therefore hides the `Sound` toggle for Seedance while REF media is attached; the audio card itself controls the timing. Seedance audio references are only valid when paired with at least one visual IN/REF image or video anchor.
 
@@ -145,8 +138,8 @@ Media Panel image, video, and audio files can also be dragged onto the prompt co
 The prompt tray uses the hosted Cloud path:
 
 - signed-in users see hosted Cloud models and hosted credit prices by default
-- personal Kie.ai keys do not switch the Media generator tray to BYO mode
-- production ignores personal provider keys for hosted AI generation/chat and uses Cloudflare secrets only
+- Kie.ai has no browser-stored key or direct client route
+- hosted AI generation/chat uses Cloudflare secrets only
 - matching Cloud models are selected and priced in MasterSelects credits
 
 Hosted generation requests are credit-backed and authenticated. There is no anonymous hosted generation path.

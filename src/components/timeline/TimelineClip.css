@@ -579,6 +579,132 @@
   pointer-events: auto;
 }
 
+/* Motion parenting controls live in the lightweight canvas interaction shell. */
+.clip-interaction-shell .shell-parenting-module {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  border-radius: 3px;
+  pointer-events: none;
+  transition: box-shadow 100ms ease, background-color 100ms ease;
+}
+
+.clip-interaction-shell .shell-parenting-module.drag-active {
+  pointer-events: auto;
+}
+
+.clip-interaction-shell .shell-parenting-module.target-valid {
+  background: color-mix(in srgb, #4fcf82 12%, transparent);
+  box-shadow: inset 0 0 0 2px #4fcf82;
+}
+
+.clip-interaction-shell .shell-parenting-module.target-blocked {
+  background: color-mix(in srgb, #ff6363 12%, transparent);
+  box-shadow: inset 0 0 0 2px #ff6363;
+}
+
+.clip-parenting-actions {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 18px;
+  padding: 1px 2px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 4px;
+  background: rgba(18, 20, 24, 0.82);
+  color: rgba(235, 240, 248, 0.82);
+  opacity: 0.45;
+  pointer-events: auto;
+  transition: opacity 100ms ease, border-color 100ms ease, color 100ms ease;
+}
+
+.clip-interaction-shell:hover .clip-parenting-actions,
+.clip-parenting-actions:focus-within,
+.clip-parenting-actions.has-parent,
+.clip-parenting-actions.dragging {
+  opacity: 1;
+}
+
+.clip-parenting-actions.dragging {
+  color: #66b9ff;
+  border-color: rgba(102, 185, 255, 0.75);
+}
+
+.clip-parenting-actions button {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  line-height: 1;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.clip-parenting-actions button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.clip-parenting-actions button:focus-visible {
+  outline: 2px solid #66b9ff;
+  outline-offset: 1px;
+}
+
+.clip-parenting-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.clip-parenting-actions .pick-whip-clear {
+  width: 15px;
+  color: rgba(255, 255, 255, 0.62);
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.pick-whip-drag-overlay.valid path,
+.pick-whip-drag-overlay.valid circle {
+  stroke: #4fcf82;
+}
+
+.pick-whip-drag-overlay.blocked path,
+.pick-whip-drag-overlay.blocked circle {
+  stroke: #ff6363;
+}
+
+.pick-whip-diagnostic {
+  position: fixed;
+  z-index: 10000;
+  max-width: 280px;
+  padding: 5px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  background: rgba(18, 20, 24, 0.94);
+  color: #d8dde5;
+  font-size: 11px;
+  line-height: 1.3;
+  pointer-events: none;
+}
+
+.pick-whip-diagnostic.valid {
+  border-color: #4fcf82;
+  color: #b9f4ce;
+}
+
+.pick-whip-diagnostic.blocked {
+  border-color: #ff6363;
+  color: #ffc0c0;
+}
+
 .timeline-canvas-clip-name-input {
   position: absolute;
   z-index: 40;

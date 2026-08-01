@@ -25,11 +25,14 @@ vi.mock('../../src/services/cloudApi', () => ({
 }));
 
 import { cloudAiService } from '../../src/services/cloudAiService';
+import { resetCreditCoordinatorForTests } from '../../src/services/credits/creditBalanceCoordinator';
 import { useAccountStore } from '../../src/stores/accountStore';
+import { useCreditActivityStore } from '../../src/stores/creditActivityStore';
 
 function createBillingSummary(creditBalance: number): BillingSummaryResponse {
   return {
     creditBalance,
+    creditMeterReference: Math.max(4500, creditBalance),
     entitlements: {},
     hostedAIEnabled: true,
     plan: {
@@ -65,6 +68,7 @@ function resetAccountStore(creditBalance = 200): void {
   useAccountStore.setState({
     billingSummary: createBillingSummary(creditBalance),
     creditBalance,
+    creditMeterReference: Math.max(4500, creditBalance),
     dialog: null,
     entitlements: {},
     error: null,
@@ -89,6 +93,7 @@ describe('cloudAiService billing sync', () => {
     createVideoMock.mockReset();
     videoCapabilitiesMock.mockReset();
     videoStatusMock.mockReset();
+    resetCreditCoordinatorForTests();
     resetAccountStore();
   });
 
@@ -207,6 +212,44 @@ describe('cloudAiService billing sync', () => {
 
     expect(useAccountStore.getState().creditBalance).toBe(154);
     expect(useAccountStore.getState().billingSummary?.creditBalance).toBe(154);
+    expect(useCreditActivityStore.getState().visualSettlements).toEqual([]);
+  });
+
+  it('animates a charged response once when it carries a stable credit mutation id', async () => {
+    createChatMock.mockResolvedValue({
+      creditBalance: 193,
+      creditMutationId: 'ledger-chat-1',
+      creditsCharged: 7,
+      data: { text: 'done' },
+      kind: 'ai.chat',
+      mode: 'hosted',
+      ok: true,
+      provider: 'openai',
+      requestId: 'req_charged',
+      status: 'completed',
+    });
+
+    await cloudAiService.createChatCompletion({
+      idempotencyKey: 'chat-request-1',
+      messages: [{ content: 'hello', role: 'user' }],
+      model: 'gpt-4.1-mini',
+    });
+
+    expect(useAccountStore.getState().creditBalance).toBe(193);
+    expect(useCreditActivityStore.getState().visualSettlements).toHaveLength(1);
+    expect(useCreditActivityStore.getState().terminalSummary).toMatchObject({
+      credits: 7,
+      status: 'completed',
+    });
+
+    await cloudAiService.createChatCompletion({
+      idempotencyKey: 'chat-request-1',
+      messages: [{ content: 'hello', role: 'user' }],
+      model: 'gpt-4.1-mini',
+    });
+
+    expect(useCreditActivityStore.getState().visualSettlements).toHaveLength(1);
+    expect(useCreditActivityStore.getState().terminalSummary?.credits).toBe(0);
   });
 
   it('keeps polling hosted video tasks through transient fetch failures', async () => {

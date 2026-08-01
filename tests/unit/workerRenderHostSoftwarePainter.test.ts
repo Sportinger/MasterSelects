@@ -92,6 +92,71 @@ describe('worker software painter', () => {
     vi.unstubAllGlobals();
   });
 
+  it('applies an adjustment to a snapshot of the lower accumulator', () => {
+    const scratchContext = {
+      ...baseContext(),
+      getImageData: vi.fn(() => ({
+        data: new Uint8ClampedArray([32, 64, 96, 255]),
+      })),
+      putImageData: vi.fn(),
+    };
+    class TestOffscreenCanvas {
+      readonly width: number;
+      readonly height: number;
+
+      constructor(width: number, height: number) {
+        this.width = width;
+        this.height = height;
+      }
+
+      getContext() {
+        return scratchContext;
+      }
+    }
+    vi.stubGlobal('OffscreenCanvas', TestOffscreenCanvas as unknown as typeof OffscreenCanvas);
+    const targetCanvas = { width: 1, height: 1 } as OffscreenCanvas;
+    const targetContext = {
+      ...baseContext(),
+      canvas: targetCanvas,
+      drawImage: vi.fn(),
+    };
+    const layer: WorkerRenderSoftwareFrame['layers'][number] = {
+      id: 'adjustment-brightness',
+      visible: true,
+      opacity: 0.5,
+      compositeOperation: 'screen',
+      filter: 'contrast(1.2)',
+      pixelEffects: { brightness: 0.2 },
+      geometry: {
+        position: { x: 0, y: 0 },
+        scale: { x: 1, y: 1 },
+        rotation: 0,
+        sourceRect: { x: 0, y: 0, width: 1, height: 1 },
+      },
+      source: { kind: 'adjustment' },
+    };
+
+    drawWorkerSoftwareLayer(
+      targetContext as unknown as OffscreenCanvasRenderingContext2D,
+      layer,
+      1,
+      1,
+    );
+
+    expect(scratchContext.drawImage).toHaveBeenCalledWith(targetCanvas, 0, 0, 1, 1);
+    expect(scratchContext.putImageData).toHaveBeenCalledOnce();
+    expect(targetContext.drawImage).toHaveBeenCalledWith(
+      expect.any(TestOffscreenCanvas),
+      0,
+      0,
+      1,
+      1,
+    );
+    expect(targetContext.globalAlpha).toBe(0.5);
+    expect(targetContext.globalCompositeOperation).toBe('screen');
+    expect(targetContext.filter).toBe('contrast(1.2)');
+  });
+
   it('applies rgb-split as channel offsets in the worker pixel pass', () => {
     const inputPixels = new Uint8ClampedArray([
       10, 20, 30, 255,

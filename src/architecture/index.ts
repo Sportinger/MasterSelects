@@ -5,6 +5,8 @@ export * from './gateRegistry';
 export * from './getStateAccessPolicy';
 export * from './highConflictOwnership';
 export * from './laneWriteManifest';
+export * from './motionDesignGateRegistry';
+export * from './motionDesignLaneWriteManifest';
 export * from './retiredPathLedger';
 export * from './storyboardGateRegistry';
 export * from './storyboardLaneWriteManifest';

@@ -1,11 +1,24 @@
 import type { Layer } from '../../core/types';
 import type { SceneCameraConfig } from '../../scene/types';
-import { getMotionRenderSize } from '../../motion/MotionTypes';
+import { applyMotionRenderPlacement } from '../../motion/MotionTypes';
+import {
+  createMotionFrameRuntimeAdmission,
+  describeMotionFrameRuntimeFailure,
+  getMotionDeviceMaxInstances,
+  getMotionDeviceTextureLimits,
+  getMotionRenderSizeForAdmission,
+  hasMotionFrameLayers,
+} from '../../motion/MotionFrameRuntime';
 import { useRenderTargetStore } from '../../../stores/renderTargetStore';
+import { useMediaStore } from '../../../stores/mediaStore';
 import type { RenderDeps } from '../RenderDispatcher';
 import type { PreviewFrameRecorder } from './dispatcherTelemetry';
 import { TargetPreviewLayerCollector } from './targetPreviewLayerCollector';
 import { calculateSourcePixelScale } from '../../../utils/sourcePixelScale';
+import type { RenderSurfaceFrameContext } from '../../../services/render/renderHostTypes';
+import { Logger } from '../../../services/logger';
+
+const log = Logger.create('TargetPreviewRenderer');
 
 interface TargetBuffers {
   device: GPUDevice;
@@ -98,7 +111,11 @@ export class TargetPreviewRenderer {
     this.releaseTargetBuffers(canvasId);
   }
 
-  renderToPreviewCanvas(canvasId: string, layers: Layer[]): void {
+  renderToPreviewCanvas(
+    canvasId: string,
+    layers: Layer[],
+    frameContext?: RenderSurfaceFrameContext,
+  ): void {
     const d = this.deps;
     if (d.isRecovering()) return;
 
@@ -148,22 +165,51 @@ export class TargetPreviewRenderer {
     }
 
     const commandEncoder = device.createCommandEncoder();
-    for (const data of layerData) {
+    const motionFrameLayers = layerData.map((data) => data.layer);
+    const motionFrameAdmission = hasMotionFrameLayers(motionFrameLayers)
+      ? createMotionFrameRuntimeAdmission({
+          consumer: 'target-preview',
+          compositionId: frameContext?.compositionId
+            ?? useMediaStore.getState().activeCompositionId
+            ?? 'timeline:active',
+          timelineTimeSeconds: frameContext?.timelineTimeSeconds
+            ?? this.getEffectiveTimelineTime(),
+          layers: motionFrameLayers,
+          deviceMaxInstances: getMotionDeviceMaxInstances(device),
+          ...getMotionDeviceTextureLimits(device),
+          allowSupersetReuse: true,
+        })
+      : undefined;
+    if (motionFrameAdmission && !motionFrameAdmission.ok) {
+      log.warn('Target Motion frame admission failed; affected Motion layers are hidden', {
+        canvasId,
+        failure: describeMotionFrameRuntimeFailure(motionFrameAdmission),
+      });
+    }
+    for (let index = layerData.length - 1; index >= 0; index -= 1) {
+      const data = layerData[index];
       if (data.layer.source?.type !== 'motion') continue;
-      const rendered = d.motionRenderer?.renderLayer(data.layer, commandEncoder);
-      const size = rendered ?? getMotionRenderSize(data.layer.source.motion);
+      if (!motionFrameAdmission?.ok) {
+        layerData.splice(index, 1);
+        continue;
+      }
+      const rendered = d.motionRenderer?.renderLayer(
+        data.layer,
+        commandEncoder,
+        motionFrameAdmission,
+      );
+      const size = rendered ?? getMotionRenderSizeForAdmission(data.layer, motionFrameAdmission);
+      data.layer = applyMotionRenderPlacement(data.layer, size);
       data.textureView = rendered?.textureView ?? null;
       data.sourceWidth = size.width;
       data.sourceHeight = size.height;
     }
 
-    let hasNestedComps = false;
     if (viewportOverride && d.nestedCompRenderer) {
       for (let i = layerData.length - 1; i >= 0; i--) {
         const data = layerData[i];
         const nested = data.layer.source?.nestedComposition;
         if (!nested) continue;
-        hasNestedComps = true;
         const view = d.nestedCompRenderer.preRender(
           nested.compositionId,
           nested.layers,
@@ -177,26 +223,40 @@ export class TargetPreviewRenderer {
           0,
           false,
           'preview',
+          motionFrameAdmission,
+          data.layer.id,
         );
         if (view) data.textureView = view;
         else layerData.splice(i, 1);
       }
     }
 
-    if (viewportOverride && localBuffers && d.compositor) {
+    if (d.compositor) {
+      const effectTempTexture = localBuffers?.effectTexture
+        ?? d.renderTargetManager.getEffectTempTexture()
+        ?? undefined;
+      const effectTempView = localBuffers?.effectView
+        ?? d.renderTargetManager.getEffectTempView()
+        ?? undefined;
+      const effectTempTexture2 = localBuffers?.effectTexture2
+        ?? d.renderTargetManager.getEffectTempTexture2()
+        ?? undefined;
+      const effectTempView2 = localBuffers?.effectView2
+        ?? d.renderTargetManager.getEffectTempView2()
+        ?? undefined;
       const result = d.compositor.composite(layerData, commandEncoder, {
         device,
         sampler: d.sampler,
-        pingView: localBuffers.pingView,
-        pongView: localBuffers.pongView,
+        pingView: indPingView,
+        pongView: indPongView,
         outputWidth: width,
         outputHeight: height,
         skipEffects: false,
-        effectTempTexture: localBuffers.effectTexture,
-        effectTempView: localBuffers.effectView,
-        effectTempTexture2: localBuffers.effectTexture2,
-        effectTempView2: localBuffers.effectView2,
-        motionTime: this.getEffectiveTimelineTime(),
+        effectTempTexture,
+        effectTempView,
+        effectTempTexture2,
+        effectTempView2,
+        motionTime: frameContext?.timelineTimeSeconds ?? this.getEffectiveTimelineTime(),
         particleQuality: 'preview',
       });
       const outputBindGroup = d.outputPipeline.createOutputBindGroup(
@@ -207,7 +267,6 @@ export class TargetPreviewRenderer {
       d.outputPipeline.renderToCanvas(commandEncoder, canvasContext, outputBindGroup);
       this.recordMainPreviewFrame('target-canvas', layerData);
       device.queue.submit([commandEncoder.finish()]);
-      if (hasNestedComps) d.nestedCompRenderer?.cleanupPendingTextures();
       return;
     }
 

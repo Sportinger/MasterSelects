@@ -1,6 +1,11 @@
 import { Logger } from '../logger';
 import { cloudApi } from '../cloudApi';
-import { useAccountStore } from '../../stores/accountStore';
+import {
+  applyConfirmedCreditUpdate,
+  beginCreditActivity,
+  endCreditActivity,
+  reconcileCreditBalance,
+} from '../credits/creditBalanceCoordinator';
 import type { TranscriptWord } from '../../types/clipMetadata';
 import { audioBufferToWav, decodeAudioBlob, splitAudioBuffer } from './audioPrep';
 import type { ClipTranscriptUpdate } from './artifactPersistence';
@@ -178,18 +183,20 @@ async function hostedTranscriptionSingleRequest(
   signal?: AbortSignal,
   chunkIndex?: number,
 ): Promise<TranscriptApiWord[]> {
+  const idempotencyKey = createHostedTranscriptionIdempotencyKey(
+    provider,
+    openAIVariant,
+    clipId,
+    requestId,
+    audioBlob,
+    language,
+    inPointOffset,
+    chunkIndex,
+  );
+  const activityId = `transcription:${requestId}`;
   const response = await cloudApi.ai.audio.transcription({
     action: 'transcription',
-    idempotencyKey: createHostedTranscriptionIdempotencyKey(
-      provider,
-      openAIVariant,
-      clipId,
-      requestId,
-      audioBlob,
-      language,
-      inPointOffset,
-      chunkIndex,
-    ),
+    idempotencyKey,
     params: {
       audioBase64: arrayBufferToBase64(await audioBlob.arrayBuffer()),
       fileName: 'audio.wav',
@@ -201,7 +208,22 @@ async function hostedTranscriptionSingleRequest(
   }, signal);
 
   if (typeof response.creditBalance === 'number') {
-    useAccountStore.getState().applyHostedCreditBalance(response.creditBalance);
+    if (
+      typeof response.creditsCharged === 'number'
+      && response.creditsCharged > 0
+      && response.creditMutationId
+    ) {
+      applyConfirmedCreditUpdate({
+        activityId,
+        balance: response.creditBalance,
+        credits: response.creditsCharged,
+        kind: 'debit',
+        mutationId: `debit:hosted:transcription:${response.creditMutationId}`,
+        source: 'hosted:transcription',
+      });
+    } else {
+      reconcileCreditBalance(response.creditBalance);
+    }
   }
 
   if (!response.ok) {
@@ -222,16 +244,16 @@ export function mapHostedTranscriptionWords(
     : mapOpenAIWords(rawWords, inPointOffset, startIndex);
 }
 
-export async function transcribeWithHostedProvider(
+async function runHostedProviderTranscription(
   provider: HostedTranscriptionProvider,
   clipId: string,
   audioBlob: Blob,
   language: string,
   inPointOffset: number,
   updateClipTranscript: TranscriptUpdater,
+  requestId: string,
   options?: TranscriptionRequestOptions,
 ): Promise<TranscriptWord[]> {
-  const requestId = createHostedTranscriptionRequestId();
   const providerName = provider === 'deepgram' ? 'Deepgram' : 'OpenAI Cloud';
   const openAIVariant = options?.openAIVariant ?? 'word-timestamps';
 
@@ -301,6 +323,41 @@ export async function transcribeWithHostedProvider(
   }
 
   return allWords;
+}
+
+export async function transcribeWithHostedProvider(
+  provider: HostedTranscriptionProvider,
+  clipId: string,
+  audioBlob: Blob,
+  language: string,
+  inPointOffset: number,
+  updateClipTranscript: TranscriptUpdater,
+  options?: TranscriptionRequestOptions,
+): Promise<TranscriptWord[]> {
+  const requestId = createHostedTranscriptionRequestId();
+  const activityId = `transcription:${requestId}`;
+  beginCreditActivity({
+    feature: 'AI transcription',
+    id: activityId,
+    targetId: 'flashboard-credit-activity-anchor',
+  });
+  try {
+    const words = await runHostedProviderTranscription(
+      provider,
+      clipId,
+      audioBlob,
+      language,
+      inPointOffset,
+      updateClipTranscript,
+      requestId,
+      options,
+    );
+    endCreditActivity({ id: activityId, status: 'completed' });
+    return words;
+  } catch (error) {
+    endCreditActivity({ id: activityId, status: options?.signal?.aborted ? 'canceled' : 'failed' });
+    throw error;
+  }
 }
 
 export function transcribeWithHostedOpenAI(

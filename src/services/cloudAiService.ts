@@ -1,9 +1,14 @@
 import { cloudApi, type CloudAiChatRequest, type CloudAiGatewayEnvelope, type CloudAiVideoRequest } from './cloudApi';
 import { resolveAiAccess, type AiAccessDecision, type AiAccessInput } from './aiAccess';
-import type { TextToImageParams } from './kieAiService';
-import type { SunoCreateMusicParams, SunoCreateSoundsParams, SunoMusicTask } from './sunoService';
-import { SUNO_PROVIDER_ID, SUNO_SOUNDS_PROVIDER_ID } from './sunoService';
-import { useAccountStore } from '../stores/accountStore';
+import type { TextToImageParams } from './aiGenerationContracts';
+import type { SunoCreateMusicParams, SunoCreateSoundsParams, SunoMusicTask } from './sunoContracts';
+import { SUNO_PROVIDER_ID, SUNO_SOUNDS_PROVIDER_ID } from './sunoContracts';
+import {
+  applyConfirmedCreditUpdate,
+  beginCreditActivity,
+  endCreditActivity,
+  reconcileCreditBalance,
+} from './credits/creditBalanceCoordinator';
 import {
   DEFAULT_ELEVENLABS_SPEECH_OUTPUT_FORMAT,
   ELEVENLABS_MP3_EXTENSION,
@@ -118,21 +123,77 @@ function getHostedTaskId(response: CloudAiGatewayEnvelope, errorMessage: string)
   return task.taskId;
 }
 
-function syncHostedCreditBalance(response: { creditBalance?: number | null }): void {
+interface HostedCreditEnvelopeLike {
+  creditBalance?: number | null;
+  creditMutationId?: string | null;
+  creditsCharged?: number | null;
+}
+
+function syncHostedCreditBalance(
+  response: HostedCreditEnvelopeLike,
+  input?: { activityId?: string; source?: string },
+): void {
   if (typeof response.creditBalance !== 'number' || !Number.isFinite(response.creditBalance)) {
     return;
   }
-
-  useAccountStore.getState().applyHostedCreditBalance(response.creditBalance);
+  const credits = typeof response.creditsCharged === 'number' && Number.isFinite(response.creditsCharged)
+    ? Math.max(0, Math.floor(response.creditsCharged))
+    : 0;
+  const creditMutationId = response.creditMutationId?.trim();
+  if (credits > 0 && creditMutationId) {
+    const source = input?.source ?? 'hosted:ai_gateway';
+    applyConfirmedCreditUpdate({
+      activityId: input?.activityId,
+      balance: response.creditBalance,
+      credits,
+      kind: 'debit',
+      mutationId: `debit:${source}:${creditMutationId}`,
+      source,
+    });
+    return;
+  }
+  reconcileCreditBalance(response.creditBalance);
 }
 
-function syncHostedCreditBalanceFromHeaders(headers: Headers): void {
+function syncHostedCreditBalanceFromHeaders(
+  headers: Headers,
+  input?: { activityId?: string; source?: string },
+): void {
   const creditBalance = Number(headers.get('X-MasterSelects-Credit-Balance'));
   if (!Number.isFinite(creditBalance)) {
     return;
   }
+  const credits = Number(headers.get('X-MasterSelects-Credits-Charged'));
+  const creditMutationId = headers.get('X-MasterSelects-Credit-Mutation-Id')?.trim();
+  if (Number.isFinite(credits) && credits > 0 && creditMutationId) {
+    const source = input?.source ?? 'hosted:binary';
+    applyConfirmedCreditUpdate({
+      activityId: input?.activityId,
+      balance: creditBalance,
+      credits,
+      kind: 'debit',
+      mutationId: `debit:${source}:${creditMutationId}`,
+      source,
+    });
+    return;
+  }
+  reconcileCreditBalance(creditBalance);
+}
 
-  useAccountStore.getState().applyHostedCreditBalance(creditBalance);
+function applyHostedRefund(refund: HostedAiRefundInfo | undefined, activityId?: string): void {
+  if (!refund) return;
+  if (refund.refunded && refund.ledgerEntryId) {
+    applyConfirmedCreditUpdate({
+      activityId,
+      balance: refund.creditBalance,
+      credits: refund.credits,
+      kind: 'refund',
+      mutationId: `refund:hosted:failed_task:${refund.ledgerEntryId}`,
+      source: 'refund:hosted:failed_task',
+    });
+    return;
+  }
+  reconcileCreditBalance(refund.creditBalance);
 }
 
 function normalizeHostedRefund(value: unknown): HostedAiRefundInfo | undefined {
@@ -181,6 +242,23 @@ function createHostedSunoIdempotencyKey(): string {
   return `hosted-suno:${Date.now()}:${crypto.randomUUID()}`;
 }
 
+function createHostedGenerationIdempotencyKey(): string {
+  return `hosted-generation:${Date.now()}:${crypto.randomUUID()}`;
+}
+
+const hostedTaskActivities = new Map<string, string>();
+
+function registerHostedTask(taskId: string, activityId: string): void {
+  hostedTaskActivities.set(taskId, activityId);
+}
+
+function finishHostedTask(taskId: string, status: 'completed' | 'failed'): void {
+  const activityId = hostedTaskActivities.get(taskId);
+  if (!activityId) return;
+  hostedTaskActivities.delete(taskId);
+  endCreditActivity({ id: activityId, status });
+}
+
 type CloudHostedReferenceMedia = NonNullable<NonNullable<CloudAiVideoRequest['params']>['referenceMedia']>;
 
 function serializeHostedReferenceMedia(
@@ -207,35 +285,63 @@ function serializeHostedReferenceMedia(
 
 export const cloudAiService = {
   async createChatCompletion(body: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> {
-    const response = await cloudApi.ai.chat.create(body as unknown as CloudAiChatRequest, signal);
-    syncHostedCreditBalance(response);
-    return response.data ?? response;
+    const idempotencyKey = typeof body.idempotencyKey === 'string' && body.idempotencyKey.trim()
+      ? body.idempotencyKey.trim()
+      : `hosted-chat:${Date.now()}:${crypto.randomUUID()}`;
+    const activityId = `chat:${idempotencyKey}`;
+    beginCreditActivity({ feature: 'AI chat', id: activityId, targetId: 'flashboard-credit-activity-anchor' });
+    try {
+      const response = await cloudApi.ai.chat.create({
+        ...body,
+        idempotencyKey,
+      } as unknown as CloudAiChatRequest, signal);
+      syncHostedCreditBalance(response, { activityId, source: 'hosted:ai_chat' });
+      endCreditActivity({ id: activityId, status: response.ok ? 'completed' : 'failed' });
+      return response.data ?? response;
+    } catch (error) {
+      endCreditActivity({ id: activityId, status: signal?.aborted ? 'canceled' : 'failed' });
+      throw error;
+    }
   },
   async createImageToVideo(params: ImageToVideoParams, idempotencyKey?: string): Promise<string> {
-    const response = await cloudApi.ai.video.create({
-      action: 'generate',
-      idempotencyKey,
-      params: {
-        aspectRatio: params.aspectRatio,
-        duration: params.duration,
-        endImageUrl: params.endImageUrl,
-        mode: params.mode,
-        multiPrompt: params.multiPrompt,
-        multiShots: params.multiShots,
-        prompt: params.prompt ?? '',
-        provider: params.provider,
-        referenceMedia: serializeHostedReferenceMedia(params.referenceMedia),
-        sound: params.sound,
-        startImageUrl: params.startImageUrl,
-      },
-    });
-    syncHostedCreditBalance(response);
-    return getHostedTaskId(response, 'Hosted video generation did not return a task id');
+    const requestKey = idempotencyKey ?? createHostedGenerationIdempotencyKey();
+    const activityId = `video:${requestKey}`;
+    beginCreditActivity({ feature: 'AI video', id: activityId, targetId: 'flashboard-credit-activity-anchor' });
+    try {
+      const response = await cloudApi.ai.video.create({
+        action: 'generate',
+        idempotencyKey: requestKey,
+        params: {
+          aspectRatio: params.aspectRatio,
+          duration: params.duration,
+          endImageUrl: params.endImageUrl,
+          mode: params.mode,
+          multiPrompt: params.multiPrompt,
+          multiShots: params.multiShots,
+          prompt: params.prompt ?? '',
+          provider: params.provider,
+          referenceMedia: serializeHostedReferenceMedia(params.referenceMedia),
+          sound: params.sound,
+          startImageUrl: params.startImageUrl,
+        },
+      });
+      syncHostedCreditBalance(response, { activityId, source: 'hosted:video' });
+      const taskId = getHostedTaskId(response, 'Hosted video generation did not return a task id');
+      registerHostedTask(taskId, activityId);
+      return taskId;
+    } catch (error) {
+      endCreditActivity({ id: activityId, status: 'failed' });
+      throw error;
+    }
   },
   async createTextToVideo(params: TextToVideoParams, idempotencyKey?: string): Promise<string> {
-    const response = await cloudApi.ai.video.create({
+    const requestKey = idempotencyKey ?? createHostedGenerationIdempotencyKey();
+    const activityId = `video:${requestKey}`;
+    beginCreditActivity({ feature: 'AI video', id: activityId, targetId: 'flashboard-credit-activity-anchor' });
+    try {
+      const response = await cloudApi.ai.video.create({
       action: 'generate',
-      idempotencyKey,
+      idempotencyKey: requestKey,
       params: {
         aspectRatio: params.aspectRatio,
         duration: params.duration,
@@ -247,14 +353,24 @@ export const cloudAiService = {
         referenceMedia: serializeHostedReferenceMedia(params.referenceMedia),
         sound: params.sound,
       },
-    });
-    syncHostedCreditBalance(response);
-    return getHostedTaskId(response, 'Hosted video generation did not return a task id');
+      });
+      syncHostedCreditBalance(response, { activityId, source: 'hosted:video' });
+      const taskId = getHostedTaskId(response, 'Hosted video generation did not return a task id');
+      registerHostedTask(taskId, activityId);
+      return taskId;
+    } catch (error) {
+      endCreditActivity({ id: activityId, status: 'failed' });
+      throw error;
+    }
   },
   async createTextToImage(params: TextToImageParams, idempotencyKey?: string): Promise<string> {
-    const response = await cloudApi.ai.video.create({
+    const requestKey = idempotencyKey ?? createHostedGenerationIdempotencyKey();
+    const activityId = `image:${requestKey}`;
+    beginCreditActivity({ feature: 'AI image', id: activityId, targetId: 'flashboard-credit-activity-anchor' });
+    try {
+      const response = await cloudApi.ai.video.create({
       action: 'generate',
-      idempotencyKey,
+      idempotencyKey: requestKey,
       params: {
         aspectRatio: params.aspectRatio,
         imageInputs: params.imageInputs,
@@ -265,9 +381,15 @@ export const cloudAiService = {
         provider: params.provider,
         resolution: params.resolution,
       },
-    });
-    syncHostedCreditBalance(response);
-    return getHostedTaskId(response, 'Hosted image generation did not return a task id');
+      });
+      syncHostedCreditBalance(response, { activityId, source: 'hosted:image' });
+      const taskId = getHostedTaskId(response, 'Hosted image generation did not return a task id');
+      registerHostedTask(taskId, activityId);
+      return taskId;
+    } catch (error) {
+      endCreditActivity({ id: activityId, status: 'failed' });
+      throw error;
+    }
   },
   async listElevenLabsModels(): Promise<ElevenLabsModel[]> {
     const response = await cloudApi.ai.audio.models();
@@ -288,71 +410,97 @@ export const cloudAiService = {
     idempotencyKey = createHostedAudioIdempotencyKey(),
     signal?: AbortSignal,
   ): Promise<ElevenLabsSpeechResult> {
-    const { blob, response } = await cloudApi.ai.audio.speech({
-      idempotencyKey,
-      params,
-    }, signal);
-    syncHostedCreditBalanceFromHeaders(response.headers);
+    const activityId = `speech:${idempotencyKey}`;
+    beginCreditActivity({ feature: 'AI speech', id: activityId, targetId: 'flashboard-credit-activity-anchor' });
+    try {
+      const { blob, response } = await cloudApi.ai.audio.speech({
+        idempotencyKey,
+        params,
+      }, signal);
+      syncHostedCreditBalanceFromHeaders(response.headers, { activityId, source: 'hosted:speech' });
 
-    const outputFormatHeader = response.headers.get('X-MasterSelects-Output-Format') ?? '';
-    const outputFormat = isElevenLabsMp3OutputFormat(outputFormatHeader)
-      ? outputFormatHeader
-      : params.outputFormat ?? DEFAULT_ELEVENLABS_SPEECH_OUTPUT_FORMAT;
+      const outputFormatHeader = response.headers.get('X-MasterSelects-Output-Format') ?? '';
+      const outputFormat = isElevenLabsMp3OutputFormat(outputFormatHeader)
+        ? outputFormatHeader
+        : params.outputFormat ?? DEFAULT_ELEVENLABS_SPEECH_OUTPUT_FORMAT;
 
-    return {
-      audio: blob,
-      mimeType: ELEVENLABS_MP3_MIME_TYPE,
-      extension: ELEVENLABS_MP3_EXTENSION,
-      outputFormat,
-      size: blob.size,
-    };
+      endCreditActivity({ id: activityId, status: 'completed' });
+      return {
+        audio: blob,
+        mimeType: ELEVENLABS_MP3_MIME_TYPE,
+        extension: ELEVENLABS_MP3_EXTENSION,
+        outputFormat,
+        size: blob.size,
+      };
+    } catch (error) {
+      endCreditActivity({ id: activityId, status: signal?.aborted ? 'canceled' : 'failed' });
+      throw error;
+    }
   },
   async createSunoMusic(
     params: SunoCreateMusicParams,
     idempotencyKey = createHostedSunoIdempotencyKey(),
     signal?: AbortSignal,
   ): Promise<string> {
-    const response = await cloudApi.ai.audio.music({
-      action: 'music',
-      idempotencyKey,
-      params: {
-        audioWeight: params.audioWeight,
-        customMode: params.customMode,
-        duration: params.duration,
-        instrumental: params.instrumental,
-        model: params.model,
-        negativeTags: params.negativeTags,
-        outputType: 'audio',
-        prompt: params.prompt ?? '',
-        provider: SUNO_PROVIDER_ID,
-        style: params.style,
-        styleWeight: params.styleWeight,
-        title: params.title,
-        vocalGender: params.vocalGender,
-        weirdnessConstraint: params.weirdnessConstraint,
-      },
-    }, signal);
-    syncHostedCreditBalance(response);
-    return getHostedTaskId(response, 'Hosted Suno generation did not return a task id');
+    const activityId = `music:${idempotencyKey}`;
+    beginCreditActivity({ feature: 'AI music', id: activityId, targetId: 'flashboard-credit-activity-anchor' });
+    try {
+      const response = await cloudApi.ai.audio.music({
+        action: 'music',
+        idempotencyKey,
+        params: {
+          audioWeight: params.audioWeight,
+          customMode: params.customMode,
+          duration: params.duration,
+          instrumental: params.instrumental,
+          model: params.model,
+          negativeTags: params.negativeTags,
+          outputType: 'audio',
+          prompt: params.prompt ?? '',
+          provider: SUNO_PROVIDER_ID,
+          style: params.style,
+          styleWeight: params.styleWeight,
+          title: params.title,
+          vocalGender: params.vocalGender,
+          weirdnessConstraint: params.weirdnessConstraint,
+        },
+      }, signal);
+      syncHostedCreditBalance(response, { activityId, source: 'hosted:music' });
+      const taskId = getHostedTaskId(response, 'Hosted Suno generation did not return a task id');
+      registerHostedTask(taskId, activityId);
+      return taskId;
+    } catch (error) {
+      endCreditActivity({ id: activityId, status: signal?.aborted ? 'canceled' : 'failed' });
+      throw error;
+    }
   },
   async createSunoSounds(
     params: SunoCreateSoundsParams,
     idempotencyKey = createHostedSunoIdempotencyKey(),
     signal?: AbortSignal,
   ): Promise<string> {
-    const response = await cloudApi.ai.audio.music({
-      action: 'sound',
-      idempotencyKey,
-      params: {
-        model: params.model,
-        outputType: 'audio',
-        prompt: params.prompt,
-        provider: SUNO_SOUNDS_PROVIDER_ID,
-        soundLoop: params.soundLoop,
-      },
-    }, signal);
-    syncHostedCreditBalance(response);
-    return getHostedTaskId(response, 'Hosted Suno Sounds generation did not return a task id');
+    const activityId = `sound:${idempotencyKey}`;
+    beginCreditActivity({ feature: 'AI sound', id: activityId, targetId: 'flashboard-credit-activity-anchor' });
+    try {
+      const response = await cloudApi.ai.audio.music({
+        action: 'sound',
+        idempotencyKey,
+        params: {
+          model: params.model,
+          outputType: 'audio',
+          prompt: params.prompt,
+          provider: SUNO_SOUNDS_PROVIDER_ID,
+          soundLoop: params.soundLoop,
+        },
+      }, signal);
+      syncHostedCreditBalance(response, { activityId, source: 'hosted:sound' });
+      const taskId = getHostedTaskId(response, 'Hosted Suno Sounds generation did not return a task id');
+      registerHostedTask(taskId, activityId);
+      return taskId;
+    } catch (error) {
+      endCreditActivity({ id: activityId, status: signal?.aborted ? 'canceled' : 'failed' });
+      throw error;
+    }
   },
   async getSunoMusicTaskStatus(taskId: string): Promise<SunoMusicTask> {
     const response = await cloudApi.ai.audio.musicStatus(taskId);
@@ -368,15 +516,21 @@ export const cloudAiService = {
       status?: SunoMusicTask['status'];
     } | null;
 
+    const refund = normalizeHostedRefund(task?.refund);
+    applyHostedRefund(refund, hostedTaskActivities.get(taskId));
+    const status = task?.status ?? 'pending';
+    if (status === 'completed' || status === 'failed') {
+      finishHostedTask(taskId, status);
+    }
     return {
       completedAt: task?.completedAt ? new Date(task.completedAt) : undefined,
       createdAt: task?.createdAt ? new Date(task.createdAt) : new Date(),
       error: task?.error,
       id: task?.id ?? taskId,
       progress: task?.progress,
-      refund: normalizeHostedRefund(task?.refund),
+      refund,
       results: task?.results,
-      status: task?.status ?? 'pending',
+      status,
     };
   },
   async pollSunoMusicTaskUntilComplete(
@@ -390,6 +544,11 @@ export const cloudAiService = {
 
     while (Date.now() - startTime < timeout) {
       if (signal?.aborted) {
+        const activityId = hostedTaskActivities.get(taskId);
+        if (activityId) {
+          hostedTaskActivities.delete(taskId);
+          endCreditActivity({ id: activityId, status: 'canceled' });
+        }
         throw new Error('Canceled');
       }
 
@@ -403,6 +562,7 @@ export const cloudAiService = {
       await new Promise((resolve) => setTimeout(resolve, pollInterval));
     }
 
+    finishHostedTask(taskId, 'failed');
     throw new Error('Suno task timed out after 15 minutes');
   },
   access: {
@@ -422,12 +582,22 @@ export const cloudAiService = {
         };
       }
 
-      const response = await cloudApi.ai.chat.create(body);
-      syncHostedCreditBalance(response);
-      return {
-        decision,
-        response,
-      };
+      const idempotencyKey = body.idempotencyKey?.trim()
+        || `hosted-chat:${Date.now()}:${crypto.randomUUID()}`;
+      const activityId = `chat:${idempotencyKey}`;
+      beginCreditActivity({ feature: 'AI chat', id: activityId, targetId: 'flashboard-credit-activity-anchor' });
+      try {
+        const response = await cloudApi.ai.chat.create({ ...body, idempotencyKey });
+        syncHostedCreditBalance(response, { activityId, source: 'hosted:ai_chat' });
+        endCreditActivity({ id: activityId, status: response.ok ? 'completed' : 'failed' });
+        return {
+          decision,
+          response,
+        };
+      } catch (error) {
+        endCreditActivity({ id: activityId, status: 'failed' });
+        throw error;
+      }
     },
     stream(body: CloudAiChatRequest, access: AiAccessInput = { feature: 'chat' }): Promise<Response> | null {
       const decision = planAiAccess('chat', access);
@@ -465,12 +635,27 @@ export const cloudAiService = {
         };
       }
 
-      const response = await cloudApi.ai.video.create(body);
-      syncHostedCreditBalance(response);
-      return {
-        decision,
-        response,
-      };
+      const idempotencyKey = body.idempotencyKey?.trim()
+        || createHostedGenerationIdempotencyKey();
+      const activityId = `generation:${idempotencyKey}`;
+      beginCreditActivity({ feature: 'AI generation', id: activityId, targetId: 'flashboard-credit-activity-anchor' });
+      try {
+        const response = await cloudApi.ai.video.create({ ...body, idempotencyKey });
+        syncHostedCreditBalance(response, { activityId, source: 'hosted:generation' });
+        const task = response.data as { taskId?: string } | null;
+        if (response.ok && task?.taskId) {
+          registerHostedTask(task.taskId, activityId);
+        } else {
+          endCreditActivity({ id: activityId, status: 'failed' });
+        }
+        return {
+          decision,
+          response,
+        };
+      } catch (error) {
+        endCreditActivity({ id: activityId, status: 'failed' });
+        throw error;
+      }
     },
     async status(taskId: string, access: AiAccessInput = { feature: 'video' }): Promise<CloudAiDispatchResult<CloudAiGatewayEnvelope>> {
       const decision = planAiAccess('video', access);
@@ -484,6 +669,12 @@ export const cloudAiService = {
 
       const response = await cloudApi.ai.video.status(taskId);
       syncHostedCreditBalance(response);
+      const task = response.data as { refund?: unknown; status?: TaskStatus } | null;
+      const refund = normalizeHostedRefund(task?.refund);
+      applyHostedRefund(refund, hostedTaskActivities.get(taskId));
+      if (task?.status === 'completed' || task?.status === 'failed') {
+        finishHostedTask(taskId, task.status);
+      }
       return {
         decision,
         response,
@@ -527,6 +718,11 @@ export const cloudAiService = {
     const imageUrl = status === 'completed' ? getHostedTaskDownloadUrl(id, rawImageUrl) : rawImageUrl;
     const videoUrl = status === 'completed' ? getHostedTaskDownloadUrl(id, rawVideoUrl) : rawVideoUrl;
 
+    const refund = normalizeHostedRefund(task?.refund);
+    applyHostedRefund(refund, hostedTaskActivities.get(taskId));
+    if (status === 'completed' || status === 'failed') {
+      finishHostedTask(taskId, status);
+    }
     return {
       completedAt: task?.completedAt ? new Date(task.completedAt) : undefined,
       createdAt: task?.createdAt ? new Date(task.createdAt) : new Date(),
@@ -534,7 +730,7 @@ export const cloudAiService = {
       id,
       imageUrl,
       progress,
-      refund: normalizeHostedRefund(task?.refund),
+      refund,
       status,
       videoUrl,
     };
@@ -574,6 +770,7 @@ export const cloudAiService = {
       await new Promise((resolve) => setTimeout(resolve, pollInterval));
     }
 
+    finishHostedTask(taskId, 'failed');
     throw new Error('Task timed out after 10 minutes');
   },
   setApiKey(): void {

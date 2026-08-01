@@ -37,7 +37,8 @@ struct MotionUniforms {
 @vertex
 fn vertexMain(
   @builtin(vertex_index) vertexIndex: u32,
-  @location(0) instanceData: vec4f
+  @location(0) instanceMatrix: vec4f,
+  @location(1) instanceTransform: vec4f
 ) -> VertexOutput {
   var uvs = array<vec2f, 6>(
     vec2f(0.0, 1.0),
@@ -53,7 +54,10 @@ fn vertexMain(
   let outputSize = max(motion.data0.zw, vec2f(1.0));
   let drawSize = shapeSize + vec2f(max(0.0, motion.data1.w) * 2.0);
   let localPoint = (uv - vec2f(0.5)) * drawSize;
-  let outputPoint = localPoint + instanceData.xy;
+  let outputPoint = vec2f(
+    instanceMatrix.x * localPoint.x + instanceMatrix.y * localPoint.y,
+    instanceMatrix.z * localPoint.x + instanceMatrix.w * localPoint.y
+  ) + instanceTransform.xy;
 
   var output: VertexOutput;
   output.position = vec4f(
@@ -63,7 +67,7 @@ fn vertexMain(
     1.0
   );
   output.localPoint = localPoint;
-  output.instanceOpacity = instanceData.z;
+  output.instanceOpacity = instanceTransform.z;
   return output;
 }
 

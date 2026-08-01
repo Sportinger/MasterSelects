@@ -1,8 +1,7 @@
-export type HostedGatewayMode = 'hosted' | 'byo';
+export type HostedGatewayMode = 'hosted';
 export type HostedGatewayKind = 'ai.audio' | 'ai.chat' | 'ai.video';
 export type HostedGatewayStatus =
   | 'accepted'
-  | 'byo_required'
   | 'completed'
   | 'error'
   | 'queued'
@@ -25,9 +24,9 @@ export interface HostedGatewaySession {
 }
 
 export interface HostedGatewayEnvelope<TData = unknown> {
-  byoRequired?: boolean;
   capability?: Record<string, unknown>;
   creditBalance?: number | null;
+  creditMutationId?: string | null;
   creditsCharged?: number | null;
   data?: TData | null;
   error?: HostedGatewayError | null;

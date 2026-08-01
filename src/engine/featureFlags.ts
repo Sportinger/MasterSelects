@@ -3,7 +3,6 @@
 // Toggle at runtime via: window.__ENGINE_FLAGS__
 
 export const flags = {
-  useRenderGraph: false,  // Render Graph executor (stubs - not ready)
   useDecoderPool: false,  // Shared decoder pool (not wired yet)
   useFullWebCodecsPlayback: false,  // Default HTML Video; persisted toggle in settingsStore syncs on rehydrate
   disableHtmlPreviewFallback: false,  // Synced with useFullWebCodecsPlayback via settingsStore

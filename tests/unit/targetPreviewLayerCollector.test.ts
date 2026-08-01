@@ -26,6 +26,35 @@ describe('TargetPreviewLayerCollector', () => {
     }]);
   });
 
+  it('keeps textureless motion adjustments in bottom-to-top stack order', () => {
+    const collector = new TargetPreviewLayerCollector({} as RenderDeps);
+    const makeLayer = (id: string, type: 'model' | 'motion-adjustment') => ({
+      id,
+      visible: true,
+      opacity: 1,
+      source: type === 'motion-adjustment'
+        ? { type, intrinsicWidth: 1280, intrinsicHeight: 720 }
+        : { type },
+    }) as Layer;
+    const result = collector.collect([
+      makeLayer('top', 'model'),
+      makeLayer('adjustment', 'motion-adjustment'),
+      makeLayer('bottom', 'model'),
+    ]);
+
+    expect(result.map((entry) => entry.layer.id)).toEqual([
+      'bottom',
+      'adjustment',
+      'top',
+    ]);
+    expect(result[1]).toMatchObject({
+      textureView: null,
+      externalTexture: null,
+      sourceWidth: 1280,
+      sourceHeight: 720,
+    });
+  });
+
   it('holds a cached scrub frame while the video element has metadata only', () => {
     useTimelineStore.setState({ isDraggingPlayhead: true, isPlaying: false });
     const cachedFrame = { view: { label: 'cached-frame' }, mediaTime: 2 };

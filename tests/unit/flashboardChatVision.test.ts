@@ -9,11 +9,23 @@ import { handleGetFramesAtTimes } from '../../src/services/aiTools/handlers/prev
 
 const mocks = vi.hoisted(() => ({
   executeAIToolCalls: vi.fn(),
+  getTimelineRevision: vi.fn(() => 0),
+  handleCaptureFrame: vi.fn(),
 }));
 
 vi.mock('../../src/services/aiTools', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../src/services/aiTools')>(),
   executeAIToolCalls: mocks.executeAIToolCalls,
+}));
+
+vi.mock('../../src/stores/timeline/revisionMiddleware', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../src/stores/timeline/revisionMiddleware')>(),
+  getTimelineRevision: mocks.getTimelineRevision,
+}));
+
+vi.mock('../../src/services/aiTools/handlers/preview', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../src/services/aiTools/handlers/preview')>(),
+  handleCaptureFrame: mocks.handleCaptureFrame,
 }));
 
 const DATA_URL = 'data:image/png;base64,iVBORw0KGgo=';
@@ -31,6 +43,13 @@ function mockCapturedFrame(): void {
 describe('FlashBoard compact-chat vision follow-ups', () => {
   beforeEach(() => {
     mockCapturedFrame();
+    mocks.getTimelineRevision.mockReset();
+    mocks.getTimelineRevision.mockReturnValue(0);
+    mocks.handleCaptureFrame.mockReset();
+    mocks.handleCaptureFrame.mockResolvedValue({
+      success: true,
+      data: { capturedAt: 0, dataUrl: DATA_URL, height: 180, width: 320 },
+    });
   });
 
   afterEach(() => {
@@ -78,37 +97,7 @@ describe('FlashBoard compact-chat vision follow-ups', () => {
     expect(mocks.executeAIToolCalls).not.toHaveBeenCalled();
   });
 
-  it('sends captured pixels through every cloud vision payload', async () => {
-    const executedToolCalls: unknown[] = [];
-    const kieFetch = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        output: [{ type: 'function_call', call_id: 'capture-1', name: 'captureFrame', arguments: '{"time":2}' }],
-      }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        output: [{ type: 'message', content: [{ type: 'output_text', text: 'A person enters the room.' }] }],
-      }), { status: 200 }));
-    vi.stubGlobal('fetch', kieFetch);
-
-    await sendFlashBoardChatMessage({
-      kieAiApiKey: 'kie-test',
-      model: 'gpt-5-6-luna',
-      onExecutedToolCalls: (toolCalls) => executedToolCalls.push(...toolCalls),
-      prompt: 'What happens?',
-      provider: 'kie',
-      temperature: 0.7,
-    });
-
-    const responsesProxyBody = JSON.parse(String(kieFetch.mock.calls[1]?.[1]?.body));
-    expect(responsesProxyBody.body.input).toEqual(expect.arrayContaining([expect.objectContaining({
-      role: 'user',
-      content: expect.arrayContaining([{
-        type: 'input_image',
-        image_url: DATA_URL,
-        detail: 'high',
-      }]),
-    })]));
-    expect(JSON.stringify(executedToolCalls)).not.toContain(DATA_URL);
-
+  it('sends captured pixels through the hosted vision payload', async () => {
     let hostedTurnId = '';
     const hostedSessionId = 'vision-session';
     let replayCount = 0;
@@ -149,7 +138,7 @@ describe('FlashBoard compact-chat vision follow-ups', () => {
       const events = replayCount === 1 ? [{
         acceptedHistoryFormatVersion: 'flashboard-provider-history-v1',
         acceptedPromptVersion: 'flashboard-chat-v2',
-        acceptedToolSchemaVersion: 'flashboard-chat-tools-v1',
+        acceptedToolSchemaVersion: 'flashboard-chat-tools-v2',
         eventId: '1',
         kind: 'session-ready',
         maximumIterations: 400,
@@ -163,7 +152,7 @@ describe('FlashBoard compact-chat vision follow-ups', () => {
         sequence: 0,
         sessionId: hostedSessionId,
         toolCalls: [{ args: { time: 2 }, toolCallId: 'capture-1', toolName: 'captureFrame' }],
-        toolSchemaVersion: 'flashboard-chat-tools-v1',
+        toolSchemaVersion: 'flashboard-chat-tools-v2',
         turnId: hostedTurnId,
       }] : [{
         creditsCharged: 1,
@@ -203,37 +192,108 @@ describe('FlashBoard compact-chat vision follow-ups', () => {
       ],
       role: 'user',
     }]);
-    expect(hostedToolBody.results[0].providerContent.claudeToolResultContent).toEqual(
-      expect.arrayContaining([{
-        source: { data: 'iVBORw0KGgo=', media_type: 'image/png', type: 'base64' },
-        type: 'image',
-      }]),
+    expect(hostedToolBody.results[0].providerContent).not.toHaveProperty(
+      'claudeToolResultContent',
     );
 
-    const anthropicFetch = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        content: [{ type: 'tool_use', id: 'capture-1', name: 'captureFrame', input: { time: 2 } }],
-      }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        content: [{ type: 'text', text: 'A person enters the room.' }],
-      }), { status: 200 }));
-    vi.stubGlobal('fetch', anthropicFetch);
+  });
+
+  it('adds one automatic preview after a mutating batch without a requested capture tool', async () => {
+    mocks.executeAIToolCalls.mockResolvedValue([{
+      id: 'mutate-1',
+      result: { success: true, data: { clipId: 'text-1' } },
+    }]);
+    mocks.getTimelineRevision.mockReturnValueOnce(10).mockReturnValue(11);
+    let hostedTurnId = '';
+    let replayCount = 0;
+    const hostedFetch = vi.fn(async (requestInfo: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(requestInfo);
+      if (url === '/api/kernel/hosted-agent/turns') {
+        const request = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        hostedTurnId = String(request.turnId);
+        return new Response(JSON.stringify({
+          acceptedHistoryFormatVersion: request.historyFormatVersion,
+          acceptedPromptVersion: request.promptVersion,
+          acceptedToolSchemaVersion: request.toolSchemaVersion,
+          eventsPath: `/api/kernel/hosted-agent/turns/${hostedTurnId}/events`,
+          maximumIterations: 400,
+          maximumSpendCredits: 500,
+          pageLease: {
+            expiresAt: '2026-07-31T12:05:00.000Z',
+            leaseToken: 'vision-lease',
+            sessionId: 'automatic-vision-session',
+          },
+          protocolVersion: 'hosted-agent-k2-v1',
+          replayed: false,
+          route: 'fast-agent',
+          sessionId: 'automatic-vision-session',
+          turnId: hostedTurnId,
+        }), { status: 202 });
+      }
+      if (url.endsWith('/tool-results')) {
+        return new Response(JSON.stringify({
+          accepted: true,
+          duplicate: false,
+          sequence: 0,
+          sessionId: 'automatic-vision-session',
+          turnId: hostedTurnId,
+        }), { status: 200 });
+      }
+      replayCount += 1;
+      const events = replayCount === 1 ? [{
+        acceptedHistoryFormatVersion: 'flashboard-provider-history-v1',
+        acceptedPromptVersion: 'flashboard-chat-v2',
+          acceptedToolSchemaVersion: 'flashboard-chat-tools-v2',
+        eventId: '1',
+        kind: 'session-ready',
+        maximumIterations: 400,
+        maximumSpendCredits: 500,
+        sessionId: 'automatic-vision-session',
+        turnId: hostedTurnId,
+      }, {
+        eventId: '2',
+        kind: 'tool-batch-request',
+        roundIndex: 0,
+        sequence: 0,
+        sessionId: 'automatic-vision-session',
+        toolCalls: [{ args: { text: 'Title' }, toolCallId: 'mutate-1', toolName: 'createTextClip' }],
+        toolSchemaVersion: 'flashboard-chat-tools-v2',
+        turnId: hostedTurnId,
+      }] : [{
+        creditsCharged: 1,
+        eventId: '3',
+        kind: 'turn-complete',
+        message: 'Done.',
+        rounds: 2,
+        sessionId: 'automatic-vision-session',
+        turnId: hostedTurnId,
+      }];
+      return new Response(events.map(event => (
+        `id: ${event.eventId}\nevent: ${event.kind}\ndata: ${JSON.stringify(event)}\n\n`
+      )).join(''), {
+        headers: { 'Content-Type': 'text/event-stream' },
+        status: 200,
+      });
+    });
+    vi.stubGlobal('fetch', hostedFetch);
 
     await sendFlashBoardChatMessage({
-      kieAiApiKey: 'kie-test',
-      model: 'claude-opus-4-8',
-      prompt: 'What happens?',
+      hostedAvailable: true,
+      model: 'gpt-5-6-luna',
+      prompt: 'Create a title.',
       provider: 'kie',
       temperature: 0.7,
     });
 
-    const anthropicProxyBody = JSON.parse(String(anthropicFetch.mock.calls[1]?.[1]?.body));
-    expect(anthropicProxyBody.body.messages.at(-1)?.content[0]).toEqual(expect.objectContaining({
-      type: 'tool_result',
-      content: expect.arrayContaining([{
-        type: 'image',
-        source: { type: 'base64', media_type: 'image/png', data: 'iVBORw0KGgo=' },
-      }]),
-    }));
+    expect(mocks.handleCaptureFrame).toHaveBeenCalledTimes(1);
+    const hostedToolBody = JSON.parse(String(hostedFetch.mock.calls[2]?.[1]?.body));
+    expect(hostedToolBody.results[0].providerContent.openAiFollowupInput[0].content)
+      .toEqual([
+        {
+          text: 'Automatic post-edit preview after this tool batch. This current frame is valid visual evidence; do not call captureFrame again unless you need another time or the image reveals a problem:',
+          type: 'input_text',
+        },
+        { detail: 'high', image_url: DATA_URL, type: 'input_image' },
+      ]);
   });
 });

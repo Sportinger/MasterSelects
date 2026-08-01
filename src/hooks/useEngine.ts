@@ -160,9 +160,13 @@ export function useEngine() {
 
         if (!hasVisualRenderDemand) {
           if (!lastNoDemandFrameWasCleared) {
-            renderScheduler.setActiveCompLayers([]);
+            const frameContext = {
+              compositionId: useMediaStore.getState().activeCompositionId ?? 'timeline:active',
+              timelineTimeSeconds: currentPlayhead,
+            };
+            renderScheduler.setActiveCompLayers([], frameContext);
             const renderStart = performance.now();
-            renderHostPort.render([]);
+            renderHostPort.render([], frameContext);
             renderMs += performance.now() - renderStart;
             lastNoDemandFrameWasCleared = true;
           }
@@ -205,15 +209,19 @@ export function useEngine() {
           return;
         }
 
-        // Build layers directly from stores (single source of truth)
+        // Build layers directly from stores (single source of truth). Lock the
+        // already sampled producer time into one context: playback's wall clock
+        // may advance while this frame is assembled, but all consumers below
+        // must describe the same evaluated instant.
+        const layerFrameContext = layerBuilder.captureFrameContext(currentPlayhead);
         const syncVideoStart = performance.now();
-        layerBuilder.syncVideoElements();
+        layerBuilder.syncVideoElements(layerFrameContext);
         syncVideoMs += performance.now() - syncVideoStart;
 
         // Share pre-built layers with renderScheduler so multi-preview
         // can reuse them instead of re-evaluating and re-seeking videos
         const buildStart = performance.now();
-        const layers = layerBuilder.buildLayersFromStore();
+        const layers = layerBuilder.buildLayersFromStore(layerFrameContext);
         buildMs += performance.now() - buildStart;
         const needsContinuousRender =
           hasPlaybackWarmup ||
@@ -234,10 +242,16 @@ export function useEngine() {
         // Previously, scrubbing rendered first (stale frame) then seeked after,
         // causing 1-frame-late display. The RVFC re-render handles page-reload
         // robustness (GPU surface cold → warmup play/pause → RVFC triggers render).
-        renderScheduler.setActiveCompLayers(layers);
+        const frameContext = {
+          compositionId: layerFrameContext.compositionById.has(layerFrameContext.activeCompId)
+            ? layerFrameContext.activeCompId
+            : 'timeline:active',
+          timelineTimeSeconds: layerFrameContext.playheadPosition,
+        };
+        renderScheduler.setActiveCompLayers(layers, frameContext);
 
         const renderStart = performance.now();
-        renderHostPort.render(layers);
+        renderHostPort.render(layers, frameContext);
         renderMs += performance.now() - renderStart;
 
         // Audio sync after render (video and audio now see same playhead).

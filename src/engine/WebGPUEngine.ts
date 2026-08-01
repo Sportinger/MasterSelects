@@ -481,8 +481,11 @@ export class WebGPUEngine {
 
   // === MAIN RENDER (delegated to RenderDispatcher) ===
 
-  render(layers: Layer[]): void {
-    this.renderDispatcher?.render(layers);
+  render(
+    layers: Layer[],
+    frameContext?: import('../services/render/renderHostTypes').RenderSurfaceFrameContext,
+  ): void {
+    this.renderDispatcher?.render(layers, frameContext);
   }
 
   setRenderTimeOverride(time: number | null): void {
@@ -505,8 +508,12 @@ export class WebGPUEngine {
     await this.renderDispatcher?.ensureExportLayersReady(layers);
   }
 
-  renderToPreviewCanvas(canvasId: string, layers: Layer[]): void {
-    this.renderDispatcher?.renderToPreviewCanvas(canvasId, layers);
+  renderToPreviewCanvas(
+    canvasId: string,
+    layers: Layer[],
+    frameContext?: import('../services/render/renderHostTypes').RenderSurfaceFrameContext,
+  ): void {
+    this.renderDispatcher?.renderToPreviewCanvas(canvasId, layers, frameContext);
   }
 
   renderCachedFrame(time: number): boolean {
@@ -539,8 +546,17 @@ export class WebGPUEngine {
     return outputPresenter.copyMainOutputToPreview(this.presenterDeps, canvasId);
   }
 
-  copyNestedCompTextureToPreview(canvasId: string, compositionId: string): boolean {
-    return outputPresenter.copyNestedCompTextureToPreview(this.presenterDeps, canvasId, compositionId);
+  copyNestedCompTextureToPreview(
+    canvasId: string,
+    compositionId: string,
+    renderOccurrenceKey?: string,
+  ): boolean {
+    return outputPresenter.copyNestedCompTextureToPreview(
+      this.presenterDeps,
+      canvasId,
+      compositionId,
+      renderOccurrenceKey,
+    );
   }
 
   cleanupNestedCompTexture(compositionId: string): void {

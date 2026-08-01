@@ -6,7 +6,7 @@ import { captureFrameGrid } from '../utils';
 import { flashPreviewCanvas } from '../aiFeedback';
 import { ensureRenderForDiagnostics } from './renderOnce';
 import {
-  captureRenderHostFrame,
+  captureStableRenderHostFrame,
   type PreviewCaptureMode,
 } from '../previewCapture';
 
@@ -18,12 +18,13 @@ export async function handleCaptureFrame(
 ): Promise<ToolResult> {
   const time = args.time as number | undefined;
   const mode = (args.mode as PreviewCaptureMode | undefined) ?? 'auto';
+  const settleMs = typeof args.settleMs === 'number' && Number.isFinite(args.settleMs)
+    ? Math.max(0, Math.min(1_500, Math.round(args.settleMs)))
+    : 120;
 
   // If time specified, move playhead there first
   if (time !== undefined) {
     timelineStore.setPlayheadPosition(time);
-    // Wait a frame for render to update
-    await new Promise(resolve => setTimeout(resolve, 100));
   }
 
   const renderDiagnostics = await ensureRenderForDiagnostics();
@@ -31,7 +32,8 @@ export async function handleCaptureFrame(
   // Visual feedback: shutter flash on preview
   flashPreviewCanvas('shutter');
 
-  const capture = await captureRenderHostFrame(mode);
+  const stabilized = await captureStableRenderHostFrame(mode, { settleMs });
+  const capture = stabilized.capture;
   if (!capture.success) {
     return {
       success: false,
@@ -39,6 +41,11 @@ export async function handleCaptureFrame(
       data: {
         requestedMode: mode,
         renderDiagnostics,
+        stabilization: {
+          attempts: stabilized.attempts,
+          stable: stabilized.stable,
+          waitedMs: stabilized.waitedMs,
+        },
       },
     };
   }
@@ -53,6 +60,11 @@ export async function handleCaptureFrame(
       requestedMode: mode,
       ...(capture.canvasSource ? { canvasSource: capture.canvasSource } : {}),
       renderDiagnostics,
+      stabilization: {
+        attempts: stabilized.attempts,
+        stable: stabilized.stable,
+        waitedMs: stabilized.waitedMs,
+      },
       dataUrl: capture.dataUrl,
     },
   };

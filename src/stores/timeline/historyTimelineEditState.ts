@@ -16,6 +16,7 @@ import type {
   TrackAudioState,
 } from '../../types';
 import type { TimelineMarker } from './types';
+import { normalizeMotionLayerDefinition } from '../../services/motionDesign/contracts/replicatorTimelineAdapter';
 
 export const HISTORY_TIMELINE_EDIT_STATE_SCHEMA_VERSION = 1 as const;
 export const HISTORY_TIMELINE_EDIT_STATE_KIND = 'history-timeline-edit-state' as const;
@@ -142,6 +143,10 @@ export interface HistoryTimelineEditState {
   label: string;
   timestamp: number;
   timeline: {
+    // Optional so schema-v1 entries written before Motion Design duration
+    // parity remain readable without changing the persisted schema version.
+    duration?: number;
+    durationLocked?: boolean;
     tracks: HistoryTimelineTrackEditState[];
     clips: HistoryTimelineClipEditState[];
     selectedClipIds: string[];
@@ -161,6 +166,8 @@ export interface CreateHistoryTimelineEditStateInput {
   id: string;
   label: string;
   timestamp: number;
+  duration?: number;
+  durationLocked?: boolean;
   tracks: TimelineTrack[];
   clips: TimelineClip[];
   selectedClipIds: Iterable<string>;
@@ -527,7 +534,7 @@ export function toHistoryTimelineClipEditState(
     automation: clip.automation,
     vectorAnimationSettings: clip.source?.vectorAnimationSettings,
     mathScene: clip.mathScene,
-    motion: clip.motion,
+    motion: clip.motion ? normalizeMotionLayerDefinition(clip.motion) : undefined,
     isComposition: clip.isComposition,
     compositionId: clip.compositionId,
     transitionIn: clip.transitionIn,
@@ -565,6 +572,8 @@ export function createHistoryTimelineEditState(
     label: input.label,
     timestamp: input.timestamp,
     timeline: {
+      duration: input.duration,
+      durationLocked: input.durationLocked,
       tracks: input.tracks.map(toHistoryTimelineTrackEditState),
       clips: input.clips.map((clip) =>
         toHistoryTimelineClipEditState(clip, readKeyframes(input.clipKeyframes, clip.id))

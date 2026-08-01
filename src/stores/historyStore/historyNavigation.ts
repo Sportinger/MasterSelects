@@ -1,155 +1,63 @@
 import type { HistoryListEntry, HistoryTimelineEvent } from '../../types/history';
-import type { HistoryBranch, HistoryNavigationState, StateSnapshot } from './historyStoreTypes';
-import { cloneSnapshotStack, deepClone } from './snapshotCloning';
+import type { HistoryNode } from './historyStoreTypes';
 
-function createHistoryEntry(
-  snapshot: StateSnapshot,
-  kind: HistoryListEntry['kind'],
-  stackIndex: number
-): HistoryListEntry {
-  return {
-    id: `${kind}:${stackIndex}:${snapshot.timestamp}:${snapshot.label}`,
-    kind,
-    label: snapshot.label,
-    timestamp: snapshot.timestamp,
-    stackIndex,
-  };
-}
+const childrenOf = (nodes: Record<string, HistoryNode>, parentId: string) =>
+  Object.values(nodes).filter((node) => node.parentId === parentId);
 
-function createHistoryEventEntry(event: HistoryTimelineEvent): HistoryListEntry {
-  return {
-    id: event.id,
-    kind: 'event',
-    label: event.label,
-    timestamp: event.timestamp,
-    eventType: event.type,
-    highlighted: event.type === 'manual-save',
-  };
-}
-
-function createHistoryBranchEntries(branch: HistoryBranch): HistoryListEntry[] {
-  const baseStackIndex = branch.baseUndoStack.length + (branch.baseSnapshot ? 1 : 0);
-
-  return branch.snapshots.map((snapshot, index) => ({
-    id: `branch:${branch.id}:${index}:${snapshot.timestamp}:${snapshot.label}`,
-    kind: 'branch',
-    label: snapshot.label || branch.label || 'Alternative branch',
-    timestamp: snapshot.timestamp,
-    stackIndex: index,
-    branchId: branch.id,
-    branchLabel: branch.label,
-    branchIndex: index,
-    branchBaseStackIndex: baseStackIndex,
-    branchBaseTimestamp: branch.baseSnapshot?.timestamp ?? branch.createdAt,
-    branchLength: branch.snapshots.length,
-  }));
+export function getRedoChild(
+  nodes: Record<string, HistoryNode>,
+  nodeId: string,
+  lastVisited: Record<string, string>
+): HistoryNode | null {
+  const preferred = lastVisited[nodeId];
+  if (preferred && nodes[preferred]?.parentId === nodeId) return nodes[preferred];
+  return childrenOf(nodes, nodeId).sort((a, b) => b.snapshot.timestamp - a.snapshot.timestamp)[0] ?? null;
 }
 
 export function createHistoryEntries(
-  undoStack: StateSnapshot[],
-  currentSnapshot: StateSnapshot | null,
-  redoStack: StateSnapshot[],
-  eventLog: HistoryTimelineEvent[],
-  branches: HistoryBranch[]
+  nodes: Record<string, HistoryNode>,
+  activeNodeId: string | null,
+  lastVisited: Record<string, string>,
+  eventLog: HistoryTimelineEvent[]
 ): HistoryListEntry[] {
-  return [
-    ...undoStack.map((snapshot, index) => createHistoryEntry(snapshot, 'undoable', index)),
-    ...(currentSnapshot ? [createHistoryEntry(currentSnapshot, 'current', undoStack.length)] : []),
-    ...redoStack
-      .slice()
-      .reverse()
-      .map((snapshot, index) => createHistoryEntry(snapshot, 'redoable', index)),
-    ...eventLog.filter((event) => event.type !== 'autosave').map(createHistoryEventEntry),
-    ...branches.flatMap(createHistoryBranchEntries),
-  ];
-}
+  const activePath = new Set<string>();
+  const depths = new Map<string, number>();
+  let cursor = activeNodeId ? nodes[activeNodeId] : undefined;
+  while (cursor) {
+    activePath.add(cursor.id);
+    cursor = cursor.parentId ? nodes[cursor.parentId] : undefined;
+  }
+  const path = [...activePath].reverse();
+  path.forEach((id, index) => depths.set(id, index));
 
-export function createHistoryNavigationState(
-  undoStack: StateSnapshot[],
-  currentSnapshot: StateSnapshot | null,
-  redoStack: StateSnapshot[],
-  eventLog: HistoryTimelineEvent[],
-  branches: HistoryBranch[]
-): HistoryNavigationState {
-  const entries = createHistoryEntries(undoStack, currentSnapshot, redoStack, eventLog, branches);
-  const snapshotsByEntryId: Record<string, StateSnapshot> = {};
+  const redo = new Map<string, number>();
+  cursor = activeNodeId ? getRedoChild(nodes, activeNodeId, lastVisited) ?? undefined : undefined;
+  let distance = 0;
+  while (cursor) {
+    redo.set(cursor.id, distance++);
+    cursor = getRedoChild(nodes, cursor.id, lastVisited) ?? undefined;
+  }
 
-  undoStack.forEach((snapshot, index) => {
-    const entry = createHistoryEntry(snapshot, 'undoable', index);
-    snapshotsByEntryId[entry.id] = snapshot;
+  const entries: HistoryListEntry[] = Object.values(nodes).map((node) => {
+    const active = node.id === activeNodeId;
+    const onActivePath = activePath.has(node.id);
+    const kind = active ? 'current' : onActivePath ? 'undoable' : redo.has(node.id) ? 'redoable' : 'branch';
+    return {
+      id: node.id,
+      nodeId: node.id,
+      parentNodeId: node.parentId,
+      label: node.snapshot.label,
+      timestamp: node.snapshot.timestamp,
+      kind,
+      onActivePath,
+      ...(kind === 'undoable' ? { stackIndex: depths.get(node.id) } : {}),
+      ...(kind === 'redoable' ? { stackIndex: redo.get(node.id) } : {}),
+      ...(active ? { active: true } : {}),
+    };
   });
-
-  if (currentSnapshot) {
-    const entry = createHistoryEntry(currentSnapshot, 'current', undoStack.length);
-    snapshotsByEntryId[entry.id] = currentSnapshot;
-  }
-
-  redoStack
-    .slice()
-    .reverse()
-    .forEach((snapshot, index) => {
-      const entry = createHistoryEntry(snapshot, 'redoable', index);
-      snapshotsByEntryId[entry.id] = snapshot;
-    });
-
-  for (const branch of branches) {
-    for (const entry of createHistoryBranchEntries(branch)) {
-      const index = entry.stackIndex;
-      if (typeof index !== 'number') continue;
-      const snapshot = branch.snapshots[index];
-      if (snapshot) {
-        snapshotsByEntryId[entry.id] = snapshot;
-      }
-    }
-  }
-
-  return { entries, snapshotsByEntryId };
-}
-
-export function markActiveHistoryEntry(
-  entries: HistoryListEntry[],
-  activeEntryId: string | null
-): HistoryListEntry[] {
-  return entries.map((entry) => ({
-    ...entry,
-    active: entry.id === activeEntryId || (!activeEntryId && entry.kind === 'current'),
-  }));
-}
-
-function createBranchId(type: string): string {
-  return `branch:${type}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function createBranchLabel(snapshots: StateSnapshot[], fallback = 'Alternative branch'): string {
-  const tip = snapshots[snapshots.length - 1];
-  return tip?.label ? `Branch: ${tip.label}` : fallback;
-}
-
-export function createBranchFromRedoPath(
-  undoStack: StateSnapshot[],
-  currentSnapshot: StateSnapshot | null,
-  redoStack: StateSnapshot[]
-): HistoryBranch | null {
-  if (!currentSnapshot || redoStack.length === 0) return null;
-
-  const snapshots = cloneSnapshotStack(redoStack.slice().reverse());
-  if (snapshots.length === 0) return null;
-
-  return {
-    id: createBranchId('redo'),
-    label: createBranchLabel(snapshots),
-    createdAt: Date.now(),
-    baseSnapshot: deepClone(currentSnapshot),
-    baseUndoStack: cloneSnapshotStack(undoStack),
-    snapshots,
-  };
-}
-
-export function appendHistoryBranch(
-  branches: HistoryBranch[],
-  branch: HistoryBranch | null,
-  maxBranches: number
-): HistoryBranch[] {
-  if (!branch || branch.snapshots.length === 0) return branches;
-  return [...branches, branch].slice(-maxBranches);
+  entries.push(...eventLog.filter((event) => event.type !== 'autosave').map((event) => ({
+    id: event.id, kind: 'event' as const, label: event.label, timestamp: event.timestamp,
+    eventType: event.type, highlighted: event.type === 'manual-save',
+  })));
+  return entries.sort((a, b) => a.timestamp - b.timestamp);
 }

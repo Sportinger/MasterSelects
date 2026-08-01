@@ -44,6 +44,23 @@ describe('editModeOverlayMath', () => {
     expect(bounds.height).toBeCloseTo(270);
   });
 
+  it('keeps the half-extent position offset independent of local scale', () => {
+    const unscaled = calculateLayerOverlayBounds({
+      ...baseParams,
+      position: { x: 0.2, y: -0.1 },
+    });
+    const scaled = calculateLayerOverlayBounds({
+      ...baseParams,
+      position: { x: 0.2, y: -0.1 },
+      scale: { x: 0.25, y: 1.75 },
+    });
+
+    expect(unscaled.x).toBeCloseTo(576);
+    expect(unscaled.y).toBeCloseTo(243);
+    expect(scaled.x).toBeCloseTo(unscaled.x);
+    expect(scaled.y).toBeCloseTo(unscaled.y);
+  });
+
   it('uses the inverse of the compositor rotation for the visible layer corners', () => {
     const bounds = calculateLayerOverlayBounds({
       ...baseParams,

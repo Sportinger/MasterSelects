@@ -71,11 +71,17 @@ import {
   handleSetTextBox,
   handleUpdateTextProperties,
 } from './text';
+import { handleCreateEditableTitleStack } from './editableTitleStack';
 import {
   handleConfigureMotionReplicator,
+  handleEditMotionModifier,
+  handleCreateMotionNull,
+  handleCreateMotionNullAndParent,
   handleCreateMotionShapeClip,
+  handleEditMotionAdjustment,
   handleGetMotionCapabilities,
   handleGetMotionDesign,
+  handleSetMotionParent,
   handleUpdateMotionAppearances,
   handleUpdateMotionProperties,
 } from './motionDesign';
@@ -170,6 +176,7 @@ export const timelineHandlers: Readonly<Record<string, TimelineHandler>> = {
   getKeyframes: handleGetKeyframes,
   addKeyframe: handleAddKeyframe,
   getTextProperties: handleGetTextProperties,
+  createEditableTitleStack: handleCreateEditableTitleStack,
   createTextClip: handleCreateTextClip,
   updateTextProperties: handleUpdateTextProperties,
   setTextBox: handleSetTextBox,
@@ -179,7 +186,12 @@ export const timelineHandlers: Readonly<Record<string, TimelineHandler>> = {
   createMotionShapeClip: handleCreateMotionShapeClip,
   updateMotionProperties: handleUpdateMotionProperties,
   updateMotionAppearances: handleUpdateMotionAppearances,
+  setMotionParent: handleSetMotionParent,
+  createMotionNull: handleCreateMotionNull,
+  createMotionNullAndParent: handleCreateMotionNullAndParent,
+  editMotionAdjustment: handleEditMotionAdjustment,
   configureMotionReplicator: handleConfigureMotionReplicator,
+  editMotionModifier: handleEditMotionModifier,
   play: handlePlay,
   pause: handlePause,
   monitorManualPause: handleMonitorManualPause,

@@ -21,8 +21,10 @@ import {
 } from '../../../services/flashboard/FlashBoardChatService';
 import { createAgentActivityEvent } from '../../../services/flashboard/FlashBoardChatActivity';
 import { resumeHostedKieAgentChat } from '../../../services/flashboard/FlashBoardHostedAgentTransport';
+import { prepareFlashBoardChatVisualReferences } from '../../../services/flashboard/FlashBoardChatVisualReferences';
 import { hasHostedAgentReloadSnapshot } from '../../../services/kernelClient/hostedAgent';
 import { useFlashBoardStore } from '../../../stores/flashboardStore';
+import { useMediaStore } from '../../../stores/mediaStore';
 import { useStoryboardStore } from '../../../stores/storyboardStore';
 import { appendFlashBoardPromptHistoryEntry } from '../../../stores/flashboardStore/activeGenerationRecords';
 import {
@@ -63,21 +65,16 @@ interface UseFlashBoardChatControllerInput {
   aiSystemPromptOverrides: Partial<Record<AIProvider, string>>;
   closePopover: () => void;
   hasHostedSession: boolean;
-  hasKieAiKey: boolean;
   hostedAIEnabled: boolean;
   initialChatPrompt?: string;
   initialMode: 'generate' | 'chat';
   lemonadeContextSize: number;
   lemonadeEndpoint: string;
   lemonadeModel: string;
-  kieAiApiKey: string;
   openAuthDialog: () => void;
   openPricingDialog: () => void;
-  openSettings: () => void;
   setAiProvider: (provider: AIProvider) => void;
   setLemonadeModel: (model: string) => void;
-  useHostedProductionProviders: boolean;
-  useKieAiKeyByDefault: boolean;
 }
 
 interface SubmitChatPromptOptions {
@@ -96,21 +93,16 @@ export function useFlashBoardChatController({
   aiSystemPromptOverrides,
   closePopover,
   hasHostedSession,
-  hasKieAiKey,
   hostedAIEnabled,
   initialChatPrompt,
   initialMode,
   lemonadeContextSize,
   lemonadeEndpoint,
   lemonadeModel,
-  kieAiApiKey,
   openAuthDialog,
   openPricingDialog,
-  openSettings,
   setAiProvider,
   setLemonadeModel,
-  useHostedProductionProviders,
-  useKieAiKeyByDefault,
 }: UseFlashBoardChatControllerInput) {
   const chatAbortRef = useRef<AbortController | null>(null);
   const resumedHostedTurnIdsRef = useRef(new Set<string>());
@@ -162,9 +154,7 @@ export function useFlashBoardChatController({
     chatProvider,
     isChatting,
     lemonadeModels,
-    useHostedProductionProviders,
-    useKieAiKeyByDefault,
-  }), [chatModel, chatProvider, isChatting, lemonadeModels, useHostedProductionProviders, useKieAiKeyByDefault]);
+  }), [chatModel, chatProvider, isChatting, lemonadeModels]);
   const {
     activeChatModelId,
     chatModelOptions,
@@ -173,8 +163,6 @@ export function useFlashBoardChatController({
     chatReasoningSupported,
   } = chatOptionsState;
   const canUseHostedChat = Boolean(chatProvider === 'kie' && hasHostedSession && hostedAIEnabled);
-  const canUseByoChat = Boolean(chatProvider === 'kie' && !useHostedProductionProviders && hasKieAiKey);
-  const shouldUseHostedChat = Boolean(canUseHostedChat && (useHostedProductionProviders || !useKieAiKeyByDefault));
   const showChatCloudActions = Boolean(chatError && !hasHostedSession && /sign in/i.test(chatError));
 
   useEffect(() => {
@@ -285,7 +273,6 @@ export function useFlashBoardChatController({
       activeChatModelId: options?.activeDecision
         ? DEFAULT_FLASHBOARD_KERNEL_MODEL
         : activeChatModelId,
-      canUseByoChat,
       canUseHostedChat,
       chatMessages,
       chatPanelOpen,
@@ -300,10 +287,7 @@ export function useFlashBoardChatController({
       isChatting,
       lemonadeContextSize,
       lemonadeEndpoint,
-      kieAiApiKey,
       openAiReasoningEffort,
-      shouldUseHostedChat,
-      useHostedProductionProviders,
     });
 
     if (chatSendPlan.action === 'openPanel') {
@@ -321,7 +305,6 @@ export function useFlashBoardChatController({
       setChatError(chatSendPlan.errorMessage);
       if (chatSendPlan.dialogTarget === 'auth') openAuthDialog();
       if (chatSendPlan.dialogTarget === 'pricing') openPricingDialog();
-      if (chatSendPlan.dialogTarget === 'settings') openSettings();
       return;
     }
 
@@ -370,8 +353,16 @@ export function useFlashBoardChatController({
             : message
         )));
       };
+      const visualReferences = chatSendPlan.request.provider === 'kie'
+        ? await prepareFlashBoardChatVisualReferences({
+            composer: useFlashBoardStore.getState().composer,
+            mediaFiles: useMediaStore.getState().files,
+            signal: abortController.signal,
+          })
+        : [];
       const response = await sendFlashBoardChatMessage({
         ...chatSendPlan.request,
+        ...(visualReferences.length === 0 ? {} : { visualReferences }),
         ...(chatSendPlan.request.provider === 'kie' && chatSendPlan.request.hostedAvailable
           ? {
               idempotencyKey: `flashboard-chat-turn:${assistantMessageId}`,
@@ -473,9 +464,7 @@ export function useFlashBoardChatController({
     chatIntent,
     decisionPolicy,
     closePopover,
-    canUseByoChat,
     canUseHostedChat,
-    kieAiApiKey,
     hostedAIEnabled,
     hasHostedSession,
     isChatting,
@@ -485,12 +474,9 @@ export function useFlashBoardChatController({
     openAiReasoningEffort,
     openAuthDialog,
     openPricingDialog,
-    openSettings,
     putStoryboardDecision,
     resolveStoryboardDecision,
-    shouldUseHostedChat,
     setChatMessages,
-    useHostedProductionProviders,
   ]);
 
   useEffect(() => {

@@ -33,6 +33,7 @@ export interface ExternalDragPayload {
 }
 
 export const EXTERNAL_DRAG_BRIDGE_EVENT = 'masterselects:external-drag-bridge';
+export const EXPORT_MEDIA_IDS_MIME_TYPE = 'application/x-masterselects-export-media-ids';
 
 export interface ExternalDragBridgeEventDetail {
   phase: 'move' | 'drop' | 'cancel';
@@ -49,6 +50,75 @@ interface CreateExternalDragPayloadOptions {
 }
 
 let currentExternalDragPayload: ExternalDragPayload | null = null;
+let currentExportMediaDragIds: string[] = [];
+
+export function normalizeExportMediaIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  const uniqueIds: string[] = [];
+  const seenIds = new Set<string>();
+  for (const valueEntry of value) {
+    if (typeof valueEntry !== 'string') continue;
+    const id = valueEntry.trim();
+    if (!id || seenIds.has(id)) continue;
+    seenIds.add(id);
+    uniqueIds.push(id);
+  }
+  return uniqueIds;
+}
+
+export function serializeExportMediaIds(ids: readonly string[]): string {
+  return JSON.stringify(normalizeExportMediaIds(ids));
+}
+
+export function parseExportMediaIds(serializedIds: string | null | undefined): string[] {
+  if (!serializedIds) return [];
+  try {
+    return normalizeExportMediaIds(JSON.parse(serializedIds));
+  } catch {
+    return [];
+  }
+}
+
+export function setExportMediaDragIds(ids: readonly string[]): void {
+  currentExportMediaDragIds = normalizeExportMediaIds(ids);
+}
+
+export function getExportMediaDragIds(): string[] {
+  return [...currentExportMediaDragIds];
+}
+
+export function clearExportMediaDragIds(): void {
+  currentExportMediaDragIds = [];
+}
+
+export function applyExportMediaIdsToDataTransfer(
+  dataTransfer: Pick<DataTransfer, 'setData'>,
+  ids: readonly string[],
+): void {
+  const normalizedIds = normalizeExportMediaIds(ids);
+  setExportMediaDragIds(normalizedIds);
+  if (normalizedIds.length === 0) return;
+  try {
+    dataTransfer.setData(EXPORT_MEDIA_IDS_MIME_TYPE, serializeExportMediaIds(normalizedIds));
+  } catch {
+    // Keep the same-document session usable if the browser rejects custom MIME data.
+  }
+}
+
+export function readExportMediaIdsFromDataTransfer(
+  dataTransfer: Pick<DataTransfer, 'getData'> | null | undefined,
+): string[] {
+  if (dataTransfer) {
+    try {
+      const transferredIds = parseExportMediaIds(dataTransfer.getData(EXPORT_MEDIA_IDS_MIME_TYPE));
+      if (transferredIds.length > 0) return transferredIds;
+    } catch {
+      // Some browsers block custom DataTransfer reads outside the drop handler.
+    }
+  }
+  return getExportMediaDragIds();
+}
 
 export function createExternalDragPayloadForProjectItem(
   item: ProjectItem,
@@ -293,6 +363,7 @@ export function getExternalDragPayload(): ExternalDragPayload | null {
 
 export function clearExternalDragPayload(): void {
   currentExternalDragPayload = null;
+  clearExportMediaDragIds();
 }
 
 export function dispatchExternalDragBridgeEvent(detail: ExternalDragBridgeEventDetail): void {

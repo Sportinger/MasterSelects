@@ -38,18 +38,7 @@ describe('hosted-agent K3 routing and rollback truth', () => {
     });
   });
 
-  it('never forwards BYO credentials and never sends Local AI to the kernel', () => {
-    expect(decideHostedAgentK3Route({
-      cohortKey: 'byo-cohort',
-      config: enabled,
-      kernelReachable: true,
-      productionPrerequisitesSatisfied: true,
-      providerRoute: 'kie-byo-direct',
-    })).toEqual({
-      canaryBucket: null,
-      executionRoute: 'legacy-direct',
-      reason: 'byo_stays_direct',
-    });
+  it('never sends Local AI to the kernel', () => {
     expect(decideHostedAgentK3Route({
       cohortKey: 'local-cohort',
       config: enabled,
@@ -83,7 +72,7 @@ describe('hosted-agent K3 routing and rollback truth', () => {
     });
   });
 
-  it('proves one-flag and emergency rollback without touching BYO, Local, or project data', () => {
+  it('proves one-flag and emergency rollback without touching Local AI or project data', () => {
     for (const cohortKey of ['a', 'b', 'c', 'd', 'e']) {
       expect(decideHostedAgentK3Route({
         cohortKey,

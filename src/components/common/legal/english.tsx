@@ -67,7 +67,7 @@ export function PrivacyEN() {
         When you start a cloud or AI feature, the selected prompts, messages, media, references, and technical metadata
         are sent to the relevant provider. Depending on the feature, recipients include <strong>OpenAI</strong>,
         <strong>Kie.ai</strong> and its selected model/upload providers, and <strong>ElevenLabs</strong>. When you use
-        your own API key, the browser may connect directly to OpenAI, Anthropic, AssemblyAI, Deepgram, PiAPI, Kie.ai,
+        your own API key, the browser may connect directly to OpenAI, Anthropic, AssemblyAI, Deepgram, PiAPI,
         Evolink, ElevenLabs, or the YouTube Data API. Legal basis: Art. 6(1)(b) GDPR, supplemented by Art. 6(1)(f)
         GDPR for security and abuse prevention.
       </p>

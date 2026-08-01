@@ -30,6 +30,12 @@ export interface CreditBalanceSummary {
   recentEntries: CreditLedgerRow[];
 }
 
+export interface CreditMeterReferenceInput {
+  balance: number;
+  epochStart?: string | null;
+  monthlyCredits: number;
+}
+
 export interface SpendCreditsResult {
   balance: number;
   charged: boolean;
@@ -306,6 +312,63 @@ export async function spendCredits(
     entry,
     insufficient: false,
   };
+}
+
+export async function getCreditMeterReference(
+  db: AppD1Database,
+  userId: string,
+  input: CreditMeterReferenceInput,
+): Promise<number> {
+  const baseReference = Math.max(
+    0,
+    Math.floor(Number.isFinite(input.balance) ? input.balance : 0),
+    Math.floor(Number.isFinite(input.monthlyCredits) ? input.monthlyCredits : 0),
+  );
+  try {
+    let epochStart = input.epochStart?.trim() || null;
+    if (!epochStart) {
+      const recurringGrant = await db
+        .prepare(
+          `SELECT created_at
+           FROM credit_ledger
+           WHERE user_id = ? AND entry_type = 'grant'
+             AND source IN (?, 'stripe:invoice_paid', 'dev:plan_monthly_grant')
+           ORDER BY created_at DESC, id DESC
+           LIMIT 1`,
+        )
+        .bind(userId, FREE_PLAN_MONTHLY_SOURCE)
+        .first<{ created_at: string }>();
+      epochStart = recurringGrant?.created_at ?? null;
+    }
+    if (!epochStart) {
+      const latestGrant = await db
+        .prepare(
+          `SELECT created_at
+           FROM credit_ledger
+           WHERE user_id = ? AND entry_type = 'grant'
+           ORDER BY created_at DESC, id DESC
+           LIMIT 1`,
+        )
+        .bind(userId)
+        .first<{ created_at: string }>();
+      epochStart = latestGrant?.created_at ?? null;
+    }
+
+    const result = epochStart
+      ? await db
+          .prepare(
+            `SELECT COALESCE(MAX(balance_after), 0) AS high_water
+             FROM credit_ledger
+             WHERE user_id = ? AND entry_type = 'grant' AND created_at >= ?`,
+          )
+          .bind(userId, epochStart)
+          .first<{ high_water: number }>()
+      : null;
+    const highWater = Number(result?.high_water ?? 0);
+    return Math.max(baseReference, Number.isFinite(highWater) ? Math.floor(highWater) : 0);
+  } catch {
+    return baseReference;
+  }
 }
 
 export async function refundCreditsForFailedTask(

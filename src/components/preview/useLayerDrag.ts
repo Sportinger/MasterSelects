@@ -25,6 +25,23 @@ import {
 
 export { resolveClipScaleFromLayerScale } from './layerTransformDragCommit';
 
+const LAYER_NUDGE_OWNED_CONTROL_SELECTOR = [
+  'button',
+  'input',
+  'select',
+  'textarea',
+  '[contenteditable="true"]',
+  '[role="button"]',
+  '[role="slider"]',
+  '[role="spinbutton"]',
+  '[role="textbox"]',
+].join(',');
+
+/** Focused authoring controls own their arrow keys before viewport layer nudge. */
+export function shouldDeferLayerNudgeToFocusedControl(active: Element | null): boolean {
+  return Boolean(active?.closest(LAYER_NUDGE_OWNED_CONTROL_SELECTOR));
+}
+
 interface UseLayerDragParams {
   editMode: boolean;
   overlayRef: React.RefObject<HTMLCanvasElement | null>;
@@ -373,9 +390,10 @@ export function useLayerDrag({
       const selectedLayer = selectedLayerId ? layers.find((l) => l?.id === selectedLayerId) : null;
       if (!selectedLayer) return;
 
-      // Don't hijack arrows while typing (e.g. text editor).
-      const active = document.activeElement as HTMLElement | null;
-      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) return;
+      // Do not hijack arrows owned by a focused authoring control. This keeps
+      // viewport handles, sliders, spinbuttons, and text fields keyboard-usable.
+      const active = document.activeElement;
+      if (shouldDeferLayerNudgeToFocusedControl(active)) return;
 
       // Scope to the preview this overlay belongs to (hovered or focused).
       const container = overlayRef.current?.closest('.preview-container') as HTMLElement | null;

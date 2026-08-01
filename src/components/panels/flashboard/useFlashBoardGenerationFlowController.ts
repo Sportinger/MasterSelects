@@ -12,7 +12,7 @@ import type {
   FlashBoardSunoVocalGender,
   FlashBoardVoiceSettings,
 } from '../../../stores/flashboardStore/types';
-import { SUNO_PROVIDER_ID } from '../../../services/sunoService';
+import { SUNO_PROVIDER_ID } from '../../../services/sunoContracts';
 import type { CatalogEntry } from '../../../services/flashboard/types';
 import { buildFlashBoardGenerationRequest } from './FlashBoardGenerationRequestPlanner';
 import { buildFlashBoardComposerSyncPatch } from './FlashBoardComposerSyncPlanner';
@@ -331,7 +331,7 @@ export function useFlashBoardGenerationFlowController({
   const handleGenerate = useCallback(() => {
     if (!canGenerate || !selectedEntry) return;
 
-    const requestIsAudio = selectedEntry.outputType === 'audio' || service === 'elevenlabs' || service === 'suno';
+    const requestIsAudio = selectedEntry.outputType === 'audio' || service === 'elevenlabs';
     const requestIsSuno = providerId === SUNO_PROVIDER_ID;
     submitFlashBoardActiveGenerationRequest(buildFlashBoardGenerationRequest({
       aspectRatio,

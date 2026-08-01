@@ -51,6 +51,8 @@ import { useToolbarProjectShortcuts } from './toolbar/useToolbarProjectShortcuts
 import { useToolbarViewActions } from './toolbar/useToolbarViewActions';
 import { useDevChatNotification } from './toolbar/useDevChatNotification';
 import { screenCaptureService } from '../../services/capture/ScreenCaptureService';
+import { CreditBurnMeter } from './CreditBurnMeter';
+import { runToolbarProjectBootRestore } from './toolbar/toolbarProjectStartup';
 
 const log = Logger.create('Toolbar');
 
@@ -100,7 +102,6 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
     toggleFavoriteSavedLayout: s.toggleFavoriteSavedLayout,
   })));
 
-  const accountCredits = useAccountStore((s) => s.creditBalance);
   const accountSession = useAccountStore((s) => s.session);
   const accountUser = useAccountStore((s) => s.user);
   const openAccountDialog = useAccountStore((s) => s.openAccountDialog);
@@ -199,9 +200,18 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
         message: 'Restoring last project',
         blocking: true,
       });
-      const restored = await projectFileService.restoreLastProject();
-      if (restored) {
-        await loadProjectToStores();
+      const restoreResult = await runToolbarProjectBootRestore({
+        url: window.location.href,
+        restoreLastProject: () => projectFileService.restoreLastProject(),
+        loadProjectToStores,
+      });
+      if (restoreResult === 'evidence-isolated') {
+        log.info('Skipping automatic project restore for isolated Motion Design evidence session');
+        setProjectLoadProgress(null);
+        setIsLoading(false);
+        return;
+      }
+      if (restoreResult === 'restored') {
         const data = projectFileService.getProjectData();
         if (data) {
           setProjectName(data.name);
@@ -503,15 +513,7 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
           </button>
         )}
         {accountSession?.authenticated && (
-          <button
-            className="toolbar-credit-pill"
-            onClick={openAccountDialog}
-            title={`${accountCredits} credits available`}
-            type="button"
-          >
-            <span className="toolbar-credit-pill-label">Credits</span>
-            <strong className="toolbar-credit-pill-value">{accountCredits}</strong>
-          </button>
+          <CreditBurnMeter />
         )}
         <button
           className="menu-trigger"

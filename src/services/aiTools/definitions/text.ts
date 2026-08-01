@@ -77,6 +77,87 @@ export const textToolDefinitions: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'createEditableTitleStack',
+      description: 'Atomically create 1-6 editable text rows with matching native Motion rectangle backplates. Boxes use top-left composition pixels; the tool converts backplate positions to centered Motion coordinates, allocates collision-free video tracks when needed, and guarantees TOPMOST-FIRST text-above-backplate compositing.',
+      parameters: {
+        type: 'object',
+        properties: {
+          startTime: { type: 'number', description: 'Timeline start in seconds. Defaults to the playhead.' },
+          duration: { type: 'number', description: 'Duration in seconds (greater than 0, default 5).' },
+          trackIds: {
+            type: 'array',
+            description: 'Optional exact unlocked, visible, empty video track IDs in current TOPMOST-FIRST order. Supply exactly 2 IDs per row: all text tracks first, then all backplate tracks. Omit to allocate tracks safely.',
+            items: { type: 'string' },
+          },
+          rows: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 6,
+            description: 'Editable title rows, each with an area-text box and a matching backplate.',
+            items: {
+              type: 'object',
+              properties: {
+                text: { type: 'string', description: 'Visible row text.' },
+                name: { type: 'string', description: 'Optional semantic layer name.' },
+                box: {
+                  type: 'object',
+                  description: 'Text box in pixels from the composition top-left.',
+                  properties: {
+                    x: { type: 'number', description: 'Left edge in composition pixels.' },
+                    y: { type: 'number', description: 'Top edge in composition pixels.' },
+                    width: { type: 'number', description: 'Box width in pixels (at least 24).' },
+                    height: { type: 'number', description: 'Box height in pixels (at least 24).' },
+                  },
+                  required: ['x', 'y', 'width', 'height'],
+                },
+                textStyle: {
+                  type: 'object',
+                  description: 'Optional editable typography. Defaults to bold centered white Arial.',
+                  properties: {
+                    fontFamily: textPropertySchema.fontFamily,
+                    fontSize: textPropertySchema.fontSize,
+                    fontWeight: textPropertySchema.fontWeight,
+                    fontStyle: textPropertySchema.fontStyle,
+                    color: textPropertySchema.color,
+                    textAlign: textPropertySchema.textAlign,
+                    verticalAlign: textPropertySchema.verticalAlign,
+                    lineHeight: textPropertySchema.lineHeight,
+                    letterSpacing: textPropertySchema.letterSpacing,
+                    strokeEnabled: textPropertySchema.strokeEnabled,
+                    strokeColor: textPropertySchema.strokeColor,
+                    strokeWidth: textPropertySchema.strokeWidth,
+                    shadowEnabled: textPropertySchema.shadowEnabled,
+                    shadowColor: textPropertySchema.shadowColor,
+                    shadowOffsetX: textPropertySchema.shadowOffsetX,
+                    shadowOffsetY: textPropertySchema.shadowOffsetY,
+                    shadowBlur: textPropertySchema.shadowBlur,
+                  },
+                  required: [],
+                },
+                backplate: {
+                  type: 'object',
+                  description: 'Optional editable rectangle styling and padding.',
+                  properties: {
+                    color: { type: 'string', description: 'Hex fill color (default #000000).' },
+                    opacity: { type: 'number', description: 'Fill opacity from 0 to 1 (default 0.9).' },
+                    paddingX: { type: 'number', description: 'Horizontal padding in pixels (default 24).' },
+                    paddingY: { type: 'number', description: 'Vertical padding in pixels (default 8).' },
+                    cornerRadius: { type: 'number', description: 'Corner radius in pixels (default 12).' },
+                  },
+                  required: [],
+                },
+              },
+              required: ['text', 'box'],
+            },
+          },
+        },
+        required: ['rows'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'createTextClip',
       description: 'Create a real editable text clip. Omitted styling uses editor defaults. The text field uses composition-pixel coordinates; omit its rectangle for a full-frame field.',
       parameters: {

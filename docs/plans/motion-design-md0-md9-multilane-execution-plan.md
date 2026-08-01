@@ -1,13 +1,23 @@
 # Motion Design MD0-MD9 Multilane Execution Plan
 
-Status: Active execution plan; planning complete, implementation waves not started
+> **SUPERSEDED 2026-08-01.** Do not execute from this document.
+> Active plan: [`motion-design-md3-md9-execution-plan.md`](./motion-design-md3-md9-execution-plan.md).
+>
+> This plan assumed four concurrent agents in one worktree. It was executed by a
+> single agent, so the lane model, write leases, integration windows, and
+> MDX0-MDX6 coordination gates were pure overhead. The MD0-MD2 closure record,
+> the rebaseline table, the Non-Goals, and the frozen MD3/MD6/MD7 contract
+> decisions below remain valid as history and are carried forward by the new
+> plan. Everything about lanes, leases, waves, and coordination gates is retired.
+
+Status: Superseded; retained for the MD0-MD2 closure record and frozen contracts
 Date: 2026-07-31
 Working branch: `master`
 Worktree model: one shared worktree, one main integrator, at most three worker lanes
 Change policy: no commit and no push unless the user explicitly changes that instruction
 
 Parent plan: [`motion-design-ai-completion-plan.md`](./motion-design-ai-completion-plan.md)
-Completed MD2 packet plan: [`motion-design-phase2-authoring-execution-plan.md`](./motion-design-phase2-authoring-execution-plan.md)
+Detailed MD2 packet plan: [`motion-design-phase2-authoring-execution-plan.md`](./motion-design-phase2-authoring-execution-plan.md)
 Historical architecture: [`../completed/plans/motion-design-system-plan.md`](../completed/plans/motion-design-system-plan.md)
 
 ## Purpose
@@ -50,9 +60,9 @@ green, even where most implementation already exists.
 
 | Phase | Current implementation state | Work still required before gate closure |
 |---|---|---|
-| MD0 Existing MVP + AI | Implementation and automated gates recorded complete | Disposable lower-third project; representative preview/export pixel comparison; refresh full gates after concurrent tree changes |
-| MD1 Shapes/Appearances | Implementation candidate exists across schema, renderer, UI, AI, persistence, and tests | Disposable-browser preview/export pixel goldens for every primitive/appearance family; resolve any discovered parity defect |
-| MD2 Authoring/Animation | Waves A-C implemented, including registry browser, pins, global graph, transactions, and motion paths | Wave D disposable required-scenario evidence; preview/nested-preview/export parity; documentation reconciliation after the unified graph work; focused and full regression refresh |
+| MD0 Existing MVP + AI | Complete; lower-third AI batch, history, save/reopen, direct/nested preview/export, and restore evidence recorded | Phase gate closed; later waves must keep its regression evidence green |
+| MD1 Shapes/Appearances | Complete across schema, renderer, UI, AI, persistence, four-surface goldens, and lifecycle tests | Phase gate closed; texture media remains intentionally assigned to MD5 |
+| MD2 Authoring/Animation | Complete; unified graph, AI sequence, motion paths/handles/onions, history, panel restoration, and six disposable baselines recorded | Phase gate closed; later waves must preserve the canonical single-graph/keyframe workflow |
 | MD3 Replicator Core | Grid MVP and partial durable/property/render scaffolding exist; persisted default `maxInstances` says 10,000 while renderer/capabilities/AI still enforce 100 | Separate requested/user/device/effective limits; complete Grid/Linear/Radial semantics, offsets, real 10k capacity/performance, caching, bounds/culling, stats, full UI/AI/persistence/history/parity |
 | MD4 Modifiers/Falloffs | Some durable placeholders exist | Ordered deterministic modifier runtime, stable seeds/indexing, falloff references, UI/AI authoring, GPU plan where appropriate, parity and performance evidence |
 | MD5 Media Motion | Texture/direct-media concepts are reserved but intentionally unavailable | Image/video/nested sources, timing modes, decoder/render reuse, relink behavior, UI/AI/persistence, preview/export parity |
@@ -242,6 +252,62 @@ handoff; integration and phase gates require the broader matrix defined below.
 No new MD3-MD8 product capability is integrated before this wave is green.
 Read-only audits and contract proposals may proceed.
 
+### Wave 0 repair write manifest — 2026-07-31
+
+The completion audit found implementation/test debt in addition to missing
+browser evidence. These are the only worker write leases active for the repair
+pass:
+
+| Lane | Exclusive write lease |
+|---|---|
+| L1 MD0 | New `src/services/aiTools/motionDesignMd0Evidence.ts`, new `tests/unit/motionDesignMd0Evidence.test.ts`, new `scripts/run-motion-design-md0-evidence.mjs` |
+| L2 MD1 | New `src/services/motionDesign/evidence/md1GoldenFixture.ts`, new `src/services/motionDesign/evidence/md1PixelComparison.ts`, new `src/services/aiTools/devBridge/browser/debugActions/motionDesignMd1Evidence.ts`, new `scripts/run-motion-design-md1-evidence.mjs`, and new `tests/unit/motionDesignMd1EvidenceManifest.test.ts`, `motionDesignMd1Lifecycle.test.ts`, `motionDesignPromptParity.test.ts` |
+| L3 MD2 | `src/components/preview/motionPathGeometry.ts`, `MotionPathOverlay.tsx`, `useMotionPathEditing.ts`, and new `tests/unit/motionPathViewportWaveD.test.tsx` |
+
+L0 retains every registration/barrel/policy file, FlashBoard prompt/playbook,
+active plan, feature documentation, and evidence status file. Workers may not
+call the bridge or browser. Actual PNG/report generation is deferred until an
+isolated browser session exists and is verified not to be the open user project.
+
+MD2 disposable-evidence preparation used a second isolated lease packet:
+
+| Lane | Exclusive write lease |
+|---|---|
+| L1 runner | New `scripts/run-motion-design-md2-evidence.mjs` and `tests/unit/motionDesignMd2EvidenceRunner.test.ts` |
+| L2 browser action | New `src/services/aiTools/devBridge/browser/debugActions/motionDesignMd2Evidence.ts` and `tests/unit/motionDesignMd2Lifecycle.test.ts`; after the worker returned no files, L0 explicitly reclaimed this lease before writing |
+| L3 fixture/capture | New `src/services/motionDesign/evidence/md2EvidenceFixture.ts`, `md2DomCapture.ts`, and their two focused tests |
+| L0 integration | Debug Action registration, plan/evidence documents, adversarial review, and final gates |
+
+No two lanes wrote the same file during preparation. L0 later ran the actions
+only against one exact, unique, unsaved, chat-free disposable session after
+verifying it was not the open user project.
+
+### Wave 0 integration checkpoint — 2026-07-31
+
+- MD0 focused evidence: 12/12; adjacent regression: 110/110; hidden
+  handler/policy/registry integration: 68/68.
+- MD1 focused fixture, lifecycle, prompt, runner-safety, and state-restore
+  evidence: 22/22.
+- MD2 shared-history, viewport, and disposable-runner closeout: 8 files/64
+  tests. The original Wave D handle suite remains 11/11; the new exact-target
+  runner, lifecycle, fixture, and DOM-PNG packet contributes 24/24.
+- Current Wave 0 matrix: 77 files and 1,375 tests green. This comprises 38
+  Motion/AI/Graph files (717), 33 Render/Nested/History files (336), four
+  Store/Project files (254), and two architecture registries (68).
+- The matrix first exposed one Motion-owned LOC-budget failure in
+  `useLayerSync.ts`. L0 reduced the host again through the existing leaf adapter,
+  then reran architecture and adjacent Motion tests green without raising the
+  budget.
+- Application TypeScript and targeted ESLint pass. The refreshed
+  `npm run build:deploy` passes with 10,410 transformed modules.
+- MD0 was rerun after the history-runtime and explicit-duration fixes. MD0 has
+  two final lower-third PNGs/report; MD1 has four surface baselines/report; MD2
+  has six Graph/Motion-Path/render baselines/report. All top-level results pass.
+- No user project was mutated, and no commit or push was made.
+
+`MD0_EXISTING_MVP_COMPLETE`, `MD1_SHAPES_AND_APPEARANCES_COMPLETE`,
+`MD2_AUTHORING_AND_ANIMATION_COMPLETE`, and `MDX0_BASELINE_CLOSED` are closed.
+
 ### L0 Main
 
 - Snapshot the scoped dirty baseline and record unrelated known failures.
@@ -289,6 +355,27 @@ Read-only audits and contract proposals may proceed.
 
 This wave prevents three implementation lanes from inventing incompatible
 schemas or evaluation paths.
+
+Read-only preflight audit:
+[`wave1-contract-preflight.md`](../evidence/motion-design/wave1-contract-preflight.md).
+It records the current gaps and proposed leases. `MDX0_BASELINE_CLOSED` is now
+green and its ownership proposal has been converted into executable registries.
+
+### Wave 1 ownership registration - 2026-07-31
+
+- `motionDesignGateRegistry.ts` registers the complete MDX0-MDX6 dependency
+  chain and Motion-specific exit-criteria evidence.
+- `motionDesignLaneWriteManifest.ts` registers L0 shared-seam ownership and
+  disjoint L1/L2/L3 leaf write sets with explicit forbidden paths.
+- High-conflict ownership records `motionDesign.ts`, `MotionRenderer.ts`, the
+  aggregate Motion contract directory, and this execution plan as L0-only.
+- The Motion registry plus complete architecture registry pass 8/8 tests;
+  targeted ESLint and application TypeScript pass.
+
+`MDX1_OWNERSHIP_REGISTERED` and `MDX2_CONTRACTS_FROZEN` are closed. The frozen
+leaf and aggregate decisions, 274 contract tests, and independent release audit
+are recorded in
+[`wave1-contract-freeze-report.md`](../evidence/motion-design/wave1-contract-freeze-report.md).
 
 ### L0 shared contract packet
 
@@ -371,6 +458,120 @@ schemas or evaluation paths.
 
 Workers build only inside their assigned scopes. L0 integrates one lane at a
 time while the other workers remain out of shared seams.
+
+### Wave 2 integration checkpoint - 2026-07-31
+
+- The MD3 frame-state/runtime foundation is integrated across main preview,
+  target preview, nested preview, and export. The latest completed MD3 matrix is
+  22 files and 294 tests, with application TypeScript green.
+- The named-hardware 10,000-instance CPU reference evaluation and 480,000-byte
+  buffer-packing evidence is recorded in
+  [`../evidence/motion-design/md3-replicator-core.md`](../evidence/motion-design/md3-replicator-core.md).
+  Visible WebGPU evidence remains open because the isolated evidence tab is not
+  connected to the browser-control session.
+- Main's adversarial MD3 re-audit found additional end-to-end blockers in exact
+  Target/RAM-preview frame provenance, export resource-planning failures,
+  repeated nested-composition instances, render fingerprints, and fail-closed
+  traversal/diagnostics. The formal MD3 checkbox therefore remains open while
+  those fixes are integrated and reviewed.
+- MD6 integration has started: parent operations use the exact high-frequency
+  operation time, apply rejects stale transform/keyframe state, nearby
+  keyframes are moved to the exact operation time, dangling parent edges can be
+  cleared through the normal transaction, and the ParentChildLink animation
+  now reaches idle. Focused adapter/lifecycle/RAF tests and application
+  TypeScript are green. Null batching, full edit/load sanitization, product UI,
+  AI, nested behavior, and parity evidence remain open.
+- The MD7 contract leaf is frozen and the isolated timeline-stack adapter is in
+  progress. No MD3, MD6, MD7, or MDX3 formal gate is closed by this checkpoint.
+- MD6 now has exact-time parent-chain evaluation across root/nested preview and
+  export, frozen world-preserving transactions, edit/load remapping, Motion Null
+  creation, and the timeline Pick Whip. The evidence and remaining gate blockers
+  are recorded in
+  [`../evidence/motion-design/md6-structure.md`](../evidence/motion-design/md6-structure.md).
+- MD7 now has one accumulated-lower-layer adjustment operation path across main,
+  target, nested, export, and the CPU worker preview, plus supported-effect
+  preflight, Adjustment properties, Add-menu authoring, and semantic
+  create/configure/move/trim/remove AI operations with real single-step
+  undo/redo. The current evidence and remaining GPU-worker/visible-evidence
+  blockers are recorded in
+  [`../evidence/motion-design/md7-adjustment-render-graph.md`](../evidence/motion-design/md7-adjustment-render-graph.md).
+- The open editor still has no browser-control binding; the editor bridge also
+  rejects the configured token. Formal MD6/MD7 gates remain unchecked until the
+  disposable visible scenarios and final combined regression matrix are green.
+- No live user project was mutated, and no commit or push was made.
+
+### Final Wave 2 gate-closure leases - 2026-08-01
+
+Wave 3 remains dependency-blocked until the three formal Wave 2 phase gates and
+`MDX3_FOUNDATIONS_INTEGRATED` are proven. The final repair pass uses these exact
+same-worktree leases; L0 retains all shared UI/render/AI/store/project seams and
+all disposable browser evidence:
+
+| Lane | Packet | Exact writable leaf scope | L0 integration seam |
+|---|---|---|---|
+| L1 | `MD3_GATE_CLOSURE_AUDIT` | `src/services/motionDesign/replicator/**`, new `motionReplicatorGateClosure*.test.ts` only | supported-hardware browser/WebGPU evidence and formal gate ledger |
+| L2 | `MD6_NULL_VIEWPORT_MODEL` | new `nullViewportController.ts` and `motionParentViewportControllerMd6.test.ts` only | Preview overlay/gesture wiring, UI regression, disposable scenario |
+| L3 | `MD7_WORKER_GPU_ADJUSTMENT_PLAN` | new `workerGpuAdjustmentPlan.ts` and `motionAdjustmentWorkerGpuPlanMd7.test.ts` only | worker render-host integration, GPU parity regression, disposable scenario |
+
+Every worker is forbidden from architecture, shared types, stores, components,
+engine/render, project, AI, and documentation files. The exact machine-readable
+leases live in `motionDesignActiveWavePackets`.
+
+### Wave 2 adversarial review closure - 2026-08-01
+
+The three leaf handoffs were independently reviewed before formal closure. The
+review found and fixed real integration defects; green leaf tests alone were not
+treated as gate evidence.
+
+- MD6 Main integration fixed double-composed parent transforms, stale commits,
+  child preview propagation, letterbox offsets, capture cleanup, fail-open
+  track state, empty history batches, focus visibility, and unchanged-axis
+  keyframe writes. The resulting 13-file / 92-test structure matrix is green.
+- MD7 Main replaced generic effect reconstruction with a direct frozen-pass GPU
+  executor, added dedicated color/separable-blur passes, namespaced masks,
+  source-over mask union, source-id binding, and allocation cleanup.
+- The bounded `MD7_RUNTIME_ENVELOPE_GATES` L3 window owned only the new envelope,
+  the two named runtime seams, and its dedicated test. After its green handoff,
+  those shared seams returned to L0 for producer clock/timeline/composition
+  integration. Same-window leases remained disjoint; sequential ownership is
+  registered in `motionDesignWave2ReviewClosureWindows`.
+- The Worker boundary now rejects stale, expired, non-exact, wrong-target,
+  wrong-composition, wrong-frame, wrong-time, or wrong-source packets before
+  decoder/GPU work and forbids adjustment plans on autonomous streams.
+- Formal Wave 2 closure is still blocked by mixed strict-Worker-GPU sources
+  (the title-above-adjustment scenario) and visible supported-hardware evidence.
+  No MD3, MD6, MD7, or MDX3 checkbox is closed by this review checkpoint.
+
+### MD7 mixed-source closure windows - 2026-08-01
+
+The adversarial mixed-source audit rejected a software `nested-frame` as formal
+Worker-GPU parity evidence. Nested compositions require a recursively validated
+GPU frame-stack packet with their own occurrence namespace and, whenever an
+Adjustment exists inside the child, their own exact frozen Adjustment plan.
+OffscreenCanvas/Canvas 2D remains a degraded-preview or raw-raster ingestion
+tool only; it may not execute effects, masks, blends, Adjustment semantics, or
+nested ordering for the MD7 parity claim.
+
+The remaining packets execute in these dependency windows. Paths within one
+window are disjoint; shared runtime seams return to L0 only in Window 6.
+
+| Window | Packet | Owner | Dependency / result |
+|---|---|---|---|
+| 3 | `MD7_RECURSIVE_FRAME_STACK_CONTRACT` | L3 | Replace provisional software nested payload with exact recursive identity, execution mode, budgets, cycle/depth limits, and recursive transfer ownership |
+| 3 | `MD7_GENERIC_PLAN_ADAPTER` | L3 | Completed; legacy video input retained, mixed source kinds freeze deterministically, unsupported/duplicate/conflicting bindings fail closed |
+| 3 | `MD7_TARGET_RESOURCE_LIFETIME` | L0 | Completed implementation; detach, replacement, unregister, and dispose/reset release surface-owned compositor resources; bitmap allocations are registered before upload |
+| 4 | `MD7_FRAME_STACK_HOST_PROJECTOR` | L0 | After recursive contract; project evaluated raw Image/Text/Solid/Motion/Nested sources without DOM/store/GPU handles or double-baked effects |
+| 4 | `MD7_FRAME_STACK_MATERIALIZER` | L3 | After recursive contract; Worker raw uploads, Motion admission/renderer, namespaced resource ledger |
+| 4 | `MD7_LAZY_SOURCE_EXECUTOR` | L3 | After recursive contract; source GPU work occurs at its matching frozen `resolve-source` pass, never eagerly |
+| 5 | `MD7_RECURSIVE_STACK_EXECUTOR` | L3 | After materializer and lazy executor; depth-first exact parent/child pass traces |
+| 5 | `MD7_FRAME_STACK_TRANSPORT_ENVELOPE` | L0 | After recursive contract; atomic command/bridge DTO, exact root identity and plan/binding bijection |
+| 6 | `MD7_FRAME_STACK_SERIAL_INTEGRATION` | L0 | After projector, recursive executor, and transport; production host/bridge/handler/compositor integration |
+| 7 | `MD7_FRAME_STACK_VISIBLE_EVIDENCE` | L0 | After integration; supported-hardware pixel/readback proof for direct, target, nested, and export surfaces |
+
+The machine-readable leases and dependencies live in
+`motionDesignMd7MixedSourcePackets`. The currently open editor is visible to the
+user, but browser control still reports no session and the editor bridge rejects
+its token. Window 7 and every formal phase checkbox therefore remain open.
 
 ### L1 - MD3 Replicator Core
 
@@ -681,7 +882,7 @@ Every handoff reports:
 - full diff check and documentation/evidence audit.
 
 Targeted commands may use `npx vitest run <files>`, `npx eslint <files>`, and
-`npx tsc --noEmit -p tsconfig.app.json`. The handoff must record the exact
+`.\node_modules\.bin\tsc.cmd -b --pretty false`. The handoff must record the exact
 expanded file list; `<files>` is not acceptable in evidence.
 
 ## Evidence Layout
@@ -734,12 +935,12 @@ incomplete phase into a completed phase.
 
 ## Execution Checklist
 
-- [ ] `MD0_EXISTING_MVP_COMPLETE`
-- [ ] `MD1_SHAPES_AND_APPEARANCES_COMPLETE`
-- [ ] `MD2_AUTHORING_AND_ANIMATION_COMPLETE`
-- [ ] `MDX0_BASELINE_CLOSED`
-- [ ] `MDX1_OWNERSHIP_REGISTERED`
-- [ ] `MDX2_CONTRACTS_FROZEN`
+- [x] `MD0_EXISTING_MVP_COMPLETE`
+- [x] `MD1_SHAPES_AND_APPEARANCES_COMPLETE`
+- [x] `MD2_AUTHORING_AND_ANIMATION_COMPLETE`
+- [x] `MDX0_BASELINE_CLOSED`
+- [x] `MDX1_OWNERSHIP_REGISTERED`
+- [x] `MDX2_CONTRACTS_FROZEN`
 - [ ] `MD3_REPLICATOR_CORE_COMPLETE`
 - [ ] `MD6_STRUCTURE_COMPLETE`
 - [ ] `MD7_ADJUSTMENT_LAYERS_COMPLETE`
@@ -752,6 +953,8 @@ incomplete phase into a completed phase.
 - [ ] `MD9_MOTION_DESIGN_1_0_RELEASE`
 - [ ] `MDX6_RELEASE_GREEN`
 
-The next implementation action is Wave 0 only: close the existing MD0-MD2
-evidence and regression gaps, then register the exact Wave 1 ownership before
-starting capability code.
+The next implementation action is Window 3's recursive MD7 frame-stack contract,
+followed by the three disjoint Window 4 packets. MD3/MD6 visible evidence resumes
+when browser control becomes available. Shared types, stores, renderers, project
+codecs, UI, AI, architecture, and documentation remain L0-owned integration
+seams.

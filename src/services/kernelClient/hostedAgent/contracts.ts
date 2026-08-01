@@ -97,6 +97,14 @@ export type HostedAgentEvent =
       text: string;
     })
   | (HostedAgentEventBase & {
+      kind: 'billing-settled';
+      creditBalance: number;
+      creditsCharged: number;
+      ledgerEntryId: string | null;
+      roundIndex: number;
+      totalCreditsCharged: number;
+    })
+  | (HostedAgentEventBase & {
       kind: 'tool-batch-request';
       sequence: number;
       roundIndex: number;
@@ -315,12 +323,14 @@ export interface HostedAgentRoundSettlementRequest {
   reasoningTokens?: number;
   roundIndex: number;
   idempotencyKey: string;
+  toolCallCount?: number;
 }
 
 export interface HostedAgentRoundSettlementResponse {
   creditBalance: number;
   creditsCharged: number;
   idempotencyKey: string;
+  ledgerEntryId: string | null;
   replayed: boolean;
   roundIndex: number;
   totalCreditsCharged: number;

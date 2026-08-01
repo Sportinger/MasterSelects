@@ -58,11 +58,12 @@ export function copyNestedCompTextureToPreview(
   deps: OutputPresenterDeps,
   canvasId: string,
   compositionId: string,
+  renderOccurrenceKey?: string,
 ): boolean {
   const device = deps.getDevice();
   const res = deps.getResources();
   const canvasContext = deps.getTargetContext(canvasId);
-  const compTexture = res?.nestedCompRenderer.getTexture(compositionId);
+  const compTexture = res?.nestedCompRenderer.getTexture(compositionId, renderOccurrenceKey);
 
   if (!device || !res || !canvasContext || !compTexture || !res.outputPipeline || !res.sampler) return false;
 

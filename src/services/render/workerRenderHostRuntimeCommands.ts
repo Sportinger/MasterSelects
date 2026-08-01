@@ -8,6 +8,7 @@ import type {
   WorkerGpuRuntimeCommand,
   WorkerGpuWebCodecsFrameLayer,
 } from './workerGpuRuntimeCommands';
+import type { MotionAdjustmentWorkerGpuExecutionPlan } from '../motionDesign/adjustment/workerGpuAdjustmentPlan';
 import type {
   TransitionCenterAxis,
   TransitionPatternMask,
@@ -44,10 +45,16 @@ export interface WorkerRenderSoftwareSolidLayerSource {
   readonly color: string;
 }
 
+/** Full-frame snapshot of the lower accumulator, processed by this layer. */
+export interface WorkerRenderSoftwareAdjustmentLayerSource {
+  readonly kind: 'adjustment';
+}
+
 export type WorkerRenderSoftwareLayerSource =
   | WorkerRenderSoftwareBitmapLayerSource
   | WorkerRenderSoftwareCachedBitmapLayerSource
-  | WorkerRenderSoftwareSolidLayerSource;
+  | WorkerRenderSoftwareSolidLayerSource
+  | WorkerRenderSoftwareAdjustmentLayerSource;
 
 export interface WorkerRenderSoftwareLayerGeometry {
   readonly position: RenderGraphVector2;
@@ -360,9 +367,11 @@ export type WorkerRenderHostRuntimeCommand =
       readonly type: 'presentGpuTransferredVideoFrames';
       readonly requestId: string;
       readonly targetId: RenderGraphId;
+      readonly compositionId?: string;
       readonly timelineTime: number;
       readonly frameIndex: number;
       readonly layers: readonly WorkerRenderHostGpuTransferredVideoFrameLayer[];
+      readonly adjustmentPlan?: MotionAdjustmentWorkerGpuExecutionPlan;
     }
   | { readonly type: 'attachTargetSurface'; readonly surface: WorkerRenderHostTargetSurfaceCommand }
   | { readonly type: 'detachTargetSurface'; readonly targetId: RenderGraphId }

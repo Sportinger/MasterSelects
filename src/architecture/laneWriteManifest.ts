@@ -1,4 +1,5 @@
 import type { CompleteRefactorLane } from './types';
+import { motionDesignRefactorLanes } from './motionDesignLaneWriteManifest';
 import { storyboardRefactorLanes } from './storyboardLaneWriteManifest';
 
 const completeLegacyRefactorLanes = [
@@ -286,4 +287,5 @@ const completeLegacyRefactorLanes = [
 export const completeRefactorLanes = [
   ...completeLegacyRefactorLanes,
   ...storyboardRefactorLanes,
+  ...motionDesignRefactorLanes,
 ] as const satisfies readonly CompleteRefactorLane[];

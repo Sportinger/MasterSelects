@@ -1,5 +1,6 @@
 import type { ContainerFormat } from '../../../engine/export';
 import type { FFmpegContainer } from '../../../engine/ffmpeg';
+import type { BatchExportMediaType } from '../../../stores/exportStore';
 import { IMAGE_FORMATS } from '../exportSettingsState';
 import { ExportAudioChannelCard } from './ExportAudioChannelCard';
 import { ExportVisualChannelCard } from './ExportVisualChannelCard';
@@ -17,6 +18,8 @@ import type {
 
 interface ExportBasicsSectionProps {
   filename: string;
+  filenameLocked?: boolean;
+  sourceMediaType?: BatchExportMediaType;
   mode: ExportBasicsModeState;
   display: ExportBasicsDisplayState;
   video: ExportBasicsVideoState;
@@ -31,6 +34,8 @@ interface ExportBasicsSectionProps {
 
 export function ExportBasicsSection({
   filename,
+  filenameLocked = false,
+  sourceMediaType,
   mode,
   display,
   video,
@@ -68,6 +73,8 @@ export function ExportBasicsSection({
                   value={filename}
                   onChange={(e) => actions.setFilename(e.target.value)}
                   placeholder="export"
+                  disabled={filenameLocked}
+                  title={filenameLocked ? 'File names stay individual while shared batch settings are active' : undefined}
                 />
               </div>
             </div>
@@ -79,7 +86,7 @@ export function ExportBasicsSection({
               <strong>{display.displayContainerLabel}</strong>
             </div>
             <div className="export-container-groups">
-              <div className="export-container-group">
+              {(!sourceMediaType || sourceMediaType === 'video') && <div className="export-container-group">
                 <span className="export-container-group-label">Video</span>
                 <div className="export-chip-row">
                   {options.videoContainerFormats.map((format) => (
@@ -110,9 +117,9 @@ export function ExportBasicsSection({
                     </button>
                   ))}
                 </div>
-              </div>
+              </div>}
 
-              <div className="export-container-group">
+              {(!sourceMediaType || sourceMediaType === 'image') && <div className="export-container-group">
                 <span className="export-container-group-label">Image</span>
                 <div className="export-chip-row">
                   {IMAGE_FORMATS.map((format) => (
@@ -131,9 +138,9 @@ export function ExportBasicsSection({
                     </button>
                   ))}
                 </div>
-              </div>
+              </div>}
 
-              <div className="export-container-group">
+              {(!sourceMediaType || sourceMediaType === 'audio') && <div className="export-container-group">
                 <span className="export-container-group-label">Audio</span>
                 <div className="export-chip-row">
                   <button
@@ -177,9 +184,9 @@ export function ExportBasicsSection({
                     .{display.browserAudioExtension}
                   </button>
                 </div>
-              </div>
+              </div>}
 
-              <div className="export-container-group">
+              {!sourceMediaType && <div className="export-container-group">
                 <span className="export-container-group-label">XML</span>
                 <div className="export-chip-row">
                   <button
@@ -193,11 +200,15 @@ export function ExportBasicsSection({
                     .fcpxml
                   </button>
                 </div>
-              </div>
+              </div>}
             </div>
           </div>
 
-          {mode.isVideoMode ? (
+          {sourceMediaType ? (
+            <div className="export-inline-note">
+              Direct source encoding uses the complete media file. Timeline-only outputs and In/Out markers are bypassed.
+            </div>
+          ) : mode.isVideoMode ? (
             <div className="export-field-card export-subcard" data-export-target="basic-workflow">
               <div className="export-field-head">
                 <span>Workflow</span>
@@ -287,6 +298,7 @@ export function ExportBasicsSection({
           time={time}
           useInOut={useInOut}
           actions={actions}
+          sourceMediaType={sourceMediaType}
         />
 
         <ExportAudioChannelCard
@@ -297,6 +309,7 @@ export function ExportBasicsSection({
           time={time}
           useInOut={useInOut}
           actions={actions}
+          sourceMediaType={sourceMediaType}
         />
       </div>
     </div>

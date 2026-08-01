@@ -37,7 +37,7 @@ function hostedToolEvents(turnId: string, sessionId = 'abort-session'): Response
   const events = [{
     acceptedHistoryFormatVersion: 'flashboard-provider-history-v1',
     acceptedPromptVersion: 'flashboard-chat-v2',
-    acceptedToolSchemaVersion: 'flashboard-chat-tools-v1',
+    acceptedToolSchemaVersion: 'flashboard-chat-tools-v2',
     eventId: '1',
     kind: 'session-ready',
     maximumIterations: 400,
@@ -51,7 +51,7 @@ function hostedToolEvents(turnId: string, sessionId = 'abort-session'): Response
     sequence: 0,
     sessionId,
     toolCalls: [{ args: {}, toolCallId: 'inspect-1', toolName: 'getTimelineState' }],
-    toolSchemaVersion: 'flashboard-chat-tools-v1',
+    toolSchemaVersion: 'flashboard-chat-tools-v2',
     turnId,
   }];
   return new Response(events.map(event => (
@@ -121,11 +121,12 @@ describe('hosted FlashBoard chat cancellation', () => {
       temperature: 0.7,
     })).rejects.toMatchObject({ name: 'AbortError' });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(mocks.executeAIToolCalls).not.toHaveBeenCalled();
     const firstBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(firstBody.routePreference).toBe('auto');
     expect(String(fetchMock.mock.calls[1]?.[0])).toMatch(/\/cancel$/);
+    expect(String(fetchMock.mock.calls[2]?.[0])).toMatch(/\/events$/);
   });
 
   it('does not authorize a later provider round after cancellation during a tool batch', async () => {
@@ -165,9 +166,10 @@ describe('hosted FlashBoard chat cancellation', () => {
     })).rejects.toMatchObject({ name: 'AbortError' });
 
     expect(mocks.executeAIToolCalls).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     const firstBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(firstBody.turnId).toBe('cancel-after-tool');
     expect(String(fetchMock.mock.calls[2]?.[0])).toMatch(/\/cancel$/);
+    expect(String(fetchMock.mock.calls[3]?.[0])).toMatch(/\/events$/);
   });
 });

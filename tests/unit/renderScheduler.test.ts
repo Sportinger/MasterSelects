@@ -113,7 +113,11 @@ type RenderSchedulerTestAccess = typeof renderScheduler & {
   preparingCompositions: Set<string>;
   nestedCompCache: Map<string, unknown>;
   nestedCompCacheTime: number;
-  activeCompLayers: unknown[] | null;
+  activeCompFrame: unknown | null;
+  isRunning: boolean;
+  startLoop: () => void;
+  stopLoop: () => void;
+  renderAllTargets: () => void;
 };
 
 describe('renderScheduler playback timing', () => {
@@ -121,6 +125,7 @@ describe('renderScheduler playback timing', () => {
     hoisted.evaluateAtTime.mockClear();
     hoisted.prepareComposition.mockClear();
     hoisted.copyNestedCompTextureToPreview.mockClear();
+    hoisted.copyNestedCompTextureToPreview.mockReturnValue(false);
     hoisted.renderToPreviewCanvas.mockClear();
 
     hoisted.timelineState = {
@@ -160,7 +165,7 @@ describe('renderScheduler playback timing', () => {
     scheduler.preparingCompositions.clear();
     scheduler.nestedCompCache.clear();
     scheduler.nestedCompCacheTime = 0;
-    scheduler.activeCompLayers = null;
+    scheduler.activeCompFrame = null;
   });
 
   it('uses the high-frequency internal playhead for nested comp previews during playback', () => {
@@ -186,7 +191,97 @@ describe('renderScheduler playback timing', () => {
     renderScheduler.forceRender();
 
     expect(hoisted.evaluateAtTime).toHaveBeenCalledWith('comp-2', 5);
-    expect(hoisted.renderToPreviewCanvas).toHaveBeenCalledWith('preview-comp-2', []);
+    expect(hoisted.renderToPreviewCanvas).toHaveBeenCalledWith('preview-comp-2', [], {
+      compositionId: 'comp-2',
+      timelineTimeSeconds: 5,
+    });
+  });
+
+  it('copies the exact nested wrapper occurrence into an independent preview', () => {
+    hoisted.timelineState = {
+      playheadPosition: 7,
+      clips: [{
+        id: 'nested-clip',
+        isComposition: true,
+        compositionId: 'comp-2',
+        startTime: 5,
+        duration: 10,
+        inPoint: 2,
+        outPoint: 12,
+      }],
+    };
+    hoisted.copyNestedCompTextureToPreview.mockReturnValue(true);
+    const wrapperLayer = {
+      id: 'comp-1_layer_0_nested-clip',
+      sourceClipId: 'nested-clip',
+      source: {
+        type: 'image',
+        nestedComposition: { compositionId: 'comp-2' },
+      },
+    } as unknown as Layer;
+    const scheduler = renderScheduler as unknown as RenderSchedulerTestAccess;
+    scheduler.registeredTargets.add('preview-comp-2');
+    renderScheduler.setActiveCompLayers([wrapperLayer], {
+      compositionId: 'comp-1',
+      timelineTimeSeconds: 7,
+    });
+
+    renderScheduler.forceRender();
+
+    expect(hoisted.copyNestedCompTextureToPreview).toHaveBeenCalledWith(
+      'preview-comp-2',
+      'comp-2',
+      'comp-1_layer_0_nested-clip',
+    );
+    expect(hoisted.renderToPreviewCanvas).not.toHaveBeenCalled();
+    expect(hoisted.evaluateAtTime).not.toHaveBeenCalled();
+  });
+
+  it('disables nested texture copy when the composition occurrence is ambiguous', () => {
+    hoisted.timelineState = {
+      playheadPosition: 7,
+      clips: [{
+        id: 'nested-clip-a',
+        isComposition: true,
+        compositionId: 'comp-2',
+        startTime: 5,
+        duration: 10,
+        inPoint: 0,
+        outPoint: 10,
+      }, {
+        id: 'nested-clip-b',
+        isComposition: true,
+        compositionId: 'comp-2',
+        startTime: 6,
+        duration: 10,
+        inPoint: 3,
+        outPoint: 13,
+      }],
+    };
+    hoisted.copyNestedCompTextureToPreview.mockReturnValue(true);
+    const scheduler = renderScheduler as unknown as RenderSchedulerTestAccess;
+    scheduler.registeredTargets.add('preview-comp-2');
+    renderScheduler.setActiveCompLayers([{
+      id: 'wrapper-a',
+      sourceClipId: 'nested-clip-a',
+      source: { type: 'image', nestedComposition: { compositionId: 'comp-2' } },
+    }, {
+      id: 'wrapper-b',
+      sourceClipId: 'nested-clip-b',
+      source: { type: 'image', nestedComposition: { compositionId: 'comp-2' } },
+    }] as unknown as Layer[], {
+      compositionId: 'comp-1',
+      timelineTimeSeconds: 7,
+    });
+
+    renderScheduler.forceRender();
+
+    expect(hoisted.copyNestedCompTextureToPreview).not.toHaveBeenCalled();
+    expect(hoisted.evaluateAtTime).toHaveBeenCalledWith('comp-2', 0);
+    expect(hoisted.renderToPreviewCanvas).toHaveBeenCalledWith('preview-comp-2', [], {
+      compositionId: 'comp-2',
+      timelineTimeSeconds: 0,
+    });
   });
 
   it('normalizes blend modes for isolated layer preview renders', () => {
@@ -202,7 +297,7 @@ describe('renderScheduler playback timing', () => {
     expect(normalized[1].blendMode).toBe('normal');
   });
 
-  it('renders an active-comp viewport override with the main loop layers', () => {
+  it('renders an active-comp viewport override with the exact main-loop frame snapshot', () => {
     const layers = [{ id: 'active-layer', blendMode: 'screen' }] as Layer[];
     hoisted.renderTargetState.targets.set('preview-edit', {
       id: 'preview-edit',
@@ -212,12 +307,56 @@ describe('renderScheduler playback timing', () => {
     });
     const scheduler = renderScheduler as unknown as RenderSchedulerTestAccess;
     scheduler.registeredTargets.add('preview-edit');
-    scheduler.activeCompLayers = layers;
+    renderScheduler.setActiveCompLayers(layers, {
+      compositionId: 'comp-1',
+      timelineTimeSeconds: 2.25,
+    });
+
+    // The playback clock can advance before the independent target is serviced.
+    // Its reused layers still belong to the atomically captured 2.25s frame.
+    playheadState.position = 8;
+    playheadState.isUsingInternalPosition = true;
 
     renderScheduler.forceRender();
 
-    expect(hoisted.renderToPreviewCanvas).toHaveBeenCalledWith('preview-edit', layers);
+    expect(hoisted.renderToPreviewCanvas).toHaveBeenCalledWith('preview-edit', layers, {
+      compositionId: 'comp-1',
+      timelineTimeSeconds: 2.25,
+    });
     expect(hoisted.renderToPreviewCanvas.mock.calls.at(-1)?.[1]).toBe(layers);
     expect(hoisted.evaluateAtTime).not.toHaveBeenCalled();
+  });
+
+  it('keeps scheduling frames when one independent target pass throws', () => {
+    const scheduledFrames: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
+      scheduledFrames.push(callback);
+      return scheduledFrames.length;
+    }));
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    const nowSpy = vi.spyOn(performance, 'now')
+      .mockReturnValueOnce(0)
+      .mockReturnValue(20);
+    const scheduler = renderScheduler as unknown as RenderSchedulerTestAccess;
+    const renderSpy = vi.spyOn(scheduler, 'renderAllTargets')
+      .mockImplementationOnce(() => {
+        throw new Error('target render failed');
+      });
+
+    try {
+      scheduler.startLoop();
+      expect(scheduledFrames).toHaveLength(1);
+
+      scheduledFrames.shift()!(20);
+
+      expect(renderSpy).toHaveBeenCalledOnce();
+      expect(scheduler.isRunning).toBe(true);
+      expect(scheduledFrames).toHaveLength(1);
+    } finally {
+      scheduler.stopLoop();
+      renderSpy.mockRestore();
+      nowSpy.mockRestore();
+      vi.unstubAllGlobals();
+    }
   });
 });

@@ -17,6 +17,11 @@ export interface RenderCaptureCanvas {
   source: string;
 }
 
+export interface RenderSurfaceFrameContext {
+  compositionId: string;
+  timelineTimeSeconds: number;
+}
+
 export interface RenderHostLayerCollector {
   isVideoGpuReady(video: HTMLVideoElement): boolean;
   markVideoGpuReady(video: HTMLVideoElement): void;
@@ -53,13 +58,21 @@ export interface RenderHostPort {
   setIsScrubbing(isScrubbing: boolean): void;
   setContinuousRender(enabled: boolean): void;
   getRamPreviewRenderEngine(): RamPreviewRenderEngine;
-  render(layers: Layer[]): void;
+  render(layers: Layer[], frameContext?: RenderSurfaceFrameContext): void;
   renderCachedFrame(time: number): boolean;
   cacheCompositeFrame(time: number): Promise<void>;
   cacheActiveCompOutput(compositionId: string): void;
   getIsExporting(): boolean;
-  renderToPreviewCanvas(canvasId: string, layers: Layer[]): void;
-  copyNestedCompTextureToPreview(canvasId: string, compositionId: string): boolean;
+  renderToPreviewCanvas(
+    canvasId: string,
+    layers: Layer[],
+    frameContext?: RenderSurfaceFrameContext,
+  ): void;
+  copyNestedCompTextureToPreview(
+    canvasId: string,
+    compositionId: string,
+    renderOccurrenceKey?: string,
+  ): boolean;
   setResolution(width: number, height: number): void;
   getOutputDimensions(): { width: number; height: number };
   readPixels(): Promise<Uint8ClampedArray | null>;

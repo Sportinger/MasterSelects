@@ -31,6 +31,8 @@ export type AgentActivityEvent =
       source: 'runtime';
       phase: 'started' | 'completed' | 'failed';
       safeLabel: string;
+      /** Stable provider call id used to collapse start/completion into one log row. */
+      operationId?: string;
       toolName?: string;
       createdAt: number;
     }
@@ -66,6 +68,16 @@ export interface FlashBoardChatModelOption {
   reasoningEfforts?: FlashBoardOpenAiReasoningEffort[];
 }
 
+/** A bounded image payload prepared by the browser for one chat turn. */
+export interface FlashBoardChatVisualReference {
+  dataUrl: string;
+  height?: number;
+  id: string;
+  mediaType: string;
+  name?: string;
+  width?: number;
+}
+
 export interface FlashBoardChatRequest {
   /** Internal run binding used to correlate provider activity with the chat audit. */
   activityRunId?: string;
@@ -74,7 +86,6 @@ export interface FlashBoardChatRequest {
   idempotencyKey?: string;
   intent?: ChatIntent;
   decisionPolicy?: DecisionPolicy;
-  kieAiApiKey?: string;
   lemonadeContextSize?: number;
   lemonadeEndpoint?: string;
   model: string;
@@ -103,6 +114,7 @@ export interface FlashBoardChatRequest {
   systemPromptOverride?: string;
   temperature: number;
   toolExecutionMode?: FlashBoardChatToolExecutionMode;
+  visualReferences?: FlashBoardChatVisualReference[];
 }
 
 export interface FlashBoardToolCall {

@@ -1,8 +1,8 @@
 import type { FlashBoardGenerationRequest } from '../../stores/flashboardStore/types';
-import { calculateKieAiCost } from '../kieAiService';
+import { calculateKieAiCost } from '../kieAi/catalog';
 import { calculateCost as calculatePiApiCost } from '../piApiService';
 import { estimateHostedElevenLabsSpeechCredits, type ElevenLabsModelRates } from '../elevenLabsService';
-import { SUNO_PROVIDER_ID, SUNO_SOUNDS_PROVIDER_ID } from '../sunoService';
+import { SUNO_PROVIDER_ID, SUNO_SOUNDS_PROVIDER_ID } from '../sunoContracts';
 import type { CatalogEntry } from './types';
 
 export const KIEAI_USD_PER_CREDIT = 0.005;
@@ -169,52 +169,6 @@ function buildHostedSunoEstimate(): FlashBoardPriceEstimate {
   };
 }
 
-function buildKieSunoEstimate(): FlashBoardPriceEstimate {
-  return {
-    compactLabel: `${KIEAI_SUNO_VENDOR_CREDITS} cr`,
-    fullLabel: `${KIEAI_SUNO_VENDOR_CREDITS} Kie credits`,
-  };
-}
-
-function calculateKieVideoAmount(input: FlashBoardPricingInput): number {
-  const isSeedance2 = input.providerId.includes('seedance-2');
-  const duration = normalizeVideoDuration(input.duration, isSeedance2 ? 4 : 3);
-  const mode = normalizeMode(input.mode);
-  const effectiveMode = isSeedance2 ? input.mode ?? '720p' : mode;
-  return calculateKieAiCost(
-    input.providerId,
-    effectiveMode,
-    duration,
-    resolveEffectiveAudio(input),
-    { hasVideoInput: input.hasVideoInput },
-  );
-}
-
-function buildKieVideoEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate {
-  const kieCredits = calculateKieVideoAmount(input);
-
-  return {
-    compactLabel: `${kieCredits} cr`,
-    fullLabel: `${kieCredits} Kie credits`,
-  };
-}
-
-function calculateKieImageAmount(input: FlashBoardPricingInput): number | null {
-  const size = input.imageSize ?? '1K';
-  const usd = KIEAI_IMAGE_USD_PRICING[input.providerId]?.[size];
-  return usd == null ? null : Math.round(usd / KIEAI_USD_PER_CREDIT);
-}
-
-function buildKieImageEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate | null {
-  const kieCredits = calculateKieImageAmount(input);
-  if (kieCredits == null) return null;
-
-  return {
-    compactLabel: `${kieCredits} cr`,
-    fullLabel: `${kieCredits} Kie credits`,
-  };
-}
-
 function calculatePiApiAmount(input: FlashBoardPricingInput): number {
   const duration = input.duration && input.duration > 0 ? input.duration : 5;
   const mode = normalizeMode(input.mode);
@@ -254,15 +208,13 @@ export function getFlashBoardPriceQuote(
       : null;
   }
 
-  // BYO prices remain estimates from vendor tables. They stay available as UI
-  // labels, but not as an exact max-spend approval quote.
   return null;
 }
 
 export function getFlashBoardPriceEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate | null {
   if (input.outputType === 'audio') {
     if (input.providerId === SUNO_PROVIDER_ID || input.providerId === SUNO_SOUNDS_PROVIDER_ID) {
-      return input.service === 'cloud' ? buildHostedSunoEstimate() : buildKieSunoEstimate();
+      return input.service === 'cloud' ? buildHostedSunoEstimate() : null;
     }
 
     return input.service === 'cloud' ? buildHostedElevenLabsEstimate(input) : null;
@@ -292,11 +244,7 @@ export function getFlashBoardPriceEstimate(input: FlashBoardPricingInput): Flash
     return buildPiApiEstimate(input);
   }
 
-  if (input.outputType === 'image' || input.providerId === 'nano-banana-2') {
-    return buildKieImageEstimate(input);
-  }
-
-  return buildKieVideoEstimate(input);
+  return null;
 }
 
 export function getCatalogEntryPriceEstimate(

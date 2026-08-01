@@ -116,7 +116,10 @@ export function buildMotionSource(clip: TimelineClip, clipLocalTime: number): La
     return null;
   }
 
-  const keyframes = useTimelineStore.getState().clipKeyframes.get(clip.id) ?? [];
+  const storeKeyframes = useTimelineStore.getState().clipKeyframes.get(clip.id);
+  const keyframes = storeKeyframes?.length
+    ? [...storeKeyframes]
+    : [...((clip as TimelineClip & { keyframes?: readonly Keyframe[] }).keyframes ?? [])];
   return {
     type: 'motion',
     motion: getInterpolatedMotionLayer(clip, keyframes, clipLocalTime) ?? clip.motion,

@@ -33,7 +33,7 @@ const generationRecord = {
   updatedAt: 11,
   job: { status: 'processing' as const },
   request: {
-    service: 'kieai' as const,
+    service: 'cloud' as const,
     providerId: 'kling-3.0',
     version: '3.0',
     outputType: 'video' as const,
@@ -71,7 +71,7 @@ describe('FlashBoard active generation record adapter', () => {
       createdAt: 10,
       updatedAt: 11,
       request: {
-        service: 'kieai',
+        service: 'cloud',
         providerId: 'kling-3.0',
         prompt: 'Board prompt',
         referenceMediaFileIds: ['frame-ref'],
@@ -269,7 +269,7 @@ describe('FlashBoard active generation record adapter', () => {
   it('submits a generation request through the active record queue', () => {
     const submitSpy = vi.spyOn(flashBoardJobService, 'submit').mockReturnValue(null);
     const request = {
-      service: 'kieai' as const,
+      service: 'cloud' as const,
       providerId: 'kling-3.0',
       version: '3.0',
       outputType: 'video' as const,
@@ -337,7 +337,7 @@ describe('FlashBoard active generation record adapter', () => {
     vi.spyOn(flashBoardJobService, 'submit').mockReturnValue(null);
 
     submitFlashBoardActiveGenerationRequest({
-      service: 'kieai',
+      service: 'cloud',
       providerId: 'kling-3.0',
       version: '3.0',
       outputType: 'video',

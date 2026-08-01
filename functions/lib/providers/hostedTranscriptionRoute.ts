@@ -196,6 +196,7 @@ export async function handleHostedTranscriptionRequest(
 
     return json(buildTranscriptionEnvelope(provider, {
       creditBalance: charge.balance,
+      creditMutationId: charge.entry?.id ?? null,
       creditsCharged: charge.charged ? creditsRequired : 0,
       data: result,
       ok: true,

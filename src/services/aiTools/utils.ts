@@ -296,6 +296,14 @@ export function getQuickTimelineSummary(): string {
     ? `Native Helper: connected (downloads available).`
     : `Native Helper: not connected (downloads unavailable).`;
   const ytKeyStatus = hasYouTubeKey ? '' : ' YouTube API key not set.';
+  const describeTrackIds = (trackList: typeof tracks): string => {
+    const maximum = 24;
+    const listed = trackList.slice(0, maximum).map((track) => (
+      `${track.id}${track.locked ? '[locked]' : ''}${track.visible === false ? '[hidden]' : ''}`
+    ));
+    return `${listed.join(', ')}${trackList.length > maximum ? `, +${trackList.length - maximum} more` : ''}`;
+  };
+  const trackIds = ` Video track IDs (TOPMOST-FIRST; earlier entries composite above later entries): ${describeTrackIds(videoTracks) || 'none'}. Audio track IDs: ${describeTrackIds(audioTracks) || 'none'}.`;
 
-  return `Timeline: ${videoTracks.length} video tracks (${videoClips.length} clips), ${audioTracks.length} audio tracks (${audioClips.length} clips). Playhead at ${playheadPosition.toFixed(2)}s, duration ${duration.toFixed(2)}s.${selectedInfo} ${ytStatus}${ytKeyStatus}`;
+  return `Timeline: ${videoTracks.length} video tracks (${videoClips.length} clips), ${audioTracks.length} audio tracks (${audioClips.length} clips). Playhead at ${playheadPosition.toFixed(2)}s, duration ${duration.toFixed(2)}s.${trackIds}${selectedInfo} ${ytStatus}${ytKeyStatus}`;
 }

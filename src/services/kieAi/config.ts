@@ -1,8 +1,3 @@
-export const BASE_URL = 'https://api.kie.ai';
-export const UPLOAD_URL = 'https://kieai.redpandaai.co/api/file-stream-upload';
-export const BYO_PROXY_REQUEST_URL = '/api/kieai/byo/request';
-export const BYO_PROXY_UPLOAD_URL = '/api/kieai/byo/upload';
-
 export const KLING_3_PROVIDER_ID = 'kling-3.0';
 export const KLING_3_MODES = ['std', 'pro', '4K'];
 export const KLING_3_DURATIONS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
@@ -22,11 +17,3 @@ export const TOPAZ_VIDEO_UPSCALE_PROVIDER_ID = 'topaz/video-upscale';
 export const VEO_3_1_PROVIDER_ID = 'veo-3.1';
 export const RUNWAY_VIDEO_PROVIDER_ID = 'runway-video';
 export const RUNWAY_ASPECT_RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4'];
-
-export function isRemoteUrl(value: string): boolean {
-  return /^https?:\/\//i.test(value);
-}
-
-export function canUseSameOriginProxy(): boolean {
-  return typeof window !== 'undefined' && typeof window.fetch === 'function';
-}

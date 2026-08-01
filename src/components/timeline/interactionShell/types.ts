@@ -36,6 +36,7 @@ import type {
 import type { FadeCurveKeyframe } from '../utils/fadeCurvePath';
 
 export const CLIP_INTERACTION_SHELL_MODULE_SLOTS = [
+  'parenting',
   'trim',
   'fade',
   'keyframe',
@@ -63,6 +64,7 @@ export const CLIP_INTERACTION_SHELL_PARITY_STATES = [
 export type ClipInteractionShellParityState = typeof CLIP_INTERACTION_SHELL_PARITY_STATES[number];
 
 export const CLIP_INTERACTION_SHELL_MOUNT_REASONS = [
+  'parenting',
   'hover',
   'drag',
   'multi-drag',
@@ -113,6 +115,8 @@ export type ClipInteractionShellClipRef = Readonly<
     | 'waveform'
     | 'audioState'
     | 'videoState'
+    | 'parentClipId'
+    | 'is3D'
   >
 >;
 
@@ -172,6 +176,13 @@ export interface ClipInteractionShellMountState {
 export interface ClipInteractionShellBaseModuleState {
   enabled: boolean;
   slot: ClipInteractionShellModuleSlot;
+}
+
+export interface ClipInteractionShellParentingModuleState extends ClipInteractionShellBaseModuleState {
+  slot: 'parenting';
+  parentClipId?: string;
+  parentClipName?: string;
+  locked: boolean;
 }
 
 export interface ClipInteractionShellTrimModuleState extends ClipInteractionShellBaseModuleState {
@@ -307,6 +318,7 @@ export interface ClipInteractionShellToolPreviewModuleState extends ClipInteract
 }
 
 export interface ClipInteractionShellActiveModules {
+  parenting?: ClipInteractionShellParentingModuleState;
   trim?: ClipInteractionShellTrimModuleState;
   fade?: ClipInteractionShellFadeModuleState;
   keyframe?: ClipInteractionShellKeyframeModuleState;
@@ -319,6 +331,7 @@ export interface ClipInteractionShellActiveModules {
 }
 
 export const CLIP_INTERACTION_SHELL_MODULE_KEYS = {
+  parenting: 'parenting',
   trim: 'trim',
   fade: 'fade',
   keyframe: 'keyframe',

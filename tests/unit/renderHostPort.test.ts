@@ -119,15 +119,22 @@ describe('renderHostPort', () => {
       height: 1,
     } as ImageData;
     const layers = [{ id: 'layer-a' }] as never;
+    const ramPreviewFrameContext = {
+      compositionId: 'comp-a',
+      timelineTimeSeconds: 2.5,
+    };
 
     renderHostPort.setTimelineVisualDemand(true);
     renderHostPort.setVisualTargetFps(30);
     renderHostPort.setIsPlaying(true);
     renderHostPort.setIsScrubbing(true);
     renderHostPort.setContinuousRender(true);
-    renderHostPort.render(layers);
+    renderHostPort.render(layers, {
+      compositionId: 'comp-a',
+      timelineTimeSeconds: 5.25,
+    });
     const ramPreviewRenderEngine = renderHostPort.getRamPreviewRenderEngine();
-    ramPreviewRenderEngine.render(layers);
+    ramPreviewRenderEngine.render(layers, ramPreviewFrameContext);
     expect(renderHostPort.renderCachedFrame(1.25)).toBe(true);
     await expect(renderHostPort.cacheCompositeFrame(1.25)).resolves.toBeUndefined();
     await expect(ramPreviewRenderEngine.cacheCompositeFrame(2.5)).resolves.toBeUndefined();
@@ -137,7 +144,11 @@ describe('renderHostPort', () => {
     await expect(renderHostPort.readPixels()).resolves.toBe(pixels);
     expect(renderHostPort.getIsExporting()).toBe(true);
     renderHostPort.renderToPreviewCanvas('target-a', layers);
-    expect(renderHostPort.copyNestedCompTextureToPreview('target-a', 'comp-a')).toBe(true);
+    expect(renderHostPort.copyNestedCompTextureToPreview(
+      'target-a',
+      'comp-a',
+      'comp-a_layer_2_nested-clip',
+    )).toBe(true);
     (engine as unknown as { mainPreviewCanvas?: HTMLCanvasElement | null }).mainPreviewCanvas = canvas;
     expect(renderHostPort.getCaptureCanvas()).toEqual({ canvas, source: 'mainPreviewCanvas' });
     expect(renderHostPort.getDevice()).toBe(device);
@@ -185,7 +196,11 @@ describe('renderHostPort', () => {
     expect(engine.setIsPlaying).toHaveBeenCalledWith(true);
     expect(engine.setIsScrubbing).toHaveBeenCalledWith(true);
     expect(engine.setContinuousRender).toHaveBeenCalledWith(true);
-    expect(engine.render).toHaveBeenCalledWith(layers);
+    expect(engine.render).toHaveBeenNthCalledWith(1, layers, {
+      compositionId: 'comp-a',
+      timelineTimeSeconds: 5.25,
+    });
+    expect(engine.render).toHaveBeenNthCalledWith(2, layers, ramPreviewFrameContext);
     expect(engine.renderCachedFrame).toHaveBeenCalledWith(1.25);
     expect(engine.cacheCompositeFrame).toHaveBeenCalledWith(1.25);
     expect(engine.cacheCompositeFrame).toHaveBeenCalledWith(2.5);
@@ -194,8 +209,12 @@ describe('renderHostPort', () => {
     expect(engine.getOutputDimensions).toHaveBeenCalledTimes(1);
     expect(engine.readPixels).toHaveBeenCalledTimes(1);
     expect(engine.getIsExporting).toHaveBeenCalledTimes(1);
-    expect(engine.renderToPreviewCanvas).toHaveBeenCalledWith('target-a', layers);
-    expect(engine.copyNestedCompTextureToPreview).toHaveBeenCalledWith('target-a', 'comp-a');
+    expect(engine.renderToPreviewCanvas).toHaveBeenCalledWith('target-a', layers, undefined);
+    expect(engine.copyNestedCompTextureToPreview).toHaveBeenCalledWith(
+      'target-a',
+      'comp-a',
+      'comp-a_layer_2_nested-clip',
+    );
     expect(engine.getDevice).toHaveBeenCalledTimes(1);
     expect(engine.getLastRenderedTexture).toHaveBeenCalledTimes(1);
     expect(engine.updateMaskTexture).toHaveBeenCalledWith('clip-a', maskImageData);

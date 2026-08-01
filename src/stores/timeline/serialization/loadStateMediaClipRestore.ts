@@ -109,6 +109,7 @@ function createRestoredMediaClip(params: {
     thumbnails: serializedClip.thumbnails,
     linkedClipId: serializedClip.linkedClipId,
     linkedGroupId: serializedClip.linkedGroupId,
+    parentClipId: serializedClip.parentClipId,
     videoState: restorePersistedClipVideoState(serializedClip),
     audioState: clonePersistedClipAudioState(serializedClip.audioState),
     waveform: serializedClip.waveform,

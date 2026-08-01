@@ -1,6 +1,6 @@
 import type { CatalogEntry } from './types';
 import type { RefineFlashBoardPromptInput, PromptReferenceDescriptor } from './FlashBoardPromptRefinerTypes';
-import { SUNO_PROVIDER_ID, SUNO_SOUNDS_PROVIDER_ID } from '../sunoService';
+import { SUNO_PROVIDER_ID, SUNO_SOUNDS_PROVIDER_ID } from '../sunoContracts';
 
 export function getOutputTypeLabel(entry: CatalogEntry): string {
   if (entry.outputType === 'image' || entry.supportsTextToImage) {

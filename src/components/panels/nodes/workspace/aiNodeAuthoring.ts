@@ -8,7 +8,6 @@ import type {
   ClipCustomNodeDefinition,
 } from '../../../../services/nodeGraph';
 import { cloudAiService } from '../../../../services/cloudAiService';
-import { requestKieChatByo } from '../../../../services/kieAi/chatTransport';
 import {
   createLemonadeChatCompletionStream,
   DEFAULT_LEMONADE_ENDPOINT,
@@ -39,11 +38,6 @@ export type NodeAIGenerationAccess =
   | {
       kind: 'hosted';
       label: 'Cloud';
-    }
-  | {
-      apiKey: string;
-      kind: 'kie';
-      label: 'Kie.ai key';
     }
   | {
       endpoint: string;
@@ -252,15 +246,6 @@ export async function generateAINodeResponse(
     const response = await cloudAiService.createChatCompletion({
       ...requestBody,
       protocol: 'openai-responses',
-    });
-    return parseAITextPayload(response);
-  }
-
-  if (access.kind === 'kie') {
-    const response = await requestKieChatByo({
-      apiKey: access.apiKey,
-      body: requestBody,
-      endpoint: '/codex/v1/responses',
     });
     return parseAITextPayload(response);
   }

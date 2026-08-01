@@ -278,7 +278,49 @@ export function MediaPanel() {
   const clearMediaBoardInsertionPreview = useCallback(() => {
     clearMediaBoardInsertionPreviewRef.current();
   }, []);
-  const getTimelineSlotGridProgress = useCallback(() => useTimelineStore.getState().slotGridProgress, []);
+  const getTimelineState = useCallback(() => useTimelineStore.getState(), []);
+  const getTimelineSlotGridProgress = useCallback(() => getTimelineState().slotGridProgress, [getTimelineState]);
+  const handleNewMotionNull = useCallback(() => {
+    const timeline = getTimelineState();
+    const selectedClip = timeline.clips.find((clip) => timeline.selectedClipIds.has(clip.id));
+    const selectedTrack = selectedClip
+      ? timeline.tracks.find((track) => track.id === selectedClip.trackId)
+      : undefined;
+    const targetTrackId = selectedTrack?.type === 'video' && selectedTrack.locked !== true
+      ? selectedTrack.id
+      : timeline.tracks.find((track) => (
+          track.type === 'video' && track.locked !== true && track.visible !== false
+        ))?.id ?? timeline.addTrack('video');
+    const current = getTimelineState();
+    const clipId = current.addMotionNullClip(
+      targetTrackId,
+      current.playheadPosition,
+      5,
+      'Motion Null',
+    );
+    if (clipId) current.selectClip(clipId);
+    closeContextMenu();
+  }, [closeContextMenu, getTimelineState]);
+  const handleNewMotionAdjustment = useCallback(() => {
+    const timeline = getTimelineState();
+    const selectedClip = timeline.clips.find((clip) => timeline.selectedClipIds.has(clip.id));
+    const selectedTrack = selectedClip
+      ? timeline.tracks.find((track) => track.id === selectedClip.trackId)
+      : undefined;
+    const targetTrackId = selectedTrack?.type === 'video' && selectedTrack.locked !== true
+      ? selectedTrack.id
+      : timeline.tracks.find((track) => (
+          track.type === 'video' && track.locked !== true && track.visible !== false
+        ))?.id ?? timeline.addTrack('video');
+    const current = getTimelineState();
+    const clipId = current.addMotionAdjustmentClip(
+      targetTrackId,
+      current.playheadPosition,
+      5,
+    );
+    if (clipId) current.selectClip(clipId);
+    closeContextMenu();
+  }, [closeContextMenu, getTimelineState]);
   const {
     handleExternalDropImport,
     handleDragOver,
@@ -619,6 +661,8 @@ export function MediaPanel() {
         onImportGaussianSplat={handleImportGaussianSplat}
         onNewMathScene={handleNewMathScene}
         onNewMotionShape={handleNewMotionShape}
+        onNewMotionNull={handleNewMotionNull}
+        onNewMotionAdjustment={handleNewMotionAdjustment}
       />
       <input
         ref={fileInputRef}
@@ -737,6 +781,8 @@ export function MediaPanel() {
           onImportGaussianSplat: handleImportGaussianSplat,
           onNewMathScene: handleNewMathScene,
           onNewMotionShape: handleNewMotionShape,
+          onNewMotionNull: handleNewMotionNull,
+          onNewMotionAdjustment: handleNewMotionAdjustment,
         }}
         deleteConfirmation={deleteConfirmation}
         deleteConfirmationBusy={deleteConfirmationBusy}

@@ -1,3 +1,4 @@
+import { useCallback, useMemo } from 'react';
 import { usePickWhipDrag } from './usePickWhipDrag';
 import { useTimelineAuxiliaryLayerProps } from './useTimelineAuxiliaryLayerProps';
 import { useTimelineAuxiliaryMenuState } from './useTimelineAuxiliaryMenuState';
@@ -34,12 +35,14 @@ interface UseTimelineAuxiliaryInteractionControllerParams extends Omit<
   pause: RightDragScrubParams['pause'];
   pixelToTime: RightDragScrubParams['pixelToTime'];
   scrollX: RightDragScrubParams['scrollX'];
+  clips: PickWhipParams['clips'];
   setClipParent: PickWhipParams['setClipParent'];
   setDraggingPlayhead: RightDragScrubParams['setDraggingPlayhead'];
   setInPoint: AuxiliaryMenuParams['setInPoint'];
   setOutPoint: AuxiliaryMenuParams['setOutPoint'];
   setPlayheadPosition: RightDragScrubParams['setPlayheadPosition'];
   setTrackParent: PickWhipParams['setTrackParent'];
+  tracks: PickWhipParams['tracks'];
   timelineRef: RightDragScrubParams['timelineRef'];
 }
 
@@ -53,6 +56,7 @@ export function useTimelineAuxiliaryInteractionController({
   pause,
   pixelToTime,
   scrollX,
+  clips,
   selectedClipIds,
   selectClip,
   setClipParent,
@@ -61,6 +65,7 @@ export function useTimelineAuxiliaryInteractionController({
   setOutPoint,
   setPlayheadPosition,
   setTrackParent,
+  tracks,
   timelineRef,
   ...auxiliaryLayerParams
 }: UseTimelineAuxiliaryInteractionControllerParams) {
@@ -115,10 +120,42 @@ export function useTimelineAuxiliaryInteractionController({
 
   const {
     pickWhipDrag,
+    handlePickWhipDragStart,
+    handlePickWhipDragEnd,
     trackPickWhipDrag,
     handleTrackPickWhipDragStart,
     handleTrackPickWhipDragEnd,
-  } = usePickWhipDrag({ setClipParent, setTrackParent });
+  } = usePickWhipDrag({ clips, tracks, setClipParent, setTrackParent });
+
+  const clearClipParent = useCallback((clipId: string) => {
+    setClipParent(clipId, null);
+  }, [setClipParent]);
+  const pickWhipContextDrag = useMemo(() => {
+    const sourceClipId = pickWhipDrag?.sourceClipId;
+    if (!sourceClipId) return null;
+    return {
+      sourceClipId,
+      targetClipId: pickWhipDrag?.targetClipId ?? null,
+      status: pickWhipDrag?.status ?? 'idle',
+      diagnostic: pickWhipDrag?.diagnostic ?? 'Drop onto an unlocked 2D video clip.',
+    } as const;
+  }, [
+    pickWhipDrag?.diagnostic,
+    pickWhipDrag?.sourceClipId,
+    pickWhipDrag?.status,
+    pickWhipDrag?.targetClipId,
+  ]);
+  const pickWhipContextValue = useMemo(() => ({
+    drag: pickWhipContextDrag,
+    startDrag: handlePickWhipDragStart,
+    cancelDrag: handlePickWhipDragEnd,
+    clearParent: clearClipParent,
+  }), [
+    clearClipParent,
+    handlePickWhipDragEnd,
+    handlePickWhipDragStart,
+    pickWhipContextDrag,
+  ]);
 
   const auxiliaryLayerProps = useTimelineAuxiliaryLayerProps({
     ...auxiliaryLayerParams,
@@ -154,6 +191,7 @@ export function useTimelineAuxiliaryInteractionController({
     handleInOutMarkerContextMenu,
     handleTimelineClipMouseDown,
     handleTimelineMarkerContextMenu,
+    pickWhipContextValue,
     handleTrackPickWhipDragEnd,
     handleTrackPickWhipDragStart,
   };

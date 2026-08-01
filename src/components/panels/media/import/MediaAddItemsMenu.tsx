@@ -22,6 +22,8 @@ export interface MediaAddItemsMenuProps {
   onImportGaussianSplat: () => void;
   onNewMathScene: () => void;
   onNewMotionShape: (primitive: ShapePrimitive) => void;
+  onNewMotionNull: () => void;
+  onNewMotionAdjustment: () => void;
 }
 
 const MESH_PRIMITIVES: readonly MeshPrimitiveType[] = ['cube', 'sphere', 'plane', 'cylinder', 'torus', 'cone'];
@@ -47,13 +49,13 @@ export function MediaAddItemsMenu({
   onImportGaussianSplat,
   onNewMathScene,
   onNewMotionShape,
+  onNewMotionNull,
+  onNewMotionAdjustment,
 }: MediaAddItemsMenuProps) {
   const itemClass = variant === 'dropdown' ? 'add-dropdown-item' : 'context-menu-item';
   const separatorClass = variant === 'dropdown' ? 'add-dropdown-separator' : 'context-menu-separator';
   const submenuClass = variant === 'dropdown' ? 'add-dropdown-submenu' : 'context-submenu';
   const iconClass = variant === 'dropdown' ? 'add-dropdown-icon' : 'context-menu-icon';
-  const hintClass = variant === 'dropdown' ? 'add-dropdown-hint' : 'context-menu-hint';
-
   const run = (action: () => void) => {
     action();
     onClose();
@@ -125,6 +127,14 @@ export function MediaAddItemsMenu({
           </div>
         </div>
       </div>
+      <div className={itemClass} onClick={() => run(onNewMotionNull)}>
+        <span className={iconClass}><FileTypeIcon type="motion-null" /></span>
+        <span>Motion Null</span>
+      </div>
+      <div className={itemClass} onClick={() => run(onNewMotionAdjustment)}>
+        <span className={iconClass}><FileTypeIcon type="motion-adjustment" /></span>
+        <span>Adjustment Layer</span>
+      </div>
       <div className={separatorClass} />
       <div className={itemClass} onClick={() => run(onNewMathScene)}>
         <span className={iconClass}><FileTypeIcon type="math-scene" /></span>
@@ -148,12 +158,6 @@ export function MediaAddItemsMenu({
             <span>Star</span>
           </div>
         </div>
-      </div>
-      <div className={separatorClass} />
-      <div className={`${itemClass} disabled`} onClick={onClose}>
-        <span className={iconClass}><FileTypeIcon type="solid" /></span>
-        <span>Adjustment Layer</span>
-        <span className={hintClass}>Coming soon</span>
       </div>
     </>
   );

@@ -1,5 +1,6 @@
 import shaderSource from './shaders/motionShapes.wgsl?raw';
 import { MOTION_RENDER_TEXTURE_FORMAT } from './MotionTypes';
+import { MOTION_REPLICATOR_INSTANCE_BYTE_STRIDE } from './replicator/runtimeContracts';
 
 export class MotionPipeline {
   private device: GPUDevice;
@@ -43,13 +44,20 @@ export class MotionPipeline {
           module,
           entryPoint: 'vertexMain',
           buffers: [{
-            arrayStride: 4 * 4,
+            arrayStride: MOTION_REPLICATOR_INSTANCE_BYTE_STRIDE,
             stepMode: 'instance',
-            attributes: [{
-              shaderLocation: 0,
-              offset: 0,
-              format: 'float32x4',
-            }],
+            attributes: [
+              {
+                shaderLocation: 0,
+                offset: 0,
+                format: 'float32x4',
+              },
+              {
+                shaderLocation: 1,
+                offset: 4 * 4,
+                format: 'float32x4',
+              },
+            ],
           }],
         },
         fragment: {

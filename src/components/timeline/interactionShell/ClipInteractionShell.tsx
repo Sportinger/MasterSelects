@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { ClipAudioRegionControls } from './ClipAudioRegionControls';
+import { ClipParentingControls } from './ClipParentingControls';
 import { ClipFadeHandles } from './ClipFadeHandles';
 import { ClipKeyframeTicks } from './ClipKeyframeTicks';
 import { ClipTrimHandles } from './ClipTrimHandles';
@@ -44,6 +45,10 @@ function renderBuiltInModule(
   context: ClipInteractionShellCommandContext,
   commands: ClipInteractionShellProps['commands'],
 ) {
+  if (slot === 'parenting') {
+    return <ClipParentingControls key={slot} context={context} />;
+  }
+
   if (slot === 'trim') {
     return <ClipTrimHandles key={slot} context={context} commands={commands} />;
   }

@@ -32,7 +32,7 @@ export interface FlashBoardCancelResult {
   remoteTaskId?: string;
 }
 
-function shouldUsePersonalApiKey(provider: 'piapi' | 'kieai' | 'evolink' | 'elevenlabs'): boolean {
+function shouldUsePersonalApiKey(provider: 'piapi' | 'evolink' | 'elevenlabs'): boolean {
   if (import.meta.env.PROD) {
     return false;
   }
@@ -41,26 +41,10 @@ function shouldUsePersonalApiKey(provider: 'piapi' | 'kieai' | 'evolink' | 'elev
 }
 
 function resolveEffectiveRequest(request: FlashBoardGenerationRequest): FlashBoardGenerationRequest {
-  if (request.service === 'kieai') {
-    return {
-      ...request,
-      providerId: request.providerId === 'kling-3.0' ? 'cloud-kling' : request.providerId,
-      service: 'cloud',
-      version: 'latest',
-    };
-  }
-
   if (request.service === 'elevenlabs') {
     return {
       ...request,
       providerId: 'cloud-elevenlabs-tts',
-      service: 'cloud',
-    };
-  }
-
-  if (request.service === 'suno') {
-    return {
-      ...request,
       service: 'cloud',
     };
   }
@@ -73,10 +57,6 @@ function assertPersonalApiKeyAccess(request: FlashBoardGenerationRequest): void 
     throw new Error('Enable a PiAPI key as default in Settings to generate with PiAPI.');
   }
 
-  if (request.service === 'kieai' && !shouldUsePersonalApiKey('kieai')) {
-    throw new Error('Enable a Kie.ai key as default in Settings to generate with Kie.ai.');
-  }
-
   if (request.service === 'evolink' && !shouldUsePersonalApiKey('evolink')) {
     throw new Error('Enable an EvoLink key as default in Settings to generate with EvoLink.');
   }
@@ -85,9 +65,6 @@ function assertPersonalApiKeyAccess(request: FlashBoardGenerationRequest): void 
     throw new Error('Enable an ElevenLabs key as default in Settings to generate speech with ElevenLabs.');
   }
 
-  if (request.service === 'suno' && !shouldUsePersonalApiKey('kieai')) {
-    throw new Error('Enable a Kie.ai key as default in Settings to generate with Suno.');
-  }
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
@@ -333,32 +310,6 @@ class FlashBoardJobService {
     throw new Error('Image generation can only use image references or video preview frames');
   }
 
-  private resolveReferenceMedia(mediaFileId: string): GenerationReferenceMedia {
-    const mediaFile = useMediaStore.getState().files.find((file) => file.id === mediaFileId);
-
-    if (!mediaFile) {
-      throw new Error('Reference media not found');
-    }
-
-    if (mediaFile.type !== 'image' && mediaFile.type !== 'video' && mediaFile.type !== 'audio') {
-      throw new Error('Reference media must be an image, video, or audio file');
-    }
-
-    const source = mediaFile.file ?? mediaFile.url;
-    if (!source) {
-      throw new Error('Reference media has no readable file source');
-    }
-
-    return {
-      id: mediaFile.id,
-      mediaType: mediaFile.type,
-      source,
-      fileName: mediaFile.file?.name ?? mediaFile.name,
-      label: mediaFile.name,
-      mimeType: mediaFile.file?.type,
-    };
-  }
-
   private async resolveHostedReferenceMedia(mediaFileId: string): Promise<GenerationReferenceMedia> {
     const mediaFile = useMediaStore.getState().files.find((file) => file.id === mediaFileId);
 
@@ -419,7 +370,6 @@ class FlashBoardJobService {
           this.onUpdate?.(recordId, update);
         },
         resolveReferenceImage: (mediaFileId) => this.resolveReferenceImage(mediaFileId),
-        resolveReferenceMedia: (mediaFileId) => this.resolveReferenceMedia(mediaFileId),
         resolveHostedReferenceMedia: (mediaFileId) => this.resolveHostedReferenceMedia(mediaFileId),
       });
       this.running = this.running.filter(r => r.recordId !== recordId);
@@ -444,7 +394,8 @@ class FlashBoardJobService {
     remoteTaskId: string;
     abortController: AbortController;
   }): Promise<void> {
-    const { recordId, request, remoteTaskId, abortController } = input;
+    const { recordId, remoteTaskId, abortController } = input;
+    const request = resolveEffectiveRequest(input.request);
 
     try {
       assertPersonalApiKeyAccess(request);

@@ -24,7 +24,7 @@ vi.mock('../../src/stores/mediaStore', () => ({
 }));
 
 import { createFrameContext, getClipTimeInfo } from '../../src/services/layerBuilder/FrameContext';
-import { playheadState } from '../../src/services/layerBuilder/PlayheadState';
+import { getPlayheadPosition, playheadState } from '../../src/services/layerBuilder/PlayheadState';
 
 function createTimelineState(overrides: Record<string, unknown> = {}) {
   return {
@@ -84,6 +84,53 @@ describe('FrameContext clipsAtTime', () => {
     expect(nextSixtyFpsContext.frameRate).toBe(60);
     expect(nextSixtyFpsContext.visualPlayheadPosition).toBeCloseTo(1 + 1 / 60);
     expect(frameAtNextSixtyFpsStep).toBe(61);
+  });
+
+  it('keeps an explicitly captured producer time while the playback clock advances', () => {
+    const clip = createMockClip({
+      id: 'clip-at-captured-time',
+      trackId: 'video-1',
+      startTime: 4,
+      duration: 0.5,
+      inPoint: 0,
+      outPoint: 0.5,
+    });
+    hoisted.timelineState = createTimelineState({
+      clips: [clip],
+      isPlaying: true,
+      playheadPosition: 0,
+    });
+
+    const previousPlayheadState = { ...playheadState };
+    const nowSpy = vi.spyOn(performance, 'now');
+    try {
+      Object.assign(playheadState, {
+        position: 4,
+        isUsingInternalPosition: true,
+        hasMasterAudio: false,
+        heldPlaybackPosition: null,
+        clockStartTimeMs: 1_000,
+        clockStartPosition: 4,
+        clockPlaybackSpeed: 1,
+      });
+      nowSpy
+        .mockReturnValueOnce(1_100)
+        .mockReturnValueOnce(1_800)
+        .mockReturnValueOnce(1_900);
+
+      const capturedPlayhead = getPlayheadPosition(0);
+      const ctx = createFrameContext(capturedPlayhead);
+      const laterPlayhead = getPlayheadPosition(0);
+
+      expect(capturedPlayhead).toBeCloseTo(4.1);
+      expect(laterPlayhead).toBeCloseTo(4.9);
+      expect(ctx.now).toBe(1_800);
+      expect(ctx.playheadPosition).toBe(capturedPlayhead);
+      expect(ctx.clipsAtTime.map((entry) => entry.id)).toEqual(['clip-at-captured-time']);
+    } finally {
+      Object.assign(playheadState, previousPlayheadState);
+      nowSpy.mockRestore();
+    }
   });
 
   it('keeps video visual time on the active composition frame grid', () => {

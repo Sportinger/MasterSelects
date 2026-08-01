@@ -116,6 +116,28 @@ function solidLayer(overrides: Partial<Layer> = {}): Layer {
   };
 }
 
+function adjustmentLayer(overrides: Partial<Layer> = {}): Layer {
+  return {
+    id: 'adjustment-a',
+    name: 'Adjustment A',
+    visible: true,
+    opacity: 0.75,
+    blendMode: 'normal',
+    source: { type: 'motion-adjustment' },
+    effects: [{
+      id: 'adjustment-brightness',
+      name: 'Brightness',
+      type: 'brightness',
+      enabled: true,
+      params: { amount: 0.2 },
+    }],
+    position: { x: 0, y: 0, z: 0 },
+    scale: { x: 1, y: 1 },
+    rotation: 0,
+    ...overrides,
+  };
+}
+
 function createVideo(overrides: {
   readonly currentTime: number;
   readonly seeking?: boolean;
@@ -176,6 +198,31 @@ function installFakeOffscreenCanvas() {
 }
 
 describe('worker software preview frame builder', () => {
+  it('preserves a supported Motion Adjustment as an accumulator layer', async () => {
+    const frame = await buildWorkerSoftwarePreviewFrame(
+      [adjustmentLayer(), solidLayer()],
+      { width: 640, height: 360 },
+    );
+
+    expect(frame.frame.layers).toHaveLength(2);
+    expect(frame.frame.layers[0]).toMatchObject({
+      id: 'adjustment-a',
+      opacity: 0.75,
+      source: { kind: 'adjustment' },
+      pixelEffects: { brightness: 0.2 },
+    });
+    expect(frame.diagnostics.skippedLayerCount).toBe(0);
+  });
+
+  it('fails closed for transformed Motion Adjustment layers', async () => {
+    const frame = await buildWorkerSoftwarePreviewFrame([
+      adjustmentLayer({ position: { x: 0.1, y: 0, z: 0 } }),
+    ], { width: 640, height: 360 });
+
+    expect(frame.frame.layers).toHaveLength(0);
+    expect(frame.diagnostics.skippedByReason['unsupported-source']).toBe(1);
+  });
+
   it('skips seeking video snapshots instead of presenting transient black scrub frames', async () => {
     const video = createVideo({ currentTime: 1, seeking: true });
     const frame = await buildWorkerSoftwarePreviewFrame([videoLayer(video, 1)], { width: 640, height: 360 });

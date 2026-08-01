@@ -10,7 +10,6 @@ import type {
   TimelineTrack,
 } from '../../../types';
 import { cloudAiService } from '../../cloudAiService';
-import { requestKieChatByo } from '../../kieAi/chatTransport';
 import {
   createLemonadeChatCompletionStream,
   DEFAULT_LEMONADE_ENDPOINT,
@@ -38,7 +37,6 @@ const AI_NODE_SUMMARY_MAX_CHARS = 2_400;
 
 type AINodeGenerationAccess =
   | { kind: 'hosted'; label: 'Cloud' }
-  | { apiKey: string; kind: 'kie'; label: 'Kie.ai key' }
   | { endpoint: string; kind: 'lemonade'; label: 'Local'; model: string }
   | { kind: 'none'; label: 'No AI' };
 
@@ -150,10 +148,6 @@ function resolveAINodeAccess(): AINodeGenerationAccess {
     return { kind: 'hosted', label: 'Cloud' };
   }
 
-  if (settings.apiKeys.kieai) {
-    return { apiKey: settings.apiKeys.kieai, kind: 'kie', label: 'Kie.ai key' };
-  }
-
   return { kind: 'none', label: 'No AI' };
 }
 
@@ -257,15 +251,6 @@ async function generateAINodeResponse(
     const response = await cloudAiService.createChatCompletion({
       ...requestBody,
       protocol: 'openai-responses',
-    });
-    return parseAITextPayload(response);
-  }
-
-  if (access.kind === 'kie') {
-    const response = await requestKieChatByo({
-      apiKey: access.apiKey,
-      body: requestBody,
-      endpoint: '/codex/v1/responses',
     });
     return parseAITextPayload(response);
   }

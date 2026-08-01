@@ -17,6 +17,7 @@ import {
 import { installAgentChatEndpoints } from './agentChatEndpoints.ts'
 import { installLocalFileEndpoints } from './localFileEndpoints.ts'
 import { installBlobStoreEndpoint, installBrowserLogEndpoint } from './supportEndpoints.ts'
+import { parseExplicitBridgeTarget } from './targetRouting.ts'
 import { BridgeTraceStore } from './traceStore.ts'
 
 export { allowedFileRoots, bridgeToken } from './auth.ts'
@@ -321,13 +322,13 @@ export function createDevBridgePlugin(options: DevBridgePluginOptions = {}): Plu
         req.on('data', (chunk: Buffer) => body += chunk.toString())
         req.on('end', () => {
           try {
+            const payload = JSON.parse(body)
             const {
               tool,
               args = {},
               options,
               timeoutMs,
-              targetTabId: requestedTargetTabId,
-            } = JSON.parse(body)
+            } = payload
             if (!tool) {
               res.statusCode = 400
               res.setHeader('Content-Type', 'application/json')
@@ -335,19 +336,31 @@ export function createDevBridgePlugin(options: DevBridgePluginOptions = {}): Plu
               return
             }
 
+            const explicitTarget = parseExplicitBridgeTarget(payload)
+            if (explicitTarget.provided && !explicitTarget.valid) {
+              res.statusCode = 400
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({
+                success: false,
+                error: explicitTarget.error,
+              }))
+              return
+            }
+
+            pruneClients()
             const requestId = `r${++requestCounter}-${crypto.randomUUID().slice(0, 8)}`
-            if (typeof requestedTargetTabId === 'string' && !clients.has(requestedTargetTabId)) {
+            const explicitTargetTabId = explicitTarget.provided
+              ? explicitTarget.targetTabId
+              : null
+            if (explicitTargetTabId && !clients.has(explicitTargetTabId)) {
               res.statusCode = 404
               res.setHeader('Content-Type', 'application/json')
               res.end(JSON.stringify({
                 success: false,
-                error: `Unknown or stale bridge session: ${requestedTargetTabId}`,
+                error: `Unknown or stale bridge session: ${explicitTargetTabId}`,
               }))
               return
             }
-            const explicitTargetTabId = typeof requestedTargetTabId === 'string'
-              ? requestedTargetTabId
-              : null
             const targetTabId = explicitTargetTabId ?? pickTargetTabId()
             if (!targetTabId) {
               res.statusCode = 503
@@ -428,19 +441,16 @@ export function createDevBridgePlugin(options: DevBridgePluginOptions = {}): Plu
           return
         }
 
-        const targetTabId = pickTargetTabId()
-        if (!targetTabId) {
-          res.statusCode = 503
-          res.setHeader('Content-Type', 'application/json')
-          res.end(JSON.stringify({ success: false, error: 'No browser tab connected to the dev bridge' }))
-          return
-        }
-
         let body = ''
         req.on('data', (chunk: Buffer) => body += chunk.toString())
         req.on('end', () => {
           try {
-            const { action, args = {} } = JSON.parse(body)
+            const payload = JSON.parse(body)
+            const {
+              action,
+              args = {},
+              timeoutMs,
+            } = payload
             if (!action) {
               res.statusCode = 400
               res.setHeader('Content-Type', 'application/json')
@@ -448,13 +458,49 @@ export function createDevBridgePlugin(options: DevBridgePluginOptions = {}): Plu
               return
             }
 
+            const explicitTarget = parseExplicitBridgeTarget(payload)
+            if (explicitTarget.provided && !explicitTarget.valid) {
+              res.statusCode = 400
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({
+                success: false,
+                error: explicitTarget.error,
+              }))
+              return
+            }
+
+            pruneClients()
+            const explicitTargetTabId = explicitTarget.provided
+              ? explicitTarget.targetTabId
+              : null
+            if (explicitTargetTabId && !clients.has(explicitTargetTabId)) {
+              res.statusCode = 404
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({
+                success: false,
+                error: `Unknown or stale bridge session: ${explicitTargetTabId}`,
+              }))
+              return
+            }
+            const targetTabId = explicitTargetTabId ?? pickTargetTabId()
+            if (!targetTabId) {
+              res.statusCode = 503
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({ success: false, error: 'No browser tab connected to the dev bridge' }))
+              return
+            }
+
             const requestId = `debug-action-${++requestCounter}-${crypto.randomUUID().slice(0, 8)}`
+            const requestTimeoutMs = sanitizeBridgeTimeoutMs(timeoutMs, 30000)
             const resultPromise = new Promise((resolve) => {
               const timer = setTimeout(() => {
                 pendingDebugActionRequests.delete(requestId)
                 markClientUnresponsive(targetTabId)
-                resolve({ success: false, error: 'Timeout: no browser tab responded within 30s' })
-              }, 30000)
+                resolve({
+                  success: false,
+                  error: `Timeout: no browser tab responded within ${Math.round(requestTimeoutMs / 1000)}s`,
+                })
+              }, requestTimeoutMs)
 
               pendingDebugActionRequests.set(requestId, { resolve, timer })
               server.hot.send('debug-action:request', { requestId, action, args, targetTabId })

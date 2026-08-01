@@ -8,6 +8,7 @@ import type {
   HostedAgentK2SessionStatus,
   HostedAgentToolExecutionMode,
 } from '../../../src/services/kernelClient/hostedAgent/contracts';
+import { validHostedAgentInlineProviderContent } from '../../../src/services/kernelClient/hostedAgent/inlineProviderContent';
 
 const DEFAULT_ACTIVE_LEASE_MS = 55_000;
 const DEFAULT_TERMINAL_TTL_MS = 60_000;
@@ -129,6 +130,13 @@ function containsDataUrl(value: unknown): boolean {
     return Object.values(value as Record<string, unknown>).some(containsDataUrl);
   }
   return false;
+}
+
+function containsUnexpectedToolResultDataUrl(batch: HostedAgentK1ToolBatchResult): boolean {
+  return containsDataUrl({
+    ...batch,
+    results: batch.results.map(({ providerContent: _providerContent, ...result }) => result),
+  });
 }
 
 function error(message: string): Error {
@@ -431,7 +439,11 @@ export class HostedAgentK2MemorySessionStore {
       || actualIds.some((id, index) => id !== expectedIds[index])
       || new Set(actualIds).size !== actualIds.length
       || encodedBytes > MAX_TOOL_RESULT_BYTES
-      || containsDataUrl(batch)
+      || containsUnexpectedToolResultDataUrl(batch)
+      || batch.results.some((result) => (
+        result.providerContent !== undefined
+        && !validHostedAgentInlineProviderContent(result.providerContent)
+      ))
       || batch.results.some((result) => result.imageResultRefs?.some((reference) => (
         !/^har_[A-Za-z0-9_-]+$/.test(reference)
       )))

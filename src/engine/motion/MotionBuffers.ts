@@ -10,6 +10,7 @@ import {
   getMotionShapeRenderBounds,
   type MotionRenderSize,
 } from './MotionTypes';
+import { MOTION_REPLICATOR_INSTANCE_FLOAT_STRIDE } from './replicator/runtimeContracts';
 
 export const MOTION_MAX_APPEARANCES = 8;
 export const MOTION_MAX_GRADIENT_STOPS = 8;
@@ -199,27 +200,11 @@ export function createMotionInstanceArray(
   size: MotionRenderSize,
 ): Float32Array<ArrayBuffer> {
   const replicator = size.replicator;
-  const countX = Math.max(1, replicator.countX);
-  const countY = Math.max(1, replicator.countY);
-  const data = new Float32Array(replicator.instanceCount * 4);
-  const gridCenterX = (countX - 1) * 0.5;
-  const gridCenterY = (countY - 1) * 0.5;
-  let cursor = 0;
-
-  for (let y = 0; y < countY; y += 1) {
-    const rowOffsetX = y % 2 === 1 ? replicator.patternOffsetX : 0;
-    const rowOffsetY = y % 2 === 1 ? replicator.patternOffsetY : 0;
-    for (let x = 0; x < countX; x += 1) {
-      const instanceIndex = y * countX + x;
-      data[cursor] = (x - gridCenterX) * replicator.spacingX + rowOffsetX - replicator.boundsCenterX;
-      data[cursor + 1] = (y - gridCenterY) * replicator.spacingY + rowOffsetY - replicator.boundsCenterY;
-      data[cursor + 2] = instanceIndex === 0
-        ? 1
-        : Math.pow(replicator.offsetOpacity, instanceIndex);
-      data[cursor + 3] = 0;
-      cursor += 4;
-    }
+  const data = new Float32Array(replicator.instanceData);
+  for (let instance = 0; instance < replicator.instanceCount; instance += 1) {
+    const offset = instance * MOTION_REPLICATOR_INSTANCE_FLOAT_STRIDE;
+    data[offset + 4] -= replicator.boundsCenterX;
+    data[offset + 5] -= replicator.boundsCenterY;
   }
-
   return data;
 }

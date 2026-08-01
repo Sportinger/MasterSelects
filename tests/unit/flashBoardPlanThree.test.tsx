@@ -9,23 +9,19 @@ import {
 function buildSendPlan(planThreeEnabled: boolean) {
   return buildFlashBoardChatSendPlan({
     activeChatModelId: 'gpt-5-6-terra',
-    canUseByoChat: true,
-    canUseHostedChat: false,
+    canUseHostedChat: true,
     chatMessages: [],
     chatPanelOpen: true,
     chatProvider: 'kie',
     chatTemperature: 0.7,
     effectiveChatPrompt: 'Cut a short travel montage.',
-    hasHostedSession: false,
-    hostedAIEnabled: false,
+    hasHostedSession: true,
+    hostedAIEnabled: true,
     isChatting: false,
-    kieAiApiKey: 'test-key',
     lemonadeContextSize: 16_384,
     lemonadeEndpoint: 'http://localhost:13305/api/v1',
     openAiReasoningEffort: 'medium',
     planThreeEnabled,
-    shouldUseHostedChat: false,
-    useHostedProductionProviders: false,
   });
 }
 

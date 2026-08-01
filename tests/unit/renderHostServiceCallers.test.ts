@@ -120,7 +120,7 @@ describe('render host service caller boundary', () => {
   it('keeps preview handlers routed through the render-host capture adapter', () => {
     const source = readSource('src/services/aiTools/handlers/preview.ts');
 
-    expect(source).toContain('captureRenderHostFrame');
+    expect(source).toContain('captureStableRenderHostFrame');
     expect(source).toContain('../previewCapture');
     expect(source).not.toContain('renderHostPort');
     expect(source).not.toMatch(/(?:from\s+['"][^'"]*WebGPUEngine|import\(['"][^'"]*WebGPUEngine)/);

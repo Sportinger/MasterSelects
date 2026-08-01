@@ -66,7 +66,7 @@ function record(
     createdAt: 20,
     updatedAt: 30,
     request: {
-      service: 'kieai',
+      service: 'cloud',
       providerId: 'provider-video',
       version: 'v1',
       idempotencyKey: 'request-1',

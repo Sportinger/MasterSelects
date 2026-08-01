@@ -231,6 +231,14 @@ interface EffectsTabProps {
   isAudioClip?: boolean;
 }
 
+const MOTION_ADJUSTMENT_EFFECT_TYPES = new Set([
+  'brightness',
+  'contrast',
+  'saturation',
+  'invert',
+  'gaussian-blur',
+]);
+
 export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
   // Reactive data - subscribe to specific values only
   const playheadPosition = useTimelineStore(state => state.playheadPosition);
@@ -245,6 +253,7 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
   const handleBatchStart = useCallback(() => startBatch('Adjust effect'), []);
   const handleBatchEnd = useCallback(() => endBatch(), []);
   const clip = clips.find(c => c.id === clipId);
+  const isMotionAdjustmentClip = clip?.source?.type === 'motion-adjustment';
   const clipLocalTime = clip ? playheadPosition - clip.startTime : 0;
   const interpolatedEffects = getInterpolatedEffects(clipId, clipLocalTime);
   const handleAddParticleDisintegrateOutro = useCallback(() => {
@@ -263,7 +272,16 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
   }, [addClipEffect, addKeyframe, clip, clipId]);
 
   // Get effects grouped by category from registry (video effects only)
-  const effectCategories = useMemo(() => getCategoriesWithEffects(), []);
+  const effectCategories = useMemo(() => {
+    const categories = getCategoriesWithEffects();
+    if (!isMotionAdjustmentClip) return categories;
+    return categories
+      .map(({ category, effects: categoryEffects }) => ({
+        category,
+        effects: categoryEffects.filter((effect) => MOTION_ADJUSTMENT_EFFECT_TYPES.has(effect.id)),
+      }))
+      .filter(({ effects: categoryEffects }) => categoryEffects.length > 0);
+  }, [isMotionAdjustmentClip]);
 
   // Video effects only (exclude audio effects from the list)
   const videoEffects = useMemo(() =>
@@ -286,15 +304,20 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
                 </optgroup>
               ))}
             </select>
-            <button
-              type="button"
-              className="btn btn-sm"
-              disabled={!clip}
-              onClick={handleAddParticleDisintegrateOutro}
-              title="Add particle disintegrate outro"
-            >
-              Particle Out
-            </button>
+            {!isMotionAdjustmentClip && (
+              <button
+                type="button"
+                className="btn btn-sm"
+                disabled={!clip}
+                onClick={handleAddParticleDisintegrateOutro}
+                title="Add particle disintegrate outro"
+              >
+                Particle Out
+              </button>
+            )}
+            {isMotionAdjustmentClip && (
+              <span className="effect-mode-label">Adjustment-safe effects</span>
+            )}
           </>
         )}
         {isAudioClip && <span className="effect-mode-label">Audio</span>}

@@ -45,7 +45,6 @@ export interface APIKeys {
   assemblyai: string;
   deepgram: string;
   piapi: string;  // PiAPI key for AI video generation (Kling, Luma, etc.)
-  kieai: string;  // Kie.ai key for chat plus hosted media providers
   evolink: string; // EvoLink key for Nano Banana 2 fallback image generation
   elevenlabs: string; // ElevenLabs key for AI audio generation
   youtube: string; // YouTube Data API v3 key (optional, Invidious works without)
@@ -54,14 +53,13 @@ export interface APIKeys {
   klingSecretKey: string;
 }
 
-export type ApiKeyDefaultProvider = 'openai' | 'anthropic' | 'piapi' | 'kieai' | 'evolink' | 'elevenlabs';
+export type ApiKeyDefaultProvider = 'openai' | 'anthropic' | 'piapi' | 'evolink' | 'elevenlabs';
 export type ApiKeyDefaults = Record<ApiKeyDefaultProvider, boolean>;
 
 export const DEFAULT_API_KEY_DEFAULTS: ApiKeyDefaults = {
   openai: false,
   anthropic: false,
   piapi: false,
-  kieai: false,
   evolink: false,
   elevenlabs: false,
 };

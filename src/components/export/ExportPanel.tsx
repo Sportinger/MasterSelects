@@ -1,6 +1,6 @@
 // Export Panel - embedded panel for frame-by-frame video export
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState, type DragEvent as ReactDragEvent } from 'react';
 import './ExportPanel.css';
 import { Logger } from '../../services/logger';
 import { projectFileService } from '../../services/projectFileService';
@@ -19,6 +19,8 @@ import type { ExportSummaryTarget } from './exportSummaryState';
 import { useExportRunController } from './useExportRunController';
 import {
   useExportStore,
+  type BatchExportData,
+  type BatchExportSource,
 } from '../../stores/exportStore';
 import { ExportAdvancedSections } from './panel/ExportAdvancedSections';
 import { ExportBasicsSection } from './panel/ExportBasicsSection';
@@ -41,13 +43,27 @@ import type {
 import { resolveStoryboardExportGuard } from '../../services/storyboard/animatic/exportPolicy';
 import type { StoryboardAnimaticRenderMode } from '../../services/storyboard/animatic/types';
 import { StoryboardExportModeControl } from './storyboard/StoryboardExportModeControl';
+import { BatchExportQueue } from './batch/BatchExportQueue';
+import { useBatchExportController } from './batch/useBatchExportController';
+import {
+  clearExportMediaDragIds,
+  EXPORT_MEDIA_IDS_MIME_TYPE,
+  readExportMediaIdsFromDataTransfer,
+} from '../timeline/utils/externalDragSession';
 
 const log = Logger.create('ExportPanel');
+const EMPTY_BATCH_EXPORT: BatchExportData = {
+  enabled: false,
+  useSharedSettings: false,
+  selectedJobId: null,
+  jobs: [],
+};
 
 export function ExportPanel() {
   const panelRef = useRef<HTMLDivElement>(null);
   const summaryHighlightTimeoutsRef = useRef<Map<HTMLElement, number>>(new Map());
   const [setupStatus, setSetupStatus] = useState<string | null>(null);
+  const [isBatchDragOver, setIsBatchDragOver] = useState(false);
   const [storyboardExportMode, setStoryboardExportMode] = useState<
     Exclude<StoryboardAnimaticRenderMode, 'preview'>
   >('normal-export');
@@ -62,11 +78,13 @@ export function ExportPanel() {
     setExportProgress: s.setExportProgress,
     endExport: s.endExport,
   })));
-  const { composition, getActiveComposition } = useMediaStore(useShallow(s => ({
+  const { composition, getActiveComposition, mediaFiles } = useMediaStore(useShallow(s => ({
     composition: s.compositions.find((candidate) => candidate.id === s.activeCompositionId),
     getActiveComposition: s.getActiveComposition,
+    mediaFiles: s.files,
   })));
   const {
+    batch,
     presets,
     selectedPresetId,
     setSelectedPresetId,
@@ -74,7 +92,16 @@ export function ExportPanel() {
     updatePreset,
     loadPreset,
     setSettings,
+    enqueueBatchJobs,
+    removeBatchJob,
+    clearBatchJobs,
+    setBatchEnabled,
+    setBatchUseSharedSettings,
+    setSelectedBatchJobId,
+    updateBatchJobSettings,
+    replaceBatchJobSettings,
   } = useExportStore(useShallow((state) => ({
+    batch: state.batch ?? EMPTY_BATCH_EXPORT,
     presets: state.presets,
     selectedPresetId: state.selectedPresetId,
     setSelectedPresetId: state.setSelectedPresetId,
@@ -82,10 +109,34 @@ export function ExportPanel() {
     updatePreset: state.updatePreset,
     loadPreset: state.loadPreset,
     setSettings: state.setSettings,
+    enqueueBatchJobs: state.enqueueBatchJobs,
+    removeBatchJob: state.removeBatchJob,
+    clearBatchJobs: state.clearBatchJobs,
+    setBatchEnabled: state.setBatchEnabled,
+    setBatchUseSharedSettings: state.setBatchUseSharedSettings,
+    setSelectedBatchJobId: state.setSelectedBatchJobId,
+    updateBatchJobSettings: state.updateBatchJobSettings,
+    replaceBatchJobSettings: state.replaceBatchJobSettings,
   })));
 
+  const selectedBatchJob = useMemo(() => (
+    batch.jobs.find((job) => job.id === batch.selectedJobId) ?? batch.jobs[0]
+  ), [batch.jobs, batch.selectedJobId]);
+  const batchActive = batch.enabled && batch.jobs.length > 0 && !!selectedBatchJob;
+  const selectedBatchJobId = selectedBatchJob?.id;
+  const setEffectiveExportSettings = useCallback((patch: Parameters<typeof setSettings>[0]) => {
+    if (batchActive && selectedBatchJobId) {
+      updateBatchJobSettings(selectedBatchJobId, patch);
+      return;
+    }
+    setSettings(patch);
+  }, [batchActive, selectedBatchJobId, setSettings, updateBatchJobSettings]);
+
   // All export state, effects, and simple handlers extracted to hook
-  const exportState = useExportState(composition);
+  const exportState = useExportState(composition, {
+    settings: batchActive ? selectedBatchJob?.settings : undefined,
+    setSettings: setEffectiveExportSettings,
+  });
   const {
     encoder, setEncoder,
     width, height,
@@ -124,9 +175,31 @@ export function ExportPanel() {
     handleResolutionChange, loadFFmpeg,
     handleFFmpegContainerChange, handleFFmpegCodecChange,
   } = exportState;
+  const {
+    runtimeByJob,
+    isRunning: isBatchRunning,
+    overallProgress: batchOverallProgress,
+    failedCount: batchFailedCount,
+    runBatch,
+    cancelBatch,
+  } = useBatchExportController({ jobs: batch.jobs, mediaFiles });
 
-  // Compute actual start/end based on In/Out markers for display.
-  const { startTime, endTime } = resolveExportRange({ duration, inPoint, outPoint }, useInOut);
+  const selectedBatchMedia = batchActive
+    ? mediaFiles.find((mediaFile) => mediaFile.id === selectedBatchJob?.mediaFileId)
+    : undefined;
+  const selectedBatchSourceType = selectedBatchJob?.mediaType;
+  // Batch source jobs always cover the full source file; timeline In/Out only
+  // belongs to the composition export path.
+  const compositionRange = resolveExportRange({ duration, inPoint, outPoint }, useInOut);
+  const startTime = batchActive ? 0 : compositionRange.startTime;
+  const endTime = batchActive
+    ? Math.max(
+        0.001,
+        selectedBatchMedia?.type === 'image'
+          ? 1 / Math.max(1, fps)
+          : selectedBatchMedia?.duration ?? 1,
+      )
+    : compositionRange.endTime;
   const storyboardClips = clips ?? [];
   const storyboardTracks = tracks ?? [];
   const storyboardExportGuard = resolveStoryboardExportGuard({
@@ -243,7 +316,7 @@ export function ExportPanel() {
     imageExportMode,
     imageQuality,
     specialContainer,
-    isExporting,
+    isExporting: isExporting || (batchActive && isBatchRunning),
   });
   const { handleCancel, handlePrimaryExport } = useExportRunController({
     exportState,
@@ -271,7 +344,7 @@ export function ExportPanel() {
     setFps(value);
   }, [setFps, setUseCustomFps]);
 
-  const sameAsComposition = !!composition &&
+  const sameAsComposition = !batchActive && !!composition &&
     actualWidth === composition.width &&
     actualHeight === composition.height &&
     actualFps === composition.frameRate;
@@ -292,6 +365,47 @@ export function ExportPanel() {
     setBitrate(value);
   }, [setBitrate, setRateControl]);
 
+  const handleBatchDragOver = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    const hasBatchType = Array.from(event.dataTransfer.types).includes(EXPORT_MEDIA_IDS_MIME_TYPE);
+    const hasBatchIds = hasBatchType || readExportMediaIdsFromDataTransfer(event.dataTransfer).length > 0;
+    if (!hasBatchIds || isBatchRunning) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'copy';
+    setIsBatchDragOver(true);
+  }, [isBatchRunning]);
+
+  const handleBatchDragLeave = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    const relatedTarget = event.relatedTarget;
+    if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) return;
+    setIsBatchDragOver(false);
+  }, []);
+
+  const handleBatchDrop = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    const mediaIds = readExportMediaIdsFromDataTransfer(event.dataTransfer);
+    setIsBatchDragOver(false);
+    clearExportMediaDragIds();
+    if (mediaIds.length === 0 || isBatchRunning) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    const mediaById = new Map(mediaFiles.map((mediaFile) => [mediaFile.id, mediaFile]));
+    const sources = mediaIds.flatMap<BatchExportSource>((mediaFileId) => {
+      const mediaFile = mediaById.get(mediaFileId);
+      if (!mediaFile || (mediaFile.type !== 'video' && mediaFile.type !== 'audio' && mediaFile.type !== 'image')) {
+        return [];
+      }
+      return [{
+        mediaFileId: mediaFile.id,
+        sourceName: mediaFile.name,
+        mediaType: mediaFile.type,
+      }];
+    });
+    if (sources.length > 0) {
+      enqueueBatchJobs(sources);
+    }
+  }, [enqueueBatchJobs, isBatchRunning, mediaFiles]);
+
   const saveCurrentSetup = useCallback(() => {
     try {
       const suggestedName = selectedPresetName || filename || 'Export Preset';
@@ -300,7 +414,7 @@ export function ExportPanel() {
         return;
       }
 
-      const result = savePreset(nextName);
+      const result = savePreset(nextName, batchActive ? selectedBatchJob?.settings : undefined);
       if (!result) {
         setSetupStatus('Preset name required');
         return;
@@ -312,7 +426,7 @@ export function ExportPanel() {
       log.error('Failed to save export setup', error);
       setSetupStatus('Preset save failed');
     }
-  }, [filename, savePreset, selectedPresetName]);
+  }, [batchActive, filename, savePreset, selectedBatchJob, selectedPresetName]);
 
   const updateCurrentSetup = useCallback(() => {
     try {
@@ -321,7 +435,10 @@ export function ExportPanel() {
         return;
       }
 
-      const updatedPreset = updatePreset(selectedPresetId);
+      const updatedPreset = updatePreset(
+        selectedPresetId,
+        batchActive ? selectedBatchJob?.settings : undefined,
+      );
       if (!updatedPreset) {
         setSetupStatus('Preset not found');
         return;
@@ -333,7 +450,7 @@ export function ExportPanel() {
       log.error('Failed to update export setup', error);
       setSetupStatus('Preset update failed');
     }
-  }, [presets.length, selectedPresetId, updatePreset]);
+  }, [batchActive, presets.length, selectedBatchJob, selectedPresetId, updatePreset]);
 
   const loadSavedSetup = useCallback(() => {
     try {
@@ -342,13 +459,22 @@ export function ExportPanel() {
         return;
       }
 
-      const loaded = loadPreset(selectedPresetId);
+      const preset = presets.find((candidate) => candidate.id === selectedPresetId);
+      let loaded = false;
+      if (batchActive && selectedBatchJob) {
+        if (preset) {
+          replaceBatchJobSettings(selectedBatchJob.id, preset.settings);
+          loaded = true;
+        }
+      } else {
+        loaded = loadPreset(selectedPresetId);
+      }
       setSetupStatus(loaded ? 'Preset loaded' : 'Preset not found');
     } catch (error) {
       log.error('Failed to load export setup', error);
       setSetupStatus('Preset load failed');
     }
-  }, [loadPreset, presets.length, selectedPresetId]);
+  }, [batchActive, loadPreset, presets, replaceBatchJobSettings, selectedBatchJob, selectedPresetId]);
 
   const scrollToSummaryTarget = useCallback((target: ExportSummaryTarget) => {
     const scrollContainer = panelRef.current?.querySelector<HTMLElement>('.export-form');
@@ -359,7 +485,9 @@ export function ExportPanel() {
 
     const containerRect = scrollContainer.getBoundingClientRect();
     const nodeRect = node.getBoundingClientRect();
-    const stickySummaryHeight = panelRef.current?.querySelector<HTMLElement>('.export-summary-sticky')?.offsetHeight ?? 0;
+    const stickySummaryHeight = panelRef.current?.querySelector<HTMLElement>('.export-top-stack')?.offsetHeight
+      ?? panelRef.current?.querySelector<HTMLElement>('.export-summary-sticky')?.offsetHeight
+      ?? 0;
     scrollContainer.scrollTo({
       behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
       top: Math.max(0, scrollContainer.scrollTop + nodeRect.top - containerRect.top - stickySummaryHeight - 12),
@@ -402,8 +530,8 @@ export function ExportPanel() {
     includeAudio,
     isAudioSupported,
     browserAudioUnavailable,
-    showRangeInVideo,
-    showRangeInAudio,
+    showRangeInVideo: batchActive ? false : showRangeInVideo,
+    showRangeInAudio: batchActive ? false : showRangeInAudio,
     showFFmpegQualityControl,
   };
 
@@ -541,6 +669,30 @@ export function ExportPanel() {
     loadFFmpeg,
   };
 
+  const handlePanelPrimaryExport = useCallback(() => {
+    if (batchActive) {
+      void runBatch();
+      return;
+    }
+    handlePrimaryExport();
+  }, [batchActive, handlePrimaryExport, runBatch]);
+
+  const handleToggleBatchMode = useCallback(() => {
+    if (isBatchRunning) return;
+    setBatchEnabled(!batch.enabled);
+  }, [batch.enabled, isBatchRunning, setBatchEnabled]);
+
+  const handleToggleBatchSharedSettings = useCallback(() => {
+    if (isBatchRunning) return;
+    setBatchUseSharedSettings(!batch.useSharedSettings);
+  }, [batch.useSharedSettings, isBatchRunning, setBatchUseSharedSettings]);
+
+  const batchPrimaryLabel = isBatchRunning
+    ? `Encoding ${Math.round(batchOverallProgress)}%`
+    : batchFailedCount > 0
+      ? `Export ${batch.jobs.length} again`
+      : `Export ${batch.jobs.length} files`;
+
   // If neither encoder is supported, show error
   if (!webCodecsAvailable && !ffmpegAvailable) {
     return (
@@ -557,93 +709,128 @@ export function ExportPanel() {
   }
 
   return (
-    <div className="export-panel" ref={panelRef}>
+    <div
+      className="export-panel"
+      ref={panelRef}
+      onDragOver={handleBatchDragOver}
+      onDragLeave={handleBatchDragLeave}
+      onDrop={handleBatchDrop}
+    >
+      {isBatchDragOver && (
+        <div className="export-batch-drop-overlay">
+          Add media to batch export
+        </div>
+      )}
       {!isExporting ? (
         <div className="export-form">
-          <ExportSummaryBadgesSection
-            showCompositionSync={isVideoMode || isImageMode}
-            sameAsComposition={sameAsComposition}
-            summaryBadges={summaryBadges}
-            primaryExportLabel={primaryExportLabel}
-            estimatedSizeLabel={estimatedSizeLabel}
-            exportDisabled={exportDisabled || (isVideoMode && storyboardExportGuard.blocked)}
-            onPrimaryExport={handlePrimaryExport}
-            onSyncComposition={syncCompositionSettings}
-            onScrollToSummaryTarget={scrollToSummaryTarget}
-          />
-
-          {isVideoMode && hasStoryboardScenesInRange && (
-            <StoryboardExportModeControl
-              mode={storyboardExportMode}
-              warnings={storyboardExportGuard.warnings}
-              onChange={setStoryboardExportMode}
+          <div className="export-top-stack">
+            <ExportSummaryBadgesSection
+              showCompositionSync={!batchActive && (isVideoMode || isImageMode)}
+              sameAsComposition={sameAsComposition}
+              summaryBadges={summaryBadges}
+              primaryExportLabel={batchActive ? batchPrimaryLabel : primaryExportLabel}
+              estimatedSizeLabel={estimatedSizeLabel}
+              exportDisabled={exportDisabled || (!batchActive && isVideoMode && storyboardExportGuard.blocked)}
+              onPrimaryExport={handlePanelPrimaryExport}
+              onSyncComposition={syncCompositionSettings}
+              onScrollToSummaryTarget={scrollToSummaryTarget}
             />
-          )}
 
-          <ExportPresetCommandSection
-            presets={presets}
-            selectedPresetId={selectedPresetId}
-            setupStatus={setupStatus}
-            onSelectPreset={setSelectedPresetId}
-            onLoad={loadSavedSetup}
-            onUpdate={updateCurrentSetup}
-            onSave={saveCurrentSetup}
-          />
+            <BatchExportQueue
+              jobs={batch.jobs}
+              selectedJobId={batch.selectedJobId}
+              enabled={batch.enabled}
+              useSharedSettings={batch.useSharedSettings}
+              runtimeByJob={runtimeByJob}
+              isRunning={isBatchRunning}
+              onToggleEnabled={handleToggleBatchMode}
+              onToggleSharedSettings={handleToggleBatchSharedSettings}
+              onSelectJob={setSelectedBatchJobId}
+              onRemoveJob={removeBatchJob}
+              onClear={clearBatchJobs}
+              onCancel={cancelBatch}
+            />
+          </div>
 
-          <ExportWorkflowSection
-            encoder={encoder}
-            webCodecsAvailable={webCodecsAvailable}
-            ffmpegAvailable={ffmpegAvailable}
-            isFFmpegMultiThreaded={isFFmpegMultiThreaded}
-            isFFmpegReady={isFFmpegReady}
-            isFFmpegLoading={isFFmpegLoading}
-            ffmpegLoadError={ffmpegLoadError}
-            onSetEncoder={setEncoder}
-            onLoadFFmpeg={loadFFmpeg}
-          />
+          <div className="export-settings-body" inert={isBatchRunning ? true : undefined}>
+            {!batchActive && isVideoMode && hasStoryboardScenesInRange && (
+              <StoryboardExportModeControl
+                mode={storyboardExportMode}
+                warnings={storyboardExportGuard.warnings}
+                onChange={setStoryboardExportMode}
+              />
+            )}
 
-          <ExportBasicsSection
-            filename={filename}
-            mode={basicsMode}
-            display={basicsDisplay}
-            video={basicsVideo}
-            image={basicsImage}
-            gif={basicsGif}
-            audio={basicsAudio}
-            options={basicsOptions}
-            time={basicsTime}
-            useInOut={useInOut}
-            actions={basicsActions}
-          />
+            <ExportPresetCommandSection
+              presets={presets}
+              selectedPresetId={selectedPresetId}
+              setupStatus={setupStatus}
+              onSelectPreset={setSelectedPresetId}
+              onLoad={loadSavedSetup}
+              onUpdate={updateCurrentSetup}
+              onSave={saveCurrentSetup}
+            />
 
-          <ExportAdvancedSections
-            filename={filename}
-            mode={basicsMode}
-            display={basicsDisplay}
-            video={basicsVideo}
-            gif={basicsGif}
-            audio={basicsAudio}
-            options={basicsOptions}
-            actions={basicsActions}
-          />
+            {!batchActive && (
+              <ExportWorkflowSection
+                encoder={encoder}
+                webCodecsAvailable={webCodecsAvailable}
+                ffmpegAvailable={ffmpegAvailable}
+                isFFmpegMultiThreaded={isFFmpegMultiThreaded}
+                isFFmpegReady={isFFmpegReady}
+                isFFmpegLoading={isFFmpegLoading}
+                ffmpegLoadError={ffmpegLoadError}
+                onSetEncoder={setEncoder}
+                onLoadFFmpeg={loadFFmpeg}
+              />
+            )}
 
-          <ExportAdvancedSummarySections
-            encoder={encoder}
-            isGifMode={isGifMode}
-            stackedAlpha={stackedAlpha}
-            setStackedAlpha={setStackedAlpha}
-            actualWidth={actualWidth}
-            actualHeight={actualHeight}
-            outputHeight={outputHeight}
-            useInOut={useInOut}
-            setUseInOut={setUseInOut}
-            startTime={startTime}
-            endTime={endTime}
-            frameCount={frameCount}
-            estimatedSizeLabel={estimatedSizeLabel}
-            error={error}
-            formatTime={formatTime}
-          />
+            <ExportBasicsSection
+              filename={filename}
+              filenameLocked={batchActive && batch.useSharedSettings}
+              sourceMediaType={batchActive ? selectedBatchSourceType : undefined}
+              mode={basicsMode}
+              display={basicsDisplay}
+              video={basicsVideo}
+              image={basicsImage}
+              gif={basicsGif}
+              audio={basicsAudio}
+              options={basicsOptions}
+              time={basicsTime}
+              useInOut={useInOut}
+              actions={basicsActions}
+            />
+
+            <ExportAdvancedSections
+              filename={filename}
+              mode={basicsMode}
+              display={basicsDisplay}
+              video={basicsVideo}
+              gif={basicsGif}
+              audio={basicsAudio}
+              options={basicsOptions}
+              actions={basicsActions}
+            />
+
+            <ExportAdvancedSummarySections
+              encoder={encoder}
+              isGifMode={isGifMode}
+              stackedAlpha={stackedAlpha}
+              setStackedAlpha={setStackedAlpha}
+              actualWidth={actualWidth}
+              actualHeight={actualHeight}
+              outputHeight={outputHeight}
+              useInOut={useInOut}
+              setUseInOut={setUseInOut}
+              startTime={startTime}
+              endTime={endTime}
+              frameCount={frameCount}
+              estimatedSizeLabel={estimatedSizeLabel}
+              error={error}
+              formatTime={formatTime}
+              fixedSourceRange={batchActive}
+            />
+          </div>
         </div>
       ) : (
         <ExportProgressView

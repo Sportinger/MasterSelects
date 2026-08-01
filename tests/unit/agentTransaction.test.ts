@@ -255,8 +255,10 @@ describe('agent mutation transactions', () => {
       { id: missingCallId, tool: 'deleteClip', args: { clipId: 'missing', withLinked: false } },
     ], 'internal', { guidedReplay: false });
 
-    expect(results.map((entry) => entry.result.success)).toEqual([true, false]);
+    expect(results.map((entry) => entry.result.success)).toEqual([false, false]);
     expect(results[0]?.result.data).toMatchObject({
+      applied: false,
+      rolledBack: true,
       partialFailure: {
         occurred: true,
         rolledBack: true,

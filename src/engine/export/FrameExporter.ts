@@ -282,8 +282,11 @@ export class FrameExporter {
       throw error;
     }
 
+    const exportCompositionId = useMediaStore.getState().activeCompositionId
+      ?? 'timeline:active';
     const renderSession = new ExportRenderSessionImpl({
       runId: exportRunId,
+      compositionId: exportCompositionId,
       width,
       height,
       stackedAlpha: !!this.settings.stackedAlpha,
@@ -675,6 +678,7 @@ export class FrameExporter {
       outputHeight: this.settings.height,
       clipsAtTime,
       renderClipsAtTime,
+      compositionClips: state.clips,
       trackMap,
       clipsByTrack,
       transitionParticipantsByTrack,

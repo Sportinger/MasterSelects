@@ -5,6 +5,7 @@
 // - Timeline marker animations (via CSS class toggling)
 
 import { PANEL_CONFIGS, type PanelType } from '../../types/dock';
+import { useTimelineStore } from '../../stores/timeline';
 import { isAIExecutionActive } from './executionState';
 
 function isPanelType(value: string): value is PanelType {
@@ -33,14 +34,15 @@ export function openPropertiesTab(tab: string): void {
 /** Select a clip and open a specific properties tab */
 export function selectClipAndOpenTab(clipId: string, tab: string): void {
   if (!isAIExecutionActive()) return;
+  // Selection is part of the editing result and must land before the owning AI
+  // history batch closes. Dock activation can remain lazy, but deferring the
+  // timeline import made redo restore the clips without their final selection.
+  useTimelineStore.getState().selectClips([clipId]);
   void import('../../stores/dockStore').then(({ FACTORY_START_LAYOUT_ID, useDockStore }) => {
     if (useDockStore.getState().activeSavedLayoutId === FACTORY_START_LAYOUT_ID) return;
-    void import('../../stores/timeline').then(({ useTimelineStore }) => {
-      useTimelineStore.getState().selectClips([clipId]);
-      useDockStore.getState().activatePanelType('clip-properties');
-      // Small delay so selection propagates before the tab switch.
-      setTimeout(() => openPropertiesTab(tab), 50);
-    });
+    useDockStore.getState().activatePanelType('clip-properties');
+    // Small delay so selection propagates before the tab switch.
+    setTimeout(() => openPropertiesTab(tab), 50);
   });
 }
 

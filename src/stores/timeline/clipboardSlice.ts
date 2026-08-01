@@ -7,6 +7,7 @@ import { captureSnapshot } from '../historyStore';
 import { generateEffectId } from './helpers/idGenerator';
 import { blobUrlManager } from './helpers/blobUrlManager';
 import { cloneClipNodeGraph } from '../../services/nodeGraph';
+import { normalizeMotionLayerDefinition } from '../../services/motionDesign/contracts/replicatorTimelineAdapter';
 import { getDataOnlyTimelineSource } from './sourceRuntimeSanitizer';
 import {
   createTimelineSolidCanvasRuntime,
@@ -17,6 +18,8 @@ import { createPastedClipboardClipsPlan } from './clipboard/clipboardClipPastePl
 import { filterPasteableClipboardData } from './clipboard/clipboardPastedClipSource';
 import { createClipboardClipAnalysisMetadata } from './clipboard/clipboardClipAnalysisMetadata';
 import { useMediaStore } from '../mediaStore';
+import { toMotionParentTransform2D } from '../../services/motionDesign/contracts/timelineStructureAdapter';
+import { getPlayheadPosition } from '../../services/layerBuilder/PlayheadState';
 import {
   clampClipboardKeyframeTime,
   cloneClipboardEffect,
@@ -29,7 +32,8 @@ const log = Logger.create('Clipboard');
 function randomSuffix(): string { return Math.random().toString(36).substr(2, 5); }
 export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) => ({
   copyClips: () => {
-    const { clips, selectedClipIds, clipKeyframes, tracks } = get();
+    const { clips, selectedClipIds, clipKeyframes, tracks, playheadPosition } = get();
+    const operationTime = getPlayheadPosition(playheadPosition);
     if (selectedClipIds.size === 0) {
       log.debug('No clips selected to copy');
       return;
@@ -49,7 +53,6 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
     // Add linked clips that aren't already selected
     const linkedClips = clips.filter(c => linkedClipIds.has(c.id) && !selectedClipIds.has(c.id));
     const allClipsToCopy = [...selectedClips, ...linkedClips];
-
     // Convert to clipboard format (serializable, without DOM elements)
     const clipboardData: ClipboardClipData[] = allClipsToCopy.map(clip => {
       const dataOnlySource = getDataOnlyTimelineSource(clip);
@@ -102,6 +105,14 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         })),
         keyframes: keyframes.length > 0 ? keyframes.map(k => structuredClone(k)) : undefined,
         linkedClipId: clip.linkedClipId,
+        parentClipId: clip.parentClipId,
+        ...(clip.parentClipId
+          ? {
+              worldTransformAtCopyTime: toMotionParentTransform2D(
+                get().getInterpolatedTransform(clip.id, operationTime - clip.startTime),
+              ),
+            }
+          : {}),
         reversed: clip.reversed,
         speed: clip.speed,
         preservesPitch: clip.preservesPitch,
@@ -121,7 +132,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         mathScene: dataOnlySource?.type === 'math-scene' && clip.mathScene
           ? structuredClone(clip.mathScene)
           : undefined,
-        motion: clip.motion ? structuredClone(clip.motion) : undefined,
+        motion: clip.motion ? normalizeMotionLayerDefinition(clip.motion) : undefined,
         // Visual data - reuse existing thumbnails and waveforms
         thumbnails: clip.thumbnails ? [...clip.thumbnails] : undefined,
         waveform: clip.waveform ? [...clip.waveform] : undefined,
@@ -167,10 +178,11 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
 
     const { idMapping, newClips, newKeyframes } = createPastedClipboardClipsPlan({
       clipboardData: pasteableClipboardData,
-      playheadPosition,
+      playheadPosition: getPlayheadPosition(playheadPosition),
       tracks,
       clipKeyframes,
       targetTrackIdByType,
+      destinationCompositionId: mediaStore.activeCompositionId ?? 'timeline:active',
       timestamp: Date.now(),
       createSuffix: randomSuffix,
       onMissingTrack: (clipData) => {

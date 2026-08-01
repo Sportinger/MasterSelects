@@ -23,7 +23,6 @@ import { AIPortDropdown } from './AIPortDropdown';
 
 export function CustomNodeParameters({ clip, node }: { clip: TimelineClip; node: NodeGraphNode }) {
   const updateClipAICustomNode = useTimelineStore((state) => state.updateClipAICustomNode);
-  const apiKeys = useSettingsStore((state) => state.apiKeys);
   const aiProvider = useSettingsStore((state) => state.aiProvider);
   const lemonadeEndpoint = useSettingsStore((state) => state.lemonadeEndpoint);
   const lemonadeModel = useSettingsStore((state) => state.lemonadeModel);
@@ -81,9 +80,7 @@ export function CustomNodeParameters({ clip, node }: { clip: TimelineClip; node:
       }
     : accountSession?.authenticated && hostedAIEnabled
       ? { kind: 'hosted', label: 'Cloud' }
-      : apiKeys.kieai
-        ? { apiKey: apiKeys.kieai, kind: 'kie', label: 'Kie.ai key' }
-        : { kind: 'none', label: 'No AI' };
+      : { kind: 'none', label: 'No AI' };
   const canSendPrompt = access.kind !== 'none' && definition.ai.prompt.trim().length > 0 && !isGenerating;
   const conversationCount = definition.ai.conversation?.length ?? 0;
 

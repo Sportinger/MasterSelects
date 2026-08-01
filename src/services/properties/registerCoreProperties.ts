@@ -7,6 +7,10 @@ import {
   getEffectDescriptorsForClip,
   registerEffectTemplates,
 } from './effectProperties';
+import {
+  getAudioEffectDescriptorForPath,
+  getAudioEffectDescriptorsForClip,
+} from './audioEffectProperties';
 import { getColorDescriptorForPath, getColorDescriptorsForClip } from './colorProperties';
 import { getMaskDescriptorForPath, getMaskDescriptorsForClip } from './maskProperties';
 import { getVectorDescriptorForPath, getVectorDescriptorsForClip } from './vectorAnimationProperties';
@@ -17,6 +21,8 @@ export function registerCoreProperties(registry: PropertyRegistry = propertyRegi
   registerEffectTemplates(registry);
   registry.registerResolver('effect-instance', getEffectDescriptorForPath);
   registry.registerProvider('effect-instance', getEffectDescriptorsForClip);
+  registry.registerResolver('audio-effect-instance', getAudioEffectDescriptorForPath);
+  registry.registerProvider('audio-effect-instance', getAudioEffectDescriptorsForClip);
   registry.registerResolver('color-correction', getColorDescriptorForPath);
   registry.registerProvider('color-correction', getColorDescriptorsForClip);
   registry.registerResolver('mask', getMaskDescriptorForPath);

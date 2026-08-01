@@ -1,5 +1,5 @@
 import { getCurrentUser, json, methodNotAllowed } from '../../lib/db';
-import { getCreditSummary } from '../../lib/credits';
+import { getCreditMeterReference, getCreditSummary } from '../../lib/credits';
 import { getBillingPlan, getEntitlementSnapshot, listEntitlements, normalizeBillingPlanId, type BillingPlanId } from '../../lib/entitlements';
 import { getUsageSummary } from '../../lib/usage';
 import type { AppContext, AppRouteHandler } from '../../lib/env';
@@ -18,6 +18,7 @@ interface BillingSubscriptionRow {
 
 interface BillingSummaryResponse {
   creditBalance: number;
+  creditMeterReference: number;
   entitlements: Record<string, string>;
   hostedAIEnabled: boolean;
   plan: {
@@ -159,6 +160,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   if (!currentUser) {
     const emptySummary: BillingSummaryResponse = {
       creditBalance: 0,
+      creditMeterReference: 0,
       entitlements: {},
       hostedAIEnabled: false,
       plan: {
@@ -195,9 +197,15 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   const planId = normalizeBillingPlanId(subscription?.plan_id, 'free');
   const snapshot = getEntitlementSnapshot(planId, entitlementRows);
   const subscriptionPlan = getBillingPlan(planId);
+  const creditMeterReference = await getCreditMeterReference(context.env.DB, currentUser.id, {
+    balance: creditSummary.balance,
+    epochStart: subscription?.current_period_start,
+    monthlyCredits: subscriptionPlan.monthlyCredits,
+  });
 
   const response: BillingSummaryResponse = {
     creditBalance: creditSummary.balance,
+    creditMeterReference,
     entitlements: snapshot.values,
     hostedAIEnabled: snapshot.hostedAIEnabled,
     plan: {

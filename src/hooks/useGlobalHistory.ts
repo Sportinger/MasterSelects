@@ -608,6 +608,7 @@ export function useGlobalHistory() {
         settings: state.settings,
         presets: state.presets,
         selectedPresetId: state.selectedPresetId,
+        batch: state.batch,
       }),
       (curr, prev) => {
         if (isHistoryCaptureSuppressed()) return;
@@ -618,6 +619,8 @@ export function useGlobalHistory() {
           debouncedCapture('Select export preset');
         } else if (curr.settings !== prev.settings) {
           debouncedCapture('Modify export settings');
+        } else if (curr.batch !== prev.batch) {
+          debouncedCapture('Modify batch export queue');
         }
       },
       { equalityFn: shallowEqual, fireImmediately: false }
@@ -645,8 +648,8 @@ export function useGlobalHistory() {
       if (registry.matches('history.undo', e)) {
         if (!claimShortcut(e, 'history.undo')) return;
         const result = undo();
-        if (result) {
-          showHistoryNotice(result);
+        if (result && result.operation !== 'restore-branch') {
+          showHistoryNotice({ operation: result.operation, label: result.label });
         }
         return;
       }
@@ -654,8 +657,8 @@ export function useGlobalHistory() {
       if (registry.matches('history.redo', e)) {
         if (!claimShortcut(e, 'history.redo')) return;
         const result = redo();
-        if (result) {
-          showHistoryNotice(result);
+        if (result && result.operation !== 'restore-branch') {
+          showHistoryNotice({ operation: result.operation, label: result.label });
         }
         return;
       }
@@ -670,7 +673,11 @@ export function useGlobalHistory() {
     redo,
     historyNotice,
     clearHistoryNotice,
-    canUndo: useHistoryStore((state) => !isHistoryDisabledForDebug() && state.undoStack.length > 0),
-    canRedo: useHistoryStore((state) => !isHistoryDisabledForDebug() && state.redoStack.length > 0),
+    canUndo: useHistoryStore((state) => !isHistoryDisabledForDebug() && Boolean(
+      state.activeNodeId && state.nodes[state.activeNodeId]?.parentId
+    )),
+    canRedo: useHistoryStore((state) => !isHistoryDisabledForDebug() && Boolean(
+      state.activeNodeId && Object.values(state.nodes).some((node) => node.parentId === state.activeNodeId)
+    )),
   };
 }

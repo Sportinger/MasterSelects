@@ -22,6 +22,7 @@ import {
 } from './layerBuilder/nestedLayers';
 import { buildTextLikeLayer, isTextLikeClipSource } from './layerBuilder/textLayers';
 import { buildVideoLayer } from './layerBuilder/videoLayers';
+import { buildMotionAdjustmentLayerFromBase } from '../../services/layerBuilder/layerBuilderMotionAdjustment';
 
 const log = Logger.create('ExportLayerBuilder');
 const IDENTITY_EPSILON = 0.000001;
@@ -231,6 +232,22 @@ function buildExportLayerForClip(
     }
     return null;
   }
+  // Handle Motion Adjustment clips as ordered compositor operations.
+  if (clip.source?.type === 'motion-adjustment') {
+    return buildMotionAdjustmentLayerFromBase({
+      clip,
+      baseLayer: baseLayerProps,
+      compositionSize: {
+        width: ctx.outputWidth ?? 1920,
+        height: ctx.outputHeight ?? 1080,
+      },
+      surface: 'export',
+    });
+  }
+  // Motion Nulls stay non-rendering transform controllers.
+  if (clip.source?.type === 'motion-null') {
+    return null;
+  }
   // Handle 3D model clips
   if (clip.source?.type === 'model') {
     const modelSourceTime = getClipSourceWindowTime(clip, clipLocalTime, ctx);
@@ -319,6 +336,8 @@ export function buildLayersAtTime(
         outputWidth: ctx.outputWidth,
         outputHeight: ctx.outputHeight,
         frameRate: ctx.fps,
+        parentTransformClips: ctx.compositionClips ?? ctx.renderClipsAtTime ?? ctx.clipsAtTime,
+        parentTransformTimelineTime: ctx.time,
       });
       if (transitionCompLayer) {
         layers.push(transitionCompLayer);

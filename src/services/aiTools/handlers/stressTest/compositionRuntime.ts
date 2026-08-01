@@ -32,7 +32,7 @@ async function waitForCompositionReady(compositionId: string, timeoutMs = 3000):
 
 export async function openComposition(compositionId: string): Promise<void> {
   const mediaStore = useMediaStore.getState();
-  mediaStore.openCompositionTab(compositionId, { skipAnimation: true });
+  await mediaStore.openCompositionTab(compositionId, { skipAnimation: true });
   const ready = await waitForCompositionReady(compositionId);
   if (!ready) {
     log.warn('Timed out waiting for fixture composition switch', { compositionId });

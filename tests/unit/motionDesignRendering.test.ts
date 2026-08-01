@@ -18,6 +18,10 @@ import {
 } from '../../src/engine/motion/MotionDiagnostics';
 import { MotionRenderer } from '../../src/engine/motion/MotionRenderer';
 import { getMotionRenderSize } from '../../src/engine/motion/MotionTypes';
+import {
+  createMotionFrameRuntimeAdmission,
+  getMotionRenderSizeForAdmission,
+} from '../../src/engine/motion/MotionFrameRuntime';
 import { getInterpolatedMotionLayer } from '../../src/utils/motionInterpolation';
 import { createTestTimelineStore } from '../helpers/storeFactory';
 
@@ -47,6 +51,16 @@ function makeMotionClip(motion = createDefaultMotionLayerDefinition('shape')): T
     effects: [],
     isLoading: false,
   };
+}
+
+function makeMotionLayer(motion = createDefaultMotionLayerDefinition('shape')) {
+  return {
+    id: 'preview-layer',
+    sourceClipId: 'motion-clip',
+    visible: true,
+    opacity: 1,
+    source: { type: 'motion' as const, motion },
+  } as unknown as import('../../src/types').Layer;
 }
 
 describe('motion design rendering helpers', () => {
@@ -140,12 +154,19 @@ describe('motion design rendering helpers', () => {
     });
     if (motion.replicator?.layout.mode === 'grid') {
       motion.replicator.enabled = true;
-      motion.replicator.layout.count = { x: 3, y: 2 };
+      motion.replicator.layout.count = { columns: 3, rows: 2 };
       motion.replicator.layout.spacing = { x: 50, y: 80 };
-      motion.replicator.offset.opacity = 0.75;
+      motion.replicator.terminalTransform.opacity = 0.75;
     }
 
-    const size = getMotionRenderSize(motion);
+    const layer = makeMotionLayer(motion);
+    const admission = createMotionFrameRuntimeAdmission({
+      consumer: 'preview',
+      compositionId: 'composition-a',
+      timelineTimeSeconds: 0,
+      layers: [layer],
+    });
+    const size = getMotionRenderSizeForAdmission(layer, admission);
     const instances = createMotionInstanceArray(size);
 
     expect(size).toMatchObject({
@@ -160,13 +181,16 @@ describe('motion design rendering helpers', () => {
         instanceCount: 6,
       },
     });
-    expect(Array.from(instances)).toEqual([
+    expect(instances).toHaveLength(6 * 12);
+    expect(Array.from(instances.slice(0, 12))).toEqual([
+      1, 0, 0, 1,
       -50, -40, 1, 0,
-      0, -40, 0.75, 0,
-      50, -40, 0.5625, 0,
-      -50, 40, 0.421875, 0,
-      0, 40, 0.31640625, 0,
-      50, 40, 0.2373046875, 0,
+      -100, -65, 0, -15,
+    ]);
+    expect(Array.from(instances.slice(-12))).toEqual([
+      1, 0, 0, 1,
+      50, 40, 0.75, 1,
+      0, 15, 100, 65,
     ]);
   });
 
@@ -287,6 +311,7 @@ describe('motion design rendering helpers', () => {
     expect(split[0].motion?.appearance).not.toBe(split[1].motion?.appearance);
     expect(split[0].motion?.appearance?.items[0])
       .not.toBe(split[1].motion?.appearance?.items[0]);
+    expect(split[0].motion?.replicator).not.toBe(split[1].motion?.replicator);
 
     store.getState().updateMotionLayer(split[0].id, (motion) => ({
       ...motion,
@@ -301,6 +326,14 @@ describe('motion design rendering helpers', () => {
     }));
     expect(store.getState().clips.find((clip) => clip.id === split[1].id)
       ?.motion?.appearance?.items[0].opacity).toBe(1);
+    const firstReplicator = store.getState().clips.find((clip) => clip.id === split[0].id)
+      ?.motion?.replicator;
+    const secondReplicator = store.getState().clips.find((clip) => clip.id === split[1].id)
+      ?.motion?.replicator;
+    if (firstReplicator?.layout.mode === 'grid' && secondReplicator?.layout.mode === 'grid') {
+      firstReplicator.layout.spacing.x = 987;
+      expect(secondReplicator.layout.spacing.x).not.toBe(987);
+    }
   });
 
   it('reports timeline clip and effective instance counts', () => {
@@ -328,7 +361,7 @@ describe('motion design rendering helpers', () => {
     };
     if (rectangle.motion?.replicator?.layout.mode === 'grid') {
       rectangle.motion.replicator.enabled = true;
-      rectangle.motion.replicator.layout.count = { x: 3, y: 2 };
+      rectangle.motion.replicator.layout.count = { columns: 3, rows: 2 };
     }
 
     expect(buildMotionTimelineDiagnostics([rectangle, ellipse, polygon, star], 1)).toEqual({
@@ -391,15 +424,19 @@ describe('motion design rendering helpers', () => {
     const motion = createDefaultMotionLayerDefinition('shape');
     if (motion.replicator?.layout.mode === 'grid') {
       motion.replicator.enabled = true;
-      motion.replicator.layout.count = { x: 3, y: 2 };
+      motion.replicator.layout.count = { columns: 3, rows: 2 };
     }
     const renderer = new MotionRenderer(device);
 
-    renderer.renderLayer({
-      id: 'preview-layer',
-      sourceClipId: 'motion-clip',
-      source: { type: 'motion', motion },
-    } as unknown as import('../../src/types').Layer, commandEncoder);
+    const layer = makeMotionLayer(motion);
+    const admission = createMotionFrameRuntimeAdmission({
+      consumer: 'preview',
+      compositionId: 'composition-a',
+      timelineTimeSeconds: 0,
+      layers: [layer],
+    });
+
+    renderer.renderLayer(layer, commandEncoder, admission);
 
     expect(writeBuffer).toHaveBeenCalledTimes(2);
     expect(pass.draw).toHaveBeenCalledWith(6, 6);
@@ -407,7 +444,7 @@ describe('motion design rendering helpers', () => {
       renderCalls: 1,
       cacheCount: 1,
       bufferUploads: 2,
-      bufferUploadBytes: MOTION_UNIFORM_BYTE_SIZE + 6 * 4 * 4,
+      bufferUploadBytes: MOTION_UNIFORM_BYTE_SIZE + 6 * 12 * 4,
       totalInstances: 6,
       lastInstanceCount: 6,
       peakInstanceCount: 6,

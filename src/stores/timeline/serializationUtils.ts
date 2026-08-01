@@ -25,6 +25,10 @@ import { restoreLoadStateMediaClip } from './serialization/loadStateMediaClipRes
 import { migrateRestoredCaptionClips } from './serialization/loadStateCaptionClipRestore';
 import { createDefaultRulerLaneState, normalizeRulerLaneState } from '../../timeline/tempo/rulerDefaults';
 import { CLEARED_TIMELINE_EDIT_PREVIEWS } from './serialization/transientTimelineState';
+import { Logger } from '../../services/logger';
+import { sanitizeTimelineParentRestoreTree } from '../../services/motionDesign/structure/timelineParentRestoreAdapter';
+
+const log = Logger.create('TimelineSerialization');
 function getDefaultExpandedTrackIds(tracks: readonly TimelineTrack[]): string[] {
   return tracks.map(track => track.id);
 }
@@ -256,6 +260,21 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
     }
 
     flushRestoredClipBuffer();
+    const parentRestore = sanitizeTimelineParentRestoreTree(
+      mediaStore.activeCompositionId ?? 'timeline:active',
+      get().clips,
+    );
+    if (parentRestore.changed) set({ clips: parentRestore.clips });
+    if (parentRestore.diagnostics.length > 0) {
+      log.warn('Sanitized invalid Motion parent relationships during timeline restore', {
+        failures: parentRestore.diagnostics.map((item) => ({
+          compositionId: item.compositionId,
+          clipPath: item.clipPath,
+          code: item.failure.code,
+          clipIds: item.failure.clipIds,
+        })),
+      });
+    }
     await migrateRestoredCaptionClips(get().clips, get().ensureCaptionTextClip);
     get().relinkClipStemSeparationJobsFromMediaLibrary();
     scheduleRestoredCompositionAudioWarmup();

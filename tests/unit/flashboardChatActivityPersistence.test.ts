@@ -27,6 +27,7 @@ describe('FlashBoard narrated activity persistence', () => {
         source: 'runtime',
         phase: 'failed',
         safeLabel: 'Trim clip',
+        operationId: 'provider-call-1',
         toolName: 'trimClip',
         createdAt: 2,
         arguments: '{"clipId":"sensitive"}',
@@ -35,7 +36,12 @@ describe('FlashBoard narrated activity persistence', () => {
 
     expect(serialized.activityEvents).toEqual([
       expect.objectContaining({ id: 'narration-1', text: 'I am checking the timeline.' }),
-      expect.objectContaining({ id: 'operation-1', safeLabel: 'Trim clip', phase: 'failed' }),
+      expect.objectContaining({
+        id: 'operation-1',
+        operationId: 'provider-call-1',
+        safeLabel: 'Trim clip',
+        phase: 'failed',
+      }),
     ]);
     expect(JSON.stringify(serialized.activityEvents)).not.toContain('secret');
     expect(JSON.stringify(serialized.activityEvents)).not.toContain('arguments');

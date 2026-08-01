@@ -1,6 +1,7 @@
 import { APP_VERSION } from '../../version';
 import { useMediaStore } from '../../stores/mediaStore';
 import { sanitizeAuditValue } from '../aiTools/audit';
+import { hasHostedAgentReloadSnapshot } from '../kernelClient/hostedAgent/reloadResume';
 import type {
   FlashBoardChatPromptVersion,
   FlashBoardChatProvider,
@@ -17,6 +18,9 @@ const CHAT_RUN_STORE_NAME = 'runs';
 const CHAT_RUN_MEMORY_LIMIT = 500;
 const CHAT_RUN_DATABASE_LIMIT = 2_000;
 const TAB_ID_SESSION_KEY = 'masterselects.aiBridgeTabId';
+const HOSTED_TURN_IDEMPOTENCY_PREFIX = 'flashboard-chat-turn:';
+const ORPHANED_RUN_ERROR = 'The browser session ended before the chat run completed.';
+const ORPHAN_RECONCILIATION_GRACE_MS = 2 * 60 * 1000;
 
 export type FlashBoardChatRunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled';
 
@@ -48,6 +52,7 @@ export interface FlashBoardChatRunRecord {
 }
 
 interface ChatRunRuntime {
+  activeRunIds: Set<string>;
   databasePromise?: Promise<IDBDatabase | null>;
   order: string[];
   persistenceQueue?: Promise<void>;
@@ -59,10 +64,12 @@ const runtimeGlobal = globalThis as typeof globalThis & {
   __MASTERSELECTS_CHAT_RUN_AUDIT__?: ChatRunRuntime;
 };
 const runtime = runtimeGlobal.__MASTERSELECTS_CHAT_RUN_AUDIT__ ?? {
+  activeRunIds: new Set<string>(),
   order: [],
   persistedWrites: 0,
   runs: new Map<string, FlashBoardChatRunRecord>(),
 };
+runtime.activeRunIds ??= new Set<string>();
 runtimeGlobal.__MASTERSELECTS_CHAT_RUN_AUDIT__ = runtime;
 
 export function beginFlashBoardChatRun(
@@ -94,6 +101,7 @@ export function beginFlashBoardChatRun(
     temperature: request.temperature,
     toolExecutionMode: request.toolExecutionMode ?? 'normal',
   };
+  runtime.activeRunIds.add(record.runId);
   remember(record);
   enqueuePersist(record);
   return record;
@@ -109,6 +117,7 @@ export function completeFlashBoardChatRun(
 ): FlashBoardChatRunRecord | null {
   const current = runtime.runs.get(runId);
   if (!current) return null;
+  runtime.activeRunIds.delete(runId);
 
   const finishedAt = Date.now();
   const error = input.error instanceof Error
@@ -132,12 +141,44 @@ export function completeFlashBoardChatRun(
   return record;
 }
 
+export function appendFlashBoardChatRunToolCalls(
+  runId: string,
+  toolCalls: FlashBoardExecutedToolCall[],
+): FlashBoardChatRunRecord | null {
+  const current = runtime.runs.get(runId);
+  if (!current || current.status !== 'running' || toolCalls.length === 0) return current ?? null;
+  const record: FlashBoardChatRunRecord = {
+    ...current,
+    executedToolCalls: [
+      ...current.executedToolCalls,
+      ...sanitizeAuditValue(toolCalls) as FlashBoardExecutedToolCall[],
+    ],
+  };
+  remember(record);
+  enqueuePersist(record);
+  return record;
+}
+
+export async function reactivateFlashBoardChatRunByIdempotencyKey(
+  idempotencyKey: string,
+): Promise<FlashBoardChatRunRecord | null> {
+  const runs = await readPersistedRuns(CHAT_RUN_DATABASE_LIMIT);
+  const record = [...runtime.runs.values()].find((candidate) => (
+    candidate.idempotencyKey === idempotencyKey
+  )) ?? runs.find((candidate) => candidate.idempotencyKey === idempotencyKey) ?? null;
+  if (!record || record.status !== 'running') return null;
+  runtime.activeRunIds.add(record.runId);
+  remember(record);
+  return record;
+}
+
 export async function listFlashBoardChatRuns(input: {
   limit?: number;
   source?: FlashBoardChatRunSource;
 } = {}): Promise<FlashBoardChatRunRecord[]> {
   const limit = normalizeLimit(input.limit);
-  const persisted = await readPersistedRuns(Math.max(limit, 100));
+  const persisted = (await readPersistedRuns(Math.max(limit, 100)))
+    .map(reconcileOrphanedRunningRecord);
   const merged = new Map(persisted.map((record) => [record.runId, record]));
   for (const record of runtime.runs.values()) merged.set(record.runId, record);
 
@@ -157,7 +198,9 @@ export async function getFlashBoardChatRun(runId: string): Promise<FlashBoardCha
     const request = database.transaction(CHAT_RUN_STORE_NAME, 'readonly')
       .objectStore(CHAT_RUN_STORE_NAME)
       .get(runId);
-    request.onsuccess = () => resolve((request.result as FlashBoardChatRunRecord | undefined) ?? null);
+    request.onsuccess = () => resolve(request.result
+      ? reconcileOrphanedRunningRecord(request.result as FlashBoardChatRunRecord)
+      : null);
     request.onerror = () => resolve(null);
   });
 }
@@ -177,6 +220,31 @@ function remember(record: FlashBoardChatRunRecord): void {
     const oldest = runtime.order.shift();
     if (oldest) runtime.runs.delete(oldest);
   }
+}
+
+function reconcileOrphanedRunningRecord(
+  record: FlashBoardChatRunRecord,
+): FlashBoardChatRunRecord {
+  if (record.status !== 'running' || runtime.activeRunIds.has(record.runId)) return record;
+  if (Date.now() - record.startedAt < ORPHAN_RECONCILIATION_GRACE_MS) return record;
+  const currentSessionId = readBridgeSessionId();
+  if (!currentSessionId || record.sessionId !== currentSessionId) return record;
+  const assistantMessageId = record.idempotencyKey?.startsWith(HOSTED_TURN_IDEMPOTENCY_PREFIX)
+    ? record.idempotencyKey.slice(HOSTED_TURN_IDEMPOTENCY_PREFIX.length)
+    : '';
+  if (assistantMessageId && hasHostedAgentReloadSnapshot(assistantMessageId)) return record;
+
+  const finishedAt = Date.now();
+  const settled: FlashBoardChatRunRecord = {
+    ...record,
+    durationMs: Math.max(0, finishedAt - record.startedAt),
+    error: ORPHANED_RUN_ERROR,
+    finishedAt,
+    status: 'cancelled',
+  };
+  remember(settled);
+  enqueuePersist(settled);
+  return settled;
 }
 
 function enqueuePersist(record: FlashBoardChatRunRecord): void {

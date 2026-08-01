@@ -5,6 +5,7 @@ import { createTimelineTransitionOverlayCanvasRuntime } from '../../services/tim
 import { mathSceneRenderer } from '../../services/mathScene/MathSceneRenderer';
 import { cloneClipNodeGraph } from '../../services/nodeGraph';
 import { normalizeTransitionInstanceParams } from '../../transitions';
+import { normalizeMotionLayerDefinitionForLoad } from '../../services/motionDesign/contracts/replicatorTimelineAdapter';
 import { serializeVideoBakeRegion } from './videoBakeSlice';
 import { blobUrlManager } from './helpers/blobUrlManager';
 import type { RestoredRuntimePatch } from './vectorRuntimeRestore';
@@ -72,6 +73,7 @@ function createRestoredNestedClipCommon(
     thumbnails: serializedClip.thumbnails,
     linkedClipId: serializedClip.linkedClipId,
     linkedGroupId: serializedClip.linkedGroupId,
+    parentClipId: serializedClip.parentClipId,
     videoState: restorePersistedClipVideoState(serializedClip),
     audioState: clonePersistedClipAudioState(serializedClip.audioState),
     waveform: serializedClip.waveform,
@@ -210,7 +212,9 @@ export function createRestoredMotionClip(
       },
       isLoading: false,
     }),
-    motion: structuredClone(serializedClip.motion),
+    motion: serializedClip.motion
+      ? normalizeMotionLayerDefinitionForLoad(serializedClip.motion)
+      : undefined,
   };
 }
 

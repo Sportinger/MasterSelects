@@ -129,6 +129,8 @@ export interface RenderTimelineClipSnapshot {
   readonly textProperties?: TextClipProperties;
   readonly text3DProperties?: Text3DProperties;
   readonly motion?: MotionLayerDefinition;
+  /** Embedded animation payload used by nested composition clips. */
+  readonly keyframes?: readonly Keyframe[];
   readonly transitionIn?: TimelineTransition;
   readonly transitionOut?: TimelineTransition;
   readonly is3D?: boolean;

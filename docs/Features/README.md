@@ -87,9 +87,9 @@ The docs in this folder were re-audited against the current codebase and now tra
 | [AI Bridge Control](./AI-Bridge-Control.md) | Authenticated session, schema, execution, replay, history, and MCP access to the live in-app AI tool surface |
 | [MuScriptor Music-to-MIDI](./MuScriptor.md) | Local Native Helper audio-to-MIDI transcription, model setup, instrument mapping, and atomic timeline commit |
 | [Credit Claims](./Credit-Claims.md) | Cloudflare-backed reward links for manually granted hosted credits |
+| [Live Credit Burn Meter](./Credit-Burn-Meter.md) | Always-visible authoritative reserve bar, confirmed run spend, settlement motion, replay safety, and reduced-motion behavior |
 | [Guided Action Runtime Plan](./Guided-Action-Runtime-Plan.md) | Target architecture for AI action replay, interactive tutorials, guided workflows, and parallel implementation workstreams |
 | [FlashBoard](./FlashBoard.md) | Media Panel generation tray for video, image, speech, and music generation |
-| [Multicam AI](./Multicam-AI.md) | Sync, transcription, multicam analysis, and Anthropic-powered EDL generation |
 | [Debugging](./Debugging.md) | Logger service, runtime monitors, log sync, and AI-facing debug tools |
 | [Playback Debugging](./Playback-Debugging.md) | Focused workflow for preview stalls, drift, and decode/render mismatches |
 | [Codex Usage Monitoring](./Codex-Usage-Monitoring.md) | Local Codex session parser for per-turn token usage, stale-run detection, and Git commit attribution |
@@ -108,7 +108,7 @@ State             Zustand with modular timeline and media slices
 Rendering         WebGPU + WGSL + shared-scene 3D runtime
 Media             MediaBunny, WebCodecs, HTML media fallback paths
 Audio             Web Audio API, artifact-backed analysis, spectral display, clip/track/master FX, recording
-AI                OpenAI/Cloud chat, local Lemonade chat, Kie.ai, hosted ElevenLabs/Suno, EvoLink, PiAPI-compatible catalog paths, SAM2, MatAnyone2, MuScriptor
+AI                OpenAI/Cloud chat, local Lemonade chat, managed Kie.ai, hosted ElevenLabs/Suno, EvoLink, PiAPI-compatible catalog paths, SAM2, MatAnyone2, MuScriptor
 Persistence       File System Access API, project-local RAW copies, IndexedDB handle/cache storage
 Native Helper     Rust service with HTTP/WebSocket bridge, yt-dlp, helper-backed jobs
 ```

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   handleAddClipSegment,
+  insertedClipAlreadyMatchesRequestedSegment,
 } from '../../src/services/aiTools/handlers/clips/addSegment';
 
 describe('addClipSegment preflight', () => {
@@ -15,5 +16,18 @@ describe('addClipSegment preflight', () => {
       success: false,
       error: 'Clip segment duration must be at least 0.04s',
     });
+  });
+
+  it('treats an inserted still that already has the requested range as complete', () => {
+    expect(insertedClipAlreadyMatchesRequestedSegment(
+      { inPoint: 0, outPoint: 60 },
+      0,
+      60,
+    )).toBe(true);
+    expect(insertedClipAlreadyMatchesRequestedSegment(
+      { inPoint: 0, outPoint: 10 },
+      2,
+      10,
+    )).toBe(false);
   });
 });

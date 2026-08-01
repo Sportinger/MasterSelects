@@ -215,6 +215,7 @@ export async function handleHostedSunoMusicRequest(
     return json(
       buildSunoEnvelope({
         creditBalance: charge.balance,
+        creditMutationId: charge.entry?.id ?? null,
         creditsCharged: charge.charged ? creditsRequired : 0,
         data: {
           outputType: 'audio',

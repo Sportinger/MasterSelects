@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useAccountStore } from '../../stores/accountStore';
 import { cloudApi } from '../../services/cloudApi';
+import { applyConfirmedCreditUpdate } from '../../services/credits/creditBalanceCoordinator';
 import { BILLING_PLANS, formatBillingPlanLabel } from '../../services/billingPlans';
 import { CLOUD_AI_PRICE_ROWS, CLOUD_EUR_PER_CREDIT, CLOUD_PRICE_BASELINE_PLAN } from '../../services/cloudAiPricing';
 import './authBillingDialogs.css';
@@ -57,7 +58,6 @@ function formatBillingDate(value: string | null | undefined): string | null {
 
 export function AccountDialog({ initialRedeemCode = '', onClose, onRedeemed }: AccountDialogProps) {
   const {
-    applyHostedCreditBalance,
     billingSummary,
     error,
     isLoading,
@@ -133,7 +133,15 @@ export function AccountDialog({ initialRedeemCode = '', onClose, onRedeemed }: A
         email,
         redeemCode: true,
       });
-      applyHostedCreditBalance(result.creditBalance);
+      if (result.ledgerEntryId) {
+        applyConfirmedCreditUpdate({
+          balance: result.creditBalance,
+          credits: result.amount,
+          kind: 'grant',
+          mutationId: `grant:credit_claim:${result.ledgerEntryId}`,
+          source: 'credit_claim',
+        });
+      }
       await loadAccountState();
       setRedeemNotice(`${formatCredits(result.amount)} credits added to your account.`);
       setRedeemCode('');

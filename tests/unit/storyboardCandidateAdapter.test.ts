@@ -18,7 +18,7 @@ function generationRecord(
     createdAt: 10,
     updatedAt: 20,
     request: {
-      service: 'kieai',
+      service: 'cloud',
       providerId: 'provider-video',
       version: 'v1',
       idempotencyKey: 'request-1',

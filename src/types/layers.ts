@@ -98,7 +98,7 @@ export type TransitionRenderState =
     };
 
 export interface LayerSource {
-  type: 'video' | 'image' | 'camera' | 'light' | 'color' | 'text' | 'solid' | 'model' | 'gaussian-avatar' | 'gaussian-splat' | 'motion';
+  type: 'video' | 'image' | 'camera' | 'light' | 'color' | 'text' | 'solid' | 'model' | 'gaussian-avatar' | 'gaussian-splat' | 'motion' | 'motion-adjustment';
   modelUrl?: string;  // Blob URL to 3D model file (OBJ/glTF/GLB)
   modelFileName?: string;
   modelSequence?: ModelSequenceData;

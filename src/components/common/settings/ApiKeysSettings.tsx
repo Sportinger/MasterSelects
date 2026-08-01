@@ -9,7 +9,6 @@ const DEFAULTABLE_PROVIDERS = new Set<string>([
   'openai',
   'anthropic',
   'piapi',
-  'kieai',
   'evolink',
   'elevenlabs',
 ]);
@@ -95,7 +94,6 @@ export function ApiKeysSettings({ localKeys, onKeyChange }: ApiKeysSettingsProps
     assemblyai: false,
     deepgram: false,
     piapi: false,
-    kieai: false,
     evolink: false,
     elevenlabs: false,
     youtube: false,
@@ -203,21 +201,6 @@ export function ApiKeysSettings({ localKeys, onKeyChange }: ApiKeysSettingsProps
           show: showKeys.evolink,
           onToggle: () => toggleShowKey('evolink'),
           onChange: (v) => onKeyChange('evolink', v),
-        })}
-      </div>
-      <div className="settings-group">
-        <div className="settings-group-title">AI Chat & Kie.ai Media</div>
-
-        {renderApiKeyRow({
-          label: 'Kie.ai API Key',
-          provider: 'kieai',
-          value: getKey('kieai'),
-          placeholder: 'Enter Kie.ai key...',
-          linkUrl: 'https://kie.ai',
-          linkText: 'Get API Key',
-          show: showKeys.kieai,
-          onToggle: () => toggleShowKey('kieai'),
-          onChange: (v) => onKeyChange('kieai', v),
         })}
       </div>
       <div className="settings-group">

@@ -157,6 +157,21 @@ function createBridge() {
       }],
       presentedFrameId: 'preview:gpu-render-1:gpu-clear:1',
     })),
+    presentGpuFrameStack: vi.fn((command: {
+      readonly commandId: string;
+      readonly stack: {
+        readonly frame: { readonly targetId: string; readonly timelineTime: number };
+      };
+    }) => Promise.resolve(output({
+      commandType: 'gpu.presentFrameStack',
+      statusEvents: [{
+        type: 'frame-presented',
+        requestId: command.commandId,
+        targetId: command.stack.frame.targetId,
+        timelineTime: command.stack.frame.timelineTime,
+      }],
+      presentedFrameId: `${command.stack.frame.targetId}:${command.commandId}:gpu-frame-stack:1`,
+    }))),
     presentGpuTransferredVideoFrames: vi.fn((
       requestId: string,
       targetId: string,
@@ -2839,18 +2854,9 @@ describe('worker presenting render host port', () => {
     canvas.height = 360;
 
     host.registerTargetCanvas('preview', canvas);
-    host.render([{
-      id: 'solid-gpu-only',
-      name: 'Solid GPU Only',
-      visible: true,
-      opacity: 1,
-      blendMode: 'normal',
-      source: { type: 'solid', color: '#00ff00' },
-      effects: [],
-      position: { x: 0, y: 0, z: 0 },
-      scale: { x: 1, y: 1 },
-      rotation: 0,
-    }]);
+    // A diagnostic empty render may use the test pattern. Real non-video
+    // content is atomic frame-stack work and requires an exact frame context.
+    host.render([]);
 
     const video = createVideo({ currentTime: 2 });
     expect(host.captureVideoFrameAtTime(video, 2, 'clip-a')).toBe(false);
@@ -2899,7 +2905,16 @@ describe('worker presenting render host port', () => {
 
   it('presents HTMLVideo frames through worker WebGPU when full WebCodecs playback is disabled', async () => {
     const originalCreateImageBitmap = globalThis.createImageBitmap;
-    const bitmap = { width: 1280, height: 720, close: vi.fn() } as unknown as ImageBitmap;
+    class TestImageBitmap {
+      readonly close = vi.fn();
+
+      constructor(
+        readonly width: number,
+        readonly height: number,
+      ) {}
+    }
+    vi.stubGlobal('ImageBitmap', TestImageBitmap);
+    const bitmap = new TestImageBitmap(1280, 720) as unknown as ImageBitmap;
     Object.defineProperty(globalThis, 'createImageBitmap', {
       configurable: true,
       value: vi.fn().mockResolvedValue(bitmap),
@@ -2930,51 +2945,839 @@ describe('worker presenting render host port', () => {
       const canvas = document.createElement('canvas');
       canvas.width = 640;
       canvas.height = 360;
-      const video = createVideo({ currentTime: 2 });
+      const video = createVideo({ currentTime: 1.25 });
 
       host.registerTargetCanvas('preview', canvas);
-      host.render([{
-        id: 'html-video-layer',
-        sourceClipId: 'clip-html',
-        name: 'HTML Video Layer',
-        visible: true,
-        opacity: 0.5,
-        blendMode: 'multiply',
-        source: { type: 'video', videoElement: video, mediaTime: 2 },
-        effects: [],
-        position: { x: 0, y: 0, z: 0 },
-        scale: { x: 1, y: 1 },
-        rotation: 0,
-      }]);
+      host.render([
+        {
+          id: 'html-adjustment-layer',
+          sourceClipId: 'clip-adjustment',
+          name: 'HTML Adjustment Layer',
+          visible: true,
+          opacity: 0.75,
+          blendMode: 'normal',
+          source: { type: 'motion-adjustment' },
+          effects: [{
+            id: 'brightness-1',
+            name: 'Brightness',
+            type: 'brightness',
+            enabled: true,
+            params: { amount: 0.2 },
+          }],
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1 },
+          rotation: 0,
+        },
+        {
+          id: 'html-video-layer',
+          sourceClipId: 'clip-html',
+          name: 'HTML Video Layer',
+          visible: true,
+          opacity: 0.5,
+          blendMode: 'multiply',
+          source: { type: 'video', videoElement: video, mediaTime: 1.25 },
+          effects: [],
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1 },
+          rotation: 0,
+        },
+      ], { compositionId: 'comp-html', timelineTimeSeconds: 2 });
 
       await vi.waitFor(() => {
-        expect(bridge.presentGpuTransferredVideoFrames).toHaveBeenCalledTimes(1);
+        expect(bridge.presentGpuFrameStack).toHaveBeenCalledTimes(1);
       });
       expect(bridge.loadWebCodecsSource).not.toHaveBeenCalled();
       expect(bridge.presentGpuWebCodecsFrame).not.toHaveBeenCalled();
+      expect(bridge.presentGpuTransferredVideoFrames).not.toHaveBeenCalled();
       expect(bridge.startGpuWebCodecsStream).not.toHaveBeenCalled();
       expect(bridge.presentGpuTestPattern).not.toHaveBeenCalled();
       expect(globalThis.createImageBitmap).toHaveBeenCalledWith(video);
-      const transferCall = vi.mocked(bridge.presentGpuTransferredVideoFrames).mock.calls[0];
-      expect(transferCall[0]).toContain('worker-gpu-only:render');
-      expect(transferCall[1]).toBe('preview');
-      expect(transferCall[2]).toBe(2);
-      expect(transferCall[4]).toMatchObject([{
-        sourceId: 'html-video:clip-html',
-        mediaTime: 2,
-        timestampSeconds: 2,
-        opacity: 0.5,
-        blendMode: 'multiply',
-      }]);
-      expect(transferCall[4][0].frame).toBe(bitmap);
-      expect(transferCall[5]).toHaveLength(1);
-      expect(transferCall[5][0]).toBe(bitmap);
+      const [command] = vi.mocked(bridge.presentGpuFrameStack).mock.calls[0];
+      expect(command.commandId).toContain('worker-gpu-only:render');
+      expect(command.admission).toMatchObject({
+        requestId: command.commandId,
+        targetId: 'preview',
+        intent: 'preview',
+      });
+      expect(command.stack).toMatchObject({
+        frame: {
+          compositionId: 'comp-html',
+          timelineTime: 2,
+          exact: true,
+        },
+        execution: {
+          kind: 'frozen-adjustment',
+        },
+      });
+      const htmlBinding = command.stack.bindings.find((binding) => binding.sourceId === 'html-video:clip-html');
+      expect(htmlBinding).toMatchObject({
+        runtimeSourceKind: 'video',
+        sourceKind: 'timeline-media',
+        renderLayer: {
+          opacity: 0.5,
+          blendMode: 'multiply',
+        },
+        payload: {
+          kind: 'bitmap',
+          bitmap,
+          width: 1280,
+          height: 720,
+          ownership: 'transferred-once',
+        },
+      });
+      const execution = command.stack.execution;
+      expect(execution.kind).toBe('frozen-adjustment');
+      if (execution.kind !== 'frozen-adjustment') throw new Error('Expected frozen adjustment stack');
+      expect(execution.plan.passes.map((pass) => pass.kind)).toEqual([
+        'initialize-accumulator',
+        'resolve-source',
+        'composite-source',
+        'snapshot-accumulator',
+        'apply-adjustment-effect',
+        'mix-adjustment-result',
+      ]);
     } finally {
       restoreCreateImageBitmap(originalCreateImageBitmap);
     }
   });
 
-  it('presents file-backed worker WebGPU video frames without falling back to test patterns', async () => {
+  it.each([
+    {
+      label: 'not ready',
+      currentTime: 3,
+      mediaTime: 3,
+      readyState: HTMLMediaElement.HAVE_METADATA,
+      seeking: false,
+      shouldPresent: false,
+    },
+    {
+      label: 'seeking',
+      currentTime: 3,
+      mediaTime: 3,
+      readyState: HTMLMediaElement.HAVE_CURRENT_DATA,
+      seeking: true,
+      shouldPresent: false,
+    },
+    {
+      label: 'stale versus the evaluated media time',
+      currentTime: 2,
+      mediaTime: 3,
+      readyState: HTMLMediaElement.HAVE_CURRENT_DATA,
+      seeking: false,
+      shouldPresent: false,
+    },
+    {
+      label: 'exact and ready',
+      currentTime: 3,
+      mediaTime: 3,
+      readyState: HTMLMediaElement.HAVE_CURRENT_DATA,
+      seeking: false,
+      shouldPresent: true,
+    },
+  ])('admits an HTML video frame stack only when its frame is $label', async ({
+    currentTime,
+    mediaTime,
+    readyState,
+    seeking,
+    shouldPresent,
+  }) => {
+    const originalCreateImageBitmap = globalThis.createImageBitmap;
+    const originalImageBitmap = globalThis.ImageBitmap;
+    class TestImageBitmap {
+      readonly close = vi.fn();
+
+      constructor(
+        readonly width: number,
+        readonly height: number,
+      ) {}
+    }
+    Object.defineProperty(globalThis, 'ImageBitmap', {
+      configurable: true,
+      value: TestImageBitmap,
+    });
+    const bitmap = new TestImageBitmap(1280, 720) as unknown as ImageBitmap;
+    Object.defineProperty(globalThis, 'createImageBitmap', {
+      configurable: true,
+      value: vi.fn().mockResolvedValue(bitmap),
+    });
+    flags.useFullWebCodecsPlayback = false;
+    flags.disableHtmlPreviewFallback = false;
+
+    try {
+      const fallback = createFallback();
+      const bridge = createBridge();
+      installWorkerCanvasSupport({ width: 640, height: 360 } as unknown as OffscreenCanvas);
+      const host = createWorkerPresentingRenderHostPort({
+        fallback,
+        getSelectionTelemetry: () => ({
+          selectedId: 'worker-primary',
+          selectedRole: 'primary',
+          workerPrimaryRequested: true,
+          workerPrimaryRegistered: true,
+          workerPrimaryAvailable: true,
+          blockers: [],
+          reason: 'using worker primary render host',
+        }),
+        createBridge: () => bridge,
+        strictWorkerOnly: true,
+        presentationStrategy: 'worker-webgpu-present',
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = 640;
+      canvas.height = 360;
+      const video = createVideo({ currentTime, readyState, seeking });
+
+      host.registerTargetCanvas('preview', canvas);
+      host.render([
+        {
+          id: 'html-readiness-adjustment',
+          sourceClipId: 'clip-html-readiness-adjustment',
+          name: 'HTML Readiness Adjustment',
+          visible: true,
+          opacity: 1,
+          blendMode: 'normal',
+          source: { type: 'motion-adjustment' },
+          effects: [{
+            id: 'brightness-readiness',
+            name: 'Brightness',
+            type: 'brightness',
+            enabled: true,
+            params: { amount: 0.1 },
+          }],
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1 },
+          rotation: 0,
+        },
+        {
+          id: 'html-readiness-video',
+          sourceClipId: 'clip-html-readiness-video',
+          name: 'HTML Readiness Video',
+          visible: true,
+          opacity: 1,
+          blendMode: 'normal',
+          source: { type: 'video', videoElement: video, mediaTime },
+          effects: [],
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1 },
+          rotation: 0,
+        },
+      ], { compositionId: 'comp-html-readiness', timelineTimeSeconds: 3 });
+
+      if (shouldPresent) {
+        await vi.waitFor(() => {
+          expect(bridge.presentGpuFrameStack).toHaveBeenCalledTimes(1);
+        });
+        expect(globalThis.createImageBitmap).toHaveBeenCalledOnce();
+        expect(bitmap.close).not.toHaveBeenCalled();
+      } else {
+        await vi.waitFor(() => {
+          expect(host.getTelemetry()).toMatchObject({
+            diagnostics: { gpuOnlyFrameStackFailureCount: expect.any(Number) },
+          });
+          expect(host.getTelemetry().diagnostics.gpuOnlyFrameStackFailureCount).toBeGreaterThan(0);
+        });
+        expect(bridge.presentGpuFrameStack).not.toHaveBeenCalled();
+        expect(globalThis.createImageBitmap).not.toHaveBeenCalled();
+      }
+      expect(bridge.presentGpuTransferredVideoFrames).not.toHaveBeenCalled();
+      expect(bridge.presentGpuTestPattern).not.toHaveBeenCalled();
+      expect(fallback.render).not.toHaveBeenCalled();
+    } finally {
+      restoreCreateImageBitmap(originalCreateImageBitmap);
+      if (originalImageBitmap) {
+        Object.defineProperty(globalThis, 'ImageBitmap', {
+          configurable: true,
+          value: originalImageBitmap,
+        });
+      } else {
+        Reflect.deleteProperty(globalThis, 'ImageBitmap');
+      }
+    }
+  });
+
+  it.each([
+    { label: 'a synchronous pre-transfer bridge throw', returnsPromise: false, expectedCloseCount: 1 },
+    { label: 'a rejected post-transfer bridge promise', returnsPromise: true, expectedCloseCount: 0 },
+  ])('keeps frame-stack bitmap ownership correct after $label', async ({
+    returnsPromise,
+    expectedCloseCount,
+  }) => {
+    const originalCreateImageBitmap = globalThis.createImageBitmap;
+    const originalImageBitmap = globalThis.ImageBitmap;
+    class TestImageBitmap {
+      readonly close = vi.fn();
+
+      constructor(
+        readonly width: number,
+        readonly height: number,
+      ) {}
+    }
+    Object.defineProperty(globalThis, 'ImageBitmap', {
+      configurable: true,
+      value: TestImageBitmap,
+    });
+    const bitmap = new TestImageBitmap(1280, 720) as unknown as ImageBitmap;
+    Object.defineProperty(globalThis, 'createImageBitmap', {
+      configurable: true,
+      value: vi.fn().mockResolvedValue(bitmap),
+    });
+    flags.useFullWebCodecsPlayback = false;
+    flags.disableHtmlPreviewFallback = false;
+
+    try {
+      const fallback = createFallback();
+      const bridge = createBridge();
+      bridge.presentGpuFrameStack = returnsPromise
+        ? vi.fn(() => Promise.reject(new Error('Worker rejected after transfer')))
+        : vi.fn(() => {
+            throw new DOMException('Failed to clone frame stack', 'DataCloneError');
+          });
+      installWorkerCanvasSupport({ width: 640, height: 360 } as unknown as OffscreenCanvas);
+      const host = createWorkerPresentingRenderHostPort({
+        fallback,
+        getSelectionTelemetry: () => ({
+          selectedId: 'worker-primary',
+          selectedRole: 'primary',
+          workerPrimaryRequested: true,
+          workerPrimaryRegistered: true,
+          workerPrimaryAvailable: true,
+          blockers: [],
+          reason: 'using worker primary render host',
+        }),
+        createBridge: () => bridge,
+        strictWorkerOnly: true,
+        presentationStrategy: 'worker-webgpu-present',
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = 640;
+      canvas.height = 360;
+      const video = createVideo({ currentTime: 1.5 });
+
+      host.registerTargetCanvas('preview', canvas);
+      host.render([
+        {
+          id: 'ownership-adjustment',
+          sourceClipId: 'clip-ownership-adjustment',
+          name: 'Ownership Adjustment',
+          visible: true,
+          opacity: 1,
+          blendMode: 'normal',
+          source: { type: 'motion-adjustment' },
+          effects: [],
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1 },
+          rotation: 0,
+        },
+        {
+          id: 'ownership-video',
+          sourceClipId: 'clip-ownership-video',
+          name: 'Ownership Video',
+          visible: true,
+          opacity: 1,
+          blendMode: 'normal',
+          source: { type: 'video', videoElement: video, mediaTime: 1.5 },
+          effects: [],
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1 },
+          rotation: 0,
+        },
+      ], { compositionId: 'comp-frame-stack-ownership', timelineTimeSeconds: 1.5 });
+
+      await vi.waitFor(() => {
+        expect(bridge.presentGpuFrameStack).toHaveBeenCalledOnce();
+        expect(host.getTelemetry().diagnostics.gpuOnlyFrameStackFailureCount).toBeGreaterThan(0);
+      });
+      expect(bitmap.close).toHaveBeenCalledTimes(expectedCloseCount);
+      expect(bridge.presentGpuTransferredVideoFrames).not.toHaveBeenCalled();
+      expect(bridge.presentGpuTestPattern).not.toHaveBeenCalled();
+      expect(fallback.render).not.toHaveBeenCalled();
+    } finally {
+      restoreCreateImageBitmap(originalCreateImageBitmap);
+      if (originalImageBitmap) {
+        Object.defineProperty(globalThis, 'ImageBitmap', {
+          configurable: true,
+          value: originalImageBitmap,
+        });
+      } else {
+        Reflect.deleteProperty(globalThis, 'ImageBitmap');
+      }
+    }
+  });
+
+  it('routes video plus title atomically and fails closed without an exact frame context', async () => {
+    const originalCreateImageBitmap = globalThis.createImageBitmap;
+    const originalImageBitmap = globalThis.ImageBitmap;
+    class TestImageBitmap {
+      readonly close = vi.fn();
+
+      constructor(
+        readonly width: number,
+        readonly height: number,
+      ) {}
+    }
+    Object.defineProperty(globalThis, 'ImageBitmap', {
+      configurable: true,
+      value: TestImageBitmap,
+    });
+    const videoBitmap = new TestImageBitmap(1280, 720) as unknown as ImageBitmap;
+    const titleBitmap = new TestImageBitmap(640, 160) as unknown as ImageBitmap;
+    flags.useFullWebCodecsPlayback = false;
+    flags.disableHtmlPreviewFallback = false;
+
+    try {
+      const video = createVideo({ currentTime: 2.25 });
+      const titleCanvas = document.createElement('canvas');
+      titleCanvas.width = 640;
+      titleCanvas.height = 160;
+      Object.defineProperty(globalThis, 'createImageBitmap', {
+        configurable: true,
+        value: vi.fn((source: ImageBitmapSource) => Promise.resolve(
+          source === video ? videoBitmap : titleBitmap,
+        )),
+      });
+      const layers = [
+        {
+          id: 'mixed-title',
+          sourceClipId: 'clip-mixed-title',
+          name: 'Mixed Title',
+          visible: true,
+          opacity: 1,
+          blendMode: 'normal' as const,
+          source: { type: 'text' as const, textCanvas: titleCanvas },
+          effects: [],
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1 },
+          rotation: 0,
+        },
+        {
+          id: 'mixed-video',
+          sourceClipId: 'clip-mixed-video',
+          name: 'Mixed Video',
+          visible: true,
+          opacity: 1,
+          blendMode: 'normal' as const,
+          source: { type: 'video' as const, videoElement: video, mediaTime: 2.25 },
+          effects: [],
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1 },
+          rotation: 0,
+        },
+      ];
+
+      const fallback = createFallback();
+      const bridge = createBridge();
+      installWorkerCanvasSupport({ width: 640, height: 360 } as unknown as OffscreenCanvas);
+      const host = createWorkerPresentingRenderHostPort({
+        fallback,
+        getSelectionTelemetry: () => ({
+          selectedId: 'worker-primary',
+          selectedRole: 'primary',
+          workerPrimaryRequested: true,
+          workerPrimaryRegistered: true,
+          workerPrimaryAvailable: true,
+          blockers: [],
+          reason: 'using worker primary render host',
+        }),
+        createBridge: () => bridge,
+        strictWorkerOnly: true,
+        presentationStrategy: 'worker-webgpu-present',
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = 640;
+      canvas.height = 360;
+      host.registerTargetCanvas('preview', canvas);
+      host.render(layers, { compositionId: 'comp-mixed-title', timelineTimeSeconds: 2.25 });
+
+      await vi.waitFor(() => {
+        expect(bridge.presentGpuFrameStack).toHaveBeenCalledOnce();
+      });
+      const [command] = vi.mocked(bridge.presentGpuFrameStack).mock.calls[0];
+      expect(command.stack.bindings).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          sourceId: 'html-video:clip-mixed-video',
+          runtimeSourceKind: 'video',
+        }),
+        expect.objectContaining({
+          sourceId: 'text:clip-mixed-title',
+          runtimeSourceKind: 'text',
+        }),
+      ]));
+      expect(command.stack.frame).toMatchObject({
+        compositionId: 'comp-mixed-title',
+        timelineTime: 2.25,
+        exact: true,
+      });
+      expect(bridge.presentGpuTransferredVideoFrames).not.toHaveBeenCalled();
+      expect(bridge.presentGpuTestPattern).not.toHaveBeenCalled();
+      expect(fallback.render).not.toHaveBeenCalled();
+
+      vi.mocked(globalThis.createImageBitmap).mockClear();
+      const noContextFallback = createFallback();
+      const noContextBridge = createBridge();
+      const noContextHost = createWorkerPresentingRenderHostPort({
+        fallback: noContextFallback,
+        getSelectionTelemetry: () => ({
+          selectedId: 'worker-primary',
+          selectedRole: 'primary',
+          workerPrimaryRequested: true,
+          workerPrimaryRegistered: true,
+          workerPrimaryAvailable: true,
+          blockers: [],
+          reason: 'using worker primary render host',
+        }),
+        createBridge: () => noContextBridge,
+        strictWorkerOnly: true,
+        presentationStrategy: 'worker-webgpu-present',
+      });
+      const noContextCanvas = document.createElement('canvas');
+      noContextCanvas.width = 640;
+      noContextCanvas.height = 360;
+      noContextHost.registerTargetCanvas('preview', noContextCanvas);
+      noContextHost.render(layers);
+
+      await vi.waitFor(() => {
+        expect(noContextHost.getTelemetry().diagnostics.gpuOnlyFrameStackFailureCount).toBeGreaterThan(0);
+      });
+      expect(noContextBridge.presentGpuFrameStack).not.toHaveBeenCalled();
+      expect(noContextBridge.presentGpuTransferredVideoFrames).not.toHaveBeenCalled();
+      expect(noContextBridge.presentGpuWebCodecsFrame).not.toHaveBeenCalled();
+      expect(noContextBridge.startGpuWebCodecsStream).not.toHaveBeenCalled();
+      expect(noContextBridge.presentGpuTestPattern).not.toHaveBeenCalled();
+      expect(globalThis.createImageBitmap).not.toHaveBeenCalled();
+      expect(noContextFallback.render).not.toHaveBeenCalled();
+    } finally {
+      restoreCreateImageBitmap(originalCreateImageBitmap);
+      if (originalImageBitmap) {
+        Object.defineProperty(globalThis, 'ImageBitmap', {
+          configurable: true,
+          value: originalImageBitmap,
+        });
+      } else {
+        Reflect.deleteProperty(globalThis, 'ImageBitmap');
+      }
+    }
+  });
+
+  it('routes heterogeneous WebCodecs plus HTML video atomically and fails closed without frame context', async () => {
+    const originalCreateImageBitmap = globalThis.createImageBitmap;
+    const originalImageBitmap = globalThis.ImageBitmap;
+    class TestImageBitmap {
+      readonly close = vi.fn();
+
+      constructor(
+        readonly width: number,
+        readonly height: number,
+      ) {}
+    }
+    Object.defineProperty(globalThis, 'ImageBitmap', {
+      configurable: true,
+      value: TestImageBitmap,
+    });
+    const htmlBitmap = new TestImageBitmap(1280, 720) as unknown as ImageBitmap;
+    Object.defineProperty(globalThis, 'createImageBitmap', {
+      configurable: true,
+      value: vi.fn().mockResolvedValue(htmlBitmap),
+    });
+    flags.useFullWebCodecsPlayback = true;
+    flags.disableHtmlPreviewFallback = true;
+
+    try {
+      const file = new File(['webcodecs-source'], 'heterogeneous.mp4', { type: 'video/mp4' });
+      Object.defineProperty(file, 'arrayBuffer', {
+        configurable: true,
+        value: vi.fn(async () => new ArrayBuffer(16)),
+      });
+      const htmlVideo = createVideo({ currentTime: 4 });
+      const layers = [
+        {
+          id: 'heterogeneous-webcodecs',
+          sourceClipId: 'clip-heterogeneous-webcodecs',
+          name: 'Heterogeneous WebCodecs Video',
+          visible: true,
+          opacity: 1,
+          blendMode: 'normal' as const,
+          source: {
+            type: 'video' as const,
+            file,
+            mediaFileId: 'media-heterogeneous',
+            mediaTime: 4,
+            targetMediaTime: 4,
+            runtimeSourceId: 'media:heterogeneous',
+            runtimeSessionKey: 'interactive:heterogeneous',
+            intrinsicWidth: 1920,
+            intrinsicHeight: 1080,
+          },
+          effects: [],
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1 },
+          rotation: 0,
+        },
+        {
+          id: 'heterogeneous-html',
+          sourceClipId: 'clip-heterogeneous-html',
+          name: 'Heterogeneous HTML Video',
+          visible: true,
+          opacity: 0.75,
+          blendMode: 'screen' as const,
+          source: { type: 'video' as const, videoElement: htmlVideo, mediaTime: 4 },
+          effects: [],
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1 },
+          rotation: 0,
+        },
+      ];
+
+      const fallback = createFallback();
+      const bridge = createBridge();
+      installWorkerCanvasSupport({ width: 640, height: 360 } as unknown as OffscreenCanvas);
+      const host = createWorkerPresentingRenderHostPort({
+        fallback,
+        getSelectionTelemetry: () => ({
+          selectedId: 'worker-primary',
+          selectedRole: 'primary',
+          workerPrimaryRequested: true,
+          workerPrimaryRegistered: true,
+          workerPrimaryAvailable: true,
+          blockers: [],
+          reason: 'using worker primary render host',
+        }),
+        createBridge: () => bridge,
+        strictWorkerOnly: true,
+        presentationStrategy: 'worker-webgpu-present',
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = 640;
+      canvas.height = 360;
+      host.registerTargetCanvas('preview', canvas);
+      host.render(layers, {
+        compositionId: 'comp-heterogeneous-video',
+        timelineTimeSeconds: 4,
+      });
+
+      await vi.waitFor(() => {
+        expect(bridge.presentGpuFrameStack).toHaveBeenCalledOnce();
+      });
+      expect(bridge.loadWebCodecsSource).toHaveBeenCalledOnce();
+      const [command] = vi.mocked(bridge.presentGpuFrameStack).mock.calls[0];
+      expect(command.stack.bindings).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          sourceId: expect.stringContaining('gpu-video:runtime:media:heterogeneous:interactive:heterogeneous'),
+          runtimeSourceKind: 'video',
+          payload: expect.objectContaining({ kind: 'webcodecs', mediaTime: 4 }),
+        }),
+        expect.objectContaining({
+          sourceId: 'html-video:clip-heterogeneous-html',
+          runtimeSourceKind: 'video',
+          payload: expect.objectContaining({ kind: 'bitmap', bitmap: htmlBitmap }),
+        }),
+      ]));
+      expect(bridge.presentGpuTransferredVideoFrames).not.toHaveBeenCalled();
+      expect(bridge.presentGpuWebCodecsFrame).not.toHaveBeenCalled();
+      expect(bridge.startGpuWebCodecsStream).not.toHaveBeenCalled();
+      expect(bridge.presentGpuTestPattern).not.toHaveBeenCalled();
+      expect(fallback.render).not.toHaveBeenCalled();
+
+      vi.mocked(globalThis.createImageBitmap).mockClear();
+      const noContextFallback = createFallback();
+      const noContextBridge = createBridge();
+      const noContextHost = createWorkerPresentingRenderHostPort({
+        fallback: noContextFallback,
+        getSelectionTelemetry: () => ({
+          selectedId: 'worker-primary',
+          selectedRole: 'primary',
+          workerPrimaryRequested: true,
+          workerPrimaryRegistered: true,
+          workerPrimaryAvailable: true,
+          blockers: [],
+          reason: 'using worker primary render host',
+        }),
+        createBridge: () => noContextBridge,
+        strictWorkerOnly: true,
+        presentationStrategy: 'worker-webgpu-present',
+      });
+      const noContextCanvas = document.createElement('canvas');
+      noContextCanvas.width = 640;
+      noContextCanvas.height = 360;
+      noContextHost.registerTargetCanvas('preview', noContextCanvas);
+      noContextHost.render(layers);
+
+      await vi.waitFor(() => {
+        expect(noContextHost.getTelemetry().diagnostics.gpuOnlyFrameStackFailureCount).toBeGreaterThan(0);
+      });
+      expect(noContextBridge.loadWebCodecsSource).not.toHaveBeenCalled();
+      expect(noContextBridge.presentGpuFrameStack).not.toHaveBeenCalled();
+      expect(noContextBridge.presentGpuTransferredVideoFrames).not.toHaveBeenCalled();
+      expect(noContextBridge.presentGpuWebCodecsFrame).not.toHaveBeenCalled();
+      expect(noContextBridge.startGpuWebCodecsStream).not.toHaveBeenCalled();
+      expect(noContextBridge.presentGpuTestPattern).not.toHaveBeenCalled();
+      expect(globalThis.createImageBitmap).not.toHaveBeenCalled();
+      expect(noContextFallback.render).not.toHaveBeenCalled();
+    } finally {
+      restoreCreateImageBitmap(originalCreateImageBitmap);
+      if (originalImageBitmap) {
+        Object.defineProperty(globalThis, 'ImageBitmap', {
+          configurable: true,
+          value: originalImageBitmap,
+        });
+      } else {
+        Reflect.deleteProperty(globalThis, 'ImageBitmap');
+      }
+    }
+  });
+
+  it('prefers an exact borrowed VideoFrame over file-backed WebCodecs and attached HTML video in a complex stack', async () => {
+    const originalCreateImageBitmap = globalThis.createImageBitmap;
+    const originalImageBitmap = globalThis.ImageBitmap;
+    class TestImageBitmap {
+      readonly close = vi.fn();
+
+      constructor(
+        readonly width: number,
+        readonly height: number,
+      ) {}
+    }
+    Object.defineProperty(globalThis, 'ImageBitmap', {
+      configurable: true,
+      value: TestImageBitmap,
+    });
+    const transferredBitmap = new TestImageBitmap(1920, 1080) as unknown as ImageBitmap;
+    Object.defineProperty(globalThis, 'createImageBitmap', {
+      configurable: true,
+      value: vi.fn().mockResolvedValue(transferredBitmap),
+    });
+    flags.useFullWebCodecsPlayback = true;
+    flags.disableHtmlPreviewFallback = true;
+
+    try {
+      const file = new File(['file-backed-video'], 'exact-frame.mp4', { type: 'video/mp4' });
+      Object.defineProperty(file, 'arrayBuffer', {
+        configurable: true,
+        value: vi.fn(async () => new ArrayBuffer(16)),
+      });
+      const htmlVideo = createVideo({
+        currentTime: 6,
+        videoWidth: 1280,
+        videoHeight: 720,
+      });
+      const borrowedVideoFrame = {
+        codedWidth: 1920,
+        codedHeight: 1080,
+        displayWidth: 1920,
+        displayHeight: 1080,
+        timestamp: 6_000_000,
+        close: vi.fn(),
+      } as unknown as VideoFrame;
+      const fallback = createFallback();
+      const bridge = createBridge();
+      installWorkerCanvasSupport({ width: 640, height: 360 } as unknown as OffscreenCanvas);
+      const host = createWorkerPresentingRenderHostPort({
+        fallback,
+        getSelectionTelemetry: () => ({
+          selectedId: 'worker-primary',
+          selectedRole: 'primary',
+          workerPrimaryRequested: true,
+          workerPrimaryRegistered: true,
+          workerPrimaryAvailable: true,
+          blockers: [],
+          reason: 'using worker primary render host',
+        }),
+        createBridge: () => bridge,
+        strictWorkerOnly: true,
+        presentationStrategy: 'worker-webgpu-present',
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = 640;
+      canvas.height = 360;
+
+      host.registerTargetCanvas('preview', canvas);
+      host.render([
+        {
+          id: 'exact-frame-adjustment',
+          sourceClipId: 'clip-exact-frame-adjustment',
+          name: 'Exact Frame Adjustment',
+          visible: true,
+          opacity: 1,
+          blendMode: 'normal',
+          source: { type: 'motion-adjustment' },
+          effects: [{
+            id: 'contrast-exact-frame',
+            name: 'Contrast',
+            type: 'contrast',
+            enabled: true,
+            params: { amount: 0.15 },
+          }],
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1 },
+          rotation: 0,
+        },
+        {
+          id: 'file-backed-exact-frame',
+          sourceClipId: 'clip-file-backed-exact-frame',
+          name: 'File-backed Exact VideoFrame',
+          visible: true,
+          opacity: 1,
+          blendMode: 'normal',
+          source: {
+            type: 'video',
+            file,
+            mediaFileId: 'media-file-backed-exact-frame',
+            mediaTime: 6,
+            targetMediaTime: 6,
+            runtimeSourceId: 'media:file-backed-exact-frame',
+            runtimeSessionKey: 'interactive:file-backed-exact-frame',
+            intrinsicWidth: 1280,
+            intrinsicHeight: 720,
+            videoElement: htmlVideo,
+            videoFrame: borrowedVideoFrame,
+          },
+          effects: [],
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1 },
+          rotation: 0,
+        },
+      ], {
+        compositionId: 'comp-file-backed-exact-frame',
+        timelineTimeSeconds: 6,
+      });
+
+      await vi.waitFor(() => {
+        expect(bridge.presentGpuFrameStack).toHaveBeenCalledOnce();
+      });
+      expect(bridge.loadWebCodecsSource).not.toHaveBeenCalled();
+      expect(globalThis.createImageBitmap).toHaveBeenCalledOnce();
+      expect(globalThis.createImageBitmap).toHaveBeenCalledWith(borrowedVideoFrame);
+      const [command] = vi.mocked(bridge.presentGpuFrameStack).mock.calls[0];
+      expect(command.stack.bindings).toContainEqual(expect.objectContaining({
+        sourceId: 'video-frame:clip-file-backed-exact-frame',
+        runtimeSourceKind: 'video',
+        payload: {
+          kind: 'bitmap',
+          bitmap: transferredBitmap,
+          width: 1920,
+          height: 1080,
+          ownership: 'transferred-once',
+        },
+      }));
+      expect(bridge.presentGpuTransferredVideoFrames).not.toHaveBeenCalled();
+      expect(bridge.presentGpuWebCodecsFrame).not.toHaveBeenCalled();
+      expect(bridge.startGpuWebCodecsStream).not.toHaveBeenCalled();
+      expect(borrowedVideoFrame.close).not.toHaveBeenCalled();
+      expect(transferredBitmap.close).not.toHaveBeenCalled();
+      expect(fallback.render).not.toHaveBeenCalled();
+    } finally {
+      restoreCreateImageBitmap(originalCreateImageBitmap);
+      if (originalImageBitmap) {
+        Object.defineProperty(globalThis, 'ImageBitmap', {
+          configurable: true,
+          value: originalImageBitmap,
+        });
+      } else {
+        Reflect.deleteProperty(globalThis, 'ImageBitmap');
+      }
+    }
+  });
+
+  it('presents file-backed worker WebGPU video with an exact composition-time adjustment plan', async () => {
     const fallback = createFallback();
     const bridge = createBridge();
     const offscreen = { width: 640, height: 360 } as unknown as OffscreenCanvas;
@@ -3004,44 +3807,80 @@ describe('worker presenting render host port', () => {
     });
 
     host.registerTargetCanvas('preview', canvas);
-    host.render([{
-      id: 'video-gpu-only',
-      name: 'Video GPU Only',
-      sourceClipId: 'clip-video',
-      visible: true,
-      opacity: 1,
-      blendMode: 'normal',
-      source: {
-        type: 'video',
-        file,
-        mediaFileId: 'media-video',
-        mediaTime: 2,
-        targetMediaTime: 2,
-        runtimeSourceId: 'media:media-video',
-        runtimeSessionKey: 'interactive:clip-video',
+    host.render([
+      {
+        id: 'webcodecs-adjustment-layer',
+        sourceClipId: 'clip-webcodecs-adjustment',
+        name: 'WebCodecs Adjustment Layer',
+        visible: true,
+        opacity: 1,
+        blendMode: 'normal',
+        source: { type: 'motion-adjustment' },
+        effects: [{
+          id: 'brightness-webcodecs',
+          name: 'Brightness',
+          type: 'brightness',
+          enabled: true,
+          params: { amount: 0.2 },
+        }],
+        position: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1 },
+        rotation: 0,
       },
-      effects: [],
-      position: { x: 0, y: 0, z: 0 },
-      scale: { x: 1, y: 1 },
-      rotation: 0,
-    }]);
+      {
+        id: 'video-gpu-only',
+        name: 'Video GPU Only',
+        sourceClipId: 'clip-video',
+        visible: true,
+        opacity: 1,
+        blendMode: 'normal',
+        source: {
+          type: 'video',
+          file,
+          mediaFileId: 'media-video',
+          mediaTime: 2,
+          targetMediaTime: 2,
+          runtimeSourceId: 'media:media-video',
+          runtimeSessionKey: 'interactive:clip-video',
+          intrinsicWidth: 1920,
+          intrinsicHeight: 1080,
+        },
+        effects: [],
+        position: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1 },
+        rotation: 0,
+      },
+    ], { compositionId: 'comp-webcodecs', timelineTimeSeconds: 4.5 });
 
     await vi.waitFor(() => {
       expect(bridge.loadWebCodecsSource).toHaveBeenCalledTimes(1);
     });
     await vi.waitFor(() => {
-      expect(bridge.presentGpuWebCodecsFrame).toHaveBeenCalledWith(
-        expect.stringContaining('worker-gpu-only:render'),
-        'preview',
-        expect.stringContaining('gpu-video:runtime:media:media-video:interactive:clip-video'),
-        2,
-        2,
-        expect.any(Number),
-        expect.objectContaining({ mode: 'seek' }),
-      );
+      expect(bridge.presentGpuFrameStack).toHaveBeenCalledTimes(1);
     });
+    const [command] = vi.mocked(bridge.presentGpuFrameStack).mock.calls[0];
+    expect(command.commandId).toContain('worker-gpu-only:render');
+    expect(command.stack).toMatchObject({
+      frame: {
+        compositionId: 'comp-webcodecs',
+        timelineTime: 4.5,
+        exact: true,
+      },
+      execution: { kind: 'frozen-adjustment' },
+    });
+    expect(command.stack.bindings).toContainEqual(expect.objectContaining({
+      sourceId: expect.stringContaining('gpu-video:runtime:media:media-video:interactive:clip-video'),
+      runtimeSourceKind: 'video',
+      payload: {
+        kind: 'webcodecs',
+        mediaTime: 2,
+        width: 1920,
+        height: 1080,
+      },
+    }));
 
     expect(bridge.presentGpuTestPattern).not.toHaveBeenCalled();
+    expect(bridge.presentGpuWebCodecsFrame).not.toHaveBeenCalled();
     expect(fallback.render).not.toHaveBeenCalled();
     expect(host.getTelemetry()).toMatchObject({
       mode: 'worker-gpu-only',
@@ -3883,7 +4722,10 @@ describe('worker presenting render host port', () => {
       return Promise.resolve(output({
         commandType: 'loadWebCodecsSource',
         presentedFrameId: null,
-        webCodecs: { status: { sourceId, ready: true }, frame: null },
+        webCodecs: {
+          status: { sourceId, ready: true, width: 1920, height: 1080 },
+          frame: null,
+        },
       }));
     }) as WorkerRenderHostRuntimeBridge['loadWebCodecsSource'];
     const offscreen = { width: 640, height: 360 } as unknown as OffscreenCanvas;
@@ -3974,12 +4816,18 @@ describe('worker presenting render host port', () => {
     topLoad.resolve(output({
       commandType: 'loadWebCodecsSource',
       presentedFrameId: null,
-      webCodecs: { status: { sourceId: 'top', ready: true }, frame: null },
+      webCodecs: {
+        status: { sourceId: 'top', ready: true, width: 1920, height: 1080 },
+        frame: null,
+      },
     }));
     bottomLoad.resolve(output({
       commandType: 'loadWebCodecsSource',
       presentedFrameId: null,
-      webCodecs: { status: { sourceId: 'bottom', ready: true }, frame: null },
+      webCodecs: {
+        status: { sourceId: 'bottom', ready: true, width: 1920, height: 1080 },
+        frame: null,
+      },
     }));
 
     await vi.waitFor(() => {
@@ -4474,7 +5322,7 @@ describe('worker presenting render host port', () => {
 
     expect(context).toEqual({ label: 'fallback-context' });
     expect(fallback.registerTargetCanvas).toHaveBeenCalledWith('preview', canvas);
-    expect(fallback.render).toHaveBeenCalledWith(layers);
+    expect(fallback.render).toHaveBeenCalledWith(layers, undefined);
   });
 
   it('blocks main fallback registration when worker-only canvas transfer fails', () => {

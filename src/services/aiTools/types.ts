@@ -76,9 +76,12 @@ export const MODIFYING_TOOLS = new Set([
   // Keyframes
   'addKeyframe', 'removeKeyframe',
   // Text
-  'createTextClip', 'updateTextProperties', 'setTextBox', 'addTextBoundsKeyframe',
+  'createEditableTitleStack', 'createTextClip', 'updateTextProperties', 'setTextBox', 'addTextBoundsKeyframe',
   // Motion Design
-  'createMotionShapeClip', 'updateMotionProperties', 'updateMotionAppearances', 'configureMotionReplicator',
+  'createMotionShapeClip', 'updateMotionProperties', 'updateMotionAppearances',
+  'setMotionParent', 'createMotionNull', 'createMotionNullAndParent', 'configureMotionReplicator',
+  'editMotionModifier',
+  'editMotionAdjustment',
   // Speed & Playback
   'setClipSpeed',
   // Markers

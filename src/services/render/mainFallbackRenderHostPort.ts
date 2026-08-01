@@ -114,7 +114,7 @@ export class MainFallbackRenderHostPort implements RenderHostPort {
   private initializePromise: Promise<boolean> | null = null;
   private readonly getSelectionTelemetry: () => RenderHostSelectionTelemetry;
   private readonly ramPreviewRenderEngine: RamPreviewRenderEngine = {
-    render: (layers) => this.render(layers),
+    render: (layers, frameContext) => this.render(layers, frameContext),
     cacheCompositeFrame: (time) => this.cacheCompositeFrame(time),
   };
 
@@ -271,8 +271,11 @@ export class MainFallbackRenderHostPort implements RenderHostPort {
     return this.ramPreviewRenderEngine;
   }
 
-  render(layers: Layer[]): void {
-    engine.render(layers);
+  render(
+    layers: Layer[],
+    frameContext?: Parameters<RenderHostPort['render']>[1],
+  ): void {
+    engine.render(layers, frameContext);
   }
 
   renderCachedFrame(time: number): boolean {
@@ -291,12 +294,20 @@ export class MainFallbackRenderHostPort implements RenderHostPort {
     return engine.getIsExporting();
   }
 
-  renderToPreviewCanvas(canvasId: string, layers: Layer[]): void {
-    engine.renderToPreviewCanvas(canvasId, layers);
+  renderToPreviewCanvas(
+    canvasId: string,
+    layers: Layer[],
+    frameContext?: Parameters<RenderHostPort['renderToPreviewCanvas']>[2],
+  ): void {
+    engine.renderToPreviewCanvas(canvasId, layers, frameContext);
   }
 
-  copyNestedCompTextureToPreview(canvasId: string, compositionId: string): boolean {
-    return engine.copyNestedCompTextureToPreview(canvasId, compositionId);
+  copyNestedCompTextureToPreview(
+    canvasId: string,
+    compositionId: string,
+    renderOccurrenceKey?: string,
+  ): boolean {
+    return engine.copyNestedCompTextureToPreview(canvasId, compositionId, renderOccurrenceKey);
   }
 
   setResolution(width: number, height: number): void {

@@ -250,6 +250,7 @@ export interface SerializableClip {
   thumbnails?: string[];
   linkedClipId?: string;
   linkedGroupId?: string;  // Multicam group ID
+  parentClipId?: string;   // Motion Design same-composition parent clip ID
   videoState?: ClipVideoState;
   audioState?: ClipAudioState;
   waveform?: number[];

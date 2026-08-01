@@ -32,19 +32,21 @@ const PLAYBOOKS: FlashBoardChatPlaybook[] = [
     matches: /\b(?:motion design|motion graphics?|shape|replicator|lower third|title card|bauchbinde|grafik(?:en)?|formen?)\b/i,
     text: `MOTION DESIGN
 - Inspect getMotionCapabilities before assuming a primitive, appearance, property, layout, or instance limit is available. Read getMotionDesign before using clip-specific appearance ids.
-- Use createMotionShapeClip for native editable rectangle/ellipse plates, updateMotionAppearances for the primary fill/stroke, updateMotionProperties for returned property paths, and configureMotionReplicator only for the currently supported Grid layout.
+- Use createMotionShapeClip for native editable rectangle, ellipse, polygon, or star layers. Use updateMotionAppearances for ordered color fills, strokes, linear/radial gradients, visibility, opacity, and advertised blend modes; use updateMotionProperties only for returned property paths, configureMotionReplicator for Grid, Linear, or Radial layout, and editMotionModifier for one flat modifier or falloff mutation with the current stack revision.
 - Use the existing text tools for editable words layered with motion shapes. Creation returns stable clip/appearance ids needed by dependent calls.
 - Author animation with one atomic addKeyframe sequence: entrance = off-frame/transparent to settled; exit = reverse near clip end; overshoot = start, pass the target, then settle; stagger sibling clips by 0.05-0.15s; hold a value by repeating it at two different times before the change.
-- Group construction with executeBatch. Later actions can consume an earlier action result with {"$batchResult":{"action":0,"path":"clipId"}}; then verify representative frames. Never claim polygon/star, gradients, texture fills, modifiers, falloffs, nulls, groups, or adjustment layers before their capability response says they are supported.`,
+- Emit all independent construction calls together so the editor applies them as one atomic transaction. Use executeBatch when later actions consume an earlier action result with {"$batchResult":{"action":0,"path":"clipId"}}; then verify representative frames. Never claim texture fills, modifiers, falloffs, nulls, groups, or adjustment layers before their capability response says they are supported.`,
   },
   {
     id: 'text',
     matches: /\b(?:text|title|typography|kinetic|schrift|titel|textanimation|bauchbinde|lower third)\b/i,
     text: `TEXT / TITLES
-- Use createTextClip to create editable text with its typography, fill, outline, shadow, timing, and initial text-field rectangle. Use composition-pixel coordinates for the text field.
+- Prefer createEditableTitleStack when the requested design is one or more editable text rows with backplates; it allocates separate topmost-first tracks, converts coordinates, and creates the entire stack atomically. Use createTextClip for standalone editable text.
+- Text boxes use top-left composition pixels. Motion x/y use centered composition pixels. If building manually, convert a box to a centered shape with shapeX = boxX + boxWidth/2 - compositionWidth/2 and shapeY = boxY + boxHeight/2 - compositionHeight/2.
+- Put every simultaneously visible text or backplate layer on its own video track. If there are not enough tracks, create them first and re-read the timeline for their generated IDs before creating the clips.
 - Use the returned clipId for dependent calls. Use updateTextProperties for content/style and setTextBox for area-text position/size.
 - Animate layer position, scale, rotation, or opacity with addKeyframe. Animate the text field itself with addTextBoundsKeyframe at clip-local times.
-- Verify the finished title at representative times with getFramesAtTimes or captureFrame and adjust any off-frame or unreadable result.`,
+- Treat an automatic post-edit preview as the first valid visual check and do not recapture the same time unless it reveals a problem. Verify the finished title at representative times with one getFramesAtTimes call and adjust any off-frame or unreadable result.`,
   },
   {
     id: 'montage',

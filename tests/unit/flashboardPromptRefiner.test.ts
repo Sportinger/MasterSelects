@@ -12,7 +12,7 @@ import {
 import type { CatalogEntry } from '../../src/services/flashboard/types';
 
 const nanoBananaEntry: CatalogEntry = {
-  service: 'kieai',
+  service: 'cloud',
   providerId: 'nano-banana-2',
   name: 'Nano Banana 2',
   description: 'Image generation with references',
@@ -32,7 +32,7 @@ const nanoBananaEntry: CatalogEntry = {
 };
 
 const klingEntry: CatalogEntry = {
-  service: 'kieai',
+  service: 'cloud',
   providerId: 'kling-3.0',
   name: 'Kling 3.0',
   description: 'Video generation',
@@ -66,7 +66,7 @@ const seedanceEntry: CatalogEntry = {
 };
 
 const gptImageEditEntry: CatalogEntry = {
-  service: 'kieai',
+  service: 'cloud',
   providerId: 'gpt-image-2-image-to-image',
   name: 'GPT Image 2 Edit',
   description: 'Image editing',
@@ -86,7 +86,7 @@ const gptImageEditEntry: CatalogEntry = {
 };
 
 const sunoEntry: CatalogEntry = {
-  service: 'suno',
+  service: 'cloud',
   providerId: 'suno-music',
   name: 'Suno Music',
   description: 'Music generation',
@@ -101,7 +101,7 @@ const sunoEntry: CatalogEntry = {
 };
 
 const sunoSoundsEntry: CatalogEntry = {
-  service: 'suno',
+  service: 'cloud',
   providerId: 'suno-sounds',
   name: 'Suno Sounds',
   description: 'Sound generation',
@@ -117,7 +117,7 @@ const sunoSoundsEntry: CatalogEntry = {
 };
 
 const topazImageEntry: CatalogEntry = {
-  service: 'kieai',
+  service: 'cloud',
   providerId: 'topaz/image-upscale',
   name: 'Topaz Image Upscale',
   description: 'Image utility',

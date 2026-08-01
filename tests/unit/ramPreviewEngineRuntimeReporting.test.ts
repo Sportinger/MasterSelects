@@ -112,8 +112,9 @@ describe('RamPreviewEngine runtime reporting', () => {
 
     const result = await preview.generate(
       {
+        compositionId: 'composition-ram-preview',
         start: 0,
-        end: 1 / 30,
+        end: 2 / 30,
         centerTime: 0,
         clips: [clip],
         tracks: [track],
@@ -131,7 +132,11 @@ describe('RamPreviewEngine runtime reporting', () => {
     );
 
     expect(result.completed).toBe(true);
-    expect(renderEngine.render).toHaveBeenCalled();
+    expect(renderEngine.render.mock.calls.map(([, frameContext]) => frameContext)).toEqual([
+      { compositionId: 'composition-ram-preview', timelineTimeSeconds: 0 },
+      { compositionId: 'composition-ram-preview', timelineTimeSeconds: 1 / 30 },
+      { compositionId: 'composition-ram-preview', timelineTimeSeconds: 2 / 30 },
+    ]);
     expect(renderEngine.cacheCompositeFrame).toHaveBeenCalledWith(0);
 
     const stats = timelineRuntimeCoordinator.getBridgeStats().policies['ram-preview'];
@@ -195,6 +200,7 @@ describe('RamPreviewEngine runtime reporting', () => {
 
     const result = await preview.generate(
       {
+        compositionId: 'composition-ram-preview',
         start: 0,
         end: 1 / 30,
         centerTime: 0,
@@ -215,15 +221,21 @@ describe('RamPreviewEngine runtime reporting', () => {
 
     expect(result.completed).toBe(true);
     expect(createdImages[0]?.src).toBe('blob:ram-preview-image');
-    expect(renderEngine.render).toHaveBeenCalledWith([
-      expect.objectContaining({
-        source: {
-          type: 'image',
-          imageElement: createdImages[0],
-          mediaFileId: 'media-image',
-        },
-      }),
-    ]);
+    expect(renderEngine.render).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          source: {
+            type: 'image',
+            imageElement: createdImages[0],
+            mediaFileId: 'media-image',
+          },
+        }),
+      ],
+      {
+        compositionId: 'composition-ram-preview',
+        timelineTimeSeconds: 0,
+      },
+    );
     expect(clip.source?.imageElement).toBeUndefined();
   });
 
@@ -285,6 +297,7 @@ describe('RamPreviewEngine runtime reporting', () => {
 
     const result = await preview.generate(
       {
+        compositionId: 'composition-ram-preview',
         start: 0,
         end: 1 / 30,
         centerTime: 0,
@@ -352,6 +365,7 @@ describe('RamPreviewEngine runtime reporting', () => {
 
     const result = await preview.generate(
       {
+        compositionId: 'composition-ram-preview',
         start: 0,
         end: 1 / 30,
         centerTime: 0,
@@ -441,6 +455,7 @@ describe('RamPreviewEngine runtime reporting', () => {
 
     const result = await preview.generate(
       {
+        compositionId: 'composition-ram-preview',
         start: 0.5,
         end: 0.5,
         centerTime: 0.5,
@@ -460,9 +475,13 @@ describe('RamPreviewEngine runtime reporting', () => {
     );
 
     expect(result.completed).toBe(true);
-    expect(renderEngine.render).toHaveBeenCalledWith([
-      expect.objectContaining({ id: 'clip-visible' }),
-    ]);
+    expect(renderEngine.render).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: 'clip-visible' })],
+      {
+        compositionId: 'composition-ram-preview',
+        timelineTimeSeconds: 0.5,
+      },
+    );
     expect(hiddenRuntime!.peekSession(`ram-preview:clip-hidden:${hiddenRuntime!.sourceId}`)).toBeNull();
   });
 });

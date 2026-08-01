@@ -13,7 +13,6 @@ export const BUILT_IN_PANEL_TYPES: PanelType[] = [
   'media',
   'export',
   'midi-mapping',
-  'multicam',
   'capture',
   'ai-segment',
   'scene-description',

@@ -48,6 +48,7 @@ const FLASHBOARD_CHAT_PRIORITY_TOOL_NAMES = new Set([
   'updateMotionProperties',
   'updateMotionAppearances',
   'configureMotionReplicator',
+  'editMotionModifier',
 ]);
 
 const eligibleFlashBoardChatTools = AI_TOOLS.filter((tool) => (
@@ -166,6 +167,66 @@ function formatToolResultForModel(
   });
 }
 
+const COMPACT_MOTION_MUTATION_TOOLS = new Set([
+  'createMotionShapeClip',
+  'updateMotionProperties',
+  'updateMotionAppearances',
+  'configureMotionReplicator',
+  'editMotionModifier',
+]);
+
+function compactMotionMutationResultForModel(
+  toolName: string,
+  result: ToolResult,
+): ToolResult {
+  if (
+    !COMPACT_MOTION_MUTATION_TOOLS.has(toolName)
+    || !result.success
+    || !result.data
+    || typeof result.data !== 'object'
+    || Array.isArray(result.data)
+  ) {
+    return result;
+  }
+
+  const data = result.data as Record<string, unknown>;
+  const motion = data.motion && typeof data.motion === 'object' && !Array.isArray(data.motion)
+    ? data.motion as Record<string, unknown>
+    : null;
+  const position = Array.isArray(data.properties)
+    ? data.properties.filter((property) => (
+        property
+        && typeof property === 'object'
+        && ['position.x', 'position.y'].includes(String((property as { path?: unknown }).path))
+      ))
+    : [];
+  const compactData: Record<string, unknown> = {};
+  for (const key of [
+    'clipId',
+    'trackId',
+    'name',
+    'startTime',
+    'duration',
+    'sourceType',
+    'primaryAppearanceIds',
+    'commonEditablePaths',
+    'updatedProperties',
+    'configuredProperties',
+    'createdAppearanceIds',
+    'createdGradientStopIds',
+    'effectiveReplicator',
+    'stateRevisionBefore',
+    'stateRevisionAfter',
+    'entities',
+  ]) {
+    if (data[key] !== undefined) compactData[key] = data[key];
+  }
+  if (motion?.shape !== undefined) compactData.shape = motion.shape;
+  if (position.length > 0) compactData.position = position;
+  compactData.detail = 'Compact mutation receipt. Reuse commonEditablePaths for position and shape edits; call getMotionDesign only for uncommon editable descriptors.';
+  return { success: true, data: compactData };
+}
+
 export function formatToolFollowupFallback(executedToolCalls: FlashBoardExecutedToolCall[]): string {
   if (executedToolCalls.length === 0) {
     return 'Done.';
@@ -264,7 +325,10 @@ export async function executeFlashBoardToolCalls(
     return {
       toolCall,
       result: resolvedResult,
-      modelContent: formatToolResultForModel(resolvedResult, maxToolResultChars),
+      modelContent: formatToolResultForModel(
+        compactMotionMutationResultForModel(toolCall.name, resolvedResult),
+        maxToolResultChars,
+      ),
     };
   });
 }
@@ -310,6 +374,7 @@ export async function runChatCompletionToolLoop(
         kind: 'operation',
         phase: 'started',
         safeLabel: toolCall.name,
+        operationId: toolCall.id,
         toolName: toolCall.name,
       });
     }
@@ -338,6 +403,7 @@ export async function runChatCompletionToolLoop(
         kind: 'operation',
         phase: toolResult.result.success ? 'completed' : 'failed',
         safeLabel: toolResult.toolCall.name,
+        operationId: toolResult.toolCall.id,
         toolName: toolResult.toolCall.name,
       });
     }

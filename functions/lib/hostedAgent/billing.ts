@@ -155,6 +155,7 @@ function turnMatchesRequest(
 export async function createHostedAgentK0Turn(
   db: AppD1Database,
   input: {
+    maximumTurnSpendCredits?: number;
     providerProtocol: HostedAgentProviderProtocol;
     request: HostedAgentTurnRequest;
     userId: string;
@@ -183,7 +184,7 @@ export async function createHostedAgentK0Turn(
   }
   const acceptedMaximumSpend = Math.min(
     input.request.maxTurnSpendCredits,
-    HOSTED_CHAT_MAX_TURN_SPEND_CREDITS,
+    input.maximumTurnSpendCredits ?? HOSTED_CHAT_MAX_TURN_SPEND_CREDITS,
     Math.floor(balance),
   );
   const minimumRoundCost = getModelCreditCost(input.request.model);
@@ -440,6 +441,7 @@ export async function settleHostedAgentK0Round(
     hosted_agent_k0: {
       provider_result_digest: input.providerResultDigest,
       redaction: 'usage-and-digest-only',
+      tool_call_count: input.toolCallCount,
     },
     usage: {
       input_tokens: finiteOptionalInteger(input.inputTokens),
@@ -474,6 +476,7 @@ export async function settleHostedAgentK0Round(
     creditBalance: settlement.balance,
     creditsCharged: settlement.creditsCharged,
     idempotencyKey: input.idempotencyKey,
+    ledgerEntryId: settlement.ledgerEntryId,
     replayed: settlement.replayed,
     roundIndex: input.roundIndex,
     totalCreditsCharged: settlement.totalCreditsCharged,

@@ -229,35 +229,38 @@ if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
   })
 }
 
-// Mock WebGPU API
-Object.defineProperty(navigator, 'gpu', {
-  value: {
-    requestAdapter: vi.fn().mockResolvedValue({
-      requestDevice: vi.fn().mockResolvedValue({
-        createBuffer: vi.fn(),
-        createTexture: vi.fn(),
-        createShaderModule: vi.fn(),
-        createBindGroupLayout: vi.fn(),
-        createPipelineLayout: vi.fn(),
-        createRenderPipeline: vi.fn(),
-        createComputePipeline: vi.fn(),
-        createBindGroup: vi.fn(),
-        createCommandEncoder: vi.fn(),
-        queue: {
-          submit: vi.fn(),
-          writeBuffer: vi.fn(),
-          copyExternalImageToTexture: vi.fn(),
-        },
-        destroy: vi.fn(),
+// Mock WebGPU API when a browser-like environment is active. Server-side
+// suites intentionally run in Vitest's Node environment.
+if (typeof navigator !== 'undefined') {
+  Object.defineProperty(navigator, 'gpu', {
+    value: {
+      requestAdapter: vi.fn().mockResolvedValue({
+        requestDevice: vi.fn().mockResolvedValue({
+          createBuffer: vi.fn(),
+          createTexture: vi.fn(),
+          createShaderModule: vi.fn(),
+          createBindGroupLayout: vi.fn(),
+          createPipelineLayout: vi.fn(),
+          createRenderPipeline: vi.fn(),
+          createComputePipeline: vi.fn(),
+          createBindGroup: vi.fn(),
+          createCommandEncoder: vi.fn(),
+          queue: {
+            submit: vi.fn(),
+            writeBuffer: vi.fn(),
+            copyExternalImageToTexture: vi.fn(),
+          },
+          destroy: vi.fn(),
+        }),
+        features: new Set(),
+        limits: {},
       }),
-      features: new Set(),
-      limits: {},
-    }),
-    getPreferredCanvasFormat: vi.fn().mockReturnValue('bgra8unorm'),
-  },
-  writable: true,
-  configurable: true,
-})
+      getPreferredCanvasFormat: vi.fn().mockReturnValue('bgra8unorm'),
+    },
+    writable: true,
+    configurable: true,
+  })
+}
 
 // Mock WebCodecs
 class MockVideoDecoder {
@@ -329,10 +332,12 @@ if (typeof globalThis.AudioContext === 'undefined') {
   (globalThis as Record<string, unknown>).AudioContext = MockAudioContext
 }
 
-// Mock HTMLMediaElement play/pause
-HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined)
-HTMLMediaElement.prototype.pause = vi.fn()
-HTMLMediaElement.prototype.load = vi.fn()
+// Mock HTMLMediaElement play/pause only for browser-like suites.
+if (typeof HTMLMediaElement !== 'undefined') {
+  HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined)
+  HTMLMediaElement.prototype.pause = vi.fn()
+  HTMLMediaElement.prototype.load = vi.fn()
+}
 
 // Clean up mocks after each test
 afterEach(() => {

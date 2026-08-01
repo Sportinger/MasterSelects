@@ -19,10 +19,6 @@ interface MediaAIGenerativeTrayExpandedProps {
 }
 
 function getHostedInitialProviderId(service: string | undefined, providerId: string | undefined): string {
-  if (service === 'kieai' && providerId === 'kling-3.0') {
-    return 'cloud-kling';
-  }
-
   if (service === 'elevenlabs' && providerId === 'elevenlabs-tts') {
     return 'cloud-elevenlabs-tts';
   }

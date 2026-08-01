@@ -199,6 +199,25 @@ describe('hosted chat billing', () => {
     });
   });
 
+  it('uses the hosted-agent redacted tool count when raw provider calls are omitted', () => {
+    expect(extractKieChatProviderUsage({
+      credits_consumed: 3.5,
+      hosted_agent_k0: {
+        provider_result_digest: 'digest',
+        redaction: 'usage-and-digest-only',
+        tool_call_count: 4,
+      },
+      usage: {
+        input_tokens: 500,
+        output_tokens: 80,
+      },
+    })).toMatchObject({
+      hasMoreTools: true,
+      providerCredits: 3.5,
+      toolCallCount: 4,
+    });
+  });
+
   it('rounds only once across the complete agent turn', () => {
     const first = calculateHostedChatCreditSettlement({
       fallbackRoundCredits: 5,

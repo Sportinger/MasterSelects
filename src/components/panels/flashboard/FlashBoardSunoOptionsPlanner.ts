@@ -6,7 +6,7 @@ import {
   SUNO_MODEL_IDS,
   type SunoModelId,
   type SunoVocalGender,
-} from '../../../services/sunoService';
+} from '../../../services/sunoContracts';
 
 export interface FlashBoardSunoOption {
   id: string;

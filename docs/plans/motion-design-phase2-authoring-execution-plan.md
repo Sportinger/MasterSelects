@@ -1,6 +1,6 @@
 # Motion Design Phase 2 — Authoring and Animation Execution Plan
 
-Status: Waves A, B, and C complete; Wave D acceptance evidence remains
+Status: Complete; Waves A-D and disposable acceptance evidence pass
 Date: 2026-07-31
 Parent plan: [`motion-design-ai-completion-plan.md`](./motion-design-ai-completion-plan.md)
 Working branch: `master`
@@ -67,7 +67,10 @@ scoped diff check passed. No live project mutation, commit, or push was used.
 
 ## Wave C Implementation Record — 2026-07-31
 
-Packets 4–6 and their main integration are implemented and gated:
+Packets 4 and 6 plus all graph, node-drag, sampling, projection, onion-skin, and
+spatial-handle parts of Packet 5 are implemented. A Wave 0 completion audit
+reopened Packet 5 and the closeout added the missing scalar-handle-backed
+viewport authoring:
 
 - `G` and the Timeline/Graph toolbar toggle switch one persisted per-user view;
   graph mode keeps a compact clip band above the universal multi-series editor;
@@ -84,6 +87,13 @@ Packets 4–6 and their main integration are implemented and gated:
   separate motion-path SVG, supports paired X/Y node upserts and FPS-based onion
   positions, and excludes playback/export, source-monitor, mask, text, camera,
   locked, and 3D modes;
+- selected paired X/Y nodes expose derivative-preserving spatial Bezier handles
+  over the same scalar keyframe ids used by the graph; per-axis temporal
+  clamping, stable missing-companion ids, one-step transactions, exact
+  cancel/blur/unmount rollback, and shared-history selection restore are covered
+  by focused tests;
+- handle targets expose 24 px focusable button semantics with keyboard nudge,
+  Enter, and Escape behavior;
 - Preview layer lookup is safe during transient sparse render-graph rebuilds;
 - AI `addKeyframe` accepts either the legacy single entry or one fully
   prevalidated atomic sequence of 1–100 entries, reports actual stable ids plus
@@ -101,11 +111,19 @@ Post-Wave C graph consolidation replaced the second visible inline editor with
 the unified global graph entry points and added parameter rows, series
 visibility/solo controls, plus temporary Timeline expansion/restoration. The
 focused refinement gate passed 22 tests, targeted ESLint, the production build,
-and the two relevant architecture contract suites. Disposable Wave D visual and
-cross-render evidence remains the formal phase exit.
+and the two relevant architecture contract suites. The dedicated Wave D runner,
+fixture, real-UI action, and lifecycle packet add 24 focused tests. Its
+disposable visual/cross-render report completed successfully.
 
-Next: Wave D — capture the disposable required-scenario fixture and final
-preview/nested-preview/export parity evidence for the acceptance matrix.
+The Wave 0 closeout added 40 passing tests across shared history snapshots,
+keyframe transactions, Wave C motion paths, and Wave D spatial handles. The
+implementation record is captured in
+[`md2-authoring-animation.md`](../evidence/motion-design/md2-authoring-animation.md).
+
+The final report is
+[`20260731-225604Z-record.report.json`](../evidence/motion-design/md2/20260731-225604Z-record.report.json),
+with six Graph, Motion-Path, preview, nested-preview, and export baselines under
+[`../evidence/motion-design/md2/baselines/`](../evidence/motion-design/md2/baselines/).
 
 ## Working Rules
 

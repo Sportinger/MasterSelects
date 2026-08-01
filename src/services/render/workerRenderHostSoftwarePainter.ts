@@ -72,7 +72,9 @@ function getLayerFootprint(input: {
 }
 
 function needsScratchSurface(layer: WorkerRenderSoftwareFrame['layers'][number]): boolean {
-  return hasWorkerSoftwarePixelEffects(layer) || Boolean(layer.transition);
+  return layer.source.kind === 'adjustment'
+    || hasWorkerSoftwarePixelEffects(layer)
+    || Boolean(layer.transition);
 }
 
 function createScratchSurface(width: number, height: number): {
@@ -115,8 +117,38 @@ export function drawWorkerSoftwareLayer(
   feedbackStore?: WorkerSoftwareFeedbackStore,
   feedbackScopeId = 'default',
 ): void {
-  const sourceWidth = layer.source.kind === 'solid' ? targetWidth : layer.source.width;
-  const sourceHeight = layer.source.kind === 'solid' ? targetHeight : layer.source.height;
+  if (layer.source.kind === 'adjustment') {
+    const scratch = createScratchSurface(targetWidth, targetHeight);
+    if (!scratch) return;
+    scratch.context.clearRect(0, 0, scratch.canvas.width, scratch.canvas.height);
+    scratch.context.drawImage(
+      context.canvas,
+      0,
+      0,
+      targetWidth,
+      targetHeight,
+    );
+    applyWorkerSoftwarePixelEffects(
+      scratch.context,
+      scratch.canvas.width,
+      scratch.canvas.height,
+      layer,
+      timelineTime,
+      feedbackStore,
+      feedbackScopeId,
+    );
+    context.save();
+    context.globalAlpha = Math.max(0, Math.min(1, layer.opacity));
+    context.globalCompositeOperation = layer.compositeOperation;
+    context.filter = layer.filter;
+    context.drawImage(scratch.canvas, 0, 0, targetWidth, targetHeight);
+    context.restore();
+    return;
+  }
+
+  const isFullFrameSource = layer.source.kind === 'solid';
+  const sourceWidth = isFullFrameSource ? targetWidth : layer.source.width;
+  const sourceHeight = isFullFrameSource ? targetHeight : layer.source.height;
   const footprint = getLayerFootprint({
     sourceWidth,
     sourceHeight,

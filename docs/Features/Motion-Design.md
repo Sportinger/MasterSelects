@@ -2,9 +2,10 @@
 
 # Motion Design
 
-Status: the MD1 shape/appearance implementation is wired. Rectangle, ellipse,
-polygon, and star authoring share one GPU renderer and one ordered appearance
-stack across preview, nesting, persistence, and export.
+Status: MD0-MD2 are complete and evidence-backed. Rectangle, ellipse, polygon,
+and star authoring share one GPU renderer and one ordered appearance stack
+across preview, nesting, persistence, and export. The unified Global Graph and
+viewport Motion Path edit the canonical keyframes used by preview and export.
 
 Active completion work follows
 [`docs/plans/motion-design-ai-completion-plan.md`](../plans/motion-design-ai-completion-plan.md).
@@ -31,8 +32,13 @@ Motion Design is native MasterSelects timeline content, not an embedded external
 - `getStats` exposes Motion Design clip/instance counts plus renderer cache, buffer-upload, and CPU encoding telemetry.
 - `LayerBuilderService`, `NestedCompRenderer`, `RenderDispatcher`, and `ExportLayerBuilder` pass motion shape layers through the same compositor path as image/text/video textures.
 - Numeric motion properties are evaluated through the keyframe store via the property registry before rendering.
+- The Motion properties tab has a clip-aware registry browser. Exact property paths can be pinned per clip, while favorites and Motion view preferences remain per-user state.
+- Timeline Graph mode is the universal multi-series curve editor. `G`, a keyframe double-click, or a parameter double-click opens the same graph over the canonical keyframe map; parameter rows can be shown, hidden, or soloed without creating copied animation data.
+- Opening Graph mode can temporarily expand a short Timeline panel and restores its prior panel ratio when the graph closes.
+- Selected editable 2D clips expose a separate viewport motion-path overlay with paired X/Y nodes, FPS-based onion positions, and focusable spatial Bezier handles. Node and handle edits write the existing scalar X/Y keyframes through one transaction and undo step; no separate spatial animation data is created.
 - `src/services/motionDesign/appearancePresets.ts` serializes media-free appearance presets and remaps appearance/stop ids safely when applying a preset.
 - The six Motion Design AI tools report capability version 2. `createMotionShapeClip` accepts polygon/star geometry, while `updateMotionAppearances` supports atomic structured stack operations and returns all created appearance/stop ids.
+- `addKeyframe` accepts either the legacy single entry or one prevalidated atomic sequence and returns the actual stable keyframe ids, canonical/stored values, and resolved clip-local times.
 - Motion Design and its Grid MVP are always on; the old unused feature-flag placeholders have been removed.
 
 ## Not Yet Implemented
@@ -40,9 +46,13 @@ Motion Design is native MasterSelects timeline content, not an embedded external
 - Replicators have a grid MVP for shape clips, but no random/noise modifiers, radial/linear layouts, falloff, or direct media replicators are wired yet.
 - Texture fills and media-backed appearance presets remain deferred to the direct-media Motion phase.
 - Blend modes outside the six explicitly advertised appearance modes currently fall back to normal in the Motion shader.
-- Viewport motion paths, pinned-property authoring, and global graph mode are not implemented yet.
 - Adjustment layers remain blocked on the render graph work.
 
-The next product slice is Phase 2 authoring UX: searchable registry properties,
-pinned lanes, and global graph mode. The MD1 exit checkbox remains evidence-gated
-until disposable-browser preview/export pixel goldens are captured.
+The MD2 Wave D evidence exercises the real Graph, Motion Path handle, panel
+resize, AI sequence, undo/redo, and direct/nested preview/export paths. MD0-MD2
+also have recorded disposable reports and PNG baselines under
+[`docs/evidence/motion-design/`](../evidence/motion-design/).
+
+`MDX0_BASELINE_CLOSED` is green. The next gated action is to register Wave 1
+ownership and freeze the shared 1.0 contracts before the MD3 Replicator, MD6
+Structure, and MD7 Render Graph foundations start.

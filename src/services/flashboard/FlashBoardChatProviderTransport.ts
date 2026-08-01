@@ -3,35 +3,15 @@ import {
   DEFAULT_LEMONADE_MODEL,
   loadLemonadeModel,
 } from '../lemonadeProvider';
-import { requestKieChatByo, type KieChatEndpoint } from '../kieAi/chatTransport';
-import { cloudAiService } from '../cloudAiService';
 import {
   FLASHBOARD_CHAT_MODEL_OPTIONS,
-  FLASHBOARD_CHAT_MAX_OUTPUT_TOKENS,
-  FLASHBOARD_CHAT_MAX_TOOL_ITERATIONS,
-  FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS,
   FLASHBOARD_LEMONADE_INITIAL_RESPONSE_TIMEOUT_MS,
   FLASHBOARD_LEMONADE_MAX_TOOL_RESULT_CHARS,
   FLASHBOARD_LEMONADE_STREAM_IDLE_TIMEOUT_MS,
   clampTemperature,
-  isOpenAiReasoningEffortSupported,
-  isTemperatureSupported,
-  normalizeOpenAiReasoningEffort,
 } from './FlashBoardChatConfig';
 import {
-  getOpenAiResponsesOutput,
-  parseAnthropicToolCalls,
-  parseOpenAiResponsesToolCalls,
-  readOpenAiResponseText,
-} from './FlashBoardChatResponseMapping';
-import {
-  ANTHROPIC_TOOLS,
   FLASHBOARD_CHAT_TOOLS,
-  OPENAI_RESPONSES_TOOLS,
-  executeFlashBoardToolCalls,
-  formatToolFollowupFallback,
-  getFlashBoardToolResultImage,
-  prepareFlashBoardToolCallsForHistory,
   runChatCompletionToolLoop,
 } from './FlashBoardChatTools';
 import {
@@ -39,7 +19,7 @@ import {
   inferNarrationPhase,
   safeToolActivityLabel,
 } from './FlashBoardChatActivity';
-import type { AnthropicMessage, AnthropicToolResultBlock, FlashBoardChatCompletionMessage, FlashBoardChatRequest, FlashBoardExecutedToolCall } from './FlashBoardChatTypes';
+import type { FlashBoardChatCompletionMessage, FlashBoardChatRequest } from './FlashBoardChatTypes';
 import { sendHostedKieAgentChat } from './FlashBoardHostedAgentTransport';
 
 const FLASHBOARD_LEMONADE_TOOL_NAMES = new Set([
@@ -79,263 +59,11 @@ const FLASHBOARD_LEMONADE_TOOL_NAMES = new Set([
 const FLASHBOARD_LEMONADE_TOOLS = FLASHBOARD_CHAT_TOOLS.filter((tool) => (
   FLASHBOARD_LEMONADE_TOOL_NAMES.has(tool.function.name)
 ));
-function createHostedChatRoundIdempotencyKey(
-  request: FlashBoardChatRequest,
-  protocol: 'claude-messages' | 'openai-responses',
-  roundIndex: number,
-): string {
-  return request.idempotencyKey
-    ? `${request.idempotencyKey}:${protocol}:${roundIndex}`
-    : `flashboard-chat:${Date.now()}:${crypto.randomUUID()}`;
-}
-
-async function requestKieChatRound(
-  request: FlashBoardChatRequest,
-  endpoint: KieChatEndpoint,
-  protocol: 'claude-messages' | 'openai-responses',
-  providerBody: Record<string, unknown>,
-  roundIndex: number,
-): Promise<unknown> {
-  if (request.signal?.aborted) {
-    throw request.signal.reason ?? new DOMException('Chat stopped.', 'AbortError');
-  }
-  if (request.hostedAvailable) {
-    return cloudAiService.createChatCompletion({
-      ...providerBody,
-      billingRoundIndex: roundIndex,
-      billingTurnId: request.idempotencyKey,
-      billingTurnAction: 'continue',
-      idempotencyKey: createHostedChatRoundIdempotencyKey(request, protocol, roundIndex),
-      protocol,
-    }, request.signal);
-  }
-  return requestKieChatByo({
-    apiKey: request.kieAiApiKey ?? '',
-    body: providerBody,
-    endpoint,
-    signal: request.signal,
-  });
-}
-
-async function completeHostedChatTurn(request: FlashBoardChatRequest): Promise<void> {
-  if (!request.hostedAvailable || !request.idempotencyKey) return;
-  await cloudAiService.createChatCompletion({
-    billingRoundIndex: 0,
-    billingTurnAction: 'complete',
-    billingTurnId: request.idempotencyKey,
-    idempotencyKey: `${request.idempotencyKey}:terminal:complete`,
-  });
-}
-
-async function sendKieResponsesChat(request: FlashBoardChatRequest, systemPrompt: string): Promise<string> {
-  const input: unknown[] = [{ role: 'user', content: request.prompt }];
-  const executedToolCalls: FlashBoardExecutedToolCall[] = [];
-
-  for (let iteration = 0; iteration < FLASHBOARD_CHAT_MAX_TOOL_ITERATIONS; iteration += 1) {
-    const body: Record<string, unknown> = {
-      model: request.model,
-      instructions: systemPrompt,
-      input,
-      tools: OPENAI_RESPONSES_TOOLS,
-      tool_choice: 'auto',
-      max_output_tokens: FLASHBOARD_CHAT_MAX_OUTPUT_TOKENS,
-      store: false,
-    };
-
-    if (isTemperatureSupported('kie', request.model)) {
-      body.temperature = clampTemperature(request.temperature);
-    }
-
-    if (isOpenAiReasoningEffortSupported(request.model)) {
-      body.reasoning = {
-        effort: normalizeOpenAiReasoningEffort(request.model, request.openAiReasoningEffort),
-      };
-    }
-
-    const data = await requestKieChatRound(
-      request,
-      '/codex/v1/responses',
-      'openai-responses',
-      body,
-      iteration,
-    );
-
-    const toolCalls = parseOpenAiResponsesToolCalls(data);
-    if (toolCalls.length === 0) {
-      const response = readOpenAiResponseText(data) || (
-        executedToolCalls.length > 0
-          ? formatToolFollowupFallback(executedToolCalls)
-          : 'Kie.ai returned an empty response.'
-      );
-      await completeHostedChatTurn(request);
-      return response;
-    }
-
-    const narration = readOpenAiResponseText(data);
-    if (narration) {
-      emitAgentActivity(request, {
-        kind: 'narration',
-        phase: inferNarrationPhase(iteration, narration),
-        roundIndex: iteration,
-        text: narration,
-      });
-    }
-    for (const toolCall of toolCalls) {
-      emitAgentActivity(request, {
-        kind: 'operation',
-        phase: 'started',
-        safeLabel: safeToolActivityLabel(toolCall.name),
-        toolName: toolCall.name,
-      });
-    }
-    input.push(...getOpenAiResponsesOutput(data));
-    if (request.signal?.aborted) {
-      throw request.signal.reason ?? new DOMException('Chat stopped.', 'AbortError');
-    }
-    const toolResults = await executeFlashBoardToolCalls(
-      toolCalls,
-      FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS,
-      { toolExecutionMode: request.toolExecutionMode },
-    );
-    for (const toolResult of toolResults) {
-      emitAgentActivity(request, {
-        kind: 'operation',
-        phase: toolResult.result.success ? 'completed' : 'failed',
-        safeLabel: safeToolActivityLabel(toolResult.toolCall.name),
-        toolName: toolResult.toolCall.name,
-      });
-    }
-    executedToolCalls.push(...toolResults);
-    request.onExecutedToolCalls?.(prepareFlashBoardToolCallsForHistory(toolResults));
-    for (const toolResult of toolResults) {
-      input.push({
-        type: 'function_call_output',
-        call_id: toolResult.toolCall.id,
-        output: toolResult.modelContent,
-      });
-    }
-    for (const toolResult of toolResults) {
-      const image = getFlashBoardToolResultImage(toolResult);
-      if (image) {
-        input.push({
-          role: 'user',
-          content: [
-            { type: 'input_text', text: `Visual output from ${toolResult.toolCall.name}:` },
-            { type: 'input_image', image_url: image.dataUrl, detail: 'high' },
-          ],
-        });
-      }
-    }
-  }
-
-  await completeHostedChatTurn(request);
-  return formatToolFollowupFallback(executedToolCalls) || 'Stopped after too many tool iterations.';
-}
-
-async function sendKieClaudeChat(
-  request: FlashBoardChatRequest,
-  systemPrompt: string,
-  supportsTools: boolean,
-): Promise<string> {
-  const messages: AnthropicMessage[] = [{ role: 'user', content: request.prompt }];
-  const executedToolCalls: FlashBoardExecutedToolCall[] = [];
-  const maxIterations = supportsTools ? FLASHBOARD_CHAT_MAX_TOOL_ITERATIONS : 1;
-
-  for (let iteration = 0; iteration < maxIterations; iteration += 1) {
-    const body: Record<string, unknown> = {
-      model: request.model,
-      max_tokens: FLASHBOARD_CHAT_MAX_OUTPUT_TOKENS,
-      temperature: clampTemperature(request.temperature),
-      system: systemPrompt,
-      messages,
-    };
-    if (supportsTools) {
-      body.tools = ANTHROPIC_TOOLS;
-    }
-    const data = await requestKieChatRound(
-      request,
-      '/claude/v1/messages',
-      'claude-messages',
-      body,
-      iteration,
-    );
-
-    const parsed = parseAnthropicToolCalls(data);
-    if (!supportsTools) {
-      const response = parsed.text || 'Kie.ai Fable returned an empty chat response.';
-      await completeHostedChatTurn(request);
-      return response;
-    }
-    if (parsed.toolCalls.length === 0) {
-      const response = parsed.text || (
-        executedToolCalls.length > 0
-          ? formatToolFollowupFallback(executedToolCalls)
-          : 'Kie.ai returned an empty response.'
-      );
-      await completeHostedChatTurn(request);
-      return response;
-    }
-
-    if (parsed.text) {
-      emitAgentActivity(request, {
-        kind: 'narration',
-        phase: inferNarrationPhase(iteration, parsed.text),
-        roundIndex: iteration,
-        text: parsed.text,
-      });
-    }
-    for (const toolCall of parsed.toolCalls) {
-      emitAgentActivity(request, {
-        kind: 'operation',
-        phase: 'started',
-        safeLabel: safeToolActivityLabel(toolCall.name),
-        toolName: toolCall.name,
-      });
-    }
-    messages.push({ role: 'assistant', content: parsed.contentBlocks });
-    if (request.signal?.aborted) {
-      throw request.signal.reason ?? new DOMException('Chat stopped.', 'AbortError');
-    }
-    const toolResults = await executeFlashBoardToolCalls(
-      parsed.toolCalls,
-      FLASHBOARD_CHAT_MAX_TOOL_RESULT_CHARS,
-      { toolExecutionMode: request.toolExecutionMode },
-    );
-    for (const toolResult of toolResults) {
-      emitAgentActivity(request, {
-        kind: 'operation',
-        phase: toolResult.result.success ? 'completed' : 'failed',
-        safeLabel: safeToolActivityLabel(toolResult.toolCall.name),
-        toolName: toolResult.toolCall.name,
-      });
-    }
-    executedToolCalls.push(...toolResults);
-    request.onExecutedToolCalls?.(prepareFlashBoardToolCallsForHistory(toolResults));
-    messages.push({
-      role: 'user',
-      content: toolResults.map((toolResult): AnthropicToolResultBlock => {
-        const image = getFlashBoardToolResultImage(toolResult);
-        return {
-          type: 'tool_result',
-          tool_use_id: toolResult.toolCall.id,
-          content: image
-            ? [
-                { type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.base64 } },
-                { type: 'text', text: toolResult.modelContent },
-              ]
-            : toolResult.modelContent,
-          is_error: !toolResult.result.success,
-        };
-      }),
-    });
-  }
-
-  await completeHostedChatTurn(request);
-  return formatToolFollowupFallback(executedToolCalls) || 'Stopped after too many tool iterations.';
-}
-
 export async function sendKieChat(request: FlashBoardChatRequest, systemPrompt: string): Promise<string> {
-  const turnRequest = request.hostedAvailable && !request.idempotencyKey
+  if (!request.hostedAvailable) {
+    throw new Error('Sign in and enable hosted credits to use AI chat.');
+  }
+  const turnRequest = !request.idempotencyKey
     ? {
         ...request,
         idempotencyKey: `flashboard-chat-turn:${Date.now()}:${crypto.randomUUID()}`,
@@ -345,17 +73,12 @@ export async function sendKieChat(request: FlashBoardChatRequest, systemPrompt: 
   if (!model?.kieProtocol) {
     throw new Error(`Unsupported Kie.ai chat model: ${turnRequest.model}`);
   }
-  if (turnRequest.hostedAvailable) {
-    return sendHostedKieAgentChat({
-      protocol: model.kieProtocol,
-      request: turnRequest,
-      supportsTools: model.supportsTools,
-      systemPrompt,
-    });
-  }
-  return model.kieProtocol === 'openai-responses'
-    ? sendKieResponsesChat(turnRequest, systemPrompt)
-    : sendKieClaudeChat(turnRequest, systemPrompt, model.supportsTools);
+  return sendHostedKieAgentChat({
+    protocol: model.kieProtocol,
+    request: turnRequest,
+    supportsTools: model.supportsTools,
+    systemPrompt,
+  });
 }
 
 export async function sendLemonadeChat(request: FlashBoardChatRequest, systemPrompt: string): Promise<string> {

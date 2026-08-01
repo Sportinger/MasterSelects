@@ -27,12 +27,14 @@ import type {
   WorkerRenderSoftwareFrame,
   WorkerRenderSoftwareLayer,
 } from './workerRenderHostRuntimeCommands';
-import type {
-  WorkerGpuPresentTestPatternCommand,
-  WorkerGpuPresentWebCodecsFrameCommand,
-  WorkerGpuStartWebCodecsStreamCommand,
-  WorkerGpuStopWebCodecsStreamCommand,
-  WorkerGpuWebCodecsFrameLayer,
+import {
+  assertWorkerGpuPresentFrameStackCommand,
+  type WorkerGpuPresentTestPatternCommand,
+  type WorkerGpuPresentFrameStackCommand,
+  type WorkerGpuPresentWebCodecsFrameCommand,
+  type WorkerGpuStartWebCodecsStreamCommand,
+  type WorkerGpuStopWebCodecsStreamCommand,
+  type WorkerGpuWebCodecsFrameLayer,
 } from './workerGpuRuntimeCommands';
 import {
   createWorkerGpuTargetSurface,
@@ -45,12 +47,27 @@ import {
 } from './workerGpuVideoFramePresenter';
 import {
   presentGpuVideoFrameLayers,
+  releaseWorkerGpuVideoFrameLayerPresenterResources,
   type WorkerGpuVideoFramePresentLayer,
 } from './workerGpuVideoFrameLayerPresenter';
 import {
   hasCompositorRenderLayer,
   presentGpuVideoFrameCompositedLayers,
+  createWorkerGpuFrameStackWebCodecsKey,
+  presentGpuFrameStack as presentGpuFrameStackOnSurface,
+  releaseWorkerGpuVideoFrameCompositorResources,
+  type WorkerGpuFrameStackWebCodecsFrame,
 } from './workerGpuVideoFrameCompositor';
+import {
+  assertWorkerGpuFrameStackContract,
+  closeWorkerGpuFrameStackTransferables,
+  type WorkerGpuFrameStackContractV1,
+} from './workerGpuFrameStackContract';
+import type { MotionAdjustmentWorkerGpuExecutionPlan } from '../motionDesign/adjustment/workerGpuAdjustmentPlan';
+import {
+  validateWorkerGpuAdjustmentEnvelope,
+  type WorkerGpuAdjustmentEnvelopeCommandType,
+} from './workerGpuAdjustmentEnvelope';
 import { probeRuntimeCapabilities } from './workerRenderHostRuntimeCapabilities';
 import {
   acceptWorkerWebCodecsCommand,
@@ -98,6 +115,13 @@ export interface WorkerRenderHostRuntimeJobOutput {
     readonly width: number;
     readonly height: number;
     readonly pixels: Uint8ClampedArray;
+    readonly identity?: {
+      readonly readbackId: string;
+      readonly targetId: string;
+      readonly compositionId: string;
+      readonly timelineTime: number;
+      readonly frameIndex: number;
+    };
   } | null;
 }
 
@@ -243,6 +267,9 @@ function requestIdForCommand(command: WorkerRenderHostRuntimeCommand): string | 
 }
 
 function targetIdForCommand(command: WorkerRenderHostRuntimeCommand): string | null {
+  if (command.type === 'gpu.presentFrameStack') {
+    return command.stack.frame.targetId;
+  }
   if ('targetId' in command && typeof command.targetId === 'string') {
     return command.targetId;
   }
@@ -346,6 +373,12 @@ function isWorkerGpuTargetSurface(
   return surface.kind === 'worker-gpu-target-surface';
 }
 
+function releaseTargetSurfaceResources(surface: WorkerRenderHostTargetSurfaceRecord): void {
+  if (!isWorkerGpuTargetSurface(surface)) return;
+  releaseWorkerGpuVideoFrameCompositorResources(surface);
+  releaseWorkerGpuVideoFrameLayerPresenterResources(surface);
+}
+
 async function attachTargetSurface(surface: WorkerRenderHostTargetSurfaceCommand, nowMs: number): Promise<WorkerRenderStatusEvent[]> {
   if (shouldUseWorkerGpuPresentation()) {
     const created = await createWorkerGpuTargetSurface({
@@ -362,6 +395,8 @@ async function attachTargetSurface(surface: WorkerRenderHostTargetSurfaceCommand
         recoverable: false,
       }];
     }
+    const previousSurface = state.targetSurfaces.get(surface.targetId);
+    if (previousSurface) releaseTargetSurfaceResources(previousSurface);
     state.targetSurfaces.set(surface.targetId, {
       ...created.surface,
       presentation: surface.presentation,
@@ -394,6 +429,8 @@ async function attachTargetSurface(surface: WorkerRenderHostTargetSurfaceCommand
     }];
   }
 
+  const previousSurface = state.targetSurfaces.get(surface.targetId);
+  if (previousSurface) releaseTargetSurfaceResources(previousSurface);
   state.targetSurfaces.set(surface.targetId, {
     kind: '2d',
     canvas: surface.canvas,
@@ -424,6 +461,8 @@ function detachTargetSurface(targetId: RenderGraphId): void {
   stopGpuWebCodecsStreamForTarget(targetId, 'target detached');
   releaseSoftwareBitmapCache(targetCacheId(targetId));
   state.softwareFeedbackCache.deleteScope(targetId);
+  const surface = state.targetSurfaces.get(targetId);
+  if (surface) releaseTargetSurfaceResources(surface);
   state.targetSurfaces.delete(targetId);
   state.cache.release(targetSurfaceCacheId(targetId));
 }
@@ -553,6 +592,9 @@ function resolveSoftwareFrameBitmaps(
 }
 
 function timelineTimeForCommand(command: WorkerRenderHostRuntimeCommand): number {
+  if (command.type === 'gpu.presentFrameStack') {
+    return command.stack.frame.timelineTime;
+  }
   if ('timelineTime' in command && typeof command.timelineTime === 'number') {
     return command.timelineTime;
   }
@@ -720,6 +762,60 @@ function commandWebCodecsLayers(
   }];
 }
 
+function rejectInvalidWorkerGpuAdjustmentEnvelope(input: {
+  readonly commandType: WorkerGpuAdjustmentEnvelopeCommandType;
+  readonly requestId: string;
+  readonly targetId: string;
+  readonly compositionId?: string;
+  readonly timelineTime: number;
+  readonly frameIndex: number;
+  readonly primarySourceId?: string;
+  readonly layers: readonly WorkerGpuWebCodecsFrameLayer[];
+  readonly adjustmentPlan?: unknown;
+}): AcceptedRenderCommand | null {
+  if (input.adjustmentPlan === undefined) return null;
+  const validation = validateWorkerGpuAdjustmentEnvelope({
+    commandType: input.commandType,
+    requestId: input.requestId,
+    targetId: input.targetId,
+    compositionId: input.compositionId,
+    timelineTime: input.timelineTime,
+    frameIndex: input.frameIndex,
+    nowMs: Date.now(),
+    primarySourceId: input.primarySourceId,
+    layers: input.layers,
+    adjustmentPlan: input.adjustmentPlan,
+  });
+  if (validation.ok) return null;
+
+  const surface = state.targetSurfaces.get(input.targetId);
+  return {
+    statusEvents: [
+      {
+        type: 'command-accepted',
+        commandType: input.commandType,
+        requestId: input.requestId,
+        presentation: surface?.presentation ?? 'not-presenting',
+      },
+      {
+        type: 'error',
+        message: validation.message,
+        recoverable: false,
+      },
+      {
+        type: 'stats',
+        requestId: input.requestId,
+        stats: {
+          'workerGpu.adjustment.envelopeAccepted': false,
+          'workerGpu.adjustment.envelopeDiagnosticCode': validation.code,
+        },
+      },
+    ],
+    presentedFrameId: null,
+    readback: null,
+  };
+}
+
 function shouldUseLayerVideoFramePresenter(layers: readonly WorkerGpuWebCodecsFrameLayer[]): boolean {
   return layers.length > 1 || layers.some((layer) => (
     !!layer.renderLayer ||
@@ -772,9 +868,11 @@ async function presentWorkerGpuVideoFrameLayers(
     readonly requestId: string;
     readonly frameIndex: number;
     readonly layers: readonly WorkerGpuVideoFramePresentLayer[];
+    readonly adjustmentPlan?: MotionAdjustmentWorkerGpuExecutionPlan;
+    readonly isSurfaceCurrent?: () => boolean;
   },
 ): Promise<WorkerGpuPresentResult> {
-  if (hasCompositorRenderLayer(options.layers)) {
+  if (options.adjustmentPlan || hasCompositorRenderLayer(options.layers)) {
     return presentGpuVideoFrameCompositedLayers(surface, options);
   }
   return presentGpuVideoFrameLayers(surface, options);
@@ -848,6 +946,7 @@ async function readGpuVideoFrameLayersForPresentation(input: {
     };
   }
   const presentLayers: WorkerGpuVideoFramePresentLayer[] = layerReads.map(({ layer, frameRead }) => ({
+    sourceId: layer.sourceId,
     frame: frameRead.frame!,
     timestampSeconds: frameRead.timestampSeconds,
     mediaTime: layer.mediaTime,
@@ -1056,6 +1155,17 @@ async function presentGpuWebCodecsStreamTick(session: WorkerGpuWebCodecsStreamSe
       : null,
     allowStaleReverseHold: true,
   });
+  if (
+    session.stopped
+    || state.gpuWebCodecsStreams.get(session.targetId) !== session
+    || state.targetSurfaces.get(session.targetId) !== surface
+  ) {
+    recordTickDuration();
+    if (!session.stopped && state.gpuWebCodecsStreams.get(session.targetId) === session) {
+      scheduleGpuWebCodecsStreamTick(session);
+    }
+    return;
+  }
   const frameRead = isGpuVideoFrameLayerRead(layerRead) ? layerRead.primaryFrameRead : layerRead;
   session.lastStatus = frameRead.status;
   retargetStreamFpsFromStatus(session, frameRead.status);
@@ -1085,6 +1195,11 @@ async function presentGpuWebCodecsStreamTick(session: WorkerGpuWebCodecsStreamSe
         requestId,
         frameIndex,
         layers: layerRead.presentLayers,
+        isSurfaceCurrent: () => (
+          !session.stopped
+          && state.gpuWebCodecsStreams.get(session.targetId) === session
+          && state.targetSurfaces.get(session.targetId) === surface
+        ),
       })
     : await presentGpuVideoFrame(surface, {
         targetId: session.targetId,
@@ -1093,6 +1208,17 @@ async function presentGpuWebCodecsStreamTick(session: WorkerGpuWebCodecsStreamSe
         frame: frameRead.frame,
         timestampSeconds: frameRead.timestampSeconds,
   });
+  if (
+    session.stopped
+    || state.gpuWebCodecsStreams.get(session.targetId) !== session
+    || state.targetSurfaces.get(session.targetId) !== surface
+  ) {
+    recordTickDuration();
+    if (!session.stopped && state.gpuWebCodecsStreams.get(session.targetId) === session) {
+      scheduleGpuWebCodecsStreamTick(session);
+    }
+    return;
+  }
   if (result.ok && result.diagnostics.presentedFrameId) {
     const compositeFrameKey = compositeFrameKeyForLayerRead(layerRead, frameRead);
     session.frameCount += 1;
@@ -1155,6 +1281,20 @@ async function startGpuWebCodecsStream(
   command: WorkerGpuStartWebCodecsStreamCommand,
   nowMs: number,
 ): Promise<AcceptedRenderCommand> {
+  const commandLayers = commandWebCodecsLayers(command);
+  const invalidAdjustmentEnvelope = rejectInvalidWorkerGpuAdjustmentEnvelope({
+    commandType: command.type,
+    requestId: command.commandId,
+    targetId: command.targetId,
+    compositionId: command.compositionId,
+    timelineTime: command.timelineTime,
+    frameIndex: command.frameIndex,
+    primarySourceId: command.sourceId,
+    layers: commandLayers,
+    adjustmentPlan: command.adjustmentPlan,
+  });
+  if (invalidAdjustmentEnvelope) return invalidAdjustmentEnvelope;
+
   const surface = state.targetSurfaces.get(command.targetId);
   const accepted: WorkerRenderStatusEvent = {
     type: 'command-accepted',
@@ -1197,7 +1337,7 @@ async function startGpuWebCodecsStream(
     sessionId: command.commandId,
     targetId: command.targetId,
     sourceId: command.sourceId,
-    layers: commandWebCodecsLayers(command),
+    layers: commandLayers,
     startedAtMs,
     baseTimelineTime: command.timelineTime,
     baseMediaTime: command.mediaTime,
@@ -1495,6 +1635,20 @@ async function presentGpuWebCodecsFrame(
   command: WorkerGpuPresentWebCodecsFrameCommand,
   nowMs: number,
 ): Promise<AcceptedRenderCommand> {
+  const commandLayers = commandWebCodecsLayers(command);
+  const invalidAdjustmentEnvelope = rejectInvalidWorkerGpuAdjustmentEnvelope({
+    commandType: command.type,
+    requestId: command.commandId,
+    targetId: command.targetId,
+    compositionId: command.compositionId,
+    timelineTime: command.timelineTime,
+    frameIndex: command.frameIndex,
+    primarySourceId: command.sourceId,
+    layers: commandLayers,
+    adjustmentPlan: command.adjustmentPlan,
+  });
+  if (invalidAdjustmentEnvelope) return invalidAdjustmentEnvelope;
+
   stopGpuWebCodecsStreamForTarget(command.targetId, `mode:${command.mode}`, command.sourceId);
   const surface = state.targetSurfaces.get(command.targetId);
   if (!surface) {
@@ -1538,11 +1692,42 @@ async function presentGpuWebCodecsFrame(
   }
 
   const layerRead = await readGpuVideoFrameLayersForPresentation({
-    layers: commandWebCodecsLayers(command),
+    layers: commandLayers,
     primarySourceId: command.sourceId,
     mode: command.mode,
     timeoutMs: command.timeoutMs,
   });
+  if (state.targetSurfaces.get(command.targetId) !== surface) {
+    return {
+      statusEvents: [
+        {
+          type: 'command-accepted',
+          commandType: command.type,
+          requestId: command.commandId,
+          presentation: 'not-presenting',
+        },
+        {
+          type: 'error',
+          message: `Worker WebGPU target surface '${command.targetId}' changed during frame decode`,
+          recoverable: true,
+        },
+      ],
+      presentedFrameId: null,
+      readback: null,
+    };
+  }
+  const invalidAfterDecode = rejectInvalidWorkerGpuAdjustmentEnvelope({
+    commandType: command.type,
+    requestId: command.commandId,
+    targetId: command.targetId,
+    compositionId: command.compositionId,
+    timelineTime: command.timelineTime,
+    frameIndex: command.frameIndex,
+    primarySourceId: command.sourceId,
+    layers: commandLayers,
+    adjustmentPlan: command.adjustmentPlan,
+  });
+  if (invalidAfterDecode) return invalidAfterDecode;
   const frameRead = isGpuVideoFrameLayerRead(layerRead) ? layerRead.primaryFrameRead : layerRead;
   if (!frameRead.frame) {
     return {
@@ -1610,6 +1795,8 @@ async function presentGpuWebCodecsFrame(
         requestId: command.commandId,
         frameIndex: command.frameIndex,
         layers: layerRead.presentLayers,
+        adjustmentPlan: command.adjustmentPlan,
+        isSurfaceCurrent: () => state.targetSurfaces.get(command.targetId) === surface,
       })
     : await presentGpuVideoFrame(surface, {
         targetId: command.targetId,
@@ -1706,6 +1893,259 @@ function closeTransferredGpuVideoFrameLayers(
   }
 }
 
+interface WorkerGpuFrameStackWebCodecsRequest {
+  readonly sourceId: string;
+  readonly mediaTime: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+interface WorkerGpuFrameStackWebCodecsReadResult {
+  readonly frames: ReadonlyMap<string, WorkerGpuFrameStackWebCodecsFrame>;
+  /** Decoder-independent snapshots created only when one player is read at multiple times. */
+  readonly ownedFrames: readonly VideoFrame[];
+}
+
+function closeOwnedFrameStackWebCodecsFrames(frames: readonly VideoFrame[]): void {
+  for (const frame of frames) {
+    try {
+      frame.close();
+    } catch {
+      // A browser runtime may already have invalidated a failed clone.
+    }
+  }
+}
+
+function collectFrameStackWebCodecsRequests(
+  stack: WorkerGpuFrameStackContractV1,
+  requests: Map<string, WorkerGpuFrameStackWebCodecsRequest>,
+): void {
+  for (const binding of stack.bindings) {
+    if (binding.payload.kind === 'webcodecs') {
+      const key = createWorkerGpuFrameStackWebCodecsKey(
+        binding.sourceId,
+        binding.payload.mediaTime,
+      );
+      const existing = requests.get(key);
+      if (
+        existing
+        && (
+          existing.width !== binding.payload.width
+          || existing.height !== binding.payload.height
+        )
+      ) {
+        throw new Error(`Worker GPU frame-stack source '${binding.sourceId}' has conflicting dimensions`);
+      }
+      requests.set(key, {
+        sourceId: binding.sourceId,
+        mediaTime: binding.payload.mediaTime,
+        width: binding.payload.width,
+        height: binding.payload.height,
+      });
+    } else if (binding.payload.kind === 'nested-stack') {
+      collectFrameStackWebCodecsRequests(binding.payload.stack, requests);
+    }
+  }
+}
+
+function frameStackReadMode(
+  intent: WorkerGpuPresentFrameStackCommand['stack']['frame']['intent'],
+): WorkerRenderHostWebCodecsSeekMode {
+  if (intent === 'scrub') return 'scrub';
+  if (intent === 'playback') return 'advance';
+  return 'seek';
+}
+
+async function readFrameStackWebCodecsFrames(
+  command: WorkerGpuPresentFrameStackCommand,
+): Promise<WorkerGpuFrameStackWebCodecsReadResult> {
+  const requests = new Map<string, WorkerGpuFrameStackWebCodecsRequest>();
+  collectFrameStackWebCodecsRequests(command.stack, requests);
+  const requestsBySource = new Map<string, Array<readonly [string, WorkerGpuFrameStackWebCodecsRequest]>>();
+  for (const entry of requests.entries()) {
+    const sourceRequests = requestsBySource.get(entry[1].sourceId) ?? [];
+    sourceRequests.push(entry);
+    requestsBySource.set(entry[1].sourceId, sourceRequests);
+  }
+  const ownedFrames: VideoFrame[] = [];
+  try {
+    // Different decoders may proceed concurrently. Reads against one decoder
+    // are strictly serial because each seek replaces its borrowed currentFrame.
+    const groups = await Promise.all([...requestsBySource.values()].map(async (sourceRequests) => {
+      const mustSnapshotBorrowedFrames = sourceRequests.length > 1;
+      const entries: Array<readonly [string, WorkerGpuFrameStackWebCodecsFrame]> = [];
+      for (const [key, request] of sourceRequests) {
+        const read = await readWorkerWebCodecsVideoFrameForGpuPresentation({
+          sourceId: request.sourceId,
+          timeSeconds: request.mediaTime,
+          mode: frameStackReadMode(command.stack.frame.intent),
+        });
+        if (
+          !read.frame
+          || read.width !== request.width
+          || read.height !== request.height
+        ) {
+          throw new Error(
+            read.error ?? `Worker GPU frame-stack source '${request.sourceId}' did not provide the exact frame`,
+          );
+        }
+        let frame = read.frame;
+        if (mustSnapshotBorrowedFrames) {
+          if (typeof read.frame.clone !== 'function') {
+            throw new Error(
+              `Worker GPU frame-stack source '${request.sourceId}' cannot snapshot multiple exact media times`,
+            );
+          }
+          frame = read.frame.clone();
+          ownedFrames.push(frame);
+        }
+        entries.push([key, {
+          sourceId: request.sourceId,
+          mediaTime: request.mediaTime,
+          frame,
+          width: read.width,
+          height: read.height,
+          timestampSeconds: read.timestampSeconds,
+        } satisfies WorkerGpuFrameStackWebCodecsFrame]);
+      }
+      return entries;
+    }));
+    return { frames: new Map(groups.flat()), ownedFrames };
+  } catch (error) {
+    closeOwnedFrameStackWebCodecsFrames(ownedFrames);
+    throw error;
+  }
+}
+
+function frameStackErrorResult(
+  command: WorkerGpuPresentFrameStackCommand,
+  message: string,
+  presentation: WorkerCommandPresentation = 'not-presenting',
+): AcceptedRenderCommand {
+  return {
+    statusEvents: [
+      {
+        type: 'command-accepted',
+        commandType: command.type,
+        requestId: command.commandId,
+        presentation,
+      },
+      { type: 'error', message, recoverable: false },
+      {
+        type: 'stats',
+        requestId: command.commandId,
+        stats: {
+          'workerGpu.frameStack.presented': false,
+          'workerGpu.frameStack.error': message,
+        },
+      },
+    ],
+    presentedFrameId: null,
+    readback: null,
+  };
+}
+
+async function presentWorkerGpuFrameStack(
+  command: WorkerGpuPresentFrameStackCommand,
+  nowMs: number,
+): Promise<AcceptedRenderCommand> {
+  let ownershipDelegated = false;
+  let ownedWebCodecsFrames: readonly VideoFrame[] = [];
+  const workerClock = () => Date.now();
+  try {
+    assertWorkerGpuPresentFrameStackCommand(command);
+    if (command.commandId !== command.admission.requestId) {
+      throw new Error('[MD7_FRAME_STACK_COMMAND_ENVELOPE_INVALID] Command id does not match admission');
+    }
+    assertWorkerGpuFrameStackContract(command.stack, {
+      ...command.admission,
+      nowMs: workerClock(),
+    });
+    const targetId = command.stack.frame.targetId;
+    stopGpuWebCodecsStreamForTarget(targetId, 'exact frame-stack presentation');
+    const surface = state.targetSurfaces.get(targetId);
+    if (!surface) {
+      throw new Error(`Worker WebGPU target surface '${targetId}' is not attached`);
+    }
+    if (!isWorkerGpuTargetSurface(surface)) {
+      throw new Error(`Worker WebGPU target surface '${targetId}' is not a WebGPU surface`);
+    }
+    const webCodecsRead = await readFrameStackWebCodecsFrames(command);
+    const webCodecsFrames = webCodecsRead.frames;
+    ownedWebCodecsFrames = webCodecsRead.ownedFrames;
+    if (state.targetSurfaces.get(targetId) !== surface) {
+      throw new Error(`Worker WebGPU target surface '${targetId}' changed during frame decode`);
+    }
+    assertWorkerGpuFrameStackContract(command.stack, {
+      ...command.admission,
+      nowMs: workerClock(),
+    });
+    ownershipDelegated = true;
+    const result = await presentGpuFrameStackOnSurface(surface, {
+      command,
+      clock: workerClock,
+      webCodecsFrames,
+      isSurfaceCurrent: () => state.targetSurfaces.get(targetId) === surface,
+    });
+    const presentedFrameId = result.diagnostics.presentedFrameId;
+    if (!result.ok || !presentedFrameId) {
+      return frameStackErrorResult(
+        command,
+        result.diagnostics.error ?? 'Worker GPU frame-stack presentation failed',
+      );
+    }
+    state.cache.touch(targetCacheId(targetId), nowMs);
+    state.cache.touch(targetSurfaceCacheId(targetId), nowMs);
+    state.lastPresentedFrameId = presentedFrameId;
+    return {
+      statusEvents: [
+        {
+          type: 'command-accepted',
+          commandType: command.type,
+          requestId: command.commandId,
+          presentation: surface.presentation,
+        },
+        {
+          type: 'frame-presented',
+          requestId: command.commandId,
+          targetId,
+          timelineTime: command.stack.frame.timelineTime,
+        },
+        {
+          type: 'stats',
+          requestId: command.commandId,
+          stats: {
+            'workerGpu.frameStack.presented': true,
+            'workerGpu.frameStack.bindingCount': command.stack.bindings.length,
+            'workerGpu.frameStack.intent': command.stack.frame.intent,
+          },
+        },
+      ],
+      presentedFrameId,
+      readback: result.readback ? {
+        width: result.readback.request.width,
+        height: result.readback.request.height,
+        pixels: result.readback.pixels,
+        identity: {
+          readbackId: result.readback.request.readbackId,
+          targetId: result.readback.request.targetId,
+          compositionId: result.readback.request.compositionId,
+          timelineTime: result.readback.request.timelineTime,
+          frameIndex: result.readback.request.frameIndex,
+        },
+      } : null,
+    };
+  } catch (error) {
+    if (!ownershipDelegated) closeWorkerGpuFrameStackTransferables(command.stack);
+    return frameStackErrorResult(
+      command,
+      error instanceof Error ? error.message : String(error),
+    );
+  } finally {
+    closeOwnedFrameStackWebCodecsFrames(ownedWebCodecsFrames);
+  }
+}
+
 function transferredFrameStats(
   layer: WorkerRenderHostGpuTransferredVideoFrameLayer | undefined,
   input: {
@@ -1740,7 +2180,6 @@ async function presentGpuTransferredVideoFrames(
   command: Extract<WorkerRenderHostRuntimeCommand, { readonly type: 'presentGpuTransferredVideoFrames' }>,
   nowMs: number,
 ): Promise<AcceptedRenderCommand> {
-  stopGpuWebCodecsStreamForTarget(command.targetId, 'transferred HTMLVideo frames');
   const surface = state.targetSurfaces.get(command.targetId);
   const accepted: WorkerRenderStatusEvent = {
     type: 'command-accepted',
@@ -1750,6 +2189,19 @@ async function presentGpuTransferredVideoFrames(
   };
 
   try {
+    const invalidAdjustmentEnvelope = rejectInvalidWorkerGpuAdjustmentEnvelope({
+      commandType: command.type,
+      requestId: command.requestId,
+      targetId: command.targetId,
+      compositionId: command.compositionId,
+      timelineTime: command.timelineTime,
+      frameIndex: command.frameIndex,
+      layers: command.layers,
+      adjustmentPlan: command.adjustmentPlan,
+    });
+    if (invalidAdjustmentEnvelope) return invalidAdjustmentEnvelope;
+
+    stopGpuWebCodecsStreamForTarget(command.targetId, 'transferred HTMLVideo frames');
     if (!surface) {
       return {
         statusEvents: [
@@ -1794,11 +2246,13 @@ async function presentGpuTransferredVideoFrames(
     }
 
     const firstLayer = command.layers[0];
-    const result = await presentGpuVideoFrameLayers(surface, {
+    const result = await presentWorkerGpuVideoFrameLayers(surface, {
       targetId: command.targetId,
       requestId: command.requestId,
       frameIndex: command.frameIndex,
       layers: command.layers,
+      adjustmentPlan: command.adjustmentPlan,
+      isSurfaceCurrent: () => state.targetSurfaces.get(command.targetId) === surface,
     });
     const presentedFrameId = result.diagnostics.presentedFrameId;
     const stats = transferredFrameStats(firstLayer, {
@@ -1971,6 +2425,9 @@ function paintSoftwareFrame(
 
 function resetState(): void {
   stopAllGpuWebCodecsStreams('runtime reset');
+  for (const surface of state.targetSurfaces.values()) {
+    releaseTargetSurfaceResources(surface);
+  }
   state.initialized = false;
   state.rendererId = null;
   state.strategy = null;
@@ -1992,6 +2449,7 @@ function shouldEmitCommandLifecycleEvents(command: WorkerRenderHostRuntimeComman
     case 'gpu.startWebCodecsStream':
     case 'gpu.stopWebCodecsStream':
     case 'gpu.presentWebCodecsFrame':
+    case 'gpu.presentFrameStack':
     case 'presentGpuTransferredVideoFrames':
     case 'gpu.presentTestPattern':
     case 'presentSoftwareFrame':
@@ -2091,6 +2549,10 @@ async function acceptCommand(command: WorkerRenderHostRuntimeCommand, nowMs: num
 
   if (command.type === 'gpu.presentWebCodecsFrame') {
     return presentGpuWebCodecsFrame(command, nowMs);
+  }
+
+  if (command.type === 'gpu.presentFrameStack') {
+    return presentWorkerGpuFrameStack(command, nowMs);
   }
 
   if (command.type === 'presentGpuTransferredVideoFrames') {

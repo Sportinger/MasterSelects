@@ -30,6 +30,7 @@ export function serializeFallbackClip(clip: TimelineClip): SerializableClip {
     thumbnails: clip.thumbnails,
     linkedClipId: clip.linkedClipId,
     linkedGroupId: clip.linkedGroupId,
+    ...(clip.parentClipId ? { parentClipId: clip.parentClipId } : {}),
     videoState: clip.videoState ? clone(clip.videoState) : undefined,
     audioState: clip.audioState ? clone(clip.audioState) : undefined,
     waveform: clip.waveform,

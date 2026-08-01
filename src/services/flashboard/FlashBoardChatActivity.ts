@@ -51,6 +51,7 @@ export function createAgentActivityEvent(
           source: 'runtime',
           phase: input.phase,
           safeLabel,
+          operationId: input.operationId,
           toolName: input.toolName,
           createdAt,
         }
@@ -137,6 +138,7 @@ export function normalizeStoredAgentActivityEvent(value: unknown): AgentActivity
       || candidate.phase === 'completed'
       || candidate.phase === 'failed')
     && typeof candidate.safeLabel === 'string'
+    && (candidate.operationId === undefined || typeof candidate.operationId === 'string')
     && (candidate.toolName === undefined || typeof candidate.toolName === 'string')
   ) {
     const safeLabel = normalizeText(candidate.safeLabel, MAX_LABEL_CHARS);

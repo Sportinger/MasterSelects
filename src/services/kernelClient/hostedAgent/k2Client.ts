@@ -14,13 +14,14 @@ import {
 type ToolBatchEvent = Extract<HostedAgentEvent, { kind: 'tool-batch-request' }>;
 
 export interface HostedAgentK2ClientTransport {
-  cancel(input: HostedAgentK2BoundRequest): Promise<void>;
+  cancel(input: HostedAgentK2BoundRequest & { signal?: AbortSignal }): Promise<void>;
   interrupt(input: HostedAgentK2BoundRequest): Promise<void>;
   postToolResults(input: HostedAgentK2BoundRequest & {
     batch: Awaited<ReturnType<HostedAgentK2InPageLedger['executeOnce']>>;
   }): Promise<HostedAgentK2BatchPostResponse>;
   replayEvents(input: HostedAgentK2BoundRequest & {
     afterEventId: string | null;
+    signal?: AbortSignal;
   }): Promise<HostedAgentK2EventReplay>;
 }
 
@@ -201,7 +202,6 @@ export class HostedAgentK2ClientSession {
       // instead of executing the editor mutation again.
       this.persistState();
       if (signal?.aborted) {
-        await this.cancel();
         throw abortError(signal);
       }
       await this.input.transport.postToolResults({
@@ -229,7 +229,7 @@ export class HostedAgentK2ClientSession {
     let reconnects = 0;
     while (!this.closed) {
       if (input.signal?.aborted) {
-        await this.cancel();
+        await this.cancelAndDrainAccounting(input.onEvent);
         throw abortError(input.signal);
       }
       try {
@@ -261,12 +261,7 @@ export class HostedAgentK2ClientSession {
           break;
         }
         if (input.signal?.aborted) {
-          try {
-            await this.cancel();
-          } catch {
-            // Preserve the caller's cancellation reason even if the best-effort
-            // server cancellation cannot be delivered.
-          }
+          await this.cancelAndDrainAccounting(input.onEvent);
           throw abortError(input.signal);
         }
         if (!(error instanceof HostedAgentK2ReconnectableError)) {
@@ -278,13 +273,87 @@ export class HostedAgentK2ClientSession {
         }
       }
       if (!this.closed) {
-        await retryPause(input.reconnectDelayMs ?? 250, input.signal);
+        if (input.signal?.aborted) {
+          await this.cancelAndDrainAccounting(input.onEvent);
+          throw abortError(input.signal);
+        }
+        try {
+          await retryPause(input.reconnectDelayMs ?? 250, input.signal);
+        } catch (error) {
+          if (input.signal?.aborted) {
+            await this.cancelAndDrainAccounting(input.onEvent);
+            throw abortError(input.signal);
+          }
+          throw error;
+        }
       }
     }
     return {
       cursor: this.cursor,
       status: this.terminalStatus ?? 'interrupted',
     };
+  }
+
+  private async cancelAndDrainAccounting(
+    onEvent?: (event: HostedAgentEvent) => void,
+  ): Promise<void> {
+    if (this.closed) {
+      return;
+    }
+    this.closed = true;
+    this.terminalStatus = 'cancelled';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1_500);
+    try {
+      try {
+        await this.input.transport.cancel({
+          ...this.boundRequest(),
+          signal: controller.signal,
+        });
+      } catch {
+        // Cancellation delivery is best effort. The authoritative account
+        // reconciliation remains the final fallback.
+      }
+
+      try {
+        const replay = await this.input.transport.replayEvents({
+          ...this.boundRequest(),
+          afterEventId: this.cursor,
+          signal: controller.signal,
+        });
+        this.assertReplayBinding(replay);
+        let cursorNumber = this.cursor === null ? 0 : Number(this.cursor);
+        for (const event of replay.events) {
+          if (
+            event.sessionId !== this.input.lease.sessionId
+            || event.turnId !== this.input.turnId
+            || !/^[1-9]\d*$/.test(event.eventId)
+          ) {
+            throw new Error('The hosted-agent accounting drain binding is invalid.');
+          }
+          const eventNumber = Number(event.eventId);
+          if (eventNumber <= cursorNumber) {
+            continue;
+          }
+          if (eventNumber !== cursorNumber + 1) {
+            throw new Error('The hosted-agent accounting drain skipped an event.');
+          }
+          if (event.kind === 'billing-settled' || isTerminalEvent(event)) {
+            onEvent?.(event);
+          }
+          this.cursor = event.eventId;
+          cursorNumber = eventNumber;
+          if (isTerminalEvent(event)) {
+            this.terminalStatus = statusForTerminalEvent(event);
+          }
+        }
+      } catch {
+        // A bounded terminal account refresh reconciles an unavailable drain.
+      }
+    } finally {
+      clearTimeout(timeout);
+      this.persistState();
+    }
   }
 
   async cancel(): Promise<void> {

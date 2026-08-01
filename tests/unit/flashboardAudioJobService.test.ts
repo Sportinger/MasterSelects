@@ -132,7 +132,7 @@ describe('FlashBoardJobService ElevenLabs audio jobs', () => {
     expect(update.assetFile?.name).toMatch(/^ai_voice_narrator_hello_from_the_board_\d+\.mp3$/);
   });
 
-  it('routes Suno music through hosted Cloud AI when Kie.ai BYO is not enabled', async () => {
+  it('routes Suno music through hosted Cloud AI', async () => {
     cloudAiMock.createSunoMusic.mockResolvedValue('suno-task-1');
     cloudAiMock.pollSunoMusicTaskUntilComplete.mockResolvedValue({
       createdAt: new Date(),
@@ -156,7 +156,7 @@ describe('FlashBoardJobService ElevenLabs audio jobs', () => {
     flashBoardJobService.submit({
       recordId: 'record-suno',
       request: {
-        service: 'suno',
+        service: 'cloud',
         providerId: 'suno-music',
         version: 'V5',
         outputType: 'audio',

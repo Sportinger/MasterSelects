@@ -95,8 +95,25 @@ export interface ProjectExportPreset {
   settings: ProjectExportSettings;
 }
 
+export interface ProjectBatchExportJob {
+  id: string;
+  mediaFileId: string;
+  sourceName: string;
+  mediaType: 'video' | 'audio' | 'image';
+  settings: ProjectExportSettings;
+  createdAt: number;
+}
+
+export interface ProjectBatchExportData {
+  enabled: boolean;
+  useSharedSettings: boolean;
+  selectedJobId: string | null;
+  jobs: ProjectBatchExportJob[];
+}
+
 export interface ProjectExportStoreData {
   settings: ProjectExportSettings;
   presets: ProjectExportPreset[];
   selectedPresetId: string | null;
+  batch: ProjectBatchExportData;
 }

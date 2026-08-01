@@ -12,11 +12,10 @@ import { importAudioMixerPanel } from '../panels/audio-mixer/audioMixerPanelLoad
 
 // Lazy-loaded panels: only loaded when the user opens them
 // This keeps the initial bundle small by deferring export pipeline,
-// AI services and multicam analysis code
+// AI services and export code
 const ExportPanel = lazy(() => import('../export/ExportPanel').then(m => ({ default: m.ExportPanel })));
 const AudioMixerPanel = lazy(importAudioMixerPanel);
 const NodeWorkspacePanel = lazy(() => import('../panels/nodes/NodeWorkspacePanel').then(m => ({ default: m.NodeWorkspacePanel })));
-const MultiCamPanel = lazy(() => import('../panels/MultiCamPanel').then(m => ({ default: m.MultiCamPanel })));
 const MIDIMappingPanel = lazy(() => import('../panels/MIDIMappingPanel').then(m => ({ default: m.MIDIMappingPanel })));
 const TransitionsPanel = lazy(() => import('../panels/TransitionsPanel').then(m => ({ default: m.TransitionsPanel })));
 const SAM2Panel = lazy(() => import('../panels/SAM2Panel').then(m => ({ default: m.SAM2Panel })));
@@ -78,8 +77,6 @@ export function DockPanelContent({ panel }: DockPanelContentProps) {
       return <Suspense fallback={<PanelLoading />}><HistoryPanel /></Suspense>;
     case 'midi-mapping':
       return <Suspense fallback={<PanelLoading />}><MIDIMappingPanel /></Suspense>;
-    case 'multicam':
-      return <Suspense fallback={<PanelLoading />}><MultiCamPanel /></Suspense>;
     case 'capture':
       return <Suspense fallback={<PanelLoading />}><CapturePanel /></Suspense>;
     case 'ai-segment':

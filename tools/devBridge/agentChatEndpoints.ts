@@ -42,6 +42,7 @@ interface AgentChatBody {
   prompt?: unknown
   promptVersion?: unknown
   provider?: unknown
+  referenceMediaFileIds?: unknown
   sessionId?: unknown
   systemPromptOverride?: unknown
   temperature?: unknown
@@ -296,6 +297,7 @@ function toChatArgs(
     prompt,
     promptVersion: normalizePromptVersion(body.promptVersion),
     provider: readOptionalString(body.provider),
+    referenceMediaFileIds: readOptionalStringArray(body.referenceMediaFileIds),
     runSource: req.headers['x-masterselects-bridge-client'] === 'mcp' ? 'mcp' : 'bridge',
     systemPromptOverride: readOptionalString(body.systemPromptOverride),
     temperature: readOptionalNumber(body.temperature),
@@ -383,6 +385,14 @@ function readOptionalBoolean(value: unknown): boolean | undefined {
 
 function readOptionalNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function readOptionalStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  return [...new Set(value
+    .filter((entry): entry is string => typeof entry === 'string')
+    .map(entry => entry.trim())
+    .filter(Boolean))].slice(0, 4)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

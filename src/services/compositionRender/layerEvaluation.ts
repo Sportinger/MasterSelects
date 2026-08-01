@@ -5,6 +5,7 @@ import { isVectorAnimationSourceType, type VectorAnimationClipSettings } from '.
 import type { Composition } from '../../stores/mediaStore/types';
 import { calculateSourceTime } from '../../utils/speedIntegration';
 import { getEffectiveScale } from '../../utils/transformScale';
+import { getInterpolatedMotionLayer } from '../../utils/motionInterpolation';
 import { evaluateTransitionRenderState } from '../../utils/transitionRenderInterpolation';
 import { mathSceneRenderer } from '../mathScene/MathSceneRenderer';
 import { resolveTransitionRecipeBlendMode } from '../timeline/transitionRecipeBlendWindows';
@@ -384,6 +385,8 @@ export function evaluateNestedComposition(params: {
       nestedLocalTime,
     );
 
+    const nestedMasks = nestedAnimation?.masks
+      ?? evaluateCompositionClipMasks(nestedClip.masks, nestedKeyframes, nestedLocalTime);
     const baseLayer = {
       id: `${parentCompId}-nested-${nestedClip.id}`,
       name: nestedClip.name,
@@ -406,8 +409,8 @@ export function evaluateNestedComposition(params: {
         y: ((transform.rotation?.y || 0) * Math.PI) / 180,
         z: ((transform.rotation?.z || 0) * Math.PI) / 180,
       },
-      ...(nestedAnimation?.masks?.some((mask) => mask.enabled !== false)
-        ? { maskClipId: nestedClip.id, maskInvert: false, masks: nestedAnimation.masks }
+      ...(nestedMasks?.some((mask) => mask.enabled !== false)
+        ? { maskClipId: nestedClip.id, maskInvert: false, masks: nestedMasks }
         : {}),
       ...(transitionRender ? { transitionRender } : {}),
       ...(nestedClip.is3D ? { is3D: true } : {}),
@@ -488,6 +491,18 @@ export function evaluateNestedComposition(params: {
         source: {
           type: 'image',
           imageElement,
+        },
+      } as Layer);
+    } else if (nestedClip.source?.type === 'motion-shape' && nestedClip.motion?.kind === 'shape') {
+      nestedLayers.push({
+        ...baseLayer,
+        source: {
+          type: 'motion',
+          motion: getInterpolatedMotionLayer(
+            nestedClip,
+            nestedKeyframes,
+            nestedLocalTime,
+          ) ?? nestedClip.motion,
         },
       } as Layer);
     } else if (nestedClip.source?.textCanvas) {

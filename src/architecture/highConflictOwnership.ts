@@ -31,6 +31,10 @@ export const completeHighConflictTargets = [
   'src/components/panels/flashboard/FlashBoardChatOutput.tsx',
   'src/components/panels/flashboard/useFlashBoardChatController.ts',
   'src/stores/flashboardStore/types.ts',
+  'src/types/motionDesign.ts',
+  'src/engine/motion/MotionRenderer.ts',
+  'src/services/motionDesign/contracts/**',
+  'docs/plans/motion-design-md0-md9-multilane-execution-plan.md',
 ] as const;
 
 export const completeHighConflictOwnership = [
@@ -63,4 +67,8 @@ export const completeHighConflictOwnership = [
   { path: 'src/components/panels/flashboard/FlashBoardChatOutput.tsx', laneId: 'storyboard-chat-decisions' },
   { path: 'src/components/panels/flashboard/useFlashBoardChatController.ts', laneId: 'storyboard-chat-decisions' },
   { path: 'src/stores/flashboardStore/types.ts', laneId: 'storyboard-chat-decisions' },
+  { path: 'src/types/motionDesign.ts', laneId: 'motion-design-integration' },
+  { path: 'src/engine/motion/MotionRenderer.ts', laneId: 'motion-design-integration' },
+  { path: 'src/services/motionDesign/contracts/**', laneId: 'motion-design-integration' },
+  { path: 'docs/plans/motion-design-md0-md9-multilane-execution-plan.md', laneId: 'motion-design-integration' },
 ] as const satisfies readonly CompleteHighConflictOwnership[];

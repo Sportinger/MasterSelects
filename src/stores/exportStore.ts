@@ -72,10 +72,35 @@ export interface ExportPreset {
   settings: ExportSettings;
 }
 
+export type BatchExportMediaType = 'video' | 'audio' | 'image';
+
+export interface BatchExportSource {
+  mediaFileId: string;
+  sourceName: string;
+  mediaType: BatchExportMediaType;
+}
+
+export interface BatchExportJob {
+  id: string;
+  mediaFileId: string;
+  sourceName: string;
+  mediaType: BatchExportMediaType;
+  settings: ExportSettings;
+  createdAt: number;
+}
+
+export interface BatchExportData {
+  enabled: boolean;
+  useSharedSettings: boolean;
+  selectedJobId: string | null;
+  jobs: BatchExportJob[];
+}
+
 export interface ExportStoreData {
   settings: ExportSettings;
   presets: ExportPreset[];
   selectedPresetId: string | null;
+  batch: BatchExportData;
 }
 
 interface SavePresetResult {
@@ -88,10 +113,18 @@ interface ExportStoreState extends ExportStoreData {
   replaceSettings: (settings: Partial<ExportSettings>) => void;
   reset: () => void;
   setSelectedPresetId: (presetId: string | null) => void;
-  savePreset: (name: string) => SavePresetResult | null;
-  updatePreset: (presetId: string) => ExportPreset | null;
+  savePreset: (name: string, settingsOverride?: ExportSettings) => SavePresetResult | null;
+  updatePreset: (presetId: string, settingsOverride?: ExportSettings) => ExportPreset | null;
   loadPreset: (presetId: string) => boolean;
   deletePreset: (presetId: string) => void;
+  enqueueBatchJobs: (sources: BatchExportSource[]) => void;
+  removeBatchJob: (jobId: string) => void;
+  clearBatchJobs: () => void;
+  setBatchEnabled: (enabled: boolean) => void;
+  setBatchUseSharedSettings: (useSharedSettings: boolean) => void;
+  setSelectedBatchJobId: (jobId: string | null) => void;
+  updateBatchJobSettings: (jobId: string, patch: Partial<ExportSettings>) => void;
+  replaceBatchJobSettings: (jobId: string, settings: Partial<ExportSettings>) => void;
   hydrateFromProject: (data?: Partial<ExportStoreData> | null) => void;
 }
 
@@ -113,6 +146,65 @@ const GIF_PALETTE_MODES: GifPaletteMode[] = ['global', 'per-frame'];
 
 function createPresetId(): string {
   return `export-preset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createBatchJobId(): string {
+  return `batch-export-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function sourceBasename(sourceName: string): string {
+  const filename = sourceName.trim().split(/[\\/]/).pop() ?? '';
+  const extensionIndex = filename.lastIndexOf('.');
+  const basename = extensionIndex > 0 ? filename.slice(0, extensionIndex) : filename;
+  return basename || 'export';
+}
+
+function createBatchSettings(
+  settings: ExportSettings,
+  source: BatchExportSource,
+): ExportSettings {
+  const sourceSettings: Partial<ExportSettings> = source.mediaType === 'video'
+    ? {
+        encoder: 'webcodecs',
+        useInOut: false,
+        filename: sourceBasename(source.sourceName),
+        specialContainer: 'none',
+        normalizeAudio: false,
+        stackedAlpha: false,
+        visualMode: 'video',
+        videoEnabled: true,
+        imageExportMode: 'frame',
+      }
+    : source.mediaType === 'audio'
+      ? {
+          encoder: 'webcodecs',
+          useInOut: false,
+          filename: sourceBasename(source.sourceName),
+          specialContainer: 'none',
+          normalizeAudio: false,
+          stackedAlpha: false,
+          visualMode: 'video',
+          videoEnabled: false,
+          includeAudio: true,
+          imageExportMode: 'frame',
+        }
+      : {
+          encoder: 'webcodecs',
+          useInOut: false,
+          filename: sourceBasename(source.sourceName),
+          specialContainer: 'none',
+          normalizeAudio: false,
+          stackedAlpha: false,
+          visualMode: 'image',
+          videoEnabled: true,
+          imageExportMode: 'frame',
+          includeAudio: false,
+        };
+
+  return sanitizeSettings({
+    ...settings,
+    ...sourceSettings,
+  });
 }
 
 export function createDefaultExportSettings(): ExportSettings {
@@ -169,6 +261,12 @@ export function createDefaultExportStoreData(): ExportStoreData {
     settings: createDefaultExportSettings(),
     presets: [],
     selectedPresetId: null,
+    batch: {
+      enabled: false,
+      useSharedSettings: false,
+      selectedJobId: null,
+      jobs: [],
+    },
   };
 }
 
@@ -180,6 +278,20 @@ function clonePreset(preset: ExportPreset): ExportPreset {
   return {
     ...preset,
     settings: cloneExportSettings(preset.settings),
+  };
+}
+
+function cloneBatchJob(job: BatchExportJob): BatchExportJob {
+  return {
+    ...job,
+    settings: cloneExportSettings(job.settings),
+  };
+}
+
+function cloneBatchData(batch: BatchExportData): BatchExportData {
+  return {
+    ...batch,
+    jobs: batch.jobs.map(cloneBatchJob),
   };
 }
 
@@ -278,6 +390,131 @@ function sanitizePreset(input: Partial<ExportPreset> | null | undefined): Export
   };
 }
 
+function sanitizeBatchJob(input: Partial<BatchExportJob> | null | undefined): BatchExportJob | null {
+  if (
+    !input
+    || typeof input.mediaFileId !== 'string'
+    || !input.mediaFileId.trim()
+    || typeof input.sourceName !== 'string'
+    || !input.sourceName.trim()
+  ) {
+    return null;
+  }
+
+  const sanitizedSettings = sanitizeSettings(input.settings);
+  const mediaType = pickEnumValue(
+    input.mediaType,
+    ['video', 'audio', 'image'] as const,
+    sanitizedSettings.visualMode === 'image'
+      ? 'image'
+      : sanitizedSettings.videoEnabled
+        ? 'video'
+        : 'audio',
+  );
+
+  const job: BatchExportJob = {
+    id: typeof input.id === 'string' && input.id ? input.id : createBatchJobId(),
+    mediaFileId: input.mediaFileId.trim(),
+    sourceName: input.sourceName.trim(),
+    mediaType,
+    settings: sanitizedSettings,
+    createdAt: pickNumber(input.createdAt, Date.now(), { min: 0 }),
+  };
+  return {
+    ...job,
+    settings: applyBatchSourceInvariants(job.settings, job.mediaType),
+  };
+}
+
+function applyBatchSourceInvariants(
+  settings: ExportSettings,
+  mediaType: BatchExportMediaType,
+): ExportSettings {
+  const common: Partial<ExportSettings> = {
+    encoder: 'webcodecs',
+    useInOut: false,
+    specialContainer: 'none',
+    normalizeAudio: false,
+    stackedAlpha: false,
+    imageExportMode: 'frame',
+  };
+  const sourceSpecific: Partial<ExportSettings> = mediaType === 'video'
+    ? {
+        visualMode: 'video',
+        videoEnabled: true,
+      }
+    : mediaType === 'audio'
+      ? {
+          visualMode: 'video',
+          videoEnabled: false,
+          includeAudio: true,
+        }
+      : {
+          visualMode: 'image',
+          videoEnabled: true,
+          includeAudio: false,
+        };
+
+  return sanitizeSettings({
+    ...settings,
+    ...common,
+    ...sourceSpecific,
+  });
+}
+
+function applySharedTechnicalSettings(
+  jobs: BatchExportJob[],
+  sourceJob: BatchExportJob,
+): BatchExportJob[] {
+  const { filename: _sourceFilename, ...technicalSettings } = sourceJob.settings;
+  return jobs.map((job) => ({
+    ...job,
+    settings: applyBatchSourceInvariants({
+      ...technicalSettings,
+      filename: job.settings.filename,
+    }, job.mediaType),
+  }));
+}
+
+function sanitizeBatchData(input?: Partial<BatchExportData> | null): BatchExportData {
+  if (!input) {
+    return createDefaultExportStoreData().batch;
+  }
+
+  const seenMediaFileIds = new Set<string>();
+  const seenJobIds = new Set<string>();
+  const jobs = Array.isArray(input.jobs)
+    ? input.jobs
+        .map((job) => sanitizeBatchJob(job))
+        .filter((job): job is BatchExportJob => {
+          if (!job || seenMediaFileIds.has(job.mediaFileId)) {
+            return false;
+          }
+          seenMediaFileIds.add(job.mediaFileId);
+          if (seenJobIds.has(job.id)) {
+            job.id = createBatchJobId();
+          }
+          seenJobIds.add(job.id);
+          return true;
+        })
+    : [];
+  const selectedJobId = typeof input.selectedJobId === 'string'
+    && jobs.some((job) => job.id === input.selectedJobId)
+    ? input.selectedJobId
+    : jobs[0]?.id ?? null;
+  const useSharedSettings = input.useSharedSettings === true;
+  const selectedJob = jobs.find((job) => job.id === selectedJobId);
+
+  return {
+    enabled: input.enabled === true && jobs.length > 0,
+    useSharedSettings,
+    selectedJobId,
+    jobs: useSharedSettings && selectedJob
+      ? applySharedTechnicalSettings(jobs, selectedJob)
+      : jobs,
+  };
+}
+
 function sanitizeStoreData(input?: Partial<ExportStoreData> | null): ExportStoreData {
   const defaults = createDefaultExportStoreData();
   if (!input) {
@@ -297,14 +534,18 @@ function sanitizeStoreData(input?: Partial<ExportStoreData> | null): ExportStore
     settings: sanitizeSettings(input.settings),
     presets,
     selectedPresetId,
+    batch: sanitizeBatchData(input.batch),
   };
 }
 
-export function getExportStoreData(state: Pick<ExportStoreState, 'settings' | 'presets' | 'selectedPresetId'>): ExportStoreData {
+export function getExportStoreData(
+  state: Pick<ExportStoreState, 'settings' | 'presets' | 'selectedPresetId' | 'batch'>,
+): ExportStoreData {
   return {
     settings: cloneExportSettings(state.settings),
     presets: state.presets.map(clonePreset),
     selectedPresetId: state.selectedPresetId,
+    batch: cloneBatchData(state.batch),
   };
 }
 
@@ -339,7 +580,7 @@ export const useExportStore = create<ExportStoreState>()(
       }));
     },
 
-    savePreset: (name) => {
+    savePreset: (name, settingsOverride) => {
       const trimmedName = name.trim();
       if (!trimmedName) {
         return null;
@@ -347,6 +588,9 @@ export const useExportStore = create<ExportStoreState>()(
 
       const now = Date.now();
       const { presets, settings } = get();
+      const settingsToSave = settingsOverride
+        ? sanitizeSettings(settingsOverride)
+        : settings;
       const normalizedName = trimmedName.toLowerCase();
       const existingPreset = presets.find((preset) => preset.name.toLowerCase() === normalizedName);
       const nextPreset: ExportPreset = existingPreset
@@ -354,14 +598,14 @@ export const useExportStore = create<ExportStoreState>()(
             ...existingPreset,
             name: trimmedName,
             updatedAt: now,
-            settings: cloneExportSettings(settings),
+            settings: cloneExportSettings(settingsToSave),
           }
         : {
             id: createPresetId(),
             name: trimmedName,
             createdAt: now,
             updatedAt: now,
-            settings: cloneExportSettings(settings),
+            settings: cloneExportSettings(settingsToSave),
           };
 
       set((state) => ({
@@ -377,17 +621,21 @@ export const useExportStore = create<ExportStoreState>()(
       };
     },
 
-    updatePreset: (presetId) => {
+    updatePreset: (presetId, settingsOverride) => {
       const { presets, settings } = get();
       const existingPreset = presets.find((preset) => preset.id === presetId);
       if (!existingPreset) {
         return null;
       }
 
+      const settingsToSave = settingsOverride
+        ? sanitizeSettings(settingsOverride)
+        : settings;
+
       const nextPreset: ExportPreset = {
         ...existingPreset,
         updatedAt: Date.now(),
-        settings: cloneExportSettings(settings),
+        settings: cloneExportSettings(settingsToSave),
       };
 
       set((state) => ({
@@ -416,6 +664,201 @@ export const useExportStore = create<ExportStoreState>()(
         presets: state.presets.filter((preset) => preset.id !== presetId),
         selectedPresetId: state.selectedPresetId === presetId ? null : state.selectedPresetId,
       }));
+    },
+
+    enqueueBatchJobs: (sources) => {
+      set((state) => {
+        const existingMediaFileIds = new Set(state.batch.jobs.map((job) => job.mediaFileId));
+        let firstExistingJobId: string | null = null;
+        const now = Date.now();
+        const nextJobs: BatchExportJob[] = [];
+
+        sources.forEach((source, index) => {
+          if (
+            !source
+            || typeof source.mediaFileId !== 'string'
+            || !source.mediaFileId.trim()
+            || typeof source.sourceName !== 'string'
+            || !source.sourceName.trim()
+            || !(['video', 'audio', 'image'] as const).includes(source.mediaType)
+          ) {
+            return;
+          }
+
+          const mediaFileId = source.mediaFileId.trim();
+          if (existingMediaFileIds.has(mediaFileId)) {
+            firstExistingJobId ??= state.batch.jobs.find((job) => job.mediaFileId === mediaFileId)?.id ?? null;
+            return;
+          }
+          existingMediaFileIds.add(mediaFileId);
+          const normalizedSource: BatchExportSource = {
+            ...source,
+            mediaFileId,
+            sourceName: source.sourceName.trim(),
+          };
+          nextJobs.push({
+            id: createBatchJobId(),
+            mediaFileId,
+            sourceName: normalizedSource.sourceName,
+            mediaType: normalizedSource.mediaType,
+            settings: createBatchSettings(state.settings, normalizedSource),
+            createdAt: now + index,
+          });
+        });
+
+        if (nextJobs.length === 0) {
+          return firstExistingJobId
+            ? {
+                batch: {
+                  ...state.batch,
+                  enabled: true,
+                  selectedJobId: firstExistingJobId,
+                },
+              }
+            : {};
+        }
+
+        const jobs = [...state.batch.jobs, ...nextJobs];
+        const selectedJobId = state.batch.selectedJobId
+          && jobs.some((job) => job.id === state.batch.selectedJobId)
+          ? state.batch.selectedJobId
+          : nextJobs[0].id;
+        const selectedJob = jobs.find((job) => job.id === selectedJobId);
+
+        return {
+          batch: {
+            ...state.batch,
+            enabled: true,
+            selectedJobId,
+            jobs: state.batch.useSharedSettings && selectedJob
+              ? applySharedTechnicalSettings(jobs, selectedJob)
+              : jobs,
+          },
+        };
+      });
+    },
+
+    removeBatchJob: (jobId) => {
+      set((state) => {
+        const removedIndex = state.batch.jobs.findIndex((job) => job.id === jobId);
+        if (removedIndex < 0) {
+          return {};
+        }
+
+        const jobs = state.batch.jobs.filter((job) => job.id !== jobId);
+        const selectedJobId = state.batch.selectedJobId === jobId
+          ? jobs[Math.min(removedIndex, jobs.length - 1)]?.id ?? null
+          : state.batch.selectedJobId;
+        return {
+          batch: {
+            ...state.batch,
+            enabled: jobs.length > 0 ? state.batch.enabled : false,
+            selectedJobId,
+            jobs,
+          },
+        };
+      });
+    },
+
+    clearBatchJobs: () => {
+      set((state) => ({
+        batch: {
+          ...state.batch,
+          enabled: false,
+          selectedJobId: null,
+          jobs: [],
+        },
+      }));
+    },
+
+    setBatchEnabled: (enabled) => {
+      set((state) => ({
+        batch: {
+          ...state.batch,
+          enabled: enabled && state.batch.jobs.length > 0,
+        },
+      }));
+    },
+
+    setBatchUseSharedSettings: (useSharedSettings) => {
+      set((state) => {
+        if (useSharedSettings === state.batch.useSharedSettings) {
+          return {};
+        }
+
+        const selectedJob = state.batch.jobs.find((job) => job.id === state.batch.selectedJobId)
+          ?? state.batch.jobs[0];
+        return {
+          batch: {
+            ...state.batch,
+            useSharedSettings,
+            selectedJobId: state.batch.selectedJobId ?? selectedJob?.id ?? null,
+            jobs: useSharedSettings && selectedJob
+              ? applySharedTechnicalSettings(state.batch.jobs, selectedJob)
+              : state.batch.jobs.map(cloneBatchJob),
+          },
+        };
+      });
+    },
+
+    setSelectedBatchJobId: (jobId) => {
+      set((state) => ({
+        batch: {
+          ...state.batch,
+          selectedJobId: jobId && state.batch.jobs.some((job) => job.id === jobId)
+            ? jobId
+            : null,
+        },
+      }));
+    },
+
+    updateBatchJobSettings: (jobId, patch) => {
+      set((state) => {
+        const targetJob = state.batch.jobs.find((job) => job.id === jobId);
+        if (!targetJob) {
+          return {};
+        }
+
+        const updatedJob: BatchExportJob = {
+          ...targetJob,
+          settings: applyBatchSourceInvariants(sanitizeSettings({
+            ...targetJob.settings,
+            ...patch,
+          }), targetJob.mediaType),
+        };
+        const jobs = state.batch.jobs.map((job) => job.id === jobId ? updatedJob : job);
+        return {
+          batch: {
+            ...state.batch,
+            jobs: state.batch.useSharedSettings
+              ? applySharedTechnicalSettings(jobs, updatedJob)
+              : jobs,
+          },
+        };
+      });
+    },
+
+    replaceBatchJobSettings: (jobId, settings) => {
+      set((state) => {
+        const targetJob = state.batch.jobs.find((job) => job.id === jobId);
+        if (!targetJob) {
+          return {};
+        }
+
+        const updatedJob: BatchExportJob = {
+          ...targetJob,
+          settings: applyBatchSourceInvariants(sanitizeSettings(settings), targetJob.mediaType),
+        };
+        const jobs = state.batch.jobs.map((job) => job.id === jobId ? updatedJob : job);
+        return {
+          batch: {
+            ...state.batch,
+            jobs: state.batch.useSharedSettings
+              ? applySharedTechnicalSettings(jobs, updatedJob)
+              : jobs,
+          },
+        };
+      });
     },
 
     hydrateFromProject: (data) => {

@@ -10,11 +10,9 @@ import {
   FLASHBOARD_PROMPT_REFINER_MODEL,
   parseSunoPromptRefinement,
   refineFlashBoardPromptHosted,
-  streamRefineFlashBoardPrompt,
 } from '../../../services/flashboard/FlashBoardPromptRefiner';
 import type { CatalogEntry } from '../../../services/flashboard/types';
 import {
-  buildFlashBoardPromptRefineDeltaUpdate,
   buildFlashBoardPromptRefineErrorRestoreUpdate,
   buildFlashBoardPromptRefineFinalUpdate,
   buildFlashBoardPromptRefineInput,
@@ -28,7 +26,6 @@ type FlashBoardPromptRefineInputOptions = Parameters<typeof buildFlashBoardPromp
 
 interface UseFlashBoardPromptRefineControllerInput {
   aspectRatio: string;
-  canUseByoPromptRefiner: boolean;
   canUseHostedPromptRefiner: boolean;
   closePopover: () => void;
   duration: number;
@@ -41,10 +38,8 @@ interface UseFlashBoardPromptRefineControllerInput {
   isSunoMode: boolean;
   mode: string;
   multiShots: boolean;
-  kieAiApiKey: string;
   openAuthDialog: () => void;
   openPricingDialog: () => void;
-  openSettings: () => void;
   prompt: string;
   providerId: string;
   referenceBadges: FlashBoardPromptRefineInputOptions['referenceBadges'];
@@ -67,7 +62,6 @@ interface UseFlashBoardPromptRefineControllerInput {
 
 export function useFlashBoardPromptRefineController({
   aspectRatio,
-  canUseByoPromptRefiner,
   canUseHostedPromptRefiner,
   closePopover,
   duration,
@@ -80,10 +74,8 @@ export function useFlashBoardPromptRefineController({
   isSunoMode,
   mode,
   multiShots,
-  kieAiApiKey,
   openAuthDialog,
   openPricingDialog,
-  openSettings,
   prompt,
   providerId,
   referenceBadges,
@@ -116,7 +108,7 @@ export function useFlashBoardPromptRefineController({
     sunoNegativeTags,
     sunoStyle,
   });
-  const promptRefineTitle = !canUseHostedPromptRefiner && !canUseByoPromptRefiner
+  const promptRefineTitle = !canUseHostedPromptRefiner
     ? hasHostedSession
       ? 'Enable hosted credits to refine prompts'
       : 'Sign in to refine prompts with MasterSelects Cloud'
@@ -171,16 +163,13 @@ export function useFlashBoardPromptRefineController({
 
     closePopover();
 
-    if (!canUseHostedPromptRefiner && !canUseByoPromptRefiner) {
+    if (!canUseHostedPromptRefiner) {
       if (!hasHostedSession) {
         setPromptRefineError('Sign in to refine prompts with MasterSelects Cloud.');
         openAuthDialog();
       } else if (!hostedAIEnabled) {
         setPromptRefineError('Enable hosted credits to refine prompts.');
         openPricingDialog();
-      } else {
-        setPromptRefineError('Add a Kie.ai API key in Settings to refine prompts.');
-        openSettings();
       }
       return;
     }
@@ -204,8 +193,6 @@ export function useFlashBoardPromptRefineController({
       style: sunoStyle,
       negativeTags: sunoNegativeTags,
     };
-    let streamedPrompt = '';
-    let streamedSunoFields = false;
     promptRefineAbortRef.current?.abort();
     const abortController = new AbortController();
     promptRefineAbortRef.current = abortController;
@@ -215,7 +202,6 @@ export function useFlashBoardPromptRefineController({
 
     try {
       const refinerInput = buildFlashBoardPromptRefineInput({
-        apiKey: kieAiApiKey,
         prompt,
         entry: selectedEntry,
         service,
@@ -240,25 +226,9 @@ export function useFlashBoardPromptRefineController({
         referenceBadges,
       });
 
-      const refinedPrompt = canUseHostedPromptRefiner
-        ? await refineFlashBoardPromptHosted(refinerInput, {
-          signal: abortController.signal,
-        })
-        : await streamRefineFlashBoardPrompt(refinerInput, {
-          signal: abortController.signal,
-          onDelta: (_delta, fullText) => {
-            streamedPrompt = fullText;
-            const deltaUpdate = buildFlashBoardPromptRefineDeltaUpdate({
-              fullText,
-              isSunoMode,
-              parsedSuno: isSunoMode ? parseSunoPromptRefinement(fullText) : undefined,
-            });
-            applyPromptRefineFieldUpdate(deltaUpdate.fields);
-            if (deltaUpdate.hasSunoFields) {
-              streamedSunoFields = true;
-            }
-          },
-        });
+      const refinedPrompt = await refineFlashBoardPromptHosted(refinerInput, {
+        signal: abortController.signal,
+      });
 
       applyPromptRefineFieldUpdate(buildFlashBoardPromptRefineFinalUpdate({
         isSunoMode,
@@ -274,8 +244,8 @@ export function useFlashBoardPromptRefineController({
         isSunoMode,
         previousPrompt,
         previousSunoPrompt,
-        streamedPrompt,
-        streamedSunoFields,
+        streamedPrompt: '',
+        streamedSunoFields: false,
       }));
       setPromptRefineError(error instanceof Error ? error.message : 'Failed to refine prompt.');
     } finally {
@@ -288,7 +258,6 @@ export function useFlashBoardPromptRefineController({
     applyPromptRefineFieldUpdate,
     aspectRatio,
     closePopover,
-    canUseByoPromptRefiner,
     canUseHostedPromptRefiner,
     duration,
     effectiveGenerateAudio,
@@ -301,10 +270,8 @@ export function useFlashBoardPromptRefineController({
     isSunoMode,
     mode,
     multiShots,
-    kieAiApiKey,
     openAuthDialog,
     openPricingDialog,
-    openSettings,
     prompt,
     providerId,
     referenceBadges,

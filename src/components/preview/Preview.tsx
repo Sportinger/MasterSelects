@@ -41,6 +41,7 @@ import {
   findMotionPathLayer,
 } from './motionPathGeometry';
 import { useMotionPathEditing } from './useMotionPathEditing';
+import { useMotionNullViewportEditing } from './useMotionNullViewportEditing';
 import {
   readStoredMotionPathOnionFrameDistance,
   readStoredMotionPathOnionSkinVisible,
@@ -79,6 +80,7 @@ export function Preview({ panelId, source, showTransparencyGrid, initialEdit }: 
   const setSceneNavFpsMoveSpeed = useEngineStore((s) => s.setSceneNavFpsMoveSpeed);
   const {
     clips,
+    clipKeyframes,
     selectedClipIds,
     primarySelectedClipId,
     selectClip,
@@ -103,6 +105,7 @@ export function Preview({ panelId, source, showTransparencyGrid, initialEdit }: 
     exportPreviewFrame,
   } = useTimelineStore(useShallow(s => ({
     clips: s.clips,
+    clipKeyframes: s.clipKeyframes,
     selectedClipIds: s.selectedClipIds,
     primarySelectedClipId: s.primarySelectedClipId,
     selectClip: s.selectClip,
@@ -655,6 +658,44 @@ export function Preview({ panelId, source, showTransparencyGrid, initialEdit }: 
     onionPositions: motionPathOnionVisible ? rawMotionPathOverlayProps.onionPositions : [],
   }), [motionPathOnionVisible, rawMotionPathOverlayProps]);
 
+  const setMotionNullPropertyValueAtTime = useCallback((
+    clipId: string,
+    property: 'position.x' | 'position.y',
+    value: number,
+    timelineTime: number,
+  ) => {
+    const target = clips.find((candidate) => candidate.id === clipId);
+    if (!target) return;
+    if (isRecording(clipId, property) || hasKeyframes(clipId, property)) {
+      addKeyframe(clipId, property, value, timelineTime - target.startTime);
+      return;
+    }
+    setPropertyValue(clipId, property, value);
+  }, [addKeyframe, clips, hasKeyframes, isRecording, setPropertyValue]);
+
+  const { overlayProps: motionNullViewportOverlayProps } = useMotionNullViewportEditing({
+    enabled: layerTransformMode,
+    clip: selectedClip,
+    clips,
+    clipKeyframes,
+    tracks,
+    compositionId: displayedCompId ?? activeCompositionId,
+    timelineTime: playheadPosition,
+    compositionSize: renderResolution,
+    canvasSize,
+    viewZoom,
+    editableSource: isEditableSource,
+    sourceMonitorActive,
+    playbackActive: isPlaying || Boolean(playbackWarmup) || isExporting,
+    conflictingModeActive: maskPanelActive
+      || maskEditMode !== 'none'
+      || textPreviewEditorEnabled
+      || textClipEditMode
+      || textTypingActive
+      || editCameraModeActive,
+    setPropertyValueAtTime: setMotionNullPropertyValueAtTime,
+  });
+
   const previewCanvasMountProps = {
     activeSharedSceneOverlayContent, activeSplatLoadProgress, canvasInContainer, canvasRef,
     canvasSize, canvasWrapperRef, clips, closeSourceMonitor, containerSize, displayedCompId,
@@ -667,7 +708,7 @@ export function Preview({ panelId, source, showTransparencyGrid, initialEdit }: 
     liveFeedbackCompositionId: stableRenderSource.type === 'layer-index' ? null : displayedCompId,
     maskEditMode, maskNavigationMode,
     maskPanelActive, overlayRef, playbackWaiterVideoCount, previewCameraOverride,
-    motionPathOverlayProps,
+    motionPathOverlayProps, motionNullViewportOverlayProps,
     previewQuality, qualityDropdownRef, qualityOpen, sam2Active, sceneGizmoToolbarTarget,
     sceneNavClipId, sceneNavEnabled, sceneObjectOverlaySelectedClipId, selectClip,
     selectedClip, selectedTextBounds, selectedTextLayer, setPropertyValue, setPreviewQuality,

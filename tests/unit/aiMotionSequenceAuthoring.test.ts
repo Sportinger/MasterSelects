@@ -218,9 +218,14 @@ describe('AI atomic motion sequence authoring', () => {
       width: 640,
       height: 240,
       duration: 5,
+      x: 480,
+      y: -270,
     }, useTimelineStore.getState());
     expect(created.success).toBe(true);
     const clipId = (created.data as { clipId: string }).clipId;
+    const positioned = useTimelineStore.getState().clips.find((clip) => clip.id === clipId)!;
+    expect(positioned.transform.position.x).toBeCloseTo(0.5);
+    expect(positioned.transform.position.y).toBeCloseTo(-0.5);
 
     const described = await handleGetMotionDesign(
       { clipId },
@@ -233,6 +238,10 @@ describe('AI atomic motion sequence authoring', () => {
       'opacity',
       'shape.size.w',
     ]));
+    expect((described.data as { properties: Array<{ path: string; value?: number }> })
+      .properties.find((property) => property.path === 'position.x')?.value).toBe(480);
+    expect((described.data as { properties: Array<{ path: string; value?: number }> })
+      .properties.find((property) => property.path === 'position.y')?.value).toBe(-270);
 
     const applied = await handleUpdateMotionProperties({
       clipId,
@@ -248,15 +257,27 @@ describe('AI atomic motion sequence authoring', () => {
     expect(afterApplied.transform.position.x).toBeCloseTo(0.5);
     expect(afterApplied.transform.opacity).toBe(0.4);
 
-    const beforeRejected = {
-      motion: structuredClone(afterApplied.motion),
-      transform: structuredClone(afterApplied.transform),
-    };
-    const rejected = await handleUpdateMotionProperties({
+    const supported = await handleUpdateMotionProperties({
       clipId,
       updates: [
         { path: 'position.x', value: 960 },
         { path: 'replicator.offset.rotation', value: 45 },
+      ],
+    }, useTimelineStore.getState());
+    expect(supported.success).toBe(true);
+    const afterSupported = useTimelineStore.getState().clips.find((clip) => clip.id === clipId)!;
+    expect(afterSupported.transform.position.x).toBeCloseTo(1);
+    expect(afterSupported.motion?.replicator?.terminalTransform.rotationDegrees).toBe(45);
+
+    const beforeRejected = {
+      motion: structuredClone(afterSupported.motion),
+      transform: structuredClone(afterSupported.transform),
+    };
+    const rejected = await handleUpdateMotionProperties({
+      clipId,
+      updates: [
+        { path: 'position.x', value: 480 },
+        { path: 'replicator.offset.rotation.invalid', value: 90 },
       ],
     }, useTimelineStore.getState());
     expect(rejected.success).toBe(false);
