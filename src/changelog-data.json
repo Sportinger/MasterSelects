@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-08-02",
+    "type": "improve",
+    "title": "MasterSelects 2.4.5",
+    "description": "Kernel cutover release: Fast V2 now shares private operation contracts with the verified kernel boundary; hosted AI billing, restart recovery and replay behavior are hardened; legacy browser BYOK and local Lemonade paths are removed; motion design, guided editing, nested media handling, documentation and browser-level regression coverage are expanded.",
+    "section": "Release"
+  },
+  {
     "date": "2026-07-29",
     "type": "improve",
     "title": "MasterSelects 2.4.4",

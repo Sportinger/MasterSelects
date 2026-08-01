@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '2.4.4';
+export const APP_VERSION = '2.4.5';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -28,7 +28,7 @@ export const FEATURED_VIDEO: {
   banner: {
     type: 'success',
     title: `MasterSelects ${APP_VERSION}`,
-    message: 'Reliability release: resumable parallel cloud transcription with live progress, faster nested-composition playback, waveform-first audio comps, stricter FAST export preparation and safer frame capture.',
+    message: 'Kernel cutover release: shared private operation contracts, hardened hosted AI recovery, expanded motion design, guided editing and browser-level regression coverage.',
     animated: true,
   },
 };
@@ -37,7 +37,7 @@ export const FEATURED_VIDEO: {
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
   title: `MasterSelects ${APP_VERSION}`,
-  message: 'Reliability release: resumable parallel cloud transcription with live progress, faster nested-composition playback, waveform-first audio comps, stricter FAST export preparation and safer frame capture.',
+  message: 'Kernel cutover release: shared private operation contracts, hardened hosted AI recovery, expanded motion design, guided editing and browser-level regression coverage.',
   animated: true,
 };
 

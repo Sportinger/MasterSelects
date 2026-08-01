@@ -129,7 +129,7 @@ Native Helper     Rust service with HTTP/WebSocket bridge, yt-dlp, helper-backed
 
 ## Audit Notes
 
-- The authoritative app version is [`src/version.ts`](../../src/version.ts), currently `2.4.4`.
+- The authoritative app version is [`src/version.ts`](../../src/version.ts), currently `2.4.5`.
 - Preview quality is wired into engine-backed preview resolution through `useEngine()`; it does not affect export resolution or the HTML-only source monitor.
 - `openComposition` and `searchVideos` are mapped through the shared AI tool dispatcher in the current branch.
 - `AI_TOOLS` assembles 169 public model-tool definitions, including storyboard, worker-first, and motion-design tools. Gaussian debug definitions remain outside that public registry.
