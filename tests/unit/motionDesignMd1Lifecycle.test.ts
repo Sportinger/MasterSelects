@@ -44,7 +44,7 @@ import { createRestoredMotionClip } from '../../src/stores/timeline/nestedRestor
 import { createSerializableTimelineState } from '../../src/stores/timeline/serialization/serializableTimelineState';
 import type { ClipboardClipData } from '../../src/stores/timeline/types';
 import { useTimelineStore } from '../../src/stores/timeline';
-import { useHistoryStore } from '../../src/stores/historyStore';
+import { getHistoryStateView, useHistoryStore } from '../../src/stores/historyStore';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useExportStore } from '../../src/stores/exportStore';
 import { renderHostPort } from '../../src/services/render/renderHostPort';
@@ -768,7 +768,7 @@ describe('MD1 motion-design lifecycle', () => {
 
   it('restores timeline view/export and history state even when evidence execution throws', async () => {
     const timelineBefore = useTimelineStore.getState();
-    const historyBefore = useHistoryStore.getState();
+    const historyBefore = getHistoryStateView();
     const mediaBefore = useMediaStore.getState();
     const exportBefore = useExportStore.getState();
     const dimensionsBefore = renderHostPort.getOutputDimensions();
@@ -786,7 +786,7 @@ describe('MD1 motion-design lifecycle', () => {
         exportRange: { start: 0, end: 1 },
         exportPreviewFrameTime: 0.5,
       });
-      useHistoryStore.setState({ maxHistorySize: historyBefore.maxHistorySize + 1 });
+      useHistoryStore.setState({ maxHistoryNodes: historyBefore.maxHistorySize + 1 });
       useMediaStore.setState({
         compositions: [],
         selectedIds: ['evidence-media'],
@@ -810,7 +810,7 @@ describe('MD1 motion-design lifecycle', () => {
     expect(timelineAfter.exportCurrentTime).toBe(timelineBefore.exportCurrentTime);
     expect(timelineAfter.exportRange).toBe(timelineBefore.exportRange);
     expect(timelineAfter.exportPreviewFrameTime).toBe(timelineBefore.exportPreviewFrameTime);
-    expect(useHistoryStore.getState().maxHistorySize).toBe(historyBefore.maxHistorySize);
+    expect(getHistoryStateView().maxHistorySize).toBe(historyBefore.maxHistorySize);
     expect(useMediaStore.getState().compositions).toEqual(mediaBefore.compositions);
     expect(useMediaStore.getState().selectedIds).toEqual(mediaBefore.selectedIds);
     expect(useMediaStore.getState().currentProjectName).toBe(mediaBefore.currentProjectName);

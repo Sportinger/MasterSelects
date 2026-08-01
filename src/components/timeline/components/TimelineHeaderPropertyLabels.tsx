@@ -1,6 +1,9 @@
 import { useEffect, useMemo } from 'react';
-import type { AnimatableProperty, ClipTransform } from '../../../types';
-import { createEffectProperty } from '../../../types';
+import {
+  createEffectProperty,
+  type AnimatableProperty,
+} from '../../../types/animationProperties';
+import type { ClipTransform } from '../../../types/timelineCore';
 import { useTimelineStore } from '../../../stores/timeline';
 import { TimelineHeaderPropertyRow } from './TimelineHeaderPropertyRow';
 import {

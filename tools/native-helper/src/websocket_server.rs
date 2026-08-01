@@ -17,6 +17,7 @@ use crate::muscriptor;
 use crate::protocol::{error_codes, Command, Response};
 use crate::session::{AppState, Session};
 
+#[allow(clippy::result_large_err)] // tungstenite's callback fixes this result type.
 pub(super) async fn handle_connection(
     stream: TcpStream,
     addr: SocketAddr,
@@ -272,6 +273,11 @@ async fn handle_websocket(
                             let id_ref = id_clone.clone();
 
                             let result = matanyone::download_model(move |progress| {
+                                debug!(
+                                    bytes_downloaded = progress.bytes_downloaded,
+                                    total_bytes = progress.total_bytes,
+                                    "MatAnyone2 model download progress"
+                                );
                                 let speed_str = format!(
                                     "{:.1} MB/s",
                                     progress.speed_bytes_per_sec / 1_048_576.0
@@ -300,6 +306,7 @@ async fn handle_websocket(
                                         "type": "complete",
                                         "downloaded": model_info.downloaded,
                                         "model_path": model_info.model_path,
+                                        "config_path": model_info.config_path,
                                         "size_bytes": model_info.size_bytes,
                                     }),
                                 ),

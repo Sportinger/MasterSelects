@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  getHistoryStateView,
   initHistoryStoreRefs,
   useHistoryStore,
 } from '../../src/stores/historyStore';
@@ -126,13 +127,15 @@ describe('audio history snapshots', () => {
 
   beforeEach(() => {
     useHistoryStore.setState({
-      undoStack: [],
-      redoStack: [],
-      currentSnapshot: null,
+      nodes: {},
+      rootId: null,
+      activeNodeId: null,
+      lastVisitedChildByNodeId: {},
+      eventLog: [],
       isApplying: false,
       batchId: null,
       batchLabel: null,
-      maxHistorySize: 50,
+      maxHistoryNodes: 50,
     });
 
     mocks = createMockStores();
@@ -224,7 +227,7 @@ describe('audio history snapshots', () => {
       files: [mockMediaFile({ id: 'media-1', audioAnalysisRefs: mediaAudioAnalysisRefs })],
     });
 
-    useHistoryStore.getState().captureSnapshot('audio state');
+    getHistoryStateView().captureSnapshot('audio state');
 
     clipAudioState.sourceAudioRevisionId = 'mutated-rev';
     clipAudioState.sourceAnalysisRefs?.spectrogramTileSetIds?.push('mutated-spectrogram');
@@ -232,7 +235,7 @@ describe('audio history snapshots', () => {
     masterAudioState.exportPreflight?.warnings?.push({ code: 'mutated', message: 'mutated', severity: 'info' });
     mediaAudioAnalysisRefs.spectrogramTileSetIds?.push('mutated-media-spectrogram');
 
-    const snapshot = useHistoryStore.getState().currentSnapshot!;
+    const snapshot = getHistoryStateView().currentSnapshot!;
 
     expect(snapshot.timeline.clips[0].audioState?.sourceAudioRevisionId).toBe('rev-1');
     expect(snapshot.timeline.clips[0].audioState?.sourceAnalysisRefs).toEqual({
@@ -282,8 +285,8 @@ describe('audio history snapshots', () => {
       ],
     });
 
-    useHistoryStore.getState().captureSnapshot('generating waveform');
-    const serialized = JSON.stringify(useHistoryStore.getState().currentSnapshot);
+    getHistoryStateView().captureSnapshot('generating waveform');
+    const serialized = JSON.stringify(getHistoryStateView().currentSnapshot);
 
     expect(serialized).not.toContain('audioAnalysisJob');
     expect(serialized).not.toContain('waveformGenerating');
@@ -325,7 +328,7 @@ describe('audio history snapshots', () => {
     mocks.setMediaState({
       files: [mockMediaFile({ id: 'media-1', audioAnalysisRefs: mediaAudioAnalysisRefs })],
     });
-    useHistoryStore.getState().captureSnapshot('before');
+    getHistoryStateView().captureSnapshot('before');
 
     mocks.setTimelineState({
       clips: [createMockClip({ id: 'clip-1', trackId: 'a1' })],
@@ -335,17 +338,17 @@ describe('audio history snapshots', () => {
     mocks.setMediaState({
       files: [mockMediaFile({ id: 'media-1' })],
     });
-    useHistoryStore.getState().captureSnapshot('after');
+    getHistoryStateView().captureSnapshot('after');
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
 
     expect(mocks.timeline.getState().clips[0].audioState).toEqual(clipAudioState);
     expect(mocks.timeline.getState().tracks[0].audioState).toEqual(trackAudioState);
     expect(mocks.timeline.getState().masterAudioState).toEqual(masterAudioState);
     expect(mocks.media.getState().files[0].audioAnalysisRefs).toEqual(mediaAudioAnalysisRefs);
-    expectNoAudioPayloadFields(useHistoryStore.getState().currentSnapshot);
+    expectNoAudioPayloadFields(getHistoryStateView().currentSnapshot);
 
-    useHistoryStore.getState().redo();
+    getHistoryStateView().redo();
 
     expect(mocks.timeline.getState().clips[0].audioState).toBeUndefined();
     expect(mocks.timeline.getState().tracks[0].audioState).toBeUndefined();

@@ -316,7 +316,7 @@ export function MotionAppearanceStackEditor({
   if (!appearance) return null;
 
   return (
-    <div className="properties-section">
+    <div className="properties-section motion-appearance-stack-editor">
       <div className="control-row">
         <label className="prop-label">Appearances</label>
         <select
@@ -338,21 +338,22 @@ export function MotionAppearanceStackEditor({
         </select>
       </div>
 
-      <div className="control-row" data-preset-revision={presetRevision}>
+      <div className="control-row motion-appearance-preset-row" data-preset-revision={presetRevision}>
         <label className="prop-label">Presets</label>
         <select aria-label="Appearance preset" value={selectedPresetId} onChange={(event) => setSelectedPresetId(event.target.value)}>
           <option value="">Saved presets…</option>
           {presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
         </select>
-        <button type="button" onClick={applyPreset} disabled={!selectedPresetId}>Apply</button>
+        <button className="btn btn-xs" type="button" onClick={applyPreset} disabled={!selectedPresetId}>Apply</button>
         <input aria-label="Appearance preset name" value={presetName} placeholder="Save as preset…" onChange={(event) => setPresetName(event.target.value)} />
-        <button type="button" onClick={savePreset} disabled={!presetName.trim()}>Save</button>
+        <button className="btn btn-xs" type="button" onClick={savePreset} disabled={!presetName.trim()}>Save</button>
       </div>
       {presetError && <div className="control-row" role="alert">{presetError}</div>}
 
       {items.map((item, index) => (
-        <div className="control-row" key={item.id}>
+        <div className="control-row motion-appearance-item-row" key={item.id}>
           <input
+            className="motion-appearance-visibility"
             aria-label={`Show ${item.name}`}
             type="checkbox"
             checked={item.visible}
@@ -361,10 +362,11 @@ export function MotionAppearanceStackEditor({
               (current) => ({ ...current, visible: event.target.checked }),
             )}
           />
-          <button type="button" onClick={() => selectItem(item.id)}>
+          <button className="btn btn-xs motion-appearance-item-name" type="button" onClick={() => selectItem(item.id)}>
             {selected?.id === item.id ? '● ' : ''}{item.name}
           </button>
           <button
+            className="btn btn-xs motion-appearance-reorder-button"
             type="button"
             aria-label={`Move ${item.name} down`}
             disabled={index === 0}
@@ -373,6 +375,7 @@ export function MotionAppearanceStackEditor({
             ↓
           </button>
           <button
+            className="btn btn-xs motion-appearance-reorder-button"
             type="button"
             aria-label={`Move ${item.name} up`}
             disabled={index === items.length - 1}
@@ -380,8 +383,8 @@ export function MotionAppearanceStackEditor({
           >
             ↑
           </button>
-          <button type="button" onClick={() => duplicateItem(item)}>Duplicate</button>
-          <button type="button" onClick={() => removeItem(item.id)}>Remove</button>
+          <button className="btn btn-xs motion-appearance-item-action" type="button" onClick={() => duplicateItem(item)}>Duplicate</button>
+          <button className="btn btn-xs motion-appearance-item-action" type="button" onClick={() => removeItem(item.id)}>Remove</button>
         </div>
       ))}
 
@@ -620,6 +623,7 @@ export function MotionAppearanceStackEditor({
               <div className="control-row">
                 <label className="prop-label">Gradient Stops</label>
                 <button
+                  className="btn btn-xs"
                   type="button"
                   disabled={selected.stops.length >= MOTION_MAX_GRADIENT_STOPS}
                   onClick={() => addGradientStop(selected)}
@@ -652,6 +656,7 @@ export function MotionAppearanceStackEditor({
                     defaultValue={Math.round(stop.offset * 100)}
                   />
                   <button
+                    className="btn btn-xs"
                     type="button"
                     disabled={selected.stops.length <= 2}
                     onClick={() => removeGradientStop(selected, stop.id)}

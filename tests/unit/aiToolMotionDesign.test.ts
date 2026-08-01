@@ -24,10 +24,10 @@ import { MODIFYING_TOOLS } from '../../src/services/aiTools/types';
 import { executeFlashBoardToolCalls } from '../../src/services/flashboard/FlashBoardChatTools';
 import type { MotionDesignClipView } from '../../src/services/motionDesign/mvpCapabilities';
 import {
+  getHistoryStateView,
   initHistoryStoreRefs,
   setHistoryCallbacks,
   setHistoryDisabledForDebug,
-  useHistoryStore,
 } from '../../src/stores/historyStore';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
@@ -142,11 +142,11 @@ describe('AI Motion Design tools', () => {
     resetTimeline();
     setHistoryDisabledForDebug(false);
     initializeHistory();
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
   });
 
   afterEach(() => {
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
     useTimelineStore.setState(initialTimelineState);
     useMediaStore.setState(initialMediaState);
   });
@@ -248,7 +248,7 @@ describe('AI Motion Design tools', () => {
       parentClipId: parent.clipId,
     }, 'internal');
     expect(applied.success).toBe(true);
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
 
     const noOp = await executeAITool('setMotionParent', {
       operation: 'set',
@@ -257,7 +257,7 @@ describe('AI Motion Design tools', () => {
     }, 'internal');
     expect(noOp.success).toBe(false);
     expect(noOp.error).toContain('already has');
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
     expect(useTimelineStore.getState().clips.find((clip) => clip.id === child.clipId)?.parentClipId)
       .toBe(parent.clipId);
 
@@ -267,7 +267,7 @@ describe('AI Motion Design tools', () => {
       parentClipId: 'missing-parent',
     }, 'internal');
     expect(rejected.success).toBe(false);
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
   });
 
   it('reports transform keyframes changed by an animated parenting transaction', async () => {
@@ -332,11 +332,11 @@ describe('AI Motion Design tools', () => {
       source: { type: 'motion-null' },
     });
 
-    expect(useHistoryStore.getState().undo()).toMatchObject({ operation: 'undo' });
+    expect(getHistoryStateView().undo()).toMatchObject({ operation: 'undo' });
     expect(useTimelineStore.getState().clips.some((clip) => clip.id === data.clipId)).toBe(false);
-    expect(useHistoryStore.getState().undo()).toBeNull();
+    expect(getHistoryStateView().undo()).toBeNull();
 
-    expect(useHistoryStore.getState().redo()).toMatchObject({ operation: 'redo' });
+    expect(getHistoryStateView().redo()).toMatchObject({ operation: 'redo' });
     expect(useTimelineStore.getState().clips.find((clip) => clip.id === data.clipId)).toMatchObject({
       trackId: 'video-1',
       name: 'Lower Third Controller',
@@ -361,10 +361,10 @@ describe('AI Motion Design tools', () => {
       source: { type: 'motion-null' },
     });
 
-    expect(useHistoryStore.getState().undo()).toMatchObject({ operation: 'undo' });
+    expect(getHistoryStateView().undo()).toMatchObject({ operation: 'undo' });
     expect(useTimelineStore.getState().clips.some((clip) => clip.id === clipId)).toBe(false);
-    expect(useHistoryStore.getState().undo()).toBeNull();
-    expect(useHistoryStore.getState().redo()).toMatchObject({ operation: 'redo' });
+    expect(getHistoryStateView().undo()).toBeNull();
+    expect(getHistoryStateView().redo()).toMatchObject({ operation: 'redo' });
     expect(useTimelineStore.getState().clips.find((clip) => clip.id === clipId)).toMatchObject({
       name: 'Direct Controller',
       startTime: 3,
@@ -396,7 +396,7 @@ describe('AI Motion Design tools', () => {
     expect(failureData.graphRevisionAfter).toBe(failureData.graphRevisionBefore);
     expect(failureData.stateRevisionAfter).toBe(failureData.stateRevisionBefore);
     expect(useTimelineStore.getState().clips).toHaveLength(0);
-    expect(useHistoryStore.getState().undo()).toBeNull();
+    expect(getHistoryStateView().undo()).toBeNull();
   });
 
   it('rolls standalone Motion Null creation back when a later batch action fails', async () => {
@@ -417,7 +417,7 @@ describe('AI Motion Design tools', () => {
     expect(result.success).toBe(false);
     expect(result.data).toMatchObject({ totalActions: 2, succeeded: 1, failed: 1 });
     expect(useTimelineStore.getState().clips).toHaveLength(0);
-    expect(useHistoryStore.getState().undo()).toBeNull();
+    expect(getHistoryStateView().undo()).toBeNull();
   });
 
   it('creates one Motion Null and parents explicit AI clip ids atomically', async () => {
@@ -464,7 +464,7 @@ describe('AI Motion Design tools', () => {
       transform: structuredClone(clip.transform),
     }));
     const before = readRelevantGraphState();
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
 
     const result = await executeAITool('createMotionNullAndParent', {
       trackId: 'video-1',
@@ -476,11 +476,11 @@ describe('AI Motion Design tools', () => {
     const data = result.data as { clipId: string; affectedClipIds: string[] };
     expect(data.affectedClipIds).toEqual([data.clipId, first.clipId, second.clipId]);
 
-    expect(useHistoryStore.getState().undo()).toMatchObject({ operation: 'undo' });
+    expect(getHistoryStateView().undo()).toMatchObject({ operation: 'undo' });
     expect(readRelevantGraphState()).toEqual(before);
-    expect(useHistoryStore.getState().undo()).toBeNull();
+    expect(getHistoryStateView().undo()).toBeNull();
 
-    expect(useHistoryStore.getState().redo()).toMatchObject({ operation: 'redo' });
+    expect(getHistoryStateView().redo()).toMatchObject({ operation: 'redo' });
     const redone = useTimelineStore.getState().clips;
     expect(redone.find((clip) => clip.id === data.clipId)?.source?.type).toBe('motion-null');
     expect(redone.find((clip) => clip.id === first.clipId)?.parentClipId).toBe(data.clipId);
@@ -1098,12 +1098,12 @@ describe('AI Motion Design tools', () => {
     expect(useTimelineStore.getState().getClipKeyframes(motion!.id)).toHaveLength(2);
     expect(useTimelineStore.getState().getClipKeyframes(text!.id)).toHaveLength(2);
     expect(useTimelineStore.getState().selectedClipIds).toEqual(new Set([text!.id]));
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
 
-    expect(useHistoryStore.getState().undo()).toMatchObject({ operation: 'undo' });
+    expect(getHistoryStateView().undo()).toMatchObject({ operation: 'undo' });
     expect(useTimelineStore.getState().clips).toHaveLength(0);
-    expect(useHistoryStore.getState().undo()).toBeNull();
-    expect(useHistoryStore.getState().redo()).toMatchObject({ operation: 'redo' });
+    expect(getHistoryStateView().undo()).toBeNull();
+    expect(getHistoryStateView().redo()).toMatchObject({ operation: 'redo' });
     expect(useTimelineStore.getState().clips).toHaveLength(2);
     expect(useTimelineStore.getState().selectedClipIds).toEqual(new Set([text!.id]));
   });

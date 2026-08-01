@@ -1,6 +1,10 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import type { AnimatableProperty, ClipTransform, TimelineClip } from '../../../types';
-import { parseMaskProperty } from '../../../types';
+import {
+  parseMaskProperty,
+  type AnimatableProperty,
+} from '../../../types/animationProperties';
+import type { TimelineClip } from '../../../types/timeline';
+import type { ClipTransform } from '../../../types/timelineCore';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import {

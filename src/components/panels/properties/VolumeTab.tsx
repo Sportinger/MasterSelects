@@ -1,7 +1,14 @@
 // Volume Tab - Audio volume and EQ controls
 import { useTimelineStore } from '../../../stores/timeline';
-import type { AnimatableProperty, AudioEffectInstance, AudioEffectParamValue, Keyframe } from '../../../types';
-import { createEffectProperty } from '../../../types';
+import {
+  createEffectProperty,
+  type AnimatableProperty,
+} from '../../../types/animationProperties';
+import type {
+  AudioEffectInstance,
+  AudioEffectParamValue,
+} from '../../../types/audio';
+import type { Keyframe } from '../../../types/keyframes';
 import { interpolateKeyframes } from '../../../utils/keyframeInterpolation';
 import { DraggableNumber, EffectKeyframeToggle, MultiKeyframeToggle } from './shared';
 import { MIDIParameterLabel } from './MIDIParameterLabel';

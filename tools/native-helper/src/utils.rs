@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 /// Call this on any `tokio::process::Command` before `.output()` or `.spawn()`.
 #[cfg(windows)]
 pub fn no_window(cmd: &mut tokio::process::Command) -> &mut tokio::process::Command {
-    use std::os::windows::process::CommandExt;
     cmd.creation_flags(0x08000000)
 }
 
@@ -183,6 +182,7 @@ pub fn is_path_allowed_with_extra(path: &std::path::Path, extra_prefixes: &[Path
     })
 }
 
+#[cfg(test)]
 pub fn is_path_allowed(path: &std::path::Path) -> bool {
     is_path_allowed_with_extra(path, &[])
 }

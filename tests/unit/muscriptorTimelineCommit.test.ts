@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   captureSnapshot,
+  getHistoryStateView,
   initHistoryStoreRefs,
-  useHistoryStore,
 } from '../../src/stores/historyStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { getTimelineClipAudioSourceFileKey } from '../../src/services/audio/audioClipResolution';
@@ -68,7 +68,7 @@ function initializeHistory() {
 describe('commitMidiTranscription', () => {
   beforeEach(() => {
     initializeHistory();
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
     useTimelineStore.setState({
       tracks: [sourceTrack()],
       clips: [sourceClip()],
@@ -130,11 +130,11 @@ describe('commitMidiTranscription', () => {
       sourceFileKey: fingerprint(),
     });
 
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
-    expect(useHistoryStore.getState().undo()).toMatchObject({ operation: 'undo' });
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
+    expect(getHistoryStateView().undo()).toMatchObject({ operation: 'undo' });
     expect(useTimelineStore.getState().tracks).toEqual([sourceTrack()]);
     expect(useTimelineStore.getState().clips.map(clip => clip.id)).toEqual(['audio-clip']);
-    expect(useHistoryStore.getState().canUndo()).toBe(false);
+    expect(getHistoryStateView().canUndo()).toBe(false);
   });
 
   it('does not mutate state or history for an empty transcription', () => {
@@ -149,7 +149,7 @@ describe('commitMidiTranscription', () => {
     expect(result).toBeNull();
     expect(useTimelineStore.getState().tracks).toBe(beforeTracks);
     expect(useTimelineStore.getState().clips).toBe(beforeClips);
-    expect(useHistoryStore.getState().undoStack).toHaveLength(0);
+    expect(getHistoryStateView().undoStack).toHaveLength(0);
   });
 
   it('rejects stale source file keys and locked source tracks without mutation', () => {
@@ -176,7 +176,7 @@ describe('commitMidiTranscription', () => {
     });
     expect(locked).toBeNull();
     expect(useTimelineStore.getState().clips).toHaveLength(1);
-    expect(useHistoryStore.getState().undoStack).toHaveLength(0);
+    expect(getHistoryStateView().undoStack).toHaveLength(0);
   });
 
   it('rejects a result when processed clip state changed during inference', () => {
@@ -202,6 +202,6 @@ describe('commitMidiTranscription', () => {
     expect(result).toBeNull();
     expect(useTimelineStore.getState().clips).toHaveLength(1);
     expect(useTimelineStore.getState().tracks).toHaveLength(1);
-    expect(useHistoryStore.getState().undoStack).toHaveLength(0);
+    expect(getHistoryStateView().undoStack).toHaveLength(0);
   });
 });

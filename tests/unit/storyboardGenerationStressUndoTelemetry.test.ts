@@ -25,6 +25,7 @@ import {
   resetStoryboardTelemetryForTests,
 } from '../../src/services/storyboard/telemetry';
 import {
+  getHistoryStateView,
   initHistoryStoreRefs,
   setHistoryCallbacks,
   setHistoryDisabledForDebug,
@@ -196,14 +197,11 @@ beforeEach(() => {
     suppressCaptures: () => undefined,
   });
   useHistoryStore.setState({
-    undoStack: [],
-    redoStack: [],
+    nodes: {},
+    rootId: null,
+    activeNodeId: null,
+    lastVisitedChildByNodeId: {},
     eventLog: [],
-    branches: [],
-    navigationEntries: null,
-    navigationSnapshotsByEntryId: {},
-    activeEntryId: null,
-    currentSnapshot: null,
     isApplying: false,
     batchId: null,
     batchLabel: null,
@@ -212,7 +210,7 @@ beforeEach(() => {
 
 afterEach(() => {
   resetStoryboardTelemetryForTests();
-  useHistoryStore.getState().clearHistory();
+  getHistoryStateView().clearHistory();
   flashBoardMediaBridge.hydrateMetadata({});
   useFlashBoardStore.setState({
     activeGenerationRecords: [],
@@ -760,7 +758,7 @@ describe('storyboard generation telemetry and attachment undo', () => {
       },
     });
 
-    useHistoryStore.getState().captureSnapshot('Imported generation is ready');
+    getHistoryStateView().captureSnapshot('Imported generation is ready');
     timeline = {
       ...timeline,
       clips: [generatedAttachmentClip(generatedFile)],
@@ -785,9 +783,9 @@ describe('storyboard generation telemetry and attachment undo', () => {
         },
       },
     };
-    useHistoryStore.getState().captureSnapshot('Attach generated candidate');
+    getHistoryStateView().captureSnapshot('Attach generated candidate');
 
-    expect(useHistoryStore.getState().undo()).toEqual({
+    expect(getHistoryStateView().undo()).toEqual({
       operation: 'undo',
       label: 'Attach generated candidate',
     });
@@ -821,7 +819,7 @@ describe('storyboard generation telemetry and attachment undo', () => {
       status: 'review',
     });
 
-    expect(useHistoryStore.getState().redo()).toEqual({
+    expect(getHistoryStateView().redo()).toEqual({
       operation: 'redo',
       label: 'Attach generated candidate',
     });

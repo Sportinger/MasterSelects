@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { useHistoryStore, initHistoryStoreRefs, setHistoryCallbacks, captureSnapshot as captureSnapshotFn, undo as undoFn, redo as redoFn, startBatch as startBatchFn, endBatch as endBatchFn, serializeHistoryStateForProject, hydrateHistoryStateFromProject, setHistoryDisabledForDebug, isHistoryDisabledForDebug } from '../../src/stores/historyStore';
+import { getHistoryStateView, useHistoryStore, initHistoryStoreRefs, setHistoryCallbacks, captureSnapshot as captureSnapshotFn, undo as undoFn, redo as redoFn, startBatch as startBatchFn, endBatch as endBatchFn, serializeHistoryStateForProject, hydrateHistoryStateFromProject, setHistoryDisabledForDebug, isHistoryDisabledForDebug } from '../../src/stores/historyStore';
 import { findHistoryStateBoundaryViolations } from '../../src/stores/timeline/historyTimelineEditState';
 import { timelineRuntimeCoordinator } from '../../src/services/timeline/timelineRuntimeCoordinator';
 import type { Layer, TimelineClip } from '../../src/types';
@@ -163,9 +163,12 @@ describe('historyStore', () => {
 
     // Reset history store state
     useHistoryStore.setState({
-      undoStack: [],
-      redoStack: [],
-      currentSnapshot: null,
+      nodes: {},
+      rootId: null,
+      activeNodeId: null,
+      lastVisitedChildByNodeId: {},
+      eventLog: [],
+      maxHistoryNodes: 150,
       isApplying: false,
       batchId: null,
       batchLabel: null,
@@ -181,8 +184,8 @@ describe('historyStore', () => {
   });
 
   it('captureSnapshot: first capture sets currentSnapshot', () => {
-    useHistoryStore.getState().captureSnapshot('first');
-    const state = useHistoryStore.getState();
+    getHistoryStateView().captureSnapshot('first');
+    const state = getHistoryStateView();
     expect(state.currentSnapshot).not.toBeNull();
     expect(state.currentSnapshot!.label).toBe('first');
     expect(state.undoStack.length).toBe(0);
@@ -222,8 +225,8 @@ describe('historyStore', () => {
       selectedLayerId: 'runtime-layer',
     });
 
-    useHistoryStore.getState().captureSnapshot('with runtime');
-    const timelineEditState = useHistoryStore.getState().currentSnapshot?.timelineEditState;
+    getHistoryStateView().captureSnapshot('with runtime');
+    const timelineEditState = getHistoryStateView().currentSnapshot?.timelineEditState;
 
     expect(timelineEditState).toBeDefined();
     expect(findHistoryStateBoundaryViolations(timelineEditState)).toEqual([]);
@@ -274,8 +277,8 @@ describe('historyStore', () => {
       ],
     });
 
-    useHistoryStore.getState().captureSnapshot('with runtime');
-    const snapshot = useHistoryStore.getState().currentSnapshot;
+    getHistoryStateView().captureSnapshot('with runtime');
+    const snapshot = getHistoryStateView().currentSnapshot;
     const legacyClip = snapshot?.timeline.clips[0];
     const legacyLayer = snapshot?.timeline.layers[0];
 
@@ -289,72 +292,72 @@ describe('historyStore', () => {
   });
 
   it('captureSnapshot: second capture pushes first to undoStack', () => {
-    useHistoryStore.getState().captureSnapshot('first');
-    useHistoryStore.getState().captureSnapshot('second');
-    const state = useHistoryStore.getState();
+    getHistoryStateView().captureSnapshot('first');
+    getHistoryStateView().captureSnapshot('second');
+    const state = getHistoryStateView();
     expect(state.undoStack.length).toBe(1);
     expect(state.undoStack[0].label).toBe('first');
     expect(state.currentSnapshot!.label).toBe('second');
   });
 
   it('captureSnapshot: clears redo stack on new action', () => {
-    useHistoryStore.getState().captureSnapshot('first');
-    useHistoryStore.getState().captureSnapshot('second');
-    useHistoryStore.getState().captureSnapshot('third');
+    getHistoryStateView().captureSnapshot('first');
+    getHistoryStateView().captureSnapshot('second');
+    getHistoryStateView().captureSnapshot('third');
     // Undo to create redo stack
-    useHistoryStore.getState().undo();
-    expect(useHistoryStore.getState().redoStack.length).toBe(1);
+    getHistoryStateView().undo();
+    expect(getHistoryStateView().redoStack.length).toBe(1);
 
     // New action clears redo
-    useHistoryStore.getState().captureSnapshot('new-action');
-    expect(useHistoryStore.getState().redoStack.length).toBe(0);
+    getHistoryStateView().captureSnapshot('new-action');
+    expect(getHistoryStateView().redoStack.length).toBe(0);
   });
 
   it('captureSnapshot: does not capture during isApplying', () => {
     useHistoryStore.setState({ isApplying: true });
-    useHistoryStore.getState().captureSnapshot('should-not-capture');
-    expect(useHistoryStore.getState().currentSnapshot).toBeNull();
+    getHistoryStateView().captureSnapshot('should-not-capture');
+    expect(getHistoryStateView().currentSnapshot).toBeNull();
   });
 
   it('debug disable: suppresses captures and batches', () => {
     setHistoryDisabledForDebug(true);
     expect(isHistoryDisabledForDebug()).toBe(true);
 
-    useHistoryStore.getState().captureSnapshot('hidden');
-    useHistoryStore.getState().startBatch('hidden batch');
-    useHistoryStore.getState().endBatch();
+    getHistoryStateView().captureSnapshot('hidden');
+    getHistoryStateView().startBatch('hidden batch');
+    getHistoryStateView().endBatch();
 
-    const state = useHistoryStore.getState();
+    const state = getHistoryStateView();
     expect(state.currentSnapshot).toBeNull();
     expect(state.undoStack).toEqual([]);
     expect(state.batchId).toBeNull();
   });
 
   it('captureSnapshot: does not capture during batch', () => {
-    useHistoryStore.getState().captureSnapshot('initial');
-    useHistoryStore.getState().startBatch('batch');
-    useHistoryStore.getState().captureSnapshot('during-batch');
+    getHistoryStateView().captureSnapshot('initial');
+    getHistoryStateView().startBatch('batch');
+    getHistoryStateView().captureSnapshot('during-batch');
     // Still only 1 snapshot (initial), nothing new pushed
-    expect(useHistoryStore.getState().undoStack.length).toBe(0);
+    expect(getHistoryStateView().undoStack.length).toBe(0);
   });
 
   it('undo: restores previous state', () => {
     // Capture initial state
-    useHistoryStore.getState().captureSnapshot('add track');
+    getHistoryStateView().captureSnapshot('add track');
 
     // Change state
     mocks.setTimelineState({ zoom: 100 });
-    useHistoryStore.getState().captureSnapshot('zoom change');
+    getHistoryStateView().captureSnapshot('zoom change');
 
-    expect(useHistoryStore.getState().undoStack.length).toBe(1);
+    expect(getHistoryStateView().undoStack.length).toBe(1);
 
     // Undo
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
 
     // Timeline state should be restored
     expect(mocks.timeline.getState().zoom).toBe(50); // original value
-    expect(useHistoryStore.getState().undoStack.length).toBe(0);
-    expect(useHistoryStore.getState().redoStack.length).toBe(1);
+    expect(getHistoryStateView().undoStack.length).toBe(0);
+    expect(getHistoryStateView().redoStack.length).toBe(1);
   });
 
   it('undo: restores from timelineEditState and reuses compatible current runtime', () => {
@@ -383,11 +386,11 @@ describe('historyStore', () => {
     });
 
     mocks.setTimelineState({ clips: [firstClip] });
-    useHistoryStore.getState().captureSnapshot('initial runtime');
+    getHistoryStateView().captureSnapshot('initial runtime');
     mocks.setTimelineState({ clips: [secondClip] });
-    useHistoryStore.getState().captureSnapshot('moved runtime');
+    getHistoryStateView().captureSnapshot('moved runtime');
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     const restoredClip = mocks.timeline.getState().clips[0];
 
     expect(restoredClip.startTime).toBe(0);
@@ -427,12 +430,12 @@ describe('historyStore', () => {
     });
 
     mocks.setTimelineState({ clips: [firstClip] });
-    useHistoryStore.getState().captureSnapshot('initial runtime');
+    getHistoryStateView().captureSnapshot('initial runtime');
     mocks.setTimelineState({ clips: [secondClip] });
-    useHistoryStore.getState().captureSnapshot('moved runtime');
+    getHistoryStateView().captureSnapshot('moved runtime');
 
     timelineRuntimeCoordinator.clearResources();
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
 
     const resources = timelineRuntimeCoordinator.getBridgeStats().policies.interactive.resources;
     expect(resources.map((resource) => resource.owner.ownerId).toSorted()).toEqual([
@@ -457,11 +460,11 @@ describe('historyStore', () => {
     });
 
     mocks.setTimelineState({ clips: [firstClip] });
-    useHistoryStore.getState().captureSnapshot('initial runtime');
+    getHistoryStateView().captureSnapshot('initial runtime');
     mocks.setTimelineState({ clips: [] });
-    useHistoryStore.getState().captureSnapshot('delete runtime');
+    getHistoryStateView().captureSnapshot('delete runtime');
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     const restoredClip = mocks.timeline.getState().clips[0];
 
     expect(restoredClip.id).toBe('deleted-runtime-clip');
@@ -472,66 +475,66 @@ describe('historyStore', () => {
   });
 
   it('undo: returns the label of the action being undone', () => {
-    useHistoryStore.getState().captureSnapshot('initial');
+    getHistoryStateView().captureSnapshot('initial');
 
     mocks.setTimelineState({ zoom: 100 });
-    useHistoryStore.getState().captureSnapshot('zoom change');
+    getHistoryStateView().captureSnapshot('zoom change');
 
-    const result = useHistoryStore.getState().undo();
+    const result = getHistoryStateView().undo();
 
     expect(result).toEqual({ operation: 'undo', label: 'zoom change' });
   });
 
   it('redo: restores undone state', () => {
-    useHistoryStore.getState().captureSnapshot('initial');
+    getHistoryStateView().captureSnapshot('initial');
 
     mocks.setTimelineState({ zoom: 100 });
-    useHistoryStore.getState().captureSnapshot('zoom 100');
+    getHistoryStateView().captureSnapshot('zoom 100');
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     expect(mocks.timeline.getState().zoom).toBe(50);
 
-    useHistoryStore.getState().redo();
+    getHistoryStateView().redo();
     expect(mocks.timeline.getState().zoom).toBe(100);
-    expect(useHistoryStore.getState().redoStack.length).toBe(0);
-    expect(useHistoryStore.getState().undoStack.length).toBe(1);
+    expect(getHistoryStateView().redoStack.length).toBe(0);
+    expect(getHistoryStateView().undoStack.length).toBe(1);
   });
 
   it('redo: returns the label of the action being redone', () => {
-    useHistoryStore.getState().captureSnapshot('initial');
+    getHistoryStateView().captureSnapshot('initial');
 
     mocks.setTimelineState({ zoom: 100 });
-    useHistoryStore.getState().captureSnapshot('zoom 100');
-    useHistoryStore.getState().undo();
+    getHistoryStateView().captureSnapshot('zoom 100');
+    getHistoryStateView().undo();
 
-    const result = useHistoryStore.getState().redo();
+    const result = getHistoryStateView().redo();
 
     expect(result).toEqual({ operation: 'redo', label: 'zoom 100' });
   });
 
   it('canUndo / canRedo: reflect stack state', () => {
-    expect(useHistoryStore.getState().canUndo()).toBe(false);
-    expect(useHistoryStore.getState().canRedo()).toBe(false);
+    expect(getHistoryStateView().canUndo()).toBe(false);
+    expect(getHistoryStateView().canRedo()).toBe(false);
 
-    useHistoryStore.getState().captureSnapshot('a');
-    useHistoryStore.getState().captureSnapshot('b');
+    getHistoryStateView().captureSnapshot('a');
+    getHistoryStateView().captureSnapshot('b');
 
-    expect(useHistoryStore.getState().canUndo()).toBe(true);
-    expect(useHistoryStore.getState().canRedo()).toBe(false);
+    expect(getHistoryStateView().canUndo()).toBe(true);
+    expect(getHistoryStateView().canRedo()).toBe(false);
 
-    useHistoryStore.getState().undo();
-    expect(useHistoryStore.getState().canUndo()).toBe(false);
-    expect(useHistoryStore.getState().canRedo()).toBe(true);
+    getHistoryStateView().undo();
+    expect(getHistoryStateView().canUndo()).toBe(false);
+    expect(getHistoryStateView().canRedo()).toBe(true);
   });
 
   it('getHistoryEntries: lists undoable, current, and redoable snapshots', () => {
-    useHistoryStore.getState().captureSnapshot('a');
-    useHistoryStore.getState().captureSnapshot('b');
-    useHistoryStore.getState().captureSnapshot('c');
+    getHistoryStateView().captureSnapshot('a');
+    getHistoryStateView().captureSnapshot('b');
+    getHistoryStateView().captureSnapshot('c');
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
 
-    expect(useHistoryStore.getState().getHistoryEntries().map((entry) => ({
+    expect(getHistoryStateView().getHistoryEntries().map((entry) => ({
       kind: entry.kind,
       label: entry.label,
     }))).toEqual([
@@ -543,20 +546,20 @@ describe('historyStore', () => {
 
   it('project persistence: serializes and hydrates visible history metadata', () => {
     mocks.setTimelineState({ zoom: 10 });
-    useHistoryStore.getState().captureSnapshot('zoom 10');
+    getHistoryStateView().captureSnapshot('zoom 10');
     mocks.setTimelineState({ zoom: 20 });
-    useHistoryStore.getState().captureSnapshot('zoom 20');
+    getHistoryStateView().captureSnapshot('zoom 20');
 
     const persisted = serializeHistoryStateForProject();
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
     mocks.setTimelineState({ zoom: 999 });
 
     hydrateHistoryStateFromProject(persisted);
-    expect(useHistoryStore.getState().getHistoryEntries().map((entry) => entry.label))
+    expect(getHistoryStateView().getHistoryEntries().map((entry) => entry.label))
       .toEqual(['zoom 10', 'zoom 20']);
 
-    expect(useHistoryStore.getState().undo()).toBeNull();
-    expect(mocks.timeline.getState().zoom).toBe(999);
+    expect(getHistoryStateView().undo()).toMatchObject({ operation: 'undo', label: 'zoom 20' });
+    expect(mocks.timeline.getState().zoom).toBe(10);
   });
 
   it('project persistence: strips browser-only media payloads from snapshots', () => {
@@ -572,7 +575,7 @@ describe('historyStore', () => {
       ],
     });
 
-    useHistoryStore.getState().captureSnapshot('with media file');
+    getHistoryStateView().captureSnapshot('with media file');
     const serialized = JSON.stringify(serializeHistoryStateForProject());
 
     expect(serialized).not.toContain('blob:');
@@ -582,35 +585,35 @@ describe('historyStore', () => {
   // ─── Batch operations ────────────────────────────────────────────────
 
   it('startBatch / endBatch: groups changes into one undo step', () => {
-    useHistoryStore.getState().captureSnapshot('initial');
-    expect(useHistoryStore.getState().undoStack.length).toBe(0);
+    getHistoryStateView().captureSnapshot('initial');
+    expect(getHistoryStateView().undoStack.length).toBe(0);
 
-    useHistoryStore.getState().startBatch('batch op');
+    getHistoryStateView().startBatch('batch op');
 
     // Multiple state changes during batch
     mocks.setTimelineState({ zoom: 80 });
     mocks.setTimelineState({ zoom: 120 });
 
-    useHistoryStore.getState().endBatch();
+    getHistoryStateView().endBatch();
 
     // Only one entry should be in undo stack
-    expect(useHistoryStore.getState().undoStack.length).toBe(1);
-    expect(useHistoryStore.getState().currentSnapshot!.label).toBe('batch op');
+    expect(getHistoryStateView().undoStack.length).toBe(1);
+    expect(getHistoryStateView().currentSnapshot!.label).toBe('batch op');
   });
 
   it('startBatch: ignored if already batching', () => {
-    useHistoryStore.getState().startBatch('first');
-    const batchId = useHistoryStore.getState().batchId;
-    useHistoryStore.getState().startBatch('second');
+    getHistoryStateView().startBatch('first');
+    const batchId = getHistoryStateView().batchId;
+    getHistoryStateView().startBatch('second');
     // Should not change
-    expect(useHistoryStore.getState().batchId).toBe(batchId);
-    expect(useHistoryStore.getState().batchLabel).toBe('first');
-    useHistoryStore.getState().endBatch();
+    expect(getHistoryStateView().batchId).toBe(batchId);
+    expect(getHistoryStateView().batchLabel).toBe('first');
+    getHistoryStateView().endBatch();
   });
 
   it('endBatch: no-op if not batching', () => {
-    useHistoryStore.getState().endBatch(); // should not throw
-    expect(useHistoryStore.getState().batchId).toBeNull();
+    getHistoryStateView().endBatch(); // should not throw
+    expect(getHistoryStateView().batchId).toBeNull();
   });
 
   // ─── Map serialization ───────────────────────────────────────────────
@@ -621,8 +624,8 @@ describe('historyStore', () => {
     ]);
     mocks.setTimelineState({ clipKeyframes: keyframeMap });
 
-    useHistoryStore.getState().captureSnapshot('with keyframes');
-    const snapshot = useHistoryStore.getState().currentSnapshot!;
+    getHistoryStateView().captureSnapshot('with keyframes');
+    const snapshot = getHistoryStateView().currentSnapshot!;
     // Should be serialized to Record, not Map
     expect(snapshot.timeline.clipKeyframes).toHaveProperty('clip-1');
     expect(Array.isArray(snapshot.timeline.clipKeyframes['clip-1'])).toBe(true);
@@ -634,14 +637,14 @@ describe('historyStore', () => {
       ['clip-1', [{ id: 'kf1', clipId: 'clip-1', time: 0, property: 'opacity', value: 1, easing: 'linear' }]],
     ]);
     mocks.setTimelineState({ clipKeyframes: keyframeMap });
-    useHistoryStore.getState().captureSnapshot('with keyframes');
+    getHistoryStateView().captureSnapshot('with keyframes');
 
     // Change keyframes
     mocks.setTimelineState({ clipKeyframes: new Map() });
-    useHistoryStore.getState().captureSnapshot('removed keyframes');
+    getHistoryStateView().captureSnapshot('removed keyframes');
 
     // Undo should restore the Map
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     const restored = mocks.timeline.getState().clipKeyframes;
     expect(restored instanceof Map).toBe(true);
     expect(restored.get('clip-1')?.length).toBe(1);
@@ -649,12 +652,12 @@ describe('historyStore', () => {
 
   it('undo restores Set from array (selectedClipIds)', () => {
     mocks.setTimelineState({ selectedClipIds: new Set(['a', 'b']) });
-    useHistoryStore.getState().captureSnapshot('with selection');
+    getHistoryStateView().captureSnapshot('with selection');
 
     mocks.setTimelineState({ selectedClipIds: new Set() });
-    useHistoryStore.getState().captureSnapshot('cleared');
+    getHistoryStateView().captureSnapshot('cleared');
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     const restored = mocks.timeline.getState().selectedClipIds;
     expect(restored instanceof Set).toBe(true);
     expect(restored.has('a')).toBe(true);
@@ -664,10 +667,10 @@ describe('historyStore', () => {
   // ─── clearHistory ────────────────────────────────────────────────────
 
   it('clearHistory: resets all stacks', () => {
-    useHistoryStore.getState().captureSnapshot('a');
-    useHistoryStore.getState().captureSnapshot('b');
-    useHistoryStore.getState().clearHistory();
-    const state = useHistoryStore.getState();
+    getHistoryStateView().captureSnapshot('a');
+    getHistoryStateView().captureSnapshot('b');
+    getHistoryStateView().clearHistory();
+    const state = getHistoryStateView();
     expect(state.undoStack.length).toBe(0);
     expect(state.redoStack.length).toBe(0);
     expect(state.currentSnapshot).toBeNull();
@@ -676,21 +679,21 @@ describe('historyStore', () => {
   // ─── History size limit ──────────────────────────────────────────────
 
   it('respects maxHistorySize', () => {
-    useHistoryStore.setState({ maxHistorySize: 3 });
+    useHistoryStore.setState({ maxHistoryNodes: 3 });
     for (let i = 0; i < 6; i++) {
-      useHistoryStore.getState().captureSnapshot(`action-${i}`);
+      getHistoryStateView().captureSnapshot(`action-${i}`);
     }
     // 5 captures create 5 undo entries (first becomes current, next 5 push)
     // But capped at 3
-    expect(useHistoryStore.getState().undoStack.length).toBeLessThanOrEqual(3);
+    expect(getHistoryStateView().undoStack.length).toBeLessThanOrEqual(3);
   });
 
   it('respects maxHistorySize: oldest entries are removed first', () => {
-    useHistoryStore.setState({ maxHistorySize: 3 });
+    useHistoryStore.setState({ maxHistoryNodes: 3 });
     for (let i = 0; i < 6; i++) {
-      useHistoryStore.getState().captureSnapshot(`action-${i}`);
+      getHistoryStateView().captureSnapshot(`action-${i}`);
     }
-    const state = useHistoryStore.getState();
+    const state = getHistoryStateView();
     // The oldest labels should have been shifted out
     const labels = state.undoStack.map((s) => s.label);
     expect(labels).not.toContain('action-0');
@@ -702,32 +705,32 @@ describe('historyStore', () => {
   // ─── Undo edge cases ──────────────────────────────────────────────
 
   it('undo: no-op when undo stack is empty', () => {
-    useHistoryStore.getState().captureSnapshot('only');
-    const stateBefore = useHistoryStore.getState();
+    getHistoryStateView().captureSnapshot('only');
+    const stateBefore = getHistoryStateView();
     expect(stateBefore.undoStack.length).toBe(0);
 
-    useHistoryStore.getState().undo(); // should not throw
+    getHistoryStateView().undo(); // should not throw
 
-    const stateAfter = useHistoryStore.getState();
+    const stateAfter = getHistoryStateView();
     expect(stateAfter.undoStack.length).toBe(0);
     expect(stateAfter.redoStack.length).toBe(0);
     expect(stateAfter.currentSnapshot!.label).toBe('only');
   });
 
   it('undo: no-op when no snapshots exist at all', () => {
-    useHistoryStore.getState().undo(); // should not throw
-    expect(useHistoryStore.getState().currentSnapshot).toBeNull();
-    expect(useHistoryStore.getState().undoStack.length).toBe(0);
-    expect(useHistoryStore.getState().redoStack.length).toBe(0);
+    getHistoryStateView().undo(); // should not throw
+    expect(getHistoryStateView().currentSnapshot).toBeNull();
+    expect(getHistoryStateView().undoStack.length).toBe(0);
+    expect(getHistoryStateView().redoStack.length).toBe(0);
   });
 
   it('redo: no-op when redo stack is empty', () => {
-    useHistoryStore.getState().captureSnapshot('a');
-    useHistoryStore.getState().captureSnapshot('b');
+    getHistoryStateView().captureSnapshot('a');
+    getHistoryStateView().captureSnapshot('b');
 
-    useHistoryStore.getState().redo(); // should not throw, redo is empty
+    getHistoryStateView().redo(); // should not throw, redo is empty
 
-    const state = useHistoryStore.getState();
+    const state = getHistoryStateView();
     expect(state.currentSnapshot!.label).toBe('b');
     expect(state.undoStack.length).toBe(1);
     expect(state.redoStack.length).toBe(0);
@@ -737,182 +740,189 @@ describe('historyStore', () => {
 
   it('undo/redo: blocked while timeline export is active', () => {
     mocks.setTimelineState({ zoom: 10 });
-    useHistoryStore.getState().captureSnapshot('zoom-10');
+    getHistoryStateView().captureSnapshot('zoom-10');
     mocks.setTimelineState({ zoom: 20 });
-    useHistoryStore.getState().captureSnapshot('zoom-20');
+    getHistoryStateView().captureSnapshot('zoom-20');
     mocks.setTimelineState({ isExporting: true });
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     expect(mocks.timeline.getState().zoom).toBe(20);
-    expect(useHistoryStore.getState().currentSnapshot!.label).toBe('zoom-20');
+    expect(getHistoryStateView().currentSnapshot!.label).toBe('zoom-20');
 
     mocks.setTimelineState({ isExporting: false });
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     expect(mocks.timeline.getState().zoom).toBe(10);
 
     mocks.setTimelineState({ isExporting: true });
-    useHistoryStore.getState().redo();
+    getHistoryStateView().redo();
     expect(mocks.timeline.getState().zoom).toBe(10);
   });
 
   it('multiple sequential undos restore state correctly', () => {
     mocks.setTimelineState({ zoom: 10 });
-    useHistoryStore.getState().captureSnapshot('zoom-10');
+    getHistoryStateView().captureSnapshot('zoom-10');
 
     mocks.setTimelineState({ zoom: 20 });
-    useHistoryStore.getState().captureSnapshot('zoom-20');
+    getHistoryStateView().captureSnapshot('zoom-20');
 
     mocks.setTimelineState({ zoom: 30 });
-    useHistoryStore.getState().captureSnapshot('zoom-30');
+    getHistoryStateView().captureSnapshot('zoom-30');
 
     // Undo to zoom-20
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     expect(mocks.timeline.getState().zoom).toBe(20);
-    expect(useHistoryStore.getState().undoStack.length).toBe(1);
-    expect(useHistoryStore.getState().redoStack.length).toBe(1);
+    expect(getHistoryStateView().undoStack.length).toBe(1);
+    expect(getHistoryStateView().redoStack.length).toBe(1);
 
     // Undo to zoom-10
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     expect(mocks.timeline.getState().zoom).toBe(10);
-    expect(useHistoryStore.getState().undoStack.length).toBe(0);
-    expect(useHistoryStore.getState().redoStack.length).toBe(2);
+    expect(getHistoryStateView().undoStack.length).toBe(0);
+    expect(getHistoryStateView().redoStack.length).toBe(2);
   });
 
   it('multiple sequential redos restore state correctly', () => {
     mocks.setTimelineState({ zoom: 10 });
-    useHistoryStore.getState().captureSnapshot('zoom-10');
+    getHistoryStateView().captureSnapshot('zoom-10');
 
     mocks.setTimelineState({ zoom: 20 });
-    useHistoryStore.getState().captureSnapshot('zoom-20');
+    getHistoryStateView().captureSnapshot('zoom-20');
 
     mocks.setTimelineState({ zoom: 30 });
-    useHistoryStore.getState().captureSnapshot('zoom-30');
+    getHistoryStateView().captureSnapshot('zoom-30');
 
     // Undo twice
-    useHistoryStore.getState().undo();
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
+    getHistoryStateView().undo();
     expect(mocks.timeline.getState().zoom).toBe(10);
 
     // Redo to zoom-20
-    useHistoryStore.getState().redo();
+    getHistoryStateView().redo();
     expect(mocks.timeline.getState().zoom).toBe(20);
-    expect(useHistoryStore.getState().redoStack.length).toBe(1);
+    expect(getHistoryStateView().redoStack.length).toBe(1);
 
     // Redo to zoom-30
-    useHistoryStore.getState().redo();
+    getHistoryStateView().redo();
     expect(mocks.timeline.getState().zoom).toBe(30);
-    expect(useHistoryStore.getState().redoStack.length).toBe(0);
+    expect(getHistoryStateView().redoStack.length).toBe(0);
   });
 
   it('interleaved undo/redo preserves state correctly', () => {
     mocks.setTimelineState({ zoom: 10 });
-    useHistoryStore.getState().captureSnapshot('z10');
+    getHistoryStateView().captureSnapshot('z10');
 
     mocks.setTimelineState({ zoom: 20 });
-    useHistoryStore.getState().captureSnapshot('z20');
+    getHistoryStateView().captureSnapshot('z20');
 
     mocks.setTimelineState({ zoom: 30 });
-    useHistoryStore.getState().captureSnapshot('z30');
+    getHistoryStateView().captureSnapshot('z30');
 
     // Undo to z20
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     expect(mocks.timeline.getState().zoom).toBe(20);
 
     // Redo back to z30
-    useHistoryStore.getState().redo();
+    getHistoryStateView().redo();
     expect(mocks.timeline.getState().zoom).toBe(30);
 
     // Undo to z20 again
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     expect(mocks.timeline.getState().zoom).toBe(20);
 
     // Undo to z10
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     expect(mocks.timeline.getState().zoom).toBe(10);
 
     // Redo to z20
-    useHistoryStore.getState().redo();
+    getHistoryStateView().redo();
     expect(mocks.timeline.getState().zoom).toBe(20);
   });
 
   // ─── Undo/redo ends stuck batches ──────────────────────────────────
 
   it('undo: ends stuck batch before undoing', () => {
-    useHistoryStore.getState().captureSnapshot('initial');
+    getHistoryStateView().captureSnapshot('initial');
 
     mocks.setTimelineState({ zoom: 80 });
-    useHistoryStore.getState().captureSnapshot('zoom-80');
+    getHistoryStateView().captureSnapshot('zoom-80');
 
     // Start a batch but "forget" to end it (simulate lost mouseup)
-    useHistoryStore.getState().startBatch('stuck-batch');
+    getHistoryStateView().startBatch('stuck-batch');
     mocks.setTimelineState({ zoom: 150 });
 
     // Undo should first end the batch, then undo
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
 
     // Batch should be ended
-    expect(useHistoryStore.getState().batchId).toBeNull();
-    expect(useHistoryStore.getState().batchLabel).toBeNull();
+    expect(getHistoryStateView().batchId).toBeNull();
+    expect(getHistoryStateView().batchLabel).toBeNull();
   });
 
   it('redo: ends stuck batch before redoing', () => {
-    useHistoryStore.getState().captureSnapshot('initial');
+    getHistoryStateView().captureSnapshot('initial');
 
     mocks.setTimelineState({ zoom: 80 });
-    useHistoryStore.getState().captureSnapshot('zoom-80');
+    getHistoryStateView().captureSnapshot('zoom-80');
 
     // Undo to create redo entry
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
 
     // Start a batch but "forget" to end it
-    useHistoryStore.getState().startBatch('stuck-batch');
+    getHistoryStateView().startBatch('stuck-batch');
 
     // Redo should first end the batch
-    useHistoryStore.getState().redo();
+    getHistoryStateView().redo();
 
-    expect(useHistoryStore.getState().batchId).toBeNull();
-    expect(useHistoryStore.getState().batchLabel).toBeNull();
+    expect(getHistoryStateView().batchId).toBeNull();
+    expect(getHistoryStateView().batchLabel).toBeNull();
   });
 
   // ─── Batch advanced scenarios ──────────────────────────────────────
 
   it('endBatch: clears redo stack', () => {
-    useHistoryStore.getState().captureSnapshot('initial');
+    getHistoryStateView().captureSnapshot('initial');
     mocks.setTimelineState({ zoom: 80 });
-    useHistoryStore.getState().captureSnapshot('zoom-80');
+    getHistoryStateView().captureSnapshot('zoom-80');
 
     // Undo to create redo entries
-    useHistoryStore.getState().undo();
-    expect(useHistoryStore.getState().redoStack.length).toBe(1);
+    getHistoryStateView().undo();
+    expect(getHistoryStateView().redoStack.length).toBe(1);
 
     // Start and end a batch — should clear redo
-    useHistoryStore.getState().startBatch('new-batch');
+    getHistoryStateView().startBatch('new-batch');
     mocks.setTimelineState({ zoom: 200 });
-    useHistoryStore.getState().endBatch();
+    getHistoryStateView().endBatch();
 
-    expect(useHistoryStore.getState().redoStack.length).toBe(0);
+    expect(getHistoryStateView().redoStack.length).toBe(0);
   });
 
   it('startBatch: creates currentSnapshot if none exists', () => {
-    expect(useHistoryStore.getState().currentSnapshot).toBeNull();
+    expect(getHistoryStateView().currentSnapshot).toBeNull();
 
-    useHistoryStore.getState().startBatch('from-scratch');
+    getHistoryStateView().startBatch('from-scratch');
 
     // startBatch should have auto-created a snapshot
-    expect(useHistoryStore.getState().currentSnapshot).not.toBeNull();
-    expect(useHistoryStore.getState().currentSnapshot!.label).toBe('initial');
-    expect(useHistoryStore.getState().batchId).not.toBeNull();
+    expect(getHistoryStateView().currentSnapshot).not.toBeNull();
+    expect(getHistoryStateView().currentSnapshot!.label).toBe('initial');
+    expect(getHistoryStateView().batchId).not.toBeNull();
 
-    useHistoryStore.getState().endBatch();
+    getHistoryStateView().endBatch();
   });
 
   it('endBatch without prior currentSnapshot: only sets currentSnapshot', () => {
     // Manually reset to ensure no currentSnapshot
-    useHistoryStore.setState({ currentSnapshot: null, batchId: Date.now(), batchLabel: 'test' });
-    useHistoryStore.getState().endBatch();
+    useHistoryStore.setState({
+      nodes: {},
+      rootId: null,
+      activeNodeId: null,
+      lastVisitedChildByNodeId: {},
+      batchId: Date.now(),
+      batchLabel: 'test',
+    });
+    getHistoryStateView().endBatch();
 
     // When currentSnapshot is null during endBatch, it should just set the final snapshot
-    const state = useHistoryStore.getState();
+    const state = getHistoryStateView();
     expect(state.currentSnapshot).not.toBeNull();
     expect(state.currentSnapshot!.label).toBe('test');
     expect(state.undoStack.length).toBe(0); // no previous snapshot to push
@@ -921,37 +931,38 @@ describe('historyStore', () => {
   });
 
   it('endBatch respects maxHistorySize', () => {
-    useHistoryStore.setState({ maxHistorySize: 2 });
+    // Tree capacity includes the current snapshot in addition to undoable nodes.
+    useHistoryStore.setState({ maxHistoryNodes: 3 });
 
     // Fill undo stack
-    useHistoryStore.getState().captureSnapshot('a');
-    useHistoryStore.getState().captureSnapshot('b');
-    useHistoryStore.getState().captureSnapshot('c');
+    getHistoryStateView().captureSnapshot('a');
+    getHistoryStateView().captureSnapshot('b');
+    getHistoryStateView().captureSnapshot('c');
     // undoStack should already be capped at 2
-    expect(useHistoryStore.getState().undoStack.length).toBe(2);
+    expect(getHistoryStateView().undoStack.length).toBe(2);
 
     // Do a batch — should also respect cap
-    useHistoryStore.getState().startBatch('batch');
+    getHistoryStateView().startBatch('batch');
     mocks.setTimelineState({ zoom: 999 });
-    useHistoryStore.getState().endBatch();
+    getHistoryStateView().endBatch();
 
-    expect(useHistoryStore.getState().undoStack.length).toBeLessThanOrEqual(2);
+    expect(getHistoryStateView().undoStack.length).toBeLessThanOrEqual(2);
   });
 
   it('batch then undo restores pre-batch state', () => {
     mocks.setTimelineState({ zoom: 50 });
-    useHistoryStore.getState().captureSnapshot('initial');
+    getHistoryStateView().captureSnapshot('initial');
 
-    useHistoryStore.getState().startBatch('drag resize');
+    getHistoryStateView().startBatch('drag resize');
     mocks.setTimelineState({ zoom: 60 });
     mocks.setTimelineState({ zoom: 70 });
     mocks.setTimelineState({ zoom: 80 });
-    useHistoryStore.getState().endBatch();
+    getHistoryStateView().endBatch();
 
     expect(mocks.timeline.getState().zoom).toBe(80);
 
     // Undo the entire batch
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     expect(mocks.timeline.getState().zoom).toBe(50);
   });
 
@@ -1003,14 +1014,14 @@ describe('historyStore', () => {
     });
 
     mocks.setMediaState({ compositions: [parent, legacy] });
-    useHistoryStore.getState().startBatch('Upgrade transition composition');
+    getHistoryStateView().startBatch('Upgrade transition composition');
     mocks.setMediaState({ compositions: [upgradedParent, legacy, upgraded] });
-    useHistoryStore.getState().endBatch();
+    getHistoryStateView().endBatch();
 
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
-    expect(useHistoryStore.getState().currentSnapshot?.label).toBe('Upgrade transition composition');
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
+    expect(getHistoryStateView().currentSnapshot?.label).toBe('Upgrade transition composition');
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
 
     const restoredCompositions = mocks.media.getState().compositions;
     const restoredParent = restoredCompositions.find((composition) => composition.id === parent.id)!;
@@ -1025,18 +1036,18 @@ describe('historyStore', () => {
 
   it('undo/redo restores media state (files)', () => {
     mocks.setMediaState({ files: [mockMediaFile({ id: 'f1', name: 'file1.mp4' })] });
-    useHistoryStore.getState().captureSnapshot('add file');
+    getHistoryStateView().captureSnapshot('add file');
 
     mocks.setMediaState({ files: [] });
-    useHistoryStore.getState().captureSnapshot('remove file');
+    getHistoryStateView().captureSnapshot('remove file');
 
     expect(mocks.media.getState().files.length).toBe(0);
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     expect(mocks.media.getState().files.length).toBe(1);
     expect(mocks.media.getState().files[0].id).toBe('f1');
 
-    useHistoryStore.getState().redo();
+    getHistoryStateView().redo();
     expect(mocks.media.getState().files.length).toBe(0);
   });
 
@@ -1044,7 +1055,7 @@ describe('historyStore', () => {
     mocks.setMediaState({
       compositions: [mockComposition({ id: 'comp1', name: 'Main' })],
     });
-    useHistoryStore.getState().captureSnapshot('add comp');
+    getHistoryStateView().captureSnapshot('add comp');
 
     mocks.setMediaState({
       compositions: [
@@ -1052,32 +1063,32 @@ describe('historyStore', () => {
         mockComposition({ id: 'comp2', name: 'Secondary' }),
       ],
     });
-    useHistoryStore.getState().captureSnapshot('add comp2');
+    getHistoryStateView().captureSnapshot('add comp2');
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     expect(mocks.media.getState().compositions.length).toBe(1);
     expect(mocks.media.getState().compositions[0].name).toBe('Main');
   });
 
   it('undo/redo restores media state (folders)', () => {
     mocks.setMediaState({ folders: [mockFolder({ id: 'folder1', name: 'Clips' })] });
-    useHistoryStore.getState().captureSnapshot('add folder');
+    getHistoryStateView().captureSnapshot('add folder');
 
     mocks.setMediaState({ folders: [] });
-    useHistoryStore.getState().captureSnapshot('remove folder');
+    getHistoryStateView().captureSnapshot('remove folder');
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     expect(mocks.media.getState().folders.length).toBe(1);
   });
 
   it('undo/redo restores media selectedIds and expandedFolderIds', () => {
     mocks.setMediaState({ selectedIds: ['a', 'b'], expandedFolderIds: ['f1'] });
-    useHistoryStore.getState().captureSnapshot('select');
+    getHistoryStateView().captureSnapshot('select');
 
     mocks.setMediaState({ selectedIds: [], expandedFolderIds: [] });
-    useHistoryStore.getState().captureSnapshot('deselect');
+    getHistoryStateView().captureSnapshot('deselect');
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     expect(mocks.media.getState().selectedIds).toEqual(['a', 'b']);
     expect(mocks.media.getState().expandedFolderIds).toEqual(['f1']);
   });
@@ -1087,12 +1098,12 @@ describe('historyStore', () => {
       textItems: [mockTextItem({ id: 't1', text: 'Hello' })],
       solidItems: [mockSolidItem({ id: 's1', color: '#ff0000' })],
     });
-    useHistoryStore.getState().captureSnapshot('add items');
+    getHistoryStateView().captureSnapshot('add items');
 
     mocks.setMediaState({ textItems: [], solidItems: [] });
-    useHistoryStore.getState().captureSnapshot('clear items');
+    getHistoryStateView().captureSnapshot('clear items');
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     expect(mocks.media.getState().textItems.length).toBe(1);
     expect(mocks.media.getState().solidItems.length).toBe(1);
   });
@@ -1101,15 +1112,15 @@ describe('historyStore', () => {
 
   it('undo/redo restores dock layout', () => {
     mocks.dock.setState({ layout: { type: 'row', children: [] } });
-    useHistoryStore.getState().captureSnapshot('layout-1');
+    getHistoryStateView().captureSnapshot('layout-1');
 
     mocks.dock.setState({ layout: { type: 'col', children: [{ id: 'panel' }] } });
-    useHistoryStore.getState().captureSnapshot('layout-2');
+    getHistoryStateView().captureSnapshot('layout-2');
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     expect(mocks.dock.getState().layout).toEqual({ type: 'row', children: [] });
 
-    useHistoryStore.getState().redo();
+    getHistoryStateView().redo();
     expect(mocks.dock.getState().layout).toEqual({ type: 'col', children: [{ id: 'panel' }] });
   });
 
@@ -1120,12 +1131,12 @@ describe('historyStore', () => {
     const track2 = { id: 'v2', name: 'V2', type: 'video' as const, height: 60, muted: false, visible: true, solo: false };
 
     mocks.setTimelineState({ tracks: [track1] });
-    useHistoryStore.getState().captureSnapshot('one track');
+    getHistoryStateView().captureSnapshot('one track');
 
     mocks.setTimelineState({ tracks: [track1, track2] });
-    useHistoryStore.getState().captureSnapshot('two tracks');
+    getHistoryStateView().captureSnapshot('two tracks');
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     expect(mocks.timeline.getState().tracks.length).toBe(1);
     expect(mocks.timeline.getState().tracks[0].id).toBe('v1');
   });
@@ -1133,41 +1144,41 @@ describe('historyStore', () => {
   it('undo/redo restores clips', () => {
     const clip1 = mockClip({ id: 'c1', trackId: 'v1', startFrame: 0, endFrame: 100, mediaId: 'm1' });
     mocks.setTimelineState({ clips: [] });
-    useHistoryStore.getState().captureSnapshot('no clips');
+    getHistoryStateView().captureSnapshot('no clips');
 
     mocks.setTimelineState({ clips: [clip1] });
-    useHistoryStore.getState().captureSnapshot('one clip');
+    getHistoryStateView().captureSnapshot('one clip');
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     expect(mocks.timeline.getState().clips.length).toBe(0);
 
-    useHistoryStore.getState().redo();
+    getHistoryStateView().redo();
     expect(mocks.timeline.getState().clips.length).toBe(1);
     expect(mocks.timeline.getState().clips[0].id).toBe('c1');
   });
 
   it('undo/redo restores markers', () => {
     mocks.setTimelineState({ markers: [] });
-    useHistoryStore.getState().captureSnapshot('no markers');
+    getHistoryStateView().captureSnapshot('no markers');
 
     mocks.setTimelineState({ markers: [{ id: 'm1', time: 100, color: 'red', label: 'mark1' }] });
-    useHistoryStore.getState().captureSnapshot('one marker');
+    getHistoryStateView().captureSnapshot('one marker');
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     expect(mocks.timeline.getState().markers.length).toBe(0);
 
-    useHistoryStore.getState().redo();
+    getHistoryStateView().redo();
     expect(mocks.timeline.getState().markers.length).toBe(1);
   });
 
   it('undo/redo restores layers', () => {
     mocks.setTimelineState({ layers: [mockLayer({ id: 'L1', name: 'Layer 1' })] });
-    useHistoryStore.getState().captureSnapshot('one layer');
+    getHistoryStateView().captureSnapshot('one layer');
 
     mocks.setTimelineState({ layers: [] });
-    useHistoryStore.getState().captureSnapshot('no layers');
+    getHistoryStateView().captureSnapshot('no layers');
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     const restoredLayers = mocks.timeline.getState().layers;
     expect(restoredLayers.length).toBe(1);
     expect(restoredLayers[0].id).toBe('L1');
@@ -1175,23 +1186,23 @@ describe('historyStore', () => {
 
   it('undo/redo restores selectedLayerId', () => {
     mocks.setTimelineState({ selectedLayerId: 'L1' });
-    useHistoryStore.getState().captureSnapshot('selected');
+    getHistoryStateView().captureSnapshot('selected');
 
     mocks.setTimelineState({ selectedLayerId: null });
-    useHistoryStore.getState().captureSnapshot('deselected');
+    getHistoryStateView().captureSnapshot('deselected');
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     expect(mocks.timeline.getState().selectedLayerId).toBe('L1');
   });
 
   it('undo/redo restores scrollX', () => {
     mocks.setTimelineState({ scrollX: 0 });
-    useHistoryStore.getState().captureSnapshot('scroll-0');
+    getHistoryStateView().captureSnapshot('scroll-0');
 
     mocks.setTimelineState({ scrollX: 500 });
-    useHistoryStore.getState().captureSnapshot('scroll-500');
+    getHistoryStateView().captureSnapshot('scroll-500');
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     expect(mocks.timeline.getState().scrollX).toBe(0);
   });
 
@@ -1200,14 +1211,14 @@ describe('historyStore', () => {
   it('snapshots are deep cloned: mutating source does not affect snapshot', () => {
     const clips = [mockClip({ id: 'c1', trackId: 'v1', startTime: 0, duration: 100, startFrame: 0, endFrame: 100 })];
     mocks.setTimelineState({ clips });
-    useHistoryStore.getState().captureSnapshot('with clips');
+    getHistoryStateView().captureSnapshot('with clips');
 
     // Mutate the original array
     clips[0].startTime = 999;
     clips[0].endFrame = 999;
     clips.push({ id: 'c2', trackId: 'v1', startFrame: 200, endFrame: 300 });
 
-    const snapshot = useHistoryStore.getState().currentSnapshot!;
+    const snapshot = getHistoryStateView().currentSnapshot!;
     // Snapshot should not be affected
     expect(snapshot.timeline.clips.length).toBe(1);
     expect(snapshot.timeline.clips[0].startTime).toBe(0);
@@ -1217,20 +1228,20 @@ describe('historyStore', () => {
 
   it('snapshots are deep cloned: mutating snapshot does not affect subsequent undo', () => {
     mocks.setTimelineState({ clips: [mockClip({ id: 'c1', startFrame: 0, endFrame: 100 })] });
-    useHistoryStore.getState().captureSnapshot('initial');
+    getHistoryStateView().captureSnapshot('initial');
 
     mocks.setTimelineState({ clips: [mockClip({ id: 'c1', startFrame: 0, endFrame: 200 })] });
-    useHistoryStore.getState().captureSnapshot('modified');
+    getHistoryStateView().captureSnapshot('modified');
 
     // Mutate the undo stack snapshot directly (should not matter for undo)
-    const undoSnapshot = useHistoryStore.getState().undoStack[0];
+    const undoSnapshot = getHistoryStateView().undoStack[0];
     (undoSnapshot.timeline.clips[0] as LegacyClip).endFrame = 9999;
 
     // Undo - the applySnapshot deep clones again, so the mutation above
     // means the applied state will have the mutated value.
     // This test validates that the store's state after undo reflects
     // what was in the undo stack (even if mutated).
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     // The timeline should have the value from the undo stack snapshot
     expect(mocks.timeline.getState().clips.length).toBe(1);
   });
@@ -1239,9 +1250,9 @@ describe('historyStore', () => {
 
   it('snapshot serializes Set<string> to array for selectedClipIds', () => {
     mocks.setTimelineState({ selectedClipIds: new Set(['x', 'y', 'z']) });
-    useHistoryStore.getState().captureSnapshot('selected');
+    getHistoryStateView().captureSnapshot('selected');
 
-    const snapshot = useHistoryStore.getState().currentSnapshot!;
+    const snapshot = getHistoryStateView().currentSnapshot!;
     // Should be array in snapshot, not Set
     expect(Array.isArray(snapshot.timeline.selectedClipIds)).toBe(true);
     expect(snapshot.timeline.selectedClipIds).toContain('x');
@@ -1252,13 +1263,13 @@ describe('historyStore', () => {
   // ─── setIsApplying ─────────────────────────────────────────────────
 
   it('setIsApplying: sets isApplying flag', () => {
-    expect(useHistoryStore.getState().isApplying).toBe(false);
+    expect(getHistoryStateView().isApplying).toBe(false);
 
-    useHistoryStore.getState().setIsApplying(true);
-    expect(useHistoryStore.getState().isApplying).toBe(true);
+    getHistoryStateView().setIsApplying(true);
+    expect(getHistoryStateView().isApplying).toBe(true);
 
-    useHistoryStore.getState().setIsApplying(false);
-    expect(useHistoryStore.getState().isApplying).toBe(false);
+    getHistoryStateView().setIsApplying(false);
+    expect(getHistoryStateView().isApplying).toBe(false);
   });
 
   // ─── setHistoryCallbacks: flushPendingCapture ──────────────────────
@@ -1268,13 +1279,13 @@ describe('historyStore', () => {
     const suppressFn = vi.fn();
     setHistoryCallbacks({ flushPendingCapture: flushFn, suppressCaptures: suppressFn });
 
-    useHistoryStore.getState().captureSnapshot('a');
-    useHistoryStore.getState().captureSnapshot('b');
+    getHistoryStateView().captureSnapshot('a');
+    getHistoryStateView().captureSnapshot('b');
     // Explicit captures now suppress the trailing auto-capture fallback too;
     // clear so this assertion isolates undo's own suppression call.
     suppressFn.mockClear();
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
 
     expect(flushFn).toHaveBeenCalledTimes(1);
     expect(suppressFn).toHaveBeenCalledTimes(1);
@@ -1289,12 +1300,12 @@ describe('historyStore', () => {
 
     // Explicit (slice) capture → suppress the trailing debounced fallback so one
     // edit is one undo step.
-    useHistoryStore.getState().captureSnapshot('explicit');
+    getHistoryStateView().captureSnapshot('explicit');
     expect(suppressFn).toHaveBeenCalledTimes(1);
 
     // The fallback path itself must NOT self-suppress, or it would swallow the
     // next distinct auto-captured edit.
-    useHistoryStore.getState().captureSnapshot('auto', { isAutoCapture: true });
+    getHistoryStateView().captureSnapshot('auto', { isAutoCapture: true });
     expect(suppressFn).toHaveBeenCalledTimes(1);
 
     setHistoryCallbacks({ flushPendingCapture: () => {}, suppressCaptures: () => {} });
@@ -1305,13 +1316,13 @@ describe('historyStore', () => {
     const suppressFn = vi.fn();
     setHistoryCallbacks({ flushPendingCapture: flushFn, suppressCaptures: suppressFn });
 
-    useHistoryStore.getState().captureSnapshot('a');
-    useHistoryStore.getState().captureSnapshot('b');
-    useHistoryStore.getState().undo();
+    getHistoryStateView().captureSnapshot('a');
+    getHistoryStateView().captureSnapshot('b');
+    getHistoryStateView().undo();
     flushFn.mockClear();
     suppressFn.mockClear();
 
-    useHistoryStore.getState().redo();
+    getHistoryStateView().redo();
 
     expect(flushFn).toHaveBeenCalledTimes(1);
     expect(suppressFn).toHaveBeenCalledTimes(1);
@@ -1323,8 +1334,8 @@ describe('historyStore', () => {
 
   it('convenience captureSnapshot function works', () => {
     captureSnapshotFn('via-export');
-    expect(useHistoryStore.getState().currentSnapshot).not.toBeNull();
-    expect(useHistoryStore.getState().currentSnapshot!.label).toBe('via-export');
+    expect(getHistoryStateView().currentSnapshot).not.toBeNull();
+    expect(getHistoryStateView().currentSnapshot!.label).toBe('via-export');
   });
 
   it('convenience undo/redo functions work', () => {
@@ -1346,18 +1357,18 @@ describe('historyStore', () => {
     mocks.setTimelineState({ zoom: 200 });
     endBatchFn();
 
-    expect(useHistoryStore.getState().undoStack.length).toBe(1);
-    expect(useHistoryStore.getState().currentSnapshot!.label).toBe('batch');
+    expect(getHistoryStateView().undoStack.length).toBe(1);
+    expect(getHistoryStateView().currentSnapshot!.label).toBe('batch');
   });
 
   // ─── Snapshot timestamp ────────────────────────────────────────────
 
   it('snapshot includes timestamp', () => {
     const before = Date.now();
-    useHistoryStore.getState().captureSnapshot('timed');
+    getHistoryStateView().captureSnapshot('timed');
     const after = Date.now();
 
-    const snapshot = useHistoryStore.getState().currentSnapshot!;
+    const snapshot = getHistoryStateView().currentSnapshot!;
     expect(snapshot.timestamp).toBeGreaterThanOrEqual(before);
     expect(snapshot.timestamp).toBeLessThanOrEqual(after);
   });
@@ -1369,16 +1380,16 @@ describe('historyStore', () => {
     mocks.setTimelineState({ zoom: 50, clips: [], tracks: [{ id: 'v1', name: 'V1', type: 'video', height: 60, muted: false, visible: true, solo: false }] });
     mocks.setMediaState({ files: [mockMediaFile({ id: 'f1', name: 'vid.mp4' })], selectedIds: ['f1'] });
     mocks.dock.setState({ layout: { type: 'row' } });
-    useHistoryStore.getState().captureSnapshot('initial-state');
+    getHistoryStateView().captureSnapshot('initial-state');
 
     // Change all stores simultaneously
     mocks.setTimelineState({ zoom: 150, clips: [mockClip({ id: 'c1' })] });
     mocks.setMediaState({ files: [], selectedIds: [] });
     mocks.dock.setState({ layout: { type: 'col' } });
-    useHistoryStore.getState().captureSnapshot('changed-state');
+    getHistoryStateView().captureSnapshot('changed-state');
 
     // Undo should restore all three stores
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
 
     expect(mocks.timeline.getState().zoom).toBe(50);
     expect(mocks.timeline.getState().clips.length).toBe(0);
@@ -1391,15 +1402,15 @@ describe('historyStore', () => {
     mocks.setTimelineState({ zoom: 50 });
     mocks.setMediaState({ files: [] });
     mocks.dock.setState({ layout: { type: 'row' } });
-    useHistoryStore.getState().captureSnapshot('before');
+    getHistoryStateView().captureSnapshot('before');
 
     mocks.setTimelineState({ zoom: 200 });
     mocks.setMediaState({ files: [mockMediaFile({ id: 'f2', name: 'pic.jpg' })] });
     mocks.dock.setState({ layout: { type: 'tabs' } });
-    useHistoryStore.getState().captureSnapshot('after');
+    getHistoryStateView().captureSnapshot('after');
 
-    useHistoryStore.getState().undo();
-    useHistoryStore.getState().redo();
+    getHistoryStateView().undo();
+    getHistoryStateView().redo();
 
     expect(mocks.timeline.getState().zoom).toBe(200);
     expect(mocks.media.getState().files.length).toBe(1);
@@ -1410,13 +1421,13 @@ describe('historyStore', () => {
 
   it('undo restores empty Map for clipKeyframes', () => {
     mocks.setTimelineState({ clipKeyframes: new Map() });
-    useHistoryStore.getState().captureSnapshot('empty map');
+    getHistoryStateView().captureSnapshot('empty map');
 
     const kfMap = new Map([['clip-x', [{ id: 'kf1', clipId: 'clip-x', time: 0, property: 'opacity', value: 1, easing: 'linear' }]]]);
     mocks.setTimelineState({ clipKeyframes: kfMap });
-    useHistoryStore.getState().captureSnapshot('with kfs');
+    getHistoryStateView().captureSnapshot('with kfs');
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     const restored = mocks.timeline.getState().clipKeyframes;
     expect(restored instanceof Map).toBe(true);
     expect(restored.size).toBe(0);
@@ -1424,12 +1435,12 @@ describe('historyStore', () => {
 
   it('undo restores empty Set for selectedClipIds', () => {
     mocks.setTimelineState({ selectedClipIds: new Set() });
-    useHistoryStore.getState().captureSnapshot('empty');
+    getHistoryStateView().captureSnapshot('empty');
 
     mocks.setTimelineState({ selectedClipIds: new Set(['a']) });
-    useHistoryStore.getState().captureSnapshot('selected');
+    getHistoryStateView().captureSnapshot('selected');
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     const restored = mocks.timeline.getState().selectedClipIds;
     expect(restored instanceof Set).toBe(true);
     expect(restored.size).toBe(0);
@@ -1448,14 +1459,14 @@ describe('historyStore', () => {
       ]],
     ]);
     mocks.setTimelineState({ clipKeyframes: kfMap });
-    useHistoryStore.getState().captureSnapshot('multi-clip kf');
+    getHistoryStateView().captureSnapshot('multi-clip kf');
 
     // Remove all keyframes
     mocks.setTimelineState({ clipKeyframes: new Map() });
-    useHistoryStore.getState().captureSnapshot('cleared kf');
+    getHistoryStateView().captureSnapshot('cleared kf');
 
     // Undo
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     const restored = mocks.timeline.getState().clipKeyframes;
     expect(restored instanceof Map).toBe(true);
     expect(restored.size).toBe(2);
@@ -1469,10 +1480,10 @@ describe('historyStore', () => {
   it('clearHistory does not modify external store state', () => {
     mocks.setTimelineState({ zoom: 123 });
     mocks.setMediaState({ selectedIds: ['x'] });
-    useHistoryStore.getState().captureSnapshot('a');
-    useHistoryStore.getState().captureSnapshot('b');
+    getHistoryStateView().captureSnapshot('a');
+    getHistoryStateView().captureSnapshot('b');
 
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
 
     // External stores should be untouched
     expect(mocks.timeline.getState().zoom).toBe(123);
@@ -1486,16 +1497,16 @@ describe('historyStore', () => {
     mocks.setTimelineState({
       layers: [mockLayer({ id: 'L1', name: 'Layer 1', source: fakeSource })],
     });
-    useHistoryStore.getState().captureSnapshot('with source');
+    getHistoryStateView().captureSnapshot('with source');
 
     // Change layers
     mocks.setTimelineState({
       layers: [mockLayer({ id: 'L1', name: 'Layer 1 modified', source: fakeSource })],
     });
-    useHistoryStore.getState().captureSnapshot('modified');
+    getHistoryStateView().captureSnapshot('modified');
 
     // Undo — should preserve the source reference from current state
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     const restored = mocks.timeline.getState().layers;
     expect(restored.length).toBe(1);
     expect(restored[0].source).toBe(fakeSource);

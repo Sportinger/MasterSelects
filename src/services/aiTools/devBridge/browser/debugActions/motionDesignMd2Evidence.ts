@@ -63,7 +63,7 @@ const TIMELINE_RESTORE_KEYS = [
 
 const HISTORY_RESTORE_KEYS = [
   'nodes', 'rootId', 'activeNodeId', 'lastVisitedChildByNodeId', 'eventLog',
-  'isApplying', 'batchId', 'batchLabel',
+  'maxHistoryNodes', 'isApplying', 'batchId', 'batchLabel',
 ] as const satisfies readonly (keyof HistoryState)[];
 
 const MEDIA_RESTORE_KEYS = [

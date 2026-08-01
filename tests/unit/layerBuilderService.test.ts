@@ -707,8 +707,8 @@ describe('LayerBuilderService paused visual provider selection', () => {
     const nestedLayers = (layers[0]?.source as NestedCompositionSource | undefined)?.nestedComposition?.layers as Array<Layer & {
       masks?: Array<{ position: { x: number; y: number } }>;
     }> | undefined;
-    const outgoingLayer = nestedLayers?.find(layer => layer.sourceClipId === outgoingClipId);
-    const incomingLayer = nestedLayers?.find(layer => layer.sourceClipId === incomingClipId);
+    const outgoingLayer = nestedLayers?.find(layer => layer.id === `nested-layer-${outgoingClipId}`);
+    const incomingLayer = nestedLayers?.find(layer => layer.id === `nested-layer-${incomingClipId}`);
     const overlayLayer = nestedLayers?.find(layer => layer.sourceClipId === overlayClipId);
 
     expect(layers).toHaveLength(1);

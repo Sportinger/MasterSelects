@@ -461,7 +461,7 @@ enum DownloadResult {
     /// Download succeeded — return the file path
     Success(String),
     /// Bot detection triggered — should retry with cookies
-    BotBlocked(String),
+    BotBlocked,
     /// Other failure — don't retry
     Failed(Response),
 }
@@ -605,10 +605,11 @@ async fn run_download(
         let reader = BufReader::new(stdout);
         let mut lines = reader.lines();
         while let Ok(Some(line)) = lines.next_line().await {
-            if line.contains("[download] Destination:") || line.contains("[download] Downloading") {
-                if download_phase == 0 && last_sent_percent > 50 {
-                    download_phase = 1;
-                }
+            if (line.contains("[download] Destination:") || line.contains("[download] Downloading"))
+                && download_phase == 0
+                && last_sent_percent > 50
+            {
+                download_phase = 1;
             }
 
             if line.contains("[Merger]") || line.contains("Merging") {
@@ -643,7 +644,7 @@ async fn run_download(
                 if let Some(raw_percent) = percent_val {
                     let speed: Option<String> = if let Some(at_idx) = line.find(" at ") {
                         let after_at = &line[at_idx + 4..];
-                        let speed_str = after_at.trim().split_whitespace().next().unwrap_or("");
+                        let speed_str = after_at.split_whitespace().next().unwrap_or("");
                         let cleaned = speed_str.trim_start_matches('~');
                         if cleaned.contains("/s") {
                             Some(cleaned.to_string())
@@ -656,7 +657,7 @@ async fn run_download(
 
                     let eta: Option<String> = if let Some(eta_idx) = line.find("ETA ") {
                         let after_eta = &line[eta_idx + 4..];
-                        let eta_str = after_eta.trim().split_whitespace().next().unwrap_or("");
+                        let eta_str = after_eta.split_whitespace().next().unwrap_or("");
                         if !eta_str.is_empty() && eta_str != "Unknown" {
                             Some(eta_str.to_string())
                         } else {
@@ -725,7 +726,7 @@ async fn run_download(
                     || full_stderr.contains("No title found in player responses"))
             {
                 warn!("YouTube bot detection triggered, will retry with cookies");
-                return DownloadResult::BotBlocked(full_stderr);
+                return DownloadResult::BotBlocked;
             }
 
             // Show ERROR lines to user, or full stderr, or generic message
@@ -811,7 +812,7 @@ pub async fn handle_download(
         DownloadResult::Success(path) => {
             return Response::ok(id, serde_json::json!({ "path": path }));
         }
-        DownloadResult::BotBlocked(_) => {
+        DownloadResult::BotBlocked => {
             // YouTube wants authentication — retry with Chrome cookies
             info!("Retrying download with --cookies-from-browser chrome");
         }

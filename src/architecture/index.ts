@@ -7,6 +7,7 @@ export * from './highConflictOwnership';
 export * from './laneWriteManifest';
 export * from './motionDesignGateRegistry';
 export * from './motionDesignLaneWriteManifest';
+export * from './motionDesignRefactorLanes';
 export * from './retiredPathLedger';
 export * from './storyboardGateRegistry';
 export * from './storyboardLaneWriteManifest';

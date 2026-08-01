@@ -201,6 +201,7 @@ describe('guided surface interaction driver', () => {
     const registry = new GuidedTargetRegistry();
     registry.registerResolver('previewPathVertex', previewVertexResolver, 'test-preview-vertex');
     const runtime = new GuidedActionRuntime({ targetRegistry: registry });
+    const addPreviewPath = vi.spyOn(useGuidedActionStore.getState(), 'addPreviewPath');
 
     const resultPromise = startSurfaceSession(runtime, [
       {
@@ -213,12 +214,12 @@ describe('guided surface interaction driver', () => {
     await vi.runAllTimersAsync();
     const result = await resultPromise;
 
-    const previewPath = useGuidedActionStore.getState().previewPaths[0];
     expect(result.status).toBe('completed');
-    expect(previewPath).toEqual(expect.objectContaining({
+    expect(addPreviewPath).toHaveBeenCalledWith(expect.objectContaining({
       closed: true,
       points: [{ x: 25, y: 50 }, { x: 75, y: 50 }],
     }));
+    expect(useGuidedActionStore.getState().previewPaths).toEqual([]);
     expect(useGuidedActionStore.getState().cursor.position).toEqual({ x: 75, y: 50 });
     expect(useGuidedActionStore.getState().cursor.clicking).toBe(false);
   });

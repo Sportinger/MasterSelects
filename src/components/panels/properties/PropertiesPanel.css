@@ -2979,3 +2979,112 @@
 .synth-preset-chip-x:hover {
   color: #ff6b6b !important;
 }
+
+/* Motion panel layout polish */
+.transform-tab-compact .properties-section .control-row .prop-label.motion-wide-label {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 96px;
+}
+
+.transform-tab-compact .motion-expression-add-row,
+.transform-tab-compact .motion-template-apply-row,
+.transform-tab-compact .motion-template-save-row,
+.transform-tab-compact .motion-appearance-preset-row {
+  display: grid;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.transform-tab-compact .motion-expression-add-row {
+  grid-template-columns: 96px minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+
+.transform-tab-compact .motion-template-apply-row {
+  grid-template-columns: 52px minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+
+.transform-tab-compact .motion-template-save-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+
+.transform-tab-compact .motion-appearance-preset-row {
+  grid-template-columns: 52px minmax(0, 1fr) auto minmax(0, 1fr) auto;
+}
+
+.transform-tab-compact .motion-expression-add-row > select,
+.transform-tab-compact .motion-expression-add-row > input,
+.transform-tab-compact .motion-template-apply-row > select,
+.transform-tab-compact .motion-template-save-row > input,
+.transform-tab-compact .motion-appearance-preset-row > select,
+.transform-tab-compact .motion-appearance-preset-row > input {
+  width: 100%;
+  min-width: 0;
+}
+
+.transform-tab-compact .motion-expression-add-row > input,
+.transform-tab-compact .motion-template-save-row > input,
+.transform-tab-compact .motion-appearance-preset-row > input {
+  box-sizing: border-box;
+  height: 22px;
+  padding: 2px 6px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.transform-tab-compact .motion-expression-add-row > input:focus,
+.transform-tab-compact .motion-template-save-row > input:focus,
+.transform-tab-compact .motion-appearance-preset-row > input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.transform-tab-compact .motion-expression-add-row > .btn,
+.transform-tab-compact .motion-template-apply-row > .btn,
+.transform-tab-compact .motion-template-save-row > .btn,
+.transform-tab-compact .motion-appearance-preset-row > .btn {
+  white-space: nowrap;
+}
+
+.transform-tab-compact .motion-appearance-item-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) repeat(2, 22px) max-content max-content;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.transform-tab-compact .motion-appearance-item-row .motion-appearance-visibility {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.transform-tab-compact .motion-appearance-item-row > .btn {
+  box-sizing: border-box;
+  height: 22px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.transform-tab-compact .motion-appearance-item-name {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-start;
+  overflow: hidden;
+  color: var(--text-primary) !important;
+  text-overflow: ellipsis;
+}
+
+.transform-tab-compact .motion-appearance-reorder-button {
+  width: 22px;
+  min-width: 22px;
+  padding: 2px;
+  text-align: center;
+}

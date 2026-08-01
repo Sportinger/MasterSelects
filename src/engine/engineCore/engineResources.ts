@@ -117,7 +117,7 @@ export async function createEngineResources(
   const outputWindowManager = new OutputWindowManager(width, height);
 
   const layerCollector = new LayerCollector();
-  const motionRenderer = new MotionRenderer(device);
+  const motionRenderer = new MotionRenderer(device, deps.requestRender);
 
   const compositor = new Compositor(
     compositorPipeline,

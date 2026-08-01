@@ -14,7 +14,7 @@
 
 use std::fs;
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
@@ -310,7 +310,7 @@ fn write_artifact_manifest(path: &PathBuf) -> Result<(), String> {
 }
 
 /// Return the `.sha256` sidecar path for a given file.
-fn sidecar_path(path: &PathBuf) -> PathBuf {
+fn sidecar_path(path: &Path) -> PathBuf {
     let mut s = path.as_os_str().to_os_string();
     s.push(".sha256");
     PathBuf::from(s)
@@ -442,11 +442,7 @@ fn download_file(
                     0.0
                 };
 
-                let remaining = if total_bytes > bytes_downloaded {
-                    total_bytes - bytes_downloaded
-                } else {
-                    0
-                };
+                let remaining = total_bytes.saturating_sub(bytes_downloaded);
                 let eta = if speed > 0.0 {
                     Some(remaining as f64 / speed)
                 } else {

@@ -111,7 +111,7 @@ fn init_logging(args: &Args) {
             _ => Level::INFO,
         };
 
-        let _subscriber = FmtSubscriber::builder()
+        FmtSubscriber::builder()
             .with_max_level(level)
             .with_target(false)
             .compact()

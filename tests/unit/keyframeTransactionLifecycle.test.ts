@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  getHistoryStateView,
   initHistoryStoreRefs,
   setHistoryCallbacks,
   useHistoryStore,
@@ -187,15 +188,15 @@ describe('keyframe transaction lifecycle', () => {
       suppressCaptures: () => undefined,
     });
     useHistoryStore.setState({ batchId: null, batchLabel: null });
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
     installFixture();
   });
 
   afterEach(() => {
-    if (useHistoryStore.getState().batchId !== null) {
-      useHistoryStore.getState().cancelBatch();
+    if (getHistoryStateView().batchId !== null) {
+      getHistoryStateView().cancelBatch();
     }
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
     useTimelineStore.setState(initialTimelineState);
     vi.restoreAllMocks();
   });
@@ -221,7 +222,7 @@ describe('keyframe transaction lifecycle', () => {
       deferHistoryCommit: true,
     }).success).toBe(true);
 
-    const ownedBatchId = useHistoryStore.getState().batchId;
+    const ownedBatchId = getHistoryStateView().batchId;
     expect(ownedBatchId).not.toBeNull();
     expect(getPositionKeyframe()).toMatchObject({ time: 3, value: 0.4 });
 
@@ -231,12 +232,12 @@ describe('keyframe transaction lifecycle', () => {
     );
     expect(commit.success).toBe(true);
     expect(commit.changedClipIds).toEqual(['clip-a']);
-    expect(useHistoryStore.getState().batchId).toBeNull();
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    expect(getHistoryStateView().batchId).toBeNull();
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
 
-    useHistoryStore.getState().undo();
+    getHistoryStateView().undo();
     expect(getPositionKeyframe()).toMatchObject({ time: 1, value: 0.1 });
-    useHistoryStore.getState().redo();
+    getHistoryStateView().redo();
     expect(getPositionKeyframe()).toMatchObject({ time: 3, value: 0.4 });
   });
 
@@ -254,7 +255,7 @@ describe('keyframe transaction lifecycle', () => {
       deferHistoryCommit: true,
     });
 
-    const ownedBatchId = useHistoryStore.getState().batchId;
+    const ownedBatchId = getHistoryStateView().batchId;
     expect(ownedBatchId).not.toBeNull();
     const replacementBatchId = (ownedBatchId ?? 0) + 10_000;
     useHistoryStore.setState({
@@ -268,14 +269,14 @@ describe('keyframe transaction lifecycle', () => {
     );
     expect(result.success).toBe(false);
     expect(result.warnings[0]?.message).toContain('lost its attached history batch');
-    expect(useHistoryStore.getState().batchId).toBe(replacementBatchId);
+    expect(getHistoryStateView().batchId).toBe(replacementBatchId);
     expect(getPositionKeyframe()).toMatchObject({ time: 1, value: 0.1 });
 
-    useHistoryStore.getState().cancelBatch();
+    getHistoryStateView().cancelBatch();
   });
 
   it('attaches to but never closes a foreign outer AI history batch', () => {
-    const outer = useHistoryStore.getState().startBatch('Outer AI batch');
+    const outer = getHistoryStateView().startBatch('Outer AI batch');
     expect(outer.opened).toBe(true);
     const transactionId = 'foreign-batch';
     const operations = movePositionOperation(4, 0.6);
@@ -294,14 +295,14 @@ describe('keyframe transaction lifecycle', () => {
       historyLabel: 'Graph edit',
     });
 
-    expect(useHistoryStore.getState().batchId).toBe(outer.batchId);
+    expect(getHistoryStateView().batchId).toBe(outer.batchId);
     expect(getPositionKeyframe()).toMatchObject({ time: 4, value: 0.6 });
-    useHistoryStore.getState().endBatch();
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    getHistoryStateView().endBatch();
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
   });
 
   it('treats a deferred update without begin inside a foreign batch as a one-shot operation', () => {
-    const outer = useHistoryStore.getState().startBatch('Outer AI batch');
+    const outer = getHistoryStateView().startBatch('Outer AI batch');
     const transactionId = 'path-action-one-shot';
 
     const update = useTimelineStore.getState().applyTimelineEditOperation(
@@ -311,7 +312,7 @@ describe('keyframe transaction lifecycle', () => {
 
     expect(update.success).toBe(true);
     expect(getPositionKeyframe()).toMatchObject({ time: 3.5, value: 0.55 });
-    expect(useHistoryStore.getState().batchId).toBe(outer.batchId);
+    expect(getHistoryStateView().batchId).toBe(outer.batchId);
 
     // Reusing the transaction ID with a different logical history ID proves
     // that the implicit update did not leave a transaction session behind.
@@ -332,10 +333,10 @@ describe('keyframe transaction lifecycle', () => {
       source: 'ui',
       historyLabel: 'Replacement transaction',
     }).success).toBe(true);
-    expect(useHistoryStore.getState().batchId).toBe(outer.batchId);
+    expect(getHistoryStateView().batchId).toBe(outer.batchId);
 
-    useHistoryStore.getState().endBatch();
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    getHistoryStateView().endBatch();
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
   });
 
   it('restores original keyframe values and selection when its own transaction is cancelled', () => {
@@ -358,12 +359,12 @@ describe('keyframe transaction lifecycle', () => {
     expect(cancel.success).toBe(true);
     expect(getPositionKeyframe()).toMatchObject({ time: 1, value: 0.1 });
     expect([...useTimelineStore.getState().selectedKeyframeIds]).toEqual(['kf-position']);
-    expect(useHistoryStore.getState().batchId).toBeNull();
-    expect(useHistoryStore.getState().undoStack).toHaveLength(0);
+    expect(getHistoryStateView().batchId).toBeNull();
+    expect(getHistoryStateView().undoStack).toHaveLength(0);
   });
 
   it('restores only its keyframe targets on cancel without closing a foreign batch', () => {
-    const outer = useHistoryStore.getState().startBatch('Outer AI batch');
+    const outer = getHistoryStateView().startBatch('Outer AI batch');
     const transactionId = 'cancel-foreign';
     useTimelineStore.getState().applyTimelineEditOperation(beginOperation(transactionId), {
       source: 'ui',
@@ -380,8 +381,8 @@ describe('keyframe transaction lifecycle', () => {
     });
 
     expect(getPositionKeyframe()).toMatchObject({ time: 1, value: 0.1 });
-    expect(useHistoryStore.getState().batchId).toBe(outer.batchId);
-    useHistoryStore.getState().endBatch();
+    expect(getHistoryStateView().batchId).toBe(outer.batchId);
+    getHistoryStateView().endBatch();
   });
 
   it('applies multi-property multi-clip operations atomically through the same transaction', () => {
@@ -406,7 +407,7 @@ describe('keyframe transaction lifecycle', () => {
     expect(new Set(result.changedClipIds)).toEqual(new Set(['clip-a', 'clip-b']));
     expect(getPositionKeyframe()).toMatchObject({ time: 2.5, value: 0.3 });
     expect(useTimelineStore.getState().clipKeyframes.get('clip-b')?.[0]).toMatchObject({ value: 0.75 });
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
   });
 
   it('preflights all targets and leaves every keyframe untouched when one target is invalid', () => {
@@ -430,8 +431,8 @@ describe('keyframe transaction lifecycle', () => {
     expect(result.warnings.map(warning => warning.code)).toContain('keyframe-not-found');
     expect(getPositionKeyframe()).toMatchObject({ time: 1, value: 0.1 });
     expect(useTimelineStore.getState().clipKeyframes.get('clip-b')?.[0]).toMatchObject({ value: 0.5 });
-    expect(useHistoryStore.getState().batchId).toBeNull();
-    expect(useHistoryStore.getState().undoStack).toHaveLength(0);
+    expect(getHistoryStateView().batchId).toBeNull();
+    expect(getHistoryStateView().undoStack).toHaveLength(0);
   });
 
   it('commits a selection-only transaction instead of rolling the selection back', () => {
@@ -448,8 +449,8 @@ describe('keyframe transaction lifecycle', () => {
 
     expect(result.success).toBe(true);
     expect([...useTimelineStore.getState().selectedKeyframeIds]).toEqual(['kf-opacity']);
-    expect(useHistoryStore.getState().batchId).toBeNull();
-    expect(useHistoryStore.getState().undoStack).toHaveLength(0);
+    expect(getHistoryStateView().batchId).toBeNull();
+    expect(getHistoryStateView().undoStack).toHaveLength(0);
   });
 
   it('does not let a standalone cancel discard an unrelated keyframe', () => {
@@ -489,7 +490,7 @@ describe('keyframe transaction lifecycle', () => {
     }).success).toBe(true);
 
     expect(getPositionKeyframe()).toBeUndefined();
-    expect(useHistoryStore.getState().batchId).toBeNull();
+    expect(getHistoryStateView().batchId).toBeNull();
   });
 
   it('rejects active cancel discard ids outside the transaction scope', () => {

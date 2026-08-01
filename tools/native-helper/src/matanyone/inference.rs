@@ -317,7 +317,7 @@ async fn read_http_response(stream: &mut TcpStream) -> Result<String, String> {
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| format!("Cannot parse status code from: {status_line}"))?;
 
-    if status_code < 200 || status_code >= 300 {
+    if !(200..300).contains(&status_code) {
         // Read remaining body for error context
         let body_start = header_end + 4;
         let mut body_buf = buf[body_start..].to_vec();

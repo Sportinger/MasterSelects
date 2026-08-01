@@ -184,6 +184,7 @@ impl MatAnyoneProcess {
     }
 
     /// Current lifecycle status.
+    #[cfg(test)]
     pub fn status(&self) -> &ProcessStatus {
         &self.status
     }
@@ -447,7 +448,7 @@ async fn stop_child(mut child: Child) -> Result<(), String> {
             .map_err(|e| format!("Failed to kill MatAnyone2 process: {e}"))?;
         let _ = child.wait().await;
         info!("MatAnyone2 process terminated (SIGKILL)");
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(windows)]
@@ -490,7 +491,7 @@ async fn stop_child(mut child: Child) -> Result<(), String> {
             .map_err(|e| format!("Failed to kill MatAnyone2 process: {e}"))?;
         let _ = child.wait().await;
         info!("MatAnyone2 process terminated");
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(all(not(unix), not(windows)))]

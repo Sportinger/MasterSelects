@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useDockStore } from '../../src/stores/dockStore';
 import { useExportStore } from '../../src/stores/exportStore';
 import { useFlashBoardStore } from '../../src/stores/flashboardStore';
-import { useHistoryStore } from '../../src/stores/historyStore';
+import { getHistoryStateView, useHistoryStore } from '../../src/stores/historyStore';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { projectFileService } from '../../src/services/projectFileService';
@@ -110,7 +110,7 @@ describe('MD2 disposable evidence lifecycle', () => {
 
   it('restores timeline, history, media, export, dock, and render state after failure', async () => {
     const timelineBefore = useTimelineStore.getState();
-    const historyBefore = useHistoryStore.getState();
+    const historyBefore = getHistoryStateView();
     const mediaBefore = useMediaStore.getState();
     const exportBefore = useExportStore.getState();
     const dockBefore = structuredClone(useDockStore.getState().layout);
@@ -125,7 +125,7 @@ describe('MD2 disposable evidence lifecycle', () => {
         selectedKeyframeIds: new Set(['md2-kf']),
         isExporting: true,
       });
-      useHistoryStore.setState({ maxHistorySize: historyBefore.maxHistorySize + 1 });
+      useHistoryStore.setState({ maxHistoryNodes: historyBefore.maxHistorySize + 1 });
       useMediaStore.setState({ selectedIds: ['md2-media'], currentProjectName: 'MD2 mutation' });
       useExportStore.setState({ selectedPresetId: 'md2-preset' });
       useDockStore.setState({
@@ -144,7 +144,7 @@ describe('MD2 disposable evidence lifecycle', () => {
     expect(timelineAfter.selectedClipIds).toBe(timelineBefore.selectedClipIds);
     expect(timelineAfter.selectedKeyframeIds).toBe(timelineBefore.selectedKeyframeIds);
     expect(timelineAfter.isExporting).toBe(timelineBefore.isExporting);
-    expect(useHistoryStore.getState().maxHistorySize).toBe(historyBefore.maxHistorySize);
+    expect(getHistoryStateView().maxHistorySize).toBe(historyBefore.maxHistorySize);
     expect(useMediaStore.getState().selectedIds).toEqual(mediaBefore.selectedIds);
     expect(useMediaStore.getState().currentProjectName).toBe(mediaBefore.currentProjectName);
     expect(useExportStore.getState().selectedPresetId).toBe(exportBefore.selectedPresetId);

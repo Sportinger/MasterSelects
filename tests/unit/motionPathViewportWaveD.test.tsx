@@ -11,6 +11,7 @@ import {
   useMotionPathEditing,
 } from '../../src/components/preview/useMotionPathEditing';
 import {
+  getHistoryStateView,
   initHistoryStoreRefs,
   setHistoryCallbacks,
   useHistoryStore,
@@ -88,7 +89,7 @@ describe('motion-path viewport spatial handles', () => {
       suppressCaptures: () => undefined,
     });
     useHistoryStore.setState({ batchId: null, batchLabel: null });
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
     clip = createMockClip({
       id: 'clip-motion',
       trackId: 'video-1',
@@ -109,10 +110,10 @@ describe('motion-path viewport spatial handles', () => {
 
   afterEach(() => {
     cleanup();
-    if (useHistoryStore.getState().batchId !== null) {
-      useHistoryStore.getState().cancelBatch();
+    if (getHistoryStateView().batchId !== null) {
+      getHistoryStateView().cancelBatch();
     }
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
     useTimelineStore.setState(initialTimelineState);
     vi.restoreAllMocks();
   });
@@ -247,16 +248,16 @@ describe('motion-path viewport spatial handles', () => {
     expect(getHandle(changed, 'y-0')?.x).toBeCloseTo(0.3);
     expect(getHandle(changed, 'y-0')?.y).toBeCloseTo(-0.05);
     expect(useTimelineStore.getState().selectedKeyframeIds).toEqual(new Set(['x-0', 'y-0']));
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
     expect(releasePointerCapture).toHaveBeenCalledWith(17);
 
-    act(() => useHistoryStore.getState().undo());
+    act(() => getHistoryStateView().undo());
     const restored = useTimelineStore.getState().clipKeyframes.get('clip-motion') ?? [];
     expect(getHandle(restored, 'x-0')).toEqual({ x: 0.2, y: 0.1 });
     expect(getHandle(restored, 'y-0')).toEqual({ x: 0.4, y: 0.2 });
     expect(useTimelineStore.getState().selectedKeyframeIds).toEqual(new Set(['x-0']));
 
-    act(() => useHistoryStore.getState().redo());
+    act(() => getHistoryStateView().redo());
     const redone = useTimelineStore.getState().clipKeyframes.get('clip-motion') ?? [];
     expect(getHandle(redone, 'x-0')?.x).toBeCloseTo(0.3);
     expect(getHandle(redone, 'x-0')?.y).toBeCloseTo(0.35);
@@ -291,7 +292,7 @@ describe('motion-path viewport spatial handles', () => {
     expect(handle).toHaveAttribute('aria-pressed', 'false');
     expect(useTimelineStore.getState().selectedKeyframeIds).toEqual(new Set(['x-0']));
     expect(useTimelineStore.getState().clipKeyframes.get('clip-motion')).toEqual(pairedKeyframes());
-    expect(useHistoryStore.getState().batchId).toBeNull();
+    expect(getHistoryStateView().batchId).toBeNull();
   });
 
   it('resolves a created companion to stable paired ids and restores it plus selection on undo', () => {
@@ -314,10 +315,10 @@ describe('motion-path viewport spatial handles', () => {
     const createdId = createdCompanions[0]!.id;
     expect(changed.find((keyframe) => keyframe.id === 'x-0')?.value).toBeCloseTo(0.3);
     expect(useTimelineStore.getState().selectedKeyframeIds).toEqual(new Set(['x-0', createdId]));
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
 
     rendered.unmount();
-    act(() => useHistoryStore.getState().undo());
+    act(() => getHistoryStateView().undo());
     const restored = useTimelineStore.getState().clipKeyframes.get('clip-motion') ?? [];
     expect(restored.some((keyframe) => keyframe.id === createdId)).toBe(false);
     expect(restored.find((keyframe) => keyframe.id === 'x-0')?.value).toBe(0.1);
@@ -346,7 +347,7 @@ describe('motion-path viewport spatial handles', () => {
       'x-0',
     )).toEqual({ x: 0.2, y: 0.1 });
     expect(useTimelineStore.getState().selectedKeyframeIds).toEqual(new Set(['x-0']));
-    expect(useHistoryStore.getState().undoStack).toHaveLength(0);
+    expect(getHistoryStateView().undoStack).toHaveLength(0);
 
     handle = screen.getByRole('button', {
       name: 'Outgoing position curve handle at 0.000 seconds',
@@ -358,7 +359,7 @@ describe('motion-path viewport spatial handles', () => {
     expect(getHandle(committed, 'x-0')?.y).toBeCloseTo(0.17);
     expect(getHandle(committed, 'y-0')?.x).toBeCloseTo(0.3);
     expect(getHandle(committed, 'y-0')?.y).toBeCloseTo(0.15);
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
   });
 
   it.each(['pointercancel', 'blur', 'unmount'] as const)(
@@ -388,8 +389,8 @@ describe('motion-path viewport spatial handles', () => {
       expect(getHandle(restored, 'x-0')).toEqual({ x: 0.2, y: 0.1 });
       expect(getHandle(restored, 'y-0')).toEqual({ x: 0.4, y: 0.2 });
       expect(useTimelineStore.getState().selectedKeyframeIds).toEqual(new Set(['x-0']));
-      expect(useHistoryStore.getState().undoStack).toHaveLength(0);
-      expect(useHistoryStore.getState().batchId).toBeNull();
+      expect(getHistoryStateView().undoStack).toHaveLength(0);
+      expect(getHistoryStateView().batchId).toBeNull();
       expect(releasePointerCapture).toHaveBeenCalledWith(23);
     },
   );

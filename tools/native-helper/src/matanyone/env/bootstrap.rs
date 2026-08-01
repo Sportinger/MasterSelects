@@ -183,7 +183,7 @@ pub(super) async fn extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<()> 
                 String::from_utf8_lossy(&result.stderr).trim()
             );
         }
-        return Ok(());
+        Ok(())
     }
     #[cfg(not(windows))]
     {

@@ -1,8 +1,15 @@
 import { useTimelineStore } from '../../../stores/timeline';
 import type { ToolResult } from '../types';
 import { selectClipAndOpenTab } from '../aiFeedback';
-import { createMaskPathProperty } from '../../../types';
-import type { ClipMask, MaskPathKeyframeValue, MaskVertex, MaskVertexHandleMode } from '../../../types';
+import {
+  createMaskPathProperty,
+} from '../../../types/animationProperties';
+import type {
+  ClipMask,
+  MaskPathKeyframeValue,
+  MaskVertex,
+  MaskVertexHandleMode,
+} from '../../../types/masks';
 import {
   captureMutationEntitySnapshot,
   describeMutationEntities,

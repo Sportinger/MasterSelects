@@ -43,6 +43,9 @@ const timelineState = {
 vi.mock('../../src/stores/timeline', () => ({
   useTimelineStore: Object.assign(vi.fn((selector: (state: typeof timelineState) => unknown) => selector(timelineState)), {
     getState: vi.fn(() => timelineState),
+    setState: vi.fn((update: Partial<typeof timelineState> | ((state: typeof timelineState) => Partial<typeof timelineState>)) => {
+      Object.assign(timelineState, typeof update === 'function' ? update(timelineState) : update);
+    }),
   }),
 }));
 

@@ -1,8 +1,7 @@
 // Shared components for Properties Panel tabs
 import { useRef, useCallback, useEffect } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
-import type { AnimatableProperty } from '../../../types';
-import { createEffectProperty } from '../../../types';
+import { createEffectProperty, type AnimatableProperty } from '../../../types/animationProperties';
 import {
   KEYFRAME_RECORDING_FEEDBACK_EVENT,
   getKeyframeRecordingFeedbackId,

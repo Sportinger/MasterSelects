@@ -31,10 +31,10 @@ import {
   hydrateStoryboardProjectState,
 } from '../../src/stores/storyboardStore';
 import {
+  getHistoryStateView,
   initHistoryStoreRefs,
   setHistoryDisabledForDebug,
   undo,
-  useHistoryStore,
 } from '../../src/stores/historyStore';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
@@ -408,7 +408,7 @@ describe('first-class storyboard variant range commit', () => {
     };
     let storyboardState = projectState();
     setHistoryDisabledForDebug(false);
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
     initHistoryStoreRefs({
       timeline: {
         getState: useTimelineStore.getState,
@@ -454,11 +454,11 @@ describe('first-class storyboard variant range commit', () => {
           storyboardState = structuredClone(state);
         },
         markVariantSetStale: vi.fn(),
-        startHistoryBatch: (label) => useHistoryStore.getState().startBatch(label),
-        endHistoryBatch: () => useHistoryStore.getState().endBatch(),
-        cancelHistoryBatch: () => useHistoryStore.getState().cancelBatch(),
+        startHistoryBatch: (label) => getHistoryStateView().startBatch(label),
+        endHistoryBatch: () => getHistoryStateView().endBatch(),
+        cancelHistoryBatch: () => getHistoryStateView().cancelBatch(),
       });
-      expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+      expect(getHistoryStateView().undoStack).toHaveLength(1);
       expect(mediaState.compositions[0]).not.toEqual(base);
       expect(storyboardState.variantSets[variantSet.id]?.status)
         .toBe('committed');
@@ -485,7 +485,7 @@ describe('first-class storyboard variant range commit', () => {
           setState: hydrateStoryboardProjectState,
         },
       });
-      useHistoryStore.getState().clearHistory();
+      getHistoryStateView().clearHistory();
     }
   });
 

@@ -69,7 +69,7 @@ describe('Fast V2 compact browser request', () => {
         schemaVersion: 1,
         timelineRevision: 7,
       },
-      editorBuildId: 'masterselects:2.4.4',
+      editorBuildId: 'masterselects:2.4.5',
       executionProfile: 'verified',
       protocolVersion: 'fast-agent-v2',
       requestedExecutionMode: 'normal',

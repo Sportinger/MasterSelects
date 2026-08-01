@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { executeAITool } from '../../src/services/aiTools';
 import {
+  getHistoryStateView,
   initHistoryStoreRefs,
   setHistoryCallbacks,
   setHistoryDisabledForDebug,
-  useHistoryStore,
 } from '../../src/stores/historyStore';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
@@ -105,14 +105,14 @@ describe('MD7 AI Motion Adjustment authoring', () => {
     resetTimeline();
     setHistoryDisabledForDebug(false);
     initializeHistory();
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
   });
 
   afterEach(() => {
-    if (useHistoryStore.getState().batchId !== null) {
-      useHistoryStore.getState().cancelBatch();
+    if (getHistoryStateView().batchId !== null) {
+      getHistoryStateView().cancelBatch();
     }
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
     useTimelineStore.setState(initialTimelineState);
     useMediaStore.setState(initialMediaState);
   });
@@ -151,13 +151,13 @@ describe('MD7 AI Motion Adjustment authoring', () => {
         { type: 'invert', params: {} },
       ],
     });
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
 
-    expect(useHistoryStore.getState().undo()).toMatchObject({ operation: 'undo' });
+    expect(getHistoryStateView().undo()).toMatchObject({ operation: 'undo' });
     expect(useTimelineStore.getState().clips.some((clip) => clip.id === clipId)).toBe(false);
-    expect(useHistoryStore.getState().undo()).toBeNull();
+    expect(getHistoryStateView().undo()).toBeNull();
 
-    expect(useHistoryStore.getState().redo()).toMatchObject({ operation: 'redo' });
+    expect(getHistoryStateView().redo()).toMatchObject({ operation: 'redo' });
     expect(useTimelineStore.getState().clips.find((clip) => clip.id === clipId)?.effects)
       .toHaveLength(2);
   });
@@ -166,7 +166,7 @@ describe('MD7 AI Motion Adjustment authoring', () => {
     const { clipId } = await createAdjustment({
       effects: [{ id: 'effect:original', type: 'contrast', parameters: { amount: 1.2 } }],
     });
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
 
     const configured = await executeAITool('editMotionAdjustment', {
       operation: 'configure',
@@ -192,15 +192,15 @@ describe('MD7 AI Motion Adjustment authoring', () => {
         params: { radius: 12, samples: 7 },
       }],
     });
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
-    expect(useHistoryStore.getState().undo()).toMatchObject({ operation: 'undo' });
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
+    expect(getHistoryStateView().undo()).toMatchObject({ operation: 'undo' });
     expect(useTimelineStore.getState().clips.find((clip) => clip.id === clipId)?.effects[0]?.id)
       .toBe('effect:original');
-    expect(useHistoryStore.getState().redo()).toMatchObject({ operation: 'redo' });
+    expect(getHistoryStateView().redo()).toMatchObject({ operation: 'redo' });
     expect(useTimelineStore.getState().clips.find((clip) => clip.id === clipId)?.effects[0]?.id)
       .toBe(configuredEffectId);
 
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
     const moved = await executeAITool('editMotionAdjustment', {
       operation: 'move',
       clipId,
@@ -213,14 +213,14 @@ describe('MD7 AI Motion Adjustment authoring', () => {
       trackId: 'video-2',
       startTime: 4,
     });
-    expect(useHistoryStore.getState().undo()).toMatchObject({ operation: 'undo' });
+    expect(getHistoryStateView().undo()).toMatchObject({ operation: 'undo' });
     expect(useTimelineStore.getState().clips.find((clip) => clip.id === clipId)).toMatchObject({
       trackId: 'video-1',
       startTime: 1,
     });
-    expect(useHistoryStore.getState().redo()).toMatchObject({ operation: 'redo' });
+    expect(getHistoryStateView().redo()).toMatchObject({ operation: 'redo' });
 
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
     const trimmed = await executeAITool('editMotionAdjustment', {
       operation: 'trim',
       clipId,
@@ -236,14 +236,14 @@ describe('MD7 AI Motion Adjustment authoring', () => {
       outPoint: 2.5,
       source: { naturalDuration: 2.5 },
     });
-    expect(useHistoryStore.getState().undo()).toMatchObject({ operation: 'undo' });
+    expect(getHistoryStateView().undo()).toMatchObject({ operation: 'undo' });
     expect(useTimelineStore.getState().clips.find((clip) => clip.id === clipId)).toMatchObject({
       startTime: 4,
       duration: 5,
     });
-    expect(useHistoryStore.getState().redo()).toMatchObject({ operation: 'redo' });
+    expect(getHistoryStateView().redo()).toMatchObject({ operation: 'redo' });
 
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
     const removed = await executeAITool('editMotionAdjustment', {
       operation: 'remove',
       clipId,
@@ -256,11 +256,11 @@ describe('MD7 AI Motion Adjustment authoring', () => {
       removedEffectIds: [configuredEffectId],
     });
     expect(useTimelineStore.getState().clips.some((clip) => clip.id === clipId)).toBe(false);
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
-    expect(useHistoryStore.getState().undo()).toMatchObject({ operation: 'undo' });
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
+    expect(getHistoryStateView().undo()).toMatchObject({ operation: 'undo' });
     expect(useTimelineStore.getState().clips.find((clip) => clip.id === clipId)?.effects[0]?.id)
       .toBe(configuredEffectId);
-    expect(useHistoryStore.getState().redo()).toMatchObject({ operation: 'redo' });
+    expect(getHistoryStateView().redo()).toMatchObject({ operation: 'redo' });
     expect(useTimelineStore.getState().clips.some((clip) => clip.id === clipId)).toBe(false);
   });
 
@@ -304,12 +304,12 @@ describe('MD7 AI Motion Adjustment authoring', () => {
       data: { code: 'MD7_ADJUSTMENT_STALE_REVISION' },
     });
     expect(useTimelineStore.getState().clips).toHaveLength(0);
-    expect(useHistoryStore.getState().undo()).toBeNull();
+    expect(getHistoryStateView().undo()).toBeNull();
   });
 
   it('blocks generic AI effect paths from injecting unsupported adjustment data', async () => {
     const { clipId } = await createAdjustment();
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
 
     const unsupported = await executeAITool('addEffect', {
       clipId,
@@ -332,7 +332,7 @@ describe('MD7 AI Motion Adjustment authoring', () => {
     });
     expect(useTimelineStore.getState().clips.find((clip) => clip.id === clipId)?.effects)
       .toEqual([]);
-    expect(useHistoryStore.getState().undo()).toBeNull();
+    expect(getHistoryStateView().undo()).toBeNull();
 
     const supported = await executeAITool('addEffect', {
       clipId,
@@ -341,7 +341,7 @@ describe('MD7 AI Motion Adjustment authoring', () => {
     }, 'internal');
     expect(supported.success).toBe(true);
     const effectId = (supported.data as { effectId: string }).effectId;
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
     const invalidUpdate = await executeAITool('updateEffect', {
       clipId,
       effectId,
@@ -353,7 +353,7 @@ describe('MD7 AI Motion Adjustment authoring', () => {
     });
     expect(useTimelineStore.getState().clips.find((clip) => clip.id === clipId)?.effects[0])
       .toMatchObject({ id: effectId, params: { amount: 0.25 } });
-    expect(useHistoryStore.getState().undo()).toBeNull();
+    expect(getHistoryStateView().undo()).toBeNull();
   });
 
   it('keeps the direct Add-menu store action locked-safe and one-step undoable', () => {
@@ -367,7 +367,7 @@ describe('MD7 AI Motion Adjustment authoring', () => {
       Number.NaN,
       5,
     )).toBeNull();
-    expect(useHistoryStore.getState().undo()).toBeNull();
+    expect(getHistoryStateView().undo()).toBeNull();
 
     const clipId = useTimelineStore.getState().addMotionAdjustmentClip('video-1', 3, 4);
     expect(clipId).not.toBeNull();
@@ -378,11 +378,11 @@ describe('MD7 AI Motion Adjustment authoring', () => {
       motion: { kind: 'adjustment' },
       effects: [],
     });
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
-    expect(useHistoryStore.getState().undo()).toMatchObject({ operation: 'undo' });
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
+    expect(getHistoryStateView().undo()).toMatchObject({ operation: 'undo' });
     expect(useTimelineStore.getState().clips.some((clip) => clip.id === clipId)).toBe(false);
-    expect(useHistoryStore.getState().undo()).toBeNull();
-    expect(useHistoryStore.getState().redo()).toMatchObject({ operation: 'redo' });
+    expect(getHistoryStateView().undo()).toBeNull();
+    expect(getHistoryStateView().redo()).toMatchObject({ operation: 'redo' });
     expect(useTimelineStore.getState().clips.find((clip) => clip.id === clipId)?.source?.type)
       .toBe('motion-adjustment');
   });

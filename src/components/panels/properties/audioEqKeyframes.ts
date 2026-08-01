@@ -3,8 +3,7 @@ import {
   AUDIO_EQ_DEFAULT_BAND_SPECTRAL_DYNAMICS,
 } from '../../../engine/audio/eq/AudioEqDefaults';
 import type { AudioEqBand } from '../../../engine/audio/eq/AudioEqTypes';
-import type { AnimatableProperty } from '../../../types';
-import { createEffectProperty } from '../../../types';
+import { createEffectProperty, type AnimatableProperty } from '../../../types/animationProperties';
 
 export type AudioEqKeyframeEntry = {
   property: AnimatableProperty;

@@ -1,9 +1,7 @@
 import type { TimelineWaveformPyramid } from '../../components/timeline/utils/waveformLod';
-import type { Keyframe, TimelineClip } from '../../types';
-import type { MediaFileAudioAnalysisRefs } from '../../types/audio';
-import {
-  type ClipAudioEditOperation,
-} from '../../types';
+import type { ClipAudioEditOperation, MediaFileAudioAnalysisRefs } from '../../types/audio';
+import type { Keyframe } from '../../types/keyframes';
+import type { TimelineClip } from '../../types/timeline';
 import type { AudioArtifactStore } from './AudioArtifactStore';
 import type { AudioAnalysisArtifact } from './audioArtifactTypes';
 import {

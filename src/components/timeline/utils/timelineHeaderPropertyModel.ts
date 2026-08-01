@@ -1,5 +1,11 @@
-import type { AnimatableProperty, ClipMask, ClipTransform, Keyframe } from '../../../types';
-import { parseCameraProperty, parseMaskProperty } from '../../../types';
+import {
+  parseCameraProperty,
+  parseMaskProperty,
+  type AnimatableProperty,
+} from '../../../types/animationProperties';
+import type { Keyframe } from '../../../types/keyframes';
+import type { ClipMask } from '../../../types/masks';
+import type { ClipTransform } from '../../../types/timelineCore';
 import { getMaskEdgeFeather } from '../../../utils/maskEdgeFeathers';
 import {
   parseVectorAnimationDataBindingProperty,

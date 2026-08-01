@@ -135,7 +135,6 @@ export const classCHardTargets = [
   { path: 'src/engine/render/dispatcher/exportReadinessFacet.ts', maxCurrentHits: 1 },
   { path: 'src/engine/render/dispatcher/sharedScene3DProcessor.ts', maxCurrentHits: 2 },
   { path: 'src/engine/render/dispatcher/targetPreviewLayerCollector.ts', maxCurrentHits: 2 },
-  { path: 'src/engine/render/dispatcher/targetPreviewRenderer.ts', maxCurrentHits: 2 },
   { path: 'src/engine/scene/SceneCameraUtils.ts', maxCurrentHits: 7 },
   { path: 'src/engine/scene/SceneEffectorUtils.ts', maxCurrentHits: 2 },
   // Packet 345: 5 -> 2+1+1 (presenter + recovery wiring; one site retired
@@ -241,7 +240,7 @@ export const classCHardTargets = [
   { path: 'src/stores/timeline/clip/addVideoClip.ts', maxCurrentHits: 3 },
   { path: 'src/stores/timeline/clip/clipAudioAnalysisShared.ts', maxCurrentHits: 1 },
   { path: 'src/stores/timeline/clip/completeDownload.ts', maxCurrentHits: 1 },
-  { path: 'src/stores/timeline/clip/compositionClipActions.ts', maxCurrentHits: 1 },
+  { path: 'src/stores/timeline/clip/compositionClipActions.ts', maxCurrentHits: 2 },
   { path: 'src/stores/timeline/clip/upgradeToNativeDecoder.ts', maxCurrentHits: 6 },
   { path: 'src/stores/timeline/clip/videoLinkedAudioLoader.ts', maxCurrentHits: 1 },
   { path: 'src/stores/timeline/clip/videoThumbnailLoader.ts', maxCurrentHits: 1 },
@@ -269,7 +268,7 @@ export const classCHardTargets = [
 ] as const satisfies readonly GetStateClassCHardTarget[];
 
 export const getStateAccessPolicyBaselines = {
-  allowedAdapterPathCount: 31,
-  classCHardTargetFileCount: 250,
-  classCHardTargetMaxHits: 734,
+  allowedAdapterPathCount: 36,
+  classCHardTargetFileCount: 248,
+  classCHardTargetMaxHits: 730,
 } as const;

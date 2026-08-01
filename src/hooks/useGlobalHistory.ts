@@ -379,6 +379,11 @@ export function useGlobalHistory() {
         }
       },
       suppressCaptures: () => {
+        if (pendingTimer.current) {
+          clearTimeout(pendingTimer.current);
+          pendingTimer.current = null;
+          pendingLabel.current = '';
+        }
         suppressUntil.current = Date.now() + 250;
       },
       // After an undo/redo restores state, rebuild layers from the restored clips

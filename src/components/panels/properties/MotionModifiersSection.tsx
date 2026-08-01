@@ -21,6 +21,33 @@ interface MotionModifiersSectionProps {
 
 type ModifierKind = MotionModifier['kind'];
 
+const EXPANDED_STORAGE_KEY = 'masterselects.motionModifiersSection.expanded';
+
+function readStoredExpanded(): boolean {
+  try {
+    return localStorage.getItem(EXPANDED_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function persistExpanded(expanded: boolean): void {
+  try {
+    localStorage.setItem(EXPANDED_STORAGE_KEY, expanded ? '1' : '0');
+  } catch { /* storage unavailable */ }
+}
+
+const styles = {
+  header: {
+    display: 'flex', alignItems: 'center', gap: '6px', width: '100%', margin: 0,
+    padding: 0, border: 'none', background: 'none', color: 'inherit', font: 'inherit',
+    textAlign: 'left', cursor: 'pointer',
+  },
+  chevron: {
+    display: 'inline-block', width: '1em', color: 'var(--text-secondary)', fontSize: 'var(--font-xs)',
+  },
+} as const;
+
 const KIND_LABELS: Record<ModifierKind, string> = {
   random: 'Random',
   noise: 'Noise',
@@ -75,6 +102,8 @@ function NumericRow({ label, value, onChange }: { label: string; value: number; 
 
 export function MotionModifiersSection({ clipId, motion }: MotionModifiersSectionProps) {
   const clips = useTimelineStore((state) => state.clips);
+  const updateMotionLayer = useTimelineStore((state) => state.updateMotionLayer);
+  const [expanded, setExpanded] = useState(readStoredExpanded);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [diagnostic, setDiagnostic] = useState<string | null>(null);
   const stack = motion.modifierStack;
@@ -90,7 +119,7 @@ export function MotionModifiersSection({ clipId, motion }: MotionModifiersSectio
   ) => {
     if (nextModifiers.length === 0) {
       setDiagnostic(null);
-      useTimelineStore.getState().updateMotionLayer(clipId, (current) => ({
+      updateMotionLayer(clipId, (current) => ({
         ...current,
         modifierStack: undefined,
       }));
@@ -108,11 +137,11 @@ export function MotionModifiersSection({ clipId, motion }: MotionModifiersSectio
     try {
       const parsed = parseMotionModifierStackContract(candidate);
       setDiagnostic(null);
-      useTimelineStore.getState().updateMotionLayer(clipId, (current) => ({ ...current, modifierStack: parsed }));
+      updateMotionLayer(clipId, (current) => ({ ...current, modifierStack: parsed }));
     } catch (error) {
       setDiagnostic(error instanceof Error ? error.message : String(error));
     }
-  }, [clipId, stack]);
+  }, [clipId, stack, updateMotionLayer]);
 
   const patchModifier = (index: number, patch: Partial<MotionModifier>) => {
     apply(modifiers.map((modifier, modifierIndex) => (
@@ -141,16 +170,30 @@ export function MotionModifiersSection({ clipId, motion }: MotionModifiersSectio
     });
   };
 
+  const toggleExpanded = useCallback(() => {
+    setExpanded(current => {
+      const next = !current;
+      persistExpanded(next);
+      return next;
+    });
+  }, []);
+
   if (motion.kind !== 'shape') return null;
 
   return (
     <div className="properties-section" data-testid="motion-modifiers-section">
-      <div className="section-header">Modifiers</div>
+      <h4>
+        <button aria-expanded={expanded} style={styles.header} type="button" onClick={toggleExpanded}>
+          <span aria-hidden="true" style={styles.chevron}>{expanded ? '▼' : '▶'}</span>
+          Modifiers
+        </button>
+      </h4>
+      {expanded && <>
       {!motion.replicator?.enabled && (
         <p className="property-hint">Modifiers apply to replicator instances. Enable Replicator to see their effect.</p>
       )}
       <div className="control-row">
-        <label className="prop-label" htmlFor={`add-motion-modifier-${clipId}`}>Add modifier</label>
+        <label className="prop-label motion-wide-label" htmlFor={`add-motion-modifier-${clipId}`}>Add modifier</label>
         <select
           id={`add-motion-modifier-${clipId}`}
           aria-label="Add modifier"
@@ -230,6 +273,7 @@ export function MotionModifiersSection({ clipId, motion }: MotionModifiersSectio
         </>}
       </div>}
       {diagnostic && <div className="analysis-status error" role="status" data-testid="motion-modifier-diagnostic">{diagnostic}</div>}
+      </>}
     </div>
   );
 }

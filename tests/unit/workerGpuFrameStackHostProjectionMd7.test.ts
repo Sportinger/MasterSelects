@@ -17,7 +17,6 @@ import {
 import {
   WorkerGpuFrameStackProjectionError,
   projectWorkerGpuFrameStack,
-  type WorkerGpuFrameStackProjectionRequest,
 } from '../../src/services/render/workerGpuFrameStackProjector';
 
 class FakeImageBitmap {

@@ -301,7 +301,6 @@ fn parse_health_response(response: &str) -> Result<HealthStatus, String> {
 
 #[cfg(windows)]
 fn hide_console(command: &mut Command) {
-    use std::os::windows::process::CommandExt;
     command.creation_flags(0x08000000);
 }
 

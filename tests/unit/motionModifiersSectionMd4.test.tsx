@@ -27,6 +27,7 @@ describe('MotionModifiersSection MD4 authoring', () => {
   let otherShapeId: string;
 
   beforeEach(() => {
+    localStorage.removeItem('masterselects.motionModifiersSection.expanded');
     useTimelineStore.setState({
       ...initialState, clips: [], tracks: [{ id: 'video-1', name: 'Video 1', type: 'video', height: 70, muted: false, visible: true, solo: false }], clipKeyframes: new Map(),
     });
@@ -40,15 +41,19 @@ describe('MotionModifiersSection MD4 authoring', () => {
     useTimelineStore.getState().updateMotionLayer(clipId, (motion) => ({ ...motion, modifierStack: next }));
   };
   const currentStack = () => useTimelineStore.getState().clips.find((clip) => clip.id === clipId)?.motion?.modifierStack;
+  const renderExpandedTab = () => {
+    render(<MotionShapeTab clipId={clipId} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Modifiers' }));
+  };
 
   it('renders existing rows in contract order', () => {
-    setStack(); render(<MotionShapeTab clipId={clipId} />);
+    setStack(); renderExpandedTab();
     expect(screen.getAllByTestId(/motion-modifier-/).map((node) => node.getAttribute('data-testid')))
       .toEqual(['motion-modifier-random-one', 'motion-modifier-osc-one']);
   });
 
   it('adds a parse-valid revision-one stack with one default target', () => {
-    render(<MotionShapeTab clipId={clipId} />);
+    renderExpandedTab();
     fireEvent.change(screen.getByLabelText('Add modifier'), { target: { value: 'random' } });
     const result = currentStack();
     expect(parseMotionModifierStackContract(result)).toEqual(result);
@@ -56,25 +61,25 @@ describe('MotionModifiersSection MD4 authoring', () => {
   });
 
   it('toggles enabled with a parse-valid next revision', () => {
-    setStack(stack([{ id: 'random-one', kind: 'random' }])); render(<MotionShapeTab clipId={clipId} />);
+    setStack(stack([{ id: 'random-one', kind: 'random' }])); renderExpandedTab();
     fireEvent.click(screen.getByLabelText('Enable Random modifier'));
     expect(parseMotionModifierStackContract(currentStack())).toMatchObject({ revision: 5, modifiers: [{ enabled: false }] });
   });
 
   it('reorders and renumbers order fields', () => {
-    setStack(); render(<MotionShapeTab clipId={clipId} />);
+    setStack(); renderExpandedTab();
     fireEvent.click(screen.getByLabelText('Move Oscillator modifier up'));
     expect(currentStack()?.modifiers.map((modifier) => [modifier.id, modifier.order])).toEqual([['osc-one', 0], ['random-one', 1]]);
   });
 
   it('clears modifierStack when the last modifier is removed', () => {
-    setStack(stack([{ id: 'random-one', kind: 'random' }])); render(<MotionShapeTab clipId={clipId} />);
+    setStack(stack([{ id: 'random-one', kind: 'random' }])); renderExpandedTab();
     fireEvent.click(screen.getByLabelText('Remove Random modifier'));
     expect(currentStack()).toBeUndefined();
   });
 
   it('shows a diagnostic and does not apply invalid amount edits', () => {
-    setStack(stack([{ id: 'random-one', kind: 'random' }])); render(<MotionShapeTab clipId={clipId} />);
+    setStack(stack([{ id: 'random-one', kind: 'random' }])); renderExpandedTab();
     fireEvent.click(screen.getByLabelText('Expand Random modifier'));
     // Drive the value through the component's double-click edit mode. A raw
     // mousedown/mousemove drag needs pointer-lock mocks, `buttons`, and
@@ -89,7 +94,7 @@ describe('MotionModifiersSection MD4 authoring', () => {
   });
 
   it('sets and clears falloff through the parser', () => {
-    setStack(stack([{ id: 'random-one', kind: 'random' }])); render(<MotionShapeTab clipId={clipId} />);
+    setStack(stack([{ id: 'random-one', kind: 'random' }])); renderExpandedTab();
     fireEvent.click(screen.getByLabelText('Enable falloff'));
     expect(parseMotionModifierStackContract(currentStack())).toMatchObject({ falloff: { shapeClipId: otherShapeId, shapeRevision: 0 } });
     fireEvent.click(screen.getByLabelText('Enable falloff'));

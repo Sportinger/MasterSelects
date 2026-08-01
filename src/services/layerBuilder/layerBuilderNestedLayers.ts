@@ -1,11 +1,10 @@
-import type {
-  BlendMode,
-  Keyframe,
-  Layer,
-  NestedCompositionData,
-  TimelineClip,
-} from '../../types';
-import { compileRuntimeColorGrade } from '../../types';
+import {
+  compileRuntimeColorGrade,
+} from '../../types/colorCorrection';
+import type { BlendMode } from '../../types/blendMode';
+import type { Keyframe } from '../../types/keyframes';
+import type { Layer, NestedCompositionData } from '../../types/layers';
+import type { TimelineClip } from '../../types/timeline';
 import { useTimelineStore } from '../../stores/timeline';
 import { getInterpolatedMotionLayer } from '../../utils/motionInterpolation';
 import { getEffectiveScale } from '../../utils/transformScale';

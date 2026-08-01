@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
 
 import {
-  handleApplyMotionTemplate,
-  handleSaveMotionTemplate,
+  handleApplyMotionTemplateForCurrentTimeline,
+  handleSaveMotionTemplateForCurrentTimeline,
 } from '../../../services/aiTools/handlers/motionDesign';
 import { listMotionTemplates } from '../../../services/motionDesign/motionTemplateLibrary';
 import { useTimelineStore } from '../../../stores/timeline';
@@ -67,11 +67,11 @@ export function MotionTemplatesSection({ clipId }: MotionTemplatesSectionProps) 
   }, []);
 
   const saveTemplate = useCallback(async () => {
-    const result = await handleSaveMotionTemplate({
+    const result = await handleSaveMotionTemplateForCurrentTimeline({
       clipId,
       name,
       ...(category.trim() ? { category: category.trim() } : {}),
-    }, useTimelineStore.getState());
+    });
     if (!result.success) {
       setError(result.error ?? 'Could not save motion template');
       return;
@@ -84,11 +84,11 @@ export function MotionTemplatesSection({ clipId }: MotionTemplatesSectionProps) 
 
   const applyTemplate = useCallback(async () => {
     if (!trackId) return;
-    const result = await handleApplyMotionTemplate({
+    const result = await handleApplyMotionTemplateForCurrentTimeline({
       templateId: selectedTemplateId,
       trackId,
       startTime: playheadPosition,
-    }, useTimelineStore.getState());
+    });
     if (!result.success) {
       setError(result.error ?? 'Could not apply motion template');
       setMissingDependencies([]);
@@ -112,7 +112,7 @@ export function MotionTemplatesSection({ clipId }: MotionTemplatesSectionProps) 
         </button>
       </h4>
       {expanded && <>
-        <div className="control-row">
+        <div className="control-row motion-template-apply-row">
           <label className="prop-label" htmlFor={`motion-template-${clipId}`}>Templates</label>
           <select aria-label="Motion template category filter" value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)}>
             <option value="">All categories</option>
@@ -124,7 +124,7 @@ export function MotionTemplatesSection({ clipId }: MotionTemplatesSectionProps) 
           </select>
           <button aria-label="Apply motion template" className="btn btn-xs" disabled={!selectedTemplateId} type="button" onClick={applyTemplate}>Apply</button>
         </div>
-        <div className="control-row">
+        <div className="control-row motion-template-save-row">
           <input aria-label="Motion template name" value={name} placeholder="Save as template…" onChange={event => setName(event.target.value)} />
           <input aria-label="Motion template category" value={category} placeholder="Category (optional)" onChange={event => setCategory(event.target.value)} />
           <button aria-label="Save motion template" className="btn btn-xs" disabled={!name.trim()} type="button" onClick={saveTemplate}>Save</button>

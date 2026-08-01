@@ -3,8 +3,12 @@
 // Preserves existing bezier handles when adjusting fade duration.
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type { TimelineClip, TimelineTrack, AnimatableProperty, Keyframe } from '../../../types';
-import { createEffectProperty } from '../../../types';
+import {
+  createEffectProperty,
+  type AnimatableProperty,
+} from '../../../types/animationProperties';
+import type { Keyframe } from '../../../types/keyframes';
+import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
 import type {
   ApplyTimelineEditOperationOptions,
   TimelineEditOperation,

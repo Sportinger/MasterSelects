@@ -10,10 +10,10 @@ import {
   handleUpdateMotionProperties,
 } from '../../src/services/aiTools/handlers/motionDesign';
 import {
+  getHistoryStateView,
   initHistoryStoreRefs,
   setHistoryCallbacks,
   setHistoryDisabledForDebug,
-  useHistoryStore,
 } from '../../src/stores/historyStore';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { DEFAULT_TRANSFORM, useTimelineStore } from '../../src/stores/timeline';
@@ -93,11 +93,11 @@ describe('AI atomic motion sequence authoring', () => {
     seedTimeline();
     setHistoryDisabledForDebug(false);
     initializeHistory();
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
   });
 
   afterEach(() => {
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
     useTimelineStore.setState(initialTimelineState);
     useMediaStore.setState(initialMediaState);
   });
@@ -119,7 +119,7 @@ describe('AI atomic motion sequence authoring', () => {
       .toBeCloseTo(-0.5);
     expect(stored.find((keyframe) => keyframe.property === 'opacity')?.value)
       .toBe(0.4);
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
 
     const data = result.data as {
       keyframes: Array<{
@@ -207,7 +207,7 @@ describe('AI atomic motion sequence authoring', () => {
     }, useTimelineStore.getState());
     expect(invalid.success).toBe(false);
     expect(useTimelineStore.getState().getClipKeyframes(CLIP_ID)).toHaveLength(0);
-    expect(useHistoryStore.getState().undoStack).toHaveLength(0);
+    expect(getHistoryStateView().undoStack).toHaveLength(0);
   });
 
   it('exposes Transform descriptors and applies mixed static updates without partial writes', async () => {

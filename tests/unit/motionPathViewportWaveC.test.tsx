@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  getHistoryStateView,
   initHistoryStoreRefs,
   setHistoryCallbacks,
   useHistoryStore,
@@ -250,7 +251,7 @@ describe('motion-path viewport overlay and editing', () => {
       suppressCaptures: () => undefined,
     });
     useHistoryStore.setState({ batchId: null, batchLabel: null });
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
     clip = createMockClip({
       id: 'clip-motion',
       trackId: 'video-1',
@@ -280,10 +281,10 @@ describe('motion-path viewport overlay and editing', () => {
 
   afterEach(() => {
     cleanup();
-    if (useHistoryStore.getState().batchId !== null) {
-      useHistoryStore.getState().cancelBatch();
+    if (getHistoryStateView().batchId !== null) {
+      getHistoryStateView().cancelBatch();
     }
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
     useTimelineStore.setState(initialTimelineState);
     vi.restoreAllMocks();
   });
@@ -375,10 +376,10 @@ describe('motion-path viewport overlay and editing', () => {
       easing: 'ease-out',
     });
     expect(yKeyframe?.value).toBeCloseTo(0.4);
-    expect(useHistoryStore.getState().batchId).toBeNull();
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    expect(getHistoryStateView().batchId).toBeNull();
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
 
-    act(() => useHistoryStore.getState().undo());
+    act(() => getHistoryStateView().undo());
     const restored = useTimelineStore.getState().clipKeyframes.get('clip-motion') ?? [];
     expect(restored).toHaveLength(1);
     expect(restored[0]).toMatchObject({ id: 'x-node', value: 0.1 });

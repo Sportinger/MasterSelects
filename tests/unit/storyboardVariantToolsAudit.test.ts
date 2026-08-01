@@ -23,9 +23,9 @@ import type {
 } from '../../src/stores/mediaStore/types';
 import { useDockStore } from '../../src/stores/dockStore';
 import {
+  getHistoryStateView,
   initHistoryStoreRefs,
   setHistoryDisabledForDebug,
-  useHistoryStore,
 } from '../../src/stores/historyStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 import type {
@@ -280,7 +280,7 @@ describe('WP10 semantic timeline-variant tool execution boundary', () => {
     });
     await useTimelineStore.getState().loadState(previousTimeline);
     useTimelineStore.getState().setTimelineRangeSelection(previousRangeSelection);
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
     vi.restoreAllMocks();
   });
 
@@ -567,7 +567,7 @@ describe('WP10 semantic timeline-variant tool execution boundary', () => {
     const storyboardBefore = getStoryboardProjectSnapshot();
 
     setHistoryDisabledForDebug(false);
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
     initHistoryStoreRefs({
       timeline: {
         getState: useTimelineStore.getState,
@@ -638,7 +638,7 @@ describe('WP10 semantic timeline-variant tool execution boundary', () => {
     expect(getStoryboardProjectSnapshot()).toEqual(storyboardBefore);
     expect(useStoryboardStore.getState().variantSets[set.id]?.status)
       .toBe('building');
-    expect(useHistoryStore.getState().batchId).toBeNull();
-    expect(useHistoryStore.getState().undoStack).toHaveLength(0);
+    expect(getHistoryStateView().batchId).toBeNull();
+    expect(getHistoryStateView().undoStack).toHaveLength(0);
   });
 });

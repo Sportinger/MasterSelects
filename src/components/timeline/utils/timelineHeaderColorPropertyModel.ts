@@ -1,11 +1,12 @@
-import type { AnimatableProperty, Keyframe } from '../../../types';
 import {
   PRIMARY_COLOR_PARAM_DEFS,
   ensureColorCorrectionState,
   getActiveColorVersion,
   getColorNodeParamValue,
   parseColorProperty,
-} from '../../../types';
+} from '../../../types/colorCorrection';
+import type { AnimatableProperty } from '../../../types/animationProperties';
+import type { Keyframe } from '../../../types/keyframes';
 import { interpolateKeyframes } from '../../../utils/keyframeInterpolation';
 import type { HeaderKeyframe, KeyframeTrackClip } from './timelineHeaderPropertyTypes';
 

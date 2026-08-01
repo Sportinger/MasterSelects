@@ -105,8 +105,8 @@ describe('AI Tool Policy Registry', () => {
     expect(policy!.allowedCallers.includes('devBridge')).toBe(true);
   });
 
-  it('mutating editor tools allow nativeHelper', () => {
-    const helperAllowedTools = [
+  it('mutating editor tools exclude the retired nativeHelper caller', () => {
+    const helperBlockedTools = [
       'deleteClip',
       'executeBatch',
       'splitClipEvenly',
@@ -114,13 +114,13 @@ describe('AI Tool Policy Registry', () => {
       'moveClip',
       'trimClip',
     ];
-    for (const name of helperAllowedTools) {
+    for (const name of helperBlockedTools) {
       const policy = getToolPolicy(name);
       expect(policy, `Missing policy for ${name}`).toBeDefined();
       expect(
         policy!.allowedCallers.includes('nativeHelper'),
-        `${name} should allow nativeHelper`
-      ).toBe(true);
+        `${name} should exclude nativeHelper`
+      ).toBe(false);
     }
   });
 
@@ -613,12 +613,12 @@ describe('AI Tool Policy Registry', () => {
     }
   });
 
-  it('local file tools allow devBridge and nativeHelper', () => {
+  it('local file tools allow devBridge and exclude the retired nativeHelper caller', () => {
     for (const name of ['listLocalFiles', 'importLocalFiles']) {
       const policy = getToolPolicy(name);
       expect(policy, `Missing policy for ${name}`).toBeDefined();
       expect(policy!.allowedCallers.includes('devBridge'), `${name} should allow devBridge`).toBe(true);
-      expect(policy!.allowedCallers.includes('nativeHelper'), `${name} should allow nativeHelper`).toBe(true);
+      expect(policy!.allowedCallers.includes('nativeHelper'), `${name} should exclude nativeHelper`).toBe(false);
     }
   });
 

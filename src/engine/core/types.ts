@@ -1,7 +1,11 @@
 // Engine-specific types and interfaces
 // Re-export common types from main types file for convenience
-export type { Layer, BlendMode, EngineStats, Effect, EffectType } from '../../types';
-import type { Layer } from '../../types';
+import type { BlendMode } from '../../types/blendMode';
+import type { Effect, EffectType } from '../../types/effects';
+import type { EngineStats } from '../../types/engineStats';
+import type { Layer } from '../../types/layers';
+
+export type { BlendMode, Effect, EffectType, EngineStats, Layer };
 
 // Blend mode to shader index mapping
 export const BLEND_MODE_MAP: Record<string, number> = {

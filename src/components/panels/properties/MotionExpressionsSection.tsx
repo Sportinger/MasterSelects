@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 
-import { handleSetMotionExpression } from '../../../services/aiTools/handlers/motionDesign';
+import { handleSetMotionExpressionForCurrentTimeline } from '../../../services/aiTools/handlers/motionDesign';
 import { MOTION_MODIFIER_TARGET_PATHS, type MotionModifierTargetPath } from '../../../services/motionDesign/modifiers/contracts';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { MotionExpressionBinding } from '../../../types/motionDesign';
@@ -63,9 +63,9 @@ export function MotionExpressionsSection({ clipId }: MotionExpressionsSectionPro
     fallback: string | number,
     enabled: boolean,
   ) => {
-    const result = await handleSetMotionExpression({
+    const result = await handleSetMotionExpressionForCurrentTimeline({
       clipId, operation: 'set', path, source, fallback: typeof fallback === 'string' ? Number(fallback) : fallback, enabled,
-    }, useTimelineStore.getState());
+    });
     if (!result.success) {
       setErrors(current => ({ ...current, [path]: result.error ?? 'Could not set motion expression' }));
       return false;
@@ -86,7 +86,7 @@ export function MotionExpressionsSection({ clipId }: MotionExpressionsSectionPro
   }, [clipId]);
 
   const removeBinding = useCallback(async (path: MotionModifierTargetPath) => {
-    const result = await handleSetMotionExpression({ clipId, operation: 'remove', path }, useTimelineStore.getState());
+    const result = await handleSetMotionExpressionForCurrentTimeline({ clipId, operation: 'remove', path });
     if (!result.success) {
       setErrors(current => ({ ...current, [path]: result.error ?? 'Could not remove motion expression' }));
       return;
@@ -125,8 +125,8 @@ export function MotionExpressionsSection({ clipId }: MotionExpressionsSectionPro
             {errors[binding.path] && <p role="alert" style={styles.error}>{errors[binding.path]}</p>}
           </div>;
         })}
-        <div className="control-row">
-          <label className="prop-label" htmlFor={`add-motion-expression-${clipId}`}>Add expression</label>
+        <div className="control-row motion-expression-add-row">
+          <label className="prop-label motion-wide-label" htmlFor={`add-motion-expression-${clipId}`}>Add expression</label>
           <select id={`add-motion-expression-${clipId}`} aria-label="Expression path" value={addPath} onChange={event => setAddPath(event.target.value as MotionModifierTargetPath | '')}>
             <option value="">Choose path…</option>
             {availablePaths.map(path => <option key={path} value={path}>{path}</option>)}

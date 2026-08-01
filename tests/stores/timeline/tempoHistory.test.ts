@@ -79,7 +79,8 @@ describe('tempo map history threading', () => {
   beforeEach(() => {
     setHistoryDisabledForDebug(false);
     useHistoryStore.setState({
-      undoStack: [], redoStack: [], currentSnapshot: null,
+      nodes: {}, rootId: null, activeNodeId: null,
+      lastVisitedChildByNodeId: {}, eventLog: [],
       isApplying: false, batchId: null, batchLabel: null,
     });
     mocks = createMockStores();
@@ -125,15 +126,16 @@ describe('tempo map history threading', () => {
 
     // Simulate persisted pre-#299 entries: strip tempoMap from both snapshot
     // tiers, exactly as an entry written before this feature would look.
-    const stripped = useHistoryStore.getState().undoStack.map(entry => {
-      const next = structuredClone(entry);
-      delete (next.timeline as { tempoMap?: unknown }).tempoMap;
-      if (next.timelineEditState) {
-        delete (next.timelineEditState.timeline as { tempoMap?: unknown }).tempoMap;
+    const state = useHistoryStore.getState();
+    const nodes = Object.fromEntries(Object.entries(state.nodes).map(([id, node]) => {
+      const snapshot = structuredClone(node.snapshot);
+      delete (snapshot.timeline as { tempoMap?: unknown }).tempoMap;
+      if (snapshot.timelineEditState) {
+        delete (snapshot.timelineEditState.timeline as { tempoMap?: unknown }).tempoMap;
       }
-      return next;
-    });
-    useHistoryStore.setState({ undoStack: stripped });
+      return [id, { ...node, snapshot }];
+    }));
+    useHistoryStore.setState({ nodes });
 
     // The live map is newer than the history entries; undo must not erase it.
     mocks.setTimelineState({ tempoMap: tempoMap(60, 150) });

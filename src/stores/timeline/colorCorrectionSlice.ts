@@ -1,4 +1,3 @@
-import type { ColorCorrectionState, ColorNode, ColorParamValue, ColorViewMode } from '../../types';
 import {
   cloneColorCorrectionState,
   createColorNode,
@@ -7,7 +6,11 @@ import {
   ensureColorCorrectionState,
   getActiveColorVersion,
   setColorNodeParamValue,
-} from '../../types';
+  type ColorCorrectionState,
+  type ColorNode,
+  type ColorParamValue,
+  type ColorViewMode,
+} from '../../types/colorCorrection';
 import type { ColorCorrectionActions, Keyframe, SliceCreator } from './types';
 
 function wouldCreateCycle(

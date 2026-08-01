@@ -77,23 +77,6 @@ fn pick_folder_native(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn muscriptor_temp_is_allowed_without_granting_local_app_data() {
-        let state = AppState::new(None);
-        let temp_file = muscriptor::env::get_temp_dir()
-            .join("job")
-            .join("audio.wav");
-        assert!(state.is_path_allowed(&temp_file));
-        if let Some(local_data) = dirs::data_local_dir() {
-            assert!(!state.is_path_allowed(&local_data.join("unrelated-secret.txt")));
-        }
-    }
-}
-
 /// Generate a random auth token
 pub fn generate_auth_token() -> String {
     use rand::Rng;
@@ -144,7 +127,6 @@ impl AppState {
         scoped_prefixes.push(muscriptor::env::get_temp_dir());
         utils::is_path_allowed_with_extra(path, &scoped_prefixes)
     }
-
 }
 
 /// Per-connection session
@@ -375,4 +357,21 @@ impl Session {
     }
 
     // ── MatAnyone2 handlers ──
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn muscriptor_temp_is_allowed_without_granting_local_app_data() {
+        let state = AppState::new(None);
+        let temp_file = muscriptor::env::get_temp_dir()
+            .join("job")
+            .join("audio.wav");
+        assert!(state.is_path_allowed(&temp_file));
+        if let Some(local_data) = dirs::data_local_dir() {
+            assert!(!state.is_path_allowed(&local_data.join("unrelated-secret.txt")));
+        }
+    }
 }

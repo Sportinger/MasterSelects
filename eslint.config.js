@@ -8,6 +8,7 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 export default defineConfig([
   globalIgnores([
     'dist',
+    'docs-site/.astro/**',
     '.codex-ref/**',
     'public/gaussian-splat/**',
   ]),

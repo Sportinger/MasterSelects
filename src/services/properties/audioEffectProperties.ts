@@ -3,7 +3,7 @@ import {
   type AudioEffectDescriptor,
   type AudioEffectParamDescriptor,
 } from '../../engine/audio/AudioEffectRegistry';
-import type { AudioEffectInstance } from '../../types/audio';
+import type { AudioEffectInstance, AudioEffectParamValue } from '../../types/audio';
 import type { Effect } from '../../types/effects';
 import type { TimelineClip } from '../../types/timeline';
 import type {
@@ -19,12 +19,20 @@ function getDescriptorId(effect: ClipAudioEffect): string {
 }
 
 function getClipAudioEffects(clip: TimelineClip): ClipAudioEffect[] {
-  const effects = [...clip.effects];
+  const effects: ClipAudioEffect[] = [...clip.effects];
   const seenIds = new Set(effects.map((effect) => effect.id));
   for (const effect of clip.audioState?.effectStack ?? []) {
     if (!seenIds.has(effect.id)) effects.push(effect);
   }
   return effects;
+}
+
+function isAudioEffectParamValue(value: unknown): value is AudioEffectParamValue {
+  if (value === null) return true;
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return true;
+  if (Array.isArray(value)) return value.every(isAudioEffectParamValue);
+  if (typeof value === 'object') return Object.values(value).every(isAudioEffectParamValue);
+  return false;
 }
 
 function mapAudioParamType(param: AudioEffectParamDescriptor): PropertyValueType {
@@ -59,6 +67,8 @@ function updateAudioEffectParams(
   paramName: string,
   value: PropertyValue,
 ): TimelineClip {
+  if (!isAudioEffectParamValue(value)) return clip;
+
   const legacyIndex = clip.effects.findIndex((effect) => effect.id === effectId);
   if (legacyIndex >= 0) {
     return {

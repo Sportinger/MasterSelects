@@ -19,7 +19,7 @@ import type { Keyframe } from '../../src/types/keyframes';
 import type { TimelineClip, TimelineTrack } from '../../src/types/timeline';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { useMediaStore } from '../../src/stores/mediaStore';
-import { useHistoryStore } from '../../src/stores/historyStore';
+import { getHistoryStateView, useHistoryStore } from '../../src/stores/historyStore';
 import {
   configureRenderHostSelection,
   renderHostPort,
@@ -574,7 +574,7 @@ describe('Motion Design MD0 disposable evidence helper', () => {
         trackHeaderWidth: 333,
         targetTrackIdByType: { video: 'baseline-video' },
       });
-      useHistoryStore.setState({ maxHistorySize: 77, isApplying: true });
+      useHistoryStore.setState({ maxHistoryNodes: 77, isApplying: true });
       const snapshot = captureMotionDesignMd0RestoreState();
 
       useTimelineStore.setState({
@@ -585,7 +585,7 @@ describe('Motion Design MD0 disposable evidence helper', () => {
         targetTrackIdByType: {},
       });
       useMediaStore.setState({ activeCompositionId: null, openCompositionIds: [] });
-      useHistoryStore.setState({ maxHistorySize: 13, isApplying: false });
+      useHistoryStore.setState({ maxHistoryNodes: 13, isApplying: false });
       renderHostPort.setResolution(320, 180);
 
       const restored = await restoreMotionDesignMd0State(snapshot);
@@ -602,7 +602,7 @@ describe('Motion Design MD0 disposable evidence helper', () => {
         activeCompositionId: baselineCompositionId,
         openCompositionIds: [baselineCompositionId],
       });
-      expect(useHistoryStore.getState()).toMatchObject({ maxHistorySize: 77, isApplying: true });
+      expect(getHistoryStateView()).toMatchObject({ maxHistorySize: 77, isApplying: true });
       expect(renderHostPort.getOutputDimensions()).toEqual({ width: 1111, height: 777 });
     } finally {
       await restoreMotionDesignMd0State(outerSnapshot);

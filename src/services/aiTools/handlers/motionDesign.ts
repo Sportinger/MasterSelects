@@ -2679,6 +2679,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+export function handleSaveMotionTemplateForCurrentTimeline(
+  args: Record<string, unknown>,
+): Promise<ToolResult> {
+  return handleSaveMotionTemplate(args, useTimelineStore.getState());
+}
+
+export function handleApplyMotionTemplateForCurrentTimeline(
+  args: Record<string, unknown>,
+): Promise<ToolResult> {
+  return handleApplyMotionTemplate(args, useTimelineStore.getState());
+}
+
+export function handleSetMotionExpressionForCurrentTimeline(
+  args: Record<string, unknown>,
+): Promise<ToolResult> {
+  return handleSetMotionExpression(args, useTimelineStore.getState());
+}
+
 function failure(error: string): ToolResult {
   return { success: false, error };
 }

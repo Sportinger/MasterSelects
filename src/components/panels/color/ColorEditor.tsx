@@ -11,8 +11,8 @@ import {
   getEditableColorNodes,
   type ColorNode,
   type ColorViewMode,
-} from '../../../types';
-import type { AnimatableProperty } from '../../../types';
+} from '../../../types/colorCorrection';
+import type { AnimatableProperty } from '../../../types/animationProperties';
 import { interpolateKeyframes } from '../../../utils/keyframeInterpolation';
 import {
   useEditableDraggableNumberSettingsRevision,

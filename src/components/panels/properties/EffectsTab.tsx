@@ -2,8 +2,12 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { startBatch, endBatch } from '../../../stores/historyStore';
-import type { AnimatableProperty, AudioEffectParamValue, EffectType } from '../../../types';
-import { createEffectProperty, isAudioEffect } from '../../../types';
+import {
+  createEffectProperty,
+  type AnimatableProperty,
+} from '../../../types/animationProperties';
+import type { AudioEffectParamValue } from '../../../types/audio';
+import { isAudioEffect, type EffectType } from '../../../types/effects';
 import { EFFECT_REGISTRY, getDefaultParams, getCategoriesWithEffects } from '../../../effects';
 import { addParticleDisintegrateOutroPreset } from '../../../effects/presets/particleDisintegrateOutro';
 import {

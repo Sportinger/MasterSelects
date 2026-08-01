@@ -314,7 +314,7 @@ fn get_update_menu_text(state: &Arc<TrayState>) -> String {
         UpdateStatus::Downloading => "Downloading update...".to_string(),
         UpdateStatus::ReadyToInstall(_) => "Installing update...".to_string(),
         UpdateStatus::UpToDate => "Up to date".to_string(),
-        UpdateStatus::Failed(_) => "Update check failed (retry)".to_string(),
+        UpdateStatus::Failed(error) => format!("Update check failed: {error} (retry)"),
     }
 }
 
@@ -405,11 +405,7 @@ fn parse_ico_best_size(data: &[u8], target_size: u32) -> Option<(Vec<u8>, u32, u
         } else {
             data[offset] as u32
         };
-        let diff = if w >= target_size {
-            w - target_size
-        } else {
-            target_size - w
-        };
+        let diff = w.abs_diff(target_size);
         if diff < best_diff || (diff == best_diff && w > best_size) {
             best_diff = diff;
             best_size = w;
@@ -444,57 +440,6 @@ fn parse_ico_best_size(data: &[u8], target_size: u32) -> Option<(Vec<u8>, u32, u
     }
 
     None // BMP entries also need decoding - fall back to generated
-}
-
-/// Draw a simple "M" onto the icon buffer
-fn draw_m(rgba: &mut [u8], size: u32) {
-    let s = size as f32;
-    let left = (s * 0.22) as i32;
-    let right = (s * 0.78) as i32;
-    let top = (s * 0.22) as i32;
-    let bottom = (s * 0.78) as i32;
-    let mid_x = (s * 0.5) as i32;
-    let mid_y = (s * 0.48) as i32;
-    let stroke = (s * 0.09).max(2.0) as i32;
-
-    for y in top..=bottom {
-        for x in left..=right {
-            let draw =
-                // Left vertical
-                (x >= left && x < left + stroke)
-                // Right vertical
-                || (x > right - stroke && x <= right)
-                // Left diagonal (top-left → mid-center)
-                || {
-                    if y <= mid_y && (mid_y - top) > 0 {
-                        let frac = (y - top) as f32 / (mid_y - top) as f32;
-                        let ex = left as f32 + frac * (mid_x - left) as f32;
-                        (x as f32 - ex).abs() < stroke as f32
-                    } else {
-                        false
-                    }
-                }
-                // Right diagonal (top-right → mid-center)
-                || {
-                    if y <= mid_y && (mid_y - top) > 0 {
-                        let frac = (y - top) as f32 / (mid_y - top) as f32;
-                        let ex = right as f32 - frac * (right - mid_x) as f32;
-                        (x as f32 - ex).abs() < stroke as f32
-                    } else {
-                        false
-                    }
-                };
-
-            if draw {
-                let idx = ((y as u32 * size + x as u32) * 4) as usize;
-                if idx + 3 < rgba.len() && rgba[idx + 3] > 0 {
-                    rgba[idx] = 255;
-                    rgba[idx + 1] = 255;
-                    rgba[idx + 2] = 255;
-                }
-            }
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,9 @@
-import type { AnimatableProperty, Effect, EffectProperty } from '../../../types';
-import { parseEffectProperty } from '../../../types';
+import {
+  parseEffectProperty,
+  type AnimatableProperty,
+  type EffectProperty,
+} from '../../../types/animationProperties';
+import type { Effect } from '../../../types/effects';
 import type { Keyframe } from '../types';
 
 function randomSuffix(): string {

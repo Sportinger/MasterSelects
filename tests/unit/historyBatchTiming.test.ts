@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   captureSnapshot,
+  getHistoryStateView,
   initHistoryStoreRefs,
   setHistoryCallbacks,
   useHistoryStore,
@@ -64,7 +65,7 @@ describe('history batch debounce timing', () => {
     vi.setSystemTime(new Date('2026-07-27T10:00:00.000Z'));
     initializeHistoryRefs();
     useHistoryStore.setState({ batchId: null, batchLabel: null });
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
     useTimelineStore.setState({
       clips: [createClip('base')],
       tracks: [],
@@ -82,7 +83,7 @@ describe('history batch debounce timing', () => {
       flushPendingCapture: () => undefined,
       suppressCaptures: () => undefined,
     });
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
     useTimelineStore.setState(initialTimelineState);
     vi.clearAllTimers();
     vi.useRealTimers();
@@ -111,6 +112,11 @@ describe('history batch debounce timing', () => {
         captureSnapshot(pendingLabel || 'pending', { isAutoCapture: true });
       },
       suppressCaptures: () => {
+        if (pendingTimer !== null) {
+          clearTimeout(pendingTimer);
+          pendingTimer = null;
+          pendingLabel = '';
+        }
         suppressUntil = Date.now() + 250;
       },
       afterApply: () => schedulePendingCapture('post-abort no-op'),
@@ -123,26 +129,28 @@ describe('history batch debounce timing', () => {
     }));
     schedulePendingCapture('pending user edit');
 
-    useHistoryStore.getState().startBatch('AI task');
+    getHistoryStateView().startBatch('AI task');
 
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
-    expect(useHistoryStore.getState().currentSnapshot?.label).toBe('pending user edit');
-    expect(useHistoryStore.getState().currentSnapshot?.timeline.clips.map((clip) => clip.id))
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
+    expect(getHistoryStateView().currentSnapshot?.label).toBe('pending user edit');
+    expect(getHistoryStateView().currentSnapshot?.timeline.clips.map((clip) => clip.id))
       .toEqual(['base', 'user-edit']);
 
     useTimelineStore.setState((state) => ({
       clips: [...state.clips, createClip('ai-edit')],
     }));
-    useHistoryStore.getState().cancelBatch();
+    getHistoryStateView().cancelBatch();
 
     expect(useTimelineStore.getState().clips.map((clip) => clip.id)).toEqual(['base', 'user-edit']);
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
-    const redoSentinel = useHistoryStore.getState().currentSnapshot!;
-    useHistoryStore.setState({ redoStack: [redoSentinel] });
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
+    const currentSentinel = getHistoryStateView().currentSnapshot!;
+    captureSnapshot('redo sentinel');
+    getHistoryStateView().undo();
+    const redoSentinel = getHistoryStateView().redoStack;
 
     vi.advanceTimersByTime(1001);
 
-    expect(useHistoryStore.getState().redoStack).toEqual([redoSentinel]);
-    expect(useHistoryStore.getState().currentSnapshot).toBe(redoSentinel);
+    expect(getHistoryStateView().redoStack).toEqual(redoSentinel);
+    expect(getHistoryStateView().currentSnapshot).toBe(currentSentinel);
   });
 });

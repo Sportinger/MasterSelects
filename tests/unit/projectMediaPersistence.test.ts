@@ -75,6 +75,7 @@ const mocks = vi.hoisted(() => ({
     showChangelogOnStartup: true,
     lastSeenChangelogVersion: '1.0.0',
     loadApiKeys: vi.fn(async () => undefined),
+    loadIntegrationCredentials: vi.fn(async () => undefined),
   },
   midiState: {
     isEnabled: false,

@@ -85,4 +85,41 @@ export const useHistoryStore = create<HistoryState>()(subscribeWithSelector((set
   serializeForProject: () => { const s=get(); return serializeHistoryForProject({ nodes:s.nodes,rootId:s.rootId,activeNodeId:s.activeNodeId,lastVisitedChildByNodeId:s.lastVisitedChildByNodeId,eventLog:s.eventLog,isHistoryDisabled:isHistoryDisabledForDebug(),persistHistorySnapshots:PERSIST_HISTORY_SNAPSHOTS,maxEventLogSize:MAX_HISTORY_EVENT_LOG_SIZE }); },
   hydrateFromProject: history => set(createHistoryProjectHydrationState({history,isHistoryDisabled:isHistoryDisabledForDebug(),createInitialHistorySnapshot,maxEventLogSize:MAX_HISTORY_EVENT_LOG_SIZE})),
 })));
+
+/**
+ * Linear view of the currently selected history path.
+ *
+ * The snapshot tree remains the only stored history state. This view exists
+ * for diagnostics and callers that need stack-shaped data while they migrate
+ * from the former v1 history model.
+ */
+export function getHistoryStateView() {
+  const state = useHistoryStore.getState();
+  const currentNode = state.activeNodeId ? state.nodes[state.activeNodeId] : undefined;
+  const undoStack: StateSnapshot[] = [];
+  let cursor = currentNode?.parentId ? state.nodes[currentNode.parentId] : undefined;
+  while (cursor) {
+    undoStack.unshift(cursor.snapshot);
+    cursor = cursor.parentId ? state.nodes[cursor.parentId] : undefined;
+  }
+
+  const redoPath: StateSnapshot[] = [];
+  cursor = state.activeNodeId
+    ? getRedoChild(state.nodes, state.activeNodeId, state.lastVisitedChildByNodeId) ?? undefined
+    : undefined;
+  while (cursor) {
+    redoPath.push(cursor.snapshot);
+    cursor = getRedoChild(state.nodes, cursor.id, state.lastVisitedChildByNodeId) ?? undefined;
+  }
+
+  return {
+    ...state,
+    undoStack,
+    currentSnapshot: currentNode?.snapshot ?? null,
+    // The v1 redo stack popped its next entry from the end.
+    redoStack: redoPath.reverse(),
+    maxHistorySize: state.maxHistoryNodes,
+  };
+}
+
 const historyFacade=createHistoryFacade(useHistoryStore); export const captureSnapshot=historyFacade.captureSnapshot; export const undo=historyFacade.undo; export const redo=historyFacade.redo; export const startBatch=historyFacade.startBatch; export const endBatch=historyFacade.endBatch; export const cancelHistoryBatch=historyFacade.cancelHistoryBatch; export const recordHistoryEvent=historyFacade.recordHistoryEvent; export const restoreHistoryEntry=historyFacade.restoreHistoryEntry; export const restoreHistoryBranch=historyFacade.restoreHistoryBranch; export const serializeHistoryStateForProject=historyFacade.serializeHistoryStateForProject; export const hydrateHistoryStateFromProject=historyFacade.hydrateHistoryStateFromProject;

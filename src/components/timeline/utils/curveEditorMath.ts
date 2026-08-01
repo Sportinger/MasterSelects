@@ -1,10 +1,10 @@
 import {
+  parseCameraProperty,
   parseMaskProperty,
   type AnimatableProperty,
   type EasingType,
-  type Keyframe,
-} from '../../../types';
-import { parseCameraProperty } from '../../../types';
+} from '../../../types/animationProperties';
+import type { Keyframe } from '../../../types/keyframes';
 import { PRESET_BEZIER } from '../../../utils/keyframeInterpolation';
 import {
   parseVectorAnimationInputProperty,

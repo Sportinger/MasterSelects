@@ -1,5 +1,5 @@
 import type { CompleteRefactorLane } from './types';
-import { motionDesignRefactorLanes } from './motionDesignLaneWriteManifest';
+import { motionDesignRefactorLanes } from './motionDesignRefactorLanes';
 import { storyboardRefactorLanes } from './storyboardLaneWriteManifest';
 
 const completeLegacyRefactorLanes = [

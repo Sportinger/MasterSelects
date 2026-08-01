@@ -1,6 +1,11 @@
-import type { ClipMask } from '../../../types';
+import {
+  createMaskEdgeFeatherProperty,
+  createMaskPathProperty,
+  createTextBoundsPathProperty,
+  parseMaskProperty,
+} from '../../../types/animationProperties';
+import type { ClipMask } from '../../../types/masks';
 import type { AnimatableProperty, KeyframeActions, SliceCreator } from '../types';
-import { createMaskEdgeFeatherProperty, createMaskPathProperty, createTextBoundsPathProperty, parseMaskProperty } from '../../../types';
 import {
   applyTextBoundsPathValue,
   cloneTextBoundsPath,

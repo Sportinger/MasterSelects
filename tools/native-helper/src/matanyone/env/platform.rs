@@ -88,7 +88,7 @@ async fn query_cuda_version() -> Option<String> {
     for line in stdout.lines() {
         if let Some(idx) = line.find("CUDA Version:") {
             let after = &line[idx + "CUDA Version:".len()..];
-            let version = after.trim().split_whitespace().next()?;
+            let version = after.split_whitespace().next()?;
             return Some(version.to_string());
         }
     }

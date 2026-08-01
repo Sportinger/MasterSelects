@@ -29,7 +29,6 @@ import {
   recordMotionTextureDiagnostic,
   setMotionRendererCacheCount,
 } from './MotionDiagnostics';
-import { renderHostPort } from '../../services/render/renderHostPort';
 
 function isRenderableMotionShape(motion: MotionLayerDefinition | undefined): motion is MotionLayerDefinition {
   const primitive = motion?.shape?.primitive;
@@ -49,9 +48,11 @@ export class MotionRenderer {
   private caches = new Map<string, MotionClipGpuCache>();
   private instanceBufferStates = new Map<string, ReplicatorInstanceBufferState>();
   private textureBindings = new WeakMap<MotionClipGpuCache, GPUTextureView>();
+  private readonly requestRender: () => void;
 
-  constructor(device: GPUDevice) {
+  constructor(device: GPUDevice, requestRender: () => void = () => undefined) {
     this.device = device;
+    this.requestRender = requestRender;
     this.pipeline = new MotionPipeline(device);
     this.textureAcquisition = new MotionTextureAcquisition(device, {
       onDiagnostic: (code, message) => recordMotionTextureDiagnostic({ code, message }),
@@ -104,7 +105,7 @@ export class MotionRenderer {
     }
     const primaryTextureFill = textureFills[0];
     const textureResult = primaryTextureFill
-      ? this.textureAcquisition.acquire(primaryTextureFill, () => renderHostPort.requestRender())
+      ? this.textureAcquisition.acquire(primaryTextureFill, this.requestRender)
       : null;
     const textureBinding = textureResult?.status === 'ready' && textureResult.textureView
       ? { view: textureResult.textureView, sampler: fallbackBinding.sampler }

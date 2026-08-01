@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   cancelHistoryBatch,
   captureSnapshot,
+  getHistoryStateView,
   initHistoryStoreRefs,
   setHistoryCallbacks,
   useHistoryStore,
@@ -83,7 +84,7 @@ describe('agent mutation transactions', () => {
     });
     initializeHistoryRefs();
     useHistoryStore.setState({ batchId: null, batchLabel: null });
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
     useTimelineStore.setState({
       clips: [createClip('base')],
       tracks: [],
@@ -98,10 +99,10 @@ describe('agent mutation transactions', () => {
   });
 
   afterEach(() => {
-    if (useHistoryStore.getState().batchId !== null) {
+    if (getHistoryStateView().batchId !== null) {
       cancelHistoryBatch();
     }
-    useHistoryStore.getState().clearHistory();
+    getHistoryStateView().clearHistory();
     useTimelineStore.setState(initialTimelineState);
     setHistoryCallbacks({
       flushPendingCapture: () => undefined,
@@ -119,8 +120,8 @@ describe('agent mutation transactions', () => {
     commitAgentTransaction(transaction);
 
     expect(isAgentTransactionOpen()).toBe(false);
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
-    expect(useHistoryStore.getState().undo()).toMatchObject({ operation: 'undo' });
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
+    expect(getHistoryStateView().undo()).toMatchObject({ operation: 'undo' });
     expect(useTimelineStore.getState().clips.map((clip) => clip.id)).toEqual(['base']);
   });
 
@@ -142,15 +143,15 @@ describe('agent mutation transactions', () => {
     });
 
     expect(split.success).toBe(true);
-    expect(useHistoryStore.getState().batchId).toBe(transaction.historyBatchId);
+    expect(getHistoryStateView().batchId).toBe(transaction.historyBatchId);
     commitAgentTransaction(transaction);
-    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
-    expect(useHistoryStore.getState().undo()).toMatchObject({ operation: 'undo' });
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
+    expect(getHistoryStateView().undo()).toMatchObject({ operation: 'undo' });
     expect(useTimelineStore.getState().clips.map((clip) => clip.id)).toEqual(['base']);
   });
 
   it('aborts to the pre-transaction clips without changing undo history', () => {
-    const undoLengthBefore = useHistoryStore.getState().undoStack.length;
+    const undoLengthBefore = getHistoryStateView().undoStack.length;
     const transaction = beginAgentTransaction('AI task: abort clips');
 
     appendClip('first');
@@ -158,13 +159,13 @@ describe('agent mutation transactions', () => {
     abortAgentTransaction(transaction);
 
     expect(useTimelineStore.getState().clips.map((clip) => clip.id)).toEqual(['base']);
-    expect(useHistoryStore.getState().undoStack).toHaveLength(undoLengthBefore);
-    expect(useHistoryStore.getState().batchId).toBeNull();
+    expect(getHistoryStateView().undoStack).toHaveLength(undoLengthBefore);
+    expect(getHistoryStateView().batchId).toBeNull();
   });
 
   it('keeps an outer history batch open for passthrough transactions', () => {
-    useHistoryStore.getState().startBatch('outer');
-    const outerBatchId = useHistoryStore.getState().batchId;
+    getHistoryStateView().startBatch('outer');
+    const outerBatchId = getHistoryStateView().batchId;
     const committedPassthrough = beginAgentTransaction('AI task: passthrough commit');
 
     expect(committedPassthrough.alreadyBatching).toBe(true);
@@ -172,11 +173,11 @@ describe('agent mutation transactions', () => {
     expect(committedPassthrough.historyBatchId).toBe(outerBatchId);
     appendClip('first');
     commitAgentTransaction(committedPassthrough);
-    expect(useHistoryStore.getState().batchId).toBe(outerBatchId);
+    expect(getHistoryStateView().batchId).toBe(outerBatchId);
 
     const abortedPassthrough = beginAgentTransaction('AI task: passthrough abort');
     abortAgentTransaction(abortedPassthrough);
-    expect(useHistoryStore.getState().batchId).toBe(outerBatchId);
+    expect(getHistoryStateView().batchId).toBe(outerBatchId);
 
     cancelHistoryBatch();
     expect(useTimelineStore.getState().clips.map((clip) => clip.id)).toEqual(['base']);
@@ -206,8 +207,8 @@ describe('agent mutation transactions', () => {
     appendClip('first');
     abortAgentTransaction(transaction);
 
-    expect(useHistoryStore.getState().batchId).toBe(flushBatchId);
-    expect(useHistoryStore.getState().batchLabel).toBe('flush owner');
+    expect(getHistoryStateView().batchId).toBe(flushBatchId);
+    expect(getHistoryStateView().batchLabel).toBe('flush owner');
     expect(useTimelineStore.getState().clips.map((clip) => clip.id)).toEqual(['base', 'first']);
   });
 
@@ -228,24 +229,24 @@ describe('agent mutation transactions', () => {
     const transaction = beginAgentTransaction('AI task: lost ownership');
     const originalBatchId = transaction.historyBatchId;
     appendClip('first');
-    useHistoryStore.getState().endBatch();
-    useHistoryStore.getState().startBatch('replacement owner');
-    const replacementBatchId = useHistoryStore.getState().batchId;
-    const undoLengthBeforeCommit = useHistoryStore.getState().undoStack.length;
+    getHistoryStateView().endBatch();
+    getHistoryStateView().startBatch('replacement owner');
+    const replacementBatchId = getHistoryStateView().batchId;
+    const undoLengthBeforeCommit = getHistoryStateView().undoStack.length;
 
     expect(originalBatchId).not.toBeNull();
     expect(replacementBatchId).not.toBe(originalBatchId);
     commitAgentTransaction(transaction);
 
     expect(isAgentTransactionOpen()).toBe(false);
-    expect(useHistoryStore.getState().batchId).toBe(replacementBatchId);
-    expect(useHistoryStore.getState().batchLabel).toBe('replacement owner');
-    expect(useHistoryStore.getState().undoStack).toHaveLength(undoLengthBeforeCommit);
+    expect(getHistoryStateView().batchId).toBe(replacementBatchId);
+    expect(getHistoryStateView().batchLabel).toBe('replacement owner');
+    expect(getHistoryStateView().undoStack).toHaveLength(undoLengthBeforeCommit);
     expect(useTimelineStore.getState().clips.map((clip) => clip.id)).toEqual(['base', 'first']);
   });
 
   it('rolls back a grouped partial failure without creating an undo entry', async () => {
-    const undoLengthBefore = useHistoryStore.getState().undoStack.length;
+    const undoLengthBefore = getHistoryStateView().undoStack.length;
     const auditIdPrefix = `rollback-audit-${Date.now()}-${Math.random()}`;
     const createCallId = `${auditIdPrefix}-create`;
     const missingCallId = `${auditIdPrefix}-missing`;
@@ -295,12 +296,12 @@ describe('agent mutation transactions', () => {
       },
     });
     expect(useTimelineStore.getState().tracks).toEqual([]);
-    expect(useHistoryStore.getState().undoStack).toHaveLength(undoLengthBefore);
-    expect(useHistoryStore.getState().batchId).toBeNull();
+    expect(getHistoryStateView().undoStack).toHaveLength(undoLengthBefore);
+    expect(getHistoryStateView().batchId).toBeNull();
   });
 
   it('does not open a transaction or create undo history when history is suppressed', async () => {
-    const undoLengthBefore = useHistoryStore.getState().undoStack.length;
+    const undoLengthBefore = getHistoryStateView().undoStack.length;
 
     const results = await executeAIToolCalls([
       { tool: 'createTrack', args: { type: 'video' } },
@@ -309,8 +310,8 @@ describe('agent mutation transactions', () => {
 
     expect(results.every((entry) => entry.result.success)).toBe(true);
     expect(isAgentTransactionOpen()).toBe(false);
-    expect(useHistoryStore.getState().batchId).toBeNull();
-    expect(useHistoryStore.getState().undoStack).toHaveLength(undoLengthBefore);
+    expect(getHistoryStateView().batchId).toBeNull();
+    expect(getHistoryStateView().undoStack).toHaveLength(undoLengthBefore);
     expect(useTimelineStore.getState().tracks).toHaveLength(2);
   });
 });

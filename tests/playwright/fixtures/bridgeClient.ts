@@ -52,7 +52,7 @@ export interface BridgeToolOptions {
   fetchTimeoutMs?: number
 }
 
-export interface BridgeDebugActionOptions extends BridgeToolOptions {}
+export type BridgeDebugActionOptions = BridgeToolOptions
 
 interface BridgeErrorBody {
   error?: string

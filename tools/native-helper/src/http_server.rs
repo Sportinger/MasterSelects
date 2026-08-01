@@ -268,7 +268,7 @@ async fn handle_upload(
 
     match tokio::fs::write(&tmp_path, &body).await {
         Ok(()) => {
-            if let Err(_) = tokio::fs::rename(&tmp_path, &path).await {
+            if tokio::fs::rename(&tmp_path, &path).await.is_err() {
                 // Rename failed â€” fallback to direct write
                 let _ = tokio::fs::remove_file(&tmp_path).await;
                 if let Err(e) = tokio::fs::write(&path, &body).await {
