@@ -7,12 +7,14 @@ import {
   createRadialGradientAppearance,
   createStrokeAppearance,
   createTextureFillAppearance,
+  MOTION_PATH_MAX_VERTICES,
   MOTION_APPEARANCE_BLEND_MODES,
   type AppearanceItem,
   type ColorFillAppearance,
   type GradientStop,
   type MotionColor,
   type MotionLayerDefinition,
+  type MotionPathVertex,
   type MotionExpressionBinding,
   type MotionVector2,
   type StrokeAppearance,
@@ -460,6 +462,51 @@ export async function handleCreateMotionShapeClip(
     const validatedPrimitive =
       primitive as (typeof MOTION_DESIGN_MVP_PRIMITIVES)[number];
 
+    const pathParameterNames = [
+      'vertices',
+      'closed',
+      'trimStart',
+      'trimEnd',
+      'trimOffset',
+      'dashLength',
+      'dashGap',
+      'dashOffset',
+    ] as const;
+    const providedPathParameter = pathParameterNames.find((name) => args[name] !== undefined);
+    if (validatedPrimitive !== 'path' && providedPathParameter) {
+      return failure(`${providedPathParameter} is only supported for path motion shapes`);
+    }
+    if (validatedPrimitive === 'path' && args.vertices === undefined) {
+      return failure('vertices are required for path motion shapes');
+    }
+    const vertices = validatedPrimitive === 'path'
+      ? validateMotionPathVertices(args.vertices)
+      : undefined;
+    const closed = validatedPrimitive === 'path'
+      ? optionalBoolean(args.closed, 'closed') ?? false
+      : undefined;
+    const trimStart = validatedPrimitive === 'path'
+      ? optionalFiniteNumber(args.trimStart, 'trimStart', 0, 1)
+      : undefined;
+    const trimEnd = validatedPrimitive === 'path'
+      ? optionalFiniteNumber(args.trimEnd, 'trimEnd', 0, 1)
+      : undefined;
+    const trimOffset = validatedPrimitive === 'path'
+      ? optionalFiniteNumber(args.trimOffset, 'trimOffset', 0, 1)
+      : undefined;
+    const dashLength = validatedPrimitive === 'path'
+      ? optionalFiniteNumber(args.dashLength, 'dashLength', 0, Number.MAX_SAFE_INTEGER)
+      : undefined;
+    const dashGap = validatedPrimitive === 'path'
+      ? optionalFiniteNumber(args.dashGap, 'dashGap', 0, Number.MAX_SAFE_INTEGER)
+      : undefined;
+    const dashOffset = validatedPrimitive === 'path'
+      ? optionalFiniteNumber(args.dashOffset, 'dashOffset', 0, Number.MAX_SAFE_INTEGER)
+      : undefined;
+    if ((trimStart ?? 0) > (trimEnd ?? 1)) {
+      return failure('trimStart must not exceed trimEnd');
+    }
+
     const width = args.width === undefined
       ? 320
       : validateFiniteNumber(args.width, 'width', 1, 100000);
@@ -481,8 +528,11 @@ export async function handleCreateMotionShapeClip(
     const innerRadius = args.innerRadius === undefined
       ? undefined
       : validateFiniteNumber(args.innerRadius, 'innerRadius', 0.5, 100000);
-    if (cornerRadius !== undefined && validatedPrimitive === 'ellipse') {
-      return failure('cornerRadius is not supported for ellipse motion shapes');
+    if (
+      cornerRadius !== undefined
+      && (validatedPrimitive === 'ellipse' || validatedPrimitive === 'path')
+    ) {
+      return failure('cornerRadius is only supported for rectangle, polygon, or star motion shapes');
     }
     if ((points !== undefined || radius !== undefined) && validatedPrimitive !== 'polygon') {
       if (validatedPrimitive !== 'star' || radius !== undefined) {
@@ -529,6 +579,7 @@ export async function handleCreateMotionShapeClip(
       || radius !== undefined
       || outerRadius !== undefined
       || innerRadius !== undefined
+      || vertices !== undefined
       || fill
       || stroke
     ) {
@@ -541,6 +592,7 @@ export async function handleCreateMotionShapeClip(
             || radius !== undefined
             || outerRadius !== undefined
             || innerRadius !== undefined
+            || vertices !== undefined
           )
           && nextMotion.shape
         ) {
@@ -573,6 +625,36 @@ export async function handleCreateMotionShapeClip(
                         innerRadius ?? shape.star?.innerRadius ?? defaultRadius * 0.5,
                       cornerRadius:
                         cornerRadius ?? shape.star?.cornerRadius ?? 0,
+                    },
+                  }
+                : {}),
+              ...(validatedPrimitive === 'path' && vertices
+                ? {
+                    path: {
+                      vertices,
+                      closed: closed ?? false,
+                      ...(trimStart !== undefined
+                        || trimEnd !== undefined
+                        || trimOffset !== undefined
+                        ? {
+                            trim: {
+                              start: trimStart ?? 0,
+                              end: trimEnd ?? 1,
+                              offset: trimOffset ?? 0,
+                            },
+                          }
+                        : {}),
+                      ...(dashLength !== undefined
+                        || dashGap !== undefined
+                        || dashOffset !== undefined
+                        ? {
+                            dash: {
+                              length: dashLength ?? 0,
+                              gap: dashGap ?? 0,
+                              offset: dashOffset ?? 0,
+                            },
+                          }
+                        : {}),
                     },
                   }
                 : {}),
@@ -613,13 +695,7 @@ export async function handleCreateMotionShapeClip(
       success: true,
       data: {
         ...describeMotionDesignForAi(finalClip),
-        commonEditablePaths: {
-          x: 'position.x',
-          y: 'position.y',
-          width: 'shape.size.w',
-          height: 'shape.size.h',
-          cornerRadius: 'shape.cornerRadius',
-        },
+        commonEditablePaths: getCommonEditablePaths(finalClip),
         ...describeMutationEntities(
           mutationSnapshot,
           useTimelineStore.getState().clips,
@@ -1388,6 +1464,28 @@ function describeMotionDesignForAi(clip: TimelineClip) {
   return {
     ...describeMotionDesignClip(clip),
     properties: getMotionAndTransformPropertyViews(clip),
+    commonEditablePaths: getCommonEditablePaths(clip),
+  };
+}
+
+function getCommonEditablePaths(clip: TimelineClip): Record<string, string> {
+  const primitive = clip.motion?.shape?.primitive;
+  return {
+    x: 'position.x',
+    y: 'position.y',
+    width: 'shape.size.w',
+    height: 'shape.size.h',
+    ...(primitive === 'rectangle' ? { cornerRadius: 'shape.cornerRadius' } : {}),
+    ...(primitive === 'path'
+      ? {
+          trimStart: 'shape.path.trim.start',
+          trimEnd: 'shape.path.trim.end',
+          trimOffset: 'shape.path.trim.offset',
+          dashLength: 'shape.path.dash.length',
+          dashGap: 'shape.path.dash.gap',
+          dashOffset: 'shape.path.dash.offset',
+        }
+      : {}),
   };
 }
 
@@ -2683,6 +2781,37 @@ export function handleSaveMotionTemplateForCurrentTimeline(
   args: Record<string, unknown>,
 ): Promise<ToolResult> {
   return handleSaveMotionTemplate(args, useTimelineStore.getState());
+}
+
+function validateMotionPathVertices(value: unknown): MotionPathVertex[] {
+  if (!Array.isArray(value)) {
+    throw new Error('vertices must be an array for path motion shapes');
+  }
+  if (value.length < 2 || value.length > MOTION_PATH_MAX_VERTICES) {
+    throw new Error(`vertices must contain between 2 and ${MOTION_PATH_MAX_VERTICES} entries`);
+  }
+  const readVector = (input: unknown, fieldName: string) => {
+    if (!isRecord(input)) throw new Error(`${fieldName} must be an object with finite x and y coordinates`);
+    return {
+      x: validateFiniteNumber(input.x, `${fieldName}.x`, -Number.MAX_VALUE, Number.MAX_VALUE),
+      y: validateFiniteNumber(input.y, `${fieldName}.y`, -Number.MAX_VALUE, Number.MAX_VALUE),
+    };
+  };
+  return value.map((input, index) => {
+    if (!isRecord(input)) {
+      throw new Error(`vertices[${index}] must be an object with finite x and y coordinates`);
+    }
+    return {
+      x: validateFiniteNumber(input.x, `vertices[${index}].x`, -Number.MAX_VALUE, Number.MAX_VALUE),
+      y: validateFiniteNumber(input.y, `vertices[${index}].y`, -Number.MAX_VALUE, Number.MAX_VALUE),
+      handleIn: input.handleIn === undefined
+        ? { x: 0, y: 0 }
+        : readVector(input.handleIn, `vertices[${index}].handleIn`),
+      handleOut: input.handleOut === undefined
+        ? { x: 0, y: 0 }
+        : readVector(input.handleOut, `vertices[${index}].handleOut`),
+    };
+  });
 }
 
 export function handleApplyMotionTemplateForCurrentTimeline(

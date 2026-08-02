@@ -51,10 +51,12 @@ export interface MotionClipGpuCache {
   view: GPUTextureView;
   uniformBuffer: GPUBuffer;
   instanceBuffer: GPUBuffer;
+  pathBuffer: GPUBuffer | null;
   bindGroup: GPUBindGroup;
   width: number;
   height: number;
   instanceCapacity: number;
+  pathCapacity: number;
 }
 
 export interface MotionReplicatorSourceGeometry {
@@ -106,6 +108,29 @@ export function getMotionShapeRenderBounds(
     return {
       width: Math.max(width, diameter),
       height: Math.max(height, diameter),
+    };
+  }
+  if (shape?.primitive === 'path' && shape.path?.vertices.length) {
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+    for (const vertex of shape.path.vertices) {
+      const points = [
+        vertex,
+        { x: vertex.x + vertex.handleIn.x, y: vertex.y + vertex.handleIn.y },
+        { x: vertex.x + vertex.handleOut.x, y: vertex.y + vertex.handleOut.y },
+      ];
+      for (const point of points) {
+        minX = Math.min(minX, finiteOr(point.x, 0));
+        minY = Math.min(minY, finiteOr(point.y, 0));
+        maxX = Math.max(maxX, finiteOr(point.x, 0));
+        maxY = Math.max(maxY, finiteOr(point.y, 0));
+      }
+    }
+    return {
+      width: Math.max(width, 2 * Math.max(Math.abs(minX), Math.abs(maxX))),
+      height: Math.max(height, 2 * Math.max(Math.abs(minY), Math.abs(maxY))),
     };
   }
   return { width, height };

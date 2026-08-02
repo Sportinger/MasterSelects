@@ -7,7 +7,11 @@ import type {
   ReplicatorLayout,
   ShapePrimitive,
 } from '../../../types/motionDesign';
-import { createDefaultReplicatorDefinition } from '../../../types/motionDesign';
+import {
+  createDefaultPathShape,
+  createDefaultReplicatorDefinition,
+} from '../../../types/motionDesign';
+import { endBatch, startBatch } from '../../../stores/historyStore';
 import { normalizeMotionReplicatorBundle } from '../../../services/motionDesign/contracts/replicatorTimelineAdapter';
 import {
   planMotionReplicatorSemanticOperation,
@@ -37,6 +41,8 @@ function NumberRow({
   max,
   suffix,
   defaultValue,
+  onDragStart,
+  onDragEnd,
 }: {
   clipId: string;
   label: string;
@@ -46,6 +52,8 @@ function NumberRow({
   max?: number;
   suffix?: string;
   defaultValue?: number;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
 }) {
   const setPropertyValue = useTimelineStore(state => state.setPropertyValue);
 
@@ -60,6 +68,8 @@ function NumberRow({
         max={max}
         suffix={suffix}
         defaultValue={defaultValue}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
       />
     </div>
   );
@@ -139,10 +149,33 @@ export function MotionShapeTab({ clipId }: MotionShapeTabProps) {
             ...current.shape,
             primitive,
             cornerRadius: primitive === 'rectangle' ? current.shape.cornerRadius ?? 0 : undefined,
+            polygon: primitive === 'polygon' ? current.shape.polygon : undefined,
+            star: primitive === 'star' ? current.shape.star : undefined,
+            path: primitive === 'path'
+              ? current.shape.path ?? createDefaultPathShape(current.shape.size)
+              : undefined,
           }
         : current.shape,
     }));
   }, [clipId, updateMotionLayer]);
+
+  const setPathClosed = useCallback((closed: boolean) => {
+    updateMotionLayer(clipId, (current) => current.shape?.primitive === 'path'
+      ? {
+          ...current,
+          shape: {
+            ...current.shape,
+            path: {
+              ...(current.shape.path ?? createDefaultPathShape(current.shape.size)),
+              closed,
+            },
+          },
+        }
+      : current);
+  }, [clipId, updateMotionLayer]);
+
+  const handlePathDragStart = useCallback(() => startBatch('Adjust motion path'), []);
+  const handlePathDragEnd = useCallback(() => endBatch(), []);
 
   const setReplicatorEnabled = useCallback((enabled: boolean) => {
     updateMotionLayer(clipId, (current) => applyReplicatorOperation(
@@ -226,6 +259,7 @@ export function MotionShapeTab({ clipId }: MotionShapeTabProps) {
             <option value="ellipse">Ellipse</option>
             <option value="polygon">Polygon</option>
             <option value="star">Star</option>
+            <option value="path">Path</option>
           </select>
         </div>
 
@@ -327,6 +361,89 @@ export function MotionShapeTab({ clipId }: MotionShapeTabProps) {
               min={0}
               suffix="px"
               defaultValue={0}
+            />
+          </>
+        )}
+        {shape.primitive === 'path' && (
+          <>
+            <div className="control-row">
+              <label className="prop-label">Path</label>
+              <span>{shape.path?.vertices.length ?? 0} vertices</span>
+              <label>
+                <input
+                  type="checkbox"
+                  aria-label="Close path"
+                  checked={shape.path?.closed ?? false}
+                  onChange={(event) => setPathClosed(event.target.checked)}
+                />
+                Closed
+              </label>
+            </div>
+            <NumberRow
+              clipId={clipId}
+              label="Trim Start"
+              property="shape.path.trim.start"
+              value={shape.path?.trim?.start ?? 0}
+              min={0}
+              max={shape.path?.trim?.end ?? 1}
+              defaultValue={0}
+              onDragStart={handlePathDragStart}
+              onDragEnd={handlePathDragEnd}
+            />
+            <NumberRow
+              clipId={clipId}
+              label="Trim End"
+              property="shape.path.trim.end"
+              value={shape.path?.trim?.end ?? 1}
+              min={shape.path?.trim?.start ?? 0}
+              max={1}
+              defaultValue={1}
+              onDragStart={handlePathDragStart}
+              onDragEnd={handlePathDragEnd}
+            />
+            <NumberRow
+              clipId={clipId}
+              label="Trim Offset"
+              property="shape.path.trim.offset"
+              value={shape.path?.trim?.offset ?? 0}
+              min={0}
+              max={1}
+              defaultValue={0}
+              onDragStart={handlePathDragStart}
+              onDragEnd={handlePathDragEnd}
+            />
+            <NumberRow
+              clipId={clipId}
+              label="Dash Length"
+              property="shape.path.dash.length"
+              value={shape.path?.dash?.length ?? 0}
+              min={0}
+              suffix="px"
+              defaultValue={0}
+              onDragStart={handlePathDragStart}
+              onDragEnd={handlePathDragEnd}
+            />
+            <NumberRow
+              clipId={clipId}
+              label="Dash Gap"
+              property="shape.path.dash.gap"
+              value={shape.path?.dash?.gap ?? 0}
+              min={0}
+              suffix="px"
+              defaultValue={0}
+              onDragStart={handlePathDragStart}
+              onDragEnd={handlePathDragEnd}
+            />
+            <NumberRow
+              clipId={clipId}
+              label="Dash Offset"
+              property="shape.path.dash.offset"
+              value={shape.path?.dash?.offset ?? 0}
+              min={0}
+              suffix="px"
+              defaultValue={0}
+              onDragStart={handlePathDragStart}
+              onDragEnd={handlePathDragEnd}
             />
           </>
         )}

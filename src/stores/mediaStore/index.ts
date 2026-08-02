@@ -68,6 +68,7 @@ const MOTION_SHAPE_LABELS: Record<import('../../types/motionDesign').ShapePrimit
   ellipse: 'Motion Ellipse',
   polygon: 'Motion Polygon',
   star: 'Motion Star',
+  path: 'Motion Path',
 };
 
 // Combined store type with all actions

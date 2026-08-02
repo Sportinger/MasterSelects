@@ -34,6 +34,7 @@ export const MOTION_DESIGN_MVP_PRIMITIVES = [
   'ellipse',
   'polygon',
   'star',
+  'path',
 ] as const;
 export const MOTION_DESIGN_MVP_APPEARANCES = [
   'color-fill',
@@ -55,6 +56,12 @@ const SUPPORTED_STATIC_PROPERTY_PATHS = new Set([
   'shape.star.outerRadius',
   'shape.star.innerRadius',
   'shape.star.cornerRadius',
+  'shape.path.trim.start',
+  'shape.path.trim.end',
+  'shape.path.trim.offset',
+  'shape.path.dash.length',
+  'shape.path.dash.gap',
+  'shape.path.dash.offset',
   'replicator.enabled',
   'replicator.count.x',
   'replicator.count.y',
@@ -395,6 +402,9 @@ function getSupportedMotionDescriptor(
   if (path.startsWith('shape.star.') && primitive !== 'star') {
     throw new Error(`${path} requires a star motion shape`);
   }
+  if (path.startsWith('shape.path.') && primitive !== 'path') {
+    throw new Error(`${path} requires a path motion shape`);
+  }
   const descriptor = propertyRegistry.getDescriptor(path, clip);
   if (!descriptor?.write) {
     throw new Error(`Motion property is not writable: ${path}`);
@@ -414,6 +424,19 @@ function validatePropertyValue(
   validatePropertyAuthoringValue(descriptor, value);
   if (descriptor.valueType === 'number') {
     const numericValue = value as number;
+    if (descriptor.path.startsWith('shape.path.trim.')) {
+      if (!Number.isFinite(numericValue) || numericValue < 0 || numericValue > 1) {
+        throw new Error(`${descriptor.path} must be a finite number between 0 and 1`);
+      }
+      return;
+    }
+    if (descriptor.path.startsWith('shape.path.dash.')) {
+      // Dash offset follows the same non-negative pixel contract as length and gap.
+      if (!Number.isFinite(numericValue) || numericValue < 0) {
+        throw new Error(`${descriptor.path} must be a finite number greater than or equal to 0`);
+      }
+      return;
+    }
     if (
       descriptor.path === 'shape.polygon.points'
       || descriptor.path === 'shape.star.points'
@@ -475,6 +498,18 @@ function validateShapePropertyCrossConstraints(
     && value < (motion.shape?.star?.innerRadius ?? 0)
   ) {
     throw new Error('shape.star.outerRadius must not be below shape.star.innerRadius');
+  }
+  if (
+    path === 'shape.path.trim.start'
+    && value > (motion.shape?.path?.trim?.end ?? 1)
+  ) {
+    throw new Error('shape.path.trim.start must not exceed shape.path.trim.end');
+  }
+  if (
+    path === 'shape.path.trim.end'
+    && value < (motion.shape?.path?.trim?.start ?? 0)
+  ) {
+    throw new Error('shape.path.trim.end must not be below shape.path.trim.start');
   }
 }
 

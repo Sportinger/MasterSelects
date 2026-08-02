@@ -6,6 +6,8 @@ import type {
 } from '../../types/motionDesign';
 import {
   DEFAULT_MOTION_SHAPE_SIZE,
+  DEFAULT_MOTION_PATH_TRIM,
+  DEFAULT_MOTION_PATH_DASH,
   createDefaultMotionLayerDefinition,
   createDefaultShapeDefinition,
 } from '../../types/motionDesign';
@@ -35,7 +37,13 @@ function readShapeValue(
   if (path === 'shape.star.points') return shape.star?.points ?? 5;
   if (path === 'shape.star.outerRadius') return shape.star?.outerRadius ?? defaultRadius;
   if (path === 'shape.star.innerRadius') return shape.star?.innerRadius ?? defaultRadius * 0.5;
-  return shape.star?.cornerRadius ?? 0;
+  if (path === 'shape.star.cornerRadius') return shape.star?.cornerRadius ?? 0;
+  if (path === 'shape.path.trim.start') return shape.path?.trim?.start ?? DEFAULT_MOTION_PATH_TRIM.start;
+  if (path === 'shape.path.trim.end') return shape.path?.trim?.end ?? DEFAULT_MOTION_PATH_TRIM.end;
+  if (path === 'shape.path.trim.offset') return shape.path?.trim?.offset ?? DEFAULT_MOTION_PATH_TRIM.offset;
+  if (path === 'shape.path.dash.length') return shape.path?.dash?.length ?? DEFAULT_MOTION_PATH_DASH.length;
+  if (path === 'shape.path.dash.gap') return shape.path?.dash?.gap ?? DEFAULT_MOTION_PATH_DASH.gap;
+  return shape.path?.dash?.offset ?? DEFAULT_MOTION_PATH_DASH.offset;
 }
 
 function writeShapeValue(
@@ -67,6 +75,36 @@ function writeShapeValue(
       },
     };
   }
+  if (path.startsWith('shape.path.')) {
+    if (shape.primitive !== 'path') return shape;
+    const pathDefinition = shape.path ?? defaults.path!;
+    if (path.startsWith('shape.path.trim.')) {
+      const field = path.slice('shape.path.trim.'.length) as keyof NonNullable<typeof pathDefinition.trim>;
+      return {
+        ...shape,
+        path: {
+          ...pathDefinition,
+          trim: {
+            ...DEFAULT_MOTION_PATH_TRIM,
+            ...pathDefinition.trim,
+            [field]: value,
+          },
+        },
+      };
+    }
+    const field = path.slice('shape.path.dash.'.length) as keyof NonNullable<typeof pathDefinition.dash>;
+    return {
+      ...shape,
+      path: {
+        ...pathDefinition,
+        dash: {
+          ...DEFAULT_MOTION_PATH_DASH,
+          ...pathDefinition.dash,
+          [field]: value,
+        },
+      },
+    };
+  }
   const field = path.slice('shape.star.'.length) as keyof NonNullable<ShapeDefinition['star']>;
   return {
     ...shape,
@@ -86,15 +124,17 @@ function defaultValue(path: MotionShapeProperty): number {
   if (path === 'shape.star.points') return 5;
   if (path === 'shape.star.outerRadius') return 90;
   if (path === 'shape.star.innerRadius') return 45;
+  if (path === 'shape.path.trim.end') return 1;
   return 0;
 }
 
 function numberUi(path: MotionShapeProperty): PropertyDescriptor<number>['ui'] {
   const pointField = path === 'shape.polygon.points' || path === 'shape.star.points';
+  const trimField = path.startsWith('shape.path.trim.');
   return {
     min: pointField ? 3 : path.startsWith('shape.size.') ? 1 : 0,
-    ...(pointField ? { max: 32 } : {}),
-    step: 1,
+    ...(pointField ? { max: 32 } : trimField ? { max: 1 } : {}),
+    step: trimField ? 0.01 : 1,
     aliases: ['motion', 'shape'],
   };
 }

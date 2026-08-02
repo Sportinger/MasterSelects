@@ -5,7 +5,7 @@ import type {
 } from '../services/motionDesign/modifiers/contracts';
 
 export type MotionLayerKind = 'shape' | 'null' | 'adjustment' | 'group';
-export type ShapePrimitive = 'rectangle' | 'ellipse' | 'polygon' | 'star';
+export type ShapePrimitive = 'rectangle' | 'ellipse' | 'polygon' | 'star' | 'path';
 
 export interface MotionColor {
   r: number;
@@ -17,6 +17,36 @@ export interface MotionColor {
 export interface MotionVector2 {
   x: number;
   y: number;
+}
+
+/** Local pixel space, origin = shape center. Handles are relative to the vertex.
+ *  Both adjoining handles at {0,0} => that segment is a straight line. */
+export interface MotionPathVertex {
+  x: number;
+  y: number;
+  handleIn: MotionVector2;
+  handleOut: MotionVector2;
+}
+
+/** Normalized fractions (0..1) of total arc length. */
+export interface MotionPathTrim {
+  start: number;
+  end: number;
+  offset: number;
+}
+
+/** Pixels along the arc. length <= 0 disables dashing. */
+export interface MotionPathDash {
+  length: number;
+  gap: number;
+  offset: number;
+}
+
+export interface PathShapeDefinition {
+  vertices: MotionPathVertex[];
+  closed: boolean;
+  trim?: MotionPathTrim;
+  dash?: MotionPathDash;
 }
 
 export interface MotionLayerDefinition {
@@ -60,6 +90,7 @@ export interface ShapeDefinition {
     innerRadius: number;
     cornerRadius: number;
   };
+  path?: PathShapeDefinition;
 }
 
 export type AppearanceKind = 'color-fill' | 'stroke' | 'linear-gradient' | 'radial-gradient' | 'texture-fill';
@@ -193,7 +224,13 @@ export type MotionShapeProperty =
   | 'shape.star.points'
   | 'shape.star.outerRadius'
   | 'shape.star.innerRadius'
-  | 'shape.star.cornerRadius';
+  | 'shape.star.cornerRadius'
+  | 'shape.path.trim.start'
+  | 'shape.path.trim.end'
+  | 'shape.path.trim.offset'
+  | 'shape.path.dash.length'
+  | 'shape.path.dash.gap'
+  | 'shape.path.dash.offset';
 
 export type MotionAppearanceProperty =
   | `appearance.${string}.opacity`
@@ -251,6 +288,10 @@ export type MotionProperty = MotionShapeProperty | MotionAppearanceProperty | Mo
 
 export const DEFAULT_MOTION_COLOR: MotionColor = { r: 1, g: 1, b: 1, a: 1 };
 export const DEFAULT_MOTION_SHAPE_SIZE = { w: 320, h: 180 };
+export const MOTION_PATH_MAX_VERTICES = 128;
+export const MOTION_PATH_MAX_FLATTENED_VERTICES = 512;
+export const DEFAULT_MOTION_PATH_TRIM: MotionPathTrim = { start: 0, end: 1, offset: 0 };
+export const DEFAULT_MOTION_PATH_DASH: MotionPathDash = { length: 0, gap: 0, offset: 0 };
 
 export function createMotionAppearanceId(prefix = 'appearance'): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -383,12 +424,42 @@ export function createDefaultShapeDefinition(
   primitive: ShapePrimitive = 'rectangle',
   size = DEFAULT_MOTION_SHAPE_SIZE,
 ): ShapeDefinition {
+  if (primitive === 'path') {
+    return {
+      primitive,
+      size: { ...size },
+      path: createDefaultPathShape(size),
+    };
+  }
+
   return {
     primitive,
     size: { ...size },
     cornerRadius: primitive === 'rectangle' ? 0 : undefined,
     polygon: { points: 6, radius: Math.min(size.w, size.h) / 2, cornerRadius: 0 },
     star: { points: 5, outerRadius: Math.min(size.w, size.h) / 2, innerRadius: Math.min(size.w, size.h) / 4, cornerRadius: 0 },
+  };
+}
+
+export function createDefaultPathShape(
+  size: { w: number; h: number },
+): PathShapeDefinition {
+  return {
+    vertices: [
+      {
+        x: -size.w / 2,
+        y: 0,
+        handleIn: { x: 0, y: 0 },
+        handleOut: { x: 0, y: 0 },
+      },
+      {
+        x: size.w / 2,
+        y: 0,
+        handleIn: { x: 0, y: 0 },
+        handleOut: { x: 0, y: 0 },
+      },
+    ],
+    closed: false,
   };
 }
 
@@ -446,7 +517,7 @@ export function isMotionProperty(property: string): property is MotionProperty {
     property === 'shape.size.w' ||
     property === 'shape.size.h' ||
     property === 'shape.cornerRadius' ||
-    /^shape\.(polygon\.(points|radius|cornerRadius)|star\.(points|outerRadius|innerRadius|cornerRadius))$/.test(property) ||
+    /^shape\.(polygon\.(points|radius|cornerRadius)|star\.(points|outerRadius|innerRadius|cornerRadius)|path\.(trim\.(start|end|offset)|dash\.(length|gap|offset)))$/.test(property) ||
     /^appearance\.[^.]+\.(opacity|visible|blendMode|color\.(r|g|b|a)|stroke\.(width|alignment)|gradient\.(start\.(x|y)|end\.(x|y)|center\.(x|y)|radius|stop\.[^.]+\.(offset|color\.(r|g|b|a))))$/.test(property) ||
     /^replicator\.(enabled|layout\.mode|count\.(x|y)|spacing\.(x|y)|patternOffset\.(x|y)|linear\.(count|step\.(x|y))|radial\.(count|center\.(x|y)|radius|startAngleDegrees|endAngleDegrees|angleSampling|autoOrient)|offset\.(mode|position\.(x|y)|rotation|scale\.(x|y)|opacity)|userLimit)$/.test(property)
   );

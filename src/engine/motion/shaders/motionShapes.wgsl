@@ -1,6 +1,7 @@
 const MAX_APPEARANCES: u32 = 8u;
 const MAX_GRADIENT_STOPS: u32 = 8u;
 const MAX_REGULAR_VERTICES: u32 = 64u;
+const MAX_PATH_VERTICES: u32 = 512u;
 const PI: f32 = 3.141592653589793;
 
 struct VertexOutput {
@@ -30,11 +31,16 @@ struct MotionUniforms {
   gradientStopColors: array<vec4f, 64>,
   // Four stop offsets per vec4.
   gradientStopOffsets: array<vec4f, 16>,
+  // trim start/end/offset, dash length
+  data4: vec4f,
+  // dash gap/offset, flattened point count, closed flag
+  data5: vec4f,
 };
 
 @group(0) @binding(0) var<uniform> motion: MotionUniforms;
 @group(0) @binding(1) var textureFill: texture_2d<f32>;
 @group(0) @binding(2) var textureFillSampler: sampler;
+@group(0) @binding(3) var<storage, read> pathVertices: array<vec4f>;
 
 @vertex
 fn vertexMain(
@@ -160,6 +166,47 @@ fn sdRegularShape(
   return select(distance, -distance, inside) - cornerRadius;
 }
 
+fn sdPathShape(point: vec2f) -> vec2f {
+  let count = u32(clamp(round(motion.data5.z), 0.0, f32(MAX_PATH_VERTICES)));
+  let closed = motion.data5.w > 0.5;
+  var minimumSquaredDistance = 1e20;
+  var nearestArc = 0.0;
+  var inside = false;
+
+  for (var index = 0u; index < MAX_PATH_VERTICES; index += 1u) {
+    if (index + 1u >= count) {
+      break;
+    }
+    let start = pathVertices[index];
+    let end = pathVertices[index + 1u];
+    let edge = end.xy - start.xy;
+    let edgeLengthSquared = max(dot(edge, edge), 0.0001);
+    let t = clamp(dot(point - start.xy, edge) / edgeLengthSquared, 0.0, 1.0);
+    let projected = point - (start.xy + edge * t);
+    let squaredDistance = dot(projected, projected);
+    if (squaredDistance < minimumSquaredDistance) {
+      minimumSquaredDistance = squaredDistance;
+      nearestArc = start.z + t * (end.z - start.z);
+    }
+
+    if (closed) {
+      let crosses = (start.y > point.y) != (end.y > point.y);
+      if (crosses) {
+        let crossingX = (
+          (end.x - start.x) * (point.y - start.y)
+          / (end.y - start.y)
+        ) + start.x;
+        if (point.x < crossingX) {
+          inside = !inside;
+        }
+      }
+    }
+  }
+
+  let distance = sqrt(max(minimumSquaredDistance, 0.0));
+  return vec2f(select(distance, -distance, closed && inside), nearestArc);
+}
+
 fn shapeDistance(localPoint: vec2f) -> f32 {
   let shapeSize = max(motion.data0.xy, vec2f(1.0));
   let halfSize = shapeSize * 0.5;
@@ -180,14 +227,17 @@ fn shapeDistance(localPoint: vec2f) -> f32 {
       false
     );
   }
-  return sdRegularShape(
-    localPoint,
-    motion.data2.w,
-    motion.data3.x,
-    motion.data3.y,
-    motion.data3.z,
-    true
-  );
+  if (shapeType < 3.5) {
+    return sdRegularShape(
+      localPoint,
+      motion.data2.w,
+      motion.data3.x,
+      motion.data3.y,
+      motion.data3.z,
+      true
+    );
+  }
+  return sdPathShape(localPoint).x;
 }
 
 fn gradientOffset(flatIndex: u32) -> f32 {
@@ -274,6 +324,7 @@ fn sampleAppearance(
   appearanceIndex: u32,
   localPoint: vec2f,
   signedDistance: f32,
+  nearestArc: f32,
   aa: f32
 ) -> vec4f {
   let itemMeta = motion.appearanceMeta[appearanceIndex];
@@ -297,6 +348,50 @@ fn sampleAppearance(
       detail.y,
       aa
     );
+    if (motion.data1.y >= 3.5) {
+      let count = u32(clamp(round(motion.data5.z), 0.0, f32(MAX_PATH_VERTICES)));
+      if (count >= 2u) {
+        let totalLength = pathVertices[count - 1u].z;
+        if (totalLength > 0.0) {
+          var effectiveArc = nearestArc + motion.data4.z * totalLength;
+          if (motion.data5.w > 0.5) {
+            effectiveArc = fract(effectiveArc / totalLength) * totalLength;
+          }
+          let arcAa = max(fwidth(nearestArc), 1.0);
+          let trimStart = motion.data4.x;
+          let trimEnd = motion.data4.y;
+          if (!(trimStart <= 0.0 && trimEnd >= 1.0)) {
+            let windowStart = trimStart * totalLength;
+            let windowEnd = trimEnd * totalLength;
+            coverage *= smoothstep(
+              windowStart - arcAa,
+              windowStart + arcAa,
+              effectiveArc
+            ) * (1.0 - smoothstep(
+              windowEnd - arcAa,
+              windowEnd + arcAa,
+              effectiveArc
+            ));
+          }
+
+          let dashLength = motion.data4.w;
+          if (dashLength > 0.0) {
+            let period = dashLength + max(motion.data5.x, 0.0);
+            let dashArc = effectiveArc + motion.data5.y;
+            let bandPosition = dashArc - floor(dashArc / period) * period;
+            coverage *= smoothstep(
+              -arcAa,
+              arcAa,
+              bandPosition
+            ) * (1.0 - smoothstep(
+              dashLength - arcAa,
+              dashLength + arcAa,
+              bandPosition
+            ));
+          }
+        }
+      }
+    }
   } else if (kind > 1.5 && kind < 3.5) {
     let shapeSize = max(motion.data0.xy, vec2f(1.0));
     let normalizedPoint = localPoint / shapeSize + vec2f(0.5);
@@ -371,6 +466,15 @@ fn sampleAppearance(
     coverage *= textureCoverage;
   }
 
+  // Path v1 applies trim/dash to strokes only; open paths have no fill.
+  if (
+    motion.data1.y >= 3.5
+    && motion.data5.w < 0.5
+    && !(kind > 0.5 && kind < 1.5)
+  ) {
+    coverage = 0.0;
+  }
+
   return vec4f(
     color.rgb,
     coverage * color.a * clamp(itemMeta.z, 0.0, 1.0)
@@ -415,7 +519,15 @@ fn compositeAppearance(top: vec4f, bottom: vec4f, mode: f32) -> vec4f {
 }
 
 fn sampleShape(localPoint: vec2f, instanceOpacity: f32) -> vec4f {
-  let distanceToShape = shapeDistance(localPoint);
+  var distanceToShape = 0.0;
+  var nearestArc = -1.0;
+  if (motion.data1.y >= 3.5) {
+    let pathDistance = sdPathShape(localPoint);
+    distanceToShape = pathDistance.x;
+    nearestArc = pathDistance.y;
+  } else {
+    distanceToShape = shapeDistance(localPoint);
+  }
   let aa = max(fwidth(distanceToShape), 1.0);
   let appearanceCount = u32(clamp(
     round(motion.data1.z),
@@ -430,6 +542,7 @@ fn sampleShape(localPoint: vec2f, instanceOpacity: f32) -> vec4f {
         index,
         localPoint,
         distanceToShape,
+        nearestArc,
         aa
       );
       result = compositeAppearance(

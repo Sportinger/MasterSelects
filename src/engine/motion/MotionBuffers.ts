@@ -12,6 +12,10 @@ import {
   type MotionRenderSize,
 } from './MotionTypes';
 import { MOTION_REPLICATOR_INSTANCE_FLOAT_STRIDE } from './replicator/runtimeContracts';
+import {
+  flattenMotionPath,
+  type FlattenedMotionPath,
+} from '../../services/motionDesign/path/flattenPath';
 
 export const MOTION_MAX_APPEARANCES = 8;
 export const MOTION_MAX_GRADIENT_STOPS = 8;
@@ -21,12 +25,14 @@ const APPEARANCE_ARRAY_COUNT = 4;
 const GRADIENT_COLOR_VEC4_COUNT =
   MOTION_MAX_APPEARANCES * MOTION_MAX_GRADIENT_STOPS;
 const GRADIENT_OFFSET_VEC4_COUNT = Math.ceil(GRADIENT_COLOR_VEC4_COUNT / 4);
+const PATH_PARAMS_VEC4_COUNT = 2;
 
 export const MOTION_UNIFORM_VEC4_COUNT =
   HEADER_VEC4_COUNT
   + APPEARANCE_ARRAY_COUNT * MOTION_MAX_APPEARANCES
   + GRADIENT_COLOR_VEC4_COUNT
-  + GRADIENT_OFFSET_VEC4_COUNT;
+  + GRADIENT_OFFSET_VEC4_COUNT
+  + PATH_PARAMS_VEC4_COUNT;
 export const MOTION_UNIFORM_FLOAT_COUNT = MOTION_UNIFORM_VEC4_COUNT * 4;
 export const MOTION_UNIFORM_BYTE_SIZE = MOTION_UNIFORM_FLOAT_COUNT * 4;
 
@@ -41,6 +47,7 @@ const GRADIENT_COLORS_OFFSET =
   APPEARANCE_COLOR_OFFSET + MOTION_MAX_APPEARANCES * 4;
 const GRADIENT_OFFSETS_OFFSET =
   GRADIENT_COLORS_OFFSET + GRADIENT_COLOR_VEC4_COUNT * 4;
+export const MOTION_PATH_PARAMS_OFFSET = 464;
 
 function finiteOr(value: number | undefined, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -54,6 +61,7 @@ function primitiveCode(primitive: ShapePrimitive | undefined): number {
   if (primitive === 'ellipse') return 1;
   if (primitive === 'polygon') return 2;
   if (primitive === 'star') return 3;
+  if (primitive === 'path') return 4;
   return 0;
 }
 
@@ -200,6 +208,7 @@ export function createMotionUniformArray(
   motion: MotionLayerDefinition,
   size: MotionRenderSize,
   textureFill?: MotionTextureFillUniformState,
+  flattenedPathInput?: FlattenedMotionPath | null,
 ): Float32Array<ArrayBuffer> {
   const shape = motion.shape;
   const shapeBounds = getMotionShapeRenderBounds(motion);
@@ -209,6 +218,12 @@ export function createMotionUniformArray(
   const polygon = shape?.polygon;
   const star = shape?.star;
   const appearances = getRenderableAppearances(motion);
+  const flattenedPath = shape?.primitive === 'path' && shape.path
+    ? (flattenedPathInput === undefined
+        ? flattenMotionPath(shape.path)
+        : flattenedPathInput)
+    : null;
+  const pathParamsOffset = MOTION_PATH_PARAMS_OFFSET;
   const data = new Float32Array(MOTION_UNIFORM_FLOAT_COUNT);
 
   data[0] = shapeWidth;
@@ -229,6 +244,21 @@ export function createMotionUniformArray(
   data[12] = Math.max(1, finiteOr(star?.outerRadius, defaultRadius));
   data[13] = Math.max(0.5, finiteOr(star?.innerRadius, defaultRadius * 0.5));
   data[14] = Math.max(0, finiteOr(star?.cornerRadius, 0));
+
+  if (shape?.primitive === 'path' && shape.path && flattenedPath) {
+    const trim = shape.path.trim;
+    const dash = shape.path.dash;
+    data[pathParamsOffset] = clamp(finiteOr(trim?.start, 0), 0, 1);
+    data[pathParamsOffset + 1] = clamp(finiteOr(trim?.end, 1), 0, 1);
+    data[pathParamsOffset + 2] = clamp(finiteOr(trim?.offset, 0), 0, 1);
+    data[pathParamsOffset + 3] = finiteOr(dash?.length, 0);
+    data[pathParamsOffset + 4] = finiteOr(dash?.gap, 0);
+    data[pathParamsOffset + 5] = finiteOr(dash?.offset, 0);
+    data[pathParamsOffset + 6] = flattenedPath.points.length;
+    data[pathParamsOffset + 7] = flattenedPath.closed ? 1 : 0;
+  } else {
+    data[pathParamsOffset + 1] = 1;
+  }
 
   appearances.forEach((item, index) => writeAppearance(data, item, index, textureFill));
   return data;

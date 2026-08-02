@@ -30,6 +30,10 @@ export class MotionPipeline {
           binding: 2,
           visibility: GPUShaderStage.FRAGMENT,
           sampler: { type: 'filtering' },
+        }, {
+          binding: 3,
+          visibility: GPUShaderStage.FRAGMENT,
+          buffer: { type: 'read-only-storage' },
         }],
       });
     }

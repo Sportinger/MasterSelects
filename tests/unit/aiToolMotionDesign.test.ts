@@ -178,7 +178,7 @@ describe('AI Motion Design tools', () => {
     expect(result.data).toMatchObject({
       capabilityVersion: 2,
       layerKinds: ['shape'],
-      primitives: ['rectangle', 'ellipse', 'polygon', 'star'],
+      primitives: ['rectangle', 'ellipse', 'polygon', 'star', 'path'],
       appearances: ['color-fill', 'stroke', 'linear-gradient', 'radial-gradient'],
       appearanceLimits: {
         maxItems: 8,
@@ -773,6 +773,74 @@ describe('AI Motion Design tools', () => {
     expect(restored?.motion).not.toBe(beforeRoundTrip);
   });
 
+  it('creates, edits, validates, and keyframes path motion properties', async () => {
+    const vertices = [
+      { x: -100, y: 40 },
+      { x: 0, y: -60, handleIn: { x: -15, y: 0 } },
+      { x: 120, y: 30, handleOut: { x: 20, y: 10 } },
+    ];
+    const created = await createShape({
+      primitive: 'path',
+      vertices,
+      closed: false,
+      trimStart: 0.1,
+      trimEnd: 0.75,
+      trimOffset: 0.05,
+      dashLength: 18,
+      dashGap: 7,
+      dashOffset: 3,
+    });
+
+    expect(useTimelineStore.getState().clips.find(
+      (clip) => clip.id === created.clipId,
+    )?.motion?.shape).toMatchObject({
+      primitive: 'path',
+      path: {
+        vertices: [
+          { x: -100, y: 40, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } },
+          { x: 0, y: -60, handleIn: { x: -15, y: 0 }, handleOut: { x: 0, y: 0 } },
+          { x: 120, y: 30, handleIn: { x: 0, y: 0 }, handleOut: { x: 20, y: 10 } },
+        ],
+        closed: false,
+        trim: { start: 0.1, end: 0.75, offset: 0.05 },
+        dash: { length: 18, gap: 7, offset: 3 },
+      },
+    });
+
+    const updated = await handleUpdateMotionProperties({
+      clipId: created.clipId,
+      updates: [{ path: 'shape.path.trim.start', value: 0.2 }],
+    }, useTimelineStore.getState());
+    expect(updated.success).toBe(true);
+
+    const rectangle = await createShape();
+    const wrongPrimitive = await handleUpdateMotionProperties({
+      clipId: rectangle.clipId,
+      updates: [{ path: 'shape.path.trim.start', value: 0.2 }],
+    }, useTimelineStore.getState());
+    expect(wrongPrimitive.success).toBe(false);
+    expect(wrongPrimitive.error).toContain('Property not found for clip');
+
+    const invalidTrim = await handleUpdateMotionProperties({
+      clipId: created.clipId,
+      updates: [{ path: 'shape.path.trim.start', value: 0.9 }],
+    }, useTimelineStore.getState());
+    expect(invalidTrim.success).toBe(false);
+    expect(invalidTrim.error).toContain('must not exceed shape.path.trim.end');
+
+    const keyframe = await handleAddKeyframe({
+      clipId: created.clipId,
+      property: 'shape.path.trim.end',
+      value: 0.6,
+      time: 0.5,
+      easing: 'ease-out',
+    }, useTimelineStore.getState());
+    expect(keyframe.success).toBe(true);
+    expect(useTimelineStore.getState().getClipKeyframes(created.clipId)).toContainEqual(
+      expect.objectContaining({ property: 'shape.path.trim.end', value: 0.6, time: 0.5 }),
+    );
+  });
+
   it('configures the effective 40x25 Grid Replicator and rejects over-limit settings', async () => {
     const created = await createShape();
     const configured = await handleConfigureMotionReplicator({
@@ -980,6 +1048,34 @@ describe('AI Motion Design tools', () => {
     );
   });
 
+  it('round-trips path geometry, trim, and dash settings through timeline save/load', async () => {
+    const created = await createShape({
+      primitive: 'path',
+      vertices: [
+        { x: -80, y: 0 },
+        { x: 0, y: -50, handleOut: { x: 16, y: 8 } },
+        { x: 90, y: 10 },
+      ],
+      closed: true,
+      trimStart: 0.15,
+      trimEnd: 0.85,
+      trimOffset: 0.1,
+      dashLength: 14,
+      dashGap: 6,
+      dashOffset: 2,
+    });
+    const shapeBefore = structuredClone(
+      useTimelineStore.getState().clips.find((clip) => clip.id === created.clipId)?.motion?.shape,
+    );
+
+    const serialized = useTimelineStore.getState().getSerializableState();
+    await useTimelineStore.getState().loadState(serialized);
+
+    expect(useTimelineStore.getState().clips.find(
+      (clip) => clip.id === created.clipId,
+    )?.motion?.shape).toEqual(shapeBefore);
+  });
+
   it('aggregates Motion Design mutations in executeBatch metadata', async () => {
     const created = await createShape();
     const result = await handleExecuteBatch({
@@ -1121,7 +1217,7 @@ describe('AI Motion Design tools', () => {
 
     expect(locked.error).toContain('locked');
     expect(audio.error).toContain('video track');
-    expect(triangle.error).toContain('rectangle, ellipse, polygon, star');
+    expect(triangle.error).toContain('rectangle, ellipse, polygon, star, path');
     expect(useTimelineStore.getState().clips).toHaveLength(0);
   });
 });

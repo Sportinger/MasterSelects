@@ -135,7 +135,7 @@ export const motionDesignToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'createMotionShapeClip',
-      description: 'Create and position a native editable Motion Design rectangle, ellipse, polygon, or star on an unlocked video track. x/y use the same centered composition pixels as setTransform. Omitted timing uses the playhead and a five-second duration.',
+      description: 'Create and position a native editable Motion Design rectangle, ellipse, polygon, star, or path on an unlocked video track. x/y use the same centered composition pixels as setTransform. Omitted timing uses the playhead and a five-second duration.',
       parameters: {
         type: 'object',
         properties: {
@@ -162,7 +162,7 @@ export const motionDesignToolDefinitions: ToolDefinition[] = [
           name: { type: 'string', description: 'Optional clip name.' },
           primitive: {
             type: 'string',
-            enum: ['rectangle', 'ellipse', 'polygon', 'star'],
+            enum: ['rectangle', 'ellipse', 'polygon', 'star', 'path'],
             description: 'Rendered shape primitive. Defaults to rectangle.',
           },
           width: {
@@ -193,6 +193,58 @@ export const motionDesignToolDefinitions: ToolDefinition[] = [
             type: 'number',
             description: 'Star inner radius in pixels.',
           },
+          vertices: {
+            type: 'array',
+            minItems: 2,
+            maxItems: 128,
+            description: 'Path vertices in local pixels with the origin at the shape center. Required for path primitives; 2 to 128 entries. Missing handles default to {x: 0, y: 0}.',
+            items: {
+              type: 'object',
+              properties: {
+                x: { type: 'number', description: 'Vertex X in local pixels.' },
+                y: { type: 'number', description: 'Vertex Y in local pixels.' },
+                handleIn: {
+                  ...vectorSchema,
+                  description: 'Incoming handle offset from the vertex in local pixels.',
+                  required: ['x', 'y'],
+                },
+                handleOut: {
+                  ...vectorSchema,
+                  description: 'Outgoing handle offset from the vertex in local pixels.',
+                  required: ['x', 'y'],
+                },
+              },
+              required: ['x', 'y'],
+            },
+          },
+          closed: {
+            type: 'boolean',
+            description: 'Whether the path closes from its last vertex to its first. Defaults to false.',
+          },
+          trimStart: {
+            type: 'number',
+            description: 'Path trim start as a normalized arc-length fraction from 0 to 1. Defaults to 0.',
+          },
+          trimEnd: {
+            type: 'number',
+            description: 'Path trim end as a normalized arc-length fraction from 0 to 1. Defaults to 1 and must not be below trimStart.',
+          },
+          trimOffset: {
+            type: 'number',
+            description: 'Path trim offset as a normalized arc-length fraction from 0 to 1. Defaults to 0.',
+          },
+          dashLength: {
+            type: 'number',
+            description: 'Path dash length in pixels, greater than or equal to 0. Zero disables dashing.',
+          },
+          dashGap: {
+            type: 'number',
+            description: 'Path dash gap in pixels, greater than or equal to 0.',
+          },
+          dashOffset: {
+            type: 'number',
+            description: 'Path dash offset in pixels, greater than or equal to 0.',
+          },
           fill: fillSchema,
           stroke: strokeSchema,
         },
@@ -204,7 +256,7 @@ export const motionDesignToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'updateMotionProperties',
-      description: 'Atomically update one or more clip-valid Motion or Transform property-registry paths on a motion-shape clip. Common shape/position paths come directly from createMotionShapeClip.commonEditablePaths; call getMotionDesign only for uncommon clip-specific paths or stable appearance ids.',
+      description: 'Atomically update one or more clip-valid Motion or Transform property-registry paths on a motion-shape clip, for example shape.size.w or shape.path.trim.start. Common shape/position paths come directly from createMotionShapeClip.commonEditablePaths; call getMotionDesign only for uncommon clip-specific paths or stable appearance ids.',
       parameters: {
         type: 'object',
         properties: {

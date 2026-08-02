@@ -149,7 +149,7 @@ export interface ProjectMathSceneItem extends ProjectMediaItemBase {
   duration: number;
 }
 
-export type ProjectShapePrimitive = 'rectangle' | 'ellipse' | 'polygon' | 'star';
+export type ProjectShapePrimitive = 'rectangle' | 'ellipse' | 'polygon' | 'star' | 'path';
 
 export interface ProjectMotionShapeItem extends ProjectMediaItemBase {
   type: 'motion-shape';

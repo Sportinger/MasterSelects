@@ -7,10 +7,13 @@ import {
   createStrokeAppearance,
 } from '../../src/types/motionDesign';
 import {
+  MOTION_PATH_PARAMS_OFFSET,
   MOTION_UNIFORM_BYTE_SIZE,
   createMotionInstanceArray,
   createMotionUniformArray,
 } from '../../src/engine/motion/MotionBuffers';
+import { MotionPathBufferState } from '../../src/engine/motion/pathBufferState';
+import { flattenMotionPath } from '../../src/services/motionDesign/path/flattenPath';
 import {
   buildMotionTimelineDiagnostics,
   getMotionRendererDiagnostics,
@@ -146,6 +149,59 @@ describe('motion design rendering helpers', () => {
       0, 0.5, 1, 0.5,
       0.5, 0.5, 0, 0,
     ]);
+  });
+
+  it('packs path trim/dash uniforms and flattened arc-length vertices', () => {
+    const motion = createDefaultMotionLayerDefinition('shape', {
+      primitive: 'path',
+      size: { w: 12, h: 8 },
+    });
+    motion.shape!.path = {
+      closed: false,
+      trim: { start: 0.25, end: 0.75, offset: 0 },
+      dash: { length: 10, gap: 5, offset: 0 },
+      vertices: [
+        {
+          x: 0,
+          y: 0,
+          handleIn: { x: 0, y: 0 },
+          handleOut: { x: 0, y: 0 },
+        },
+        {
+          x: 3,
+          y: 4,
+          handleIn: { x: 0, y: 0 },
+          handleOut: { x: 0, y: 0 },
+        },
+        {
+          x: 6,
+          y: 4,
+          handleIn: { x: 0, y: 0 },
+          handleOut: { x: 0, y: 0 },
+        },
+      ],
+    };
+    const flattened = flattenMotionPath(motion.shape!.path)!;
+    const uniforms = createMotionUniformArray(
+      motion,
+      getMotionRenderSize(motion),
+      undefined,
+      flattened,
+    );
+    const pathUpdate = new MotionPathBufferState().prepare(flattened);
+
+    expect(uniforms[5]).toBe(4);
+    expect(MOTION_PATH_PARAMS_OFFSET).toBe(464);
+    expect(Array.from(uniforms.slice(
+      MOTION_PATH_PARAMS_OFFSET,
+      MOTION_PATH_PARAMS_OFFSET + 8,
+    ))).toEqual([0.25, 0.75, 0, 10, 5, 0, 3, 0]);
+    expect(Array.from(pathUpdate.data)).toEqual([
+      0, 0, 0, 0,
+      3, 4, 5, 0,
+      6, 4, 8, 0,
+    ]);
+    expect(pathUpdate.needsUpload).toBe(true);
   });
 
   it('sizes and packs grid replicator instances for motion shapes', () => {
@@ -390,6 +446,7 @@ describe('motion design rendering helpers', () => {
       UNIFORM: 1,
       VERTEX: 2,
       COPY_DST: 4,
+      STORAGE: 8,
     });
 
     const texture = {

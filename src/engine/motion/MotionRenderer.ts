@@ -18,6 +18,15 @@ import {
 import { MotionPipeline } from './MotionPipeline';
 import { MotionTextureAcquisition } from './media/motionTextureAcquisition';
 import { ReplicatorInstanceBufferState } from './replicator/instanceBufferState';
+import {
+  MOTION_PATH_MAX_BUFFER_CAPACITY,
+  MOTION_PATH_VERTEX_BYTE_STRIDE,
+  MotionPathBufferState,
+} from './pathBufferState';
+import {
+  flattenMotionPath,
+  type FlattenedMotionPath,
+} from '../../services/motionDesign/path/flattenPath';
 import { planReplicatorSourceTexture } from './replicator/resourcePlanning';
 import {
   MOTION_REPLICATOR_DEFAULT_MAX_BUFFER_CAPACITY,
@@ -30,7 +39,13 @@ import {
   setMotionRendererCacheCount,
 } from './MotionDiagnostics';
 
-function isRenderableMotionShape(motion: MotionLayerDefinition | undefined): motion is MotionLayerDefinition {
+function isRenderableMotionShape(
+  motion: MotionLayerDefinition | undefined,
+  flattenedPath: FlattenedMotionPath | null = motion?.shape?.primitive === 'path'
+    && motion.shape.path
+    ? flattenMotionPath(motion.shape.path)
+    : null,
+): motion is MotionLayerDefinition {
   const primitive = motion?.shape?.primitive;
   return motion?.kind === 'shape'
     && (
@@ -38,6 +53,11 @@ function isRenderableMotionShape(motion: MotionLayerDefinition | undefined): mot
       || primitive === 'ellipse'
       || primitive === 'polygon'
       || primitive === 'star'
+      || (
+        primitive === 'path'
+        && motion.shape?.path !== undefined
+        && flattenedPath !== null
+      )
     );
 }
 
@@ -47,13 +67,21 @@ export class MotionRenderer {
   private textureAcquisition: MotionTextureAcquisition;
   private caches = new Map<string, MotionClipGpuCache>();
   private instanceBufferStates = new Map<string, ReplicatorInstanceBufferState>();
+  private pathBufferStates = new Map<string, MotionPathBufferState>();
   private textureBindings = new WeakMap<MotionClipGpuCache, GPUTextureView>();
+  private pathBindings = new WeakMap<MotionClipGpuCache, GPUBuffer>();
+  private dummyPathBuffer: GPUBuffer;
   private readonly requestRender: () => void;
 
   constructor(device: GPUDevice, requestRender: () => void = () => undefined) {
     this.device = device;
     this.requestRender = requestRender;
     this.pipeline = new MotionPipeline(device);
+    this.dummyPathBuffer = device.createBuffer({
+      label: 'motion-shape-dummy-path',
+      size: MOTION_PATH_VERTEX_BYTE_STRIDE,
+      usage: GPUBufferUsage.STORAGE,
+    });
     this.textureAcquisition = new MotionTextureAcquisition(device, {
       onDiagnostic: (code, message) => recordMotionTextureDiagnostic({ code, message }),
     });
@@ -65,7 +93,10 @@ export class MotionRenderer {
     frameAdmission: MotionFrameRuntimeAdmission,
   ): MotionRenderResult | null {
     const motion = layer.source?.motion;
-    if (!isRenderableMotionShape(motion)) {
+    const flattenedPath = motion?.shape?.primitive === 'path' && motion.shape.path
+      ? flattenMotionPath(motion.shape.path)
+      : null;
+    if (!isRenderableMotionShape(motion, flattenedPath)) {
       return null;
     }
 
@@ -115,9 +146,13 @@ export class MotionRenderer {
       size.width,
       size.height,
       size.replicator.instanceCount,
+      flattenedPath?.points.length ?? 0,
       fallbackBinding,
     );
-    this.ensureTextureBinding(cache, textureBinding);
+    const activePathBuffer = flattenedPath && cache.pathBuffer
+      ? cache.pathBuffer
+      : this.dummyPathBuffer;
+    this.ensureTextureBinding(cache, textureBinding, activePathBuffer);
     const uniforms = createMotionUniformArray(
       motion,
       size,
@@ -127,6 +162,7 @@ export class MotionRenderer {
             sourceSize: textureResult?.sourceSize,
           }
         : undefined,
+      flattenedPath,
     );
     const instances = createMotionInstanceArray(size);
     const cacheKey = this.getCacheKey(layer);
@@ -140,6 +176,25 @@ export class MotionRenderer {
       instances,
       size.replicator.instanceCount,
     );
+    let pathUploadBytes = 0;
+    let pathUploadCount = 0;
+    if (flattenedPath && cache.pathBuffer) {
+      let pathBufferState = this.pathBufferStates.get(cacheKey);
+      if (!pathBufferState) {
+        pathBufferState = new MotionPathBufferState();
+        this.pathBufferStates.set(cacheKey, pathBufferState);
+      }
+      const pathUpdate = pathBufferState.prepare(flattenedPath);
+      if (pathUpdate.needsUpload) {
+        this.device.queue.writeBuffer(
+          cache.pathBuffer,
+          0,
+          pathUpdate.data as GPUAllowSharedBufferSource,
+        );
+        pathUploadBytes = pathUpdate.data.byteLength;
+        pathUploadCount = 1;
+      }
+    }
     this.device.queue.writeBuffer(cache.uniformBuffer, 0, uniforms as GPUAllowSharedBufferSource);
     for (const range of bufferUpdate.dirtyRanges) {
       const floatStart = range.byteOffset / Float32Array.BYTES_PER_ELEMENT;
@@ -170,8 +225,9 @@ export class MotionRenderer {
       layerId: layer.id,
       sourceClipId: layer.sourceClipId,
       instanceCount: size.replicator.instanceCount,
-      bufferUploads: 1 + bufferUpdate.dirtyRanges.length,
-      bufferUploadBytes: uniforms.byteLength + bufferUpdate.stats.uploadedBytes,
+      bufferUploads: 1 + bufferUpdate.dirtyRanges.length + pathUploadCount,
+      bufferUploadBytes:
+        uniforms.byteLength + bufferUpdate.stats.uploadedBytes + pathUploadBytes,
       encodeTimeMs: finishedAt - startedAt,
       renderedAt: Date.now(),
     });
@@ -187,10 +243,14 @@ export class MotionRenderer {
       cache.texture.destroy();
       cache.uniformBuffer.destroy();
       cache.instanceBuffer.destroy();
+      cache.pathBuffer?.destroy();
     }
     this.caches.clear();
     this.instanceBufferStates.clear();
+    this.pathBufferStates.clear();
     this.textureBindings = new WeakMap<MotionClipGpuCache, GPUTextureView>();
+    this.pathBindings = new WeakMap<MotionClipGpuCache, GPUBuffer>();
+    this.dummyPathBuffer.destroy();
     this.textureAcquisition.destroy();
     this.pipeline.destroy();
     setMotionRendererCacheCount(0);
@@ -205,6 +265,7 @@ export class MotionRenderer {
     width: number,
     height: number,
     requiredInstances: number,
+    requiredPathPoints: number,
     fallbackBinding: { view: GPUTextureView; sampler: GPUSampler },
   ): MotionClipGpuCache {
     const key = this.getCacheKey(layer);
@@ -214,6 +275,7 @@ export class MotionRenderer {
       && existing.width === width
       && existing.height === height
       && existing.instanceCapacity >= requiredInstances
+      && existing.pathCapacity >= requiredPathPoints
     ) {
       return existing;
     }
@@ -222,11 +284,14 @@ export class MotionRenderer {
       existing.texture.destroy();
       existing.uniformBuffer.destroy();
       existing.instanceBuffer.destroy();
+      existing.pathBuffer?.destroy();
       this.caches.delete(key);
     }
 
     const instanceCapacity = resolveInstanceCapacity(requiredInstances);
+    const pathCapacity = resolvePathCapacity(requiredPathPoints);
     this.instanceBufferStates.get(key)?.invalidate();
+    this.pathBufferStates.get(key)?.invalidate();
 
     const texture = this.device.createTexture({
       label: `motion-shape-texture-${key}`,
@@ -245,6 +310,14 @@ export class MotionRenderer {
       size: MOTION_REPLICATOR_INSTANCE_BYTE_STRIDE * instanceCapacity,
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
     });
+    const pathBuffer = pathCapacity > 0
+      ? this.device.createBuffer({
+          label: `motion-shape-path-${key}`,
+          size: MOTION_PATH_VERTEX_BYTE_STRIDE * pathCapacity,
+          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+        })
+      : null;
+    const initialPathBinding = pathBuffer ?? this.dummyPathBuffer;
     const bindGroup = this.device.createBindGroup({
       label: `motion-shape-bind-group-${key}`,
       layout: this.pipeline.getBindGroupLayout(),
@@ -252,6 +325,7 @@ export class MotionRenderer {
         { binding: 0, resource: { buffer: uniformBuffer } },
         { binding: 1, resource: fallbackBinding.view },
         { binding: 2, resource: fallbackBinding.sampler },
+        { binding: 3, resource: { buffer: initialPathBinding } },
       ],
     });
 
@@ -260,13 +334,16 @@ export class MotionRenderer {
       view,
       uniformBuffer,
       instanceBuffer,
+      pathBuffer,
       bindGroup,
       width,
       height,
       instanceCapacity,
+      pathCapacity,
     };
     this.caches.set(key, cache);
     this.textureBindings.set(cache, fallbackBinding.view);
+    this.pathBindings.set(cache, initialPathBinding);
     setMotionRendererCacheCount(this.caches.size);
     return cache;
   }
@@ -274,8 +351,12 @@ export class MotionRenderer {
   private ensureTextureBinding(
     cache: MotionClipGpuCache,
     textureBinding: { view: GPUTextureView; sampler: GPUSampler },
+    pathBinding: GPUBuffer,
   ): void {
-    if (this.textureBindings.get(cache) === textureBinding.view) return;
+    if (
+      this.textureBindings.get(cache) === textureBinding.view
+      && this.pathBindings.get(cache) === pathBinding
+    ) return;
     cache.bindGroup = this.device.createBindGroup({
       label: 'motion-shape-texture-bind-group',
       layout: this.pipeline.getBindGroupLayout(),
@@ -283,9 +364,11 @@ export class MotionRenderer {
         { binding: 0, resource: { buffer: cache.uniformBuffer } },
         { binding: 1, resource: textureBinding.view },
         { binding: 2, resource: textureBinding.sampler },
+        { binding: 3, resource: { buffer: pathBinding } },
       ],
     });
     this.textureBindings.set(cache, textureBinding.view);
+    this.pathBindings.set(cache, pathBinding);
   }
 }
 
@@ -300,4 +383,18 @@ function resolveInstanceCapacity(requiredInstances: number): number {
   let capacity = MOTION_REPLICATOR_MIN_BUFFER_CAPACITY;
   while (capacity < requiredInstances) capacity *= 2;
   return Math.min(capacity, MOTION_REPLICATOR_DEFAULT_MAX_BUFFER_CAPACITY);
+}
+
+function resolvePathCapacity(requiredPoints: number): number {
+  if (
+    !Number.isSafeInteger(requiredPoints)
+    || requiredPoints < 0
+    || requiredPoints > MOTION_PATH_MAX_BUFFER_CAPACITY
+  ) {
+    throw new RangeError('Motion path point count exceeds GPU buffer capacity');
+  }
+  if (requiredPoints === 0) return 0;
+  let capacity = 1;
+  while (capacity < requiredPoints) capacity *= 2;
+  return capacity;
 }

@@ -38,6 +38,12 @@ const MOTION_SHAPE_PROPERTY_LABELS: Record<MotionShapeProperty, string> = {
   'shape.star.outerRadius': 'Star Outer Radius',
   'shape.star.innerRadius': 'Star Inner Radius',
   'shape.star.cornerRadius': 'Star Corner Radius',
+  'shape.path.trim.start': 'Trim Start',
+  'shape.path.trim.end': 'Trim End',
+  'shape.path.trim.offset': 'Trim Offset',
+  'shape.path.dash.length': 'Dash Length',
+  'shape.path.dash.gap': 'Dash Gap',
+  'shape.path.dash.offset': 'Dash Offset',
 };
 
 export function getMotionDescriptorsForClip(clip: TimelineClip): PropertyDescriptor[] {
@@ -61,6 +67,16 @@ export function getMotionDescriptorsForClip(clip: TimelineClip): PropertyDescrip
           'shape.star.outerRadius',
           'shape.star.innerRadius',
           'shape.star.cornerRadius',
+        ] as MotionShapeProperty[]
+      : []),
+    ...(clip.motion?.shape?.primitive === 'path'
+      ? [
+          'shape.path.trim.start',
+          'shape.path.trim.end',
+          'shape.path.trim.offset',
+          'shape.path.dash.length',
+          'shape.path.dash.gap',
+          'shape.path.dash.offset',
         ] as MotionShapeProperty[]
       : []),
   ];
