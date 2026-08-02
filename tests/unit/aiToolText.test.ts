@@ -81,10 +81,12 @@ async function createTextClip() {
 describe('AI text authoring tools', () => {
   beforeEach(resetTimeline);
 
-  it('publishes the complete six-tool text surface', () => {
+  it('publishes the complete eight-tool text surface', () => {
     expect(textToolDefinitions.map((tool) => tool.function.name)).toEqual([
       'getTextProperties',
       'createEditableTitleStack',
+      'manageEditableHook',
+      'refineEditableHook',
       'createTextClip',
       'updateTextProperties',
       'setTextBox',

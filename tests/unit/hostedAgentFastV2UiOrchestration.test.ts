@@ -143,9 +143,11 @@ describe('Fast V2 official hosted UI orchestration', () => {
       requestedModelClass: 'fast',
       turnId: 'turn-v2-ui',
     });
+    expect(browserRequest).toHaveProperty('editorToolCatalog');
     expect(JSON.stringify(browserRequest)).not.toMatch(
-      /PRIVATE_BROWSER_PROMPT_MUST_NOT_EGRESS|providerInput|systemPrompt|tools|reasoningEffort|maxTurnSpendCredits/,
+      /PRIVATE_BROWSER_PROMPT_MUST_NOT_EGRESS|providerInput|systemPrompt|reasoningEffort|maxTurnSpendCredits/,
     );
+    expect(browserRequest).not.toHaveProperty('tools');
     expect(globalThis.fetch).toHaveBeenCalledTimes(3);
   });
 

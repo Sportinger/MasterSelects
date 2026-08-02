@@ -513,6 +513,36 @@ describe('hosted-agent K2 public boundary', () => {
     expect(operationResultResponse.status).toBe(200);
     expect(JSON.parse(forwardedOperationResult)).toEqual(operationResult);
 
+    for (const [operationId, projectedResult] of [
+      ['timeline.editor.catalog.v1', { success: true }],
+      ['timeline.editor.inspect.v1', { data: { inspected: true }, success: true }],
+      ['timeline.editor.mutate.v1', { data: { updated: true }, success: true }],
+      ['timeline.editor.destructive.v1', { data: { deleted: true }, success: true }],
+    ] as const) {
+      const progressiveOperationResult = {
+        result: {
+          ...operationResult.result,
+          result: {
+            batchId: operationResult.result.batchId,
+            results: [{
+              operationId,
+              result: projectedResult,
+              sequence: 1,
+            }],
+            success: true,
+          },
+        },
+      };
+      const progressiveResponse = await onRequest(context({
+        body: progressiveOperationResult,
+        headers: sessionHeaders,
+        method: 'POST',
+        path: `hosted-agent/turns/${TURN_ID}/operation-results`,
+      }));
+      expect(progressiveResponse.status).toBe(200);
+      expect(JSON.parse(forwardedOperationResult)).toEqual(progressiveOperationResult);
+    }
+
     const operationSettlement = {
       receipt: {
         batchId: 'k0-operation-batch',

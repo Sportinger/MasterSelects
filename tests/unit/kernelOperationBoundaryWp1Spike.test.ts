@@ -926,7 +926,8 @@ describe('WP1 public operation boundary spike', () => {
     expect(checkToolAccess('getFramesAtTimes', 'kernel').allowed).toBe(true);
     expect(checkToolAccess('getTimelineState', 'kernel').allowed).toBe(true);
     expect(checkToolAccess('reorderClips', 'kernel').allowed).toBe(true);
-    expect(checkToolAccess('deleteClip', 'kernel').allowed).toBe(false);
+    expect(checkToolAccess('deleteClip', 'kernel').allowed).toBe(true);
     expect(checkToolAccess('executeBatch', 'kernel').allowed).toBe(false);
+    expect(checkToolAccess('createEditableTitleStack', 'kernel').allowed).toBe(false);
   });
 });

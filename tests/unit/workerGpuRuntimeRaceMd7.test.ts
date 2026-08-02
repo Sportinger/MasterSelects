@@ -906,6 +906,7 @@ describe('MD7 Worker GPU runtime races', () => {
 
   it('fails closed when real compositor resources are released before ready continuation', async () => {
     vi.stubGlobal('GPUShaderStage', { FRAGMENT: 2 });
+    vi.stubGlobal('GPUBufferUsage', { COPY_DST: 1, MAP_READ: 2 });
     vi.stubGlobal('GPUTextureUsage', {
       RENDER_ATTACHMENT: 1,
       TEXTURE_BINDING: 2,
@@ -918,7 +919,8 @@ describe('MD7 Worker GPU runtime races', () => {
       destroy: whiteMaskDestroy,
     }));
     const device = {
-      queue: { writeTexture: vi.fn() },
+      queue: { writeBuffer: vi.fn(), writeTexture: vi.fn() },
+      createBuffer: vi.fn(() => ({ destroy: vi.fn() })),
       createTexture,
       createSampler: vi.fn(() => ({})),
       createShaderModule: vi.fn(() => ({})),

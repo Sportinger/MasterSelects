@@ -398,6 +398,10 @@ function validStateFingerprint(value: unknown): value is string {
 }
 
 const WP1_OPERATION_IDS = new Set([
+  'timeline.editor.catalog.v1',
+  'timeline.editor.destructive.v1',
+  'timeline.editor.inspect.v1',
+  'timeline.editor.mutate.v1',
   'timeline.hook.commit.v1',
   'timeline.hook.preview.v1',
   'timeline.hook.refine.commit.v1',
@@ -419,7 +423,23 @@ function validProjectedOperationResult(value: unknown, operationId: string): boo
   }
   if (value.error !== undefined) return false;
   if (
-    operationId === 'timeline.hook.commit.v1'
+    operationId === 'timeline.editor.destructive.v1'
+    || operationId === 'timeline.editor.inspect.v1'
+    || operationId === 'timeline.editor.mutate.v1'
+  ) {
+    if (value.data === undefined) return true;
+    try {
+      const serialized = JSON.stringify(value.data);
+      return typeof serialized === 'string'
+        && serialized.length <= 500_000
+        && !/(?:^|["'])data:/i.test(serialized);
+    } catch {
+      return false;
+    }
+  }
+  if (
+    operationId === 'timeline.editor.catalog.v1'
+    || operationId === 'timeline.hook.commit.v1'
     || operationId === 'timeline.hook.preview.v1'
     || operationId === 'timeline.hook.refine.commit.v1'
     || operationId === 'timeline.intercut.commit.v1'

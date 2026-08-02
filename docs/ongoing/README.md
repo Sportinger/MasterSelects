@@ -8,6 +8,7 @@ note here when a plan still has unresolved gates or intentionally deferred work.
 
 | File | Status | Why It Stays Here |
 |---|---|---|
+| [Fast-V2-Progressive-Editor-Tools-Plan.md](./Fast-V2-Progressive-Editor-Tools-Plan.md) | Implementation in progress | Progressive private categories and fast paths over a digest-pinned flat catalog of public atomic editor tools. Binding ownership decision: [ADR-001](../architecture/ADR-001-Fast-V2-Kernel-Owned-Orchestration.md). |
 | [Agent-Timeline-Analysis-Index-Plan.md](./Agent-Timeline-Analysis-Index-Plan.md) | Planning and cost validation | Versioned, range-queryable agent timeline, eight derived channels, and a unified visual scene/transcript analysis workspace; benchmark and granularity gates are still open. |
 | [FlashBoard-Agent-Module-Foundation.md](./FlashBoard-Agent-Module-Foundation.md) | **Binding working foundation** | Module Bauordnung: how every FlashBoard agent module is scoped, built on Fast V2, verified with evidence, and accepted; entry point for every new agent session. |
 | [FlashBoard-Kernel-Agent-ChatCut-Plan.md](./FlashBoard-Kernel-Agent-ChatCut-Plan.md) | Zielbild / architecture reference | Kernel-first Fast V2 expansion for ordered chat blocks, native history, capability discovery, declarative transcript editing, evidence, approvals, and version restore; execution follows the Module Foundation. |

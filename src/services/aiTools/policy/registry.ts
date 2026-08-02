@@ -6,6 +6,7 @@ import type {
   ToolAccessOptions,
   ToolPolicyEntry,
 } from './types';
+import { isKernelEditorToolName } from '../editorToolCatalog';
 
 const allCallers: CallerContext[] = ['chat', 'devBridge', 'console', 'internal'];
 const localFileCallers: CallerContext[] = ['chat', 'devBridge', 'console', 'internal'];
@@ -506,6 +507,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['createEditableTitleStack', mutatingMedium()],
   ['manageEditableHook', allowKernelOperation(mutatingMedium())],
   ['refineEditableHook', allowKernelOperation(mutatingMedium())],
+  ['executeKernelEditorTool', allowKernelOperation(mutatingMedium())],
   ['updateTextProperties', mutatingMedium()],
   ['setTextBox', mutatingMedium()],
   ['addTextBoundsKeyframe', mutatingMedium()],
@@ -611,7 +613,10 @@ export function checkToolAccess(
   if (!policy) {
     return { allowed: false, reason: `Unknown tool: ${name}` };
   }
-  if (!policy.allowedCallers.includes(caller)) {
+  const kernelEditorAccess = caller === 'kernel'
+    && policy.allowedCallers.includes('chat')
+    && isKernelEditorToolName(name);
+  if (!policy.allowedCallers.includes(caller) && !kernelEditorAccess) {
     return { allowed: false, reason: `Tool "${name}" is not allowed for caller "${caller}"` };
   }
   if (

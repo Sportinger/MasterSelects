@@ -324,6 +324,45 @@ describe('Fast V2 browser fetch transport', () => {
     expect(fetchImplementation).toHaveBeenCalledTimes(2);
   });
 
+  it('accepts the stable-revision result used to load a private editor category', async () => {
+    const fetchImplementation = vi.fn(async () => jsonResponse({
+      accepted: true,
+      cursor: '2',
+      replayed: false,
+      sequence: 0,
+      sessionId: SESSION_ID,
+      status: 'active',
+      turnId: TURN_ID,
+    }));
+    const transport = createHostedAgentFastV2FetchTransport({ fetchImplementation });
+    const result: KernelOperationPlanResultV1 = {
+      batchId: 'category-browse-batch',
+      capabilitySetId: 'progressive-editor-tools',
+      clientInstanceId: CLIENT_ID,
+      kind: 'operation-plan-result',
+      result: {
+        batchId: 'category-browse-batch',
+        results: [{
+          operationId: 'timeline.editor.catalog.v1',
+          result: { success: true },
+          sequence: 1,
+        }],
+        success: true,
+      },
+      schemaVersion: 1,
+      sequence: 0,
+      sessionId: SESSION_ID,
+      stateRevisionAfter: 17,
+      stateRevisionBefore: 17,
+      status: 'committed',
+      turnId: TURN_ID,
+    };
+
+    await expect(transport.postOperationResult({ ...binding(), result }))
+      .resolves.toMatchObject({ accepted: true, sequence: 0 });
+    expect(fetchImplementation).toHaveBeenCalledTimes(1);
+  });
+
   it('cancels with the page binding and requires the exact terminal response', async () => {
     let headers = new Headers();
     const fetchImplementation = vi.fn(async (_input, init) => {

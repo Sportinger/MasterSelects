@@ -1,4 +1,8 @@
 export type PublicOperationIdV1 =
+  | 'timeline.editor.catalog.v1'
+  | 'timeline.editor.destructive.v1'
+  | 'timeline.editor.inspect.v1'
+  | 'timeline.editor.mutate.v1'
   | 'timeline.hook.commit.v1'
   | 'timeline.hook.preview.v1'
   | 'timeline.hook.refine.commit.v1'
@@ -17,6 +21,7 @@ export type PublicOperationEffectV1 =
 
 export type PublicEditorToolNameV1 =
   | 'deleteClips'
+  | 'executeKernelEditorTool'
   | 'getFramesAtTimes'
   | 'getTimelineState'
   | 'manageEditableHook'
@@ -108,7 +113,7 @@ export interface PublicOperationSpecV1 {
   dispatcher: {
     adapterVersion: 'ms-kernel-ai-tool-dispatcher-v1';
     callerContext: 'kernel';
-    suppressHistory: true;
+    suppressHistory: boolean;
     toolName: PublicEditorToolNameV1;
   };
   effects: readonly PublicOperationEffectV1[];
@@ -117,6 +122,10 @@ export interface PublicOperationSpecV1 {
     bindable: readonly PublicBindableResultV1[];
     projection:
       | { kind: 'success-only-v1' }
+      | {
+          kind: 'bounded-json-v1';
+          maximumCharacters: number;
+        }
       | {
           idMaximumLength: number;
           kind: 'split-video-id-array-v1';
@@ -144,6 +153,119 @@ export interface PublicOperationSpecV1 {
 export const PUBLIC_OPERATION_CONTRACT_V1 = {
   contractVersion: 'ms-editor-operations-v1',
   operations: [
+    {
+      arguments: {
+        additionalProperties: false,
+        fields: {},
+        schemaVersion: 1,
+      },
+      confirmation: 'inherit',
+      dispatcher: {
+        adapterVersion: 'ms-kernel-ai-tool-dispatcher-v1',
+        callerContext: 'kernel',
+        suppressHistory: true,
+        toolName: 'getTimelineState',
+      },
+      effects: [],
+      id: 'timeline.editor.catalog.v1',
+      result: {
+        bindable: [],
+        projection: { kind: 'success-only-v1' },
+        schemaVersion: 1,
+      },
+      risk: 'read-only',
+      transaction: 'none',
+    },
+    {
+      arguments: {
+        additionalProperties: false,
+        fields: {
+          requestJson: {
+            kind: 'bounded-json-string-v1',
+            maximumLength: 100_000,
+            minimumLength: 2,
+            required: true,
+          },
+        },
+        schemaVersion: 1,
+      },
+      confirmation: 'required',
+      dispatcher: {
+        adapterVersion: 'ms-kernel-ai-tool-dispatcher-v1',
+        callerContext: 'kernel',
+        suppressHistory: false,
+        toolName: 'executeKernelEditorTool',
+      },
+      effects: ['mediaDuration', 'segmentation', 'sourceCoverage', 'sourceOrder', 'timelinePlacement'],
+      id: 'timeline.editor.destructive.v1',
+      result: {
+        bindable: [],
+        projection: { kind: 'bounded-json-v1', maximumCharacters: 500_000 },
+        schemaVersion: 1,
+      },
+      risk: 'destructive',
+      transaction: 'none',
+    },
+    {
+      arguments: {
+        additionalProperties: false,
+        fields: {
+          requestJson: {
+            kind: 'bounded-json-string-v1',
+            maximumLength: 100_000,
+            minimumLength: 2,
+            required: true,
+          },
+        },
+        schemaVersion: 1,
+      },
+      confirmation: 'inherit',
+      dispatcher: {
+        adapterVersion: 'ms-kernel-ai-tool-dispatcher-v1',
+        callerContext: 'kernel',
+        suppressHistory: false,
+        toolName: 'executeKernelEditorTool',
+      },
+      effects: [],
+      id: 'timeline.editor.inspect.v1',
+      result: {
+        bindable: [],
+        projection: { kind: 'bounded-json-v1', maximumCharacters: 500_000 },
+        schemaVersion: 1,
+      },
+      risk: 'read-only',
+      transaction: 'none',
+    },
+    {
+      arguments: {
+        additionalProperties: false,
+        fields: {
+          requestJson: {
+            kind: 'bounded-json-string-v1',
+            maximumLength: 100_000,
+            minimumLength: 2,
+            required: true,
+          },
+        },
+        schemaVersion: 1,
+      },
+      confirmation: 'inherit',
+      dispatcher: {
+        adapterVersion: 'ms-kernel-ai-tool-dispatcher-v1',
+        callerContext: 'kernel',
+        suppressHistory: false,
+        toolName: 'executeKernelEditorTool',
+      },
+      effects: ['mediaDuration', 'segmentation', 'sourceCoverage', 'sourceOrder', 'timelinePlacement'],
+      id: 'timeline.editor.mutate.v1',
+      result: {
+        bindable: [],
+        projection: { kind: 'bounded-json-v1', maximumCharacters: 500_000 },
+        schemaVersion: 1,
+      },
+      risk: 'mutating',
+      transaction: 'none',
+    },
     {
       arguments: {
         additionalProperties: false,
@@ -455,7 +577,7 @@ export const PUBLIC_OPERATION_CONTRACT_V1 = {
 
 // Recomputed by the WP1 compatibility check from the canonical JSON above.
 export const PUBLIC_OPERATION_CONTRACT_DIGEST_V1 =
-  'sha256:c22edef8cd80e983a7a1f79b41cd3bf9a92c335a0278e5a882e92a5d6921481d' as const;
+  'sha256:37406c757f0a90967cdbfd45b0b047b246a6844fc632f6f07a10038e834a9595' as const;
 
 export const PUBLIC_COMPILED_PLAN_EXTENSION_V1 = {
   bindingVersion: 'ms-prior-result-path-v1',
@@ -469,7 +591,7 @@ export const PUBLIC_COMPILED_PLAN_EXTENSION_V1 = {
 } as const;
 
 export const PUBLIC_COMPILED_PLAN_DIGEST_V1 =
-  'sha256:aa9506ae5c3dc8aa1ce8def8f6e192e1fbc3d2f775f333ad126356da9d8794e3' as const;
+  'sha256:72ec74d702c6facf409ea9999f6d7f839967a4585426c40878020dc98a333480' as const;
 
 const OPERATION_BY_ID = new Map<PublicOperationIdV1, PublicOperationSpecV1>(
   PUBLIC_OPERATION_CONTRACT_V1.operations.map((operation) => [operation.id, operation]),
@@ -713,6 +835,31 @@ function boundedOperationError(value: unknown): string {
   return value.slice(0, 1_000);
 }
 
+function sanitizeBoundedEditorResult(
+  value: unknown,
+  depth = 0,
+  budget: { nodes: number } = { nodes: 0 },
+): unknown {
+  budget.nodes += 1;
+  if (budget.nodes > 20_000 || depth > 24) return '[result omitted: structural bound exceeded]';
+  if (typeof value === 'string') {
+    if (/^data:/i.test(value)) return '[binary data omitted]';
+    return value.slice(0, 100_000);
+  }
+  if (value === null || typeof value === 'boolean') return value;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (Array.isArray(value)) {
+    return value.slice(0, 2_000).map((entry) => sanitizeBoundedEditorResult(entry, depth + 1, budget));
+  }
+  if (!isRecord(value)) return String(value);
+  const output: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+  for (const [key, entry] of Object.entries(value).slice(0, 500)) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
+    output[key.slice(0, 200)] = sanitizeBoundedEditorResult(entry, depth + 1, budget);
+  }
+  return output;
+}
+
 export function projectPublicOperationResultV1(
   operationId: PublicOperationIdV1,
   value: unknown,
@@ -728,6 +875,22 @@ export function projectPublicOperationResultV1(
   const spec = getPublicOperationSpecV1(operationId);
   if (!spec) return { success: false, error: 'unknown editor operation result' };
   if (spec.result.projection.kind === 'success-only-v1') return { success: true };
+
+  if (spec.result.projection.kind === 'bounded-json-v1') {
+    if (value.data === undefined) return { success: true };
+    const sanitized = sanitizeBoundedEditorResult(value.data);
+    const serialized = JSON.stringify(sanitized);
+    if (serialized.length <= spec.result.projection.maximumCharacters) {
+      return { success: true, data: sanitized };
+    }
+    return {
+      success: true,
+      data: {
+        preview: serialized.slice(0, spec.result.projection.maximumCharacters - 100),
+        truncated: true,
+      },
+    };
+  }
 
   if (spec.result.projection.kind === 'visual-grid-v1') {
     const data = value.data;

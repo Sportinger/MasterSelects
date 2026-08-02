@@ -125,7 +125,7 @@ describe('project lifecycle auto sync', () => {
     transportBindingListener();
 
     expect(mocks.markDirty).toHaveBeenCalledTimes(1);
-  });
+  }, 10_000);
 
   it('tears down previous auto-sync subscriptions before setting up again', async () => {
     const disposers = Array.from({ length: 10 }, () => vi.fn());

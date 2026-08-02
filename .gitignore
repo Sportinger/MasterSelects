@@ -67,6 +67,7 @@ ffmpeg-wasm-build/build.log
 
 # Local agent instructions
 AGENTS.md
+!AGENTS.md
 CLAUDE.md
 
 # Test videos (large files - keep out of git)

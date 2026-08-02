@@ -18,7 +18,7 @@ import {
   commitAgentTransaction,
   isAgentTransactionOpen,
 } from '../../src/services/aiTools/agentTransaction';
-import type { TimelineClip } from '../../src/types';
+import type { TimelineClip } from '../../src/types/timeline';
 import { createMockTrack } from '../helpers/mockData';
 
 const initialTimelineState = useTimelineStore.getState();
@@ -121,6 +121,29 @@ describe('agent mutation transactions', () => {
 
     expect(isAgentTransactionOpen()).toBe(false);
     expect(getHistoryStateView().undoStack).toHaveLength(1);
+    expect(getHistoryStateView().undo()).toMatchObject({ operation: 'undo' });
+    expect(useTimelineStore.getState().clips.map((clip) => clip.id)).toEqual(['base']);
+  });
+
+  it('drops a pending fallback capture after committing an explicit batch', () => {
+    let fallbackPending = false;
+    setHistoryCallbacks({
+      flushPendingCapture: () => {
+        if (!fallbackPending) return;
+        fallbackPending = false;
+        captureSnapshot('duplicate fallback', { isAutoCapture: true });
+      },
+      suppressCaptures: () => {
+        fallbackPending = false;
+      },
+    });
+    const transaction = beginAgentTransaction('AI task: append clips');
+
+    appendClip('first');
+    appendClip('second');
+    fallbackPending = true;
+    commitAgentTransaction(transaction);
+
     expect(getHistoryStateView().undo()).toMatchObject({ operation: 'undo' });
     expect(useTimelineStore.getState().clips.map((clip) => clip.id)).toEqual(['base']);
   });

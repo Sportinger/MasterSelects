@@ -4,20 +4,25 @@ import {
 } from '../wp1Spike/publicOperationContracts';
 
 export const HOSTED_AGENT_FAST_V2_PROTOCOL_VERSION = 'fast-agent-v2' as const;
+// Whole-timeline bulk edits should be byte/timeout-bound, not stopped by the
+// former eight-call batching default. Keep a finite fail-closed ceiling.
+export const HOSTED_AGENT_FAST_V2_MAX_TOOL_CALLS_PER_ROUND = 256 as const;
+export const HOSTED_AGENT_FAST_V2_EDITOR_TOOL_CATALOG_DIGEST =
+  'sha256:23f6983186a1e3375d6a872494e1e47d9611d2752327684452602388d230ac96' as const;
 export const HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_VERSION =
   PUBLIC_OPERATION_CONTRACT_V1.contractVersion;
 export const HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_DIGEST =
   PUBLIC_OPERATION_CONTRACT_DIGEST_V1;
 export const HOSTED_AGENT_FAST_V2_SERVICE_ENVELOPE_VERSION = 1 as const;
 export const HOSTED_AGENT_FAST_V2_PROMPT_VERSION =
-  'fast-v2-prompt-pixel-hooks-2026-08-02' as const;
+  'fast-v2-prompt-progressive-tools-2026-08-02' as const;
 export const HOSTED_AGENT_FAST_V2_CAPABILITY_BUNDLE_VERSION =
-  'fast-v2-timeline-editing-pixels-2026-08-02' as const;
+  'fast-v2-progressive-editor-tools-2026-08-02' as const;
 export const HOSTED_AGENT_FAST_V2_MODEL_POLICY_VERSION =
   'fast-v2-model-policy-2026-08-02' as const;
 export const HOSTED_AGENT_FAST_V2_BUDGET_POLICY_VERSION =
   'fast-v2-budget-policy-2026-08-01' as const;
-export const HOSTED_AGENT_FAST_V2_MAXIMUM_ITERATIONS = 4 as const;
+export const HOSTED_AGENT_FAST_V2_MAXIMUM_ITERATIONS = 8 as const;
 export const HOSTED_AGENT_FAST_V2_MAXIMUM_SPEND_CREDITS = 2_000 as const;
 export const HOSTED_AGENT_FAST_V2_MAX_START_BYTES = 1_400_000 as const;
 
@@ -29,6 +34,7 @@ const START_REQUEST_KEYS = [
   'compactSnapshot',
   'conversationRef',
   'editorBuildId',
+  'editorToolCatalog',
   'executionContractDigest',
   'executionContractVersion',
   'executionProfile',
@@ -46,6 +52,21 @@ export type HostedAgentFastV2RunSource = 'bridge' | 'mcp' | 'ui';
 export type HostedAgentFastV2RequestedExecutionMode = 'normal' | 'plan' | 'read-only';
 export type HostedAgentFastV2RequestedModelClass = 'very-fast' | 'fast' | 'slow';
 export type HostedAgentFastV2ExecutionProfile = 'fast' | 'verified';
+
+export type HostedAgentFastV2EditorToolRisk = 'destructive' | 'mutating' | 'read-only';
+
+export interface HostedAgentFastV2EditorTool {
+  description: string;
+  name: string;
+  parameters: Record<string, unknown>;
+  risk: HostedAgentFastV2EditorToolRisk;
+}
+
+export interface HostedAgentFastV2EditorToolCatalog {
+  digest: typeof HOSTED_AGENT_FAST_V2_EDITOR_TOOL_CATALOG_DIGEST;
+  schemaVersion: 1;
+  tools: HostedAgentFastV2EditorTool[];
+}
 
 export interface HostedAgentFastV2CompactSnapshot {
   payload: Record<string, unknown>;
@@ -67,6 +88,7 @@ export interface HostedAgentFastV2StartRequest {
   compactSnapshot: HostedAgentFastV2CompactSnapshot;
   conversationRef?: string;
   editorBuildId: string;
+  editorToolCatalog?: HostedAgentFastV2EditorToolCatalog;
   executionContractDigest: typeof HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_DIGEST;
   executionContractVersion: typeof HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_VERSION;
   executionProfile?: HostedAgentFastV2ExecutionProfile;
@@ -236,6 +258,42 @@ function parseVisualReferences(value: unknown): HostedAgentFastV2VisualReference
   return references;
 }
 
+function parseEditorToolCatalog(
+  value: unknown,
+): HostedAgentFastV2EditorToolCatalog | undefined {
+  if (value === undefined) return undefined;
+  if (
+    !isRecord(value)
+    || !hasOnlyKeys(value, ['digest', 'schemaVersion', 'tools'])
+    || value.digest !== HOSTED_AGENT_FAST_V2_EDITOR_TOOL_CATALOG_DIGEST
+    || value.schemaVersion !== 1
+    || !Array.isArray(value.tools)
+    || value.tools.length === 0
+    || value.tools.length > 256
+  ) {
+    throw new HostedAgentFastV2ContractError('editorToolCatalog is invalid or incompatible.');
+  }
+  const toolNames = new Set<string>();
+  for (const rawTool of value.tools) {
+    if (
+      !isRecord(rawTool)
+      || !hasOnlyKeys(rawTool, ['description', 'name', 'parameters', 'risk'])
+      || !validIdentifier(rawTool.name, 120)
+      || toolNames.has(rawTool.name)
+      || typeof rawTool.description !== 'string'
+      || rawTool.description.length === 0
+      || rawTool.description.length > 4_000
+      || !isRecord(rawTool.parameters)
+      || !validJsonValue(rawTool.parameters)
+      || !['destructive', 'mutating', 'read-only'].includes(String(rawTool.risk))
+    ) {
+      throw new HostedAgentFastV2ContractError('An editor tool catalog entry is invalid.');
+    }
+    toolNames.add(rawTool.name);
+  }
+  return value as unknown as HostedAgentFastV2EditorToolCatalog;
+}
+
 function parseUserPreferences(value: unknown): Record<string, string | number | boolean> | undefined {
   if (value === undefined) return undefined;
   if (!isRecord(value) || Object.keys(value).length > 32) {
@@ -292,6 +350,7 @@ export function parseHostedAgentFastV2StartRequest(
   }
 
   const compactSnapshot = parseSnapshot(value.compactSnapshot);
+  const editorToolCatalog = parseEditorToolCatalog(value.editorToolCatalog);
   const visualReferences = parseVisualReferences(value.visualReferences);
   const userPreferences = parseUserPreferences(value.userPreferences);
   const parsed: HostedAgentFastV2StartRequest = {
@@ -299,6 +358,7 @@ export function parseHostedAgentFastV2StartRequest(
     compactSnapshot,
     ...(value.conversationRef === undefined ? {} : { conversationRef: value.conversationRef }),
     editorBuildId: value.editorBuildId,
+    ...(editorToolCatalog === undefined ? {} : { editorToolCatalog }),
     executionContractDigest: HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_DIGEST,
     executionContractVersion: HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_VERSION,
     ...(executionProfile === undefined ? {} : { executionProfile }),

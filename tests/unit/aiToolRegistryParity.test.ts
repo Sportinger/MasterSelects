@@ -28,6 +28,7 @@ const KNOWN_ALLOWED_REGISTRY_ASYMMETRIES = {
   policyOnly: [
     'createStressTestProjectFixture',
     'debugExport',
+    'executeKernelEditorTool',
     'getDockLayoutDebugState',
     'reloadApp',
     'runMotionDesignMd0Evidence',

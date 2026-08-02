@@ -2,6 +2,7 @@ import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
 import { resolveEditableHookLayerMetadata } from '../../aiTools/editableHookIdentity';
 import { APP_VERSION } from '../../../version';
 import { sanitizeHostedAgentFastV2SemanticJson } from './fastV2SemanticTimelineState';
+import { buildHostedAgentFastV2EditorToolCatalog } from './fastV2EditorToolCatalog';
 import {
   fingerprintPublicTimelineStateV1,
 } from '../wp1Spike/publicOperationContracts';
@@ -291,6 +292,7 @@ export async function buildHostedAgentFastV2BrowserRequest(
     },
     ...(input.conversationRef === undefined ? {} : { conversationRef: input.conversationRef }),
     editorBuildId: `masterselects:${APP_VERSION}`,
+    editorToolCatalog: buildHostedAgentFastV2EditorToolCatalog(),
     executionContractDigest: HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_DIGEST,
     executionContractVersion: HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_VERSION,
     ...(input.executionProfile === undefined
