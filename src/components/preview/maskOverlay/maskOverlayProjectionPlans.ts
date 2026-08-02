@@ -1,6 +1,7 @@
 import type { Layer } from "../../../types/layers";
 import type { ClipTransform } from "../../../types/timelineCore";
 import type { ClipMask, MaskVertex } from "../../../types/masks";
+import { getMotionRenderSize } from "../../../engine/motion/MotionTypes";
 import { getEffectiveScale } from "../../../utils/transformScale";
 import { type LayerUvProjectionParams } from '../editModeOverlayMath';
 import type {
@@ -59,6 +60,13 @@ export function getLayerSourceSize(
       width: layer.source.nestedComposition.width || fallback.width,
       height: layer.source.nestedComposition.height || fallback.height,
     };
+  }
+  if (layer.source.motion) {
+    // Must match the compositor: RenderDispatcher uses getMotionRenderSize()
+    // as the motion layer's sourceWidth/sourceHeight, so mask UVs span the
+    // shape render bounds, not the composition.
+    const size = getMotionRenderSize(layer.source.motion);
+    return { width: size.width, height: size.height };
   }
   if (layer.source.intrinsicWidth && layer.source.intrinsicHeight) {
     return {

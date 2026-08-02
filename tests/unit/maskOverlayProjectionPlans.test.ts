@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getLayerSourceSize,
   getProjectionParams,
   withClipProjectionTransform,
 } from '../../src/components/preview/maskOverlay/maskOverlayProjectionPlans';
+import { getMotionRenderSize } from '../../src/engine/motion/MotionTypes';
+import { createDefaultMotionLayerDefinition } from '../../src/types/motionDesign';
 import type { Layer } from '../../src/types/layers';
 import type { ClipTransform } from '../../src/types/timelineCore';
 
@@ -58,5 +61,19 @@ describe('maskOverlayProjectionPlans', () => {
     const layer = createLayer();
 
     expect(withClipProjectionTransform(layer, undefined)).toBe(layer);
+  });
+
+  it('uses the motion render size, not the canvas, for motion shape layers', () => {
+    const motion = createDefaultMotionLayerDefinition('shape');
+    const layer: Layer = {
+      ...createLayer(),
+      source: { type: 'motion', motion },
+    };
+
+    const expected = getMotionRenderSize(motion);
+    const sourceSize = getLayerSourceSize(layer, { width: 1280, height: 720 });
+
+    expect(sourceSize).toEqual({ width: expected.width, height: expected.height });
+    expect(sourceSize).not.toEqual({ width: 1280, height: 720 });
   });
 });
