@@ -10,11 +10,11 @@ export const HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_DIGEST =
   PUBLIC_OPERATION_CONTRACT_DIGEST_V1;
 export const HOSTED_AGENT_FAST_V2_SERVICE_ENVELOPE_VERSION = 1 as const;
 export const HOSTED_AGENT_FAST_V2_PROMPT_VERSION =
-  'fast-v2-prompt-2026-08-01' as const;
+  'fast-v2-prompt-pixel-hooks-2026-08-02' as const;
 export const HOSTED_AGENT_FAST_V2_CAPABILITY_BUNDLE_VERSION =
-  'fast-v2-remove-ranges-2026-08-01' as const;
+  'fast-v2-timeline-editing-pixels-2026-08-02' as const;
 export const HOSTED_AGENT_FAST_V2_MODEL_POLICY_VERSION =
-  'fast-v2-model-policy-2026-08-01' as const;
+  'fast-v2-model-policy-2026-08-02' as const;
 export const HOSTED_AGENT_FAST_V2_BUDGET_POLICY_VERSION =
   'fast-v2-budget-policy-2026-08-01' as const;
 export const HOSTED_AGENT_FAST_V2_MAXIMUM_ITERATIONS = 4 as const;
@@ -44,7 +44,7 @@ const START_REQUEST_KEYS = [
 
 export type HostedAgentFastV2RunSource = 'bridge' | 'mcp' | 'ui';
 export type HostedAgentFastV2RequestedExecutionMode = 'normal' | 'plan' | 'read-only';
-export type HostedAgentFastV2RequestedModelClass = 'fast' | 'quality';
+export type HostedAgentFastV2RequestedModelClass = 'very-fast' | 'fast' | 'slow';
 export type HostedAgentFastV2ExecutionProfile = 'fast' | 'verified';
 
 export interface HostedAgentFastV2CompactSnapshot {
@@ -168,14 +168,14 @@ function validJsonValue(
   budget: { nodes: number } = { nodes: 0 },
 ): boolean {
   budget.nodes += 1;
-  if (budget.nodes > 20_000 || depth > 20) return false;
+  if (budget.nodes > 250_000 || depth > 40) return false;
   if (value === null || typeof value === 'boolean') return true;
   if (typeof value === 'number') return Number.isFinite(value);
   if (typeof value === 'string') {
     return value.length <= 100_000 && !/^\s*data:/i.test(value);
   }
   if (Array.isArray(value)) {
-    return value.length <= 5_000
+    return value.length <= 50_000
       && value.every((item) => validJsonValue(item, depth + 1, budget));
   }
   if (!isRecord(value) || Object.keys(value).length > 2_000) return false;
@@ -201,7 +201,7 @@ function parseSnapshot(value: unknown): HostedAgentFastV2CompactSnapshot {
     || !validJsonValue(value.payload)
   ) {
     throw new HostedAgentFastV2ContractError(
-      'compactSnapshot must be bounded structural state with a revision and SHA-256 fingerprint.',
+      'compactSnapshot must contain bounded complete semantic timeline state with a revision and SHA-256 fingerprint.',
     );
   }
   return value as unknown as HostedAgentFastV2CompactSnapshot;
@@ -284,7 +284,7 @@ export function parseHostedAgentFastV2StartRequest(
     || !['bridge', 'mcp', 'ui'].includes(String(value.runSource))
     || (value.conversationRef !== undefined && !validIdentifier(value.conversationRef, 200))
     || (value.requestedModelClass !== undefined
-      && !['fast', 'quality'].includes(String(value.requestedModelClass)))
+      && !['very-fast', 'fast', 'slow'].includes(String(value.requestedModelClass)))
     || (value.requestedExecutionMode !== undefined
       && !['normal', 'plan', 'read-only'].includes(String(value.requestedExecutionMode)))
   ) {

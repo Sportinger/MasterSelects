@@ -1,5 +1,6 @@
-import type {
-  DecisionPolicy,
+import {
+  DEFAULT_FLASHBOARD_DECISION_POLICY,
+  type DecisionPolicy,
 } from '../../../services/flashboard/FlashBoardChatService';
 
 interface FlashBoardActionStackProps {
@@ -11,11 +12,9 @@ interface FlashBoardActionStackProps {
   generateButtonTitle: string;
   isChatting: boolean;
   decisionPolicy?: DecisionPolicy;
-  planThreeEnabled: boolean;
   onChatButtonClick: () => void | Promise<void>;
   onGenerate: () => void;
   onDecisionPolicyChange?: (policy: DecisionPolicy) => void;
-  onPlanThreeToggle: () => void;
 }
 
 export function FlashBoardActionStack({
@@ -26,17 +25,15 @@ export function FlashBoardActionStack({
   generateButtonLabel,
   generateButtonTitle,
   isChatting,
-  decisionPolicy = 'automatic',
-  planThreeEnabled,
+  decisionPolicy = DEFAULT_FLASHBOARD_DECISION_POLICY,
   onChatButtonClick,
   onGenerate,
   onDecisionPolicyChange,
-  onPlanThreeToggle,
 }: FlashBoardActionStackProps) {
   return (
     <div className="fb-action-stack">
       {chatPanelOpen ? (
-        <div className={`fb-chat-split-button ${planThreeEnabled ? 'plan-three-on' : ''}`}>
+        <div className="fb-chat-split-button">
           <select
             className="fb-chat-decision-policy"
             aria-label="Decision policy"
@@ -49,18 +46,6 @@ export function FlashBoardActionStack({
             <option value="milestones">Co-direct</option>
             <option value="every-decision">Every choice</option>
           </select>
-          <button
-            className={`fb-chat-plan-three-toggle ${planThreeEnabled ? 'active' : ''}`}
-            type="button"
-            aria-pressed={planThreeEnabled}
-            disabled={isChatting}
-            onClick={onPlanThreeToggle}
-            title={planThreeEnabled
-              ? 'Plan 3 is on — each request creates three different compositions. Click to turn it off.'
-              : 'Plan 3 is off — click to create three different compositions from each request.'}
-          >
-            Plan 3
-          </button>
           <button
             className="fb-generate fb-chat-button active"
             type="button"

@@ -879,6 +879,27 @@ describe('WP1 public operation boundary spike', () => {
       'kernel',
       { guidedReplay: false, suppressHistory: true },
     );
+    await expect(dispatch('timeline.intercut.preview.v1', {}))
+      .resolves.toMatchObject({ success: true });
+    expect(executeToolCalls).toHaveBeenLastCalledWith(
+      [{ id: 'wp1:timeline.intercut.preview.v1', tool: 'getTimelineState', args: {} }],
+      'kernel',
+      { guidedReplay: false, suppressHistory: true },
+    );
+    await expect(dispatch('timeline.intercut.commit.v1', {
+      clipIds: ['shot-a', 'shot-b'],
+      startTime: 0,
+      withLinked: true,
+    })).resolves.toMatchObject({ success: true });
+    expect(executeToolCalls).toHaveBeenLastCalledWith(
+      [{
+        id: 'wp1:timeline.intercut.commit.v1',
+        tool: 'reorderClips',
+        args: { clipIds: ['shot-a', 'shot-b'], startTime: 0, withLinked: true },
+      }],
+      'kernel',
+      { guidedReplay: false, suppressHistory: true },
+    );
     const plan = candidateTwoPlan();
     const authorize = createWp1EditorOperationAuthorization(acceptPlan(
       plan,
@@ -903,6 +924,8 @@ describe('WP1 public operation boundary spike', () => {
     expect(checkToolAccess('splitClipAtTimes', 'kernel').allowed).toBe(true);
     expect(checkToolAccess('deleteClips', 'kernel').allowed).toBe(true);
     expect(checkToolAccess('getFramesAtTimes', 'kernel').allowed).toBe(true);
+    expect(checkToolAccess('getTimelineState', 'kernel').allowed).toBe(true);
+    expect(checkToolAccess('reorderClips', 'kernel').allowed).toBe(true);
     expect(checkToolAccess('deleteClip', 'kernel').allowed).toBe(false);
     expect(checkToolAccess('executeBatch', 'kernel').allowed).toBe(false);
   });

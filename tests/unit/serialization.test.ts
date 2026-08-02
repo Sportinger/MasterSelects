@@ -183,6 +183,7 @@ describe('SerializableClip structure', () => {
 
   it('preserves optional fields when present', () => {
     const clip = makeSerializableClip({
+      editableHook: { id: 'hook-persisted-1', role: 'text', rowIndex: 1 },
       linkedClipId: 'clip-audio-1',
       linkedGroupId: 'group-1',
       naturalDuration: 15,
@@ -216,6 +217,7 @@ describe('SerializableClip structure', () => {
 
     expect(restored.linkedClipId).toBe('clip-audio-1');
     expect(restored.linkedGroupId).toBe('group-1');
+    expect(restored.editableHook).toEqual({ id: 'hook-persisted-1', role: 'text', rowIndex: 1 });
     expect(restored.naturalDuration).toBe(15);
     expect(restored.thumbnails).toEqual(['data:image/png;base64,abc', 'data:image/png;base64,def']);
     expect(restored.waveform).toEqual([0.1, 0.5, 0.8, 0.3]);

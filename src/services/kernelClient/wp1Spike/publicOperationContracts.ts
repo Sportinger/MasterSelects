@@ -1,4 +1,9 @@
 export type PublicOperationIdV1 =
+  | 'timeline.hook.commit.v1'
+  | 'timeline.hook.preview.v1'
+  | 'timeline.hook.refine.commit.v1'
+  | 'timeline.intercut.commit.v1'
+  | 'timeline.intercut.preview.v1'
   | 'timeline.segment.delete-many.v1'
   | 'timeline.segment.split.v1'
   | 'timeline.visual.capture-grid.v1';
@@ -6,11 +11,17 @@ export type PublicOperationIdV1 =
 export type PublicOperationEffectV1 =
   | 'mediaDuration'
   | 'segmentation'
-  | 'sourceCoverage';
+  | 'sourceCoverage'
+  | 'sourceOrder'
+  | 'timelinePlacement';
 
 export type PublicEditorToolNameV1 =
   | 'deleteClips'
   | 'getFramesAtTimes'
+  | 'getTimelineState'
+  | 'manageEditableHook'
+  | 'refineEditableHook'
+  | 'reorderClips'
   | 'splitClipAtTimes';
 
 export type PublicTimelineStateFingerprintV1 = `sha256:${string}`;
@@ -39,11 +50,23 @@ export const PUBLIC_OPERATION_EFFECTS_V1: readonly PublicOperationEffectV1[] = [
   'mediaDuration',
   'segmentation',
   'sourceCoverage',
+  'sourceOrder',
+  'timelinePlacement',
 ];
 
 export type PublicOperationArgumentFieldV1 =
   | {
       kind: 'boolean-v1';
+      required: boolean;
+    }
+  | {
+      kind: 'bounded-json-string-v1';
+      maximumLength: number;
+      minimumLength: number;
+      required: boolean;
+    }
+  | {
+      kind: 'finite-non-negative-number-v1';
       required: boolean;
     }
   | {
@@ -121,6 +144,151 @@ export interface PublicOperationSpecV1 {
 export const PUBLIC_OPERATION_CONTRACT_V1 = {
   contractVersion: 'ms-editor-operations-v1',
   operations: [
+    {
+      arguments: {
+        additionalProperties: false,
+        fields: {
+          requestJson: {
+            kind: 'bounded-json-string-v1',
+            maximumLength: 50_000,
+            minimumLength: 2,
+            required: true,
+          },
+        },
+        schemaVersion: 1,
+      },
+      confirmation: 'inherit',
+      dispatcher: {
+        adapterVersion: 'ms-kernel-ai-tool-dispatcher-v1',
+        callerContext: 'kernel',
+        suppressHistory: true,
+        toolName: 'refineEditableHook',
+      },
+      effects: ['mediaDuration', 'timelinePlacement'],
+      id: 'timeline.hook.refine.commit.v1',
+      result: {
+        bindable: [],
+        projection: { kind: 'success-only-v1' },
+        schemaVersion: 1,
+      },
+      risk: 'mutating',
+      transaction: 'none',
+    },
+    {
+      arguments: {
+        additionalProperties: false,
+        fields: {
+          requestJson: {
+            kind: 'bounded-json-string-v1',
+            maximumLength: 50_000,
+            minimumLength: 2,
+            required: true,
+          },
+        },
+        schemaVersion: 1,
+      },
+      confirmation: 'inherit',
+      dispatcher: {
+        adapterVersion: 'ms-kernel-ai-tool-dispatcher-v1',
+        callerContext: 'kernel',
+        suppressHistory: true,
+        toolName: 'manageEditableHook',
+      },
+      effects: ['mediaDuration', 'timelinePlacement'],
+      id: 'timeline.hook.commit.v1',
+      result: {
+        bindable: [],
+        projection: { kind: 'success-only-v1' },
+        schemaVersion: 1,
+      },
+      risk: 'mutating',
+      // This orchestration calls the existing async text and Motion builders.
+      // They already perform the concrete editor mutations; wrapping their
+      // awaited font/canvas preparation in the synchronous exclusive lease
+      // would make the tool block its own continuation.
+      transaction: 'none',
+    },
+    {
+      arguments: {
+        additionalProperties: false,
+        fields: {},
+        schemaVersion: 1,
+      },
+      confirmation: 'inherit',
+      dispatcher: {
+        adapterVersion: 'ms-kernel-ai-tool-dispatcher-v1',
+        callerContext: 'kernel',
+        suppressHistory: true,
+        toolName: 'getTimelineState',
+      },
+      effects: [],
+      id: 'timeline.hook.preview.v1',
+      result: {
+        bindable: [],
+        projection: { kind: 'success-only-v1' },
+        schemaVersion: 1,
+      },
+      risk: 'read-only',
+      transaction: 'none',
+    },
+    {
+      arguments: {
+        additionalProperties: false,
+        fields: {
+          clipIds: {
+            itemMaximumLength: 500,
+            itemMinimumLength: 1,
+            kind: 'non-empty-id-array-v1',
+            maximumItems: 64,
+            minimumItems: 2,
+            required: true,
+            uniqueItems: true,
+          },
+          startTime: { kind: 'finite-non-negative-number-v1', required: false },
+          withLinked: { kind: 'boolean-v1', required: false },
+        },
+        schemaVersion: 1,
+      },
+      confirmation: 'required',
+      dispatcher: {
+        adapterVersion: 'ms-kernel-ai-tool-dispatcher-v1',
+        callerContext: 'kernel',
+        suppressHistory: true,
+        toolName: 'reorderClips',
+      },
+      effects: ['sourceOrder', 'timelinePlacement'],
+      id: 'timeline.intercut.commit.v1',
+      result: {
+        bindable: [],
+        projection: { kind: 'success-only-v1' },
+        schemaVersion: 1,
+      },
+      risk: 'mutating',
+      transaction: 'required',
+    },
+    {
+      arguments: {
+        additionalProperties: false,
+        fields: {},
+        schemaVersion: 1,
+      },
+      confirmation: 'inherit',
+      dispatcher: {
+        adapterVersion: 'ms-kernel-ai-tool-dispatcher-v1',
+        callerContext: 'kernel',
+        suppressHistory: true,
+        toolName: 'getTimelineState',
+      },
+      effects: [],
+      id: 'timeline.intercut.preview.v1',
+      result: {
+        bindable: [],
+        projection: { kind: 'success-only-v1' },
+        schemaVersion: 1,
+      },
+      risk: 'read-only',
+      transaction: 'none',
+    },
     {
       arguments: {
         additionalProperties: false,
@@ -287,7 +455,7 @@ export const PUBLIC_OPERATION_CONTRACT_V1 = {
 
 // Recomputed by the WP1 compatibility check from the canonical JSON above.
 export const PUBLIC_OPERATION_CONTRACT_DIGEST_V1 =
-  'sha256:19a689e4f92a5ba1f2087750d23f68d97453a0e19592290fb83d317972dca9e0' as const;
+  'sha256:c22edef8cd80e983a7a1f79b41cd3bf9a92c335a0278e5a882e92a5d6921481d' as const;
 
 export const PUBLIC_COMPILED_PLAN_EXTENSION_V1 = {
   bindingVersion: 'ms-prior-result-path-v1',
@@ -301,7 +469,7 @@ export const PUBLIC_COMPILED_PLAN_EXTENSION_V1 = {
 } as const;
 
 export const PUBLIC_COMPILED_PLAN_DIGEST_V1 =
-  'sha256:27f8dd32a8676d372c27bc28a5c31b93c814d3d592c48877b683bea1cc9f481b' as const;
+  'sha256:aa9506ae5c3dc8aa1ce8def8f6e192e1fbc3d2f775f333ad126356da9d8794e3' as const;
 
 const OPERATION_BY_ID = new Map<PublicOperationIdV1, PublicOperationSpecV1>(
   PUBLIC_OPERATION_CONTRACT_V1.operations.map((operation) => [operation.id, operation]),
@@ -316,6 +484,22 @@ function validateArgumentField(
   field: PublicOperationArgumentFieldV1,
 ): boolean {
   if (field.kind === 'boolean-v1') return typeof value === 'boolean';
+  if (field.kind === 'bounded-json-string-v1') {
+    if (
+      typeof value !== 'string'
+      || value.length < field.minimumLength
+      || value.length > field.maximumLength
+    ) return false;
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed);
+    } catch {
+      return false;
+    }
+  }
+  if (field.kind === 'finite-non-negative-number-v1') {
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+  }
   if (field.kind === 'non-empty-id-v1') {
     return typeof value === 'string'
       && value.length >= field.minimumLength

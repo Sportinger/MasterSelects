@@ -98,6 +98,10 @@ export type HostedAgentFastV2Event =
       request: KernelOperationPlanRequestV1;
     })
   | (HostedAgentFastV2EventBase & {
+      kind: 'operation-plan-settlement';
+      settlement: KernelOperationPlanSettlementV1;
+    })
+  | (HostedAgentFastV2EventBase & {
       creditBalance: number;
       creditsCharged: number;
       kind: 'billing-settled';
@@ -717,7 +721,14 @@ function validProjectedOperationResult(value: unknown, operationId: string): boo
       && value.error.length <= 1_000;
   }
   if (value.error !== undefined) return false;
-  if (operationId === 'timeline.segment.delete-many.v1') return value.data === undefined;
+  if (
+    operationId === 'timeline.hook.commit.v1'
+    || operationId === 'timeline.hook.preview.v1'
+    || operationId === 'timeline.hook.refine.commit.v1'
+    || operationId === 'timeline.intercut.commit.v1'
+    || operationId === 'timeline.intercut.preview.v1'
+    || operationId === 'timeline.segment.delete-many.v1'
+  ) return value.data === undefined;
   if (!isRecord(value.data)) return false;
   if (operationId === 'timeline.segment.split.v1') {
     if (!hasExactKeys(value.data, ['segments']) || !isRecord(value.data.segments)) return false;

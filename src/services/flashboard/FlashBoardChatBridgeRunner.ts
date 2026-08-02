@@ -24,11 +24,14 @@ import type {
   FlashBoardChatProvider,
   FlashBoardChatRunSource,
   FlashBoardChatToolExecutionMode,
+  FlashBoardChatModelClass,
   FlashBoardExecutedToolCall,
   FlashBoardOpenAiReasoningEffort,
+  DecisionPolicy,
 } from './FlashBoardChatTypes';
 
 export interface FlashBoardBridgeChatTurnInput {
+  decisionPolicy?: DecisionPolicy;
   idempotencyKey?: string;
   includeHistory?: boolean;
   model?: string;
@@ -41,13 +44,17 @@ export interface FlashBoardBridgeChatTurnInput {
   persistToChat?: boolean;
   prompt: string;
   provider?: FlashBoardChatProvider;
+  requestedModelClass?: FlashBoardChatModelClass;
   referenceMediaFileIds?: string[];
   runSource?: FlashBoardChatRunSource;
+  signal?: AbortSignal;
   temperature?: number;
   toolExecutionMode?: FlashBoardChatToolExecutionMode;
 }
 
 export interface FlashBoardBridgeChatTurnResult {
+  assistantMessageId?: string;
+  kernelReport?: KernelRunReport;
   model: string;
   persistedToChat: boolean;
   promptVersion: FlashBoardChatPromptVersion;
@@ -101,6 +108,7 @@ export async function runFlashBoardBridgeChatTurn(
 
     const response = await sendFlashBoardChatMessage({
       hostedAvailable,
+      decisionPolicy: input.decisionPolicy ?? 'automatic',
       idempotencyKey: input.idempotencyKey,
       model,
       onActivityEvent: (event) => {
@@ -140,7 +148,9 @@ export async function runFlashBoardBridgeChatTurn(
       playbookPrompt: visiblePrompt,
       prompt: requestPrompt,
       provider,
+      requestedModelClass: input.requestedModelClass ?? 'fast',
       runSource: input.runSource ?? 'bridge',
+      ...(input.signal === undefined ? {} : { signal: input.signal }),
       temperature: input.temperature ?? DEFAULT_FLASHBOARD_CHAT_TEMPERATURE,
       toolExecutionMode: input.toolExecutionMode ?? 'normal',
       ...(visualReferences.length === 0 ? {} : { visualReferences }),
@@ -157,6 +167,8 @@ export async function runFlashBoardBridgeChatTurn(
       );
     }
     return {
+      ...(messageIds === null ? {} : { assistantMessageId: messageIds.assistantId }),
+      ...(kernelReportRef.current === undefined ? {} : { kernelReport: kernelReportRef.current }),
       model,
       persistedToChat: persistToChat,
       promptVersion: completedRun.promptVersion,

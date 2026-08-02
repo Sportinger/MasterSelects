@@ -265,6 +265,10 @@ export const clipToolDefinitions: ToolDefinition[] = [
             items: { type: 'string' },
             description: 'Array of clip IDs in the desired playback order. Clips will be placed sequentially starting from the earliest clip position.',
           },
+          startTime: {
+            type: 'number',
+            description: 'Optional timeline position for the first reordered clip. Defaults to the earliest current position.',
+          },
           withLinked: {
             type: 'boolean',
             description: 'Also apply to linked audio/video clips (default: true). Set false to reorder only the specified clips.',

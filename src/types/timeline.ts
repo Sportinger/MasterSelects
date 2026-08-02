@@ -94,6 +94,14 @@ export interface TimelineClipSourceRuntimeHandles {
 
 export type TimelineClipSource = TimelineClipDataSource & TimelineClipSourceRuntimeHandles;
 
+export type EditableHookLayerRole = 'text' | 'background';
+
+export interface EditableHookLayerMetadata {
+  id: string;
+  role: EditableHookLayerRole;
+  rowIndex: number;
+}
+
 export interface TimelineClip {
   id: string;
   trackId: string;
@@ -113,6 +121,7 @@ export interface TimelineClip {
   signalRenderAdapterId?: string; // Renderer adapter that produced the clip materialization
   linkedClipId?: string;  // ID of linked clip (e.g., audio linked to video)
   linkedGroupId?: string; // ID of multicam group (clips synced together)
+  editableHook?: EditableHookLayerMetadata; // Durable AI-editable hook identity
   parentClipId?: string;  // ID of parent clip for transform inheritance (like AE parenting)
   videoState?: ClipVideoState; // Video bake/cache regions and future clip-side video derivations
   audioState?: ClipAudioState; // Advanced audio workstation state (optional, legacy-safe)
@@ -250,6 +259,7 @@ export interface SerializableClip {
   thumbnails?: string[];
   linkedClipId?: string;
   linkedGroupId?: string;  // Multicam group ID
+  editableHook?: EditableHookLayerMetadata;
   parentClipId?: string;   // Motion Design same-composition parent clip ID
   videoState?: ClipVideoState;
   audioState?: ClipAudioState;

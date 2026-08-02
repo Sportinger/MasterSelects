@@ -7,6 +7,7 @@ import { useSettingsStore } from '../../../stores/settingsStore';
 import { animateSlotGrid } from '../slotGridAnimation';
 import { TIMELINE_END_PADDING_PX } from '../utils/timelineHostConstants';
 import { calculateTimelineZoomScrollX } from '../utils/timelineZoomAnchor';
+import { isExclusiveTimelineMutationLeaseActive } from '../../../stores/timeline/exclusiveMutationLease';
 
 const ZOOM_WHEEL_BASE_MULTIPLIER = 1.08;
 const ZOOM_WHEEL_REFERENCE_DELTA_PX = 100;
@@ -97,6 +98,7 @@ export function useTimelineZoom({
 
   // Fit composition to window - calculate zoom to show entire duration
   const handleFitToWindow = useCallback(() => {
+    if (isExclusiveTimelineMutationLeaseActive()) return;
     const trackLanes = timelineBodyRef.current?.querySelector<HTMLElement>('.timeline-lane-reference, .track-lanes');
     const viewportWidth = trackLanes?.clientWidth ?? 800;
     // Calculate zoom: viewportWidth = duration * zoom, so zoom = viewportWidth / duration
@@ -117,32 +119,47 @@ export function useTimelineZoom({
 
   // Wrapper for setZoom that enforces dynamic min zoom
   const handleSetZoom = useCallback((newZoom: number) => {
+    if (isExclusiveTimelineMutationLeaseActive()) return;
     const dynamicMinZoom = getDynamicMinZoom();
     setZoom(Math.max(dynamicMinZoom, Math.min(MAX_ZOOM, newZoom)));
   }, [setZoom, getDynamicMinZoom]);
 
   // Clamp zoom and scrollX when duration or viewport changes
   useEffect(() => {
-    const trackLanes = timelineBodyRef.current?.querySelector<HTMLElement>('.timeline-lane-reference, .track-lanes');
-    const viewportWidth = trackLanes?.clientWidth ?? 800;
-    const dynamicMinZoom = Math.max(
-      MIN_ZOOM,
-      (viewportWidth - TIMELINE_END_PADDING_PX) / duration,
-    );
+    let retryTimer: number | null = null;
+    let cancelled = false;
+    const applyClamp = () => {
+      if (cancelled) return;
+      if (isExclusiveTimelineMutationLeaseActive()) {
+        retryTimer = window.setTimeout(applyClamp, 50);
+        return;
+      }
 
-    // Clamp zoom to dynamic minimum
-    if (zoom < dynamicMinZoom) {
-      setZoom(dynamicMinZoom);
-    }
+      const trackLanes = timelineBodyRef.current?.querySelector<HTMLElement>('.timeline-lane-reference, .track-lanes');
+      const viewportWidth = trackLanes?.clientWidth ?? 800;
+      const dynamicMinZoom = Math.max(
+        MIN_ZOOM,
+        (viewportWidth - TIMELINE_END_PADDING_PX) / duration,
+      );
 
-    // Clamp scrollX to max (allow scrolling up to END_PADDING past duration)
-    const maxScrollX = Math.max(
-      0,
-      duration * zoom - viewportWidth + TIMELINE_END_PADDING_PX,
-    );
-    if (scrollX > maxScrollX) {
-      setScrollX(maxScrollX);
-    }
+      if (zoom < dynamicMinZoom) {
+        setZoom(dynamicMinZoom);
+      }
+
+      const maxScrollX = Math.max(
+        0,
+        duration * zoom - viewportWidth + TIMELINE_END_PADDING_PX,
+      );
+      if (scrollX > maxScrollX) {
+        setScrollX(maxScrollX);
+      }
+    };
+
+    applyClamp();
+    return () => {
+      cancelled = true;
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
+    };
   }, [timelineBodyRef, zoom, duration, scrollX, setZoom, setScrollX]);
 
   // Zoom with mouse wheel, also handle vertical scroll
@@ -152,6 +169,7 @@ export function useTimelineZoom({
     if (!el) return;
 
     const handleWheel = (e: WheelEvent) => {
+      if (isExclusiveTimelineMutationLeaseActive()) return;
       // Coordinates with usePageZoom (src/hooks/usePageZoom.ts): that window-level
       // capture guard blocks the browser's Ctrl+wheel page zoom everywhere, but it
       // deliberately does NOT preventDefault over `.timeline-body` lanes so this

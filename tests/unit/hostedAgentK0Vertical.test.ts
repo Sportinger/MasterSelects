@@ -1420,8 +1420,8 @@ describe('hosted-agent K2 public boundary', () => {
     expect(upstreamFetch).not.toHaveBeenCalled();
 
     const qualityRequest = {
-      ...fastV2TurnRequest('turn.fast-v2-quality-billing'),
-      requestedModelClass: 'quality' as const,
+      ...fastV2TurnRequest('turn.fast-v2-slow-billing'),
+      requestedModelClass: 'slow' as const,
     };
     const qualityStart = await onRequest(context({
       body: qualityRequest,
@@ -1432,7 +1432,7 @@ describe('hosted-agent K2 public boundary', () => {
     expect(await db.prepare(
       'SELECT model FROM hosted_agent_k0_turns WHERE turn_id = ?',
     ).bind(qualityRequest.turnId).first<Record<string, unknown>>()).toMatchObject({
-      model: 'masterselects-fast-v2-quality',
+      model: 'masterselects-fast-v2-slow',
     });
 
     const qualityHeaders = {

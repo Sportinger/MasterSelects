@@ -622,6 +622,10 @@
   scrollbar-width: none;
 }
 
+.fb-bubble-bar.inline-submenu-chatModelClass .fb-pill-group .fb-popover-pills {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .fb-bubble-bar.inline-submenu-model .fb-pill-group .fb-popover-pills {
   max-height: none;
   overflow: visible;

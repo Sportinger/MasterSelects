@@ -81,6 +81,7 @@ export function serializeFlashBoardChatMessage(
     editOptions: message.editOptions,
     isError: message.isError,
     isPending: message.isPending,
+    isStreaming: message.isStreaming,
     kernelReport: message.kernelReport,
     toolCalls: redactFlashBoardChatImageData(message.toolCalls),
   };
@@ -102,13 +103,18 @@ export function normalizeFlashBoardChatMessage(
     ? message.id
     : crypto.randomUUID();
   const canResume = wasPending && hasHostedAgentReloadSnapshot(messageId);
+  const resumableStreamingText = canResume
+    && message.isStreaming === true
+    && message.text
+    ? message.text
+    : undefined;
   return {
     activityEvents: safeStoredActivityEvents(message.activityEvents),
     id: messageId,
     role: message.role,
-    text: canResume
+    text: resumableStreamingText ?? (canResume
       ? 'Reconnecting to kernel…'
-      : wasPending ? 'Chat interrupted by reload.' : message.text,
+      : wasPending ? 'Chat interrupted by reload.' : message.text),
     decisionId: typeof message.decisionId === 'string' && message.decisionId.trim()
       ? message.decisionId
       : undefined,
@@ -116,6 +122,7 @@ export function normalizeFlashBoardChatMessage(
     editOptions: Array.isArray(message.editOptions) ? message.editOptions : undefined,
     isError: message.isError || (wasPending && !canResume) || undefined,
     isPending: canResume,
+    isStreaming: canResume && message.isStreaming === true ? true : undefined,
     kernelReport: !wasPending && isStoredKernelReport(message.kernelReport)
       ? message.kernelReport
       : undefined,

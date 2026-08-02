@@ -271,6 +271,10 @@
   color: var(--text-muted, #888);
 }
 
+.fb-chat-message.is-pending.is-streaming .fb-chat-output-message {
+  color: var(--text-primary, #f5f5f5);
+}
+
 .fb-chat-output-label {
   margin-bottom: 3px;
   color: color-mix(in srgb, var(--accent, #4aa3ff) 50%, var(--text-secondary, #bbb));

@@ -1,9 +1,13 @@
 import { getTimelineRevision } from '../../stores/timeline/revisionMiddleware';
 import { useTimelineStore } from '../../stores/timeline';
+import { createSerializableTimelineState } from '../../stores/timeline/serialization/serializableTimelineState';
+import { useMediaStore } from '../../stores/mediaStore';
+import { getStoryboardProjectSnapshot } from '../../stores/storyboardStore';
 import { executeAIToolCalls } from '../aiTools';
 import { handleCaptureFrame } from '../aiTools/handlers/preview';
 import {
   HOSTED_AGENT_MAXIMUM_ITERATIONS,
+  HOSTED_AGENT_FAST_V2_PROTOCOL_VERSION,
   HOSTED_AGENT_FAST_V2_CAPABILITY_BUNDLE_VERSION,
   HostedAgentK2ClientSession,
   adaptHostedAgentFastV2TransportToK2,
@@ -30,10 +34,12 @@ import {
   type HostedAgentToolExecutionMode,
   type HostedAgentTurnAccepted,
 } from '../kernelClient/hostedAgent';
+import { buildHostedAgentFastV2SemanticTimelineState } from '../kernelClient/hostedAgent/fastV2SemanticTimelineState';
 import { createWp1AgentTransactionAdapter } from '../kernelClient/wp1Spike/agentTransactionAdapter';
 import { createWp1EditorOperationDispatcher } from '../kernelClient/wp1Spike/editorOperationDispatcher';
 import { KernelOperationRoundTripV1 } from '../kernelClient/wp1Spike/operationRoundTrip';
 import { fingerprintPublicTimelineStateV1 } from '../kernelClient/wp1Spike/publicOperationContracts';
+import { resolveClipTranscriptWords } from '../transcription/clipTranscriptResolver';
 import {
   KernelOperationSessionAuthorityV1,
   type KernelOperationSessionDescriptorV1,
@@ -68,9 +74,11 @@ import {
   reactivateFlashBoardChatRunByIdempotencyKey,
 } from './FlashBoardChatRunAudit';
 import { findFlashBoardChatImageData } from './FlashBoardChatImageData';
+import { approveFlashBoardKernelOperation } from './FlashBoardKernelOperationConfirmation';
 import type {
   FlashBoardChatRequest,
   FlashBoardChatExecutionProfile,
+  FlashBoardChatModelClass,
   FlashBoardChatToolExecutionMode,
   FlashBoardChatVisualReference,
   FlashBoardExecutedToolCall,
@@ -195,7 +203,7 @@ export function buildHostedAgentTurnRequest(input: {
     clientCapabilities: {
       maximumInlineResultCharacters: HOSTED_AGENT_MAXIMUM_INLINE_RESULT_CHARACTERS,
       supportsImageResultRefs: false,
-      supportsNarrationDeltas: false,
+      supportsNarrationDeltas: true,
       toolNames: tools.map((tool) => tool.name),
     },
     clientInstanceId: clientInstanceId(),
@@ -235,14 +243,6 @@ export function buildHostedAgentTurnRequest(input: {
   return request;
 }
 
-function fastV2ModelClass(model: string): 'fast' | 'quality' {
-  return [
-    'claude-fable-5',
-    'claude-opus-4-8',
-    'gpt-5-6-sol',
-  ].includes(model) ? 'quality' : 'fast';
-}
-
 function fastV2VisualReferences(
   visualReferences: readonly FlashBoardChatVisualReference[],
 ): HostedAgentFastV2VisualReference[] {
@@ -265,16 +265,15 @@ async function buildCurrentHostedAgentFastV2Request(
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const timelineRevision = getTimelineRevision();
     const state = useTimelineStore.getState();
-    const clips = state.clips.map((clip) => ({
-      duration: clip.duration,
-      id: clip.id,
-      inPoint: clip.inPoint,
-      ...(clip.linkedClipId === undefined ? {} : { linkedClipId: clip.linkedClipId }),
-      name: clip.name,
-      outPoint: clip.outPoint,
-      startTime: clip.startTime,
-      trackId: clip.trackId,
-    } as typeof clip));
+    const transcriptsByClipId = new Map<string, typeof state.clips[number]['transcript']>();
+    const clips = state.clips.map((clip) => {
+      const transcript = resolveClipTranscriptWords(clip);
+      if (transcript !== undefined) transcriptsByClipId.set(clip.id, transcript);
+      return {
+        ...clip,
+        ...(transcript === undefined ? {} : { transcript }),
+      };
+    });
     const tracks = state.tracks.map((track) => ({
       height: track.height,
       id: track.id,
@@ -285,15 +284,45 @@ async function buildCurrentHostedAgentFastV2Request(
       type: track.type,
       visible: track.visible,
     }));
+    const composition = useMediaStore.getState().getActiveComposition();
+    const semanticTimelineState = buildHostedAgentFastV2SemanticTimelineState({
+      activeComposition: composition
+        ? {
+            backgroundColor: composition.backgroundColor,
+            ...(composition.camera === undefined ? {} : { camera: composition.camera }),
+            ...(composition.captionComp === undefined ? {} : { captionComp: composition.captionComp }),
+            duration: composition.duration,
+            frameRate: composition.frameRate,
+            height: composition.height,
+            id: composition.id,
+            name: composition.name,
+            ...(composition.transitionComp === undefined
+              ? {}
+              : { transitionComp: composition.transitionComp }),
+            width: composition.width,
+          }
+        : null,
+      activeMaskId: state.activeMaskId,
+      layers: state.layers,
+      primarySelectedClipId: state.primarySelectedClipId,
+      propertiesSelection: state.propertiesSelection,
+      runtimeClips: state.clips,
+      selectedClipIds: [...state.selectedClipIds],
+      selectedKeyframeIds: [...state.selectedKeyframeIds],
+      selectedLayerId: state.selectedLayerId,
+      selectedVertexIds: [...state.selectedVertexIds],
+      serializedTimeline: createSerializableTimelineState(state),
+      storyboard: getStoryboardProjectSnapshot(),
+      timelineRangeSelection: state.timelineRangeSelection,
+      timelineRevision,
+      transcriptsByClipId,
+    });
     const built = await buildHostedAgentFastV2BrowserRequest({
       clientInstanceId: clientInstanceId(),
-      ...(request.resumeMessageId === undefined
-        ? {}
-        : { conversationRef: request.resumeMessageId }),
       executionProfile: request.executionProfile ?? 'fast',
       request: request.prompt,
       requestedExecutionMode: hostedExecutionMode(request.toolExecutionMode),
-      requestedModelClass: fastV2ModelClass(request.model),
+      requestedModelClass: request.requestedModelClass ?? 'fast',
       runSource: request.runSource === 'bridge' || request.runSource === 'mcp'
         ? request.runSource
         : 'ui',
@@ -304,6 +333,7 @@ async function buildCurrentHostedAgentFastV2Request(
         outPoint: state.outPoint,
         playheadPosition: state.playheadPosition,
         selectedClipIds: new Set(state.selectedClipIds),
+        semanticTimelineState,
         timelineRevision,
         tracks,
       },
@@ -321,6 +351,16 @@ export async function getHostedAgentExecutionProfileAvailability(
   const transport = createHostedAgentFastV2FetchTransport({ signal: input.signal });
   const selection = await transport.getProtocol({ signal: input.signal });
   return [...selection.availableExecutionProfiles];
+}
+
+export async function getHostedAgentModelClassAvailability(
+  input: { signal?: AbortSignal } = {},
+): Promise<readonly FlashBoardChatModelClass[]> {
+  const transport = createHostedAgentFastV2FetchTransport({ signal: input.signal });
+  const selection = await transport.getProtocol({ signal: input.signal });
+  return selection.protocolVersion === HOSTED_AGENT_FAST_V2_PROTOCOL_VERSION
+    ? ['very-fast', 'fast', 'slow']
+    : [];
 }
 
 function toolCallsForEvent(
@@ -476,9 +516,16 @@ async function sendHostedKieAgentChatV1(input: {
   }
   let accepted: HostedAgentTurnAccepted;
   try {
+    input.request.signal?.throwIfAborted();
     accepted = await startHostedAgentK2Turn({
       request: turnRequest,
-      signal: input.request.signal,
+      // The accepted response carries the lease required to cancel the kernel
+      // turn. Keep this short handshake alive across a UI abort; the client
+      // session observes the original signal immediately afterwards and sends
+      // the authoritative cancellation with that lease.
+      signal: input.request.signal === undefined
+        ? undefined
+        : new AbortController().signal,
     });
   } catch (error) {
     if (input.request.resumeMessageId) {
@@ -526,12 +573,7 @@ function createKernelOperationRoundTrip(
       descriptor,
     }),
     requestConfirmation: async (request) => {
-      const approved = callbackRequest.onKernelOperationConfirmation
-        ? await callbackRequest.onKernelOperationConfirmation(request)
-        : typeof window !== 'undefined'
-          && window.confirm(
-            'Allow this AI request to perform a destructive timeline edit? You can undo it after completion.',
-          );
+      const approved = await approveFlashBoardKernelOperation(callbackRequest, request);
       return {
         decision: approved ? 'approved' : 'denied',
         planBinding: request.planBinding,
@@ -572,9 +614,15 @@ async function sendHostedFastV2AgentChat(
   }
   let accepted: HostedAgentFastV2TurnAccepted;
   try {
+    input.request.signal?.throwIfAborted();
     accepted = await transport.start({
       request: turnRequest,
-      signal: input.request.signal,
+      // Do not lose the server binding if Stop/New lands while start is in
+      // flight. Once accepted, runHostedFastV2Session sees the original abort
+      // and cancels the bound kernel turn before doing any further work.
+      signal: input.request.signal === undefined
+        ? undefined
+        : new AbortController().signal,
     });
   } catch (error) {
     if (input.request.resumeMessageId) {
@@ -669,7 +717,9 @@ async function runHostedFastV2Session(input: {
         throw new Error('Fast V2 rejected an unexpected client tool-batch request.');
       },
       onEvent: (event) => {
-        if (event.kind === 'narration-complete' || event.kind === 'narration-delta') {
+        if (event.kind === 'narration-delta') {
+          input.callbackRequest.onTextDelta?.(event.text);
+        } else if (event.kind === 'narration-complete') {
           emitAgentActivity(input.callbackRequest, {
             kind: 'narration',
             phase: event.phase,
@@ -740,6 +790,14 @@ export async function sendHostedKieAgentChat(input: {
     signal: input.request.signal,
   });
   const selection = await fastV2Transport.getProtocol({ signal: input.request.signal });
+  if (
+    input.request.requestedModelClass !== undefined
+    && selection.protocolVersion !== 'fast-agent-v2'
+  ) {
+    throw new Error(
+      'Fast V2 model switching is currently unavailable. Please try again shortly.',
+    );
+  }
   const executionProfile = input.request.executionProfile ?? 'fast';
   if (executionProfile === 'verified') {
     if (
@@ -841,7 +899,9 @@ async function runHostedAgentSession(input: {
         event,
       ),
       onEvent: (event) => {
-        if (event.kind === 'narration-complete' || event.kind === 'narration-delta') {
+        if (event.kind === 'narration-delta') {
+          input.callbackRequest.onTextDelta?.(event.text);
+        } else if (event.kind === 'narration-complete') {
           emitAgentActivity(input.callbackRequest, {
             kind: 'narration',
             phase: event.phase,
@@ -921,9 +981,12 @@ async function resumeHostedFastV2AgentChat(input: {
   };
   const transport = createHostedAgentFastV2FetchTransport({ signal: input.request.signal });
   try {
+    input.request.signal?.throwIfAborted();
     const accepted = await transport.start({
       request: snapshot.request,
-      signal: input.request.signal,
+      signal: input.request.signal === undefined
+        ? undefined
+        : new AbortController().signal,
     });
     input.request.onPhase?.('provider');
     const response = await runHostedFastV2Session({
@@ -977,9 +1040,12 @@ export async function resumeHostedKieAgentChat(input: {
     },
   };
   try {
+    input.request.signal?.throwIfAborted();
     const accepted = await startHostedAgentK2Turn({
       request: snapshot.request,
-      signal: input.request.signal,
+      signal: input.request.signal === undefined
+        ? undefined
+        : new AbortController().signal,
     });
     assertCompatibleAcceptedTurn(snapshot.request, accepted);
     input.request.onPhase?.('provider');

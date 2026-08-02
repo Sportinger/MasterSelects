@@ -1,31 +1,59 @@
 import type { RefObject } from 'react';
 import type {
-  FlashBoardChatExecutionProfile,
+  FlashBoardChatModelClass,
   FlashBoardChatProvider,
   FlashBoardChatProviderOption,
 } from '../../../services/flashboard/FlashBoardChatService';
 
-type ChatControlsPopover = 'chatProvider' | 'chatExecutionProfile';
+type ChatControlsPopover = 'chatProvider' | 'chatModelClass';
 type RenderedPopover = string | null;
-type ExecutionProfileAvailabilityStatus = 'idle' | 'loading' | 'ready' | 'unavailable';
+type ModelClassAvailabilityStatus = 'idle' | 'loading' | 'ready' | 'unavailable';
+
+const MODEL_CLASS_OPTIONS = [
+  {
+    id: 'very-fast',
+    label: 'Very Fast',
+    title: 'Very Fast: lowest latency with lighter reasoning.',
+  },
+  {
+    id: 'fast',
+    label: 'Fast',
+    title: 'Fast: balanced latency and reasoning on priority service.',
+  },
+  {
+    id: 'slow',
+    label: 'Slow',
+    title: 'Slow: deepest reasoning on priority service.',
+  },
+] as const satisfies ReadonlyArray<{
+  id: FlashBoardChatModelClass;
+  label: string;
+  title: string;
+}>;
+
+export const FLASHBOARD_CHAT_MODEL_CLASS_OPTION_COUNT = MODEL_CLASS_OPTIONS.length;
+
+function modelClassLabel(modelClass: FlashBoardChatModelClass): string {
+  return MODEL_CLASS_OPTIONS.find((option) => option.id === modelClass)?.label ?? 'Fast';
+}
 
 interface FlashBoardChatControlsProps {
   activePopover: RenderedPopover;
+  availableChatModelClasses: readonly FlashBoardChatModelClass[];
   chatError: string | null;
-  chatExecutionProfile: FlashBoardChatExecutionProfile;
-  chatExecutionProfileAvailabilityStatus: ExecutionProfileAvailabilityStatus;
+  chatModelClass: FlashBoardChatModelClass;
+  chatModelClassAvailabilityStatus: ModelClassAvailabilityStatus;
   chatPrompt: string;
   chatProvider: FlashBoardChatProvider;
   chatProviderLabel: string;
   chatProviderOptions: FlashBoardChatProviderOption[];
-  availableChatExecutionProfiles: readonly FlashBoardChatExecutionProfile[];
   hasChatMessages: boolean;
   isChatting: boolean;
   popoverHostClassName: string;
   popoverRef: RefObject<HTMLDivElement | null>;
   renderedPopover: RenderedPopover;
-  showChatExecutionProfile: boolean;
-  onChatExecutionProfileSelect: (profile: FlashBoardChatExecutionProfile) => void;
+  showChatModelClass: boolean;
+  onChatModelClassSelect: (modelClass: FlashBoardChatModelClass) => void;
   onChatProviderSelect: (provider: FlashBoardChatProvider) => void;
   onClearChatHistory: () => void;
   onClosePopover: (popover: ChatControlsPopover) => void;
@@ -35,21 +63,21 @@ interface FlashBoardChatControlsProps {
 
 export function FlashBoardChatControls({
   activePopover,
+  availableChatModelClasses,
   chatError,
-  chatExecutionProfile,
-  chatExecutionProfileAvailabilityStatus,
+  chatModelClass,
+  chatModelClassAvailabilityStatus,
   chatPrompt,
   chatProvider,
   chatProviderLabel,
   chatProviderOptions,
-  availableChatExecutionProfiles,
   hasChatMessages,
   isChatting,
   popoverHostClassName,
   popoverRef,
   renderedPopover,
-  showChatExecutionProfile,
-  onChatExecutionProfileSelect,
+  showChatModelClass,
+  onChatModelClassSelect,
   onChatProviderSelect,
   onClearChatHistory,
   onClosePopover,
@@ -69,19 +97,17 @@ export function FlashBoardChatControls({
         >
           <span className="fb-pill-label">Model</span>
         </button>
-        {showChatExecutionProfile && (
+        {showChatModelClass && (
           <button
-            className={`fb-pill fb-chat-profile-pill ${activePopover === 'chatExecutionProfile' ? 'active' : ''}`}
+            className={`fb-pill fb-chat-profile-pill ${activePopover === 'chatModelClass' ? 'active' : ''}`}
             type="button"
-            onClick={() => onOpenPopover('chatExecutionProfile')}
-            title={`Execution profile: ${chatExecutionProfile === 'verified' ? 'Verified' : 'Fast'}`}
+            onClick={() => onOpenPopover('chatModelClass')}
+            title={`Model speed: ${modelClassLabel(chatModelClass)}`}
             aria-haspopup="menu"
-            aria-expanded={activePopover === 'chatExecutionProfile'}
+            aria-expanded={activePopover === 'chatModelClass'}
             disabled={isChatting}
           >
-            <span className="fb-pill-label">
-              {chatExecutionProfile === 'verified' ? 'Verified' : 'Fast'}
-            </span>
+            <span className="fb-pill-label">{modelClassLabel(chatModelClass)}</span>
           </button>
         )}
         <button
@@ -126,38 +152,33 @@ export function FlashBoardChatControls({
           </div>
         )}
 
-        {showChatExecutionProfile && renderedPopover === 'chatExecutionProfile' && (
-          <div className="fb-popover" role="menu" aria-label="Execution profile">
-            <div className="fb-popover-title">Execution profile</div>
+        {showChatModelClass && renderedPopover === 'chatModelClass' && (
+          <div className="fb-popover" role="menu" aria-label="Model speed">
+            <div className="fb-popover-title">Model speed</div>
             <div className="fb-popover-pills">
-              {(['fast', 'verified'] as const).map((profile) => {
-                const available = availableChatExecutionProfiles.includes(profile);
-                const verifiedUnavailable = profile === 'verified' && !available;
-                const title = profile === 'verified'
-                  ? available
-                    ? 'Verified: local Range Removal pilot; reload resume is unavailable.'
-                    : chatExecutionProfileAvailabilityStatus === 'loading'
-                      ? 'Checking whether the local Verified pilot is available.'
-                      : 'Verified is unavailable in this local environment.'
-                  : 'Fast: default hosted execution profile.';
+              {MODEL_CLASS_OPTIONS.map((option) => {
+                const available = availableChatModelClasses.includes(option.id);
+                const title = available
+                  ? option.title
+                  : chatModelClassAvailabilityStatus === 'loading'
+                    ? 'Checking Fast V2 model availability.'
+                    : 'This Fast V2 model speed is currently unavailable.';
                 return (
                   <button
-                    key={profile}
-                    className={`fb-popover-pill ${chatExecutionProfile === profile ? 'active' : ''}`}
+                    key={option.id}
+                    className={`fb-popover-pill ${chatModelClass === option.id ? 'active' : ''}`}
                     type="button"
                     role="menuitemradio"
-                    aria-checked={chatExecutionProfile === profile}
-                    aria-disabled={isChatting || verifiedUnavailable}
+                    aria-checked={chatModelClass === option.id}
+                    aria-disabled={isChatting || !available}
                     onClick={() => {
-                      onChatExecutionProfileSelect(profile);
-                      onClosePopover('chatExecutionProfile');
+                      onChatModelClassSelect(option.id);
+                      onClosePopover('chatModelClass');
                     }}
-                    disabled={isChatting || verifiedUnavailable}
+                    disabled={isChatting || !available}
                     title={title}
                   >
-                    <span className="fb-popover-pill-label">
-                      {profile === 'verified' ? 'Verified · local pilot' : 'Fast'}
-                    </span>
+                    <span className="fb-popover-pill-label">{option.label}</span>
                   </button>
                 );
               })}

@@ -176,6 +176,7 @@ function createRestoredClip(
       signalRenderAdapterId: clip.signalRenderAdapterId,
       linkedClipId: clip.linkedClipId,
       linkedGroupId: clip.linkedGroupId,
+      editableHook: clip.editableHook ? { ...clip.editableHook } : undefined,
       parentClipId: clip.parentClipId,
       videoState: clonePlain(clip.videoState),
       audioState: clonePlain(clip.audioState),

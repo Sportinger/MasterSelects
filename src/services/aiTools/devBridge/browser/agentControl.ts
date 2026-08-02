@@ -24,6 +24,13 @@ import { getAIToolAuditEntry, listAIToolAuditEntries } from '../../audit';
 import type { CallerContext, ToolPolicyEntry } from '../../policy';
 import { isRecord, resolveBridgeToolExecution } from './guidedOptions';
 import { projectFileService } from '../../../projectFileService';
+import {
+  getFlashBoardBridgeChatModelClass,
+  hasFlashBoardBridgeChatHandler,
+  sendFlashBoardBridgeChatMessage,
+  setFlashBoardBridgeChatModelClass,
+} from '../../../flashboard/FlashBoardChatBridgeControl';
+import { queueLandingEntryRequest } from '../../../../marketing/landingEntryRequest';
 
 export type AgentControlSurface = 'chat' | 'devBridge';
 
@@ -56,6 +63,7 @@ export function describeAgentControlSession(): Record<string, unknown> {
 
   return {
     chatMessageCount: messages.length,
+    chatModelClass: getFlashBoardBridgeChatModelClass(),
     chatToolCallCount: toolCallCount,
     devToolCount: getSurfaceToolDefinitions('devBridge').length,
     chatToolCount: getSurfaceToolDefinitions('chat').length,
@@ -85,11 +93,48 @@ export async function handleAgentControlRequest(
       return getAgentControlHistory(args);
     case 'getCall':
       return getAgentControlCall(args);
+    case 'sendChatMessage':
+      return sendAgentControlChatMessage(args);
+    case 'setChatModelClass':
+      return setAgentControlChatModelClass(args);
     case 'executeTool':
       return executeAgentControlTool(args);
     default:
       return { success: false, error: `Unknown agent-control operation: ${operation}` };
   }
+}
+
+async function setAgentControlChatModelClass(args: Record<string, unknown>): Promise<unknown> {
+  const modelClass = readRequiredString(args.modelClass);
+  if (!modelClass || !['very-fast', 'fast', 'slow'].includes(modelClass)) {
+    return { success: false, error: 'Invalid modelClass.' };
+  }
+
+  if (!hasFlashBoardBridgeChatHandler()) {
+    queueLandingEntryRequest({ mode: 'chat' });
+  }
+  return setFlashBoardBridgeChatModelClass(modelClass as 'very-fast' | 'fast' | 'slow');
+}
+
+async function sendAgentControlChatMessage(args: Record<string, unknown>): Promise<unknown> {
+  const prompt = readRequiredString(args.prompt);
+  if (!prompt) {
+    return { success: false, error: 'Missing chat prompt.' };
+  }
+  const requestedModelClass = readRequiredString(args.requestedModelClass);
+  if (requestedModelClass && !['very-fast', 'fast', 'slow'].includes(requestedModelClass)) {
+    return { success: false, error: 'Invalid requestedModelClass.' };
+  }
+
+  if (!hasFlashBoardBridgeChatHandler()) {
+    queueLandingEntryRequest({ mode: 'chat' });
+  }
+  return sendFlashBoardBridgeChatMessage({
+    prompt,
+    ...(requestedModelClass
+      ? { requestedModelClass: requestedModelClass as 'very-fast' | 'fast' | 'slow' }
+      : {}),
+  });
 }
 
 export function flattenFlashBoardToolHistory(

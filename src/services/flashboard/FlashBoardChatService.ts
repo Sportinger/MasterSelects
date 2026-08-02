@@ -20,6 +20,7 @@ export type {
   ChatIntent,
   DecisionPolicy,
   FlashBoardChatExecutionProfile,
+  FlashBoardChatModelClass,
   FlashBoardExecutedToolCall,
   FlashBoardChatModelOption,
   FlashBoardChatPromptVersion,
@@ -31,6 +32,7 @@ export type {
   FlashBoardChatVisualReference,
   FlashBoardOpenAiReasoningEffort,
 } from './FlashBoardChatTypes';
+export { DEFAULT_FLASHBOARD_DECISION_POLICY } from './FlashBoardChatTypes';
 export {
   DEFAULT_FLASHBOARD_CHAT_MODEL,
   DEFAULT_FLASHBOARD_CHAT_PROVIDER,

@@ -104,7 +104,7 @@ describe('AI tool entity results wave 2', () => {
     });
 
     const result = await handleReorderClips(
-      { clipIds: ['clip-b', 'clip-a'], withLinked: false },
+      { clipIds: ['clip-b', 'clip-a'], startTime: 5, withLinked: false },
       useTimelineStore.getState(),
     );
     const data = getMutationResultData(result);
@@ -114,6 +114,8 @@ describe('AI tool entity results wave 2', () => {
     expect(data.entities.updated.every((entity) => entity.kind === 'clip')).toBe(true);
     expect(data.entities.deleted).toHaveLength(0);
     expect(data.stateRevisionAfter).toBeGreaterThan(data.stateRevisionBefore);
+    expect(useTimelineStore.getState().clips.find((clip) => clip.id === 'clip-b')?.startTime).toBe(5);
+    expect(useTimelineStore.getState().clips.find((clip) => clip.id === 'clip-a')?.startTime).toBe(8);
   });
 });
 

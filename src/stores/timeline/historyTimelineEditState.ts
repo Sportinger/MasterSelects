@@ -83,6 +83,7 @@ export interface HistoryTimelineClipEditState {
   signalRenderAdapterId?: string;
   linkedClipId?: string;
   linkedGroupId?: string;
+  editableHook?: TimelineClip['editableHook'];
   parentClipId?: string;
   naturalDuration?: number;
   videoState?: ClipVideoState;
@@ -505,6 +506,7 @@ export function toHistoryTimelineClipEditState(
     signalRenderAdapterId: clip.signalRenderAdapterId,
     linkedClipId: clip.linkedClipId,
     linkedGroupId: clip.linkedGroupId,
+    editableHook: clip.editableHook ? { ...clip.editableHook } : undefined,
     parentClipId: clip.parentClipId,
     naturalDuration: clip.source?.naturalDuration,
     videoState: cloneOptionalPlainData(clip.videoState),

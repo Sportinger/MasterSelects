@@ -151,9 +151,20 @@ export async function handleReorderClips(
 ): Promise<ToolResult> {
   const clipIds = args.clipIds as string[];
   const withLinked = (args.withLinked as boolean | undefined) ?? true;
+  const requestedStartTime = args.startTime;
 
   if (!clipIds || clipIds.length < 2) {
     return { success: false, error: 'Need at least 2 clip IDs to reorder' };
+  }
+  if (
+    requestedStartTime !== undefined
+    && (
+      typeof requestedStartTime !== 'number'
+      || !Number.isFinite(requestedStartTime)
+      || requestedStartTime < 0
+    )
+  ) {
+    return { success: false, error: 'startTime must be a finite non-negative number' };
   }
 
   // Get fresh state
@@ -168,7 +179,9 @@ export async function handleReorderClips(
   }
 
   // Find the earliest startTime among the clips to reorder
-  const startPosition = Math.min(...orderedClips.map(c => c!.startTime));
+  const startPosition = typeof requestedStartTime === 'number'
+    ? requestedStartTime
+    : Math.min(...orderedClips.map(c => c!.startTime));
 
   // Build a map of new positions: clipId -> newStartTime
   const newPositions = new Map<string, number>();
@@ -239,6 +252,7 @@ export async function handleReorderClips(
     success: true,
     data: {
       reorderedCount: clipIds.length,
+      startTime: startPosition,
       withLinked,
       newOrder: clipIds.map((id, i) => ({
         clipId: id,

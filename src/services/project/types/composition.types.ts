@@ -10,7 +10,7 @@ import type { ColorCorrectionState } from '../../../types/colorCorrection';
 import type { ClipNodeGraph } from '../../../types/nodeGraph';
 import type { MotionLayerDefinition } from '../../../types/motionDesign';
 import type { LayerSourceRect, TransitionRenderState } from '../../../types/layers';
-import type { TransitionOverlayClipDefinition } from '../../../types/timeline';
+import type { EditableHookLayerMetadata, TransitionOverlayClipDefinition } from '../../../types/timeline';
 import type {
   TimelineTransition,
   TransitionCompositionLink,
@@ -133,6 +133,7 @@ export interface ProjectClip {
   liveInputId?: string;
   linkedClipId?: string;
   linkedGroupId?: string;
+  editableHook?: EditableHookLayerMetadata;
   thumbnails?: string[];
   waveform?: number[];
   waveformChannels?: number[][];

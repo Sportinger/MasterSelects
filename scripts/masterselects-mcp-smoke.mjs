@@ -39,6 +39,20 @@ const bridgeServer = createServer((request, response) => {
     response.end(JSON.stringify({ success: true, data: { fixture: true } }));
     return;
   }
+  if (request.method === 'POST' && url.pathname === '/api/agent-control/chat') {
+    response.end(JSON.stringify({
+      success: true,
+      data: { assistantMessageId: 'assistant-smoke', status: 'completed', success: true },
+    }));
+    return;
+  }
+  if (request.method === 'POST' && url.pathname === '/api/agent-control/chat/model-class') {
+    response.end(JSON.stringify({
+      success: true,
+      data: { modelClass: 'slow', success: true },
+    }));
+    return;
+  }
 
   response.statusCode = 404;
   response.end(JSON.stringify({ success: false, error: `Unexpected smoke request: ${request.method} ${url.pathname}` }));
@@ -77,6 +91,8 @@ try {
     'bridge_get_history',
     'bridge_replay_tool_call',
     'bridge_call_tool',
+    'bridge_send_chat_message',
+    'bridge_set_chat_model_class',
     fixtureToolName,
   ]) {
     if (!names.has(expected)) {
@@ -101,6 +117,18 @@ try {
     arguments: {},
   });
   assertSuccessfulTextResult(fixture, fixtureToolName);
+
+  const chat = await client.callTool({
+    name: 'bridge_send_chat_message',
+    arguments: { prompt: 'Smoke-test prompt.' },
+  });
+  assertSuccessfulTextResult(chat, 'bridge_send_chat_message');
+
+  const modelClass = await client.callTool({
+    name: 'bridge_set_chat_model_class',
+    arguments: { modelClass: 'slow' },
+  });
+  assertSuccessfulTextResult(modelClass, 'bridge_set_chat_model_class');
 
   console.log(`MasterSelects MCP smoke passed (${listed.tools.length} tools).`);
 } finally {

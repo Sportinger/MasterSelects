@@ -4,6 +4,7 @@
 import { useEffect, useRef } from 'react';
 import { useTimelineStore } from '../stores/timeline';
 import { useDockStore } from '../stores/dockStore';
+import { isExclusiveTimelineMutationLeaseActive } from '../stores/timeline/exclusiveMutationLease';
 
 export function useClipPanelSync() {
   const clips = useTimelineStore(state => state.clips);
@@ -42,6 +43,12 @@ export function useClipPanelSync() {
     }
 
     prevSelectionKey.current = selectionKey;
+
+    // Kernel transactions keep every history-backed store locked until the
+    // verified edit commits. Selection changes render before that commit, so
+    // focusing a dock tab from this passive effect would be an unauthorized
+    // history mutation and would surface as an uncaught React error.
+    if (isExclusiveTimelineMutationLeaseActive()) return;
 
     // Activate Properties panel for clip, audio track, and master bus targets.
     activatePanelType('clip-properties');

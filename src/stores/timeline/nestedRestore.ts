@@ -76,6 +76,7 @@ function createRestoredNestedClipCommon(
     thumbnails: serializedClip.thumbnails,
     linkedClipId: serializedClip.linkedClipId,
     linkedGroupId: serializedClip.linkedGroupId,
+    editableHook: serializedClip.editableHook ? { ...serializedClip.editableHook } : undefined,
     parentClipId: serializedClip.parentClipId,
     videoState: restorePersistedClipVideoState(serializedClip),
     audioState: clonePersistedClipAudioState(serializedClip.audioState),

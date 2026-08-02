@@ -1,10 +1,12 @@
-import type {
-  FlashBoardChatProvider,
-  FlashBoardChatRequest,
-  FlashBoardChatExecutionProfile,
-  FlashBoardOpenAiReasoningEffort,
-  ChatIntent,
-  DecisionPolicy,
+import {
+  DEFAULT_FLASHBOARD_DECISION_POLICY,
+  type ChatIntent,
+  type DecisionPolicy,
+  type FlashBoardChatExecutionProfile,
+  type FlashBoardChatModelClass,
+  type FlashBoardChatProvider,
+  type FlashBoardChatRequest,
+  type FlashBoardOpenAiReasoningEffort,
 } from '../../../services/flashboard/FlashBoardChatService';
 import { buildFlashBoardChatRequestPrompt } from '../../../services/flashboard/FlashBoardChatHistory';
 import type { FlashBoardChatMessage } from './FlashBoardChatOutput';
@@ -21,6 +23,7 @@ interface BuildFlashBoardChatSendPlanInput {
   chatPanelOpen: boolean;
   planThreeEnabled: boolean;
   chatExecutionProfile?: FlashBoardChatExecutionProfile;
+  chatModelClass?: FlashBoardChatModelClass;
   chatProvider: FlashBoardChatProvider;
   chatTemperature: number;
   chatIntent?: ChatIntent;
@@ -101,10 +104,11 @@ export function buildFlashBoardChatSendPlan({
   chatPanelOpen,
   planThreeEnabled,
   chatExecutionProfile = 'fast',
+  chatModelClass,
   chatProvider,
   chatTemperature,
   chatIntent = 'execute',
-  decisionPolicy = 'automatic',
+  decisionPolicy = DEFAULT_FLASHBOARD_DECISION_POLICY,
   effectiveChatPrompt,
   hasHostedSession,
   hostedAIEnabled,
@@ -145,7 +149,12 @@ export function buildFlashBoardChatSendPlan({
     action: 'send',
     request: {
       ...(chatProvider === 'kie' && canUseHostedChat
-        ? { executionProfile: chatExecutionProfile }
+        ? {
+            executionProfile: chatExecutionProfile,
+            // Only forward a class the availability probe confirmed; a K2
+            // selection must never receive a Fast V2 model class.
+            ...(chatModelClass === undefined ? {} : { requestedModelClass: chatModelClass }),
+          }
         : {}),
       hostedAvailable: canUseHostedChat,
       model: activeChatModelId,
@@ -197,6 +206,7 @@ export function buildFlashBoardChatCompletionMessages(
           decisionId,
           kernelProgress: undefined,
           isPending: false,
+          isStreaming: undefined,
         }
       : message
   ));
@@ -214,6 +224,7 @@ export function buildFlashBoardChatErrorMessages(
           text: errorMessage,
           isError: true,
           isPending: false,
+          isStreaming: undefined,
           kernelProgress: undefined,
         }
       : message

@@ -67,6 +67,7 @@ export interface ProjectFlashBoardChatMessage {
   editOptions?: ProjectFlashBoardChatEditOption[];
   isError?: boolean;
   isPending?: boolean;
+  isStreaming?: boolean;
   /** Stored as-is; validated on load before it reaches the run card. */
   kernelReport?: unknown;
   toolCalls?: ProjectFlashBoardChatExecutedToolCall[];

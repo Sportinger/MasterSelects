@@ -176,6 +176,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       thumbnails: c.thumbnails,
       linkedClipId: c.linkedClipId,
       linkedGroupId: c.linkedGroupId,
+      editableHook: c.editableHook ? { ...c.editableHook } : undefined,
       videoState: serializeProjectClipVideoState(c.videoState),
       waveform: shouldPersistClipWaveform(c) ? c.waveform : undefined,
       waveformChannels: shouldPersistClipWaveform(c) ? c.waveformChannels : undefined,

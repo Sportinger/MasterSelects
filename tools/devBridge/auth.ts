@@ -207,5 +207,5 @@ export function sanitizeBridgeTimeoutMs(value: unknown, fallbackMs: number): num
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return fallbackMs
   }
-  return Math.max(1000, Math.min(300000, Math.round(value)))
+  return Math.max(1000, Math.min(600000, Math.round(value)))
 }

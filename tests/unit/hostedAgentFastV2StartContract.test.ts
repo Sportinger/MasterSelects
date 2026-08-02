@@ -43,6 +43,21 @@ describe('Fast Agent V2 browser start contract', () => {
     expect(parseHostedAgentFastV2StartRequest(validStartRequest())).toEqual(validStartRequest());
   });
 
+  it('accepts only the three opaque server-owned model speed classes', () => {
+    for (const requestedModelClass of ['very-fast', 'fast', 'slow'] as const) {
+      expect(parseHostedAgentFastV2StartRequest({
+        ...validStartRequest(),
+        requestedModelClass,
+      }).requestedModelClass).toBe(requestedModelClass);
+    }
+    for (const requestedModelClass of ['quality', 'gpt-5.6-sol', 'deepseek', '', null]) {
+      expect(() => parseHostedAgentFastV2StartRequest({
+        ...validStartRequest(),
+        requestedModelClass,
+      })).toThrow(HostedAgentFastV2ContractError);
+    }
+  });
+
   it('preserves an optional explicit profile and resolves only its legacy omission to fast', () => {
     const legacy = parseHostedAgentFastV2StartRequest(validStartRequest());
     expect(legacy.executionProfile).toBeUndefined();

@@ -211,10 +211,14 @@
   z-index: 1;
   inset: 1px;
   border-radius: inherit;
-  background: linear-gradient(105deg, transparent 18%, rgba(94, 190, 255, 0.1) 46%, transparent 73%);
+  /* Keep the animated sheen inside this fixed box. A transformed pseudo-element
+     contributes its translated bounds to the scrollable overflow of `.app`,
+     which used to create a full-window horizontal scrollbar every 2.4s. */
+  background:
+    linear-gradient(105deg, transparent 18%, rgba(94, 190, 255, 0.1) 46%, transparent 73%)
+    120% 0 / 260% 100% no-repeat;
   content: '';
   pointer-events: none;
-  transform: translateX(-80%);
   animation: credit-active-sheen 2.4s ease-in-out infinite;
 }
 
@@ -360,9 +364,9 @@
 }
 
 @keyframes credit-active-sheen {
-  0%, 38% { opacity: 0; transform: translateX(-85%); }
+  0%, 38% { opacity: 0; background-position: 120% 0; }
   55% { opacity: 1; }
-  76%, 100% { opacity: 0; transform: translateX(85%); }
+  76%, 100% { opacity: 0; background-position: -120% 0; }
 }
 
 @keyframes credit-particle-drain {

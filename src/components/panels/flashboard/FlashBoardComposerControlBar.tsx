@@ -1,6 +1,9 @@
 import type { ComponentProps, CSSProperties } from 'react';
 import { FlashBoardActionStack } from './FlashBoardActionStack';
-import { FlashBoardChatControls } from './FlashBoardChatControls';
+import {
+  FLASHBOARD_CHAT_MODEL_CLASS_OPTION_COUNT,
+  FlashBoardChatControls,
+} from './FlashBoardChatControls';
 import { FlashBoardElevenLabsSettingsPopovers } from './FlashBoardElevenLabsSettingsPopovers';
 import { FlashBoardElevenLabsVoicePopover } from './FlashBoardElevenLabsVoicePopover';
 import { FlashBoardGenerationControls } from './FlashBoardGenerationControls';
@@ -37,6 +40,7 @@ function getInlineSubmenuStyle(
   }
 
   let optionCount = 1;
+  let columnCount = 2;
   let extraHeight = 8;
 
   switch (true) {
@@ -63,9 +67,13 @@ function getInlineSubmenuStyle(
     case chatControls.renderedPopover === 'chatProvider':
       optionCount = chatControls.chatProviderOptions.length;
       break;
+    case chatControls.renderedPopover === 'chatModelClass':
+      optionCount = FLASHBOARD_CHAT_MODEL_CLASS_OPTION_COUNT;
+      columnCount = FLASHBOARD_CHAT_MODEL_CLASS_OPTION_COUNT;
+      break;
   }
 
-  const estimatedRows = Math.max(1, Math.ceil(optionCount / 2));
+  const estimatedRows = Math.max(1, Math.ceil(optionCount / columnCount));
   const height = extraHeight + estimatedRows * 28;
   return { '--fb-inline-submenu-height': `${height}px` };
 }

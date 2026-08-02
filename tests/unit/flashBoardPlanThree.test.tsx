@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { FlashBoardActionStack } from '../../src/components/panels/flashboard/FlashBoardActionStack';
 import {
@@ -58,8 +58,7 @@ describe('FlashBoard Plan 3 mode', () => {
     expect(messages[0]?.text).not.toContain('PLAN 3');
   });
 
-  it('renders Plan 3 as an accessible toggle next to the chat action', () => {
-    const onPlanThreeToggle = vi.fn();
+  it('keeps the dormant Plan 3 mode out of the chat action UI', () => {
     const props = {
       canGenerate: true,
       chatButtonLabel: 'Chat',
@@ -70,20 +69,9 @@ describe('FlashBoard Plan 3 mode', () => {
       isChatting: false,
       onChatButtonClick: vi.fn(),
       onGenerate: vi.fn(),
-      onPlanThreeToggle,
-      planThreeEnabled: false,
     };
-    const { rerender } = render(<FlashBoardActionStack {...props} />);
-    const toggle = screen.getByRole('button', { name: 'Plan 3' });
+    render(<FlashBoardActionStack {...props} />);
 
-    expect(toggle).toHaveAttribute('aria-pressed', 'false');
-    fireEvent.click(toggle);
-    expect(onPlanThreeToggle).toHaveBeenCalledOnce();
-
-    rerender(<FlashBoardActionStack {...props} planThreeEnabled />);
-    expect(screen.getByRole('button', { name: 'Plan 3' })).toHaveAttribute('aria-pressed', 'true');
-
-    rerender(<FlashBoardActionStack {...props} isChatting planThreeEnabled />);
-    expect(screen.getByRole('button', { name: 'Plan 3' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Plan 3' })).not.toBeInTheDocument();
   });
 });

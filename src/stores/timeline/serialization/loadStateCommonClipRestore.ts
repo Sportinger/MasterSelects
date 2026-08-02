@@ -22,6 +22,7 @@ export function applyCommonRestoredClipFields(serializedClip: SerializableClip):
   | 'sourceRect'
   | 'transitionRender'
   | 'parentClipId'
+  | 'editableHook'
 > {
   return {
     videoState: restorePersistedClipVideoState(serializedClip),
@@ -40,6 +41,7 @@ export function applyCommonRestoredClipFields(serializedClip: SerializableClip):
     sourceRect: serializedClip.sourceRect ? { ...serializedClip.sourceRect } : undefined,
     transitionRender: serializedClip.transitionRender ? structuredClone(serializedClip.transitionRender) : undefined,
     parentClipId: serializedClip.parentClipId,
+    editableHook: serializedClip.editableHook ? { ...serializedClip.editableHook } : undefined,
   };
 }
 

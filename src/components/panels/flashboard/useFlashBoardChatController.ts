@@ -9,12 +9,13 @@ import {
 import {
   DEFAULT_FLASHBOARD_CHAT_MODEL,
   DEFAULT_FLASHBOARD_CHAT_TEMPERATURE,
+  DEFAULT_FLASHBOARD_DECISION_POLICY,
   DEFAULT_FLASHBOARD_KERNEL_MODEL,
   DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT,
   sendFlashBoardChatMessage,
   type AgentActivityEvent,
   type FlashBoardExecutedToolCall,
-  type FlashBoardChatExecutionProfile,
+  type FlashBoardChatModelClass,
   type FlashBoardChatProvider,
   type FlashBoardOpenAiReasoningEffort,
   type DecisionPolicy,
@@ -22,7 +23,7 @@ import {
 } from '../../../services/flashboard/FlashBoardChatService';
 import { createAgentActivityEvent } from '../../../services/flashboard/FlashBoardChatActivity';
 import {
-  getHostedAgentExecutionProfileAvailability,
+  getHostedAgentModelClassAvailability,
   resumeHostedKieAgentChat,
 } from '../../../services/flashboard/FlashBoardHostedAgentTransport';
 import { prepareFlashBoardChatVisualReferences } from '../../../services/flashboard/FlashBoardChatVisualReferences';
@@ -56,6 +57,13 @@ import {
   buildFlashBoardChatOptimisticMessages,
   buildFlashBoardChatSendPlan,
 } from './FlashBoardChatSendPlanner';
+import {
+  cancelFlashBoardBridgeChatMessage,
+  registerFlashBoardBridgeChatHandler,
+  registerFlashBoardBridgeChatModelClassHandler,
+  reportFlashBoardBridgeChatModelClass,
+  type FlashBoardBridgeChatResult,
+} from '../../../services/flashboard/FlashBoardChatBridgeControl';
 
 interface UseFlashBoardChatControllerInput {
   closePopover: () => void;
@@ -70,7 +78,9 @@ interface UseFlashBoardChatControllerInput {
 interface SubmitChatPromptOptions {
   activeDecision?: KernelActiveDecision;
   decisionSelection?: StoryboardDecisionSelection;
+  forceSend?: boolean;
   prompt?: string;
+  requestedModelClass?: FlashBoardChatModelClass;
 }
 
 function createFlashBoardChatMessageId(role: FlashBoardChatMessage['role']): string {
@@ -92,21 +102,23 @@ export function useFlashBoardChatController({
   const [chatPanelOpen, setChatPanelOpen] = useState(initialMode === 'chat');
   const [chatPrompt, setChatPrompt] = useState(initialChatPrompt ?? '');
   const [chatProvider, setChatProvider] = useState<FlashBoardChatProvider>('kie');
-  const [chatExecutionProfile, setChatExecutionProfile] = useState<FlashBoardChatExecutionProfile>('fast');
-  const [availableChatExecutionProfiles, setAvailableChatExecutionProfiles] = useState<
-    readonly FlashBoardChatExecutionProfile[]
-  >(['fast']);
-  const [chatExecutionProfileAvailabilityStatus, setChatExecutionProfileAvailabilityStatus] = useState<
+  const [chatModelClass, setChatModelClass] = useState<FlashBoardChatModelClass>('fast');
+  const [availableChatModelClasses, setAvailableChatModelClasses] = useState<
+    readonly FlashBoardChatModelClass[]
+  >([]);
+  const [chatModelClassAvailabilityStatus, setChatModelClassAvailabilityStatus] = useState<
     'idle' | 'loading' | 'ready' | 'unavailable'
   >('idle');
+  const [chatModelClassAvailabilityRetry, setChatModelClassAvailabilityRetry] = useState(0);
   const [chatModel, setChatModelState] = useState(DEFAULT_FLASHBOARD_CHAT_MODEL);
   const [chatTemperature, setChatTemperature] = useState(DEFAULT_FLASHBOARD_CHAT_TEMPERATURE);
   const [openAiReasoningEffort, setOpenAiReasoningEffort] = useState<FlashBoardOpenAiReasoningEffort>(
     DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT,
   );
-  const [planThreeEnabled, setPlanThreeEnabled] = useState(false);
   const chatIntent = 'execute' as const;
-  const [decisionPolicy, setDecisionPolicy] = useState<DecisionPolicy>('milestones');
+  const [decisionPolicy, setDecisionPolicy] = useState<DecisionPolicy>(
+    DEFAULT_FLASHBOARD_DECISION_POLICY,
+  );
   const chatMessages = useFlashBoardStore((state) => state.chatMessages);
   const storyboardDecisions = useStoryboardStore((state) => state.decisions);
   const markStoryboardDecisionStale = useStoryboardStore(
@@ -143,37 +155,39 @@ export function useFlashBoardChatController({
 
   useEffect(() => {
     if (!chatPanelOpen || !canUseHostedChat) {
-      setAvailableChatExecutionProfiles(['fast']);
-      setChatExecutionProfileAvailabilityStatus('idle');
-      setChatExecutionProfile('fast');
+      setAvailableChatModelClasses([]);
+      setChatModelClassAvailabilityStatus('idle');
       return;
     }
 
     const abortController = new AbortController();
     let cancelled = false;
-    setChatExecutionProfileAvailabilityStatus('loading');
-    void getHostedAgentExecutionProfileAvailability({ signal: abortController.signal }).then(
-      (profiles) => {
+    let retryTimer: number | null = null;
+    setChatModelClassAvailabilityStatus('loading');
+    void getHostedAgentModelClassAvailability({ signal: abortController.signal }).then(
+      (modelClasses) => {
         if (cancelled) return;
-        const availableProfiles = profiles.includes('fast') ? profiles : ['fast'] as const;
-        setAvailableChatExecutionProfiles(availableProfiles);
-        setChatExecutionProfileAvailabilityStatus('ready');
-        setChatExecutionProfile((profile) => (
-          availableProfiles.includes(profile) ? profile : 'fast'
+        setAvailableChatModelClasses(modelClasses);
+        setChatModelClassAvailabilityStatus(modelClasses.length > 0 ? 'ready' : 'unavailable');
+        setChatModelClass((modelClass) => (
+          modelClasses.includes(modelClass) ? modelClass : 'fast'
         ));
       },
       (error: unknown) => {
         if (cancelled || (error instanceof DOMException && error.name === 'AbortError')) return;
-        setAvailableChatExecutionProfiles(['fast']);
-        setChatExecutionProfile('fast');
-        setChatExecutionProfileAvailabilityStatus('unavailable');
+        setAvailableChatModelClasses([]);
+        setChatModelClassAvailabilityStatus('unavailable');
+        retryTimer = window.setTimeout(() => {
+          if (!cancelled) setChatModelClassAvailabilityRetry((value) => value + 1);
+        }, 2_000);
       },
     );
     return () => {
       cancelled = true;
       abortController.abort();
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
     };
-  }, [canUseHostedChat, chatPanelOpen]);
+  }, [canUseHostedChat, chatModelClassAvailabilityRetry, chatPanelOpen]);
 
   useEffect(() => {
     const fallbackModel = buildFlashBoardChatModelFallback({ chatModel, chatModelOptions });
@@ -211,23 +225,15 @@ export function useFlashBoardChatController({
     setChatModelState(model);
   }, []);
 
-  const handleChatExecutionProfileSelect = useCallback((profile: FlashBoardChatExecutionProfile) => {
+  const handleChatModelClassSelect = useCallback((modelClass: FlashBoardChatModelClass) => {
     if (isChatting) return;
-    if (!availableChatExecutionProfiles.includes(profile)) {
-      setChatError('Verified is unavailable in this local environment. Fast remains selected.');
-      setChatExecutionProfile('fast');
+    if (!availableChatModelClasses.includes(modelClass)) {
+      setChatError('Fast V2 model switching is currently unavailable.');
       return;
     }
-    setChatExecutionProfile(profile);
+    setChatModelClass(modelClass);
     setChatError(null);
-  }, [availableChatExecutionProfiles, isChatting]);
-
-  const handlePlanThreeToggle = useCallback(() => {
-    if (isChatting) return;
-    closePopover();
-    setPlanThreeEnabled((enabled) => !enabled);
-    setChatError(null);
-  }, [closePopover, isChatting]);
+  }, [availableChatModelClasses, isChatting]);
 
   const handleDecisionPolicyChange = useCallback((policy: DecisionPolicy) => {
     if (isChatting) return;
@@ -242,20 +248,36 @@ export function useFlashBoardChatController({
     }
   }, [chatProvider, chatProviderOptions, handleChatProviderSelect]);
 
-  const submitChatPrompt = useCallback(async (options?: SubmitChatPromptOptions) => {
+  const submitChatPrompt = useCallback(async (
+    options?: SubmitChatPromptOptions,
+  ): Promise<FlashBoardBridgeChatResult> => {
     closePopover();
 
     const effectiveChatPrompt = options?.prompt?.trim() ?? chatPrompt.trim();
     const effectiveChatProvider = options?.activeDecision ? 'kernel' : chatProvider;
+    const effectiveChatModelClass = options?.requestedModelClass ?? chatModelClass;
+    if (
+      effectiveChatProvider === 'kie'
+      && effectiveChatModelClass !== 'fast'
+      && !availableChatModelClasses.includes(effectiveChatModelClass)
+    ) {
+      const error = `${effectiveChatModelClass === 'slow' ? 'Slow' : 'Very Fast'} is reconnecting to Fast V2. Please retry in a moment.`;
+      setChatError(error);
+      return { status: 'rejected', success: false, error };
+    }
     const chatSendPlan = buildFlashBoardChatSendPlan({
       activeChatModelId: options?.activeDecision
         ? DEFAULT_FLASHBOARD_KERNEL_MODEL
         : activeChatModelId,
       canUseHostedChat,
-      chatExecutionProfile,
+      // Forward the class only once the availability probe confirmed Fast V2;
+      // a K2-selected account must not carry a model class at all.
+      chatModelClass: availableChatModelClasses.includes(effectiveChatModelClass)
+        ? effectiveChatModelClass
+        : undefined,
       chatMessages,
-      chatPanelOpen,
-      planThreeEnabled,
+      chatPanelOpen: options?.forceSend ? true : chatPanelOpen,
+      planThreeEnabled: false,
       chatProvider: effectiveChatProvider,
       chatTemperature,
       chatIntent,
@@ -270,19 +292,19 @@ export function useFlashBoardChatController({
     if (chatSendPlan.action === 'openPanel') {
       setChatPanelOpen(true);
       setChatError(null);
-      return;
+      return { status: 'rejected', success: false, error: 'The chat panel was opened.' };
     }
 
     if (chatSendPlan.action === 'abort') {
       chatAbortRef.current?.abort();
-      return;
+      return { status: 'stopped', success: false, error: 'Chat stopped.' };
     }
 
     if (chatSendPlan.action === 'error') {
       setChatError(chatSendPlan.errorMessage);
       if (chatSendPlan.dialogTarget === 'auth') openAuthDialog();
       if (chatSendPlan.dialogTarget === 'pricing') openPricingDialog();
-      return;
+      return { status: 'rejected', success: false, error: chatSendPlan.errorMessage };
     }
 
     const abortController = new AbortController();
@@ -309,6 +331,7 @@ export function useFlashBoardChatController({
       const executedToolCalls: FlashBoardExecutedToolCall[] = [];
       let kernelReport: KernelRunReport | undefined;
       let kernelDecision: KernelDecisionPrompt | undefined;
+      let streamedResponse = '';
       const updatePending = (patch: Partial<FlashBoardChatMessage>) => {
         setChatMessages((current) => current.map((message) => (
           message.id === assistantMessageId && message.isPending
@@ -376,6 +399,15 @@ export function useFlashBoardChatController({
             ? { text: 'Starting kernel…' }
             : { text: 'AI thinking…', kernelProgress: undefined });
         },
+        onTextDelta: (delta) => {
+          if (!delta) return;
+          streamedResponse += delta;
+          updatePending({
+            isStreaming: true,
+            kernelProgress: undefined,
+            text: streamedResponse,
+          });
+        },
         signal: abortController.signal,
       });
       if (options?.decisionSelection) {
@@ -415,30 +447,42 @@ export function useFlashBoardChatController({
         kernelReport,
         decisionId,
       ));
+      return {
+        assistantMessageId,
+        ...(kernelReport?.outcome === undefined ? {} : { kernelOutcome: kernelReport.outcome }),
+        status: 'completed',
+        success: true,
+      };
     } catch (error) {
       const errorMessage = abortController.signal.aborted
         ? 'Chat stopped.'
         : error instanceof Error ? error.message : 'Chat request failed.';
       setChatMessages((current) => buildFlashBoardChatErrorMessages(current, assistantMessageId, errorMessage));
+      return {
+        assistantMessageId,
+        error: errorMessage,
+        status: abortController.signal.aborted ? 'stopped' : 'rejected',
+        success: false,
+      };
     } finally {
       if (chatAbortRef.current === abortController) {
         chatAbortRef.current = null;
+        setIsChatting(false);
       }
-      setIsChatting(false);
     }
   }, [
     activeChatModelId,
     chatMessages,
     chatPanelOpen,
     chatPrompt,
-    planThreeEnabled,
     chatProvider,
     chatTemperature,
     chatIntent,
     decisionPolicy,
     closePopover,
     canUseHostedChat,
-    chatExecutionProfile,
+    availableChatModelClasses,
+    chatModelClass,
     hostedAIEnabled,
     hasHostedSession,
     isChatting,
@@ -450,6 +494,31 @@ export function useFlashBoardChatController({
     resolveStoryboardDecision,
     setChatMessages,
   ]);
+
+  useEffect(() => registerFlashBoardBridgeChatHandler(({ prompt, requestedModelClass }) => {
+    setChatPanelOpen(true);
+    if (requestedModelClass !== undefined) {
+      setChatProvider('kie');
+      setChatModelClass(requestedModelClass);
+    }
+    return submitChatPrompt({
+      forceSend: true,
+      prompt,
+      ...(requestedModelClass === undefined ? {} : { requestedModelClass }),
+    });
+  }), [submitChatPrompt]);
+
+  useEffect(() => registerFlashBoardBridgeChatModelClassHandler(async (modelClass) => {
+    setChatPanelOpen(true);
+    setChatProvider('kie');
+    setChatModelClass(modelClass);
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+    return { modelClass, success: true };
+  }), []);
+
+  useEffect(() => {
+    reportFlashBoardBridgeChatModelClass(chatModelClass);
+  }, [chatModelClass]);
 
   useEffect(() => {
     if (isChatting || !canUseHostedChat) return;
@@ -467,6 +536,7 @@ export function useFlashBoardChatController({
     const executedToolCalls: FlashBoardExecutedToolCall[] = [
       ...(pendingMessage.toolCalls ?? []),
     ];
+    let streamedResponse = pendingMessage.isStreaming ? pendingMessage.text : '';
     const updatePending = (patch: Partial<FlashBoardChatMessage>) => {
       setChatMessages((current) => current.map((message) => (
         message.id === pendingMessage.id && message.isPending
@@ -493,6 +563,10 @@ export function useFlashBoardChatController({
     setChatError(null);
     updatePending({ isError: undefined, text: 'Reconnecting to kernel…' });
 
+    if (streamedResponse) {
+      updatePending({ isStreaming: true, text: streamedResponse });
+    }
+
     void resumeHostedKieAgentChat({
       assistantMessageId: pendingMessage.id,
       request: {
@@ -505,9 +579,19 @@ export function useFlashBoardChatController({
           updatePending({ toolCalls: [...executedToolCalls] });
         },
         onPhase: (phase) => {
+          if (streamedResponse) return;
           updatePending({
             kernelProgress: undefined,
             text: phase === 'kernel' ? 'Reconnecting to kernel…' : 'AI thinking…',
+          });
+        },
+        onTextDelta: (delta) => {
+          if (!delta) return;
+          streamedResponse += delta;
+          updatePending({
+            isStreaming: true,
+            kernelProgress: undefined,
+            text: streamedResponse,
           });
         },
         prompt: 'Resume the active hosted-agent turn.',
@@ -540,8 +624,8 @@ export function useFlashBoardChatController({
     }).finally(() => {
       if (chatAbortRef.current === abortController) {
         chatAbortRef.current = null;
+        setIsChatting(false);
       }
-      setIsChatting(false);
     });
   }, [
     activeChatModelId,
@@ -593,11 +677,13 @@ export function useFlashBoardChatController({
   ]);
 
   const handleChatButtonClick = useCallback(async () => {
+    if (cancelFlashBoardBridgeChatMessage()) return;
     await submitChatPrompt();
   }, [submitChatPrompt]);
 
   const handleClearChatHistory = useCallback(() => {
     closePopover();
+    cancelFlashBoardBridgeChatMessage();
     chatAbortRef.current?.abort();
     chatAbortRef.current = null;
     if (copiedChatResetTimeoutRef.current !== null) {
@@ -672,21 +758,20 @@ export function useFlashBoardChatController({
   return {
     ...chatOptionsState,
     chatError,
-    chatExecutionProfile,
-    chatExecutionProfileAvailabilityStatus,
+    chatModelClass,
+    chatModelClassAvailabilityStatus,
     chatMessages,
     chatPanelOpen,
     chatPrompt,
     chatProvider,
     chatTemperature,
-    availableChatExecutionProfiles,
+    availableChatModelClasses,
     clearChatError,
     copiedChatMessageId,
     handleChatButtonClick,
-    handleChatExecutionProfileSelect,
+    handleChatModelClassSelect,
     handleChatInputKeyDown,
     handleChatMessageDoubleClick,
-    handlePlanThreeToggle,
     handleDecisionPolicyChange,
     handleChatProviderSelect,
     handleChatPromptChange,
@@ -695,7 +780,6 @@ export function useFlashBoardChatController({
     handleClearChatPrompt,
     isChatting,
     openAiReasoningEffort,
-    planThreeEnabled,
     decisionPolicy,
     setChatModel: handleChatModelSelect,
     setChatTemperature,

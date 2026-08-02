@@ -82,8 +82,9 @@ const IDENTIFIER_PATTERN = /^[A-Za-z0-9:_-]+$/;
 const VERSION_PATTERN = /^[A-Za-z0-9._:-]+$/;
 const EVENT_CURSOR_PATTERN = /^[A-Za-z0-9._:-]+$/;
 const FAST_V2_EDGE_BILLING_MODEL = {
+  'very-fast': 'masterselects-fast-v2-very-fast',
   fast: 'masterselects-fast-v2-fast',
-  quality: 'masterselects-fast-v2-quality',
+  slow: 'masterselects-fast-v2-slow',
 } as const;
 const FAST_V2_EDGE_PROVIDER_PROTOCOL = 'openai-responses' as const;
 const FAST_V2_HISTORY_FORMAT_VERSION = 'fast-v2-history-2026-08-01';
@@ -397,6 +398,11 @@ function validStateFingerprint(value: unknown): value is string {
 }
 
 const WP1_OPERATION_IDS = new Set([
+  'timeline.hook.commit.v1',
+  'timeline.hook.preview.v1',
+  'timeline.hook.refine.commit.v1',
+  'timeline.intercut.commit.v1',
+  'timeline.intercut.preview.v1',
   'timeline.segment.delete-many.v1',
   'timeline.segment.split.v1',
   'timeline.visual.capture-grid.v1',
@@ -412,7 +418,14 @@ function validProjectedOperationResult(value: unknown, operationId: string): boo
     return value.data === undefined && validString(value.error, 1_000);
   }
   if (value.error !== undefined) return false;
-  if (operationId === 'timeline.segment.delete-many.v1') return value.data === undefined;
+  if (
+    operationId === 'timeline.hook.commit.v1'
+    || operationId === 'timeline.hook.preview.v1'
+    || operationId === 'timeline.hook.refine.commit.v1'
+    || operationId === 'timeline.intercut.commit.v1'
+    || operationId === 'timeline.intercut.preview.v1'
+    || operationId === 'timeline.segment.delete-many.v1'
+  ) return value.data === undefined;
   if (!isRecord(value.data)) return false;
   if (operationId === 'timeline.segment.split.v1') {
     if (!hasOnlyKeys(value.data, ['segments']) || !isRecord(value.data.segments)) return false;

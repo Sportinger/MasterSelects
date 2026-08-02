@@ -72,6 +72,27 @@ describe('hosted-agent reload resume', () => {
     });
   });
 
+  it('keeps already streamed text visible while reconnecting a hosted turn', () => {
+    saveHostedAgentReloadSnapshot({
+      assistantMessageId: ASSISTANT_MESSAGE_ID,
+      completedBatches: [],
+      cursor: '2',
+      request: turnRequest(),
+    });
+
+    expect(normalizeFlashBoardChatMessage({
+      id: ASSISTANT_MESSAGE_ID,
+      isPending: true,
+      isStreaming: true,
+      role: 'assistant',
+      text: 'This partial answer is already visible.',
+    })).toMatchObject({
+      isPending: true,
+      isStreaming: true,
+      text: 'This partial answer is already visible.',
+    });
+  });
+
   it('still settles an orphaned legacy pending bubble as interrupted', () => {
     expect(normalizeFlashBoardChatMessage({
       id: ASSISTANT_MESSAGE_ID,

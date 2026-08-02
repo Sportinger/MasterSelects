@@ -122,6 +122,8 @@ export type {
 export type { Text3DProperties, TextClipProperties } from './text';
 export type {
   CompositionTimelineData,
+  EditableHookLayerMetadata,
+  EditableHookLayerRole,
   RulerLane,
   RulerLaneFormat,
   SerializableClip,

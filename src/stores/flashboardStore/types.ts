@@ -105,6 +105,8 @@ export interface FlashBoardChatMessage {
   editOptions?: FlashBoardChatEditOption[];
   isError?: boolean;
   isPending?: boolean;
+  /** True while the pending assistant bubble contains live provider output. */
+  isStreaming?: boolean;
   /** Live stage while a kernel turn is running; cleared once it settles. */
   kernelProgress?: KernelProgressEvent;
   /** Structured kernel evidence, rendered as a run card instead of prose. */

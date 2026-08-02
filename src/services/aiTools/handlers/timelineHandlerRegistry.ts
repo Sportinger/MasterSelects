@@ -72,6 +72,7 @@ import {
   handleUpdateTextProperties,
 } from './text';
 import { handleCreateEditableTitleStack } from './editableTitleStack';
+import { handleManageEditableHook, handleRefineEditableHook } from './editableHook';
 import {
   handleConfigureMotionReplicator,
   handleEditMotionModifier,
@@ -184,6 +185,8 @@ export const timelineHandlers: Readonly<Record<string, TimelineHandler>> = {
   addKeyframe: handleAddKeyframe,
   getTextProperties: handleGetTextProperties,
   createEditableTitleStack: handleCreateEditableTitleStack,
+  manageEditableHook: handleManageEditableHook,
+  refineEditableHook: handleRefineEditableHook,
   createTextClip: handleCreateTextClip,
   updateTextProperties: handleUpdateTextProperties,
   setTextBox: handleSetTextBox,

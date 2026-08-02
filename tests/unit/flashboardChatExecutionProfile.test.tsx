@@ -4,18 +4,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { FlashBoardChatControls } from '../../src/components/panels/flashboard/FlashBoardChatControls';
 
 function renderControls(input?: {
-  availableExecutionProfiles?: readonly ('fast' | 'verified')[];
-  executionProfile?: 'fast' | 'verified';
-  renderedPopover?: 'chatExecutionProfile' | 'chatProvider' | null;
+  availableModelClasses?: readonly ('very-fast' | 'fast' | 'slow')[];
+  modelClass?: 'very-fast' | 'fast' | 'slow';
+  renderedPopover?: 'chatModelClass' | 'chatProvider' | null;
 }) {
-  const onChatExecutionProfileSelect = vi.fn();
+  const onChatModelClassSelect = vi.fn();
   const view = render(
     <FlashBoardChatControls
       activePopover={input?.renderedPopover ?? null}
-      availableChatExecutionProfiles={input?.availableExecutionProfiles ?? ['fast']}
+      availableChatModelClasses={input?.availableModelClasses ?? ['very-fast', 'fast', 'slow']}
       chatError={null}
-      chatExecutionProfile={input?.executionProfile ?? 'fast'}
-      chatExecutionProfileAvailabilityStatus="ready"
+      chatModelClass={input?.modelClass ?? 'fast'}
+      chatModelClassAvailabilityStatus="ready"
       chatPrompt=""
       chatProvider="kie"
       chatProviderLabel="Kie"
@@ -28,8 +28,8 @@ function renderControls(input?: {
       popoverHostClassName="fb-pill-group"
       popoverRef={createRef<HTMLDivElement>()}
       renderedPopover={input?.renderedPopover ?? null}
-      showChatExecutionProfile
-      onChatExecutionProfileSelect={onChatExecutionProfileSelect}
+      showChatModelClass
+      onChatModelClassSelect={onChatModelClassSelect}
       onChatProviderSelect={vi.fn()}
       onClearChatHistory={vi.fn()}
       onClosePopover={vi.fn()}
@@ -37,10 +37,10 @@ function renderControls(input?: {
       onOpenPromptBook={vi.fn()}
     />,
   );
-  return { onChatExecutionProfileSelect, unmount: view.unmount };
+  return { onChatModelClassSelect, unmount: view.unmount };
 }
 
-describe('FlashBoard hosted execution profile control', () => {
+describe('FlashBoard hosted Fast V2 model-speed control', () => {
   it('keeps Fast as the visible default and leaves the model control intact', () => {
     renderControls();
 
@@ -49,25 +49,25 @@ describe('FlashBoard hosted execution profile control', () => {
     expect(screen.getByRole('button', { name: 'Prompt Book' })).toBeInTheDocument();
   });
 
-  it('allows Verified only when server-selected availability includes the local pilot', () => {
-    const unavailable = renderControls({ renderedPopover: 'chatExecutionProfile' });
-    const unavailableVerified = screen.getByRole('menuitemradio', {
-      name: 'Verified · local pilot',
-    });
-    expect(unavailableVerified).toBeDisabled();
-    fireEvent.click(unavailableVerified);
-    expect(unavailable.onChatExecutionProfileSelect).not.toHaveBeenCalled();
+  it('offers all three fixed Fast V2 model classes and respects availability', () => {
+    const available = renderControls({ renderedPopover: 'chatModelClass' });
+    const veryFast = screen.getByRole('menuitemradio', { name: 'Very Fast' });
+    const fast = screen.getByRole('menuitemradio', { name: 'Fast' });
+    const slow = screen.getByRole('menuitemradio', { name: 'Slow' });
+    expect(veryFast).toBeEnabled();
+    expect(fast).toBeEnabled();
+    expect(slow).toBeEnabled();
+    fireEvent.click(slow);
+    expect(available.onChatModelClassSelect).toHaveBeenCalledWith('slow');
 
-    unavailable.unmount();
-    const available = renderControls({
-      availableExecutionProfiles: ['fast', 'verified'],
-      renderedPopover: 'chatExecutionProfile',
+    available.unmount();
+    const unavailable = renderControls({
+      availableModelClasses: [],
+      renderedPopover: 'chatModelClass',
     });
-    const availableVerified = screen.getByRole('menuitemradio', {
-      name: 'Verified · local pilot',
-    });
-    expect(availableVerified).toBeEnabled();
-    fireEvent.click(availableVerified);
-    expect(available.onChatExecutionProfileSelect).toHaveBeenCalledWith('verified');
+    const unavailableVeryFast = screen.getByRole('menuitemradio', { name: 'Very Fast' });
+    expect(unavailableVeryFast).toBeDisabled();
+    fireEvent.click(unavailableVeryFast);
+    expect(unavailable.onChatModelClassSelect).not.toHaveBeenCalled();
   });
 });

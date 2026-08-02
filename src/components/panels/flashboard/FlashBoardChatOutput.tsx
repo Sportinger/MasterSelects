@@ -206,7 +206,7 @@ export function FlashBoardChatOutput({
         return (
           <div
             key={message.id}
-            className={`fb-chat-message ${message.role} ${message.isPending ? 'is-pending' : ''} ${message.isError ? 'is-error' : ''} ${canCopy ? 'is-copyable' : ''} ${copied ? 'is-copied' : ''}`}
+            className={`fb-chat-message ${message.role} ${message.isPending ? 'is-pending' : ''} ${message.isStreaming ? 'is-streaming' : ''} ${message.isError ? 'is-error' : ''} ${canCopy ? 'is-copyable' : ''} ${copied ? 'is-copied' : ''}`}
             onDoubleClick={() => onMessageDoubleClick(message)}
             title={canCopy
               ? `Double-click to copy ${message.role === 'user' ? 'prompt' : 'response'}`
@@ -215,8 +215,13 @@ export function FlashBoardChatOutput({
             <div className="fb-chat-output-label">
               {copied ? 'Copied' : message.role === 'user' ? 'You' : message.isError ? 'Error' : 'AI'}
             </div>
-            {(!message.isPending || !message.activityEvents?.length) && (
-              <div className="fb-chat-output-message">{message.text}</div>
+            {(!message.isPending || message.isStreaming || !message.activityEvents?.length) && (
+              <div
+                className="fb-chat-output-message"
+                aria-live={message.isStreaming ? 'polite' : undefined}
+              >
+                {message.text}
+              </div>
             )}
             <ChatActivity message={message} />
             {message.decisionId && onDecisionSubmit && (

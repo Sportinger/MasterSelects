@@ -94,6 +94,7 @@ function createSerializableClip(
     thumbnails: clip.thumbnails,
     linkedClipId: clip.linkedClipId,
     linkedGroupId: clip.linkedGroupId,
+    editableHook: clip.editableHook ? { ...clip.editableHook } : undefined,
     parentClipId: clip.parentClipId,
     videoState: clip.videoState
       ? {

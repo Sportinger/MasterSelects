@@ -70,8 +70,41 @@ const CONTROL_TOOLS = [
       name: { type: 'string' },
       sessionId: { type: 'string' },
       surface: { type: 'string', enum: ['chat', 'devBridge'], default: defaultSurface },
-      timeoutMs: { type: 'number', minimum: 1000, maximum: 300000 },
+      timeoutMs: { type: 'number', minimum: 1000, maximum: 600000 },
     }, ['name']),
+  },
+  {
+    name: 'bridge_send_chat_message',
+    description: 'Send a prompt through the real visible FlashBoard chat and wait for the terminal result. When requestedModelClass is supplied, the visible UI selector is switched to that class before the prompt runs.',
+    inputSchema: objectSchema({
+      idempotencyKey: { type: 'string' },
+      prompt: { type: 'string' },
+      requestedModelClass: { type: 'string', enum: ['very-fast', 'fast', 'slow'] },
+      sessionId: { type: 'string' },
+      timeoutMs: { type: 'number', minimum: 1000, maximum: 600000, default: 600000 },
+    }, ['prompt']),
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+  },
+  {
+    name: 'bridge_set_chat_model_class',
+    description: 'Switch the visible FlashBoard chat speed selector to Very Fast, Fast, or Slow without sending a prompt.',
+    inputSchema: objectSchema({
+      idempotencyKey: { type: 'string' },
+      modelClass: { type: 'string', enum: ['very-fast', 'fast', 'slow'] },
+      sessionId: { type: 'string' },
+      timeoutMs: { type: 'number', minimum: 1000, maximum: 600000, default: 30000 },
+    }, ['modelClass']),
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
   },
   {
     name: 'bridge_get_history',
@@ -105,7 +138,7 @@ const CONTROL_TOOLS = [
       idempotencyKey: { type: 'string' },
       sessionId: { type: 'string' },
       surface: { type: 'string', enum: ['chat', 'devBridge'] },
-      timeoutMs: { type: 'number', minimum: 1000, maximum: 300000 },
+      timeoutMs: { type: 'number', minimum: 1000, maximum: 600000 },
     }, ['callId']),
   },
 ];
@@ -179,6 +212,7 @@ async function callControlTool(name, args) {
     case 'bridge_call_tool':
       return bridgeFetch('/api/agent-control/call', {
         method: 'POST',
+        timeoutMs: normalizeTimeout(args.timeoutMs, defaultTimeoutMs),
         body: {
           args: isRecord(args.args) ? args.args : {},
           confirm: args.confirm === true,
@@ -190,6 +224,33 @@ async function callControlTool(name, args) {
           tool: requiredString(args.name, 'name'),
         },
       });
+    case 'bridge_send_chat_message': {
+      const timeoutMs = normalizeTimeout(args.timeoutMs, 600_000);
+      return bridgeFetch('/api/agent-control/chat', {
+        method: 'POST',
+        timeoutMs,
+        body: {
+          idempotencyKey: optionalString(args.idempotencyKey) || createIdempotencyKey(),
+          prompt: requiredString(args.prompt, 'prompt'),
+          requestedModelClass: optionalString(args.requestedModelClass) || undefined,
+          sessionId: optionalString(args.sessionId) || selectedSessionId,
+          timeoutMs,
+        },
+      });
+    }
+    case 'bridge_set_chat_model_class': {
+      const timeoutMs = normalizeTimeout(args.timeoutMs, 30_000);
+      return bridgeFetch('/api/agent-control/chat/model-class', {
+        method: 'POST',
+        timeoutMs,
+        body: {
+          idempotencyKey: optionalString(args.idempotencyKey) || createIdempotencyKey(),
+          modelClass: requiredString(args.modelClass, 'modelClass'),
+          sessionId: optionalString(args.sessionId) || selectedSessionId,
+          timeoutMs,
+        },
+      });
+    }
     case 'bridge_get_history':
       return bridgeFetch(toQuery('/api/agent-control/history', {
         includeMessages: args.includeMessages === false ? 'false' : 'true',
@@ -205,6 +266,7 @@ async function callControlTool(name, args) {
     case 'bridge_replay_tool_call':
       return bridgeFetch('/api/agent-control/replay', {
         method: 'POST',
+        timeoutMs: normalizeTimeout(args.timeoutMs, defaultTimeoutMs),
         body: {
           argumentsOverride: isRecord(args.argumentsOverride) ? args.argumentsOverride : undefined,
           callId: requiredString(args.callId, 'callId'),
@@ -308,7 +370,7 @@ function withExecutionControls(parameters, policy) {
       timeoutMs: {
         type: 'number',
         minimum: 1000,
-        maximum: 300000,
+        maximum: 600000,
       },
     },
   };
@@ -438,7 +500,7 @@ function normalizeLimit(value) {
 function normalizeTimeout(value, fallback) {
   const parsed = typeof value === 'string' ? Number(value) : value;
   return typeof parsed === 'number' && Number.isFinite(parsed)
-    ? Math.max(1000, Math.min(300000, Math.round(parsed)))
+    ? Math.max(1000, Math.min(600000, Math.round(parsed)))
     : fallback;
 }
 

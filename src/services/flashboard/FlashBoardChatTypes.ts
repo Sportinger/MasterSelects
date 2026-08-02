@@ -5,10 +5,12 @@ import type {
 } from '../storyboard/contracts';
 import type {
   HostedAgentFastV2ExecutionProfile,
+  HostedAgentFastV2RequestedModelClass,
 } from '../kernelClient/hostedAgent/fastV2StartContract';
 
 export type FlashBoardChatProvider = 'kernel' | 'kie';
 export type FlashBoardChatExecutionProfile = HostedAgentFastV2ExecutionProfile;
+export type FlashBoardChatModelClass = HostedAgentFastV2RequestedModelClass;
 export type FlashBoardKieChatProtocol = 'claude-messages' | 'openai-responses';
 export type FlashBoardOpenAiReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh';
 export type FlashBoardChatPromptVersion = 'v2';
@@ -16,6 +18,7 @@ export type FlashBoardChatRunSource = 'ui' | 'bridge' | 'mcp' | 'test';
 export type FlashBoardChatToolExecutionMode = 'normal' | 'plan' | 'read-only';
 export type ChatIntent = 'plan' | 'execute';
 export type DecisionPolicy = 'automatic' | 'milestones' | 'every-decision';
+export const DEFAULT_FLASHBOARD_DECISION_POLICY: DecisionPolicy = 'automatic';
 
 export type AgentActivityEvent =
   | {
@@ -92,6 +95,8 @@ export interface FlashBoardChatRequest {
   decisionPolicy?: DecisionPolicy;
   /** Explicit hosted execution profile; omitted callers retain the Fast default. */
   executionProfile?: FlashBoardChatExecutionProfile;
+  /** Server-owned Fast V2 speed profile; never a raw provider or model name. */
+  requestedModelClass?: FlashBoardChatModelClass;
   model: string;
   onActivityEvent?: (event: AgentActivityEvent) => void;
   onExecutedToolCalls?: (toolCalls: FlashBoardExecutedToolCall[]) => void;
@@ -107,6 +112,8 @@ export interface FlashBoardChatRequest {
   ) => boolean | Promise<boolean>;
   /** Reports which explicitly selected engine is working on the turn. */
   onPhase?: (phase: 'kernel' | 'provider') => void;
+  /** Incremental assistant text emitted while a hosted model is still generating. */
+  onTextDelta?: (delta: string) => void;
   onRunCompleted?: (run: import('./FlashBoardChatRunAudit').FlashBoardChatRunRecord) => void;
   openAiReasoningEffort?: FlashBoardOpenAiReasoningEffort;
   playbookPrompt?: string;

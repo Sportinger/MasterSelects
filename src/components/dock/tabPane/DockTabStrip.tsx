@@ -215,16 +215,18 @@ export function DockTabStrip({
           );
         })
       )}
-      <button
-        className={`dock-tab-add ${addMenuOpen ? 'is-open' : ''}`}
-        type="button"
-        title="Add panel"
-        aria-label="Add panel"
-        onClick={onAddButtonClick}
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        +
-      </button>
+      {!hasTimelinePanel && (
+        <button
+          className={`dock-tab-add ${addMenuOpen ? 'is-open' : ''}`}
+          type="button"
+          title="Add panel"
+          aria-label="Add panel"
+          onClick={onAddButtonClick}
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          +
+        </button>
+      )}
     </div>
   );
 }

@@ -123,7 +123,7 @@ function devBridgeFixture(): ToolPolicyEntry {
 
 const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   // ── READ-ONLY (low risk) ──────────────────────────────────────────────
-  ['getTimelineState', readOnly()],
+  ['getTimelineState', allowKernelOperation(readOnly())],
   ['getTimelineRangeSelection', readOnly()],
   ['verifyTimelineInvariants', {
     ...readOnly(),
@@ -495,7 +495,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['splitClipAtTimes', allowKernelOperation(mutatingMedium())],
   ['moveClip', mutatingMedium()],
   ['trimClip', mutatingMedium()],
-  ['reorderClips', mutatingMedium()],
+  ['reorderClips', allowKernelOperation(mutatingMedium())],
   ['setTransform', mutatingMedium()],
   ['addEffect', mutatingMedium()],
   ['removeEffect', mutatingMedium()],
@@ -504,6 +504,8 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['removeKeyframe', mutatingMedium()],
   ['createTextClip', mutatingMedium()],
   ['createEditableTitleStack', mutatingMedium()],
+  ['manageEditableHook', allowKernelOperation(mutatingMedium())],
+  ['refineEditableHook', allowKernelOperation(mutatingMedium())],
   ['updateTextProperties', mutatingMedium()],
   ['setTextBox', mutatingMedium()],
   ['addTextBoundsKeyframe', mutatingMedium()],

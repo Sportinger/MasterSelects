@@ -122,15 +122,15 @@ export function FlashBoardComposer({
   const [copiedPromptBookEntryId, setCopiedPromptBookEntryId] = useState<string | null>(null);
   const copiedPromptBookResetRef = useRef<number | null>(null);
   const {
-    availableChatExecutionProfiles, chatButtonLabel, chatChargeTitle, chatError,
-    chatExecutionProfile, chatExecutionProfileAvailabilityStatus,
+    availableChatModelClasses, chatButtonLabel, chatChargeTitle, chatError,
+    chatModelClass, chatModelClassAvailabilityStatus,
     chatMessages, chatPanelOpen, chatPrompt, chatProvider,
     chatProviderLabel, chatProviderOptions,
-    copiedChatMessageId, handleChatButtonClick, handleChatExecutionProfileSelect,
+    copiedChatMessageId, handleChatButtonClick, handleChatModelClassSelect,
     handleChatInputKeyDown,
     handleChatMessageDoubleClick, handleChatProviderSelect, handleChatPromptChange,
-    handleClearChatHistory, handleClearChatPrompt, handlePlanThreeToggle, isChatting,
-    planThreeEnabled, decisionPolicy,
+    handleClearChatHistory, handleClearChatPrompt, isChatting,
+    decisionPolicy,
     handleDecisionPolicyChange, handleStoryboardDecisionSubmit,
     showChatCloudActions,
   } = useFlashBoardChatController({
@@ -726,25 +726,24 @@ export function FlashBoardComposer({
           onImageSizeChange: setImageSize, onModeChange: setMode,
         }}
         chatControls={{
-          activePopover: popover, availableChatExecutionProfiles, chatError,
-          chatExecutionProfile, chatExecutionProfileAvailabilityStatus, chatPrompt,
+          activePopover: popover, availableChatModelClasses, chatError,
+          chatModelClass, chatModelClassAvailabilityStatus, chatPrompt,
           chatProvider, chatProviderLabel, chatProviderOptions,
           hasChatMessages: chatMessages.length > 0,
           isChatting, popoverHostClassName, popoverRef, renderedPopover,
-          onChatExecutionProfileSelect: handleChatExecutionProfileSelect,
+          onChatModelClassSelect: handleChatModelClassSelect,
           onChatProviderSelect: handleChatProviderSelect,
           onClearChatHistory: handleClearChatHistory, onClosePopover: closePopover,
           onOpenPopover: togglePopover, onOpenPromptBook: () => openPromptBook('chat'),
-          showChatExecutionProfile: Boolean(
+          showChatModelClass: Boolean(
             chatProvider === 'kie' && hasHostedSession && hostedAIEnabled,
           ),
         }}
         actionStack={{
           canGenerate, chatButtonLabel, chatButtonTitle: chatChargeTitle ?? 'Send chat prompt',
           chatPanelOpen, generateButtonLabel, generateButtonTitle,
-          isChatting, planThreeEnabled, decisionPolicy,
+          isChatting, decisionPolicy,
           onChatButtonClick: handleChatButtonClick, onGenerate: handleGenerate,
-          onPlanThreeToggle: handlePlanThreeToggle,
           onDecisionPolicyChange: handleDecisionPolicyChange,
         }}
       />

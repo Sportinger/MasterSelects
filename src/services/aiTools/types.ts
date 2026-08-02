@@ -76,7 +76,7 @@ export const MODIFYING_TOOLS = new Set([
   // Keyframes
   'addKeyframe', 'removeKeyframe',
   // Text
-  'createEditableTitleStack', 'createTextClip', 'updateTextProperties', 'setTextBox', 'addTextBoundsKeyframe',
+  'createEditableTitleStack', 'manageEditableHook', 'refineEditableHook', 'createTextClip', 'updateTextProperties', 'setTextBox', 'addTextBoundsKeyframe',
   // Motion Design
   'createMotionShapeClip', 'updateMotionProperties', 'updateMotionAppearances', 'saveMotionAppearancePreset', 'applyMotionAppearancePreset', 'saveMotionTemplate', 'applyMotionTemplate',
   'setMotionParent', 'createMotionNull', 'createMotionNullAndParent', 'configureMotionReplicator',

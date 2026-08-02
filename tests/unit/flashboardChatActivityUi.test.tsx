@@ -76,6 +76,33 @@ describe('FlashBoard narrated activity UI', () => {
     ]);
   });
 
+  it('shows streamed assistant text while the work log remains active', () => {
+    const { container } = render(
+      <FlashBoardChatOutput
+        chatError={null}
+        chatHistoryRef={createRef<HTMLDivElement>()}
+        copiedChatMessageId={null}
+        messages={[{
+          activityEvents,
+          id: 'assistant-streaming',
+          isPending: true,
+          isStreaming: true,
+          role: 'assistant',
+          text: 'This answer is appearing live.',
+        }]}
+        onAuthClick={vi.fn()}
+        onMessageDoubleClick={vi.fn()}
+        onPricingClick={vi.fn()}
+        showChatCloudActions={false}
+      />,
+    );
+
+    expect(screen.getByText('This answer is appearing live.')).toBeInTheDocument();
+    expect(container.querySelector('.fb-chat-message')).toHaveClass('is-streaming');
+    expect(container.querySelector('.fb-chat-output-message')).toHaveAttribute('aria-live', 'polite');
+    expect(container.querySelector('.fb-chat-activity-log')).toBeInTheDocument();
+  });
+
   it('keeps a dedicated running indicator available outside the scrollable work log', () => {
     const { container } = render(
       <FlashBoardChatOutput

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   getHostedAgentExecutionProfileAvailability,
+  getHostedAgentModelClassAvailability,
   sendHostedKieAgentChat,
 } from '../../src/services/flashboard/FlashBoardHostedAgentTransport';
 import {
@@ -79,9 +80,16 @@ describe('Fast V2 official hosted UI orchestration', () => {
           snapshotTimelineRevision: browserRequest.compactSnapshot.timelineRevision,
         }, {
           ...binding,
+          eventId: '2',
+          kind: 'narration-delta',
+          phase: 'inspecting',
+          roundIndex: 0,
+          text: 'The private kernel is writing live.',
+        }, {
+          ...binding,
           creditBalance: 95,
           creditsCharged: 5,
-          eventId: '2',
+          eventId: '3',
           kind: 'billing-settled',
           ledgerEntryId: 'ledger-v2-ui',
           roundIndex: 0,
@@ -89,7 +97,7 @@ describe('Fast V2 official hosted UI orchestration', () => {
         }, {
           ...binding,
           creditsCharged: 5,
-          eventId: '3',
+          eventId: '4',
           kind: 'turn-complete',
           message: 'The private kernel finished safely.',
           rounds: 1,
@@ -100,7 +108,7 @@ describe('Fast V2 official hosted UI orchestration', () => {
         return new Response(body, {
           headers: {
             'Content-Type': 'text/event-stream',
-            'X-MasterSelects-Event-Cursor': '3',
+            'X-MasterSelects-Event-Cursor': '4',
             'X-MasterSelects-Stream-Lease-Ms': '55000',
           },
         });
@@ -108,12 +116,14 @@ describe('Fast V2 official hosted UI orchestration', () => {
       throw new Error(`Unexpected Fast V2 UI request: ${url.pathname}`);
     });
 
+    const onTextDelta = vi.fn();
     const response = await sendHostedKieAgentChat({
       protocol: 'openai-responses',
       request: {
         hostedAvailable: true,
         idempotencyKey: 'turn-v2-ui',
         model: 'gpt-5-6-terra',
+        onTextDelta,
         prompt: 'Inspect the current edit.',
         provider: 'kie',
         temperature: 0.7,
@@ -124,6 +134,7 @@ describe('Fast V2 official hosted UI orchestration', () => {
     });
 
     expect(response).toBe('The private kernel finished safely.');
+    expect(onTextDelta).toHaveBeenCalledWith('The private kernel is writing live.');
     expect(browserRequest).toMatchObject({
       executionProfile: 'fast',
       protocolVersion: 'fast-agent-v2',
@@ -161,6 +172,126 @@ describe('Fast V2 official hosted UI orchestration', () => {
       '/api/kernel/hosted-agent/protocol',
       '/api/kernel/hosted-agent/protocol',
     ]);
+  });
+
+  it('exposes model speeds only when the server selects Fast V2', async () => {
+    const selections = [
+      { protocolVersion: 'fast-agent-v2', reason: 'canary_selected' },
+      { protocolVersion: 'hosted-agent-k2-v1', reason: 'outside_canary' },
+    ];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      const selection = selections.shift();
+      return jsonResponse({
+        availableExecutionProfiles: ['fast'],
+        ...selection,
+      });
+    });
+
+    await expect(getHostedAgentModelClassAvailability()).resolves.toEqual([
+      'very-fast',
+      'fast',
+      'slow',
+    ]);
+    await expect(getHostedAgentModelClassAvailability()).resolves.toEqual([]);
+  });
+
+  it('finishes the start handshake and cancels the bound kernel turn when the UI stops', async () => {
+    const controller = new AbortController();
+    const sessionId = 'session-v2-ui-start-cancel';
+    let browserRequest: HostedAgentFastV2StartRequest | null = null;
+    let resolveStart: ((response: Response) => void) | undefined;
+    let startSignal: AbortSignal | null = null;
+    let cancelSeen = false;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (requestInfo, init) => {
+      const url = new URL(String(requestInfo), 'https://masterselects.test');
+      if (url.pathname === '/api/kernel/hosted-agent/protocol') {
+        return jsonResponse({
+          availableExecutionProfiles: ['fast'],
+          protocolVersion: 'fast-agent-v2',
+          reason: 'canary_selected',
+        });
+      }
+      if (url.pathname === '/api/kernel/hosted-agent/v2/turns') {
+        browserRequest = JSON.parse(String(init?.body)) as HostedAgentFastV2StartRequest;
+        startSignal = init?.signal ?? null;
+        return await new Promise<Response>((resolve) => { resolveStart = resolve; });
+      }
+      if (browserRequest && url.pathname === (
+        `/api/kernel/hosted-agent/v2/turns/${browserRequest.turnId}/cancel`
+      )) {
+        cancelSeen = true;
+        return jsonResponse({
+          terminalReason: 'explicit_cancel',
+          turnId: browserRequest.turnId,
+          turnStatus: 'cancelled',
+        });
+      }
+      if (browserRequest && url.pathname === (
+        `/api/kernel/hosted-agent/v2/turns/${browserRequest.turnId}/events`
+      )) {
+        const event = {
+          eventId: '1',
+          kind: 'turn-canceled',
+          message: 'The user canceled the Fast V2 turn.',
+          protocolVersion: 'fast-agent-v2',
+          recoverable: false,
+          sessionId,
+          turnId: browserRequest.turnId,
+        };
+        return new Response(
+          `id: 1\nevent: turn-canceled\ndata: ${JSON.stringify(event)}\n\n`,
+          {
+            headers: {
+              'Content-Type': 'text/event-stream',
+              'X-MasterSelects-Event-Cursor': '1',
+            },
+          },
+        );
+      }
+      throw new Error(`Unexpected Fast V2 cancel-race request: ${url.pathname}`);
+    });
+
+    const pending = sendHostedKieAgentChat({
+      protocol: 'openai-responses',
+      request: {
+        hostedAvailable: true,
+        idempotencyKey: 'turn-v2-ui-start-cancel',
+        model: 'gpt-5-6-terra',
+        prompt: 'Start and then stop safely.',
+        provider: 'kie',
+        signal: controller.signal,
+        temperature: 0.7,
+        toolExecutionMode: 'normal',
+      },
+      supportsTools: true,
+      systemPrompt: 'Private prompt.',
+    });
+
+    await vi.waitFor(() => expect(resolveStart).toBeTypeOf('function'));
+    controller.abort(new DOMException('Chat stopped.', 'AbortError'));
+    expect(startSignal?.aborted).toBe(false);
+    const acceptedRequest = browserRequest as HostedAgentFastV2StartRequest | null;
+    if (acceptedRequest === null) throw new Error('The start request was not captured.');
+    resolveStart?.(jsonResponse({
+      acceptedExecutionContractDigest: acceptedRequest.executionContractDigest,
+      acceptedExecutionContractVersion: acceptedRequest.executionContractVersion,
+      eventsPath: `/api/kernel/hosted-agent/v2/turns/${acceptedRequest.turnId}/events`,
+      maximumIterations: 4,
+      maximumSpendCredits: 500,
+      pageLease: {
+        expiresAt: '2026-08-01T23:59:00.000Z',
+        leaseToken: 'lease-v2-ui-start-cancel',
+        sessionId,
+      },
+      protocolVersion: 'fast-agent-v2',
+      replayed: false,
+      route: 'fast-agent-v2',
+      sessionId,
+      turnId: acceptedRequest.turnId,
+    }, 202));
+
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(cancelSeen).toBe(true);
   });
 
   it('routes Verified only through available V2 and surfaces unsupported-family failures', async () => {

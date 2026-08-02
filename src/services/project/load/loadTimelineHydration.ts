@@ -254,6 +254,7 @@ export function convertProjectCompositionToStore(
         thumbnails: c.thumbnails,
         linkedClipId: c.linkedClipId,
         linkedGroupId: c.linkedGroupId,
+        editableHook: c.editableHook ? { ...c.editableHook } : undefined,
         videoState: c.videoState ? structuredClone(c.videoState) : undefined,
         audioState: c.audioState ? structuredClone(c.audioState) : undefined,
         waveform: c.waveform,

@@ -62,6 +62,8 @@ The MCP server publishes the current FlashBoard Chat tools with their exact live
 | `bridge_list_tools` | Read the live tool registry for either surface |
 | `bridge_get_tool_schema` | Inspect one live schema and policy |
 | `bridge_call_tool` | Execute a named tool, optionally as a dry run |
+| `bridge_send_chat_message` | Submit a prompt through the real visible FlashBoard chat and wait for its terminal result |
+| `bridge_set_chat_model_class` | Switch the visible chat speed selector between Very Fast, Fast, and Slow without sending a prompt |
 | `bridge_get_history` | Merge current project chat calls, browser audit calls, and bridge traces |
 | `bridge_get_tool_result` | Read the stored details of one call |
 | `bridge_replay_tool_call` | Replay a stored call with optional replacement arguments |
@@ -82,6 +84,8 @@ All routes are under `/api/agent-control` and require the same bridge token acce
 | `GET` | `/history?sessionId=...&limit=500` | Merged history |
 | `GET` | `/calls/:callId?sessionId=...` | One stored result |
 | `POST` | `/call` | Execute or dry-run a tool |
+| `POST` | `/chat` | Submit a prompt through the visible chat controller |
+| `POST` | `/chat/model-class` | Switch the visible chat speed selector |
 | `POST` | `/replay` | Replay a stored call |
 
 Example request body:
@@ -98,6 +102,8 @@ Example request body:
 ```
 
 Explicit unknown or stale session IDs fail instead of silently targeting another tab.
+
+`POST /chat` and `bridge_send_chat_message` use the selected tab's current model class and Auto/Co-direct setting. Tests may provide `requestedModelClass` (`very-fast`, `fast`, or `slow`) explicitly; that also updates the visible selector before the prompt runs. `POST /chat/model-class` and `bridge_set_chat_model_class` switch the same UI selector without sending a prompt. The prompt is inserted into the normal visible chat history and follows the same hosted-agent, cancellation, and timeline-edit path as clicking the Chat button.
 
 ## FlashBoard Chat Runs
 
