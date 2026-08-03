@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_DIGEST,
   HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_VERSION,
+  HOSTED_AGENT_FAST_V2_MAXIMUM_ITERATIONS,
   HostedAgentFastV2ContractError,
   parseHostedAgentFastV2StartRequest,
   resolveHostedAgentFastV2ExecutionProfile,
@@ -39,6 +40,10 @@ function validStartRequest(): Record<string, unknown> {
 }
 
 describe('Fast Agent V2 browser start contract', () => {
+  it('allows enough server-owned rounds for multi-stage editing workflows', () => {
+    expect(HOSTED_AGENT_FAST_V2_MAXIMUM_ITERATIONS).toBe(24);
+  });
+
   it('accepts only bounded user data plus the pinned public execution contract', () => {
     expect(parseHostedAgentFastV2StartRequest(validStartRequest())).toEqual(validStartRequest());
   });

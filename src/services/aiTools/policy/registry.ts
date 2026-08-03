@@ -182,7 +182,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['redo', readOnly()],
   ['setPlayhead', readOnly()],
   ['setInOutPoints', readOnly()],
-  ['openComposition', readOnly()],
+  ['openComposition', mutatingLow()],
   ['listStoryboardScenes', readOnly()],
   ['listTimelineVariantOptions', readOnly()],
   ['listMotionTemplates', readOnly()],

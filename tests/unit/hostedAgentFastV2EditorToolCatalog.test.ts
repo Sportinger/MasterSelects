@@ -22,6 +22,7 @@ describe('Fast V2 editor tool catalog', () => {
     expect(digest).toBe(HOSTED_AGENT_FAST_V2_EDITOR_TOOL_CATALOG_DIGEST);
     expect(catalog.digest).toBe(digest);
     expect(catalog.tools.length).toBeGreaterThan(70);
+    expect(catalog.tools.find((tool) => tool.name === 'openComposition')?.risk).toBe('mutating');
     expect(new Set(names).size).toBe(names.length);
     expect(names).toEqual(expect.arrayContaining([
       'createTextClip',

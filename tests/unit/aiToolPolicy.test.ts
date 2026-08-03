@@ -23,6 +23,14 @@ describe('AI Tool Policy Registry', () => {
     }
   });
 
+  it('classifies composition switching as a timeline mutation', () => {
+    const policy = getToolPolicy('openComposition');
+    expect(policy).toBeDefined();
+    expect(policy!.readOnly).toBe(false);
+    expect(policy!.riskLevel).toBe('low');
+    expect(policy!.requiresConfirmation).toBe(false);
+  });
+
   it('checkToolAccess returns allowed=true for deleteClip from devBridge', () => {
     const result = checkToolAccess('deleteClip', 'devBridge');
     expect(result.allowed).toBe(true);

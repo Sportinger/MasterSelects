@@ -586,13 +586,30 @@ async function fastV2Fetch(
   }
 }
 
-function responseError(response: Response): Error {
+async function safeResponseErrorCode(response: Response): Promise<string | undefined> {
+  if (!JSON_CONTENT_TYPE_PATTERN.test(response.headers.get('Content-Type') ?? '')) return undefined;
+  try {
+    const value = await response.json() as unknown;
+    if (
+      isRecord(value)
+      && typeof value.error === 'string'
+      && /^[a-z][a-z0-9_]{0,63}$/.test(value.error)
+    ) return value.error;
+  } catch {
+    // Unknown or malformed error bodies remain generic and fail closed.
+  }
+  return undefined;
+}
+
+async function responseError(response: Response): Promise<Error> {
   if ([502, 503, 504].includes(response.status)) {
     return new HostedAgentFastV2ReconnectableError(
       `The Fast V2 hosted-agent connection is temporarily unavailable (${response.status}).`,
     );
   }
-  return new Error(`The Fast V2 hosted-agent request failed safely (${response.status}).`);
+  const code = await safeResponseErrorCode(response);
+  const detail = code === undefined ? String(response.status) : `${response.status}: ${code}`;
+  return new Error(`The Fast V2 hosted-agent request failed safely (${detail}).`);
 }
 
 async function startResponseError(response: Response): Promise<Error> {
@@ -601,7 +618,7 @@ async function startResponseError(response: Response): Promise<Error> {
     && JSON_CONTENT_TYPE_PATTERN.test(response.headers.get('Content-Type') ?? '')
   ) {
     try {
-      const value = await response.json() as unknown;
+      const value = await response.clone().json() as unknown;
       if (
         isRecord(value)
         && hasExactKeys(value, ['error', 'message'])
@@ -923,7 +940,7 @@ export function createHostedAgentFastV2FetchTransport(input: {
       method: 'POST',
       signal: signal ?? input.signal,
     });
-    if (!response.ok) throw responseError(response);
+    if (!response.ok) throw await responseError(response);
     return parseOperationPostResponse(await readStrictJson(response), binding, sequence);
   }
 
@@ -934,7 +951,7 @@ export function createHostedAgentFastV2FetchTransport(input: {
         method: 'POST',
         signal: signal ?? input.signal,
       });
-      if (!response.ok) throw responseError(response);
+      if (!response.ok) throw await responseError(response);
       const parsed = await readStrictJson(response);
       if (!isRecord(parsed)
         || !hasExactKeys(parsed, ['terminalReason', 'turnId', 'turnStatus'])
@@ -951,7 +968,7 @@ export function createHostedAgentFastV2FetchTransport(input: {
         method: 'GET',
         signal: signal ?? input.signal,
       });
-      if (!response.ok) throw responseError(response);
+      if (!response.ok) throw await responseError(response);
       return parseProtocolSelection(await readStrictJson(response));
     },
     async postOperationResult(inputValue) {
@@ -973,7 +990,7 @@ export function createHostedAgentFastV2FetchTransport(input: {
           signal: signal ?? input.signal,
         },
       );
-      if (!response.ok) throw responseError(response);
+      if (!response.ok) throw await responseError(response);
       return parseOperationPostResponse(await readStrictJson(response), binding, receipt.sequence);
     },
     async replayEvents({ afterEventId, signal, ...binding }) {
@@ -988,7 +1005,7 @@ export function createHostedAgentFastV2FetchTransport(input: {
         method: 'GET',
         signal: signal ?? input.signal,
       });
-      if (!response.ok) throw responseError(response);
+      if (!response.ok) throw await responseError(response);
       if (!(response.headers.get('Content-Type') ?? '').toLowerCase().includes('text/event-stream')) {
         throw new Error('The Fast V2 hosted-agent event response is not an SSE stream.');
       }

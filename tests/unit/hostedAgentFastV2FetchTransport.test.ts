@@ -204,7 +204,7 @@ describe('Fast V2 browser fetch transport', () => {
     await expect(transport.start({ request: verifiedRequest }))
       .rejects.toThrow('The Verified profile is not available for this account. Choose Fast and try again.');
     await expect(transport.start({ request: verifiedRequest }))
-      .rejects.toThrow('The Fast V2 hosted-agent request failed safely (409).');
+      .rejects.toThrow('The Fast V2 hosted-agent request failed safely (409: another_conflict).');
   });
 
   it('reconnects with the event cursor and strictly parses narration, billing, and completion', async () => {
@@ -322,6 +322,21 @@ describe('Fast V2 browser fetch transport', () => {
     );
     expect(requestBody).toEqual({ receipt });
     expect(fetchImplementation).toHaveBeenCalledTimes(2);
+  });
+
+  it('surfaces a bounded kernel error code without exposing its internal message', async () => {
+    const fetchImplementation = vi.fn(async () => jsonResponse({
+      error: 'state_revision_drift',
+      message: 'internal timeline details must remain private',
+    }, { status: 409 }));
+    const transport = createHostedAgentFastV2FetchTransport({ fetchImplementation });
+
+    await expect(transport.postOperationResult({
+      ...binding(),
+      result: failedOperationResult(),
+    })).rejects.toThrow(
+      'The Fast V2 hosted-agent request failed safely (409: state_revision_drift).',
+    );
   });
 
   it('accepts the stable-revision result used to load a private editor category', async () => {
