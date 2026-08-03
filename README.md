@@ -42,8 +42,6 @@
 # you are home
 <img width="2025" height="693" alt="Screenshot 2026-06-12 232723" src="https://github.com/user-attachments/assets/31600199-a90e-4a73-b5a0-d998584ae376" />
 
-<video src="https://github.com/user-attachments/assets/24966b2a-064f-49c8-bc7f-88472a5e4cb0" autoplay loop muted playsinline width="100%"></video>
-
 </div>
 
 ---
