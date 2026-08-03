@@ -9,13 +9,16 @@ import {
   HOSTED_AGENT_MAXIMUM_ITERATIONS,
   HOSTED_AGENT_FAST_V2_PROTOCOL_VERSION,
   HOSTED_AGENT_FAST_V2_CAPABILITY_BUNDLE_VERSION,
+  HostedAgentFastV2ContractError,
   HostedAgentK2ClientSession,
   adaptHostedAgentFastV2TransportToK2,
   buildHostedAgentFastV2BrowserRequest,
+  buildHostedAgentFastV2ProjectContext,
   clearHostedAgentReloadSnapshot,
   createHostedAgentFastV2FetchTransport,
   createHostedAgentK2FetchTransport,
   getHostedAgentClientInstanceId,
+  describeHostedAgentFastV2AspectRatio,
   hostedAgentFastV2RoundIdempotencyKey,
   hostedAgentRoundIdempotencyKey,
   readHostedAgentFastV2ReloadSnapshot,
@@ -284,63 +287,112 @@ async function buildCurrentHostedAgentFastV2Request(
       type: track.type,
       visible: track.visible,
     }));
-    const composition = useMediaStore.getState().getActiveComposition();
-    const semanticTimelineState = buildHostedAgentFastV2SemanticTimelineState({
-      activeComposition: composition
-        ? {
-            backgroundColor: composition.backgroundColor,
-            ...(composition.camera === undefined ? {} : { camera: composition.camera }),
-            ...(composition.captionComp === undefined ? {} : { captionComp: composition.captionComp }),
-            duration: composition.duration,
-            frameRate: composition.frameRate,
-            height: composition.height,
-            id: composition.id,
-            name: composition.name,
-            ...(composition.transitionComp === undefined
-              ? {}
-              : { transitionComp: composition.transitionComp }),
-            width: composition.width,
-          }
-        : null,
-      activeMaskId: state.activeMaskId,
-      layers: state.layers,
-      primarySelectedClipId: state.primarySelectedClipId,
-      propertiesSelection: state.propertiesSelection,
-      runtimeClips: state.clips,
-      selectedClipIds: [...state.selectedClipIds],
-      selectedKeyframeIds: [...state.selectedKeyframeIds],
-      selectedLayerId: state.selectedLayerId,
-      selectedVertexIds: [...state.selectedVertexIds],
-      serializedTimeline: createSerializableTimelineState(state),
-      storyboard: getStoryboardProjectSnapshot(),
-      timelineRangeSelection: state.timelineRangeSelection,
-      timelineRevision,
-      transcriptsByClipId,
-    });
-    const built = await buildHostedAgentFastV2BrowserRequest({
-      clientInstanceId: clientInstanceId(),
-      executionProfile: request.executionProfile ?? 'fast',
-      request: request.prompt,
-      requestedExecutionMode: hostedExecutionMode(request.toolExecutionMode),
-      requestedModelClass: request.requestedModelClass ?? 'fast',
-      runSource: request.runSource === 'bridge' || request.runSource === 'mcp'
-        ? request.runSource
-        : 'ui',
-      snapshot: {
-        clips,
-        duration: state.duration,
-        inPoint: state.inPoint,
-        outPoint: state.outPoint,
-        playheadPosition: state.playheadPosition,
-        selectedClipIds: new Set(state.selectedClipIds),
-        semanticTimelineState,
+    const mediaState = useMediaStore.getState();
+    const composition = mediaState.activeCompositionId
+      ? mediaState.compositions.find((candidate) => candidate.id === mediaState.activeCompositionId)
+      : undefined;
+    const referencedMediaItemIds = state.clips.flatMap((clip) => [
+      clip.source?.mediaFileId,
+      clip.mediaFileId,
+      clip.compositionId,
+      clip.signalAssetId,
+    ].filter((id): id is string => typeof id === 'string' && id.length > 0));
+    const compositionAspect = composition
+      ? describeHostedAgentFastV2AspectRatio(composition.width, composition.height)
+      : undefined;
+    const activeComposition = composition && compositionAspect
+      ? {
+          aspectLabel: compositionAspect.aspectLabel,
+          aspectRatio: compositionAspect.aspectRatio,
+          backgroundColor: composition.backgroundColor,
+          ...(composition.camera === undefined ? {} : { camera: composition.camera }),
+          ...(composition.captionComp === undefined ? {} : { captionComp: composition.captionComp }),
+          duration: composition.duration,
+          frameRate: composition.frameRate,
+          height: composition.height,
+          id: composition.id,
+          name: composition.name,
+          orientation: compositionAspect.orientation,
+          ...(composition.transitionComp === undefined
+            ? {}
+            : { transitionComp: composition.transitionComp }),
+          width: composition.width,
+        }
+      : null;
+    const serializedTimeline = createSerializableTimelineState(state);
+    const storyboard = getStoryboardProjectSnapshot();
+    const visualReferences = fastV2VisualReferences(request.visualReferences ?? []);
+    let built: HostedAgentFastV2StartRequest | undefined;
+    let builtProjectContext: ReturnType<typeof buildHostedAgentFastV2ProjectContext> | undefined;
+    let builtProjectContextMaximumCharacters: number | undefined;
+    let startSizeError: HostedAgentFastV2ContractError | undefined;
+    for (const maximumCharacters of [350_000, 200_000, 100_000, 50_000, 25_000]) {
+      const projectContext = buildHostedAgentFastV2ProjectContext(mediaState, {
+        maximumCharacters,
+        referencedMediaItemIds,
+      });
+      const semanticTimelineState = buildHostedAgentFastV2SemanticTimelineState({
+        activeComposition,
+        activeMaskId: state.activeMaskId,
+        layers: state.layers,
+        primarySelectedClipId: state.primarySelectedClipId,
+        projectContext,
+        propertiesSelection: state.propertiesSelection,
+        runtimeClips: state.clips,
+        selectedClipIds: [...state.selectedClipIds],
+        selectedKeyframeIds: [...state.selectedKeyframeIds],
+        selectedLayerId: state.selectedLayerId,
+        selectedVertexIds: [...state.selectedVertexIds],
+        serializedTimeline,
+        storyboard,
+        timelineRangeSelection: state.timelineRangeSelection,
         timelineRevision,
-        tracks,
-      },
-      turnId: currentTurnId,
-      visualReferences: fastV2VisualReferences(request.visualReferences ?? []),
+        transcriptsByClipId,
+      });
+      try {
+        built = await buildHostedAgentFastV2BrowserRequest({
+          clientInstanceId: clientInstanceId(),
+          executionProfile: request.executionProfile ?? 'fast',
+          request: request.prompt,
+          requestedExecutionMode: hostedExecutionMode(request.toolExecutionMode),
+          requestedModelClass: request.requestedModelClass ?? 'fast',
+          runSource: request.runSource === 'bridge' || request.runSource === 'mcp'
+            ? request.runSource
+            : 'ui',
+          snapshot: {
+            clips,
+            duration: state.duration,
+            inPoint: state.inPoint,
+            outPoint: state.outPoint,
+            playheadPosition: state.playheadPosition,
+            selectedClipIds: new Set(state.selectedClipIds),
+            semanticTimelineState,
+            timelineRevision,
+            tracks,
+          },
+          turnId: currentTurnId,
+          visualReferences,
+        });
+        builtProjectContext = projectContext;
+        builtProjectContextMaximumCharacters = maximumCharacters;
+        break;
+      } catch (error) {
+        if (
+          !(error instanceof HostedAgentFastV2ContractError)
+          || !error.message.includes('canonical total byte bound')
+        ) throw error;
+        startSizeError = error;
+      }
+    }
+    if (!built) throw startSizeError ?? new Error('The Fast V2 start request could not be bounded.');
+    const currentProjectContext = buildHostedAgentFastV2ProjectContext(useMediaStore.getState(), {
+      maximumCharacters: builtProjectContextMaximumCharacters,
+      referencedMediaItemIds,
     });
-    if (getTimelineRevision() === timelineRevision) return built;
+    if (
+      getTimelineRevision() === timelineRevision
+      && JSON.stringify(currentProjectContext) === JSON.stringify(builtProjectContext)
+    ) return built;
   }
   throw new Error('The timeline changed while the Fast V2 snapshot was being prepared.');
 }

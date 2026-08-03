@@ -172,6 +172,11 @@ export function useFlashBoardChatController({
         setChatModelClass((modelClass) => (
           modelClasses.includes(modelClass) ? modelClass : 'fast'
         ));
+        if (modelClasses.length === 0) {
+          retryTimer = window.setTimeout(() => {
+            if (!cancelled) setChatModelClassAvailabilityRetry((value) => value + 1);
+          }, 2_000);
+        }
       },
       (error: unknown) => {
         if (cancelled || (error instanceof DOMException && error.name === 'AbortError')) return;

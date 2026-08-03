@@ -64,17 +64,51 @@ describe('Fast V2 complete semantic timeline state', () => {
 
     const result = buildHostedAgentFastV2SemanticTimelineState({
       activeComposition: {
+        aspectLabel: '9:16',
+        aspectRatio: 0.5625,
         backgroundColor: '#000000',
         duration: 3,
         frameRate: 30,
         height: 1920,
         id: 'comp-1',
         name: 'Vertical Cut',
+        orientation: 'portrait',
         width: 1080,
       },
       activeMaskId: null,
       layers: [],
       primarySelectedClipId: 'text-1',
+      projectContext: {
+        mediaPool: {
+          activeCompositionId: 'comp-1',
+          characterBudget: 350000,
+          complete: true,
+          counts: { compositions: 1 },
+          folderCount: 0,
+          folders: [],
+          includedFolderCount: 0,
+          includedItemCount: 1,
+          itemCount: 1,
+          items: [{
+            id: 'media-1',
+            name: 'Portrait source',
+            type: 'video',
+            videoGeometry: {
+              aspectLabel: '9:16',
+              aspectRatio: 0.5625,
+              height: 1920,
+              orientation: 'portrait',
+              width: 1080,
+            },
+          }],
+          omittedFolderCount: 0,
+          omittedItemCount: 0,
+          openCompositionIds: ['comp-1'],
+          selectedItemIds: [],
+        },
+        project: { id: 'project-1', name: 'Campaign' },
+        schemaVersion: 2,
+      },
       propertiesSelection: { kind: 'clip', clipId: 'text-1' },
       runtimeClips: [runtimeClip],
       selectedClipIds: ['text-1'],
@@ -105,7 +139,21 @@ describe('Fast V2 complete semantic timeline state', () => {
 
     const json = JSON.stringify(result);
     expect(result).toMatchObject({
-      activeComposition: { id: 'comp-1', width: 1080, height: 1920 },
+      activeComposition: {
+        aspectLabel: '9:16',
+        id: 'comp-1',
+        orientation: 'portrait',
+        width: 1080,
+        height: 1920,
+      },
+      projectContext: {
+        mediaPool: {
+          complete: true,
+          items: [{ id: 'media-1', videoGeometry: { aspectLabel: '9:16' } }],
+        },
+        schemaVersion: 2,
+      },
+      schemaVersion: 2,
       selection: { selectedClipIds: ['text-1'] },
       timeline: {
         clips: [{

@@ -12,6 +12,7 @@ import { transformToolDefinitions } from './transform';
 import { effectToolDefinitions } from './effects';
 import { keyframeToolDefinitions } from './keyframes';
 import { textToolDefinitions } from './text';
+import { captionToolDefinitions } from './captions';
 import { motionDesignToolDefinitions } from './motionDesign';
 import { playbackToolDefinitions } from './playback';
 import { transitionToolDefinitions } from './transitions';
@@ -36,6 +37,7 @@ export const AI_TOOLS = [
   ...effectToolDefinitions,
   ...keyframeToolDefinitions,
   ...textToolDefinitions,
+  ...captionToolDefinitions,
   ...motionDesignToolDefinitions,
   ...playbackToolDefinitions,
   ...transitionToolDefinitions,
@@ -61,6 +63,7 @@ export {
   effectToolDefinitions,
   keyframeToolDefinitions,
   textToolDefinitions,
+  captionToolDefinitions,
   motionDesignToolDefinitions,
   playbackToolDefinitions,
   transitionToolDefinitions,

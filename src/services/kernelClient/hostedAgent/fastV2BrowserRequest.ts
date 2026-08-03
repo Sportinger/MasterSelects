@@ -1,5 +1,6 @@
 import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
 import { resolveEditableHookLayerMetadata } from '../../aiTools/editableHookIdentity';
+import { effectiveWordTiming } from '../../transcription/effectiveWordTiming';
 import { APP_VERSION } from '../../../version';
 import { sanitizeHostedAgentFastV2SemanticJson } from './fastV2SemanticTimelineState';
 import { buildHostedAgentFastV2EditorToolCatalog } from './fastV2EditorToolCatalog';
@@ -150,8 +151,7 @@ function compactClipTranscript(
 } | undefined {
   if (!clip.transcript?.length || maximumWords <= 0) return undefined;
   const matchingWords = clip.transcript.flatMap((word) => {
-    const start = Number.isFinite(word.alignedStart) ? word.alignedStart! : word.start;
-    const end = Number.isFinite(word.alignedEnd) ? word.alignedEnd! : word.end;
+    const { start, end } = effectiveWordTiming(word);
     const text = typeof word.text === 'string' ? boundedTranscriptText(word.text.trim()) : '';
     if (
       !Number.isFinite(start)

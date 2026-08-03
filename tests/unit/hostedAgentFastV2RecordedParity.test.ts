@@ -392,6 +392,7 @@ function assertSanitizedInputPlanBinding(
   expect(splitStep).toMatchObject({
     arguments: {
       clipId: sanitizedInput.target.clipId,
+      snapToAudioZeroCrossing: true,
       times: targetBoundaries,
       withLinked: sanitizedInput.target.withLinked,
     },
@@ -399,7 +400,10 @@ function assertSanitizedInputPlanBinding(
     sequence: 1,
   });
   expect(deleteStep).toMatchObject({
-    arguments: { withLinked: sanitizedInput.target.withLinked },
+    arguments: {
+      deClickFadeSeconds: 0.006,
+      withLinked: sanitizedInput.target.withLinked,
+    },
     operationId: 'timeline.segment.delete-many.v1',
     sequence: 2,
   });

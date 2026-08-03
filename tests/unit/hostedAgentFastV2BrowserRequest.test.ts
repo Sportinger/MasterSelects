@@ -116,8 +116,14 @@ describe('Fast V2 browser request', () => {
 
   it('projects transcript words into bounded timeline-space evidence without duplicating linked audio', async () => {
     const transcript = [
-      { id: 'word-1', text: 'Keep', start: 1, end: 1.5 },
-      { id: 'word-2', text: 'remove this', start: 3, end: 4 },
+      {
+        id: 'word-1', text: 'Keep', start: 1, end: 1.5,
+        alignedStart: 1.1, alignedEnd: 1.4, alignmentConfidence: 0.2,
+      },
+      {
+        id: 'word-2', text: 'remove this', start: 3, end: 4,
+        alignedStart: 3.1, alignedEnd: 3.9, alignmentConfidence: 0.9,
+      },
       { id: 'word-3', text: 'outside', start: 12, end: 13 },
     ];
     const request = await buildHostedAgentFastV2BrowserRequest({
@@ -168,7 +174,7 @@ describe('Fast V2 browser request', () => {
       truncated: false,
       words: [
         { text: 'Keep', timelineEnd: 10.5, timelineStart: 10 },
-        { text: 'remove this', timelineEnd: 13, timelineStart: 12 },
+        { text: 'remove this', timelineEnd: 12.9, timelineStart: 12.1 },
       ],
     });
     expect(payload.clips[1]?.transcript).toBeUndefined();

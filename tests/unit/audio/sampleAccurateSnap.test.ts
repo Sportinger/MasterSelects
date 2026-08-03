@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  findLowestDiscontinuitySample,
   findNearestZeroCrossing,
+  snapSourceTimeToLowDiscontinuity,
   snapSourceTimeToZeroCrossing,
   zeroCrossingSnapCache,
 } from '../../../src/services/audio/sampleAccurateSnap';
@@ -99,6 +101,37 @@ describe('snapSourceTimeToZeroCrossing', () => {
     const buffer = createMockAudioBuffer([sine]);
     expect(snapSourceTimeToZeroCrossing(buffer, 0.022, { maxDistanceSeconds: 0.004 })).toBeNull();
     expect(snapSourceTimeToZeroCrossing(buffer, 0.026, { prefer: 'before' })).toBeCloseTo(crossingTime(2), 6);
+  });
+});
+
+describe('multi-channel low-discontinuity snapping', () => {
+  it('chooses the quiet shared sample instead of a zero crossing on only one channel', () => {
+    const left = new Float32Array(40).fill(0.6);
+    const right = new Float32Array(40).fill(0.6);
+    left[10] = 0;
+    right[10] = 0.9;
+    left[12] = 0.01;
+    right[12] = -0.01;
+
+    expect(findLowestDiscontinuitySample([left, right], SAMPLE_RATE, 0.01, 0.005))
+      .toBeCloseTo(0.012, 9);
+    expect(snapSourceTimeToLowDiscontinuity(
+      createMockAudioBuffer([left, right]),
+      0.01,
+      { maxDistanceSeconds: 0.005 },
+    )).toBeCloseTo(0.012, 9);
+  });
+
+  it('keeps an already silent boundary at the requested sample', () => {
+    const silent = new Float32Array(40);
+    expect(findLowestDiscontinuitySample([silent, silent], SAMPLE_RATE, 0.017, 0.005))
+      .toBeCloseTo(0.017, 9);
+  });
+
+  it('fails closed for invalid multi-channel inputs', () => {
+    expect(findLowestDiscontinuitySample([], SAMPLE_RATE, 0.01, 0.005)).toBeNull();
+    expect(findLowestDiscontinuitySample([new Float32Array(1)], SAMPLE_RATE, 0, 0.005)).toBeNull();
+    expect(findLowestDiscontinuitySample([new Float32Array(10)], 0, 0.005, 0.005)).toBeNull();
   });
 });
 

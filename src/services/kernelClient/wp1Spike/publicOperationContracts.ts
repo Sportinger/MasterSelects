@@ -424,6 +424,10 @@ export const PUBLIC_OPERATION_CONTRACT_V1 = {
             required: true,
             uniqueItems: true,
           },
+          deClickFadeSeconds: {
+            kind: 'finite-non-negative-number-v1',
+            required: false,
+          },
           withLinked: { kind: 'boolean-v1', required: false },
         },
         schemaVersion: 1,
@@ -498,6 +502,7 @@ export const PUBLIC_OPERATION_CONTRACT_V1 = {
             required: true,
             uniqueItems: true,
           },
+          snapToAudioZeroCrossing: { kind: 'boolean-v1', required: false },
           withLinked: { kind: 'boolean-v1', required: false },
         },
         schemaVersion: 1,
@@ -577,7 +582,7 @@ export const PUBLIC_OPERATION_CONTRACT_V1 = {
 
 // Recomputed by the WP1 compatibility check from the canonical JSON above.
 export const PUBLIC_OPERATION_CONTRACT_DIGEST_V1 =
-  'sha256:37406c757f0a90967cdbfd45b0b047b246a6844fc632f6f07a10038e834a9595' as const;
+  'sha256:04e98a757c065eac124ffcd6e035a714d3714dfa2c87152eaf9307cf4133b007' as const;
 
 export const PUBLIC_COMPILED_PLAN_EXTENSION_V1 = {
   bindingVersion: 'ms-prior-result-path-v1',
@@ -591,7 +596,7 @@ export const PUBLIC_COMPILED_PLAN_EXTENSION_V1 = {
 } as const;
 
 export const PUBLIC_COMPILED_PLAN_DIGEST_V1 =
-  'sha256:72ec74d702c6facf409ea9999f6d7f839967a4585426c40878020dc98a333480' as const;
+  'sha256:da80771d51db4492c7a133b48f63c04d7df3a0061a50e39ad8f9c42be42284ca' as const;
 
 const OPERATION_BY_ID = new Map<PublicOperationIdV1, PublicOperationSpecV1>(
   PUBLIC_OPERATION_CONTRACT_V1.operations.map((operation) => [operation.id, operation]),

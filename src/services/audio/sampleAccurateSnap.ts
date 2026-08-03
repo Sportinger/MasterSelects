@@ -6,6 +6,10 @@ export interface SnapSourceTimeToZeroCrossingOptions {
   channel?: number;
 }
 
+export interface SnapSourceTimeToLowDiscontinuityOptions {
+  maxDistanceSeconds?: number;
+}
+
 export interface ZeroCrossingSnapCacheEntry {
   channelData: Float32Array;
   sampleRate: number;
@@ -80,6 +84,91 @@ export function snapSourceTimeToZeroCrossing(
     sourceTime,
     opts.maxDistanceSeconds ?? DEFAULT_MAX_DISTANCE_SECONDS,
     opts.prefer ?? 'nearest',
+  );
+}
+
+/**
+ * Finds a sample boundary that is quiet across every channel. A per-channel
+ * zero crossing is not sufficient for stereo material because the other
+ * channel can still be near a peak at that instant. The small distance term
+ * keeps the phonetic boundary authoritative while preferring a low-amplitude,
+ * low-jump sample when one is available nearby.
+ */
+export function findLowestDiscontinuitySample(
+  channels: readonly Float32Array[],
+  sampleRate: number,
+  sourceTime: number,
+  maxDistanceSeconds: number,
+): number | null {
+  if (channels.length === 0 || channels.some((channel) => channel.length < 2)) return null;
+  if (!Number.isFinite(sampleRate) || sampleRate <= 0) return null;
+  if (!Number.isFinite(sourceTime) || sourceTime < 0) return null;
+  if (!Number.isFinite(maxDistanceSeconds) || maxDistanceSeconds <= 0) return null;
+
+  const usableLength = Math.min(...channels.map((channel) => channel.length));
+  const sourceSample = sourceTime * sampleRate;
+  if (sourceSample > usableLength - 1) return null;
+
+  const radius = Math.max(1, Math.ceil(maxDistanceSeconds * sampleRate));
+  const center = clampInt(Math.round(sourceSample), 0, usableLength - 1);
+  const first = Math.max(0, center - radius);
+  const last = Math.min(usableLength - 1, center + radius);
+  let bestSample = center;
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (let sample = first; sample <= last; sample += 1) {
+    let peak = 0;
+    let mean = 0;
+    let jump = 0;
+    let valid = true;
+    for (const channel of channels) {
+      const value = channel[sample];
+      if (!Number.isFinite(value)) {
+        valid = false;
+        break;
+      }
+      const magnitude = Math.abs(value);
+      peak = Math.max(peak, magnitude);
+      mean += magnitude;
+      if (sample > 0) {
+        const previous = channel[sample - 1];
+        if (!Number.isFinite(previous)) {
+          valid = false;
+          break;
+        }
+        jump += Math.abs(value - previous);
+      }
+    }
+    if (!valid) continue;
+
+    mean /= channels.length;
+    jump /= channels.length;
+    const distance = Math.abs(sample - sourceSample) / radius;
+    const score = peak + mean * 0.25 + jump * 0.05 + distance * 0.02;
+    if (score < bestScore) {
+      bestScore = score;
+      bestSample = sample;
+    }
+  }
+
+  return Number.isFinite(bestScore) ? bestSample / sampleRate : null;
+}
+
+export function snapSourceTimeToLowDiscontinuity(
+  buffer: AudioBuffer,
+  sourceTime: number,
+  opts: SnapSourceTimeToLowDiscontinuityOptions = {},
+): number | null {
+  if (!Number.isInteger(buffer.numberOfChannels) || buffer.numberOfChannels <= 0) return null;
+  const channels = Array.from(
+    { length: buffer.numberOfChannels },
+    (_, channel) => buffer.getChannelData(channel),
+  );
+  return findLowestDiscontinuitySample(
+    channels,
+    buffer.sampleRate,
+    sourceTime,
+    opts.maxDistanceSeconds ?? DEFAULT_MAX_DISTANCE_SECONDS,
   );
 }
 

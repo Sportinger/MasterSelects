@@ -1,4 +1,15 @@
 import { useTimelineStore } from '../../../../stores/timeline';
+import type { ClipAudioEditOperation } from '../../../../types';
+import { clearProcessedAudioAnalysisRefs } from '../../../../stores/timeline/helpers/audioAnalysisStateHelpers';
+import { createAudioEditOperationId } from '../../../../stores/timeline/audioEdit/audioEditHelpers';
+import {
+  collectAutomaticAudioFadeTargets,
+  collectLinkedDeletionIds,
+  createAutomaticCutDeClickOperation,
+  MAX_AUTOMATIC_DE_CLICK_FADE_SECONDS,
+  type AutomaticAudioFadeEdge,
+  type AutomaticAudioFadeTarget,
+} from '../../../audio/automaticCutDeClick';
 import type { ToolResult } from '../../types.ts';
 import { isAIExecutionActive } from '../../executionState';
 import {
@@ -9,6 +20,45 @@ import type { TimelineStore } from './runtime';
 import { getClipColor } from './runtime';
 
 const TIMELINE_EPSILON = 1e-6;
+
+function applyAutomaticAudioFades(
+  targets: readonly AutomaticAudioFadeTarget[],
+  requestedDuration: number,
+): number {
+  if (targets.length === 0 || requestedDuration <= 0) return 0;
+  const targetByClipId = new Map<string, AutomaticAudioFadeEdge[]>();
+  for (const target of targets) {
+    const edges = targetByClipId.get(target.clipId) ?? [];
+    edges.push(target.edge);
+    targetByClipId.set(target.clipId, edges);
+  }
+  let applied = 0;
+  useTimelineStore.setState((state) => ({
+    clips: state.clips.map((clip) => {
+      const edges = targetByClipId.get(clip.id);
+      if (!edges) return clip;
+      const operations = edges
+        .map((edge) => createAutomaticCutDeClickOperation(
+          clip,
+          edge,
+          requestedDuration,
+          { createdAt: Date.now(), id: createAudioEditOperationId() },
+        ))
+        .filter((operation): operation is ClipAudioEditOperation => operation !== null);
+      if (operations.length === 0) return clip;
+      applied += operations.length;
+      return clearProcessedAudioAnalysisRefs({
+        ...clip,
+        audioState: {
+          ...(clip.audioState ?? {}),
+          editStack: [...(clip.audioState?.editStack ?? []), ...operations],
+        },
+      });
+    }),
+  }));
+  if (applied > 0) useTimelineStore.getState().invalidateCache();
+  return applied;
+}
 
 export async function handleDeleteClip(
   args: Record<string, unknown>,
@@ -81,6 +131,10 @@ export async function handleDeleteClips(
 ): Promise<ToolResult> {
   const clipIds = args.clipIds as string[];
   const withLinked = (args.withLinked as boolean | undefined) ?? true;
+  const requestedDeClickFadeSeconds = typeof args.deClickFadeSeconds === 'number'
+    && Number.isFinite(args.deClickFadeSeconds)
+    ? Math.max(0, Math.min(MAX_AUTOMATIC_DE_CLICK_FADE_SECONDS, args.deClickFadeSeconds))
+    : 0;
   const currentClips = useTimelineStore.getState().clips;
   const mutationSnapshot = captureMutationEntitySnapshot('clip', currentClips);
   const deleted = clipIds.filter((clipId) => currentClips.some((clip) => clip.id === clipId));
@@ -93,6 +147,7 @@ export async function handleDeleteClips(
         deleted,
         notFound,
         deletedCount: 0,
+        deClickFadesApplied: 0,
         withLinked,
         ...describeMutationEntities(
           mutationSnapshot,
@@ -101,6 +156,11 @@ export async function handleDeleteClips(
       },
     };
   }
+
+  const deletionIds = collectLinkedDeletionIds(currentClips, deleted, withLinked);
+  const audioFadeTargets = requestedDeClickFadeSeconds > 0
+    ? collectAutomaticAudioFadeTargets(currentClips, deletionIds)
+    : [];
 
   for (const clipId of deleted) {
     const clip = currentClips.find(c => c.id === clipId);
@@ -132,12 +192,19 @@ export async function handleDeleteClips(
     };
   }
 
+  const deClickFadesApplied = applyAutomaticAudioFades(
+    audioFadeTargets,
+    requestedDeClickFadeSeconds,
+  );
+
   return {
     success: true,
     data: {
       deleted,
       notFound,
       deletedCount: deleted.length,
+      deClickFadeSeconds: requestedDeClickFadeSeconds,
+      deClickFadesApplied,
       withLinked,
       ...describeMutationEntities(
         mutationSnapshot,

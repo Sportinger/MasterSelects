@@ -77,6 +77,7 @@
         {
           "arguments": {
             "clipId": "video-source",
+            "snapToAudioZeroCrossing": true,
             "times": [3.25, 5.5, 9.75, 12],
             "withLinked": true
           },
@@ -100,6 +101,7 @@
                 }
               }
             ],
+            "deClickFadeSeconds": 0.006,
             "withLinked": true
           },
           "operationId": "timeline.segment.delete-many.v1",
@@ -116,6 +118,7 @@
         {
           "arguments": {
             "clipId": "video-source",
+            "snapToAudioZeroCrossing": true,
             "times": [0.3000001, 0.7000002],
             "withLinked": true
           },
@@ -133,6 +136,7 @@
                 }
               }
             ],
+            "deClickFadeSeconds": 0.006,
             "withLinked": true
           },
           "operationId": "timeline.segment.delete-many.v1",
@@ -149,6 +153,7 @@
         {
           "arguments": {
             "clipId": "video-source",
+            "snapToAudioZeroCrossing": true,
             "times": [0.2],
             "withLinked": true
           },
@@ -166,6 +171,7 @@
                 }
               }
             ],
+            "deClickFadeSeconds": 0.006,
             "withLinked": true
           },
           "operationId": "timeline.segment.delete-many.v1",
@@ -182,6 +188,7 @@
         {
           "arguments": {
             "clipId": "video-source",
+            "snapToAudioZeroCrossing": true,
             "times": [0.8],
             "withLinked": true
           },
@@ -199,6 +206,7 @@
                 }
               }
             ],
+            "deClickFadeSeconds": 0.006,
             "withLinked": true
           },
           "operationId": "timeline.segment.delete-many.v1",
@@ -215,6 +223,7 @@
         {
           "arguments": {
             "clipIds": ["video-source"],
+            "deClickFadeSeconds": 0.006,
             "withLinked": true
           },
           "operationId": "timeline.segment.delete-many.v1",

@@ -8,16 +8,16 @@ export const HOSTED_AGENT_FAST_V2_PROTOCOL_VERSION = 'fast-agent-v2' as const;
 // former eight-call batching default. Keep a finite fail-closed ceiling.
 export const HOSTED_AGENT_FAST_V2_MAX_TOOL_CALLS_PER_ROUND = 256 as const;
 export const HOSTED_AGENT_FAST_V2_EDITOR_TOOL_CATALOG_DIGEST =
-  'sha256:23f6983186a1e3375d6a872494e1e47d9611d2752327684452602388d230ac96' as const;
+  'sha256:6ed9e5ca6566e5f36805c814afd99e6e06d89bbe0759e32c992dd257b3eba040' as const;
 export const HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_VERSION =
   PUBLIC_OPERATION_CONTRACT_V1.contractVersion;
 export const HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_DIGEST =
   PUBLIC_OPERATION_CONTRACT_DIGEST_V1;
 export const HOSTED_AGENT_FAST_V2_SERVICE_ENVELOPE_VERSION = 1 as const;
 export const HOSTED_AGENT_FAST_V2_PROMPT_VERSION =
-  'fast-v2-prompt-progressive-tools-2026-08-02' as const;
+  'fast-v2-prompt-project-context-v2-2026-08-02' as const;
 export const HOSTED_AGENT_FAST_V2_CAPABILITY_BUNDLE_VERSION =
-  'fast-v2-progressive-editor-tools-2026-08-02' as const;
+  'fast-v2-progressive-editor-tools-captions-2026-08-02' as const;
 export const HOSTED_AGENT_FAST_V2_MODEL_POLICY_VERSION =
   'fast-v2-model-policy-2026-08-02' as const;
 export const HOSTED_AGENT_FAST_V2_BUDGET_POLICY_VERSION =

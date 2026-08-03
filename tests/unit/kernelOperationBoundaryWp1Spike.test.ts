@@ -247,6 +247,8 @@ describe('WP1 public operation boundary spike', () => {
 
     const publicShape = `${canonicalPublicOperationContractV1()}${canonicalPublicCompiledPlanExtensionV1()}`;
     expect(publicShape).toContain('withLinked');
+    expect(publicShape).toContain('snapToAudioZeroCrossing');
+    expect(publicShape).toContain('deClickFadeSeconds');
     expect(publicShape).toContain('"data","segments","videoClipIds"');
     expect(publicShape).toContain('declared-array-element-only-v1');
     for (const forbidden of [

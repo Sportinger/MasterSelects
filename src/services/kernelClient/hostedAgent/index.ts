@@ -1,6 +1,7 @@
 export * from './contracts';
 export * from './fastV2StartContract';
 export * from './fastV2BrowserRequest';
+export * from './fastV2ProjectContext';
 export * from './fastV2FetchTransport';
 export * from './fastV2K2Adapter';
 export * from './fastV2ReloadResume';

@@ -3,6 +3,10 @@ import type {
   CompositionTimelineData,
   TimelineClip,
 } from '../../../types/timeline';
+import type {
+  HostedAgentFastV2MediaOrientation,
+  HostedAgentFastV2ProjectContextV2,
+} from './fastV2ProjectContext';
 
 const OMITTED_BINARY_FIELDS = new Set([
   'thumbnails',
@@ -11,6 +15,8 @@ const OMITTED_BINARY_FIELDS = new Set([
 ]);
 
 export interface HostedAgentFastV2ActiveCompositionState {
+  aspectLabel: string;
+  aspectRatio: number;
   backgroundColor: string;
   camera?: unknown;
   captionComp?: unknown;
@@ -19,6 +25,7 @@ export interface HostedAgentFastV2ActiveCompositionState {
   height: number;
   id: string;
   name: string;
+  orientation: HostedAgentFastV2MediaOrientation;
   transitionComp?: unknown;
   width: number;
 }
@@ -28,6 +35,7 @@ export interface HostedAgentFastV2SemanticTimelineStateInput {
   activeMaskId: string | null;
   layers: readonly unknown[];
   primarySelectedClipId: string | null;
+  projectContext: HostedAgentFastV2ProjectContextV2;
   propertiesSelection: unknown;
   runtimeClips: readonly TimelineClip[];
   selectedClipIds: readonly string[];
@@ -99,8 +107,9 @@ export function buildHostedAgentFastV2SemanticTimelineState(
   });
 
   return sanitizeHostedAgentFastV2SemanticJson({
-    schemaVersion: 1,
+    schemaVersion: 2,
     activeComposition: input.activeComposition,
+    projectContext: input.projectContext,
     timeline: {
       ...input.serializedTimeline,
       clips,

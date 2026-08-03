@@ -1,5 +1,8 @@
 import { useTimelineStore } from '../../../../stores/timeline';
+import { isExclusiveTimelineMutationLeaseActive } from '../../../../stores/timeline/exclusiveMutationLease';
 import type { TimelineClip } from '../../../../types/timeline';
+import { audioExtractor } from '../../../../engine/audio/AudioExtractor';
+import { snapSourceTimeToLowDiscontinuity } from '../../../audio/sampleAccurateSnap';
 import type { ToolResult } from '../../types.ts';
 import { isAIExecutionActive } from '../../executionState';
 import {
@@ -8,6 +11,121 @@ import {
 } from '../mutationEntityResults';
 import type { TimelineStore } from './runtime';
 import { logSplitCheckpoint, splitClipBatch } from './runtime';
+
+const SPEECH_SAFE_SNAP_WINDOW_SECONDS = 0.008;
+const SPLIT_BOUNDARY_EPSILON_SECONDS = 0.001;
+
+interface AudioBoundaryResolution {
+  appliedCount: number;
+  requested: boolean;
+  adjustments: Array<{ delta: number; requested: number; resolved: number }>;
+}
+
+type ResolvedAudioBoundaries = { resolution: AudioBoundaryResolution; times: number[] };
+
+function isAudioClip(clip: TimelineClip): boolean {
+  return clip.source?.type === 'audio' || clip.file?.type?.startsWith('audio/') === true;
+}
+
+function timelineTimeToSourceTime(clip: TimelineClip, timelineTime: number): number {
+  const timelineRatio = Math.max(0, Math.min(1, (
+    timelineTime - clip.startTime
+  ) / Math.max(SPLIT_BOUNDARY_EPSILON_SECONDS, clip.duration)));
+  const sourceSpan = Math.max(SPLIT_BOUNDARY_EPSILON_SECONDS, clip.outPoint - clip.inPoint);
+  const reversed = clip.reversed === true || (clip.speed ?? 1) < 0;
+  return reversed
+    ? clip.outPoint - timelineRatio * sourceSpan
+    : clip.inPoint + timelineRatio * sourceSpan;
+}
+
+function sourceTimeToTimelineTime(clip: TimelineClip, sourceTime: number): number {
+  const sourceSpan = Math.max(SPLIT_BOUNDARY_EPSILON_SECONDS, clip.outPoint - clip.inPoint);
+  const sourceRatio = Math.max(0, Math.min(1, (sourceTime - clip.inPoint) / sourceSpan));
+  const reversed = clip.reversed === true || (clip.speed ?? 1) < 0;
+  return clip.startTime + (reversed ? 1 - sourceRatio : sourceRatio) * clip.duration;
+}
+
+function fallbackAudioBoundaries(times: readonly number[]): ResolvedAudioBoundaries {
+  return {
+    resolution: {
+      appliedCount: 0,
+      requested: true,
+      adjustments: times.map((time) => ({ delta: 0, requested: time, resolved: time })),
+    },
+    times: [...times],
+  };
+}
+
+function boundaryAudioClip(clip: TimelineClip): TimelineClip {
+  const linked = clip.linkedClipId
+    ? useTimelineStore.getState().clips.find((candidate) => candidate.id === clip.linkedClipId)
+    : undefined;
+  return linked && isAudioClip(linked) ? linked : clip;
+}
+
+function resolveSpeechSafeSplitTimesFromBuffer(
+  clip: TimelineClip,
+  audioClip: TimelineClip,
+  times: readonly number[],
+  buffer: AudioBuffer,
+): ResolvedAudioBoundaries {
+  const fallback = fallbackAudioBoundaries(times);
+  const adjustments = times.map((time) => {
+    const sourceTime = timelineTimeToSourceTime(audioClip, time);
+    const snappedSourceTime = snapSourceTimeToLowDiscontinuity(buffer, sourceTime, {
+      maxDistanceSeconds: SPEECH_SAFE_SNAP_WINDOW_SECONDS,
+    });
+    if (snappedSourceTime === null) return { delta: 0, requested: time, resolved: time };
+    const resolved = sourceTimeToTimelineTime(audioClip, snappedSourceTime);
+    return { delta: resolved - time, requested: time, resolved };
+  });
+  const resolvedTimes = adjustments.map((adjustment) => adjustment.resolved);
+  const clipEnd = clip.startTime + clip.duration;
+  const invalid = resolvedTimes.some((time, index) => (
+    !Number.isFinite(time)
+    || time <= clip.startTime + SPLIT_BOUNDARY_EPSILON_SECONDS
+    || time >= clipEnd - SPLIT_BOUNDARY_EPSILON_SECONDS
+    || (index > 0 && time <= resolvedTimes[index - 1] + SPLIT_BOUNDARY_EPSILON_SECONDS)
+  ));
+  if (invalid) return fallback;
+  return {
+    resolution: {
+      appliedCount: adjustments.filter((adjustment) => Math.abs(adjustment.delta) > 1e-7).length,
+      requested: true,
+      adjustments,
+    },
+    times: resolvedTimes,
+  };
+}
+
+function resolveSpeechSafeSplitTimesFromCache(
+  clip: TimelineClip,
+  times: readonly number[],
+): ResolvedAudioBoundaries {
+  const audioClip = boundaryAudioClip(clip);
+  const mediaFileId = audioClip.source?.mediaFileId ?? audioClip.mediaFileId ?? audioClip.id;
+  const buffer = audioExtractor.getCached(mediaFileId);
+  return buffer === null
+    ? fallbackAudioBoundaries(times)
+    : resolveSpeechSafeSplitTimesFromBuffer(clip, audioClip, times, buffer);
+}
+
+async function resolveSpeechSafeSplitTimes(
+  clip: TimelineClip,
+  times: readonly number[],
+): Promise<ResolvedAudioBoundaries> {
+  const fallback = fallbackAudioBoundaries(times);
+  const audioClip = boundaryAudioClip(clip);
+  try {
+    const mediaFileId = audioClip.source?.mediaFileId ?? audioClip.mediaFileId ?? audioClip.id;
+    const buffer = await audioExtractor.extractAudio(audioClip.file, mediaFileId);
+    return resolveSpeechSafeSplitTimesFromBuffer(clip, audioClip, times, buffer);
+  } catch {
+    // Decoding is best effort. The transcript boundary remains valid when the
+    // source has no decodable audio or the browser cannot open an AudioContext.
+    return fallback;
+  }
+}
 
 export async function handleSplitClip(
   args: Record<string, unknown>,
@@ -209,6 +327,20 @@ export async function handleSplitClipAtTimes(
     return { success: false, error: `No valid split times within clip range (${clipStart}s - ${clipEnd}s)` };
   }
 
+  const boundaryResolution = args.snapToAudioZeroCrossing === true
+    ? isExclusiveTimelineMutationLeaseActive()
+      ? resolveSpeechSafeSplitTimesFromCache(clip, validTimes)
+      : await resolveSpeechSafeSplitTimes(clip, validTimes)
+    : {
+        resolution: {
+          appliedCount: 0,
+          requested: false,
+          adjustments: validTimes.map((time) => ({ delta: 0, requested: time, resolved: time })),
+        },
+        times: validTimes,
+      };
+  const resolvedTimes = boundaryResolution.times;
+
   const targetClipIds = [
     clip.id,
     withLinked ? clip.linkedClipId : undefined,
@@ -218,23 +350,23 @@ export async function handleSplitClipAtTimes(
     useTimelineStore.getState().clips,
   );
   if (isAIExecutionActive()) {
-    logSplitCheckpoint('split-at-times:start', clip, validTimes.length, withLinked);
+    logSplitCheckpoint('split-at-times:start', clip, resolvedTimes.length, withLinked);
     const trackId = clip.trackId;
     // Bulk split: single state update for all cuts at once
-    splitClipBatch(clip, validTimes, withLinked);
-    logSplitCheckpoint('split-at-times:after-batch', clip, validTimes.length, withLinked);
+    splitClipBatch(clip, resolvedTimes, withLinked);
+    logSplitCheckpoint('split-at-times:after-batch', clip, resolvedTimes.length, withLinked);
     // Staggered overlays via CSS animation-delay (single state update, no JS timers)
-    const totalAnimMs = Math.min(3000, validTimes.length * 100);
-    const delayStep = validTimes.length <= 1 ? 0 : totalAnimMs / (validTimes.length - 1);
+    const totalAnimMs = Math.min(3000, resolvedTimes.length * 100);
+    const delayStep = resolvedTimes.length <= 1 ? 0 : totalAnimMs / (resolvedTimes.length - 1);
     useTimelineStore.getState().addAIOverlaysBatch(
-      validTimes.map((t, i) => ({
+      resolvedTimes.map((t, i) => ({
         type: 'split-glow' as const, trackId, timePosition: t,
         duration: 1000, animationDelay: Math.round(i * delayStep),
       }))
     );
-    logSplitCheckpoint('split-at-times:after-overlays', clip, validTimes.length, withLinked);
+    logSplitCheckpoint('split-at-times:after-overlays', clip, resolvedTimes.length, withLinked);
   } else {
-    splitClipBatch(clip, validTimes, withLinked);
+    splitClipBatch(clip, resolvedTimes, withLinked);
   }
 
   const clipsAfter = useTimelineStore.getState().clips;
@@ -249,10 +381,11 @@ export async function handleSplitClipAtTimes(
   return {
     success: true,
     data: {
-      splitCount: validTimes.length,
-      splitTimes: validTimes,
-      resultingParts: validTimes.length + 1,
+      splitCount: resolvedTimes.length,
+      splitTimes: resolvedTimes,
+      resultingParts: resolvedTimes.length + 1,
       withLinked,
+      audioBoundaryResolution: boundaryResolution.resolution,
       // Runtime segment binding payload (agent-kernel plan section 6.2):
       // segment ids in timeline order so downstream steps never copy ID lists.
       segments: {

@@ -71,6 +71,11 @@ import {
   handleSetTextBox,
   handleUpdateTextProperties,
 } from './text';
+import {
+  handleCreateCaptionClip,
+  handleGetCaptionProperties,
+  handleUpdateCaptionProperties,
+} from './captions';
 import { handleCreateEditableTitleStack } from './editableTitleStack';
 import { handleManageEditableHook, handleRefineEditableHook } from './editableHook';
 import {
@@ -191,6 +196,9 @@ export const timelineHandlers: Readonly<Record<string, TimelineHandler>> = {
   updateTextProperties: handleUpdateTextProperties,
   setTextBox: handleSetTextBox,
   addTextBoundsKeyframe: handleAddTextBoundsKeyframe,
+  getCaptionProperties: handleGetCaptionProperties,
+  createCaptionClip: handleCreateCaptionClip,
+  updateCaptionProperties: handleUpdateCaptionProperties,
   getMotionCapabilities: handleGetMotionCapabilities,
   getMotionDesign: handleGetMotionDesign,
   createMotionShapeClip: handleCreateMotionShapeClip,
