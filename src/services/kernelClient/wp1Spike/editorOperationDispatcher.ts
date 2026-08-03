@@ -28,6 +28,7 @@ function genericOperationRisk(
   if (operationId === 'timeline.editor.inspect.v1') return 'read-only';
   if (operationId === 'timeline.editor.mutate.v1') return 'mutating';
   if (operationId === 'timeline.editor.destructive.v1') return 'destructive';
+  if (operationId === 'timeline.editor.program.commit.v1') return 'mutating';
   return undefined;
 }
 

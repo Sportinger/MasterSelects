@@ -654,8 +654,8 @@ nicht wiederholt nach Informationen, die nur wegen eines laufenden Jobs fehlen.
 Der öffentliche Fast-V2-Vertrag erhält sinngemäß:
 
 ```ts
-'timeline.transcript-assembly.preview.v1'
-'timeline.transcript-assembly.commit.v1'
+'timeline.editor.program.preview.v1'
+'timeline.editor.program.commit.v1'
 ```
 
 Der lokale Executor kann darunter bestehende Split-, Move-, Delete-, Ripple-

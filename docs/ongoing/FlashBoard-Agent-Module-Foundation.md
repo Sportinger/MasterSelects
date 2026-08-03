@@ -123,10 +123,11 @@ Die Tabelle hier ist die menschenlesbare Spiegelung:
 
 | Modul | Bundle | Operationen | Status | Akzeptanz-Aufgabe |
 |---|---|---|---|---|
-| remove-ranges | `fast-v2-timeline-editing-2026-08-02` | `timeline.segment.split.v1`, `timeline.segment.delete-many.v1`, `timeline.visual.capture-grid.v1` | live (Referenzmodul, grandfathered ohne Preview/Commit-Paar) | Bereiche aus einem Clip entfernen, optional visuell prüfen |
-| timeline-intercut | `fast-v2-timeline-editing-2026-08-02` | `timeline.intercut.preview.v1`, `timeline.segment.split.v1`, `timeline.segment.delete-many.v1`, `timeline.intercut.commit.v1` | live | Transkript-getaktete Shots aus mehreren Takes atomar abwechseln und verknüpften Ton erhalten |
-| editable-hook | `fast-v2-timeline-editing-2026-08-02` | `timeline.hook.preview.v1`, `timeline.hook.commit.v1`, `timeline.hook.refine.commit.v1`, `timeline.visual.capture-grid.v1` | live | Editierbaren Text-Hook mit nativen Backplates schnell erzeugen und danach automatisch einen Kontrollframe liefern |
-| editable-hook-refinement | `fast-v2-timeline-editing-2026-08-02` | `timeline.hook.preview.v1`, `timeline.hook.commit.v1`, `timeline.hook.refine.commit.v1`, `timeline.visual.capture-grid.v1` | live | Einzelne Text-/Backplate-Zeilen über stabilen `hookId` und `rowIndex` nachbessern, nach jeder Änderung neu rendern, maximal zwei Refinements |
+| remove-ranges | `fast-v2-transcript-assembly-2026-08-03` | `timeline.segment.split.v1`, `timeline.segment.delete-many.v1`, `timeline.visual.capture-grid.v1` | live (Referenzmodul, grandfathered ohne Preview/Commit-Paar) | Bereiche aus einem Clip entfernen, optional visuell prüfen |
+| timeline-intercut | `fast-v2-transcript-assembly-2026-08-03` | `timeline.intercut.preview.v1`, `timeline.segment.split.v1`, `timeline.segment.delete-many.v1`, `timeline.intercut.commit.v1` | live | Transkript-getaktete Shots aus mehreren Takes atomar abwechseln und verknüpften Ton erhalten |
+| transcript-assembly | `fast-v2-transcript-assembly-2026-08-03` | `timeline.editor.program.preview.v1`, `timeline.editor.program.commit.v1` | live | Verbatim Text in Wort-, Phrasen- oder Satzgranularität deklarieren; der private Kernel löst Zeitstempel auf und kompiliert eine neue Komposition aus atomaren Segment-Inserts. Die öffentliche Grenze bleibt ein generisches Edit-Programm ohne Transkript-Orchestrierung. |
+| editable-hook | `fast-v2-transcript-assembly-2026-08-03` | `timeline.hook.preview.v1`, `timeline.hook.commit.v1`, `timeline.hook.refine.commit.v1`, `timeline.visual.capture-grid.v1` | live | Editierbaren Text-Hook mit nativen Backplates schnell erzeugen und danach automatisch einen Kontrollframe liefern |
+| editable-hook-refinement | `fast-v2-transcript-assembly-2026-08-03` | `timeline.hook.preview.v1`, `timeline.hook.commit.v1`, `timeline.hook.refine.commit.v1`, `timeline.visual.capture-grid.v1` | live | Einzelne Text-/Backplate-Zeilen über stabilen `hookId` und `rowIndex` nachbessern, nach jeder Änderung neu rendern, maximal zwei Refinements |
 
 ## 8. Einstiegspunkte und Regeln
 

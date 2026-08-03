@@ -888,6 +888,57 @@ describe('WP1 public operation boundary spike', () => {
       'kernel',
       { guidedReplay: false, suppressHistory: true },
     );
+    await expect(dispatch('timeline.editor.program.preview.v1', {}))
+      .resolves.toMatchObject({ success: true });
+    expect(executeToolCalls).toHaveBeenLastCalledWith(
+      [{
+        id: 'wp1:timeline.editor.program.preview.v1',
+        tool: 'getTimelineState',
+        args: {},
+      }],
+      'kernel',
+      { guidedReplay: false, suppressHistory: true },
+    );
+    const assemblyBatch = {
+      requests: [
+        { args: { duration: 2, name: 'Remix' }, toolName: 'createComposition' },
+        {
+          args: {
+            inPoint: 1,
+            mediaFileId: 'media-a',
+            outPoint: 1.2,
+            startTime: 0,
+            trackId: null,
+          },
+          toolName: 'addClipSegment',
+        },
+      ],
+    };
+    await expect(dispatch('timeline.editor.program.commit.v1', {
+      requestJson: JSON.stringify(assemblyBatch),
+    })).resolves.toMatchObject({ success: true });
+    expect(executeToolCalls).toHaveBeenLastCalledWith(
+      [
+        {
+          args: { duration: 2, name: 'Remix' },
+          id: 'wp1:timeline.editor.program.commit.v1:1:createComposition',
+          tool: 'createComposition',
+        },
+        {
+          args: {
+            inPoint: 1,
+            mediaFileId: 'media-a',
+            outPoint: 1.2,
+            startTime: 0,
+            trackId: null,
+          },
+          id: 'wp1:timeline.editor.program.commit.v1:2:addClipSegment',
+          tool: 'addClipSegment',
+        },
+      ],
+      'kernel',
+      { guidedReplay: false, suppressHistory: false },
+    );
     await expect(dispatch('timeline.intercut.commit.v1', {
       clipIds: ['shot-a', 'shot-b'],
       startTime: 0,

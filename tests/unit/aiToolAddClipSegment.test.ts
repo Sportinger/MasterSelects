@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   handleAddClipSegment,
   insertedClipAlreadyMatchesRequestedSegment,
+  resolveAddClipSegmentTrackId,
 } from '../../src/services/aiTools/handlers/clips/addSegment';
 
 describe('addClipSegment preflight', () => {
@@ -29,5 +30,17 @@ describe('addClipSegment preflight', () => {
       2,
       10,
     )).toBe(false);
+  });
+
+  it('binds a null track id to the first compatible active-composition track', () => {
+    const tracks = [
+      { id: 'audio-1', type: 'audio' },
+      { id: 'video-1', type: 'video' },
+      { id: 'video-2', type: 'video' },
+    ];
+    expect(resolveAddClipSegmentTrackId(null, 'video', tracks)).toBe('video-1');
+    expect(resolveAddClipSegmentTrackId(null, 'audio', tracks)).toBe('audio-1');
+    expect(resolveAddClipSegmentTrackId('video-2', 'video', tracks)).toBe('video-2');
+    expect(resolveAddClipSegmentTrackId('missing', 'video', tracks)).toBeUndefined();
   });
 });

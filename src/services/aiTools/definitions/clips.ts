@@ -321,8 +321,8 @@ export const clipToolDefinitions: ToolDefinition[] = [
             description: 'ID of the media file in the media pool (from getMediaItems)',
           },
           trackId: {
-            type: 'string',
-            description: 'ID of the track to add the clip to',
+            type: ['string', 'null'],
+            description: 'ID of the track to add the clip to, or null to select the first compatible active-composition track',
           },
           startTime: {
             type: 'number',
@@ -335,6 +335,12 @@ export const clipToolDefinitions: ToolDefinition[] = [
           outPoint: {
             type: 'number',
             description: 'End time within the source file in seconds',
+          },
+          deClickFadeSeconds: {
+            type: 'number',
+            minimum: 0,
+            maximum: 0.02,
+            description: 'Optional automatic audio fade duration on both inserted segment edges (0-0.02 seconds)',
           },
         },
         required: ['mediaFileId', 'trackId', 'startTime', 'inPoint', 'outPoint'],

@@ -10,6 +10,8 @@ export type PublicOperationIdV1 =
   | 'timeline.intercut.preview.v1'
   | 'timeline.segment.delete-many.v1'
   | 'timeline.segment.split.v1'
+  | 'timeline.editor.program.commit.v1'
+  | 'timeline.editor.program.preview.v1'
   | 'timeline.visual.capture-grid.v1';
 
 export type PublicOperationEffectV1 =
@@ -264,6 +266,59 @@ export const PUBLIC_OPERATION_CONTRACT_V1 = {
         schemaVersion: 1,
       },
       risk: 'mutating',
+      transaction: 'none',
+    },
+    {
+      arguments: {
+        additionalProperties: false,
+        fields: {
+          requestJson: {
+            kind: 'bounded-json-string-v1',
+            maximumLength: 100_000,
+            minimumLength: 2,
+            required: true,
+          },
+        },
+        schemaVersion: 1,
+      },
+      confirmation: 'inherit',
+      dispatcher: {
+        adapterVersion: 'ms-kernel-ai-tool-dispatcher-v1',
+        callerContext: 'kernel',
+        suppressHistory: false,
+        toolName: 'executeKernelEditorTool',
+      },
+      effects: ['mediaDuration', 'segmentation', 'sourceCoverage', 'sourceOrder', 'timelinePlacement'],
+      id: 'timeline.editor.program.commit.v1',
+      result: {
+        bindable: [],
+        projection: { kind: 'bounded-json-v1', maximumCharacters: 500_000 },
+        schemaVersion: 1,
+      },
+      risk: 'mutating',
+      transaction: 'none',
+    },
+    {
+      arguments: {
+        additionalProperties: false,
+        fields: {},
+        schemaVersion: 1,
+      },
+      confirmation: 'inherit',
+      dispatcher: {
+        adapterVersion: 'ms-kernel-ai-tool-dispatcher-v1',
+        callerContext: 'kernel',
+        suppressHistory: true,
+        toolName: 'getTimelineState',
+      },
+      effects: [],
+      id: 'timeline.editor.program.preview.v1',
+      result: {
+        bindable: [],
+        projection: { kind: 'success-only-v1' },
+        schemaVersion: 1,
+      },
+      risk: 'read-only',
       transaction: 'none',
     },
     {
@@ -582,7 +637,7 @@ export const PUBLIC_OPERATION_CONTRACT_V1 = {
 
 // Recomputed by the WP1 compatibility check from the canonical JSON above.
 export const PUBLIC_OPERATION_CONTRACT_DIGEST_V1 =
-  'sha256:04e98a757c065eac124ffcd6e035a714d3714dfa2c87152eaf9307cf4133b007' as const;
+  'sha256:75c941fa67c87e6f14f2933cec13499cbce5b0d5e164c004ec10b002d4c8baaa' as const;
 
 export const PUBLIC_COMPILED_PLAN_EXTENSION_V1 = {
   bindingVersion: 'ms-prior-result-path-v1',
@@ -596,7 +651,7 @@ export const PUBLIC_COMPILED_PLAN_EXTENSION_V1 = {
 } as const;
 
 export const PUBLIC_COMPILED_PLAN_DIGEST_V1 =
-  'sha256:da80771d51db4492c7a133b48f63c04d7df3a0061a50e39ad8f9c42be42284ca' as const;
+  'sha256:fddab5db3c573719c9e8200bd343a89eca3175d96087d422e9a0d7bb1b6bdfa7' as const;
 
 const OPERATION_BY_ID = new Map<PublicOperationIdV1, PublicOperationSpecV1>(
   PUBLIC_OPERATION_CONTRACT_V1.operations.map((operation) => [operation.id, operation]),

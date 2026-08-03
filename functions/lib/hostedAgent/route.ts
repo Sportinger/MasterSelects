@@ -409,6 +409,8 @@ const WP1_OPERATION_IDS = new Set([
   'timeline.intercut.preview.v1',
   'timeline.segment.delete-many.v1',
   'timeline.segment.split.v1',
+  'timeline.editor.program.commit.v1',
+  'timeline.editor.program.preview.v1',
   'timeline.visual.capture-grid.v1',
 ]);
 
@@ -426,6 +428,7 @@ function validProjectedOperationResult(value: unknown, operationId: string): boo
     operationId === 'timeline.editor.destructive.v1'
     || operationId === 'timeline.editor.inspect.v1'
     || operationId === 'timeline.editor.mutate.v1'
+    || operationId === 'timeline.editor.program.commit.v1'
   ) {
     if (value.data === undefined) return true;
     try {
@@ -445,6 +448,7 @@ function validProjectedOperationResult(value: unknown, operationId: string): boo
     || operationId === 'timeline.intercut.commit.v1'
     || operationId === 'timeline.intercut.preview.v1'
     || operationId === 'timeline.segment.delete-many.v1'
+    || operationId === 'timeline.editor.program.preview.v1'
   ) return value.data === undefined;
   if (!isRecord(value.data)) return false;
   if (operationId === 'timeline.segment.split.v1') {

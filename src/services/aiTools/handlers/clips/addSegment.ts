@@ -8,6 +8,13 @@ import {
 import {
   MIN_CLIP_DURATION,
 } from '../../../../stores/timeline/editOperations/trimOperations';
+import type { ClipAudioEditOperation } from '../../../../types';
+import { clearProcessedAudioAnalysisRefs } from '../../../../stores/timeline/helpers/audioAnalysisStateHelpers';
+import { createAudioEditOperationId } from '../../../../stores/timeline/audioEdit/audioEditHelpers';
+import {
+  createAutomaticCutDeClickOperation,
+  MAX_AUTOMATIC_DE_CLICK_FADE_SECONDS,
+} from '../../../audio/automaticCutDeClick';
 
 export function insertedClipAlreadyMatchesRequestedSegment(
   clip: { inPoint: number; outPoint: number },
@@ -18,6 +25,18 @@ export function insertedClipAlreadyMatchesRequestedSegment(
     && Math.abs(clip.outPoint - outPoint) < 1e-6;
 }
 
+export function resolveAddClipSegmentTrackId(
+  requestedTrackId: string | null,
+  mediaType: string,
+  tracks: readonly { id: string; type: string }[],
+): string | undefined {
+  if (requestedTrackId !== null) {
+    return tracks.find((track) => track.id === requestedTrackId)?.id;
+  }
+  const preferredTrackType = mediaType === 'audio' ? 'audio' : 'video';
+  return tracks.find((track) => track.type === preferredTrackType)?.id;
+}
+
 /**
  * Add a clip segment from the media pool with specific in/out points.
  * Self-contained handler — fetches both stores internally.
@@ -26,10 +45,14 @@ export async function handleAddClipSegment(
   args: Record<string, unknown>,
 ): Promise<ToolResult> {
   const mediaFileId = args.mediaFileId as string;
-  const trackId = args.trackId as string;
+  const requestedTrackId = typeof args.trackId === 'string' ? args.trackId : null;
   const startTime = args.startTime as number;
   const inPoint = args.inPoint as number;
   const outPoint = args.outPoint as number;
+  const deClickFadeSeconds = typeof args.deClickFadeSeconds === 'number'
+    && Number.isFinite(args.deClickFadeSeconds)
+    ? Math.max(0, Math.min(MAX_AUTOMATIC_DE_CLICK_FADE_SECONDS, args.deClickFadeSeconds))
+    : 0;
 
   if (inPoint >= outPoint) {
     return { success: false, error: 'inPoint must be less than outPoint' };
@@ -58,10 +81,21 @@ export async function handleAddClipSegment(
     return { success: false, error: `File object not available for media: ${mediaFileId}. Try re-importing the file.` };
   }
 
-  // Validate track
-  const track = timelineStore.tracks.find(t => t.id === trackId);
-  if (!track) {
-    return { success: false, error: `Track not found: ${trackId}` };
+  // A null track id is the deterministic runtime binding used by private
+  // kernel edit programs after creating and opening a destination composition.
+  const preferredTrackType = mediaFile.type === 'audio' ? 'audio' : 'video';
+  const trackId = resolveAddClipSegmentTrackId(
+    requestedTrackId,
+    mediaFile.type,
+    timelineStore.tracks,
+  );
+  if (!trackId) {
+    return {
+      success: false,
+      error: requestedTrackId === null
+        ? `No compatible ${preferredTrackType} track is available in the active composition`
+        : `Track not found: ${requestedTrackId}`,
+    };
   }
 
   const mutationSnapshot = captureMutationEntitySnapshot('clip', timelineStore.clips);
@@ -109,12 +143,46 @@ export async function handleAddClipSegment(
     if (clip.linkedClipId) trimmedClipIds.add(clip.linkedClipId);
   }
 
+  let deClickFadesApplied = 0;
+  if (deClickFadeSeconds > 0) {
+    const newClipIds = new Set(newClips.map((clip) => clip.id));
+    const audioTrackIds = new Set(
+      useTimelineStore.getState().tracks
+        .filter((candidate) => candidate.type === 'audio')
+        .map((candidate) => candidate.id),
+    );
+    useTimelineStore.setState((state) => ({
+      clips: state.clips.map((clip) => {
+        if (!newClipIds.has(clip.id) || !audioTrackIds.has(clip.trackId)) return clip;
+        const operations = (['in', 'out'] as const)
+          .map((edge) => createAutomaticCutDeClickOperation(
+            clip,
+            edge,
+            deClickFadeSeconds,
+            { createdAt: Date.now(), id: createAudioEditOperationId() },
+          ))
+          .filter((operation): operation is ClipAudioEditOperation => operation !== null);
+        if (operations.length === 0) return clip;
+        deClickFadesApplied += operations.length;
+        return clearProcessedAudioAnalysisRefs({
+          ...clip,
+          audioState: {
+            ...(clip.audioState ?? {}),
+            editStack: [...(clip.audioState?.editStack ?? []), ...operations],
+          },
+        });
+      }),
+    }));
+    if (deClickFadesApplied > 0) useTimelineStore.getState().invalidateCache();
+  }
+
   // Return info about created clips
   const createdClips = useTimelineStore.getState().clips.filter(c => newClips.some(n => n.id === c.id));
   return {
     success: true,
     data: {
       clipCount: createdClips.length,
+      deClickFadesApplied,
       clips: createdClips.map(c => ({
         id: c.id,
         trackId: c.trackId,
