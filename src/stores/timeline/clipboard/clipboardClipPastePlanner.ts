@@ -95,8 +95,7 @@ export function createPastedClipboardClipsPlan(
       parentClipId: undefined,
       reversed: clipData.reversed,
       speed: clipData.speed,
-      preservesPitch: clipData.preservesPitch,
-      followsLinkedVideoSpeed: clipData.followsLinkedVideoSpeed,
+      preservesPitch: clipData.preservesPitch, followsLinkedVideoSpeed: clipData.followsLinkedVideoSpeed,
       freeRun: clipData.freeRun,
       textProperties: clipData.textProperties ? { ...clipData.textProperties } : undefined,
       captionProperties: clipData.captionProperties

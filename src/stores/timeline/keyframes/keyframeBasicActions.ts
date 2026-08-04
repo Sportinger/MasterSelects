@@ -1,19 +1,20 @@
-import type { Keyframe, KeyframeActions, SliceCreator, TimelineClip } from '../types';
+import type { Keyframe } from '../../../types/keyframes';
+import type { KeyframeActions } from '../storeTypes/utilityActionTypes';
+import type { SliceCreator } from '../storeTypes/timelineStoreTypes';
 import { renderHostPort } from '../../../services/render/renderHostPort';
 import { getKeyframeAtTime, hasKeyframesForProperty } from '../../../utils/keyframeInterpolation';
 import { normalizeEasingType } from '../../../utils/easing';
 import { isVectorAnimationSourceType, parseVectorAnimationStateProperty } from '../../../types/vectorAnimation';
-import { clearProcessedAudioAnalysisRefsForKeyframeTargets, type AudioKeyframeInvalidationTarget } from './audioEffectKeyframeValues';
+import type { AudioKeyframeInvalidationTarget } from './audioEffectKeyframeValues';
 import { findClipById, isAnyKeyframeOnLockedTrack, isClipOnLockedTrack } from './keyframeClipLookup';
 import { normalizeVectorAnimationStateKeyframeValue } from './vectorAnimationKeyframeValues';
 import {
-  CLIP_SPEED_MAX_MULTIPLIER,
-  CLIP_SPEED_MIN_MULTIPLIER,
   isLinkedAudioFollowingVideo,
   resolveLinkedVideoAudioPair,
   resolveSpeedMutationTarget,
   synchronizeAllFollowingAudioSpeedKeyframes,
 } from '../helpers/linkedClipSpeed';
+import { finalizeLinkedSpeedKeyframeMutation, isValidSpeedKeyframeValue } from './linkedSpeedKeyframeState';
 
 type KeyframeBasicActions = Pick<
   KeyframeActions,
@@ -29,28 +30,11 @@ type KeyframeBasicActions = Pick<
   | 'updateBezierHandle'
 >;
 
-function followingAudioSpeedInvalidationTargets(
-  clips: readonly TimelineClip[],
-): AudioKeyframeInvalidationTarget[] {
-  return clips.flatMap(clip => {
-    if (clip.source?.type !== 'video') return [];
-    const pair = resolveLinkedVideoAudioPair(clips, clip.id);
-    return pair && isLinkedAudioFollowingVideo(pair)
-      ? [{ clipId: pair.audio.id, property: 'speed' as const }]
-      : [];
-  });
-}
-
 export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (set, get) => ({
   addKeyframe: (clipId, property, value, time, easing = 'linear') => {
     const { clips, tracks, playheadPosition, clipKeyframes, invalidateCache } = get();
     if (property === 'speed') {
-      const magnitude = Math.abs(value);
-      if (
-        !Number.isFinite(value) ||
-        magnitude < CLIP_SPEED_MIN_MULTIPLIER ||
-        magnitude > CLIP_SPEED_MAX_MULTIPLIER
-      ) return;
+      if (!isValidSpeedKeyframeValue(value)) return;
       const speedTarget = resolveSpeedMutationTarget(clips, clipId);
       if (speedTarget && speedTarget.leader.id !== clipId) {
         get().addKeyframe(speedTarget.leader.id, property, value, time, easing);
@@ -97,19 +81,7 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
 
     const newMap = new Map(clipKeyframes);
     newMap.set(clipId, newKeyframes);
-    const synchronizedMap = property === 'speed'
-      ? synchronizeAllFollowingAudioSpeedKeyframes(clips, newMap)
-      : newMap;
-    const nextClips = clearProcessedAudioAnalysisRefsForKeyframeTargets(
-      clips,
-      [
-        { clipId, property },
-        ...(property === 'speed' ? followingAudioSpeedInvalidationTargets(clips) : []),
-      ],
-    );
-    set(nextClips === clips
-      ? { clipKeyframes: synchronizedMap }
-      : { clipKeyframes: synchronizedMap, clips: nextClips });
+    set(finalizeLinkedSpeedKeyframeMutation(clips, newMap, [{ clipId, property }]));
 
     invalidateCache();
     renderHostPort.requestRender();
@@ -135,20 +107,10 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
     const newSelection = new Set(selectedKeyframeIds);
     newSelection.delete(keyframeId);
 
-    const speedChanged = invalidationTargets.some(target => target.property === 'speed');
-    const synchronizedMap = speedChanged
-      ? synchronizeAllFollowingAudioSpeedKeyframes(clips, newMap)
-      : newMap;
-    const nextClips = clearProcessedAudioAnalysisRefsForKeyframeTargets(
-      clips,
-      [
-        ...invalidationTargets,
-        ...(speedChanged ? followingAudioSpeedInvalidationTargets(clips) : []),
-      ],
-    );
-    set(nextClips === clips
-      ? { clipKeyframes: synchronizedMap, selectedKeyframeIds: newSelection }
-      : { clipKeyframes: synchronizedMap, selectedKeyframeIds: newSelection, clips: nextClips });
+    set({
+      ...finalizeLinkedSpeedKeyframeMutation(clips, newMap, invalidationTargets),
+      selectedKeyframeIds: newSelection,
+    });
     invalidateCache();
   },
 
@@ -170,14 +132,7 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
         }
         const nextProperty = baseNormalizedUpdates.property ?? k.property;
         const nextValue = baseNormalizedUpdates.value ?? k.value;
-        if (
-          nextProperty === 'speed' &&
-          (
-            !Number.isFinite(nextValue) ||
-            Math.abs(nextValue) < CLIP_SPEED_MIN_MULTIPLIER ||
-            Math.abs(nextValue) > CLIP_SPEED_MAX_MULTIPLIER
-          )
-        ) return k;
+        if (nextProperty === 'speed' && !isValidSpeedKeyframeValue(nextValue)) return k;
         invalidationTargets.push({ clipId, property: k.property });
         if (baseNormalizedUpdates.property) {
           invalidationTargets.push({ clipId, property: baseNormalizedUpdates.property });
@@ -198,20 +153,7 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
       }));
     });
 
-    const speedChanged = invalidationTargets.some(target => target.property === 'speed');
-    const synchronizedMap = speedChanged
-      ? synchronizeAllFollowingAudioSpeedKeyframes(clips, newMap)
-      : newMap;
-    const nextClips = clearProcessedAudioAnalysisRefsForKeyframeTargets(
-      clips,
-      [
-        ...invalidationTargets,
-        ...(speedChanged ? followingAudioSpeedInvalidationTargets(clips) : []),
-      ],
-    );
-    set(nextClips === clips
-      ? { clipKeyframes: synchronizedMap }
-      : { clipKeyframes: synchronizedMap, clips: nextClips });
+    set(finalizeLinkedSpeedKeyframeMutation(clips, newMap, invalidationTargets));
     invalidateCache();
   },
 
@@ -235,20 +177,7 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
       }).sort((a, b) => a.time - b.time));
     });
 
-    const speedChanged = invalidationTargets.some(target => target.property === 'speed');
-    const synchronizedMap = speedChanged
-      ? synchronizeAllFollowingAudioSpeedKeyframes(clips, newMap)
-      : newMap;
-    const nextClips = clearProcessedAudioAnalysisRefsForKeyframeTargets(
-      clips,
-      [
-        ...invalidationTargets,
-        ...(speedChanged ? followingAudioSpeedInvalidationTargets(clips) : []),
-      ],
-    );
-    set(nextClips === clips
-      ? { clipKeyframes: synchronizedMap }
-      : { clipKeyframes: synchronizedMap, clips: nextClips });
+    set(finalizeLinkedSpeedKeyframeMutation(clips, newMap, invalidationTargets));
     invalidateCache();
   },
 
@@ -287,20 +216,7 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
 
     if (!changed) return;
 
-    const speedChanged = invalidationTargets.some(target => target.property === 'speed');
-    const synchronizedMap = speedChanged
-      ? synchronizeAllFollowingAudioSpeedKeyframes(clips, newMap)
-      : newMap;
-    const nextClips = clearProcessedAudioAnalysisRefsForKeyframeTargets(
-      clips,
-      [
-        ...invalidationTargets,
-        ...(speedChanged ? followingAudioSpeedInvalidationTargets(clips) : []),
-      ],
-    );
-    set(nextClips === clips
-      ? { clipKeyframes: synchronizedMap }
-      : { clipKeyframes: synchronizedMap, clips: nextClips });
+    set(finalizeLinkedSpeedKeyframeMutation(clips, newMap, invalidationTargets));
     invalidateCache();
   },
 

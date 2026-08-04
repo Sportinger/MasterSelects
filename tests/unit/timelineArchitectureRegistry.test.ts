@@ -2530,6 +2530,7 @@ describe('timeline architecture registry', () => {
     const vectorSource = readRepoFile('src/stores/timeline/keyframes/vectorAnimationKeyframeValues.ts');
     const nodeCameraSource = readRepoFile('src/stores/timeline/keyframes/nodeCameraKeyframeValues.ts');
     const basicActionsSource = readRepoFile('src/stores/timeline/keyframes/keyframeBasicActions.ts');
+    const linkedSpeedStateSource = readRepoFile('src/stores/timeline/keyframes/linkedSpeedKeyframeState.ts');
     const pathActionsSource = readRepoFile('src/stores/timeline/keyframes/keyframePathActions.ts');
     const viewStateSource = readRepoFile('src/stores/timeline/keyframes/keyframeViewStateActions.ts');
     const transformInterpolationSource = readRepoFile('src/stores/timeline/keyframes/keyframeTransformInterpolationActions.ts');
@@ -2567,6 +2568,8 @@ describe('timeline architecture registry', () => {
     expect(nodeCameraSource).toContain('getCustomNodeParamDefaults');
     expect(nodeCameraSource).toContain('buildCameraSettingsPatch');
     expect(basicActionsSource).toContain('addKeyframe');
+    expect(basicActionsSource).toContain("from './linkedSpeedKeyframeState'");
+    expect(linkedSpeedStateSource).toContain('finalizeLinkedSpeedKeyframeMutation');
     expect(pathActionsSource).toContain('addMaskPathKeyframe');
     expect(viewStateSource).toContain('getExpandedTrackHeight');
     expect(transformInterpolationSource).toContain('getInterpolatedTransform');
@@ -2580,6 +2583,7 @@ describe('timeline architecture registry', () => {
     expect(lineCount(vectorSource)).toBeLessThanOrEqual(250);
     expect(lineCount(nodeCameraSource)).toBeLessThanOrEqual(250);
     expect(lineCount(basicActionsSource)).toBeLessThanOrEqual(300);
+    expect(lineCount(linkedSpeedStateSource)).toBeLessThanOrEqual(150);
     expect(lineCount(pathActionsSource)).toBeLessThanOrEqual(300);
     expect(lineCount(viewStateSource)).toBeLessThanOrEqual(300);
     expect(lineCount(transformInterpolationSource)).toBeLessThanOrEqual(300);
@@ -2740,11 +2744,15 @@ describe('timeline architecture registry', () => {
     const storyboardRestoreSource = readRepoFile('src/stores/timeline/serialization/loadStateStoryboardClipRestore.ts');
     const compositionRestoreSource = readRepoFile('src/stores/timeline/serialization/loadStateCompositionClipRestore.ts');
     const mediaRestoreSource = readRepoFile('src/stores/timeline/serialization/loadStateMediaClipRestore.ts');
+    const linkedSpeedRestoreSource = readRepoFile('src/stores/timeline/serialization/loadStateLinkedSpeedRestore.ts');
+    const sourceThumbnailRestoreSource = readRepoFile('src/stores/timeline/serialization/loadStateSourceThumbnailRestore.ts');
 
     expect(serializationSource).toContain("from './serialization/serializableTimelineState'");
     expect(serializationSource).toContain("from './serialization/loadStateGeneratedClipRestore'");
     expect(serializationSource).toContain("from './serialization/loadStateCompositionClipRestore'");
     expect(serializationSource).toContain("from './serialization/loadStateMediaClipRestore'");
+    expect(serializationSource).toContain("from './serialization/loadStateLinkedSpeedRestore'");
+    expect(serializationSource).toContain("from './serialization/loadStateSourceThumbnailRestore'");
     expect(serializationSource).not.toContain('function createSerializableClip');
     expect(serializationSource).not.toContain('function createCompositionVideoClip');
     expect(serializationSource).not.toContain('function createInitialRestoredMediaSource');
@@ -2762,12 +2770,16 @@ describe('timeline architecture registry', () => {
     expect(mediaRestoreSource).toContain('restoreLoadStateMediaClip');
     expect(mediaRestoreSource).toContain('resolveLoadStateMediaRuntimeReference');
     expect(mediaRestoreSource).toContain('startLoadStateVectorRuntimeRestore');
+    expect(linkedSpeedRestoreSource).toContain('restoreLoadStateLinkedSpeedState');
+    expect(sourceThumbnailRestoreSource).toContain('restoreLoadStateSourceThumbnails');
     expect(lineCount(serializationSource)).toBeLessThanOrEqual(339);
     expect(lineCount(serializableStateSource)).toBeLessThanOrEqual(200);
     expect(lineCount(generatedRestoreSource)).toBeLessThanOrEqual(300);
     expect(lineCount(storyboardRestoreSource)).toBeLessThanOrEqual(100);
     expect(lineCount(compositionRestoreSource)).toBeLessThanOrEqual(300);
     expect(lineCount(mediaRestoreSource)).toBeLessThanOrEqual(380);
+    expect(lineCount(linkedSpeedRestoreSource)).toBeLessThanOrEqual(100);
+    expect(lineCount(sourceThumbnailRestoreSource)).toBeLessThanOrEqual(100);
   });
 
   it('keeps clip add composition and audio analysis actions split out of the clip slice', () => {
@@ -2791,6 +2803,7 @@ describe('timeline architecture registry', () => {
       'clipPreparedAudioAnalysisCore',
       'clipProcessedWaveformAnalysisActions',
       'clipRhythmFrequencyAnalysisActions',
+      'clipSpeedActions',
       'clipWaveformAnalysisActions',
       'completeDownload',
       'compositionClipActions',
@@ -2806,6 +2819,7 @@ describe('timeline architecture registry', () => {
     expect(clipSource).toContain("from './clip/clipPreparedAudioAnalysisActions'");
     expect(clipSource).toContain("from './clip/clipProcessedWaveformAnalysisActions'");
     expect(clipSource).toContain("from './clip/clipRhythmFrequencyAnalysisActions'");
+    expect(clipSource).toContain("from './clip/clipSpeedActions'");
     expect(clipSource).not.toContain('generateTimelineWaveformAnalysisForFile');
     expect(clipSource).not.toContain('prepareClipAudioAnalysisInput');
     expect(clipSource).not.toContain('createNestedContentHash');
@@ -2814,6 +2828,7 @@ describe('timeline architecture registry', () => {
     expect(readRepoFile('src/stores/timeline/clip/compositionClipActions.ts')).toContain('refreshCompClipNestedDataAction');
     expect(readRepoFile('src/stores/timeline/clip/clipProcessedWaveformAnalysisActions.ts')).toContain('generateProcessedWaveformForClipAction');
     expect(readRepoFile('src/stores/timeline/clip/clipRhythmFrequencyAnalysisActions.ts')).toContain('generateFrequencyPhaseForClipAction');
+    expect(readRepoFile('src/stores/timeline/clip/clipSpeedActions.ts')).toContain('setClipSpeedAction');
     expect(readRepoFile('src/stores/timeline/clip/videoLinkedAudioLoader.ts')).toContain('loadLinkedAudio');
     expect(lineCount(clipSource)).toBeLessThanOrEqual(784);
     for (const moduleName of clipModules) {
@@ -2858,6 +2873,7 @@ describe('timeline architecture registry', () => {
       'audioActionTypes',
       'clipboardTypes',
       'clipActionTypes',
+      'clipSpeedActionTypes',
       'feedbackTypes',
       'maskActionTypes',
       'playbackActionTypes',

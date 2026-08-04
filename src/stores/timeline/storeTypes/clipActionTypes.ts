@@ -29,6 +29,7 @@ import type {
 import type { Composition } from '../../mediaStore';
 import type { MeshPrimitiveType } from '../../mediaStore/types';
 import type { CaptionClipActions } from './captionClipActionTypes';
+import type { ClipSpeedActions } from './clipSpeedActionTypes';
 import type { StoryboardClipActions } from './storyboardClipActionTypes';
 
 export interface TextClipActions {
@@ -250,11 +251,7 @@ export interface GenerateClipAudioAnalysisOptions {
   derivedOnly?: boolean;
 }
 
-export interface SetClipSpeedOptions {
-  preservesPitch?: boolean;
-}
-
-export interface CoreClipActions {
+export interface CoreClipActions extends ClipSpeedActions {
   addClip: (
     trackId: string,
     file: File,
@@ -272,7 +269,6 @@ export interface CoreClipActions {
   splitClip: (clipId: string, splitTime: number) => void;
   splitClipAtPlayhead: () => void;
   updateClipTransform: (id: string, transform: ClipTransformUpdate) => void;
-  toggleClipReverse: (id: string) => void;
   generateWaveformForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
   generateProcessedWaveformForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
   generateSpectrogramForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
@@ -283,9 +279,6 @@ export interface CoreClipActions {
   cancelAudioAnalysisForClip: (clipId: string) => void;
   setClipParent: (clipId: string, parentClipId: string | null) => void;
   getClipChildren: (clipId: string) => TimelineClip[];
-  setClipSpeed: (clipId: string, speed: number, options?: SetClipSpeedOptions) => boolean;
-  setLinkedClipSpeedEnabled: (clipId: string, enabled: boolean) => boolean;
-  setClipPreservesPitch: (clipId: string, preservesPitch: boolean) => void;
   refreshCompClipNestedData: (sourceCompositionId: string) => Promise<void>;
   toggle3D: (clipId: string) => void;
 }

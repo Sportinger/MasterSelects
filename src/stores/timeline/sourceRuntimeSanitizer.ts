@@ -1,4 +1,4 @@
-import type { TimelineClip, TimelineClipDataSource } from '../../types';
+import type { TimelineClip, TimelineClipDataSource } from '../../types/timeline';
 
 const RUNTIME_SOURCE_KEYS = [
   'videoElement',

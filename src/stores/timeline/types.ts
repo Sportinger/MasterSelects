@@ -61,6 +61,7 @@ export type * from './storeTypes/audioActionTypes';
 export type * from './storeTypes/clipboardTypes';
 export type * from './storeTypes/captionClipActionTypes';
 export type * from './storeTypes/clipActionTypes';
+export type * from './storeTypes/clipSpeedActionTypes';
 export type * from './storeTypes/feedbackTypes';
 export type * from './storeTypes/maskActionTypes';
 export type * from './storeTypes/playbackActionTypes';

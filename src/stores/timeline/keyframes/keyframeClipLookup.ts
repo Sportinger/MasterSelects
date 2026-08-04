@@ -1,5 +1,5 @@
-import type { TimelineClip, TimelineTrack } from '../../../types';
-import type { Keyframe } from '../types';
+import type { Keyframe } from '../../../types/keyframes';
+import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
 
 export function findClipById(clips: TimelineClip[], clipId: string): TimelineClip | undefined {
   for (const clip of clips) {

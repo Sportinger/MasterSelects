@@ -1,14 +1,16 @@
 // Timeline serialization utilities - save, load, clear
 // Extracted from index.ts for maintainability
 
-import type { SliceCreator, TimelineClip, TimelineTrack, TimelineUtils, Keyframe, CompositionTimelineData } from './types';
+import type { Keyframe } from '../../types/keyframes';
+import type { CompositionTimelineData, TimelineClip, TimelineTrack } from '../../types/timeline';
+import type { SliceCreator } from './storeTypes/timelineStoreTypes';
+import type { TimelineUtils } from './storeTypes/utilityActionTypes';
 import { DEFAULT_TRACKS } from './constants';
 import { useMediaStore } from '../mediaStore';
 import { renderHostPort } from '../../services/render/renderHostPort';
 import { layerBuilder } from '../../services/layerBuilder';
 import { videoBakeProxyCache } from '../../services/videoBakeProxyCache';
 import { sanitizePlayheadPosition } from '../../services/layerBuilder/PlayheadState';
-import { thumbnailCacheService } from '../../services/thumbnailCacheService';
 import { clearAINodeRuntimeCache } from '../../services/nodeGraph';
 import { runtimeAudioMeterBus } from '../../services/audio/runtimeAudioMeterBus';
 import { withProjectStoreSyncGuard } from '../../services/project/projectStoreSyncGuard';
@@ -22,28 +24,17 @@ import { createSerializableTimelineState } from './serialization/serializableTim
 import { createLoadStateGeneratedClip } from './serialization/loadStateGeneratedClipRestore';
 import { restoreLoadStateCompositionClip } from './serialization/loadStateCompositionClipRestore';
 import { restoreLoadStateMediaClip } from './serialization/loadStateMediaClipRestore';
+import { restoreLoadStateLinkedSpeedState } from './serialization/loadStateLinkedSpeedRestore';
+import { restoreLoadStateSourceThumbnails } from './serialization/loadStateSourceThumbnailRestore';
 import { migrateRestoredCaptionClips } from './serialization/loadStateCaptionClipRestore';
 import { createDefaultRulerLaneState, normalizeRulerLaneState } from '../../timeline/tempo/rulerDefaults';
 import { CLEARED_TIMELINE_EDIT_PREVIEWS } from './serialization/transientTimelineState';
 import { Logger } from '../../services/logger';
 import { sanitizeTimelineParentRestoreTree } from '../../services/motionDesign/structure/timelineParentRestoreAdapter';
-import { normalizeFollowingAudioSpeedState } from './helpers/linkedClipSpeed';
-import { clearProcessedAudioAnalysisRefs } from './helpers/audioAnalysisStateHelpers';
 
 const log = Logger.create('TimelineSerialization');
 function getDefaultExpandedTrackIds(tracks: readonly TimelineTrack[]): string[] {
   return tracks.map(track => track.id);
-}
-
-function restoreSourceThumbnails(
-  mediaFileId: string | undefined,
-): void {
-  if (!mediaFileId) {
-    return;
-  }
-
-  const fileHash = useMediaStore.getState().files.find(f => f.id === mediaFileId)?.fileHash;
-  void thumbnailCacheService.loadCachedForSource(mediaFileId, fileHash);
 }
 
 type SerializationUtils = Pick<TimelineUtils, 'getSerializableState' | 'loadState' | 'clearTimeline'>;
@@ -164,6 +155,10 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
 
     // Restore clips - need to recreate media elements from file references
     const mediaStore = useMediaStore.getState();
+    const restoreSourceThumbnails = (mediaFileId: string | undefined) => restoreLoadStateSourceThumbnails(
+      mediaFileId,
+      mediaStore.files.find(file => file.id === mediaFileId)?.fileHash,
+    );
     const restoredClipBuffer: TimelineClip[] = [];
     const flushRestoredClipBuffer = () => {
       if (restoredClipBuffer.length === 0) {
@@ -277,16 +272,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         })),
       });
     }
-    const linkedSpeedRestore = normalizeFollowingAudioSpeedState(get().clips, get().clipKeyframes);
-    if (linkedSpeedRestore.changedAudioClipIds.length > 0) {
-      const changedIds = new Set(linkedSpeedRestore.changedAudioClipIds);
-      set({
-        clips: linkedSpeedRestore.clips.map(clip => changedIds.has(clip.id)
-          ? clearProcessedAudioAnalysisRefs(clip)
-          : clip),
-        clipKeyframes: linkedSpeedRestore.keyframes,
-      });
-    }
+    set(restoreLoadStateLinkedSpeedState(get().clips, get().clipKeyframes));
     await migrateRestoredCaptionClips(get().clips, get().ensureCaptionTextClip);
     get().relinkClipStemSeparationJobsFromMediaLibrary();
     scheduleRestoredCompositionAudioWarmup();

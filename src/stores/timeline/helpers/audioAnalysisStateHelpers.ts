@@ -1,4 +1,5 @@
-import type { AudioEffectInstance, ClipAudioState, TimelineClip } from '../../../types';
+import type { AudioEffectInstance, ClipAudioState } from '../../../types/audio';
+import type { TimelineClip } from '../../../types/timeline';
 import { audioEffectInstanceRequiresProcessedAnalysis } from '../../../services/audio/processedWaveformEligibility';
 
 const AUDIO_RELEVANT_UPDATE_KEYS = new Set<keyof TimelineClip>([

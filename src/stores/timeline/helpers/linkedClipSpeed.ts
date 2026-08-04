@@ -1,4 +1,5 @@
-import type { Keyframe, TimelineClip } from '../../../types';
+import type { Keyframe } from '../../../types/keyframes';
+import type { TimelineClip } from '../../../types/timeline';
 
 export const CLIP_SPEED_MIN_MULTIPLIER = 0.1;
 export const CLIP_SPEED_MAX_MULTIPLIER = 10;
