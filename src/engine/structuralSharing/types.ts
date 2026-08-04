@@ -22,6 +22,7 @@ export interface SerializedClipState {
   colorCorrection?: TimelineClip['colorCorrection'];
   speed?: number;
   preservesPitch?: boolean;
+  followsLinkedVideoSpeed?: boolean;
   reversed?: boolean;
   isComposition?: boolean;
   compositionId?: string;

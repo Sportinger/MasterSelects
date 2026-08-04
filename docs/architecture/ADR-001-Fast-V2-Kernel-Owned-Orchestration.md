@@ -25,6 +25,13 @@ kernel assigns atomic tools to categories and exposes them progressively to the
 provider. A fast path compiles to explicit public operation-plan steps; the
 editor validates and executes those steps without deciding the workflow.
 
+Source intelligence is media-owned at the public operation boundary. Transcript,
+visual/face analysis, and scene-description artifacts are projected once per
+media source in the bounded semantic snapshot; timeline clips reference that
+record by stable source identity instead of repeating the full artifacts after
+split operations. Clip-local transforms, effects, masks, timing, and overrides
+remain clip-owned.
+
 ## Rule for future changes
 
 When adding a capability, first decide which kind it is:

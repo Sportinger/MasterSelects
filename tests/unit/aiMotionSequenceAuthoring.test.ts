@@ -189,6 +189,23 @@ describe('AI atomic motion sequence authoring', () => {
       .toMatchObject({ id: stableId, value: 0.8, easing: 'ease-in' });
   });
 
+  it('commits an atomic sequence larger than the former 100-keyframe cap', async () => {
+    const sequence = Array.from({ length: 124 }, (_, index) => ({
+      clipId: CLIP_ID,
+      property: 'opacity',
+      value: index / 123,
+      time: (index / 123) * 5,
+      easing: 'linear',
+    }));
+
+    const result = await handleAddKeyframe({ sequence }, useTimelineStore.getState());
+
+    expect(result.success).toBe(true);
+    expect((result.data as { createdCount: number }).createdCount).toBe(124);
+    expect(useTimelineStore.getState().getClipKeyframes(CLIP_ID)).toHaveLength(124);
+    expect(getHistoryStateView().undoStack).toHaveLength(1);
+  });
+
   it('rejects duplicate or invalid sequence items before any write', async () => {
     const duplicate = await handleAddKeyframe({
       sequence: [

@@ -101,12 +101,14 @@ function formatElapsed(milliseconds: number): string {
 }
 
 function RunningIndicator({ detail, startedAt }: { detail?: string; startedAt?: number }) {
+  const [fallbackStartedAt] = useState(() => Date.now());
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(interval);
   }, []);
-  const elapsed = formatElapsed(startedAt === undefined ? 0 : now - startedAt);
+  const effectiveStartedAt = startedAt ?? fallbackStartedAt;
+  const elapsed = formatElapsed(now - effectiveStartedAt);
 
   return (
     <div
@@ -253,7 +255,7 @@ export function FlashBoardChatOutput({
       {isChatting && (
         <RunningIndicator
           detail={runningDetail}
-          startedAt={pendingMessage?.activityEvents?.[0]?.createdAt}
+          startedAt={pendingMessage?.createdAt ?? pendingMessage?.activityEvents?.[0]?.createdAt}
         />
       )}
     </div>

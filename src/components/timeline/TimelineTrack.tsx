@@ -43,6 +43,10 @@ import {
   type TimelinePaintFadeVisuals,
 } from '../../timeline';
 import { createWorkerDrawableClips } from './utils/timelineClipCanvasClipGeometry';
+import {
+  getClipSourceRate,
+  timelineDeltaToSourceDelta,
+} from '../../utils/clipPlaybackTiming';
 
 const TRACK_VIEWPORT_FALLBACK_PX = 1600;
 const TRACK_RENDER_OVERSCAN_PX = 1200;
@@ -361,6 +365,13 @@ function TimelineTrackComponent({
         const sourceDuration = getCanvasClipSourceDuration(clip);
         let previewEnd = clip.startTime + clip.duration;
         let sourceExtensionEnd = previewEnd;
+        const originalWindow = {
+          duration: clipTrim.originalDuration,
+          inPoint: clipTrim.originalInPoint,
+          outPoint: clipTrim.originalOutPoint,
+          speed: clip.speed,
+        };
+        const sourceRate = getClipSourceRate(originalWindow);
 
         if (clipTrim.edge === 'right') {
           const maxExtend = isInfiniteTimelineSourceType(sourceType) ||
@@ -369,17 +380,17 @@ function TimelineTrackComponent({
               shouldLoopVectorAnimation(clip.source?.vectorAnimationSettings)
             )
             ? Number.MAX_SAFE_INTEGER
-            : sourceDuration - clipTrim.originalOutPoint;
+            : (sourceDuration - clipTrim.originalOutPoint) / sourceRate;
           const minTrim = -(clipTrim.originalDuration - MIN_CLIP_DURATION);
           const clampedDelta = Math.max(minTrim, Math.min(maxExtend, clipTrim.appliedDelta));
           const previewDuration = Math.max(0.001, clipTrim.originalDuration + clampedDelta);
-          const previewOutPoint = clipTrim.originalOutPoint + clampedDelta;
+          const previewOutPoint = clipTrim.originalOutPoint + timelineDeltaToSourceDelta(originalWindow, clampedDelta);
           previewEnd = clipTrim.originalStartTime + previewDuration;
-          sourceExtensionEnd = previewEnd + Math.max(0, sourceDuration - previewOutPoint);
+          sourceExtensionEnd = previewEnd + Math.max(0, sourceDuration - previewOutPoint) / sourceRate;
         } else {
           const minTrim = isInfiniteTimelineSourceType(sourceType)
             ? -clipTrim.originalStartTime
-            : -clipTrim.originalInPoint;
+            : Math.max(-clipTrim.originalStartTime, -clipTrim.originalInPoint / sourceRate);
           const maxTrim = clipTrim.originalDuration - MIN_CLIP_DURATION;
           const clampedDelta = Math.max(minTrim, Math.min(maxTrim, clipTrim.appliedDelta));
           previewEnd = clipTrim.originalStartTime + clampedDelta + Math.max(0.001, clipTrim.originalDuration - clampedDelta);

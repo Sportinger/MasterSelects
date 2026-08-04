@@ -96,6 +96,7 @@ function createRestoredNestedClipCommon(
     reversed: serializedClip.reversed,
     speed: serializedClip.speed,
     preservesPitch: serializedClip.preservesPitch,
+    followsLinkedVideoSpeed: serializedClip.followsLinkedVideoSpeed,
     is3D: serializedClip.is3D,
     meshType: serializedClip.meshType,
     text3DProperties,

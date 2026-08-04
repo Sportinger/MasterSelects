@@ -250,6 +250,10 @@ export interface GenerateClipAudioAnalysisOptions {
   derivedOnly?: boolean;
 }
 
+export interface SetClipSpeedOptions {
+  preservesPitch?: boolean;
+}
+
 export interface CoreClipActions {
   addClip: (
     trackId: string,
@@ -279,6 +283,8 @@ export interface CoreClipActions {
   cancelAudioAnalysisForClip: (clipId: string) => void;
   setClipParent: (clipId: string, parentClipId: string | null) => void;
   getClipChildren: (clipId: string) => TimelineClip[];
+  setClipSpeed: (clipId: string, speed: number, options?: SetClipSpeedOptions) => boolean;
+  setLinkedClipSpeedEnabled: (clipId: string, enabled: boolean) => boolean;
   setClipPreservesPitch: (clipId: string, preservesPitch: boolean) => void;
   refreshCompClipNestedData: (sourceCompositionId: string) => Promise<void>;
   toggle3D: (clipId: string) => void;

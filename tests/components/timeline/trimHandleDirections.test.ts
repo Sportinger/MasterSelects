@@ -75,4 +75,27 @@ describe('trimHandleDirections', () => {
       expect(extendLeft.newDuration).toBe(9);
     }
   });
+
+  it('maps timeline trim deltas through the absolute playback speed', () => {
+    for (const speed of [2, -2]) {
+      const clip = createMockClip({
+        startTime: 0,
+        duration: 5,
+        inPoint: 0,
+        outPoint: 10,
+        speed,
+        source: { type: 'video', naturalDuration: 10 },
+      });
+
+      const trimEnd = computeTrimTiming(clip, 'right', trimOriginalsFromClip(clip), -1);
+      expect(trimEnd.newOutPoint).toBe(8);
+      expect(trimEnd.newDuration).toBe(4);
+      expect(trimEnd.targetTime).toBe(4);
+
+      const trimStart = computeTrimTiming(clip, 'left', trimOriginalsFromClip(clip), 1);
+      expect(trimStart.newStartTime).toBe(1);
+      expect(trimStart.newInPoint).toBe(2);
+      expect(trimStart.newDuration).toBe(4);
+    }
+  });
 });

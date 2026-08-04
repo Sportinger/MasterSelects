@@ -608,12 +608,12 @@ export function TimelineContextMenu({
         </div>
       )}
 
-      {isVideo && (
+      {(isVideo || isAudio) && (
         <div
           className={`context-menu-item ${clip?.reversed ? 'checked' : ''} ${!canModifyTargets ? 'disabled' : ''}`}
           onClick={() => runCommand({ kind: 'timeline', command: 'toggle-reverse', canExecute: canModifyTargets })}
         >
-          {clip?.reversed ? '\u2713 ' : ''}Reverse Playback
+          {clip?.reversed ? '\u2713 ' : ''}Reverse
         </div>
       )}
 

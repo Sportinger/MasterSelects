@@ -27,7 +27,6 @@ import {
 import { isMotionProperty } from '../../types/motionDesign';
 import { mergeLightClipSettings, parseLightProperty, setLightSettingValue } from '../../types/light';
 import { propertyRegistry } from '../../services/properties';
-import { calculateTimelineDuration } from '../../utils/speedIntegration';
 import { dispatchKeyframeRecordingFeedback } from '../../utils/keyframeRecordingFeedback';
 import { clearProcessedAudioAnalysisRefs } from './helpers/audioAnalysisStateHelpers';
 import { getClipTextBounds } from './keyframes/pathKeyframeValues';
@@ -49,6 +48,7 @@ import { createKeyframePathActions } from './keyframes/keyframePathActions';
 import { createKeyframeTransformInterpolationActions } from './keyframes/keyframeTransformInterpolationActions';
 import { isClipOnLockedTrack } from './keyframes/keyframeClipLookup';
 import { createKeyframeViewStateActions } from './keyframes/keyframeViewStateActions';
+import { resolveSpeedMutationTarget } from './helpers/linkedClipSpeed';
 
 export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => ({
   ...createKeyframeBasicActions(set, get),
@@ -58,6 +58,10 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
   ...createKeyframeAssetInterpolationActions(set, get),
 
   setPropertyValue: (clipId, property, value) => {
+    if (property === 'speed') {
+      get().setClipSpeed(clipId, value);
+      return;
+    }
     const { isRecording, addKeyframe, updateClipTransform, updateClipEffect, updateClipAudioEffectInstance, updateColorNodeParam, updateMask, updateTextProperties, setMaskEdgeFeather, clips, tracks, hasKeyframes, isPlaying } = get();
     if (isClipOnLockedTrack(clips, tracks, clipId)) return;
     const currentClip = clips.find(c => c.id === clipId);
@@ -82,23 +86,6 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
       }
       if (isPlaying && clips.some(c => c.id === clipId)) {
         dispatchKeyframeRecordingFeedback(clipId, property);
-      }
-      // Also update clip.speed and recalculate duration
-      if (property === 'speed') {
-        const { invalidateCache, clipKeyframes, updateDuration } = get();
-        const clip = clips.find(c => c.id === clipId);
-        if (clip) {
-          const keyframes = clipKeyframes.get(clipId) || [];
-          const sourceDuration = clip.outPoint - clip.inPoint;
-          const newDuration = calculateTimelineDuration(keyframes, sourceDuration, value);
-          set({
-            clips: clips.map(c => c.id === clipId
-              ? clearProcessedAudioAnalysisRefs({ ...c, speed: value, duration: newDuration })
-              : c)
-          });
-          updateDuration(); // Update timeline duration
-        }
-        invalidateCache();
       }
       const textBoundsProperty = parseTextBoundsProperty(property);
       if (textBoundsProperty && textBoundsProperty !== 'path') {
@@ -330,23 +317,6 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
         return;
       }
 
-      // Handle speed property (directly on clip, not transform)
-      if (property === 'speed') {
-        const { invalidateCache, updateDuration } = get();
-        const sourceDuration = clip.outPoint - clip.inPoint;
-        // For constant speed (no keyframes): duration = sourceDuration / |speed|
-        const absSpeed = Math.abs(value) || 0.01; // Avoid division by zero
-        const newDuration = sourceDuration / absSpeed;
-        set({
-          clips: clips.map(c => c.id === clipId
-            ? clearProcessedAudioAnalysisRefs({ ...c, speed: value, duration: newDuration })
-            : c)
-        });
-        updateDuration(); // Update timeline duration
-        invalidateCache();
-        return;
-      }
-
       // Build partial transform update from property path
       const transformUpdate: Partial<ClipTransform> = {};
 
@@ -385,6 +355,35 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     } = get();
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return;
+
+    if (property === 'speed') {
+      const target = resolveSpeedMutationTarget(clips, clipId);
+      if (!target) return;
+      const affectedIds = [target.leader.id, ...(target.follower ? [target.follower.id] : [])];
+      if (affectedIds.some(id => isClipOnLockedTrack(clips, get().tracks, id))) return;
+
+      const sourceDuration = target.leader.outPoint - target.leader.inPoint;
+      const absSpeed = Math.abs(currentValue) || 0.01;
+      const newDuration = sourceDuration / absSpeed;
+      const newMap = new Map(clipKeyframes);
+      for (const id of affectedIds) {
+        const remaining = (newMap.get(id) ?? []).filter(keyframe => keyframe.property !== 'speed');
+        if (remaining.length > 0) newMap.set(id, remaining);
+        else newMap.delete(id);
+      }
+      const newRecording = new Set(keyframeRecordingEnabled);
+      for (const id of affectedIds) newRecording.delete(`${id}:speed`);
+      set({
+        clips: clips.map(candidate => affectedIds.includes(candidate.id)
+          ? clearProcessedAudioAnalysisRefs({ ...candidate, speed: currentValue, duration: newDuration })
+          : candidate),
+        clipKeyframes: newMap,
+        keyframeRecordingEnabled: newRecording,
+      });
+      get().updateDuration();
+      invalidateCache();
+      return;
+    }
 
     // 1. Write current value to base clip value (same logic as setPropertyValue static path)
     const vectorAnimationState = parseVectorAnimationStateProperty(property);
@@ -544,17 +543,6 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
           clips: get().clips.map(c => c.id === clipId ? nextClip : c),
         });
       }
-    } else if (property === 'speed') {
-      const { updateDuration } = get();
-      const sourceDuration = clip.outPoint - clip.inPoint;
-      const absSpeed = Math.abs(currentValue) || 0.01;
-      const newDuration = sourceDuration / absSpeed;
-      set({
-        clips: get().clips.map(c => c.id === clipId
-          ? clearProcessedAudioAnalysisRefs({ ...c, speed: currentValue, duration: newDuration })
-          : c)
-      });
-      updateDuration();
     } else if (property === 'opacity') {
       updateClipTransform(clipId, { opacity: currentValue });
     } else if (property.startsWith('position.')) {

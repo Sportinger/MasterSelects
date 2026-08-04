@@ -324,6 +324,7 @@ function hydrateTransitionClip(
     reversed: clip.reversed,
     speed: clip.speed,
     preservesPitch: clip.preservesPitch,
+    followsLinkedVideoSpeed: clip.followsLinkedVideoSpeed,
     textProperties: optionalClone(clip.textProperties),
     text3DProperties: optionalClone(clip.text3DProperties),
     solidColor: clip.solidColor,

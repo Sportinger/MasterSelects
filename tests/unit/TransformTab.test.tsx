@@ -9,7 +9,11 @@ const mockState = vi.hoisted(() => ({
   sourceWidth: 3840,
   sourceHeight: 2160,
   isPlaying: false,
+  hasLinkedAudio: false,
+  linkedAudioFollowsVideo: true,
   setPropertyValue: vi.fn(),
+  setClipSpeed: vi.fn(),
+  setLinkedClipSpeedEnabled: vi.fn(),
   updateClipTransform: vi.fn(),
   toggle3D: vi.fn(),
   updateClip: vi.fn(),
@@ -35,18 +39,30 @@ vi.mock('../../src/stores/timeline', () => {
         ? { cameraSettings: mockState.cameraSettings }
         : {}),
     },
+    ...(mockState.hasLinkedAudio ? { linkedClipId: 'audio-1' } : {}),
     wireframe: false,
   });
+  const buildClips = () => [
+    buildClip(),
+    ...(mockState.hasLinkedAudio ? [{
+      id: 'audio-1',
+      source: { type: 'audio' },
+      linkedClipId: 'clip-1',
+      followsLinkedVideoSpeed: mockState.linkedAudioFollowsVideo ? undefined : false,
+    }] : []),
+  ];
 
   const useTimelineStore = Object.assign(
     vi.fn((selector: (state: unknown) => unknown) => selector({
-      clips: [buildClip()],
+      clips: buildClips(),
       isPlaying: mockState.isPlaying,
     })),
     {
       getState: vi.fn(() => ({
-        clips: [buildClip()],
+        clips: buildClips(),
         setPropertyValue: mockState.setPropertyValue,
+        setClipSpeed: mockState.setClipSpeed,
+        setLinkedClipSpeedEnabled: mockState.setLinkedClipSpeedEnabled,
         updateClipTransform: mockState.updateClipTransform,
         toggle3D: mockState.toggle3D,
         updateClip: mockState.updateClip,
@@ -126,7 +142,11 @@ describe('TransformTab position units', () => {
   beforeEach(() => {
     mockState.sourceType = 'gaussian-splat';
     mockState.isPlaying = false;
+    mockState.hasLinkedAudio = false;
+    mockState.linkedAudioFollowsVideo = true;
     mockState.setPropertyValue.mockClear();
+    mockState.setClipSpeed.mockClear();
+    mockState.setLinkedClipSpeedEnabled.mockClear();
     mockState.updateClipTransform.mockClear();
     mockState.setTimelineState.mockClear();
     mockState.toggle3D.mockClear();
@@ -184,7 +204,7 @@ describe('TransformTab position units', () => {
     expect(mockState.setPropertyValue).toHaveBeenCalledWith('clip-1', 'position.x', 1);
   });
 
-  it('accepts clip speed values up to 10000 percent', () => {
+  it('accepts clip speed values up to the native 1000 percent limit', () => {
     mockState.sourceType = 'video';
     const { container } = render(
       <TransformTab
@@ -198,10 +218,47 @@ describe('TransformTab position units', () => {
       .find((element) => element.textContent === '100%') as HTMLElement;
     fireEvent.doubleClick(speedControl);
     const input = container.querySelector('input.draggable-number-input') as HTMLInputElement;
-    fireEvent.change(input, { target: { value: '10000' } });
+    fireEvent.change(input, { target: { value: '1000' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
-    expect(mockState.setPropertyValue).toHaveBeenCalledWith('clip-1', 'speed', 100);
+    expect(mockState.setClipSpeed).toHaveBeenCalledWith('clip-1', 10);
+  });
+
+  it('accepts negative speed values for reverse playback and ramps', () => {
+    mockState.sourceType = 'video';
+    const { container } = render(
+      <TransformTab
+        clipId="clip-1"
+        transform={makeTransform({ x: 0, y: 0, z: 0 })}
+        speed={1}
+      />,
+    );
+
+    const speedControl = Array.from(container.querySelectorAll('.draggable-number'))
+      .find((element) => element.textContent === '100%') as HTMLElement;
+    fireEvent.doubleClick(speedControl);
+    const input = container.querySelector('input.draggable-number-input') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '-200' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(mockState.setClipSpeed).toHaveBeenCalledWith('clip-1', -2);
+  });
+
+  it('shows an enabled linked-audio speed toggle for imported video pairs', () => {
+    mockState.sourceType = 'video';
+    mockState.hasLinkedAudio = true;
+    const { getByRole } = render(
+      <TransformTab
+        clipId="clip-1"
+        transform={makeTransform({ x: 0, y: 0, z: 0 })}
+        speed={1}
+      />,
+    );
+
+    const toggle = getByRole('checkbox', { name: 'Link Audio Speed' });
+    expect(toggle).toBeChecked();
+    fireEvent.click(toggle);
+    expect(mockState.setLinkedClipSpeedEnabled).toHaveBeenCalledWith('clip-1', false);
   });
 
   it('accepts negative X and Y scale values for mirrored clips', () => {

@@ -27,6 +27,8 @@ import { createDefaultRulerLaneState, normalizeRulerLaneState } from '../../time
 import { CLEARED_TIMELINE_EDIT_PREVIEWS } from './serialization/transientTimelineState';
 import { Logger } from '../../services/logger';
 import { sanitizeTimelineParentRestoreTree } from '../../services/motionDesign/structure/timelineParentRestoreAdapter';
+import { normalizeFollowingAudioSpeedState } from './helpers/linkedClipSpeed';
+import { clearProcessedAudioAnalysisRefs } from './helpers/audioAnalysisStateHelpers';
 
 const log = Logger.create('TimelineSerialization');
 function getDefaultExpandedTrackIds(tracks: readonly TimelineTrack[]): string[] {
@@ -273,6 +275,16 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           code: item.failure.code,
           clipIds: item.failure.clipIds,
         })),
+      });
+    }
+    const linkedSpeedRestore = normalizeFollowingAudioSpeedState(get().clips, get().clipKeyframes);
+    if (linkedSpeedRestore.changedAudioClipIds.length > 0) {
+      const changedIds = new Set(linkedSpeedRestore.changedAudioClipIds);
+      set({
+        clips: linkedSpeedRestore.clips.map(clip => changedIds.has(clip.id)
+          ? clearProcessedAudioAnalysisRefs(clip)
+          : clip),
+        clipKeyframes: linkedSpeedRestore.keyframes,
       });
     }
     await migrateRestoredCaptionClips(get().clips, get().ensureCaptionTextClip);

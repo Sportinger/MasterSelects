@@ -49,6 +49,7 @@ export function serializeFallbackClip(clip: TimelineClip): SerializableClip {
     reversed: clip.reversed,
     speed: clip.speed,
     preservesPitch: clip.preservesPitch,
+    followsLinkedVideoSpeed: clip.followsLinkedVideoSpeed,
     textProperties: clip.textProperties ? clone(clip.textProperties) : undefined,
     text3DProperties: clip.text3DProperties ? clone(clip.text3DProperties) : undefined,
     solidColor: clip.solidColor,

@@ -219,8 +219,8 @@ function parseKeyframeRequests(args: Record<string, unknown>): KeyframeAuthoring
     if (!Array.isArray(args.sequence)) {
       throw new Error('sequence must be an array');
     }
-    if (args.sequence.length < 1 || args.sequence.length > 100) {
-      throw new Error('sequence must contain between 1 and 100 keyframes');
+    if (args.sequence.length < 1) {
+      throw new Error('sequence must contain at least one keyframe');
     }
     return args.sequence.map((item, index) => {
       if (!item || typeof item !== 'object' || Array.isArray(item)) {

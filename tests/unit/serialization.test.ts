@@ -190,6 +190,7 @@ describe('SerializableClip structure', () => {
       thumbnails: ['data:image/png;base64,abc', 'data:image/png;base64,def'],
       waveform: [0.1, 0.5, 0.8, 0.3],
       reversed: true,
+      followsLinkedVideoSpeed: false,
       isComposition: true,
       compositionId: 'comp-1',
       vectorAnimationSettings: {
@@ -222,6 +223,7 @@ describe('SerializableClip structure', () => {
     expect(restored.thumbnails).toEqual(['data:image/png;base64,abc', 'data:image/png;base64,def']);
     expect(restored.waveform).toEqual([0.1, 0.5, 0.8, 0.3]);
     expect(restored.reversed).toBe(true);
+    expect(restored.followsLinkedVideoSpeed).toBe(false);
     expect(restored.isComposition).toBe(true);
     expect(restored.compositionId).toBe('comp-1');
     expect(restored.vectorAnimationSettings).toEqual({

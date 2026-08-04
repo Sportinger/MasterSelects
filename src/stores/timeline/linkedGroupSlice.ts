@@ -11,6 +11,8 @@ import {
 import { Logger } from '../../services/logger';
 import { resolveAudibleAudioClip } from '../../services/audio/audioClipResolution';
 import { audioSync, type TimelineAudioSyncReport } from '../../services/audioSync';
+import { normalizeFollowingAudioSpeedState } from './helpers/linkedClipSpeed';
+import { clearProcessedAudioAnalysisRefs } from './helpers/audioAnalysisStateHelpers';
 
 const log = Logger.create('LinkedGroupSlice');
 
@@ -109,6 +111,7 @@ function getAudioSyncGuardSignature(clip: TimelineClip): string {
     sourceMediaFileId: clip.source?.mediaFileId,
     sourceType: clip.source?.type,
     speed: clip.speed,
+    followsLinkedVideoSpeed: clip.followsLinkedVideoSpeed,
     startTime: clip.startTime,
     trackId: clip.trackId,
   });
@@ -212,6 +215,18 @@ export const createLinkedGroupSlice: SliceCreator<LinkedGroupActions> = (set, ge
       selectedClipIds: new Set(useManualGroup ? linkTargetClipIds : targetClipIds),
       primarySelectedClipId: (useManualGroup ? linkTargetClipIds[0] : targetClipIds[0]) ?? null,
     });
+    if (!useManualGroup) {
+      const linkedSpeedState = normalizeFollowingAudioSpeedState(get().clips, get().clipKeyframes);
+      if (linkedSpeedState.changedAudioClipIds.length > 0) {
+        const changedAudioIds = new Set(linkedSpeedState.changedAudioClipIds);
+        set({
+          clips: linkedSpeedState.clips.map(clip => changedAudioIds.has(clip.id)
+            ? clearProcessedAudioAnalysisRefs(clip)
+            : clip),
+          clipKeyframes: linkedSpeedState.keyframes,
+        });
+      }
+    }
     invalidateCache();
     log.debug('Linked clips', { clipIds: linkTargetClipIds, groupId: manualGroupId });
   },

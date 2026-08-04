@@ -266,6 +266,15 @@ describe('parameter schemas for key tools', () => {
     expect(tool.function.parameters.required).toEqual([]);
   });
 
+  it('does not impose an item-count cap on atomic keyframe sequences', () => {
+    const tool = findTool('addKeyframe');
+    const sequence = tool.function.parameters.properties.sequence as Record<string, unknown>;
+
+    expect(sequence).toMatchObject({ type: 'array', minItems: 1 });
+    expect(sequence).not.toHaveProperty('maxItems');
+    expect(tool.function.description).not.toContain('1-100');
+  });
+
   it('setRenderHostMode requires a known mode enum', () => {
     const tool = findTool('setRenderHostMode');
     expect(tool.function.parameters.required).toEqual(['mode']);

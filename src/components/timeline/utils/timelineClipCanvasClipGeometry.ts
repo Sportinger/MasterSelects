@@ -13,6 +13,10 @@ import {
   isInfiniteTimelineSourceType,
 } from './clipSourceTiming';
 import type { TimelineClipCanvasTrimGeometry } from './timelineClipCanvasTrimResource';
+import {
+  getClipSourceRate,
+  timelineDeltaToSourceDelta,
+} from '../../../utils/clipPlaybackTiming';
 
 export interface TimelineClipCanvasGeometryInput {
   clipDrag?: ClipDragState | null;
@@ -102,28 +106,34 @@ export function resolveClipGeometry(
     const originalDuration = isPrimaryTrimClip ? clipTrim.originalDuration : clip.duration;
     const originalInPoint = isPrimaryTrimClip ? clipTrim.originalInPoint : inPoint;
     const originalOutPoint = isPrimaryTrimClip ? clipTrim.originalOutPoint : outPoint;
+    const originalWindow = {
+      duration: originalDuration,
+      inPoint: originalInPoint,
+      outPoint: originalOutPoint,
+    };
+    const sourceRate = getClipSourceRate(originalWindow);
     const sourceType = clip.source?.type;
     const isInfiniteClip = isInfiniteTimelineSourceType(sourceType);
     if (clipTrim.edge === 'left') {
       const maxTrim = originalDuration - MIN_CLIP_DURATION;
       const minTrim = isInfiniteClip
         ? -originalStartTime
-        : -originalInPoint;
+        : Math.max(-originalStartTime, -originalInPoint / sourceRate);
       const clampedDelta = Math.max(minTrim, Math.min(maxTrim, deltaTime));
       startTime = originalStartTime + clampedDelta;
       duration = originalDuration - clampedDelta;
-      inPoint = originalInPoint + clampedDelta;
+      inPoint = originalInPoint + timelineDeltaToSourceDelta(originalWindow, clampedDelta);
       outPoint = originalOutPoint;
     } else {
       const maxExtend = isInfiniteClip || canLoopExtendTimelineVectorClip(clip)
         ? Number.MAX_SAFE_INTEGER
-        : sourceDuration - originalOutPoint;
+        : (sourceDuration - originalOutPoint) / sourceRate;
       const minTrim = -(originalDuration - MIN_CLIP_DURATION);
       const clampedDelta = Math.max(minTrim, Math.min(maxExtend, deltaTime));
       startTime = originalStartTime;
       duration = originalDuration + clampedDelta;
       inPoint = originalInPoint;
-      outPoint = originalOutPoint + clampedDelta;
+      outPoint = originalOutPoint + timelineDeltaToSourceDelta(originalWindow, clampedDelta);
     }
   }
 

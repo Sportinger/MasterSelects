@@ -324,6 +324,7 @@ function mappingFor(
     inPoint: clip.inPoint,
     outPoint: clip.outPoint,
     speed: clip.speed,
+    followsLinkedVideoSpeed: clip.followsLinkedVideoSpeed,
     reversed: clip.reversed,
     speedKeyframes: (timelineStore.clipKeyframes.get(clip.id) ?? [])
       .filter((keyframe) => keyframe.property === 'speed')

@@ -56,6 +56,7 @@ import {
   buildFlashBoardChatErrorMessages,
   buildFlashBoardChatOptimisticMessages,
   buildFlashBoardChatSendPlan,
+  normalizeFlashBoardSubmittedPrompt,
 } from './FlashBoardChatSendPlanner';
 import {
   cancelFlashBoardBridgeChatMessage,
@@ -258,7 +259,7 @@ export function useFlashBoardChatController({
   ): Promise<FlashBoardBridgeChatResult> => {
     closePopover();
 
-    const effectiveChatPrompt = options?.prompt?.trim() ?? chatPrompt.trim();
+    const effectiveChatPrompt = normalizeFlashBoardSubmittedPrompt(options?.prompt ?? chatPrompt);
     const effectiveChatProvider = options?.activeDecision ? 'kernel' : chatProvider;
     const effectiveChatModelClass = options?.requestedModelClass ?? chatModelClass;
     if (

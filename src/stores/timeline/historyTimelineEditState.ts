@@ -102,6 +102,7 @@ export interface HistoryTimelineClipEditState {
   reversed?: boolean;
   speed?: number;
   preservesPitch?: boolean;
+  followsLinkedVideoSpeed?: boolean;
   freeRun?: boolean;
   textProperties?: TimelineClip['textProperties'];
   captionProperties?: TimelineClip['captionProperties'];
@@ -525,6 +526,7 @@ export function toHistoryTimelineClipEditState(
     reversed: clip.reversed,
     speed: clip.speed,
     preservesPitch: clip.preservesPitch,
+    followsLinkedVideoSpeed: clip.followsLinkedVideoSpeed,
     freeRun: clip.freeRun,
     textProperties: clip.textProperties,
     captionProperties: clip.captionProperties,

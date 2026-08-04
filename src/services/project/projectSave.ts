@@ -248,6 +248,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       disabled: c.disabled || false,
       speed: c.speed,
       preservesPitch: c.preservesPitch,
+      followsLinkedVideoSpeed: c.followsLinkedVideoSpeed,
       freeRun: c.freeRun,
       // Nested composition support
       isComposition: c.isComposition || undefined,

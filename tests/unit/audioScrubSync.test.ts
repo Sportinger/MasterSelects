@@ -21,6 +21,7 @@ import type { FrameContext, AudioSyncState } from '../../src/services/layerBuild
 import type { AudioMeterSnapshot, ClipAudioStemLayer, TimelineClip } from '../../src/types';
 import type { RenderResourceDescriptor } from '../../src/services/timeline/runtimeCoordinatorTypes';
 import { createMockClip } from '../helpers/mockData';
+import { clearMasterAudio, playheadState } from '../../src/services/layerBuilder/PlayheadState';
 
 const compositionAudioMixerMocks = vi.hoisted(() => ({
   mixdownComposition: vi.fn(),
@@ -274,6 +275,51 @@ describe('scrub audio sync', () => {
     clearCompositionAudioMixdownCache();
     compositionAudioMixerMocks.mixdownComposition.mockReset();
     compositionAudioMixerMocks.createAudioElement.mockReset();
+    clearMasterAudio();
+  });
+
+  it('keeps variable-speed clip audio as a follower of the timeline clock', () => {
+    const handler = new AudioSyncHandler();
+    const clip = makeClip({ speed: 2 });
+    const element = {
+      muted: false,
+      volume: 1,
+      playbackRate: 1,
+      currentTime: 1,
+      readyState: 4,
+      paused: false,
+      play: vi.fn().mockResolvedValue(undefined),
+      pause: vi.fn(),
+    } as unknown as HTMLAudioElement;
+    const state: AudioSyncState = {
+      audioPlayingCount: 0,
+      maxAudioDrift: 0,
+      hasAudioError: false,
+      masterSet: false,
+    };
+
+    handler.syncAudioElement(
+      {
+        element,
+        clip,
+        clipTime: 1,
+        absSpeed: 2,
+        isMuted: false,
+        canBeMaster: true,
+        type: 'audioTrack',
+      },
+      makeFrameContext({
+        clips: [clip],
+        clipsAtTime: [clip],
+        isDraggingPlayhead: false,
+        isPlaying: true,
+        hasKeyframes: (clipId: string, property?: string) => clipId === clip.id && property === 'speed',
+      }),
+      state,
+    );
+
+    expect(state.masterSet).toBe(false);
+    expect(playheadState.masterAudioElement).not.toBe(element);
   });
 
   it('applies clip volume during fallback scrub playback instead of a fixed default', () => {

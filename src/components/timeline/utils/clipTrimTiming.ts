@@ -13,6 +13,10 @@ import {
   isInfiniteTimelineSourceType,
 } from './clipSourceTiming';
 import { MIN_CLIP_DURATION } from '../timelineRenderConstants';
+import {
+  getClipSourceRate,
+  timelineDeltaToSourceDelta,
+} from '../../../utils/clipPlaybackTiming';
 
 export interface TrimOriginals {
   startTime: number;
@@ -39,35 +43,53 @@ export function computeTrimTiming(
   orig: TrimOriginals,
   deltaTime: number,
 ): TrimTimingResult {
+  const originalWindow = {
+    duration: orig.duration,
+    inPoint: orig.inPoint,
+    outPoint: orig.outPoint,
+    speed: clip.speed,
+  };
+  const sourceRate = getClipSourceRate(originalWindow);
   const maxDuration = isInfiniteTimelineSourceType(clip.source?.type)
     ? Number.MAX_SAFE_INTEGER
-    : (clip.source?.naturalDuration || orig.duration);
+    : (clip.source?.naturalDuration || Math.max(orig.outPoint, orig.inPoint));
 
   let newStartTime = orig.startTime;
   let newInPoint = orig.inPoint;
   let newOutPoint = orig.outPoint;
+  let appliedTimelineDelta = deltaTime;
 
   if (edge === 'left') {
     const maxTrim = orig.duration - MIN_CLIP_DURATION;
     const minTrim = isInfiniteTimelineSourceType(clip.source?.type)
       ? -orig.startTime
-      : -orig.inPoint;
+      : Math.max(-orig.startTime, -orig.inPoint / sourceRate);
     const clampedDelta = Math.max(minTrim, Math.min(maxTrim, deltaTime));
+    const sourceDelta = timelineDeltaToSourceDelta(originalWindow, clampedDelta);
+    appliedTimelineDelta = clampedDelta;
     newStartTime = orig.startTime + clampedDelta;
-    newInPoint = orig.inPoint + clampedDelta;
+    newInPoint = orig.inPoint + sourceDelta;
   } else {
     const maxExtend = canLoopExtendTimelineVectorClip(clip)
       ? Number.MAX_SAFE_INTEGER
-      : maxDuration - orig.outPoint;
+      : (maxDuration - orig.outPoint) / sourceRate;
     const minTrim = -(orig.duration - MIN_CLIP_DURATION);
     const clampedDelta = Math.max(minTrim, Math.min(maxExtend, deltaTime));
-    newOutPoint = orig.outPoint + clampedDelta;
+    const sourceDelta = timelineDeltaToSourceDelta(originalWindow, clampedDelta);
+    appliedTimelineDelta = clampedDelta;
+    newOutPoint = orig.outPoint + sourceDelta;
   }
 
   const resultEdge: 'start' | 'end' = edge === 'left' ? 'start' : 'end';
+  const newDuration = Math.max(
+    MIN_CLIP_DURATION,
+    edge === 'left'
+      ? orig.duration - appliedTimelineDelta
+      : orig.duration + appliedTimelineDelta,
+  );
   const targetTime = resultEdge === 'start'
     ? Math.max(0, newStartTime)
-    : clip.startTime + (newOutPoint - clip.inPoint);
+    : orig.startTime + newDuration;
 
   return {
     edge: resultEdge,
@@ -75,7 +97,7 @@ export function computeTrimTiming(
     newStartTime: Math.max(0, newStartTime),
     newInPoint,
     newOutPoint,
-    newDuration: Math.max(MIN_CLIP_DURATION, newOutPoint - newInPoint),
+    newDuration,
   };
 }
 

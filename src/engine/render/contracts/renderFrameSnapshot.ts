@@ -121,6 +121,7 @@ export interface RenderTimelineClipSnapshot {
   readonly reversed?: boolean;
   readonly speed?: number;
   readonly preservesPitch?: boolean;
+  readonly followsLinkedVideoSpeed?: boolean;
   readonly isComposition?: boolean;
   readonly compositionId?: string;
   readonly nestedClips?: readonly RenderTimelineClipSnapshot[];

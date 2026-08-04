@@ -31,6 +31,10 @@ import {
   resolveScaleValues,
 } from './transformTab/transformValues';
 import { calculateFitToFrameScale } from '../../../utils/sourcePixelScale';
+import {
+  isLinkedAudioFollowingVideo,
+  resolveLinkedVideoAudioPair,
+} from '../../../stores/timeline/helpers/linkedClipSpeed';
 
 function positiveDimension(value: number | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
@@ -62,6 +66,8 @@ export function TransformTab({
 }: TransformTabProps) {
   const {
     setPropertyValue,
+    setClipSpeed,
+    setLinkedClipSpeedEnabled,
     updateClipTransform,
     toggle3D,
     updateClip,
@@ -80,6 +86,10 @@ export function TransformTab({
   const setSceneNavNoKeyframes = useEngineStore((s) => s.setSceneNavNoKeyframes);
   const sceneNavFpsMoveSpeedIndex = getSceneNavFpsMoveSpeedStepIndex(sceneNavFpsMoveSpeed);
   const clip = useTimelineStore((s) => s.clips.find((c) => c.id === clipId));
+  const linkedAudioSpeedEnabled = useTimelineStore((state) => {
+    const pair = resolveLinkedVideoAudioPair(state.clips, clipId);
+    return pair?.video.id === clipId ? isLinkedAudioFollowingVideo(pair) : undefined;
+  });
   const wireframe = clip?.wireframe ?? false;
   const sourceType = clip?.source?.type;
   const supportsFreeRun = sourceType === 'video' && !clip?.source?.liveInputId;
@@ -321,7 +331,7 @@ export function TransformTab({
   const opacityPct = transform.opacity * 100;
   const handleOpacityChange = (pct: number) => handlePropertyChange('opacity', Math.max(0, Math.min(100, pct)) / 100);
   const speedPct = speed * 100;
-  const handleSpeedChange = (pct: number) => handlePropertyChange('speed', pct / 100);
+  const handleSpeedChange = (pct: number) => setClipSpeed(clipId, pct / 100);
   const handleThreeDEffectorsToggle = useCallback(() => {
     if (!clip?.source) return;
     updateClip(clipId, {
@@ -366,6 +376,7 @@ export function TransformTab({
         sceneNavNoKeyframes={sceneNavNoKeyframes}
         speed={speed}
         speedPct={speedPct}
+        linkedAudioSpeedEnabled={linkedAudioSpeedEnabled}
         supportsFreeRun={supportsFreeRun}
         freeRun={freeRun}
         supportsThreeDEffectorToggle={supportsThreeDEffectorToggle}
@@ -383,6 +394,7 @@ export function TransformTab({
         onSceneNavNoKeyframesChange={setSceneNavNoKeyframes}
         onSetAllCameraKeyframes={handleSetAllCameraKeyframes}
         onSpeedChange={handleSpeedChange}
+        onLinkedAudioSpeedChange={(enabled) => setLinkedClipSpeedEnabled(clipId, enabled)}
         onFreeRunToggle={() => updateClip(clipId, { freeRun: !freeRun })}
         onThreeDEffectorsToggle={handleThreeDEffectorsToggle}
         onToggle3D={() => toggle3D(clipId)}

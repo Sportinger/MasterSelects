@@ -21,6 +21,7 @@ import {
 import { createMaskPathProperty, type LayerSource, type TimelineClip } from '../../src/types';
 import { installFakeMediaStore } from '../helpers/fakeMediaStore';
 import { createMockClip, createMockKeyframe, createMockTrack } from '../helpers/mockData';
+import { handleSetClipSpeed } from '../../src/services/aiTools/handlers/playback';
 
 function createTransitionJunctionFixture(clipAId = 'clip-a', clipBId = 'clip-b', junctionTime = 10) {
   return {
@@ -2837,6 +2838,274 @@ describe('timeline edit operations kernel', () => {
     expect(result.success).toBe(true);
     expect(useTimelineStore.getState().clips.map((clip) => [clip.id, clip.duration, clip.speed, clip.preservesPitch])).toEqual([
       ['clip-1', 10, 0.5, true],
+    ]);
+  });
+
+  it('changes linked video and audio speed atomically by default', () => {
+    const video = createMockClip({
+      id: 'video-1', trackId: 'video-1', duration: 5, inPoint: 0, outPoint: 5,
+      source: { type: 'video' }, linkedClipId: 'audio-1', speed: 1,
+    });
+    const audio = createMockClip({
+      id: 'audio-1', trackId: 'audio-1', duration: 5, inPoint: 0, outPoint: 5,
+      source: { type: 'audio' }, linkedClipId: 'video-1', speed: 1,
+    });
+    useTimelineStore.setState({
+      tracks: [
+        createMockTrack({ id: 'video-1', type: 'video' }),
+        createMockTrack({ id: 'audio-1', type: 'audio' }),
+      ],
+      clips: [video, audio],
+      clipKeyframes: new Map(),
+    });
+
+    expect(useTimelineStore.getState().setClipSpeed('video-1', 2)).toBe(true);
+    expect(useTimelineStore.getState().clips.map(clip => [clip.id, clip.speed, clip.duration])).toEqual([
+      ['video-1', 2, 2.5],
+      ['audio-1', 2, 2.5],
+    ]);
+  });
+
+  it('keeps the speed-adjusted timeline duration when trimming linked clips', () => {
+    useTimelineStore.setState({
+      tracks: [
+        createMockTrack({ id: 'video-1', type: 'video' }),
+        createMockTrack({ id: 'audio-1', type: 'audio' }),
+      ],
+      clips: [
+        createMockClip({
+          id: 'video-1', trackId: 'video-1', duration: 5, inPoint: 0, outPoint: 10,
+          source: { type: 'video', naturalDuration: 10 }, linkedClipId: 'audio-1', speed: -2,
+        }),
+        createMockClip({
+          id: 'audio-1', trackId: 'audio-1', duration: 5, inPoint: 0, outPoint: 10,
+          source: { type: 'audio', naturalDuration: 10 }, linkedClipId: 'video-1', speed: -2,
+        }),
+      ],
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'trim-negative-speed-linked-pair',
+      type: 'trim-clip',
+      clipId: 'video-1',
+      inPoint: 0,
+      outPoint: 8,
+      includeLinked: true,
+    }, { source: 'ui' });
+
+    expect(result.success).toBe(true);
+    expect(useTimelineStore.getState().clips.map(clip => [
+      clip.id, clip.inPoint, clip.outPoint, clip.duration, clip.speed,
+    ])).toEqual([
+      ['video-1', 0, 8, 4, -2],
+      ['audio-1', 0, 8, 4, -2],
+    ]);
+  });
+
+  it('routes AI audio speed edits through the linked video timing leader', async () => {
+    useTimelineStore.setState({
+      tracks: [
+        createMockTrack({ id: 'video-1', type: 'video' }),
+        createMockTrack({ id: 'audio-1', type: 'audio' }),
+      ],
+      clips: [
+        createMockClip({
+          id: 'video-1', trackId: 'video-1', duration: 5, inPoint: 0, outPoint: 5,
+          source: { type: 'video' }, linkedClipId: 'audio-1', speed: 1,
+        }),
+        createMockClip({
+          id: 'audio-1', trackId: 'audio-1', duration: 5, inPoint: 0, outPoint: 5,
+          source: { type: 'audio' }, linkedClipId: 'video-1', speed: 1,
+        }),
+      ],
+      clipKeyframes: new Map(),
+    });
+
+    const result = await handleSetClipSpeed({
+      clipId: 'audio-1',
+      speed: 2,
+      preservePitch: false,
+    }, useTimelineStore.getState());
+
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({ clipId: 'audio-1', speed: 2, preservesPitch: false });
+    expect(useTimelineStore.getState().clips.map(clip => [
+      clip.id, clip.speed, clip.duration, clip.preservesPitch,
+    ])).toEqual([
+      ['video-1', 2, 2.5, false],
+      ['audio-1', 2, 2.5, false],
+    ]);
+  });
+
+  it('mirrors video speed keyframes onto following audio', () => {
+    useTimelineStore.setState({
+      tracks: [
+        createMockTrack({ id: 'video-1', type: 'video' }),
+        createMockTrack({ id: 'audio-1', type: 'audio' }),
+      ],
+      clips: [
+        createMockClip({
+          id: 'video-1', trackId: 'video-1', duration: 5, inPoint: 0, outPoint: 5,
+          source: { type: 'video' }, linkedClipId: 'audio-1', speed: 1,
+        }),
+        createMockClip({
+          id: 'audio-1', trackId: 'audio-1', duration: 5, inPoint: 0, outPoint: 5,
+          source: { type: 'audio' }, linkedClipId: 'video-1', speed: 1,
+        }),
+      ],
+      clipKeyframes: new Map(),
+      playheadPosition: 0,
+    });
+
+    useTimelineStore.getState().addKeyframe('video-1', 'speed', 1, 0);
+    useTimelineStore.setState({ playheadPosition: 2 });
+    expect(useTimelineStore.getState().setClipSpeed('video-1', 2)).toBe(true);
+
+    const videoSpeedKeyframes = (useTimelineStore.getState().clipKeyframes.get('video-1') ?? [])
+      .filter(keyframe => keyframe.property === 'speed');
+    const audioSpeedKeyframes = (useTimelineStore.getState().clipKeyframes.get('audio-1') ?? [])
+      .filter(keyframe => keyframe.property === 'speed');
+    expect(audioSpeedKeyframes.map(keyframe => [keyframe.time, keyframe.value, keyframe.easing])).toEqual(
+      videoSpeedKeyframes.map(keyframe => [keyframe.time, keyframe.value, keyframe.easing]),
+    );
+    expect(audioSpeedKeyframes.every(keyframe => keyframe.clipId === 'audio-1')).toBe(true);
+    expect(useTimelineStore.getState().clips.map(clip => clip.duration)).toEqual([
+      expect.any(Number),
+      expect.any(Number),
+    ]);
+    expect(useTimelineStore.getState().clips[0].duration).toBeCloseTo(useTimelineStore.getState().clips[1].duration, 6);
+  });
+
+  it('resizes a same-direction speed ramp before it can exhaust its source range', () => {
+    useTimelineStore.setState({
+      tracks: [
+        createMockTrack({ id: 'video-1', type: 'video' }),
+        createMockTrack({ id: 'audio-1', type: 'audio' }),
+      ],
+      clips: [
+        createMockClip({
+          id: 'video-1', trackId: 'video-1', duration: 18.3, inPoint: 0, outPoint: 18.3,
+          source: { type: 'video' }, linkedClipId: 'audio-1', speed: 2.5453,
+        }),
+        createMockClip({
+          id: 'audio-1', trackId: 'audio-1', duration: 18.3, inPoint: 0, outPoint: 18.3,
+          source: { type: 'audio' }, linkedClipId: 'video-1', speed: 2.5453,
+        }),
+      ],
+      clipKeyframes: new Map(),
+      playheadPosition: 0,
+    });
+
+    useTimelineStore.getState().addKeyframe('video-1', 'speed', 2.5453, 0);
+    useTimelineStore.setState({ playheadPosition: 8.6090724191 });
+    expect(useTimelineStore.getState().setClipSpeed('video-1', 1)).toBe(true);
+
+    const [video, audio] = useTimelineStore.getState().clips;
+    expect(video.duration).toBeCloseTo(11.649, 2);
+    expect(audio.duration).toBeCloseTo(video.duration, 6);
+    expect(video.duration).toBeLessThan(18.3);
+  });
+
+  it('creates a smooth forward-to-reverse speed ramp without resizing the clips', () => {
+    useTimelineStore.setState({
+      tracks: [
+        createMockTrack({ id: 'video-1', type: 'video' }),
+        createMockTrack({ id: 'audio-1', type: 'audio' }),
+      ],
+      clips: [
+        createMockClip({
+          id: 'video-1', trackId: 'video-1', duration: 5, inPoint: 0, outPoint: 5,
+          source: { type: 'video' }, linkedClipId: 'audio-1', speed: 1,
+        }),
+        createMockClip({
+          id: 'audio-1', trackId: 'audio-1', duration: 5, inPoint: 0, outPoint: 5,
+          source: { type: 'audio' }, linkedClipId: 'video-1', speed: 1,
+        }),
+      ],
+      clipKeyframes: new Map(),
+      playheadPosition: 0,
+    });
+
+    useTimelineStore.getState().addKeyframe('video-1', 'speed', 1, 0, 'ease-in-out');
+    useTimelineStore.setState({ playheadPosition: 2 });
+    expect(useTimelineStore.getState().setClipSpeed('video-1', -1)).toBe(true);
+
+    expect(useTimelineStore.getState().clips.map(clip => [clip.speed, clip.duration])).toEqual([
+      [-1, 5],
+      [-1, 5],
+    ]);
+    expect(useTimelineStore.getState().getInterpolatedSpeed('video-1', 1)).toBeCloseTo(0, 6);
+    expect(useTimelineStore.getState().getInterpolatedSpeed('audio-1', 1)).toBeCloseTo(0, 6);
+  });
+
+  it('allows independent audio speed only after its linked-speed toggle is off', () => {
+    const video = createMockClip({
+      id: 'video-1', trackId: 'video-1', duration: 5, inPoint: 0, outPoint: 5,
+      source: { type: 'video' }, linkedClipId: 'audio-1', speed: 1,
+    });
+    const audio = createMockClip({
+      id: 'audio-1', trackId: 'audio-1', duration: 5, inPoint: 0, outPoint: 5,
+      source: { type: 'audio' }, linkedClipId: 'video-1', speed: 1,
+    });
+    useTimelineStore.setState({
+      tracks: [
+        createMockTrack({ id: 'video-1', type: 'video' }),
+        createMockTrack({ id: 'audio-1', type: 'audio' }),
+      ],
+      clips: [video, audio],
+      clipKeyframes: new Map(),
+    });
+
+    expect(useTimelineStore.getState().setLinkedClipSpeedEnabled('audio-1', false)).toBe(true);
+    expect(useTimelineStore.getState().setClipSpeed('audio-1', 0.5)).toBe(true);
+    expect(useTimelineStore.getState().clips.map(clip => [
+      clip.id, clip.speed, clip.duration, clip.followsLinkedVideoSpeed,
+    ])).toEqual([
+      ['video-1', 1, 5, undefined],
+      ['audio-1', 0.5, 10, false],
+    ]);
+
+    expect(useTimelineStore.getState().setLinkedClipSpeedEnabled('video-1', true)).toBe(true);
+    expect(useTimelineStore.getState().clips.map(clip => [
+      clip.id, clip.speed, clip.duration, clip.followsLinkedVideoSpeed,
+    ])).toEqual([
+      ['video-1', 1, 5, undefined],
+      ['audio-1', 1, 5, undefined],
+    ]);
+  });
+
+  it('does not rate-stretch linked audio when independent speed is enabled', () => {
+    useTimelineStore.setState({
+      tracks: [
+        createMockTrack({ id: 'video-1', type: 'video' }),
+        createMockTrack({ id: 'audio-1', type: 'audio' }),
+      ],
+      clips: [
+        createMockClip({
+          id: 'video-1', trackId: 'video-1', duration: 5, inPoint: 0, outPoint: 5,
+          source: { type: 'video' }, linkedClipId: 'audio-1', speed: 1,
+        }),
+        createMockClip({
+          id: 'audio-1', trackId: 'audio-1', duration: 5, inPoint: 0, outPoint: 5,
+          source: { type: 'audio' }, linkedClipId: 'video-1', speed: 1,
+          followsLinkedVideoSpeed: false,
+        }),
+      ],
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'rate-stretch-independent-audio',
+      type: 'rate-stretch-clip',
+      clipId: 'video-1',
+      edge: 'end',
+      time: 10,
+      includeLinked: true,
+    }, { source: 'ui' });
+
+    expect(result.success).toBe(true);
+    expect(useTimelineStore.getState().clips.map(clip => [clip.id, clip.speed, clip.duration])).toEqual([
+      ['video-1', 0.5, 10],
+      ['audio-1', 1, 5],
     ]);
   });
 

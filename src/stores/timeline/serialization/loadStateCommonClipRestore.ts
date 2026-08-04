@@ -19,6 +19,7 @@ export function applyCommonRestoredClipFields(serializedClip: SerializableClip):
   | 'masks'
   | 'speed'
   | 'preservesPitch'
+  | 'followsLinkedVideoSpeed'
   | 'sourceRect'
   | 'transitionRender'
   | 'parentClipId'
@@ -38,6 +39,7 @@ export function applyCommonRestoredClipFields(serializedClip: SerializableClip):
     masks: serializedClip.masks,
     speed: serializedClip.speed,
     preservesPitch: serializedClip.preservesPitch,
+    followsLinkedVideoSpeed: serializedClip.followsLinkedVideoSpeed,
     sourceRect: serializedClip.sourceRect ? { ...serializedClip.sourceRect } : undefined,
     transitionRender: serializedClip.transitionRender ? structuredClone(serializedClip.transitionRender) : undefined,
     parentClipId: serializedClip.parentClipId,

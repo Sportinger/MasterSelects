@@ -114,6 +114,7 @@ export interface ProjectClip {
   // Speed
   speed?: number;
   preservesPitch?: boolean;
+  followsLinkedVideoSpeed?: boolean;
   freeRun?: boolean;
 
   // Nested composition support

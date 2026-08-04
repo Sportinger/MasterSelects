@@ -206,6 +206,7 @@ describe('TimelineContextMenu regenerate menu', () => {
     expect(screen.queryByText('Copy Color')).toBeNull();
     expect(screen.queryByText('Paste Color')).toBeNull();
     expect(screen.queryByText(/Show Thumbnail/)).toBeNull();
+    expect(screen.getByText('Reverse')).toBeTruthy();
   });
 
   it('exports the current frame as a jpg from visual clip menus', async () => {

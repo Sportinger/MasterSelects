@@ -3,6 +3,7 @@ import type {
   CompositionTimelineData,
   TimelineClip,
 } from '../../../types/timeline';
+import type { MediaSourceArtifactProjection } from '../../mediaArtifacts/mediaSourceArtifacts';
 import type {
   HostedAgentFastV2MediaOrientation,
   HostedAgentFastV2ProjectContextV2,
@@ -43,10 +44,145 @@ export interface HostedAgentFastV2SemanticTimelineStateInput {
   selectedLayerId: string | null;
   selectedVertexIds: readonly string[];
   serializedTimeline: CompositionTimelineData;
+  sourceArtifactsByMediaFileId?: ReadonlyMap<string, MediaSourceArtifactProjection>;
   storyboard: StoryboardProjectState;
   timelineRangeSelection: unknown;
   timelineRevision: number;
   transcriptsByClipId: ReadonlyMap<string, TimelineClip['transcript']>;
+}
+
+type MutableSourceArtifacts = MediaSourceArtifactProjection & {
+  transcriptProgress?: number;
+};
+
+interface SourceIntelligenceAccumulator {
+  artifacts: MutableSourceArtifacts;
+  clipIds: Set<string>;
+  id: string;
+  kind: 'clip' | 'media';
+  mediaFileId?: string;
+}
+
+function mediaFileIdForClip(
+  serializedClip: CompositionTimelineData['clips'][number],
+  runtimeClip: TimelineClip | undefined,
+): string | undefined {
+  const id = serializedClip.mediaFileId
+    || runtimeClip?.source?.mediaFileId
+    || runtimeClip?.mediaFileId;
+  return typeof id === 'string' && id.length > 0 ? id : undefined;
+}
+
+function hasSourceArtifacts(artifacts: MutableSourceArtifacts): boolean {
+  return Object.values(artifacts).some((value) => value !== undefined);
+}
+
+function mergeSourceArtifacts(
+  target: MutableSourceArtifacts,
+  candidate: MutableSourceArtifacts,
+  options: { authoritative?: boolean } = {},
+): void {
+  for (const [key, value] of Object.entries(candidate) as Array<
+    [keyof MutableSourceArtifacts, MutableSourceArtifacts[keyof MutableSourceArtifacts]]
+  >) {
+    if (value === undefined) continue;
+    const current = target[key];
+    const useCandidate = options.authoritative
+      || current === undefined
+      || (Array.isArray(value) && (!Array.isArray(current) || value.length > current.length))
+      || (key === 'analysis'
+        && typeof value === 'object'
+        && value !== null
+        && 'frames' in value
+        && Array.isArray(value.frames)
+        && (
+          typeof current !== 'object'
+          || current === null
+          || !('frames' in current)
+          || !Array.isArray(current.frames)
+          || value.frames.length > current.frames.length
+        ));
+    if (useCandidate) {
+      Object.assign(target, { [key]: value });
+    }
+  }
+}
+
+function sourceArtifactsFromClip(
+  clip: TimelineClip,
+  transcript: TimelineClip['transcript'],
+): MutableSourceArtifacts {
+  return {
+    analysis: clip.analysis,
+    analysisProgress: clip.analysisProgress,
+    analysisStatus: clip.analysisStatus,
+    faceAnalysisMessage: clip.faceAnalysisMessage,
+    faceAnalysisProgress: clip.faceAnalysisProgress,
+    faceAnalysisStatus: clip.faceAnalysisStatus,
+    sceneDescriptionMessage: clip.sceneDescriptionMessage,
+    sceneDescriptionProgress: clip.sceneDescriptionProgress,
+    sceneDescriptions: clip.sceneDescriptions,
+    sceneDescriptionStatus: clip.sceneDescriptionStatus,
+    transcript,
+    transcriptProgress: clip.transcriptProgress,
+    transcriptStatus: clip.transcriptStatus,
+  };
+}
+
+function buildSourceIntelligence(
+  input: HostedAgentFastV2SemanticTimelineStateInput,
+  runtimeClipsById: ReadonlyMap<string, TimelineClip>,
+): {
+  clipSourceIdByClipId: ReadonlyMap<string, string>;
+  sources: Record<string, unknown>[];
+} {
+  const accumulators = new Map<string, SourceIntelligenceAccumulator>();
+  const clipSourceIdByClipId = new Map<string, string>();
+
+  for (const serializedClip of input.serializedTimeline.clips) {
+    const runtimeClip = runtimeClipsById.get(serializedClip.id);
+    if (!runtimeClip) continue;
+    const mediaFileId = mediaFileIdForClip(serializedClip, runtimeClip);
+    const runtimeArtifacts = sourceArtifactsFromClip(
+      runtimeClip,
+      input.transcriptsByClipId.get(serializedClip.id) ?? runtimeClip.transcript,
+    );
+    if (!mediaFileId && !hasSourceArtifacts(runtimeArtifacts)) continue;
+
+    const sourceId = mediaFileId ? `media:${mediaFileId}` : `clip:${serializedClip.id}`;
+    const accumulator = accumulators.get(sourceId) ?? {
+      artifacts: {},
+      clipIds: new Set<string>(),
+      id: sourceId,
+      kind: mediaFileId ? 'media' : 'clip',
+      ...(mediaFileId === undefined ? {} : { mediaFileId }),
+    };
+    accumulator.clipIds.add(serializedClip.id);
+    mergeSourceArtifacts(accumulator.artifacts, runtimeArtifacts);
+    accumulators.set(sourceId, accumulator);
+    clipSourceIdByClipId.set(serializedClip.id, sourceId);
+  }
+
+  for (const accumulator of accumulators.values()) {
+    if (!accumulator.mediaFileId) continue;
+    const authoritative = input.sourceArtifactsByMediaFileId?.get(accumulator.mediaFileId);
+    if (authoritative) {
+      mergeSourceArtifacts(accumulator.artifacts, authoritative, { authoritative: true });
+    }
+  }
+
+  return {
+    clipSourceIdByClipId,
+    sources: [...accumulators.values()]
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((source) => ({
+        artifacts: source.artifacts,
+        clipIds: [...source.clipIds].sort(),
+        id: source.id,
+        kind: source.kind,
+        ...(source.mediaFileId === undefined ? {} : { mediaFileId: source.mediaFileId }),
+      })),
+  };
 }
 
 /**
@@ -78,38 +214,24 @@ export function buildHostedAgentFastV2SemanticTimelineState(
   input: HostedAgentFastV2SemanticTimelineStateInput,
 ): Record<string, unknown> {
   const runtimeClipsById = new Map(input.runtimeClips.map((clip) => [clip.id, clip]));
+  const sourceIntelligence = buildSourceIntelligence(input, runtimeClipsById);
   const clips = input.serializedTimeline.clips.map((serializedClip) => {
-    const runtimeClip = runtimeClipsById.get(serializedClip.id);
-    const transcript = input.transcriptsByClipId.get(serializedClip.id);
     return {
       ...serializedClip,
-      ...(transcript === undefined ? {} : { transcript }),
-      ...(runtimeClip?.transcriptStatus === undefined
-        ? {}
-        : { transcriptStatus: runtimeClip.transcriptStatus }),
-      ...(runtimeClip?.analysis === undefined ? {} : { analysis: runtimeClip.analysis }),
-      ...(runtimeClip?.analysisStatus === undefined
-        ? {}
-        : { analysisStatus: runtimeClip.analysisStatus }),
-      ...(runtimeClip?.faceAnalysisStatus === undefined
-        ? {}
-        : { faceAnalysisStatus: runtimeClip.faceAnalysisStatus }),
-      ...(runtimeClip?.faceAnalysisMessage === undefined
-        ? {}
-        : { faceAnalysisMessage: runtimeClip.faceAnalysisMessage }),
-      ...(runtimeClip?.sceneDescriptions === undefined
-        ? {}
-        : { sceneDescriptions: runtimeClip.sceneDescriptions }),
-      ...(runtimeClip?.sceneDescriptionStatus === undefined
-        ? {}
-        : { sceneDescriptionStatus: runtimeClip.sceneDescriptionStatus }),
+      ...(sourceIntelligence.clipSourceIdByClipId.has(serializedClip.id)
+        ? { sourceIntelligenceId: sourceIntelligence.clipSourceIdByClipId.get(serializedClip.id)! }
+        : {}),
     };
   });
 
   return sanitizeHostedAgentFastV2SemanticJson({
-    schemaVersion: 2,
+    schemaVersion: 3,
     activeComposition: input.activeComposition,
     projectContext: input.projectContext,
+    sourceIntelligence: {
+      schemaVersion: 1,
+      sources: sourceIntelligence.sources,
+    },
     timeline: {
       ...input.serializedTimeline,
       clips,

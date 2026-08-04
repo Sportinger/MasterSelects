@@ -347,6 +347,7 @@ export function convertProjectCompositionToStore(
         disabled: c.disabled,
         speed: c.speed,
         preservesPitch: c.preservesPitch,
+        followsLinkedVideoSpeed: c.followsLinkedVideoSpeed,
         freeRun: c.freeRun,
         isComposition: c.isComposition,
         compositionId: c.compositionId,

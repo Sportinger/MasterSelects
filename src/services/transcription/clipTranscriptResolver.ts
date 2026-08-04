@@ -21,6 +21,19 @@ export function resolveClipTranscriptWords(
   return file?.transcript?.length ? file.transcript : undefined;
 }
 
+export function resolveClipTranscriptWindow(
+  clip: Pick<
+    TimelineClip,
+    'inPoint' | 'outPoint' | 'transcript' | 'mediaFileId' | 'source'
+  >,
+): TranscriptWord[] | undefined {
+  const transcript = resolveClipTranscriptWords(clip);
+  if (!transcript) return undefined;
+  const sourceStart = Math.min(clip.inPoint, clip.outPoint);
+  const sourceEnd = Math.max(clip.inPoint, clip.outPoint);
+  return transcript.filter((word) => word.end >= sourceStart && word.start <= sourceEnd);
+}
+
 export function clipHasTranscript(
   clip: Pick<TimelineClip, 'transcript' | 'mediaFileId' | 'source'>,
 ): boolean {

@@ -497,6 +497,21 @@ describe('clipSlice', () => {
       expect(trimmed.duration).toBe(6); // outPoint - inPoint
     });
 
+    it('keeps static speed in the timeline duration when trimming directly', () => {
+      const clip = createMockClip({
+        id: 'clip-1', startTime: 0, duration: 5, inPoint: 0, outPoint: 10, speed: -2,
+      });
+      store = createTestTimelineStore({ clips: [clip] });
+
+      store.getState().trimClip('clip-1', 2, 8);
+      const trimmed = store.getState().clips.find(c => c.id === 'clip-1')!;
+
+      expect(trimmed.inPoint).toBe(2);
+      expect(trimmed.outPoint).toBe(8);
+      expect(trimmed.duration).toBe(3);
+      expect(trimmed.speed).toBe(-2);
+    });
+
     it('preserves other clip properties when trimming', () => {
       const clip = createMockClip({ id: 'clip-1', name: 'My Clip', startTime: 5, duration: 10, inPoint: 0, outPoint: 10 });
       store = createTestTimelineStore({ clips: [clip] });
@@ -1199,6 +1214,29 @@ describe('clipSlice', () => {
       expect(updated.reversed).toBe(true);
       expect(updated.audioState?.sourceAnalysisRefs).toEqual(audioState.sourceAnalysisRefs);
       expect(updated.audioState?.processedAnalysisRefs).toBeUndefined();
+    });
+
+    it('reverses an imported video and linked audio pair together', () => {
+      const video = createMockClip({
+        id: 'video-1',
+        trackId: 'video-1',
+        linkedClipId: 'audio-1',
+        source: { type: 'video' },
+      });
+      const audio = createMockClip({
+        id: 'audio-1',
+        trackId: 'audio-1',
+        linkedClipId: 'video-1',
+        source: { type: 'audio' },
+      });
+      store = createTestTimelineStore({ clips: [video, audio] });
+
+      store.getState().toggleClipReverse('audio-1');
+
+      expect(store.getState().clips.map(candidate => [candidate.id, candidate.reversed])).toEqual([
+        ['video-1', true],
+        ['audio-1', true],
+      ]);
     });
   });
 

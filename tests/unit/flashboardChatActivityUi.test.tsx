@@ -1,5 +1,5 @@
 import { createRef } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { FlashBoardChatOutput } from '../../src/components/panels/flashboard/FlashBoardChatOutput';
 import type { AgentActivityEvent } from '../../src/services/flashboard/FlashBoardChatTypes';
@@ -131,6 +131,39 @@ describe('FlashBoard narrated activity UI', () => {
     expect(indicator).toHaveTextContent('The edit is ready; I am verifying the result.');
     expect(container.querySelector('.fb-chat-running-elapsed')).toBeInTheDocument();
     expect(container.querySelector('.fb-chat-activity-log')).toBeInTheDocument();
+  });
+
+  it('starts counting from submission before the first activity event arrives', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(10_000);
+    const view = render(
+      <FlashBoardChatOutput
+        chatError={null}
+        chatHistoryRef={createRef<HTMLDivElement>()}
+        copiedChatMessageId={null}
+        isChatting
+        messages={[{
+          createdAt: 10_000,
+          id: 'assistant-waiting-for-activity',
+          role: 'assistant',
+          text: 'AI thinking...',
+          isPending: true,
+        }]}
+        onAuthClick={vi.fn()}
+        onMessageDoubleClick={vi.fn()}
+        onPricingClick={vi.fn()}
+        showChatCloudActions={false}
+      />,
+    );
+
+    try {
+      expect(view.container.querySelector('.fb-chat-running-elapsed')).toHaveTextContent('0s');
+      act(() => vi.advanceTimersByTime(2_100));
+      expect(view.container.querySelector('.fb-chat-running-elapsed')).toHaveTextContent('2s');
+    } finally {
+      view.unmount();
+      vi.useRealTimers();
+    }
   });
 
   it('pairs operation lifecycle events and groups repeated parallel tools', () => {

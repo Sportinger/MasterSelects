@@ -205,6 +205,7 @@ function createRestoredClip(
       reversed: clip.reversed,
       speed: clip.speed,
       preservesPitch: clip.preservesPitch,
+      followsLinkedVideoSpeed: clip.followsLinkedVideoSpeed,
       freeRun: clip.freeRun,
       textProperties: clonePlain(clip.textProperties),
       captionProperties: clonePlain(clip.captionProperties),

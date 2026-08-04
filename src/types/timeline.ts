@@ -141,6 +141,7 @@ export interface TimelineClip {
   reversed?: boolean;     // True if clip plays in reverse
   speed?: number;         // Playback speed (default 1.0, 0.5 = half speed, -1.0 = reverse)
   preservesPitch?: boolean;  // Keep pitch when speed changes (default true)
+  followsLinkedVideoSpeed?: boolean; // Audio-only: linked video owns speed/timing (default true)
   freeRun?: boolean;      // Preview the source continuously instead of seeking with the timeline
   // Nested composition support
   isComposition?: boolean;  // True if this clip is a nested composition
@@ -277,21 +278,21 @@ export interface SerializableClip {
   compositionId?: string;
   // Mask support
   masks?: ClipMask[];        // Masks applied to this clip
-  // Transcript data
+  // Legacy read compatibility only. New writers persist source intelligence
+  // once per mediaFileId and intentionally omit these fields from clips.
   transcript?: TranscriptWord[];
   transcriptStatus?: TranscriptStatus;
-  // Analysis data
   analysis?: ClipAnalysis;
   analysisStatus?: AnalysisStatus;
   faceAnalysisStatus?: import('./clipMetadata').FaceAnalysisStatus;
   faceAnalysisMessage?: string;
-  // AI scene description data
   sceneDescriptions?: SceneSegment[];
   sceneDescriptionStatus?: SceneDescriptionStatus;
   // Playback
   reversed?: boolean;
   speed?: number;         // Playback speed (default 1.0)
   preservesPitch?: boolean;  // Keep pitch when speed changes (default true)
+  followsLinkedVideoSpeed?: boolean; // Audio-only: linked video owns speed/timing (default true)
   freeRun?: boolean;
   // Text clip support
   textProperties?: TextClipProperties;

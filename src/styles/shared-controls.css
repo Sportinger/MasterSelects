@@ -350,6 +350,21 @@ input[type="checkbox"] {
   color: #7aabe0;
 }
 
+.draggable-number-disabled,
+.draggable-number-disabled:hover,
+.draggable-number-disabled:active {
+  color: var(--text-muted);
+  background: var(--bg-primary);
+  border-color: var(--border-color);
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.control-row-disabled .prop-label {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
 .draggable-number:active {
   color: #9cc4f0;
   cursor: grabbing;

@@ -4,6 +4,7 @@ import { FlashBoardActionStack } from '../../src/components/panels/flashboard/Fl
 import {
   buildFlashBoardChatOptimisticMessages,
   buildFlashBoardChatSendPlan,
+  normalizeFlashBoardSubmittedPrompt,
 } from '../../src/components/panels/flashboard/FlashBoardChatSendPlanner';
 
 function buildSendPlan(planThreeEnabled: boolean) {
@@ -24,6 +25,15 @@ function buildSendPlan(planThreeEnabled: boolean) {
 }
 
 describe('FlashBoard Plan 3 mode', () => {
+  it('collapses an exact adjacent duplicate at the chat submission boundary', () => {
+    expect(normalizeFlashBoardSubmittedPrompt(
+      'ok ,dann jetzt 200%- 140%ok ,dann jetzt 200%- 140%',
+    )).toBe('ok ,dann jetzt 200%- 140%');
+    expect(normalizeFlashBoardSubmittedPrompt('go go')).toBe('go go');
+    expect(normalizeFlashBoardSubmittedPrompt('Repeat this sentence. Repeat this sentence.'))
+      .toBe('Repeat this sentence. Repeat this sentence.');
+  });
+
   it('keeps a normal chat request unchanged while the toggle is off', () => {
     const plan = buildSendPlan(false);
 

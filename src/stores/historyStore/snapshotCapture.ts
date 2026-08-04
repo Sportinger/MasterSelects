@@ -1,5 +1,6 @@
 import { flashBoardMediaBridge } from '../../services/flashboard/FlashBoardMediaBridge';
 import type { Keyframe } from '../../types/keyframes';
+import type { TimelineClip } from '../../types/timeline';
 import { createDefaultFlashBoardComposer } from '../flashboardStore/defaults';
 import { createDefaultExportStoreData, getExportStoreData } from '../exportStore';
 import {
@@ -16,6 +17,16 @@ import {
   cloneTrackForHistory,
   deepClone,
 } from './snapshotCloning';
+
+function cloneClipWithoutSourceArtifacts(clip: TimelineClip): TimelineClip {
+  const {
+    analysis: _analysis,
+    sceneDescriptions: _sceneDescriptions,
+    transcript: _transcript,
+    ...clipState
+  } = clip;
+  return cloneClipForHistory(clipState as TimelineClip);
+}
 
 function createTimelineSnapshot(refs: HistoryStoreRefs): StateSnapshot['timeline'] {
   const timeline = refs.getTimelineState?.() || null;
@@ -81,7 +92,11 @@ function createTimelineSnapshotFromEditState(
     placeholderFileMode: 'plain-data',
   }).state;
   return {
-    clips: restored.clips.map(cloneClipForHistory),
+    // Source intelligence is owned once by snapshot.media.files and by the
+    // media-scoped project artifacts. The v2 timeline edit state already
+    // restores those projections by mediaFileId, so the compatibility
+    // timeline must not multiply them across every split clip.
+    clips: restored.clips.map(cloneClipWithoutSourceArtifacts),
     tracks: restored.tracks.map(cloneTrackForHistory),
     selectedClipIds: [...restored.selectedClipIds],
     selectedKeyframeIds: selectedKeyframeIds ? [...selectedKeyframeIds] : [],

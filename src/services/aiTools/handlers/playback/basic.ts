@@ -6,6 +6,7 @@ import {
   describeMutationEntities,
 } from '../mutationEntityResults';
 import type { PlaybackToolResult, TimelineStore } from './runtime';
+import { resolveLinkedVideoAudioPair } from '../../../../stores/timeline/helpers/linkedClipSpeed';
 
 export async function handlePlay(
   _args: Record<string, unknown>,
@@ -41,8 +42,14 @@ export async function handleSetClipSpeed(
     const speed = args.speed as number;
     if (speed <= 0) return { success: false, error: 'Speed must be positive. Use "reverse: true" for reverse playback.' };
 
-    // Use keyframe system for speed.
-    store.setPropertyValue(clipId, 'speed', speed);
+    const changed = store.setClipSpeed(clipId, speed, {
+      ...(args.preservePitch !== undefined
+        ? { preservesPitch: args.preservePitch as boolean }
+        : {}),
+    });
+    if (!changed) {
+      return { success: false, error: 'Could not change clip speed. Check the supported 0.1x-10x range and track locks.' };
+    }
   }
 
   if (args.reverse !== undefined) {
@@ -54,20 +61,22 @@ export async function handleSetClipSpeed(
     }
   }
 
-  if (args.preservePitch !== undefined) {
+  if (args.preservePitch !== undefined && args.speed === undefined) {
     store.setClipPreservesPitch(clipId, args.preservePitch as boolean);
   }
 
   store.invalidateCache();
 
   const finalClip = useTimelineStore.getState().clips.find(c => c.id === clipId);
+  const finalPair = resolveLinkedVideoAudioPair(useTimelineStore.getState().clips, clipId);
+  const pitchOwner = finalPair?.audio ?? finalClip;
   return {
     success: true,
     data: {
       clipId,
       speed: finalClip?.speed ?? 1,
       reversed: finalClip?.reversed ?? false,
-      preservesPitch: finalClip?.preservesPitch ?? true,
+      preservesPitch: pitchOwner?.preservesPitch ?? true,
       ...describeMutationEntities(
         mutationSnapshot,
         useTimelineStore.getState().clips,

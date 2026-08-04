@@ -8,23 +8,28 @@ export const HOSTED_AGENT_FAST_V2_PROTOCOL_VERSION = 'fast-agent-v2' as const;
 // former eight-call batching default. Keep a finite fail-closed ceiling.
 export const HOSTED_AGENT_FAST_V2_MAX_TOOL_CALLS_PER_ROUND = 256 as const;
 export const HOSTED_AGENT_FAST_V2_EDITOR_TOOL_CATALOG_DIGEST =
-  'sha256:0418657c23c5bbef2e5a9c270c4793208f5045201aee6b5a9bb2ec22855636ff' as const;
+  'sha256:d1a075975a98160f7997d592ab7e019e4516ca98a80503f6d9c59efdb7a74277' as const;
 export const HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_VERSION =
   PUBLIC_OPERATION_CONTRACT_V1.contractVersion;
 export const HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_DIGEST =
   PUBLIC_OPERATION_CONTRACT_DIGEST_V1;
 export const HOSTED_AGENT_FAST_V2_SERVICE_ENVELOPE_VERSION = 1 as const;
 export const HOSTED_AGENT_FAST_V2_PROMPT_VERSION =
-  'fast-v2-prompt-transcript-assembly-2026-08-03' as const;
+  'fast-v2-prompt-unbounded-keyframe-sequences-2026-08-03' as const;
 export const HOSTED_AGENT_FAST_V2_CAPABILITY_BUNDLE_VERSION =
   'fast-v2-transcript-assembly-2026-08-03' as const;
 export const HOSTED_AGENT_FAST_V2_MODEL_POLICY_VERSION =
   'fast-v2-model-policy-2026-08-02' as const;
 export const HOSTED_AGENT_FAST_V2_BUDGET_POLICY_VERSION =
-  'fast-v2-budget-policy-2026-08-01' as const;
+  'fast-v2-budget-policy-large-session-2026-08-03' as const;
 export const HOSTED_AGENT_FAST_V2_MAXIMUM_ITERATIONS = 24 as const;
 export const HOSTED_AGENT_FAST_V2_MAXIMUM_SPEND_CREDITS = 2_000 as const;
-export const HOSTED_AGENT_FAST_V2_MAX_START_BYTES = 1_400_000 as const;
+// Large projects still cross one finite browser/edge/kernel boundary. Keep the
+// byte and structural ceilings aligned with the private contract so future
+// split-heavy timelines have substantial headroom without admitting binaries.
+export const HOSTED_AGENT_FAST_V2_MAX_START_BYTES = 8 * 1024 * 1024;
+export const HOSTED_AGENT_FAST_V2_MAX_SNAPSHOT_JSON_NODES = 2_000_000 as const;
+export const HOSTED_AGENT_FAST_V2_MAX_SNAPSHOT_ARRAY_ITEMS = 250_000 as const;
 
 const IDENTIFIER_PATTERN = /^[A-Za-z0-9._:-]+$/;
 const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/;
@@ -190,14 +195,14 @@ function validJsonValue(
   budget: { nodes: number } = { nodes: 0 },
 ): boolean {
   budget.nodes += 1;
-  if (budget.nodes > 250_000 || depth > 40) return false;
+  if (budget.nodes > HOSTED_AGENT_FAST_V2_MAX_SNAPSHOT_JSON_NODES || depth > 40) return false;
   if (value === null || typeof value === 'boolean') return true;
   if (typeof value === 'number') return Number.isFinite(value);
   if (typeof value === 'string') {
     return value.length <= 100_000 && !/^\s*data:/i.test(value);
   }
   if (Array.isArray(value)) {
-    return value.length <= 50_000
+    return value.length <= HOSTED_AGENT_FAST_V2_MAX_SNAPSHOT_ARRAY_ITEMS
       && value.every((item) => validJsonValue(item, depth + 1, budget));
   }
   if (!isRecord(value) || Object.keys(value).length > 2_000) return false;

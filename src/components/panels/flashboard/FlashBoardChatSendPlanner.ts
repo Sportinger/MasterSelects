@@ -41,6 +41,23 @@ export type FlashBoardChatSendPlan =
   | { action: 'error'; dialogTarget?: FlashBoardChatDialogTarget; errorMessage: string }
   | { action: 'send'; request: FlashBoardChatPlannedRequest };
 
+const MIN_DUPLICATED_PROMPT_LENGTH = 16;
+
+export function normalizeFlashBoardSubmittedPrompt(value: string): string {
+  const prompt = value.trim();
+  if (prompt.length % 2 !== 0) return prompt;
+
+  const midpoint = prompt.length / 2;
+  const firstCopy = prompt.slice(0, midpoint);
+  if (
+    firstCopy.length < MIN_DUPLICATED_PROMPT_LENGTH
+    || !/\s/u.test(firstCopy)
+    || prompt.slice(midpoint) !== firstCopy
+  ) return prompt;
+
+  return firstCopy;
+}
+
 export function buildFlashBoardPlanThreePrompt(
   userPrompt: string,
   planThreeEnabled: boolean,

@@ -210,6 +210,7 @@ function createCompositionAudioClip(serializedClip: SerializableClip): TimelineC
     compositionId: serializedClip.compositionId,
     speed: serializedClip.speed,
     preservesPitch: serializedClip.preservesPitch,
+    followsLinkedVideoSpeed: serializedClip.followsLinkedVideoSpeed,
     mixdownGenerating: false,
     hasMixdownAudio: false,
   };
@@ -250,5 +251,6 @@ function createCompositionVideoClip(serializedClip: SerializableClip): TimelineC
     nestedTracks: [],
     speed: serializedClip.speed,
     preservesPitch: serializedClip.preservesPitch,
+    followsLinkedVideoSpeed: serializedClip.followsLinkedVideoSpeed,
   };
 }

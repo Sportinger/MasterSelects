@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_DIGEST,
   HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_VERSION,
+  HOSTED_AGENT_FAST_V2_MAX_START_BYTES,
   HOSTED_AGENT_FAST_V2_MAXIMUM_ITERATIONS,
   HostedAgentFastV2ContractError,
   parseHostedAgentFastV2StartRequest,
@@ -174,16 +175,45 @@ describe('Fast Agent V2 browser start contract', () => {
       .toThrow(HostedAgentFastV2ContractError);
   });
 
-  it('enforces one canonical UTF-8 byte ceiling across snapshot and visual data', () => {
-    const request = validStartRequest();
-    request.visualReferences = [1, 2].map((index) => ({
+  it('admits substantially larger sessions and keeps one canonical UTF-8 ceiling', () => {
+    const formerlyOversized = validStartRequest();
+    formerlyOversized.visualReferences = [1, 2].map((index) => ({
       id: `reference-${index}`,
       mediaType: 'image/png',
       role: 'initial',
       source: `data:image/png;base64,${'A'.repeat(700_000)}`,
       transport: 'data-url',
     }));
-    expect(() => parseHostedAgentFastV2StartRequest(request))
+    expect(parseHostedAgentFastV2StartRequest(formerlyOversized).visualReferences)
+      .toHaveLength(2);
+
+    const oversized = validStartRequest();
+    oversized.visualReferences = Array.from({ length: 8 }, (_, index) => ({
+      id: `large-reference-${index}`,
+      mediaType: 'image/png',
+      role: 'initial',
+      source: `data:image/png;base64,${String.fromCharCode(65 + index).repeat(1_100_000)}`,
+      transport: 'data-url',
+    }));
+    expect(new TextEncoder().encode(JSON.stringify(oversized)).byteLength)
+      .toBeGreaterThan(HOSTED_AGENT_FAST_V2_MAX_START_BYTES);
+    expect(() => parseHostedAgentFastV2StartRequest(oversized))
       .toThrow('canonical total byte bound');
+  });
+
+  it('accepts semantic snapshots above the former 250,000-node ceiling', () => {
+    const request = validStartRequest();
+    request.compactSnapshot = {
+      ...(request.compactSnapshot as Record<string, unknown>),
+      payload: {
+        sourceWindows: Object.fromEntries(Array.from(
+          { length: 600 },
+          (_, index) => [`source-${index}`, Array.from({ length: 600 }, () => 0)],
+        )),
+      },
+    };
+
+    expect(parseHostedAgentFastV2StartRequest(request).compactSnapshot.timelineRevision)
+      .toBe(12);
   });
 });

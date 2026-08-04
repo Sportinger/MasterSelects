@@ -10,6 +10,14 @@ import type {
   TrimClipOperation,
   TrimEdgeToTimeOperation,
 } from './types';
+import {
+  isLinkedAudioFollowingVideo,
+  resolveLinkedVideoAudioPair,
+} from '../helpers/linkedClipSpeed';
+import {
+  getTimelineDurationForSourceWindow,
+  timelineDeltaToSourceDelta,
+} from '../../../utils/clipPlaybackTiming';
 
 export const MIN_CLIP_DURATION = 0.04;
 const EPSILON = 0.0001;
@@ -43,7 +51,7 @@ function updateTrimmedClip(
 ): TimelineClip {
   const inPoint = updates.inPoint ?? clip.inPoint;
   const outPoint = updates.outPoint ?? clip.outPoint;
-  const duration = updates.duration ?? (outPoint - inPoint);
+  const duration = updates.duration ?? getTimelineDurationForSourceWindow(clip, inPoint, outPoint);
   return clearProcessedAudioAnalysisRefs({
     ...clip,
     ...(updates.startTime !== undefined ? { startTime: Math.max(0, updates.startTime) } : {}),
@@ -103,7 +111,7 @@ function applyTrimUpdates(
 
     const inPoint = updates.inPoint ?? clip.inPoint;
     const outPoint = updates.outPoint ?? clip.outPoint;
-    const duration = updates.duration ?? (outPoint - inPoint);
+    const duration = updates.duration ?? getTimelineDurationForSourceWindow(clip, inPoint, outPoint);
     if (!Number.isFinite(inPoint) || !Number.isFinite(outPoint) || !Number.isFinite(duration) || duration < MIN_CLIP_DURATION) {
       warnings.push({ code: 'invalid-range', message: 'Trim range must keep a positive clip duration.', clipId });
       continue;
@@ -155,9 +163,10 @@ export function applyTrimClipOperation(
     };
   }
 
-  const updates = {
+  const updates: ClipTrimUpdate = {
     inPoint: operation.inPoint,
     outPoint: operation.outPoint,
+    duration: getTimelineDurationForSourceWindow(clip, operation.inPoint, operation.outPoint),
     ...(operation.startTime !== undefined ? { startTime: operation.startTime } : {}),
   };
   const updatesByClipId = new Map<string, ClipTrimUpdate>([
@@ -174,6 +183,7 @@ export function applyTrimClipOperation(
     const extraUpdates: ClipTrimUpdate = {
       inPoint: extra.inPoint,
       outPoint: extra.outPoint,
+      duration: getTimelineDurationForSourceWindow(extraClip, extra.inPoint, extra.outPoint),
       ...(extra.startTime !== undefined ? { startTime: extra.startTime } : {}),
     };
     updatesByClipId.set(extra.clipId, extraUpdates);
@@ -226,9 +236,17 @@ export function applyTrimEdgeToTimeOperation(
     }
 
     const offset = operation.time - clip.startTime;
+    const sourceOffset = timelineDeltaToSourceDelta(clip, offset);
     const updates = operation.edge === 'start'
-      ? { startTime: operation.time, inPoint: clip.inPoint + offset }
-      : { outPoint: clip.inPoint + offset };
+      ? {
+          startTime: operation.time,
+          inPoint: clip.inPoint + sourceOffset,
+          duration: getClipEnd(clip) - operation.time,
+        }
+      : {
+          outPoint: clip.inPoint + sourceOffset,
+          duration: offset,
+        };
     updatesByClipId.set(clip.id, updates);
     pushLinkedTrim(updatesByClipId, clips, clip, updates, operation.includeLinked);
   }
@@ -361,9 +379,10 @@ export function applyRippleTrimEdgeToTimeOperation(
       }
       const removedDuration = operation.time - originalStart;
       const updates = {
-        inPoint: clip.inPoint + removedDuration,
+        inPoint: clip.inPoint + timelineDeltaToSourceDelta(clip, removedDuration),
         outPoint: clip.outPoint,
         startTime: originalStart,
+        duration: clip.duration - removedDuration,
       };
       updatesByClipId.set(clip.id, updates);
       pushLinkedTrim(updatesByClipId, clips, clip, updates, operation.includeLinked);
@@ -377,7 +396,8 @@ export function applyRippleTrimEdgeToTimeOperation(
       }
       const removedDuration = originalEnd - operation.time;
       const updates = {
-        outPoint: clip.outPoint - removedDuration,
+        outPoint: clip.outPoint - timelineDeltaToSourceDelta(clip, removedDuration),
+        duration: clip.duration - removedDuration,
       };
       updatesByClipId.set(clip.id, updates);
       pushLinkedTrim(updatesByClipId, clips, clip, updates, operation.includeLinked);
@@ -430,11 +450,16 @@ function addRollingPairUpdates(
 
   const rightSourceDelta = editTime - rightClip.startTime;
   updatesByClipId.set(leftClip.id, {
-    outPoint: leftClip.inPoint + leftDuration,
+    outPoint: leftClip.outPoint + timelineDeltaToSourceDelta(
+      leftClip,
+      leftDuration - leftClip.duration,
+    ),
+    duration: leftDuration,
   });
   updatesByClipId.set(rightClip.id, {
     startTime: editTime,
-    inPoint: rightClip.inPoint + rightSourceDelta,
+    inPoint: rightClip.inPoint + timelineDeltaToSourceDelta(rightClip, rightSourceDelta),
+    duration: rightDuration,
   });
   return true;
 }
@@ -527,14 +552,17 @@ function addSlideTripletUpdates(
   delta: number,
 ): void {
   updatesByClipId.set(previousClip.id, {
-    outPoint: previousClip.outPoint + delta,
+    outPoint: previousClip.outPoint + timelineDeltaToSourceDelta(previousClip, delta),
+    duration: previousClip.duration + delta,
   });
   updatesByClipId.set(clip.id, {
     startTime: clip.startTime + delta,
+    duration: clip.duration,
   });
   updatesByClipId.set(nextClip.id, {
     startTime: nextClip.startTime + delta,
-    inPoint: nextClip.inPoint + delta,
+    inPoint: nextClip.inPoint + timelineDeltaToSourceDelta(nextClip, delta),
+    duration: nextClip.duration - delta,
   });
 }
 
@@ -630,6 +658,16 @@ export function applyRateStretchClipOperation(
   };
 
   const updatesByClipId = new Map<string, ClipTrimUpdate>([[clip.id, updates]]);
-  pushLinkedTrim(updatesByClipId, clips, clip, updates, operation.includeLinked);
+  const linkedPair = resolveLinkedVideoAudioPair(clips, clip.id);
+  const includeLinkedSpeed = operation.includeLinked !== false && (
+    !linkedPair || isLinkedAudioFollowingVideo(linkedPair)
+  );
+  const linkedClip = linkedPair
+    ? (linkedPair.video.id === clip.id ? linkedPair.audio : linkedPair.video)
+    : undefined;
+  const linkedUpdates = linkedClip && operation.preservesPitch === undefined
+    ? { ...updates, preservesPitch: linkedClip.preservesPitch ?? true }
+    : updates;
+  pushLinkedTrim(updatesByClipId, clips, clip, linkedUpdates, includeLinkedSpeed);
   return applyTrimUpdates(clips, tracks, updatesByClipId);
 }

@@ -29,6 +29,7 @@ export interface EditableDraggableNumberProps {
   max?: number;
   persistenceKey?: string;
   ariaLabel?: string;
+  disabled?: boolean;
   onDragStart?: () => void;
   onDragEnd?: () => void;
 }
@@ -94,6 +95,7 @@ export function EditableDraggableNumber({
   max,
   persistenceKey,
   ariaLabel,
+  disabled = false,
   onDragStart,
   onDragEnd,
 }: EditableDraggableNumberProps) {
@@ -132,13 +134,14 @@ export function EditableDraggableNumber({
   const effectiveDefaultValue = persistedSettings?.defaultValue ?? defaultValue;
 
   const controlTitle = useMemo(() => {
+    if (disabled) return 'Controlled by linked video speed';
     const parts = ['Drag to change', 'Shift-drag coarse', 'Ctrl-drag fine', 'double-click to type'];
     if (effectiveDefaultValue !== undefined) {
       parts.push('right-click to default');
     }
     parts.push('middle-click for range');
     return parts.join(', ');
-  }, [effectiveDefaultValue]);
+  }, [disabled, effectiveDefaultValue]);
 
   useEffect(() => {
     if (!isEditing) return;
@@ -260,12 +263,14 @@ export function EditableDraggableNumber({
   }, []);
 
   const beginEditing = useCallback(() => {
+    if (disabled) return;
     setShowBoundsPopover(false);
     setDraftValue(formatEditableValue(value, decimals));
     setIsEditing(true);
-  }, [decimals, value]);
+  }, [decimals, disabled, value]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (disabled) return;
     if (isEditing) return;
     if (e.button === 1) {
       e.preventDefault();
@@ -378,6 +383,7 @@ export function EditableDraggableNumber({
   }, [
     beginEditing,
     decimals,
+    disabled,
     effectiveMax,
     effectiveMin,
     onChange,
@@ -472,7 +478,7 @@ export function EditableDraggableNumber({
     setIsEditing(false);
   }, [cancelEditing, decimals, draftValue, effectiveMax, effectiveMin, onChange]);
 
-  const popover = showBoundsPopover && typeof document !== 'undefined'
+  const popover = showBoundsPopover && !disabled && typeof document !== 'undefined'
     ? createPortal(
         <div
           ref={popoverRef}
@@ -533,11 +539,16 @@ export function EditableDraggableNumber({
     : null;
 
   return (
-    <span ref={rootRef} className="draggable-number-anchor">
-      {isEditing ? (
+    <span
+      ref={rootRef}
+      className={`draggable-number-anchor ${disabled ? 'draggable-number-anchor-disabled' : ''}`}
+      aria-disabled={disabled}
+    >
+      {isEditing && !disabled ? (
         <input
           ref={inputRef}
           className="draggable-number draggable-number-input"
+          disabled={disabled}
           type="text"
           inputMode="decimal"
           aria-label={ariaLabel}
@@ -559,8 +570,9 @@ export function EditableDraggableNumber({
       ) : (
         <span
           ref={spanRef}
-          className="draggable-number"
+          className={`draggable-number ${disabled ? 'draggable-number-disabled' : ''}`}
           aria-label={ariaLabel}
+          aria-disabled={disabled}
           onMouseDown={handleMouseDown}
           onAuxClick={(e) => {
             if (e.button === 1) {
@@ -569,6 +581,7 @@ export function EditableDraggableNumber({
             }
           }}
           onDoubleClick={(e) => {
+            if (disabled) return;
             e.preventDefault();
             e.stopPropagation();
             beginEditing();
@@ -576,6 +589,7 @@ export function EditableDraggableNumber({
           onContextMenu={(e) => {
             e.preventDefault();
             e.stopPropagation();
+            if (disabled) return;
             handleResetToDefault();
           }}
           title={controlTitle}

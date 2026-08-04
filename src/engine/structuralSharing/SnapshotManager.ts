@@ -191,6 +191,7 @@ export class SnapshotManager {
       colorCorrection: clip.colorCorrection ? structuredClone(clip.colorCorrection) : undefined,
       speed: clip.speed,
       preservesPitch: clip.preservesPitch,
+      followsLinkedVideoSpeed: clip.followsLinkedVideoSpeed,
       reversed: clip.reversed,
       isComposition: clip.isComposition,
       compositionId: clip.compositionId,

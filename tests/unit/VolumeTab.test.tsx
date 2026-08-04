@@ -81,6 +81,83 @@ describe('VolumeTab', () => {
     expect(container.querySelector('.flex-eq')).toBeNull();
   });
 
+  it('greys linked audio speed until follow-video speed is turned off', () => {
+    useTimelineStore.setState({
+      clips: [
+        createMockClip({
+          id: 'video-1',
+          trackId: 'video-1',
+          duration: 5,
+          inPoint: 0,
+          outPoint: 5,
+          speed: 1,
+          linkedClipId: 'clip-1',
+          source: { type: 'video' },
+        }),
+        createMockClip({
+          id: 'clip-1',
+          trackId: 'audio-1',
+          duration: 5,
+          inPoint: 0,
+          outPoint: 5,
+          speed: 1,
+          linkedClipId: 'video-1',
+          effects: [],
+          source: { type: 'audio', naturalDuration: 5 },
+        }),
+      ],
+      tracks: [
+        createMockTrack({ id: 'video-1', type: 'video' }),
+        createMockTrack({ id: 'audio-1', type: 'audio' }),
+      ],
+    });
+    render(<VolumeTab clipId="clip-1" effects={[]} />);
+
+    const followToggle = screen.getByRole('checkbox', { name: 'Follow Linked Video Speed' });
+    expect(followToggle).toBeChecked();
+    expect(screen.getByLabelText('Audio speed')).toHaveAttribute('aria-disabled', 'true');
+
+    fireEvent.click(followToggle);
+    expect(useTimelineStore.getState().clips.find(clip => clip.id === 'clip-1')?.followsLinkedVideoSpeed).toBe(false);
+
+    const speedControl = screen.getByLabelText('Audio speed');
+    expect(speedControl).toHaveAttribute('aria-disabled', 'false');
+    fireEvent.doubleClick(speedControl);
+    fireEvent.change(screen.getByTitle('Enter value'), { target: { value: '50' } });
+    fireEvent.keyDown(screen.getByTitle('Enter value'), { key: 'Enter' });
+
+    expect(useTimelineStore.getState().clips.map(clip => [clip.id, clip.speed, clip.duration])).toEqual([
+      ['video-1', 1, 5],
+      ['clip-1', 0.5, 10],
+    ]);
+  });
+
+  it('accepts a negative speed for independently timed audio', () => {
+    useTimelineStore.setState({
+      clips: [createMockClip({
+        id: 'clip-1',
+        trackId: 'audio-1',
+        duration: 5,
+        inPoint: 0,
+        outPoint: 5,
+        speed: 1,
+        effects: [],
+        source: { type: 'audio', naturalDuration: 5 },
+      })],
+      tracks: [createMockTrack({ id: 'audio-1', type: 'audio' })],
+    });
+    render(<VolumeTab clipId="clip-1" effects={[]} />);
+
+    const speedControl = screen.getByLabelText('Audio speed');
+    fireEvent.doubleClick(speedControl);
+    fireEvent.change(screen.getByTitle('Enter value'), { target: { value: '-200' } });
+    fireEvent.keyDown(screen.getByTitle('Enter value'), { key: 'Enter' });
+
+    expect(useTimelineStore.getState().clips.map(clip => [clip.speed, clip.duration])).toEqual([
+      [-2, 2.5],
+    ]);
+  });
+
   it('creates the legacy volume effect only when the user edits volume', () => {
     const { container } = render(<VolumeTab clipId="clip-1" effects={[]} />);
     const volumeControl = container.querySelector('.control-row .draggable-number');

@@ -5,7 +5,13 @@ import type { TimelineClip, TimelineTrack } from '../../types';
 import type { FrameContext, AudioSyncState, AudioSyncTarget } from './types';
 import { LAYER_BUILDER_CONSTANTS } from './types';
 import { createFrameContext, getClipTimeInfo, getMediaFileForClip, getClipForTrack, isVideoTrackVisible } from './FrameContext';
-import { AudioSyncHandler, createAudioSyncState, finalizeAudioSync, resumeAudioContextIfNeeded } from './AudioSyncHandler';
+import {
+  AudioSyncHandler,
+  canClipDriveAudioMasterClock,
+  createAudioSyncState,
+  finalizeAudioSync,
+  resumeAudioContextIfNeeded,
+} from './AudioSyncHandler';
 import { proxyFrameCache } from '../proxyFrameCache';
 import { layerPlaybackManager } from '../layerPlaybackManager';
 import { Logger } from '../logger';
@@ -308,7 +314,7 @@ export class AudioTrackSyncManager {
         this.stemBufferMixers.canUseForStemSet(stemSeparation, audibleStemLayers),
       );
       if (stemSeparation && ctx.isPlaying && !ctx.isDraggingPlayhead && shouldPreferStemBufferMixer) {
-        const canBeStemMaster = !state.masterSet;
+        const canBeStemMaster = !state.masterSet && canClipDriveAudioMasterClock(ctx, clip);
         const mixerSourceCount = this.stemBufferMixers.sync({
           clip,
           stemSeparation,
@@ -371,7 +377,7 @@ export class AudioTrackSyncManager {
         : null;
 
       if (canUseSourceBufferMixer && sourceMediaFileId && sourceAudioBuffer) {
-        const canBeSourceMaster = !state.masterSet;
+        const canBeSourceMaster = !state.masterSet && canClipDriveAudioMasterClock(ctx, clip);
         const mixerSourceCount = this.stemBufferMixers.syncSource({
           clip,
           mediaFileId: sourceMediaFileId,

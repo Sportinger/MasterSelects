@@ -10,7 +10,7 @@ import type {
 } from '../../../types/audio';
 import type { Keyframe } from '../../../types/keyframes';
 import { interpolateKeyframes } from '../../../utils/keyframeInterpolation';
-import { DraggableNumber, EffectKeyframeToggle, MultiKeyframeToggle } from './shared';
+import { DraggableNumber, EffectKeyframeToggle, KeyframeToggle, MultiKeyframeToggle } from './shared';
 import { MIDIParameterLabel } from './MIDIParameterLabel';
 import { AudioEffectStackControl } from './AudioEffectStackControl';
 import { FlexEqualizerControl } from './FlexEqualizerControl';
@@ -27,6 +27,13 @@ import {
   mergeAudioEffectParamPatch,
 } from '../../../utils/audioEffectParamPath';
 import { getAudioEqAllNumericKeyframeEntries } from './audioEqKeyframes';
+import { endBatch, startBatch } from '../../../stores/historyStore';
+import {
+  CLIP_SPEED_MAX_PERCENT,
+  CLIP_SPEED_MIN_PERCENT,
+  isLinkedAudioFollowingVideo,
+  resolveLinkedVideoAudioPair,
+} from '../../../stores/timeline/helpers/linkedClipSpeed';
 
 // dB conversion helpers (internal gain 0–2 ↔ display dB)
 const SILENCE_THRESHOLD_DB = -60;
@@ -153,7 +160,13 @@ function interpolateAudioEffectStack(
 export function VolumeTab({ clipId, effects }: VolumeTabProps) {
   // Reactive data - subscribe to specific values only
   const playheadPosition = useTimelineStore(state => state.playheadPosition);
-  const clip = useTimelineStore(state => state.clips.find(candidate => candidate.id === clipId));
+  const clips = useTimelineStore(state => state.clips);
+  const clip = clips.find(candidate => candidate.id === clipId);
+  const linkedSpeedPair = resolveLinkedVideoAudioPair(clips, clipId);
+  const followsLinkedVideoSpeed = Boolean(
+    linkedSpeedPair?.audio.id === clipId && isLinkedAudioFollowingVideo(linkedSpeedPair),
+  );
+  const speedOwner = followsLinkedVideoSpeed ? linkedSpeedPair!.video : clip;
   const trackId = clip?.trackId;
   const runtimeDynamicsMeter = useRuntimeAudioMeterSnapshot(
     trackId ? { kind: 'track', trackId } : undefined,
@@ -173,6 +186,9 @@ export function VolumeTab({ clipId, effects }: VolumeTabProps) {
   // Actions from getState() - stable, no subscription needed
   const {
     setPropertyValue,
+    setClipSpeed,
+    setLinkedClipSpeedEnabled,
+    getInterpolatedSpeed,
     getInterpolatedEffects,
     addClipEffect,
     removeClipEffect,
@@ -186,9 +202,11 @@ export function VolumeTab({ clipId, effects }: VolumeTabProps) {
     reorderClipAudioEffectInstance,
   } = useTimelineStore.getState();
   const clipLocalTime = clip ? playheadPosition - clip.startTime : 0;
+  const speedLocalTime = speedOwner ? playheadPosition - speedOwner.startTime : 0;
   void keyframeStateToken;
   const interpolatedEffects = getInterpolatedEffects(clipId, clipLocalTime);
   const preservesPitch = clip?.preservesPitch !== false; // default true
+  const speed = speedOwner ? getInterpolatedSpeed(speedOwner.id, speedLocalTime) : 1;
   const clipKeyframes = useTimelineStore(state => state.clipKeyframes.get(clipId) ?? EMPTY_KEYFRAMES);
   const clipAudioEffectStack = interpolateAudioEffectStack(
     clip?.audioState?.effectStack ?? [],
@@ -290,11 +308,49 @@ export function VolumeTab({ clipId, effects }: VolumeTabProps) {
         </div>
       </div>
 
-      {/* Pitch Preservation Section */}
+      {/* Speed and pitch section */}
       <div className="properties-section">
         <div className="section-header-row">
           <h4>Speed Settings</h4>
         </div>
+        {linkedSpeedPair?.audio.id === clipId && (
+          <div className="control-row checkbox-row">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={followsLinkedVideoSpeed}
+                onChange={(event) => setLinkedClipSpeedEnabled(clipId, event.target.checked)}
+              />
+              <span>Follow Linked Video Speed</span>
+            </label>
+            <span className="hint">Turn off to edit this audio clip independently</span>
+          </div>
+        )}
+        <div className={`control-row ${followsLinkedVideoSpeed ? 'control-row-disabled' : ''}`}>
+          {!followsLinkedVideoSpeed && (
+            <KeyframeToggle clipId={clipId} property="speed" value={speed} />
+          )}
+          <label className="prop-label">Speed</label>
+          <DraggableNumber
+            value={speed * 100}
+            onChange={(percent) => setClipSpeed(clipId, percent / 100)}
+            defaultValue={100}
+            decimals={0}
+            suffix="%"
+            min={CLIP_SPEED_MIN_PERCENT}
+            max={CLIP_SPEED_MAX_PERCENT}
+            sensitivity={1}
+            disabled={followsLinkedVideoSpeed}
+            ariaLabel="Audio speed"
+            onDragStart={() => startBatch('Adjust audio speed')}
+            onDragEnd={() => endBatch()}
+          />
+        </div>
+        {(Math.abs(speed) < 0.25 || Math.abs(speed) > 4) && (
+          <div className="control-row">
+            <span className="hint">Exact timing is used for export; browser preview is limited outside 25-400%.</span>
+          </div>
+        )}
         <div className="control-row checkbox-row">
           <label className="checkbox-label">
             <input

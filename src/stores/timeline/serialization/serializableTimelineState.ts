@@ -130,6 +130,7 @@ function createSerializableClip(
     reversed: clip.reversed || undefined,
     speed: clip.speed != null && clip.speed !== 1 ? clip.speed : undefined,
     preservesPitch: clip.preservesPitch === false ? false : undefined,
+    followsLinkedVideoSpeed: clip.followsLinkedVideoSpeed === false ? false : undefined,
     freeRun: clip.freeRun || undefined,
     textProperties: clip.textProperties,
     captionProperties: clip.captionProperties

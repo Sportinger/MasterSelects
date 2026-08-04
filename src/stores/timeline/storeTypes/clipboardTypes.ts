@@ -51,6 +51,7 @@ export interface ClipboardClipData {
   reversed?: boolean;
   speed?: number;
   preservesPitch?: boolean;
+  followsLinkedVideoSpeed?: boolean;
   freeRun?: boolean;
   textProperties?: import('../../../types').TextClipProperties;
   captionProperties?: CaptionClipProperties;

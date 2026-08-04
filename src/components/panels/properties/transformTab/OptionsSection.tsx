@@ -9,6 +9,12 @@ import {
   SetAllKeyframesIcon,
 } from './SceneNavIcons';
 import type { CreateMidiTarget } from './transformTabTypes';
+import {
+  CLIP_SPEED_MAX_MULTIPLIER,
+  CLIP_SPEED_MAX_PERCENT,
+  CLIP_SPEED_MIN_PERCENT,
+  CLIP_SPEED_MIN_SIGNED_MULTIPLIER,
+} from '../../../../stores/timeline/helpers/linkedClipSpeed';
 
 interface OptionsSectionProps {
   clipId: string;
@@ -28,6 +34,7 @@ interface OptionsSectionProps {
   sceneNavNoKeyframes: boolean;
   speed: number;
   speedPct: number;
+  linkedAudioSpeedEnabled?: boolean;
   supportsFreeRun: boolean;
   freeRun: boolean;
   supportsThreeDEffectorToggle: boolean;
@@ -45,16 +52,12 @@ interface OptionsSectionProps {
   onSceneNavNoKeyframesChange: (enabled: boolean) => void;
   onSetAllCameraKeyframes: () => void;
   onSpeedChange: (pct: number) => void;
+  onLinkedAudioSpeedChange?: (enabled: boolean) => void;
   onFreeRunToggle: () => void;
   onThreeDEffectorsToggle: () => void;
   onToggle3D: () => void;
   onWireframeToggle: () => void;
 }
-
-const CLIP_SPEED_MIN_PERCENT = -10000;
-const CLIP_SPEED_MAX_PERCENT = 10000;
-const CLIP_SPEED_MIN_MULTIPLIER = CLIP_SPEED_MIN_PERCENT / 100;
-const CLIP_SPEED_MAX_MULTIPLIER = CLIP_SPEED_MAX_PERCENT / 100;
 
 export function OptionsSection({
   clipId,
@@ -74,6 +77,7 @@ export function OptionsSection({
   sceneNavNoKeyframes,
   speed,
   speedPct,
+  linkedAudioSpeedEnabled,
   supportsFreeRun,
   freeRun,
   supportsThreeDEffectorToggle,
@@ -91,11 +95,13 @@ export function OptionsSection({
   onSceneNavNoKeyframesChange,
   onSetAllCameraKeyframes,
   onSpeedChange,
+  onLinkedAudioSpeedChange,
   onFreeRunToggle,
   onThreeDEffectorsToggle,
   onToggle3D,
   onWireframeToggle,
 }: OptionsSectionProps) {
+  const realtimeAudioPreviewLimited = Math.abs(speed) < 0.25 || Math.abs(speed) > 4;
   return (
     <div className="properties-section">
       {isCameraClip && (
@@ -263,11 +269,11 @@ export function OptionsSection({
               'speed',
               'Speed',
               speed,
-              CLIP_SPEED_MIN_MULTIPLIER,
+              CLIP_SPEED_MIN_SIGNED_MULTIPLIER,
               CLIP_SPEED_MAX_MULTIPLIER,
             )}
           >
-            Speed <span className="menu-wip-badge">WIP</span>
+            Speed
           </MIDIParameterLabel>
           <DraggableNumber
             value={speedPct}
@@ -280,6 +286,23 @@ export function OptionsSection({
             sensitivity={1}
             onDragStart={onBatchStart}
             onDragEnd={onBatchEnd}
+          />
+        </div>
+      )}
+      {!isCameraClip && realtimeAudioPreviewLimited && (
+        <div className="control-row">
+          <span className="hint">Exact audio timing is used for export; browser preview is limited outside 25-400%.</span>
+        </div>
+      )}
+      {!isCameraClip && linkedAudioSpeedEnabled !== undefined && onLinkedAudioSpeedChange && (
+        <div className="control-row transform-option-row">
+          <label className="prop-label" htmlFor={`linked-audio-speed-${clipId}`}>Link Audio Speed</label>
+          <input
+            id={`linked-audio-speed-${clipId}`}
+            type="checkbox"
+            checked={linkedAudioSpeedEnabled}
+            onChange={(event) => onLinkedAudioSpeedChange(event.target.checked)}
+            title="Make the linked audio follow this video's speed and duration"
           />
         </div>
       )}

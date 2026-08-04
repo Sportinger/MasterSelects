@@ -1,6 +1,6 @@
 import type { ToolResult } from '../../types.ts';
 import { formatClipInfo } from '../../utils';
-import { resolveClipTranscriptWords } from '../../../transcription/clipTranscriptResolver';
+import { resolveClipTranscriptWindow } from '../../../transcription/clipTranscriptResolver';
 import { getGaussianSplatGpuRenderer } from '../../../../engine/gaussian/core/GaussianSplatGpuRenderer';
 import { resolveSharedSplatSceneKey } from '../../../../engine/scene/runtime/SharedSplatRuntimeUtils';
 import { ensureRenderForDiagnostics } from '../renderOnce';
@@ -10,6 +10,14 @@ import {
   resolveClipPropertyAuthoringContext,
   resolveTransformPositionUnitMode,
 } from '../../../properties/propertyAuthoring';
+import {
+  getClipMediaFileId,
+  getMediaSourceArtifactProjection,
+} from '../../../mediaArtifacts/mediaSourceArtifacts';
+import {
+  isLinkedAudioFollowingVideo,
+  resolveLinkedVideoAudioPair,
+} from '../../../../stores/timeline/helpers/linkedClipSpeed';
 
 function resolveClipInfoAuthoringContext(clipId: string, timelineStore: TimelineStore) {
   const clip = timelineStore.clips.find((candidate) => candidate.id === clipId);
@@ -34,6 +42,9 @@ export async function handleGetClipDetails(
     return { success: false, error: `Clip not found: ${clipId}` };
   }
   const track = timelineStore.tracks.find(t => t.id === clip.trackId);
+  const linkedSpeedPair = resolveLinkedVideoAudioPair(timelineStore.clips, clip.id);
+  const sourceArtifacts = getMediaSourceArtifactProjection(getClipMediaFileId(clip));
+  const analysis = clip.analysis ?? sourceArtifacts.analysis;
   const authoringContextResolution = resolveClipInfoAuthoringContext(clip.id, timelineStore);
   if (!authoringContextResolution?.ok) {
     return {
@@ -88,6 +99,13 @@ export async function handleGetClipDetails(
         audioAnalysisJob: clip.audioAnalysisJob ?? null,
       },
       linkedClipId: clip.linkedClipId ?? null,
+      linkedSpeed: linkedSpeedPair
+        ? {
+            followsVideo: isLinkedAudioFollowingVideo(linkedSpeedPair),
+            videoClipId: linkedSpeedPair.video.id,
+            audioClipId: linkedSpeedPair.audio.id,
+          }
+        : null,
       isComposition: clip.isComposition === true,
       compositionId: clip.compositionId ?? null,
       nested: clip.isComposition
@@ -126,22 +144,22 @@ export async function handleGetClipDetails(
       gaussianTargetSummary,
       effects: clip.effects || [],
       masks: clip.masks || [],
-      transcript: resolveClipTranscriptWords(clip),
-      analysisStatus: clip.analysisStatus,
+      transcript: resolveClipTranscriptWindow(clip),
+      analysisStatus: clip.analysisStatus ?? sourceArtifacts.analysisStatus,
       faceAnalysis: {
-        status: clip.faceAnalysisStatus ?? 'none',
-        progress: clip.faceAnalysisProgress ?? 0,
-        message: clip.faceAnalysisMessage ?? null,
-        model: clip.analysis?.faceAnalysis
+        status: clip.faceAnalysisStatus ?? sourceArtifacts.faceAnalysisStatus ?? 'none',
+        progress: clip.faceAnalysisProgress ?? sourceArtifacts.faceAnalysisProgress ?? 0,
+        message: clip.faceAnalysisMessage ?? sourceArtifacts.faceAnalysisMessage ?? null,
+        model: analysis?.faceAnalysis
           ? {
-              detector: clip.analysis.faceAnalysis.detector,
-              recognizer: clip.analysis.faceAnalysis.recognizer,
-              version: clip.analysis.faceAnalysis.modelVersion,
-              backend: clip.analysis.faceAnalysis.backend,
+              detector: analysis.faceAnalysis.detector,
+              recognizer: analysis.faceAnalysis.recognizer,
+              version: analysis.faceAnalysis.modelVersion,
+              backend: analysis.faceAnalysis.backend,
             }
           : null,
-        uniquePeople: clip.analysis?.faceAnalysis?.people.length ?? 0,
-        observationCount: clip.analysis?.faceAnalysis?.observationCount ?? 0,
+        uniquePeople: analysis?.faceAnalysis?.people.length ?? 0,
+        observationCount: analysis?.faceAnalysis?.observationCount ?? 0,
       },
     },
   };

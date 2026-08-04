@@ -11,9 +11,10 @@ import {
   createEffectPropertyKey,
   formatParamValue,
 } from './nodeWorkspaceUtils';
-
-const CLIP_SPEED_MIN_PERCENT = -10000;
-const CLIP_SPEED_MAX_PERCENT = 10000;
+import {
+  CLIP_SPEED_MAX_PERCENT,
+  CLIP_SPEED_MIN_PERCENT,
+} from '../../../../stores/timeline/helpers/linkedClipSpeed';
 
 interface NumericParamEditorProps {
   label: string;

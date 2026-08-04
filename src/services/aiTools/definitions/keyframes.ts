@@ -25,7 +25,6 @@ const addKeyframeParameters = {
     sequence: {
       type: 'array',
       minItems: 1,
-      maxItems: 100,
       description: 'Atomic multi-keyframe mode. Every item is prevalidated and the full sequence is committed as one undo step.',
       items: keyframeSequenceItemSchema,
     },
@@ -65,7 +64,7 @@ export const keyframeToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'addKeyframe',
-      description: 'Add one keyframe with the legacy clipId/property/value fields, or atomically author a sequence of 1-100 keyframes. Use exactly one mode. Times are relative to each clip start (0 = clip start).',
+      description: 'Add one keyframe with the legacy clipId/property/value fields, or atomically author a keyframe sequence of any required size. Use exactly one mode. Times are relative to each clip start (0 = clip start).',
       parameters: addKeyframeParameters,
     },
   },

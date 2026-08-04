@@ -288,6 +288,20 @@ async function buildCurrentHostedAgentFastV2Request(
       visible: track.visible,
     }));
     const mediaState = useMediaStore.getState();
+    const sourceArtifactsByMediaFileId = new Map(mediaState.files.map((file) => [file.id, {
+      analysis: file.analysis,
+      analysisProgress: file.analysisProgress,
+      analysisStatus: file.analysisStatus,
+      faceAnalysisMessage: file.faceAnalysisMessage,
+      faceAnalysisProgress: file.faceAnalysisProgress,
+      faceAnalysisStatus: file.faceAnalysisStatus,
+      sceneDescriptionMessage: file.sceneDescriptionMessage,
+      sceneDescriptionProgress: file.sceneDescriptionProgress,
+      sceneDescriptions: file.sceneDescriptions,
+      sceneDescriptionStatus: file.sceneDescriptionStatus,
+      transcript: file.transcript,
+      transcriptStatus: file.transcriptStatus,
+    }]));
     const composition = mediaState.activeCompositionId
       ? mediaState.compositions.find((candidate) => candidate.id === mediaState.activeCompositionId)
       : undefined;
@@ -344,6 +358,7 @@ async function buildCurrentHostedAgentFastV2Request(
         selectedLayerId: state.selectedLayerId,
         selectedVertexIds: [...state.selectedVertexIds],
         serializedTimeline,
+        sourceArtifactsByMediaFileId,
         storyboard,
         timelineRangeSelection: state.timelineRangeSelection,
         timelineRevision,

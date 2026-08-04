@@ -28,6 +28,25 @@ const METER_PUBLISH_INTERVAL_MS = 16;
 // does not allocate a fresh zero array per element.
 const EMPTY_EQ_GAINS: readonly number[] = Object.freeze(new Array(10).fill(0));
 
+/**
+ * Audio can only drive the timeline when source time is an affine function of
+ * timeline time. A speed ramp (or transition source map) needs integration;
+ * dividing the accumulated audio time by the current instantaneous rate makes
+ * the playhead jump as that rate changes.
+ */
+export function canClipDriveAudioMasterClock(
+  ctx: FrameContext,
+  clip: TimelineClip,
+): boolean {
+  return (
+    !clip.reversed &&
+    (clip.speed ?? 1) > 0 &&
+    !clip.transitionSourceMap &&
+    clip.transitionSourceHold !== true &&
+    !ctx.hasKeyframes(clip.id, 'speed')
+  );
+}
+
 function hasActiveRouteEffects(route: AudioSyncTarget['masterRoute']): boolean {
   if (!route) return false;
   return (
@@ -95,6 +114,7 @@ export class AudioSyncHandler {
       meterTrackId,
     } = target;
     const effectivelyMuted = isMuted || volume <= 0.01;
+    const canDriveMasterClock = canBeMaster && canClipDriveAudioMasterClock(ctx, clip);
 
     // Set muted state
     if (element.muted !== effectivelyMuted) {
@@ -118,7 +138,7 @@ export class AudioSyncHandler {
       this.handleScrub(element, clipTime, ctx, volume, eqGains, pan, processors, masterRoute, meterTrackId);
     } else if (shouldPlay) {
       this.cancelTailMeterPolling(meterTrackId);
-      this.handlePlayback(element, clipTime, absSpeed, clip, canBeMaster, type, state, volume, eqGains, pan, processors, masterRoute, meterTrackId);
+      this.handlePlayback(element, clipTime, absSpeed, clip, canDriveMasterClock, type, state, volume, eqGains, pan, processors, masterRoute, meterTrackId);
     } else {
       this.pauseIfPlaying(element);
       if (!this.startTailMeterPolling(
