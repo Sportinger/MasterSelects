@@ -4,11 +4,6 @@
 
 <h3>Local-first Media Editor for Video, Audio, Vector Animation & 3D</h3>
 
-> [!IMPORTANT]
-> **Legacy Community Edition:** This public repository is frozen at
-> [`v2.4.5-mit-final`](https://github.com/Sportinger/MasterSelects/releases/tag/v2.4.5-mit-final)
-> and remains available under the MIT License. Active product development has
-> moved to a private repository; this archive will not receive new features.
 
 <br>
 
