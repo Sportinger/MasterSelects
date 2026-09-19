@@ -142,9 +142,8 @@ export function usePlayheadSnap({
     };
 
     const handleMouseMove = (e: MouseEvent) => {
-      // isDraggingPlayhead is also used by right-button timeline scrubbing.
-      // Edge auto-scroll belongs only to left-button ruler/playhead drags.
-      if ((e.buttons & 1) === 0) return;
+      // Both ruler drags and right-button timeline scrubs share edge scrolling.
+      if ((e.buttons & 3) === 0) return;
 
       pointer = { clientX: e.clientX, altKey: e.altKey, shiftKey: e.shiftKey };
       updatePlayhead(e.clientX, e.altKey, e.shiftKey);

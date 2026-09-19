@@ -423,8 +423,10 @@ export function useMediaBoardNodeMoveGesture({
         syncTimelineBridge('move');
         syncFlashBoardReferenceTarget();
         if (latestTimelineHandoffActive && timelineDragPayload) {
-          mediaBoardViewportRef.current = liveViewport;
-          setMediaBoardViewport(liveViewport);
+          liveViewport = startViewport;
+          mediaBoardViewportRef.current = startViewport;
+          applyMediaBoardViewportPreview(startViewport);
+          setMediaBoardViewport(startViewport);
           syncTimelineBridge('drop');
           timelineBridgeActive = false;
           clearExternalDragPayload();

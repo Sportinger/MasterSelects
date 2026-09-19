@@ -180,6 +180,7 @@ Image export can render a single composited frame at the current playhead positi
 
 ### Current Behavior
 
+- A visual clip's **Export Current Frame** context-menu command renders the whole active composition at its full resolution, independent of preview quality. Its JPG has a black background, without preview overlays. Use the export panel's PNG or WebP format for transparency.
 - Timeline `Frame` mode does not use the In/Out range. It renders only the current playhead frame. Direct source batch export instead encodes the complete source image.
 - `Sequence` mode uses the normal export range, respects `Use In/Out`, renders at the selected frame rate, and writes numbered image files into a user-selected folder when the browser supports File System Access.
 - Browsers without folder write access fall back to a ZIP download.

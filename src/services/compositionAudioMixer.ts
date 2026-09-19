@@ -14,13 +14,14 @@ const log = Logger.create('CompositionAudioMixer');
 import { useTimelineStore } from '../stores/timeline';
 import { AudioMixer, type AudioTrackData } from '../engine/audio/AudioMixer';
 import { audioExtractor } from '../engine/audio/AudioExtractor';
+import { ClipAudioRenderService } from './audio/ClipAudioRenderService';
 import {
   getTrackAudioMuted,
   getTrackAudioSolo,
   getTrackPan,
   getTrackVolumeDb,
 } from './audio/audioGraphRouteSettings';
-import type { TimelineClip, TimelineTrack, SerializableClip } from '../types';
+import type { TimelineClip, TimelineTrack, SerializableClip, Keyframe } from '../types';
 import { generateWaveformFromBuffer } from '../stores/timeline/helpers/waveformHelpers';
 import { MAX_NESTING_DEPTH } from '../stores/timeline/constants';
 import { blobUrlManager } from '../stores/timeline/helpers/blobUrlManager';
@@ -45,6 +46,7 @@ class CompositionAudioMixerService {
   private audioContext: AudioContext | null = null;
   private emptyMixdownBuffer: AudioBuffer | null = null;
   private blobUrls: Set<string> = new Set();
+  private readonly clipRenderer = new ClipAudioRenderService();
 
   private getAudioContext(): AudioContext {
     if (!this.audioContext) {
@@ -79,11 +81,13 @@ class CompositionAudioMixerService {
     const isActiveComp = compositionId === activeCompositionId;
     let clips: (SerializableClip | TimelineClip)[];
     let tracks: TimelineTrack[];
+    let activeKeyframes: Map<string, Keyframe[]> | undefined;
 
     if (isActiveComp) {
       const timelineState = useTimelineStore.getState();
       clips = timelineState.clips;
       tracks = timelineState.tracks;
+      activeKeyframes = timelineState.clipKeyframes;
     } else if (composition.timelineData) {
       clips = composition.timelineData.clips || [];
       tracks = composition.timelineData.tracks || [];
@@ -92,21 +96,19 @@ class CompositionAudioMixerService {
       return null;
     }
 
-    // Find audio tracks
-    const audioTracks = tracks.filter(t => t.type === 'audio');
-    if (audioTracks.length === 0) {
-      log.debug(`No audio tracks in composition ${composition.name}`);
-      return {
-        buffer: this.getEmptyMixdownBuffer(),
-        waveform: [],
-        duration: composition.duration || 10,
-        hasAudio: false,
-      };
-    }
-
-    // Find clips on audio tracks
-    const audioTrackIds = new Set(audioTracks.map(t => t.id));
-    const audioClips = clips.filter(c => audioTrackIds.has(c.trackId));
+    const audioTrackIds = new Set(tracks.filter(t => t.type === 'audio').map(t => t.id));
+    const videoTrackIds = new Set(tracks.filter(t => t.type === 'video').map(t => t.id));
+    const audioClips = clips.filter(clip => {
+      if (audioTrackIds.has(clip.trackId)) return true;
+      if (!videoTrackIds.has(clip.trackId) || !clip.isComposition || !clip.compositionId) return false;
+      // A nested composition's linked audio half owns its sound. Only legacy
+      // or unlinked video halves need an inline mixdown; never render both.
+      return !clips.some(candidate =>
+        audioTrackIds.has(candidate.trackId) && candidate.isComposition &&
+        candidate.compositionId === clip.compositionId &&
+        (candidate.id === clip.linkedClipId || candidate.linkedClipId === clip.id)
+      );
+    });
 
     if (audioClips.length === 0) {
       log.debug(`No audio clips in composition ${composition.name}`);
@@ -132,44 +134,45 @@ class CompositionAudioMixerService {
 
     for (let i = 0; i < audioClips.length; i++) {
       const clip = audioClips[i];
-      const track = audioTracks.find(t => t.id === clip.trackId);
-
-      // Find the source file
-      let file: File | undefined;
-
-      // Check if clip has file directly (TimelineClip has file property)
-      if ('file' in clip && clip.file) {
-        file = clip.file;
-      } else {
-        // Look up in media files
-        const mediaFile = files.find(f => f.name === clip.name || f.id === clip.mediaFileId);
-        if (mediaFile?.file) {
-          file = mediaFile.file;
-        }
-      }
-
-      if (!file) {
-        log.warn(`No file found for clip ${clip.name}`);
-        continue;
-      }
+      const track = tracks.find(t => t.id === clip.trackId);
 
       try {
-        // Extract audio from the file
-        const extractedBuffer = await audioExtractor.extractAudio(file, clip.id);
+        let extractedBuffer: AudioBuffer | null;
+        if (clip.isComposition && clip.compositionId) {
+          // Composition placeholders are not media files. This also handles
+          // an audio-only subcomp after its video half was removed.
+          const nested = await this.mixdownComposition(clip.compositionId, undefined, depth + 1);
+          extractedBuffer = nested?.hasAudio ? nested.buffer : null;
+        } else {
+          const mediaFileId = clip.mediaFileId || ('source' in clip ? clip.source?.mediaFileId : undefined);
+          const mediaFile = mediaFileId
+            ? files.find(candidate => candidate.id === mediaFileId)
+            : files.find(candidate => candidate.name === clip.name);
+          const file = ('file' in clip && clip.file?.size ? clip.file : undefined) ?? mediaFile?.file;
+          if (!file) {
+            log.warn(`No file found for clip ${clip.name}`);
+            continue;
+          }
+          extractedBuffer = await audioExtractor.extractAudio(file, clip.id);
+        }
         if (!extractedBuffer) {
           log.warn(`Failed to extract audio from ${clip.name}`);
           continue;
         }
 
-        // Calculate what portion of the audio to use based on in/out points
-        const inPoint = clip.inPoint || 0;
-        const outPoint = clip.outPoint || extractedBuffer.duration;
-
-        // Create a trimmed buffer if needed
-        let processedBuffer = extractedBuffer;
-        if (inPoint > 0 || outPoint < extractedBuffer.duration) {
-          processedBuffer = this.trimBuffer(extractedBuffer, inPoint, outPoint);
-        }
+        const renderClip: TimelineClip = 'sourceType' in clip
+          ? {
+            ...clip,
+            file: new File([], clip.name),
+            source: { type: clip.sourceType, naturalDuration: clip.naturalDuration },
+          }
+          : clip;
+        const keyframes = activeKeyframes?.get(clip.id) ?? ('keyframes' in clip ? clip.keyframes : undefined) ?? [];
+        const { buffer: processedBuffer } = await this.clipRenderer.render({
+          clip: renderClip,
+          sourceBuffer: extractedBuffer,
+          keyframes,
+        });
 
         trackDataList.push({
           clipId: clip.id,
@@ -191,42 +194,6 @@ class CompositionAudioMixerService {
         percent: 10 + Math.round((i / audioClips.length) * 50),
         message: `Extracting ${clip.name}...`,
       });
-    }
-
-    // Also check video tracks for nested composition clips that may have audio
-    const videoTracks = tracks.filter(t => t.type === 'video');
-    const videoTrackIds = new Set(videoTracks.map(t => t.id));
-    const videoClips = clips.filter(c => videoTrackIds.has(c.trackId));
-
-    for (const clip of videoClips) {
-      const isCompClip = ('isComposition' in clip && clip.isComposition) ||
-                          ('compositionId' in clip && clip.compositionId);
-      if (!isCompClip) continue;
-
-      const compId = ('compositionId' in clip) ? clip.compositionId : undefined;
-      if (!compId) continue;
-
-      try {
-        const subResult = await this.mixdownComposition(compId, undefined, depth + 1);
-        if (subResult?.hasAudio) {
-          trackDataList.push({
-            clipId: clip.id,
-            buffer: subResult.buffer,
-            startTime: clip.startTime,
-            trackId: clip.trackId,
-            trackMuted: false,
-            trackSolo: false,
-            clipVolume: clip.transform?.opacity ?? 1,
-          });
-          log.info('Mixed in audio from nested composition', {
-            clipName: clip.name,
-            compositionId: compId,
-            depth: depth + 1,
-          });
-        }
-      } catch (e) {
-        log.error('Failed to mixdown nested composition audio', { clipName: clip.name, error: e });
-      }
     }
 
     if (trackDataList.length === 0) {
@@ -306,32 +273,6 @@ class CompositionAudioMixerService {
     this.audioContext = null;
     this.emptyMixdownBuffer = null;
     log.info('CompositionAudioMixer disposed');
-  }
-
-  /**
-   * Trim an AudioBuffer to a specific range
-   */
-  private trimBuffer(buffer: AudioBuffer, startTime: number, endTime: number): AudioBuffer {
-    const ctx = this.getAudioContext();
-    const startSample = Math.floor(startTime * buffer.sampleRate);
-    const endSample = Math.floor(endTime * buffer.sampleRate);
-    const length = endSample - startSample;
-
-    const trimmed = ctx.createBuffer(
-      buffer.numberOfChannels,
-      length,
-      buffer.sampleRate
-    );
-
-    for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-      const sourceData = buffer.getChannelData(ch);
-      const destData = trimmed.getChannelData(ch);
-      for (let i = 0; i < length; i++) {
-        destData[i] = sourceData[startSample + i] || 0;
-      }
-    }
-
-    return trimmed;
   }
 
   /**

@@ -50,6 +50,7 @@ function MarqueeHarness({
   selectClips = vi.fn(),
   geometryX,
   timeToPixel = (time) => time * 10,
+  audioClips = [],
 }: {
   selectKeyframe: (keyframeId: string, addToSelection?: boolean) => void;
   deselectAllKeyframes: () => void;
@@ -57,6 +58,7 @@ function MarqueeHarness({
   selectClips?: (clipIds: string[]) => void;
   geometryX?: number;
   timeToPixel?: (time: number) => number;
+  audioClips?: TimelineClip[];
 }) {
   const trackLanesRef = useRef<HTMLDivElement>(null);
   const clipKeyframes = new Map([
@@ -86,8 +88,8 @@ function MarqueeHarness({
   const { marquee, handleMarqueeMouseDown } = useMarqueeSelection({
     trackLanesRef,
     scrollX: 0,
-    clips: [clip],
-    tracks: [track],
+    clips: [clip, ...audioClips],
+    tracks: [track, { ...track, id: 'track-audio', type: 'audio' }],
     selectedClipIds: new Set(['clip-video']),
     selectedKeyframeIds: new Set(),
     clipKeyframes,
@@ -130,6 +132,9 @@ function MarqueeHarness({
           </div>
         </div>
       </div>
+      <div className="track-lane" data-track-id="track-audio">
+        <div className="track-clip-row" data-testid="audio-row" />
+      </div>
       <div data-testid="marquee-state">{marquee?.mode ?? 'none'}</div>
     </div>
   );
@@ -142,6 +147,27 @@ describe('useMarqueeSelection', () => {
       selectedKeyframeIds: new Set(),
       timelineRangeSelection: null,
     });
+  });
+
+  it('adds audio clips with Shift-marquee while preserving an existing video selection', async () => {
+    const audioClips = [2, 7].map((startTime, index) => ({
+      ...clip, id: `audio-${index}`, trackId: 'track-audio', startTime,
+      source: { type: 'audio' as const },
+    }));
+    const selectClips = vi.fn();
+    const { getByTestId } = render(<MarqueeHarness
+      audioClips={audioClips} selectClips={selectClips}
+      selectKeyframe={vi.fn()} deselectAllKeyframes={vi.fn()}
+    />);
+    const lanes = getByTestId('timeline-lanes');
+    const audioRow = getByTestId('audio-row');
+    lanes.getBoundingClientRect = () => rect(0, 0, 1000, 250);
+    audioRow.getBoundingClientRect = () => rect(0, 120, 1000, 64);
+
+    fireEvent.mouseDown(audioRow, { button: 0, shiftKey: true, clientX: 10, clientY: 125 });
+    fireEvent.mouseMove(document, { shiftKey: true, clientX: 100, clientY: 175 });
+    await waitFor(() => expect(selectClips).toHaveBeenLastCalledWith(['clip-video', 'audio-0', 'audio-1']));
+    fireEvent.mouseUp(document);
   });
 
   it('marquee-selects multiple keyframes from row data without rendered diamond nodes', async () => {

@@ -6,6 +6,10 @@ title: "Timeline"
 
 The Timeline is the core editing interface for multi-track editing. It now covers video, audio, image, Lottie, Rive, text, solid, motion shape, mesh, composition, camera, and splat-effector clips, with keyframe lanes, transitions, multicam grouping, pick-whip parenting, and slot-grid playback.
 
+Right-button scrubbing scrolls the viewport at either edge and follows its current scroll offset. Moving clips to another track preserves their original start times even with snapping disabled; occupied destinations do not silently shift or trim the selection. Reversed, trimmed clip thumbnails use the visible source interval in both software and worker rendering paths.
+
+Section resize observations update only the element that changed, so an audio or video child resize does not re-sample a transient parent split height during track-property edits.
+
 ---
 
 ## Large compositions

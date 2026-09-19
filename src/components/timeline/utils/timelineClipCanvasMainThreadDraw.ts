@@ -26,6 +26,7 @@ import { paintTimelineClipCanvasBody } from './timelineClipCanvasBodyPainter';
 import { paintTimelineClipCanvasMissingMediaBorder } from './timelineClipCanvasMissingMediaPainter';
 import { getResolveTimelineClipFooterHeight, paintResolveTimelineClipFooterForBody, paintResolveTimelineClipPreviewBackground, RESOLVE_TIMELINE_CLIP_PREVIEW_INSET_PX } from './resolveTimelineClipCanvas';
 import { getTimelineClipCanvasVisualPreviewHeight } from './timelineClipCanvasVisualLayout';
+import { getTimelineClipCanvasVisibleSourceRange } from './timelineClipCanvasVisibleSourceRange';
 import { withTimelineClipCanvasAlpha } from './timelineClipCanvasColor';
 import {
   getTimelineClipCanvasWaveformPyramidForClip,
@@ -258,11 +259,11 @@ export function drawTimelineClipCanvasMainThread(
       : null;
     if (mediaFileId) {
       diagnostics.thumbnailClipCount += 1;
-      const sourceSpan = Math.max(0.001, geometry.outPoint - geometry.inPoint);
       const visibleClip = {
         ...clip,
-        inPoint: geometry.inPoint + sourceSpan * visibleStartRatio,
-        outPoint: geometry.inPoint + sourceSpan * visibleEndRatio,
+        ...getTimelineClipCanvasVisibleSourceRange(
+          geometry, visibleStartRatio, visibleEndRatio, clip.reversed,
+        ),
       };
       ctx.save();
       ctx.beginPath();

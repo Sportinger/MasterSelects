@@ -42,21 +42,25 @@ export function useTimelineSectionViewportMeasurement({
       const videoViewport = videoSectionViewportRef.current;
       const audioViewport = audioSectionViewportRef.current;
 
-      if (scrollWrapper) {
+      // A child resize must not re-sample its parent's transient layout. The
+      // split drives those children, so mixing measurements creates feedback.
+      if (scrollWrapper && (!entryByElement || entryByElement.has(scrollWrapper))) {
         const entry = entryByElement?.get(scrollWrapper);
         setSplitViewportHeight(entry ? getResizeObserverBlockSize(entry) : scrollWrapper.clientHeight);
       }
-      if (videoViewport) {
+      if (videoViewport && (!entryByElement || entryByElement.has(videoViewport))) {
         const entry = entryByElement?.get(videoViewport);
         setVideoViewportHeight(entry ? getResizeObserverBlockSize(entry) : videoViewport.clientHeight);
       }
-      if (audioViewport) {
+      if (audioViewport && (!entryByElement || entryByElement.has(audioViewport))) {
         const entry = entryByElement?.get(audioViewport);
         setAudioViewportHeight(entry ? getResizeObserverBlockSize(entry) : audioViewport.clientHeight);
       }
 
       const timelineEntry = timeline ? entryByElement?.get(timeline) : undefined;
       const timelineBodyEntry = timelineBody ? entryByElement?.get(timelineBody) : undefined;
+      const widthSource = timeline ?? timelineBody;
+      if (entryByElement && (!widthSource || !entryByElement.has(widthSource))) return;
       const nextTimelineViewportWidth =
         (timelineEntry ? getResizeObserverInlineSize(timelineEntry) : timeline?.clientWidth) ??
         (timelineBody

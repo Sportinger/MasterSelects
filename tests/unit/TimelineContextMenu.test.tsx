@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TimelineContextMenu } from '../../src/components/timeline/TimelineContextMenu';
 import { downloadBlob } from '../../src/engine/export';
-import { captureCurrentPreviewFrameJpegBlob } from '../../src/services/previewFrameCapture';
+import { captureCompositionFrameJpegBlob } from '../../src/components/export/captureCompositionFrame';
 import { useMediaStore, type MediaFile } from '../../src/stores/mediaStore';
 import type { TimelineClip } from '../../src/types';
 
@@ -10,8 +10,9 @@ vi.mock('../../src/engine/export', () => ({
   downloadBlob: vi.fn(),
 }));
 
-vi.mock('../../src/services/previewFrameCapture', () => ({
-  captureCurrentPreviewFrameJpegBlob: vi.fn(),
+vi.mock('../../src/components/export/captureCompositionFrame', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../src/components/export/captureCompositionFrame')>(),
+  captureCompositionFrameJpegBlob: vi.fn(),
 }));
 
 function createClip(overrides: Partial<TimelineClip>): TimelineClip {
@@ -212,7 +213,7 @@ describe('TimelineContextMenu regenerate menu', () => {
 
   it('exports the current frame as a jpg from visual clip menus', async () => {
     const blob = new Blob(['jpg'], { type: 'image/jpeg' });
-    vi.mocked(captureCurrentPreviewFrameJpegBlob).mockResolvedValueOnce(blob);
+    vi.mocked(captureCompositionFrameJpegBlob).mockResolvedValueOnce(blob);
     renderMenu({
       clips: [createClip({ id: 'clip-video' })],
       mediaFile: {
@@ -231,7 +232,7 @@ describe('TimelineContextMenu regenerate menu', () => {
     fireEvent.click(screen.getByText('Export Current Frame'));
 
     await waitFor(() => {
-      expect(captureCurrentPreviewFrameJpegBlob).toHaveBeenCalledTimes(1);
+      expect(captureCompositionFrameJpegBlob).toHaveBeenCalledWith(0);
       expect(downloadBlob).toHaveBeenCalledWith(blob, 'Clip_frame_0_00s.jpg');
     });
   });

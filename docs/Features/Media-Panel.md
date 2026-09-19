@@ -4,6 +4,8 @@
 
 Import, organize, and manage media assets with folder structure, proxy generation, and three view modes.
 
+Dragging a board item into the timeline restores the board's starting pan and zoom after edge auto-pan, keeping its layout and viewing position stable.
+
 ---
 
 ## Table of Contents

@@ -255,9 +255,12 @@ export function useClipDrag({
         const previousX = drag.currentX - rect.left + scrollX - drag.grabOffsetX;
         const x = moveEvent.clientX - rect.left + scrollX - drag.grabOffsetX;
         const quantizationDrag = { ...drag, altKeyPressed: moveEvent.altKey };
-        const rawTime = quantizeClipDragTime(quantizationDrag, currentClipMap, pixelToTime(x), frameRate);
+        const changingTrack = newTrackId !== drag.originalTrackId;
+        const rawTime = changingTrack
+          ? drag.originalStartTime
+          : quantizeClipDragTime(quantizationDrag, currentClipMap, pixelToTime(x), frameRate);
 
-        const shouldSnap = isTimelineSnappingActive(snappingEnabled, moveEvent);
+        const shouldSnap = !changingTrack && isTimelineSnappingActive(snappingEnabled, moveEvent);
 
         // First check for edge snapping (only if snapping should be active)
         // Snap hysteresis: once snapped, user must drag SNAP_BREAKOUT_PX pixels to break free
@@ -309,27 +312,6 @@ export function useClipDrag({
               }
             }
 
-            // When moving to a different track, also snap to original position
-            // so the user can precisely move clips up/down without horizontal drift
-            if (!snapped && newTrackId !== drag.originalTrackId) {
-              const draggedClipForOrig = clipMap.get(drag.clipId);
-              const dur = draggedClipForOrig?.duration || 0;
-              const origEnd = drag.originalStartTime + dur;
-              const snapThresholdTime = pixelToTime(SNAP_BREAKOUT_PX / 2);
-
-              // Snap start to original start
-              if (Math.abs(rawTime - drag.originalStartTime) < snapThresholdTime) {
-                snapped = true;
-                snappedTime = quantizeClipDragTime(quantizationDrag, currentClipMap, drag.originalStartTime, frameRate);
-                snapEdgeTime = snappedTime;
-              }
-              // Snap end to original end
-              else if (Math.abs((rawTime + dur) - origEnd) < snapThresholdTime) {
-                snapped = true;
-                snappedTime = quantizeClipDragTime(quantizationDrag, currentClipMap, drag.originalStartTime, frameRate);
-                snapEdgeTime = quantizeClipDragTime(quantizationDrag, currentClipMap, origEnd, frameRate);
-              }
-            }
           }
         }
 
@@ -397,8 +379,18 @@ export function useClipDrag({
           getPositionWithResistance,
         );
         const { overlapClipIds } = groupPlacement;
-        resistedTime = quantizeClipDragTime(quantizationDrag, currentClipMap, groupPlacement.primaryStartTime, frameRate);
+        resistedTime = changingTrack ? groupPlacement.primaryStartTime
+          : quantizeClipDragTime(quantizationDrag, currentClipMap, groupPlacement.primaryStartTime, frameRate);
         forcingOverlap = groupPlacement.forcingOverlap;
+        // A vertical move must not silently slide clips to another time or trim
+        // occupied destinations. Keep the source placement when it cannot fit.
+        if (changingTrack && (forcingOverlap || overlapClipIds.length > 0 ||
+          Math.abs(resistedTime - drag.originalStartTime) > CLIP_DRAG_COMMIT_EPSILON_SECONDS)) {
+          newTrackId = drag.originalTrackId;
+          newTrackType = null;
+          resistedTime = drag.originalStartTime;
+          forcingOverlap = false;
+        }
         const timeDelta = resistedTime - (draggedClip?.startTime ?? drag.originalStartTime);
 
         // Calculate time delta for multi-select preview
@@ -534,7 +526,9 @@ export function useClipDrag({
             const draggedClip = currentClipMap.get(drag.clipId);
             timeDelta = finalStartTime - (draggedClip?.startTime ?? drag.originalStartTime);
           }
-          finalStartTime = quantizeClipDragTime(drag, currentClipMap, finalStartTime, frameRate);
+          if (finalTrackId === drag.originalTrackId) {
+            finalStartTime = quantizeClipDragTime(drag, currentClipMap, finalStartTime, frameRate);
+          }
           timeDelta = finalStartTime - (currentClipMap.get(drag.clipId)?.startTime ?? drag.originalStartTime);
 
           log.debug('Multi-select drag check', {
@@ -592,7 +586,11 @@ export function useClipDrag({
               operationPlan,
             );
 
-            if (operationToApply) {
+            const preservesVerticalTiming = finalTrackId === drag.originalTrackId ||
+              resolution.resolvedMoves.every(move =>
+                Math.abs(move.timelineDelta) <= CLIP_DRAG_COMMIT_EPSILON_SECONDS &&
+                !move.resistance.forcingOverlap);
+            if (operationToApply && preservesVerticalTiming) {
               const applyResult = applyTimelineEditOperation(operationToApply, {
                 source: 'ui',
                 historyLabel: isMultiSelect ? 'Move selected clips' : 'Move clip',

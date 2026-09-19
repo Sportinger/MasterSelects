@@ -54,13 +54,17 @@ export function useTimelineRightDragScrub({
   const timelineRightDragScrubRef = useRef<TimelineRightDragScrubState | null>(null);
   const timelineRightDragScrubCleanupRef = useRef<(() => void) | null>(null);
   const suppressTimelineContextMenuUntilRef = useRef(0);
+  const scrollXRef = useRef(scrollX);
+  useLayoutEffect(() => {
+    scrollXRef.current = scrollX;
+  }, [scrollX]);
 
   const getTimelineTimeFromClientX = useCallback((clientX: number) => {
     if (!timelineRef.current) return null;
     const rect = timelineRef.current.getBoundingClientRect();
-    const x = clientX - rect.left + scrollX;
+    const x = clientX - rect.left + scrollXRef.current;
     return Math.max(0, Math.min(duration, pixelToTime(x)));
-  }, [duration, pixelToTime, scrollX, timelineRef]);
+  }, [duration, pixelToTime, timelineRef]);
 
   const cleanupTimelineRightDragScrub = useCallback(() => {
     timelineRightDragScrubCleanupRef.current?.();

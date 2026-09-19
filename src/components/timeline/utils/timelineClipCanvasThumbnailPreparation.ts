@@ -14,6 +14,7 @@ import {
   type TimelineClipCanvasWorkerThumbnailStripPlan,
 } from './timelineClipCanvasThumbnailResource';
 import { getTimelineClipCanvasVisualPreviewHeight } from './timelineClipCanvasVisualLayout';
+import { getTimelineClipCanvasVisibleSourceRange } from './timelineClipCanvasVisibleSourceRange';
 
 export interface TimelineClipCanvasWorkerThumbnailPreparation {
   handledClipIds: ReadonlySet<string>;
@@ -120,9 +121,9 @@ export function collectTimelineClipCanvasWorkerThumbnailPreparation(input: {
 
     const visibleStartRatio = Math.max(0, Math.min(1, (visibleAbsLeft - absoluteX) / Math.max(1, absoluteW)));
     const visibleEndRatio = Math.max(visibleStartRatio, Math.min(1, (visibleAbsRight - absoluteX) / Math.max(1, absoluteW)));
-    const sourceSpan = Math.max(0.001, geometry.outPoint - geometry.inPoint);
-    const visibleInPoint = geometry.inPoint + sourceSpan * visibleStartRatio;
-    const visibleOutPoint = geometry.inPoint + sourceSpan * visibleEndRatio;
+    const { inPoint: visibleInPoint, outPoint: visibleOutPoint } = getTimelineClipCanvasVisibleSourceRange(
+      geometry, visibleStartRatio, visibleEndRatio, clip.reversed,
+    );
     const count = Math.max(1, Math.min(input.maxThumbnailSlots, Math.floor(visibleW / input.thumbnailSlotPx)));
     const staticThumbnailUrl = clip.source?.type === 'image'
       ? input.mediaThumbnailUrlsById?.get(mediaFileId)

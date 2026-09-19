@@ -17,7 +17,7 @@ describe('usePlayheadSnap', () => {
     vi.unstubAllGlobals();
   });
 
-  it('keeps scrolling and scrubbing while a left-button drag stays at an edge', () => {
+  it.each([1, 2])('keeps scrolling and scrubbing while mouse buttons=%s stays at an edge', (buttons) => {
     const timeline = document.createElement('div');
     vi.spyOn(timeline, 'getBoundingClientRect').mockReturnValue({
       left: 0, right: 1000, width: 1000,
@@ -46,7 +46,7 @@ describe('usePlayheadSnap', () => {
     }));
 
     act(() => {
-      document.dispatchEvent(new MouseEvent('mousemove', { buttons: 1, clientX: 999 }));
+      document.dispatchEvent(new MouseEvent('mousemove', { buttons, clientX: 999 }));
       requestFrame.mock.calls.at(-1)?.[0](0);
       requestFrame.mock.calls.at(-1)?.[0](50);
     });
@@ -55,7 +55,7 @@ describe('usePlayheadSnap', () => {
     expect(setPlayheadPosition).toHaveBeenLastCalledWith(expect.any(Number));
 
     act(() => {
-      document.dispatchEvent(new MouseEvent('mousemove', { buttons: 1, clientX: 1 }));
+      document.dispatchEvent(new MouseEvent('mousemove', { buttons, clientX: 1 }));
       requestFrame.mock.calls.at(-1)?.[0](100);
       document.dispatchEvent(new MouseEvent('mouseup'));
     });

@@ -77,6 +77,11 @@ export async function encodeImageDataToBlob(
   }
 
   ctx.putImageData(imageData, 0, 0);
+  if (!format.supportsAlpha) {
+    ctx.globalCompositeOperation = 'destination-over';
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
   return canvasToBlob(
     canvas,
     format.mimeType,

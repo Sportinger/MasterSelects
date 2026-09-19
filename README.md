@@ -103,6 +103,12 @@ Timeline volume keyframe rows and inline curves show gain in dB.
 Deleting timeline gaps moves the playhead with the remaining material.
 Timeline snapping starts off; hold **Shift** to snap temporarily or enable the
 magnet button to keep it on. Your choice is remembered.
+**Export Current Frame** saves a JPG at full composition resolution with a black
+background, even when the preview uses reduced quality.
+Right-button scrubbing scrolls at the timeline edges. Moving clips between tracks
+keeps their original timing, and reversed thumbnails follow the visible source range.
+Nested audio-only compositions retain their sound; mixdowns include clip timing
+and audio processing. Board-to-timeline drops restore the board view after auto-pan.
 
 ## Try it
 

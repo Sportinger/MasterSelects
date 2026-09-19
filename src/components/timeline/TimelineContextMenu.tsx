@@ -9,7 +9,6 @@ import { useSettingsStore, type TranscriptionProvider } from '../../stores/setti
 import { useAccountStore } from '../../stores/accountStore';
 import { projectFileService } from '../../services/projectFileService';
 import { thumbnailCacheService } from '../../services/thumbnailCacheService';
-import { captureCurrentPreviewFrameJpegBlob } from '../../services/previewFrameCapture';
 import { Logger } from '../../services/logger';
 import { downloadBlob } from '../../engine/export';
 import { flashBoardMediaBridge } from '../../services/flashboard/FlashBoardMediaBridge';
@@ -47,14 +46,6 @@ const TRANSCRIPTION_PROVIDER_LABELS: Record<TranscriptionProvider, string> = {
   deepgram: 'Deepgram',
   hybrid: 'Best Quality: Deepgram + OpenAI',
 };
-
-function getFrameExportFilename(clip: TimelineClip | null | undefined, playheadPosition: number): string {
-  const baseName = (clip?.name ?? 'current-frame')
-    .replace(/\.[^.]+$/, '')
-    .replace(/[<>:"/\\|?*]/g, '_')
-    .trim() || 'current-frame';
-  return `${baseName.slice(0, 80)}_frame_${Math.max(0, playheadPosition).toFixed(2).replace('.', '_')}s.jpg`;
-}
 
 async function copyTextToClipboard(text: string): Promise<void> {
   try {
@@ -310,13 +301,17 @@ export function TimelineContextMenu({
     setAudioDisplayMode,
     loadTranscriber: () => import('../../services/clipTranscriber'),
     exportCurrentFrame: async () => {
-      const blob = await captureCurrentPreviewFrameJpegBlob();
-      if (!blob) {
-        alert('Could not export current frame.');
+      try {
+        const { captureCompositionFrameJpegBlob, getCompositionFrameFilename } = await import('../export/captureCompositionFrame');
+        const blob = await captureCompositionFrameJpegBlob(playheadPosition);
+        if (!blob) throw new Error('Could not export current frame.');
+        downloadBlob(blob, getCompositionFrameFilename(clip?.name, playheadPosition));
+        return true;
+      } catch (error) {
+        log.warn('Current frame export failed', error);
+        alert(error instanceof Error ? error.message : 'Could not export current frame.');
         return false;
       }
-      downloadBlob(blob, getFrameExportFilename(clip, playheadPosition));
-      return true;
     },
     writeClipboardText: copyTextToClipboard,
     onCopyPromptComplete: confirmPromptCopied,
