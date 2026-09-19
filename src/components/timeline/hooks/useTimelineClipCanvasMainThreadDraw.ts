@@ -34,6 +34,7 @@ interface TimelineClipCanvasMainThreadDrawInput {
   scrollX: number;
   scrollBucket: number;
   viewportWidth: number;
+  thumbnailsEnabled?: boolean;
   waveformsEnabled?: boolean;
   audioDisplayMode?: TimelineAudioDisplayMode;
   showFaceRanges: boolean;
@@ -77,6 +78,7 @@ export function useTimelineClipCanvasMainThreadDraw(input: TimelineClipCanvasMai
     scrollX,
     scrollBucket,
     viewportWidth,
+    thumbnailsEnabled,
     waveformsEnabled,
     audioDisplayMode,
     showFaceRanges,
@@ -133,6 +135,7 @@ export function useTimelineClipCanvasMainThreadDraw(input: TimelineClipCanvasMai
         selectionBorderColor,
         scrollX,
         viewportWidth,
+        thumbnailsEnabled,
         waveformsEnabled,
         audioDisplayMode,
         showFaceRanges,
@@ -190,5 +193,5 @@ export function useTimelineClipCanvasMainThreadDraw(input: TimelineClipCanvasMai
     };
     // scrollX intentionally excluded; scrollBucket drives viewport-thumbnail redraws.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workerMode, clips, trackId, height, cssWidth, canvasOffsetX, timeToPixel, selectedClipIds, hoveredClipId, trackColor, selectionBorderColor, scrollBucket, viewportWidth, waveformsEnabled, audioDisplayMode, showFaceRanges, clipDrag, clipDragPreview, clipTrim, waveformPyramids, spectrogramTileSets, mediaFileStatusById, mediaThumbnailUrlsById, redrawNonce, workerEligibility, workerRuntimeFallbackReason, workerCanvasGeneration, markMainThreadCanvasContextInitialized]);
+  }, [workerMode, clips, trackId, height, cssWidth, canvasOffsetX, timeToPixel, selectedClipIds, hoveredClipId, trackColor, selectionBorderColor, scrollBucket, viewportWidth, thumbnailsEnabled, waveformsEnabled, audioDisplayMode, showFaceRanges, clipDrag, clipDragPreview, clipTrim, waveformPyramids, spectrogramTileSets, mediaFileStatusById, mediaThumbnailUrlsById, redrawNonce, workerEligibility, workerRuntimeFallbackReason, workerCanvasGeneration, markMainThreadCanvasContextInitialized]);
 }

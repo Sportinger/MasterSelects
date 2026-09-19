@@ -4,6 +4,8 @@ import { TimelineClipCanvas } from '../../src/components/timeline/TimelineClipCa
 import type { TimelinePaintSourceClip } from '../../src/timeline';
 import type { ClipDragState, ClipTrimState } from '../../src/components/timeline/types';
 import { flags } from '../../src/engine/featureFlags';
+import { useTimelineStore } from '../../src/stores/timeline';
+import * as thumbnailGenerationWarmup from '../../src/services/timeline/timelineThumbnailGenerationWarmup';
 import {
   evictTimelineSpectrogramTileSetRefs,
   primeTimelineSpectrogramTileSetCache,
@@ -174,6 +176,7 @@ class FakeTimelineCanvasWorker {
 }
 
 const originalTimelineCanvasWorkerFlag = flags.timelineCanvasWorker;
+const originalThumbnailsEnabled = useTimelineStore.getState().thumbnailsEnabled;
 const originalTransferDescriptor = Object.getOwnPropertyDescriptor(
   HTMLCanvasElement.prototype,
   'transferControlToOffscreen',
@@ -292,6 +295,7 @@ function getWorkerTotals(): WorkerTotals {
 
 describe('TimelineClipCanvas worker runtime', () => {
   beforeEach(() => {
+    useTimelineStore.setState({ thumbnailsEnabled: true });
     clearTimelineCanvasDiagnostics();
     flags.timelineCanvasWorker = true;
     workers = [];
@@ -315,6 +319,7 @@ describe('TimelineClipCanvas worker runtime', () => {
   });
 
   afterEach(() => {
+    useTimelineStore.setState({ thumbnailsEnabled: originalThumbnailsEnabled });
     flags.timelineCanvasWorker = originalTimelineCanvasWorkerFlag;
     clearTimelineCanvasDiagnostics();
     evictTimelineSpectrogramTileSetRefs(['spectrogram-ref']);
@@ -843,6 +848,24 @@ describe('TimelineClipCanvas worker runtime', () => {
     expect(createdStripBitmaps).toHaveLength(0);
     expect(container.querySelector('[data-clip-type="composition"]')).toBeNull();
     expect(cacheBitmap.close).not.toHaveBeenCalled();
+
+    act(() => useTimelineStore.setState({ thumbnailsEnabled: false }));
+    await waitFor(() => expect(workers).toHaveLength(1));
+    const worker = workers[0];
+    await act(async () => worker.emit({ type: 'ready' }));
+    const draw = worker.postedMessages.filter((message) => message.type === 'draw').at(-1);
+    expect(draw?.paintPayloads?.thumbnailStrips).toEqual([]);
+    const composition = draw?.paintPayloads?.compositionVisuals?.[0]?.resource;
+    expect(composition?.outline).toBe(true);
+    expect(Array.from(composition?.nestedBoundaries ?? [])).toEqual([0.25, 0.75]);
+    expect(composition?.segmentRects?.length).toBeGreaterThan(0);
+    expect(composition?.segmentThumbnailStrip).toBeUndefined();
+    expect(container.querySelector('[data-clip-type="composition"]')).not.toBeNull();
+
+    act(() => useTimelineStore.setState({ thumbnailsEnabled: true }));
+    expect(worker.terminate).toHaveBeenCalled();
+    expect(container.querySelector('[data-clip-type="composition"]')).toBeNull();
+    expect(cacheBitmap.close).not.toHaveBeenCalled();
   });
 
   it('posts fresh reversed thumbnail strip bitmaps without transferring cache-owned bitmaps', async () => {
@@ -898,6 +921,77 @@ describe('TimelineClipCanvas worker runtime', () => {
     );
     expect(worker.postedTransferables[drawIndex]).toEqual([thumbnailStrip?.bitmap]);
     expect(worker.postedTransferables[drawIndex]).not.toContain(cacheBitmap);
+    expect(cacheBitmap.close).not.toHaveBeenCalled();
+  });
+
+  it('removes cached worker thumbnails immediately and restores them when enabled again', async () => {
+    const cacheBitmap = { width: 320, height: 180, close: vi.fn() } as unknown as ImageBitmap;
+    const createdBitmaps: ImageBitmap[] = [];
+    installFakeOffscreenCanvas(createdBitmaps);
+    vi.spyOn(thumbnailCacheService, 'getThumbnailsForRange').mockReturnValue(['blob:thumb']);
+    vi.spyOn(thumbnailBitmapCache, 'hasThumbnailBitmap').mockReturnValue(true);
+    vi.spyOn(thumbnailBitmapCache, 'getThumbnailBitmap').mockReturnValue(cacheBitmap);
+    const cancelGeneration = vi.fn();
+    const scheduleGeneration = vi.spyOn(thumbnailGenerationWarmup, 'scheduleVisibleTimelineThumbnailGeneration')
+      .mockReturnValue(cancelGeneration);
+    const { container } = renderWorkerCanvas({ clips: [createClip({
+      id: 'clip-video', duration: 16, mediaFileId: 'media-1', reversed: true,
+      source: { type: 'video', mediaFileId: 'media-1', naturalDuration: 16 },
+    })] });
+    await waitFor(() => expect(workers).toHaveLength(1));
+    const worker = workers[0];
+    await act(async () => worker.emit({ type: 'ready' }));
+    const lastDraw = () => worker.postedMessages.filter((message) => message.type === 'draw').at(-1);
+    await waitFor(() => expect(lastDraw()?.paintPayloads?.thumbnailStrips).toHaveLength(1));
+    expect(scheduleGeneration).toHaveBeenCalled();
+    scheduleGeneration.mockClear();
+    cancelGeneration.mockClear();
+    const previousDraw = lastDraw();
+
+    act(() => useTimelineStore.setState({ thumbnailsEnabled: false }));
+    await waitFor(() => expect(lastDraw()).not.toBe(previousDraw));
+    expect(lastDraw()?.paintPayloads?.thumbnailStrips).toEqual([]);
+    expect(lastDraw()?.clips).toHaveLength(1);
+    expect(container.querySelector('[data-clip-type="video"]')).not.toBeNull();
+    expect(cancelGeneration).toHaveBeenCalled();
+    expect(scheduleGeneration).not.toHaveBeenCalled();
+    expect(workers).toHaveLength(1);
+    expect(worker.terminate).not.toHaveBeenCalled();
+
+    act(() => useTimelineStore.setState({ thumbnailsEnabled: true }));
+    await waitFor(() => expect(lastDraw()?.paintPayloads?.thumbnailStrips).toHaveLength(1));
+    expect(container.querySelector('[data-clip-type="video"]')).toBeNull();
+    expect(scheduleGeneration).toHaveBeenCalled();
+    expect(cacheBitmap.close).not.toHaveBeenCalled();
+  });
+
+  it.each(['video', 'composition'] as const)('toggles cached %s thumbnails on the software canvas without hiding the clip', (kind) => {
+    flags.timelineCanvasWorker = false;
+    const ctx = createCanvasContextMock();
+    vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(ctx);
+    const cacheBitmap = { width: 320, height: 180, close: vi.fn() } as unknown as ImageBitmap;
+    vi.spyOn(thumbnailCacheService, 'getThumbnailsForRange').mockReturnValue(['blob:thumb']);
+    vi.spyOn(thumbnailBitmapCache, 'hasThumbnailBitmap').mockReturnValue(true);
+    vi.spyOn(thumbnailBitmapCache, 'getThumbnailBitmap').mockReturnValue(cacheBitmap);
+    const { container } = renderWorkerCanvas({ clips: [createClip({
+      duration: 16, mediaFileId: 'media-1',
+      source: { type: 'video', mediaFileId: 'media-1', naturalDuration: 16 },
+      ...(kind === 'composition' ? {
+        isComposition: true, compositionId: 'comp-1', nestedClipBoundaries: [0.5],
+        clipSegments: [{ clipId: 'nested-1', clipName: 'Nested', startNorm: 0, endNorm: 1, thumbnails: ['blob:thumb'] }],
+      } : {}),
+    })] });
+    expect(ctx.drawImage).toHaveBeenCalled();
+    vi.mocked(ctx.drawImage).mockClear();
+    vi.mocked(ctx.clearRect).mockClear();
+    vi.mocked(ctx.setLineDash).mockClear();
+    act(() => useTimelineStore.setState({ thumbnailsEnabled: false }));
+    expect(ctx.clearRect).toHaveBeenCalled();
+    expect(ctx.drawImage).not.toHaveBeenCalled();
+    expect(container.querySelector(`[data-clip-type="${kind}"]`)).not.toBeNull();
+    if (kind === 'composition') expect(ctx.setLineDash).toHaveBeenCalledWith([6, 4]);
+    act(() => useTimelineStore.setState({ thumbnailsEnabled: true }));
+    expect(ctx.drawImage).toHaveBeenCalled();
     expect(cacheBitmap.close).not.toHaveBeenCalled();
   });
 

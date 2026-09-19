@@ -70,6 +70,7 @@ const MAX_THUMB_SLOTS = 48;
 const THUMBNAIL_VIEWPORT_OVERSCAN_PX = 600;
 const CANVAS_RENDER_OVERSCAN_PX = 1200;
 const NEUTRAL_CLIP_COLOR = getTimelineTrackColor({ labelColor: 'none' });
+const NO_THUMBNAIL_CLIPS: readonly TimelinePaintSourceClip[] = [];
 
 interface TimelineClipCanvasProps {
   clips: readonly TimelinePaintSourceClip[];
@@ -115,6 +116,7 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     ? '#ef4b3f'
     : '#ffffff';
   const showFaceRanges = useTimelineStore((state) => state.showFaceRanges);
+  const thumbnailsEnabled = useTimelineStore((state) => state.thumbnailsEnabled);
   const mediaFilesState = useMediaStore((state) => state.files);
   const mediaFiles = useMemo(
     () => (Array.isArray(mediaFilesState) ? mediaFilesState : []),
@@ -135,6 +137,7 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     () => enrichClipsWithSourceWaveformRef(rawClips, sourceWaveformPyramidIds),
     [rawClips, sourceWaveformPyramidIds],
   );
+  const thumbnailClips = thumbnailsEnabled ? clips : NO_THUMBNAIL_CLIPS;
   const geometryProps = useMemo(() => ({
     trackId,
     clipDrag,
@@ -188,7 +191,7 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     () => {
       void redrawNonce;
       return collectTimelineClipCanvasWorkerThumbnailPreparation({
-        clips,
+        clips: thumbnailClips,
         height,
         cssWidth,
         canvasOffsetX,
@@ -204,10 +207,10 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
         mediaThumbnailUrlsById,
       });
     },
-    [canvasOffsetX, clips, cssWidth, geometryProps, height, mediaThumbnailUrlsById, redrawNonce, scrollX, timeToPixel, viewportWidth],
+    [canvasOffsetX, thumbnailClips, cssWidth, geometryProps, height, mediaThumbnailUrlsById, redrawNonce, scrollX, timeToPixel, viewportWidth],
   );
   useTimelineClipCanvasThumbnailWarmups({
-    clips,
+    clips: thumbnailClips,
     mediaFiles,
     scrollX,
     viewportWidth,
@@ -251,8 +254,8 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     [clips, geometryProps],
   );
   const workerPaintClips = useMemo(
-    () => workerDrawableClips.map(createTimelineClipCanvasWorkerPaintClipInput),
-    [workerDrawableClips],
+    () => workerDrawableClips.map((clip) => createTimelineClipCanvasWorkerPaintClipInput(clip, thumbnailsEnabled)),
+    [workerDrawableClips, thumbnailsEnabled],
   );
   const passiveDecorationClipIds = useMemo(() => {
     const ids = new Set<string>();
@@ -335,6 +338,7 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     scrollX,
     scrollBucket,
     viewportWidth,
+    thumbnailsEnabled,
     waveformsEnabled,
     audioDisplayMode,
     showFaceRanges,

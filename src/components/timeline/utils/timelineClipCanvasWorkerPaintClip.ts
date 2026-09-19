@@ -25,8 +25,10 @@ export interface TimelineClipCanvasWorkerPaintClipInput {
 
 export function createTimelineClipCanvasWorkerPaintClipInput(
   clip: TimelinePaintSourceClip,
+  thumbnailsEnabled = true,
 ): TimelineClipCanvasWorkerPaintClipInput {
   const isAudio = isTimelineClipCanvasAudioClip(clip);
+  const visuals = resolveTimelineClipCanvasPaintVisuals(clip);
   return {
     id: clip.id,
     trackId: clip.trackId,
@@ -34,8 +36,8 @@ export function createTimelineClipCanvasWorkerPaintClipInput(
     startTime: clip.startTime,
     duration: clip.duration,
     isAudio,
-    hasCompositionSegmentThumbnails: !isAudio && Boolean(clip.clipSegments?.length),
-    visuals: resolveTimelineClipCanvasPaintVisuals(clip),
+    hasCompositionSegmentThumbnails: thumbnailsEnabled && !isAudio && Boolean(clip.clipSegments?.length),
+    visuals: thumbnailsEnabled ? visuals : { ...visuals, thumbnail: false, sourceTimingNeedsThumbnail: false },
     bodyFill: resolveTimelineClipCanvasBodyFill(clip),
     missingMedia: clip.needsReload === true,
     dataSourceType: clip.source?.type,

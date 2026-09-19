@@ -7,6 +7,7 @@ interface DrawTimelineClipCanvasCompositionSegmentsProps {
   maxThumbSlots: number;
   minThumbnailWidth: number;
   thumbSlotPx: number;
+  thumbnailsEnabled?: boolean;
 }
 
 export function drawTimelineClipCanvasCompositionSegmentThumbnails(
@@ -38,7 +39,7 @@ export function drawTimelineClipCanvasCompositionSegmentThumbnails(
     ctx.fillStyle = 'rgba(15, 23, 42, 0.62)';
     ctx.fillRect(segmentX, top, segmentW, h);
 
-    const urls = getTimelineClipCanvasCompositionSegmentThumbnailSlotUrls(
+    const urls = props.thumbnailsEnabled === false ? [] : getTimelineClipCanvasCompositionSegmentThumbnailSlotUrls(
       segment,
       segmentW,
       props.thumbSlotPx,

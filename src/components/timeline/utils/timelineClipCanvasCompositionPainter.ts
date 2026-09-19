@@ -9,6 +9,7 @@ interface DrawTimelineClipCanvasCompositionDecorationsProps {
   minThumbnailWidth: number;
   thumbSlotPx: number;
   thumbnailHeight: number;
+  thumbnailsEnabled?: boolean;
 }
 
 function drawCanvasCompositionOutline(

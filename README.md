@@ -97,6 +97,8 @@ Explore the [feature guide](docs/Features/README.md) for workflows and examples.
 Find keyboard shortcuts by action or key combination in Settings. Copy and paste
 automation curves to replace the destination range while keeping surrounding
 keyframes and other properties intact.
+Use **View > Thumbnails** in the timeline to hide or restore clip previews while
+keeping clip labels and audio waveforms visible.
 
 ## Try it
 

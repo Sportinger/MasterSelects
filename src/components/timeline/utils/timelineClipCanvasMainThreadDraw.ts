@@ -43,6 +43,7 @@ export interface TimelineClipCanvasMainThreadDrawInput {
   selectionBorderColor?: string;
   scrollX: number;
   viewportWidth: number;
+  thumbnailsEnabled?: boolean;
   waveformsEnabled?: boolean;
   audioDisplayMode?: TimelineAudioDisplayMode;
   showFaceRanges?: boolean;
@@ -77,6 +78,7 @@ export function drawTimelineClipCanvasMainThread(
     selectionBorderColor = '#ffffff',
     scrollX,
     viewportWidth,
+    thumbnailsEnabled = true,
     waveformsEnabled,
     audioDisplayMode = 'detailed',
     showFaceRanges = false,
@@ -246,12 +248,12 @@ export function drawTimelineClipCanvasMainThread(
     }
 
     const hasCompositionSegments = Boolean(clip.trackType !== 'audio' && clip.source?.type !== 'audio' && clip.isComposition && clip.clipSegments?.length);
-    if (hasCompositionSegments) {
+    if (thumbnailsEnabled && hasCompositionSegments) {
       diagnostics.thumbnailClipCount += 1;
     }
 
     const inThumbWindow = absoluteRight > thumbVisibleLeft && absoluteX < thumbVisibleRight;
-    const mediaFileId = (visibleW >= lodThumbnailPx && inThumbWindow && !hasCompositionSegments)
+    const mediaFileId = (thumbnailsEnabled && visibleW >= lodThumbnailPx && inThumbWindow && !hasCompositionSegments)
       ? getTimelineClipCanvasThumbnailSourceId(clip)
       : null;
     if (mediaFileId) {
@@ -305,6 +307,7 @@ export function drawTimelineClipCanvasMainThread(
         minThumbnailWidth: lodThumbnailPx,
         thumbSlotPx: thumbnailSlotPx,
         thumbnailHeight: visualPreviewHeight,
+        thumbnailsEnabled,
       },
     );
     if (compositionThumbnailDrawCount > 0) {
