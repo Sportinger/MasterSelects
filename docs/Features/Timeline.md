@@ -239,6 +239,8 @@ getTrackChildren()  // Query child tracks
 - Timeline edit operations expose replay descriptors for Guided Action playback, so Blade, Track Select, Trim, Slip/Slide, Placement, Lift/Extract, and related operation-kernel edits can be represented as semantic timeline replay targets without DOM clicks as the execution source.
 
 ### Trim Tools
+- Deleting a gap or all gaps moves the playhead with the remaining material, including during playback. Positions inside a removed gap land at its beginning; positions before it stay unchanged. Existing clip overlaps are preserved.
+- For gap deletion on several tracks with different gaps, the playhead follows the selected clip's affected track, or the first affected track when none is selected. A single explicitly targeted track takes precedence. Linked audio/video gaps are counted once.
 - Trim-to-playhead and ripple-trim-to-playhead commands run through the shared operation kernel and preserve linked audio/video timing.
 - Edge Trim, Ripple Trim, Rolling Edit, and Rate Stretch reuse the existing trim handles, but commit through `applyTimelineEditOperation` instead of direct clip mutations.
 - Edge-trimming a linked video/audio clip resizes the linked partner live in the canvas preview, including the source-extension ghost; holding `Alt` keeps the partner independent.

@@ -10,7 +10,8 @@ import { applySplitAtTimesOperation } from './splitBatchOperations';
 import { applyMergeMidiClipsOperation } from './mergeOperations';
 import { generateMidiClipId, generateMidiNoteId } from '../helpers/idGenerator';
 import { resolveSplitAllAtTimeTargets, resolveSplitAtTimeTargets } from './splitOperations';
-import { applyDeleteAllGapsOperation, applyDeleteGapAtTimeOperation, applyRippleDeleteSelectionOperation } from './rippleOperations';
+import { applyRippleDeleteSelectionOperation } from './rippleOperations';
+import { applyGapDeletionOperation } from './gapDeletionOperation';
 import { applyTimelineTrimOperation } from './applyTimelineTrimOperation';
 import type { TimelineEditOperation, TimelineEditResult } from './types';
 import {
@@ -386,60 +387,8 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
       };
     }
 
-    if (operation.type === 'delete-gap-at-time') {
-      const previousClips = get().clips;
-      const result = applyDeleteGapAtTimeOperation(operation, previousClips, get().tracks);
-      if (result.changedClipIds.length === 0 || hasOnlyNoopWarnings(result.warnings)) {
-        return resultFromWarnings(operationId, result.warnings);
-      }
-      const prunedTransitions = pruneInvalidClipTransitions(result.clips);
-      const nextClips = prunedTransitions.clips;
-      const changedClipIds = uniqueIds([...result.changedClipIds, ...prunedTransitions.changedClipIds]);
-
-      const historyBatch = startBatch(options.historyLabel ?? 'Delete gap');
-      try {
-        setClipsAndCleanupTransitionComps(set, previousClips, { clips: nextClips });
-        ensureTransitionCompositionsForChangedClips(set, get, changedClipIds, previousClips);
-        get().updateDuration();
-        get().invalidateCache();
-      } finally {
-        if (historyBatch.opened) endBatch();
-      }
-
-      return {
-        success: true,
-        operationId,
-        changedClipIds,
-        warnings: result.warnings,
-      };
-    }
-
-    if (operation.type === 'delete-all-gaps') {
-      const previousClips = get().clips;
-      const result = applyDeleteAllGapsOperation(operation, previousClips, get().tracks);
-      if (result.changedClipIds.length === 0 || hasOnlyNoopWarnings(result.warnings)) {
-        return resultFromWarnings(operationId, result.warnings);
-      }
-      const prunedTransitions = pruneInvalidClipTransitions(result.clips);
-      const nextClips = prunedTransitions.clips;
-      const changedClipIds = uniqueIds([...result.changedClipIds, ...prunedTransitions.changedClipIds]);
-
-      const historyBatch = startBatch(options.historyLabel ?? 'Delete all gaps');
-      try {
-        setClipsAndCleanupTransitionComps(set, previousClips, { clips: nextClips });
-        ensureTransitionCompositionsForChangedClips(set, get, changedClipIds, previousClips);
-        get().updateDuration();
-        get().invalidateCache();
-      } finally {
-        if (historyBatch.opened) endBatch();
-      }
-
-      return {
-        success: true,
-        operationId,
-        changedClipIds,
-        warnings: result.warnings,
-      };
+    if (operation.type === 'delete-gap-at-time' || operation.type === 'delete-all-gaps') {
+      return applyGapDeletionOperation(operation, { set, get, options });
     }
 
     if (operation.type === 'move-clips') {

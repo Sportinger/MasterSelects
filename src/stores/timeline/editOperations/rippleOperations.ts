@@ -3,6 +3,14 @@ import type { DeleteAllGapsOperation, DeleteGapAtTimeOperation, RippleDeleteSele
 
 const EPSILON = 0.0001;
 
+export interface GapDeletionApplyResult {
+  clips: TimelineClip[];
+  changedClipIds: string[];
+  warnings: TimelineEditWarning[];
+  /** Disjoint removed intervals in the original timeline coordinates, per track. */
+  removedTimeRanges: Map<string, Array<{ start: number; end: number }>>;
+}
+
 export interface RippleDeleteSelectionApplyResult {
   clips: TimelineClip[];
   deletedClips: TimelineClip[];
@@ -150,8 +158,9 @@ export function applyDeleteGapAtTimeOperation(
   operation: DeleteGapAtTimeOperation,
   clips: TimelineClip[],
   tracks: TimelineTrack[],
-): { clips: TimelineClip[]; changedClipIds: string[]; warnings: TimelineEditWarning[] } {
+): GapDeletionApplyResult {
   const warnings: TimelineEditWarning[] = [];
+  const removedTimeRanges: GapDeletionApplyResult['removedTimeRanges'] = new Map();
   const allowedTrackIds = operation.trackIds
     ? new Set(operation.trackIds)
     : new Set(tracks.filter((track) => track.locked !== true && track.visible !== false).map((track) => track.id));
@@ -166,6 +175,7 @@ export function applyDeleteGapAtTimeOperation(
     const gap = findGapAroundTime(clips.filter((clip) => clip.trackId === track.id), operation.time);
     if (!gap) continue;
     shiftByTrack.set(track.id, { start: gap.end, delta: gap.end - gap.start });
+    removedTimeRanges.set(track.id, [gap]);
   }
 
   if (shiftByTrack.size === 0) {
@@ -173,6 +183,7 @@ export function applyDeleteGapAtTimeOperation(
       clips,
       changedClipIds: [],
       warnings: [{ code: 'no-op', message: 'No timeline gap found at the requested time.' }],
+      removedTimeRanges,
     };
   }
 
@@ -190,15 +201,16 @@ export function applyDeleteGapAtTimeOperation(
     return nextStart === undefined ? clip : { ...clip, startTime: nextStart };
   });
 
-  return { clips: nextClips, changedClipIds: [...targetStartByClipId.keys()], warnings };
+  return { clips: nextClips, changedClipIds: [...targetStartByClipId.keys()], warnings, removedTimeRanges };
 }
 
 export function applyDeleteAllGapsOperation(
   operation: DeleteAllGapsOperation,
   clips: TimelineClip[],
   tracks: TimelineTrack[],
-): { clips: TimelineClip[]; changedClipIds: string[]; warnings: TimelineEditWarning[] } {
+): GapDeletionApplyResult {
   const warnings: TimelineEditWarning[] = [];
+  const removedTimeRanges: GapDeletionApplyResult['removedTimeRanges'] = new Map();
   const allowedTrackIds = operation.trackIds
     ? new Set(operation.trackIds)
     : new Set(tracks.filter((track) => track.locked !== true && track.visible !== false).map((track) => track.id));
@@ -214,21 +226,26 @@ export function applyDeleteAllGapsOperation(
     const sorted = clips
       .filter((clip) => clip.trackId === track.id)
       .toSorted((a, b) => a.startTime - b.startTime || a.id.localeCompare(b.id));
-    let nextStart = 0;
+    let coveredEnd = 0;
+    let removedDuration = 0;
+    const ranges: Array<{ start: number; end: number }> = [];
     const startTime = operation.startTime;
 
     for (const clip of sorted) {
       const currentStart = clip.startTime;
-      if (startTime !== undefined && currentStart < startTime - EPSILON) {
-        nextStart = Math.max(nextStart, currentStart + clip.duration);
-        continue;
+      if ((startTime === undefined || currentStart >= startTime - EPSILON)
+        && currentStart > coveredEnd + EPSILON) {
+        ranges.push({ start: coveredEnd, end: currentStart });
+        removedDuration += currentStart - coveredEnd;
       }
-      const targetStart = currentStart > nextStart + EPSILON ? nextStart : currentStart;
+      // Shift every clip by removed empty time, keeping existing overlaps intact.
+      const targetStart = currentStart - removedDuration;
       if (Math.abs(targetStart - currentStart) > EPSILON) {
         nextStartByClipId.set(clip.id, targetStart);
       }
-      nextStart = Math.max(nextStart, targetStart + clip.duration);
+      coveredEnd = Math.max(coveredEnd, currentStart + clip.duration);
     }
+    if (ranges.length > 0) removedTimeRanges.set(track.id, ranges);
   }
 
   if (nextStartByClipId.size === 0) {
@@ -238,6 +255,7 @@ export function applyDeleteAllGapsOperation(
       warnings: warnings.length > 0
         ? warnings
         : [{ code: 'no-op', message: 'No timeline gaps found.' }],
+      removedTimeRanges,
     };
   }
 
@@ -248,5 +266,5 @@ export function applyDeleteAllGapsOperation(
     return nextStart === undefined ? clip : { ...clip, startTime: Math.max(0, nextStart) };
   });
 
-  return { clips: nextClips, changedClipIds: [...nextStartByClipId.keys()], warnings };
+  return { clips: nextClips, changedClipIds: [...nextStartByClipId.keys()], warnings, removedTimeRanges };
 }
