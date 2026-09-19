@@ -10,7 +10,7 @@ export default defineConfig({
     starlight({
       title: 'MasterSelects Documentation',
       description:
-        'Browser-based WebGPU video editor: timeline editing, motion design, replicators, audio workstation, and AI-assisted workflows.',
+        'Browser-based media editor and agent-friendly foundation for video, audio, motion, 3D, and creative tools.',
       logo: { src: './src/assets/ms-mark.png' },
       customCss: ['./src/styles/custom.css'],
       sidebar: [

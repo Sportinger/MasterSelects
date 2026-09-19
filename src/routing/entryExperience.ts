@@ -174,6 +174,9 @@ export function isEnglishLegalPath(pathname: string): boolean {
 export function isSupportedPagePath(pathname: string): boolean {
   const normalizedPath = normalizePathname(pathname);
   return ROOT_PATHS.includes(normalizedPath)
+    // Static product information, built separately from the React editor.
+    || normalizedPath === '/about'
+    || normalizedPath === '/about/index.html'
     || isLandingPath(normalizedPath)
     || isLegacyLandingPath(normalizedPath)
     || isChatPath(normalizedPath)

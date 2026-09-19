@@ -459,6 +459,20 @@
   background: var(--bg-hover);
 }
 
+.info-menu-dropdown .menu-option {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.info-menu-dropdown .menu-option:focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
+}
+
+.info-menu-dropdown .menu-option:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
 .menu-option:disabled,
 .menu-option.disabled {
   color: var(--text-muted);

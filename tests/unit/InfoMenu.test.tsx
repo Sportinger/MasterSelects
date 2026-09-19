@@ -44,6 +44,10 @@ describe('InfoMenu community actions and developer chat notification', () => {
 
     expect(screen.getByRole('button', { name: 'Info' })).not.toHaveAttribute('title');
     expect(screen.getByLabelText(`Version ${APP_VERSION}`)).toHaveTextContent(`v${APP_VERSION}`);
+    const aboutLink = screen.getByRole('menuitem', { name: 'About MasterSelects' });
+    expect(aboutLink).toHaveAttribute('href', '/about/');
+    expect(aboutLink).toHaveAttribute('target', '_blank');
+    expect(aboutLink).toHaveAttribute('rel', 'noopener noreferrer');
     const documentationLink = screen.getByRole('menuitem', { name: 'Documentation' });
     expect(documentationLink).toHaveAttribute('href', 'https://www.masterselects.com/docs/');
     expect(documentationLink).toHaveAttribute('target', '_blank');

@@ -70,6 +70,16 @@ export function InfoMenu({
           <div className="menu-separator" />
           <a
             className="menu-option"
+            href="/about/"
+            onClick={closeMenu}
+            rel="noopener noreferrer"
+            role="menuitem"
+            target="_blank"
+          >
+            <span>About MasterSelects</span>
+          </a>
+          <a
+            className="menu-option"
             href={DOCUMENTATION_URL}
             onClick={closeMenu}
             rel="noopener noreferrer"

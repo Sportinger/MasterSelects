@@ -8,6 +8,32 @@ production. `/`, `/landing`, `/landing-preview`, and the legacy
 also returns to `/editor`, and direct editor/chat/medium entries no longer add a
 landing return entry to browser history.
 
+## Public product information
+
+`/about/` is a separate, readable product page. It describes video, audio,
+motion, 3D and live workflows, building tools with coding agents while working
+on a project, community contributions, bridge diagnostics, and touch/iPad
+support (with phone workflows still being refined). It links to the public
+AGPL editor source, documentation, and the editor.
+
+The page is ordinary HTML and CSS, available without JavaScript or WebGPU.
+Vite builds `about/index.html` as a second entry, without loading the editor
+runtime. The editor's **Info → About MasterSelects** link opens it separately,
+preserving the current project. The README and docs homepage also link to it.
+Pages middleware allows only `/about`, `/about/`, and `/about/index.html`;
+unknown child routes continue to return 404.
+
+The editor shell's description, social metadata, JSON-LD and no-JavaScript
+fallback describe the same product. The previous embedded tool catalogue and
+crawler-directed prompt have been removed; technical readers are linked to
+the maintained bridge documentation instead. `public/robots.txt` references
+`public/sitemap.xml`, which lists the editor, product page and documentation.
+There is no user-agent-specific description or special AI-only page.
+
+Chrome's AI playback chooses how to extract and summarize a page. These changes
+make the current description accessible but do not guarantee a particular
+audio summary, especially when playback starts inside the editor UI.
+
 The underlying chooser and layouts remain available in source for possible
 reactivation. `CHAT` remains available through `/chat` as a factory favorite,
 with durable identifier `factory-start`; the Medium layout remains available

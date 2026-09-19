@@ -420,6 +420,10 @@ export default defineConfig(({ command, mode }) => {
       target: 'esnext',
       chunkSizeWarningLimit: 6000,
       rollupOptions: {
+        input: {
+          editor: path.resolve(__dirname, 'index.html'),
+          about: path.resolve(__dirname, 'about/index.html'),
+        },
         onwarn(warning, warn) {
           if (warning.message.includes('dynamic import will not move module into another chunk')) {
             return;

@@ -29,6 +29,14 @@ describe('entry experience routing', () => {
     })).toBe('editor');
   });
 
+  it('allows the static information page without redirecting it into the editor', () => {
+    for (const pathname of ['/about', '/about/', '/about/index.html']) {
+      expect(isSupportedPagePath(pathname)).toBe(true);
+      expect(canonicalEntryPath({ hostname: 'www.masterselects.com', pathname })).toBeNull();
+    }
+    expect(isSupportedPagePath('/about/missing')).toBe(false);
+  });
+
   it('maps each canonical route to its own refresh-stable experience', () => {
     expect(resolveEntryExperience({
       hostname: 'localhost',

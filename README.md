@@ -11,6 +11,7 @@ build it into the editor while you work. Try the new effect, panel, or workflow
 in that same project, and refine it around the job in front of you.
 
 [Open the editor](https://www.masterselects.com/) ·
+[About MasterSelects](https://www.masterselects.com/about/) ·
 [Documentation](https://www.masterselects.com/docs/) ·
 [Discord](https://discord.com/invite/K8dApzG3XC) ·
 [Report an issue](https://github.com/Sportinger/MasterSelects/issues)

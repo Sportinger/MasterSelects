@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>About MasterSelects — build while you create</title>
+    <meta name="description" content="A browser-based media editor and agent-friendly foundation for creative tools. Edit video, audio, motion and 3D, build what you need, and contribute it back." />
+    <link rel="canonical" href="https://www.masterselects.com/about/" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="stylesheet" href="./style.css" />
+    <meta property="og:title" content="About MasterSelects — build while you create" />
+    <meta property="og:description" content="A browser-based media editor and agent-friendly foundation for creative tools. Edit video, audio, motion and 3D, build what you need, and contribute it back." />
+    <meta property="og:url" content="https://www.masterselects.com/about/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://www.masterselects.com/preview.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "AboutPage",
+        "name": "About MasterSelects",
+        "url": "https://www.masterselects.com/about/",
+        "description": "A browser-based media editor and agent-friendly foundation for creative tools. Edit video, audio, motion and 3D, build what you need, and contribute it back.",
+        "mainEntity": {
+          "@type": "WebApplication",
+          "@id": "https://www.masterselects.com/#app",
+          "name": "MasterSelects",
+          "url": "https://www.masterselects.com/",
+          "applicationCategory": "MultimediaApplication",
+          "operatingSystem": "Web browser with WebGPU support",
+          "license": "https://github.com/Sportinger/MasterSelects/blob/master/LICENSE",
+          "sameAs": "https://github.com/Sportinger/MasterSelects"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <a class="brand" href="/editor"><img src="/favicon.png" width="28" height="28" alt="" />MasterSelects</a>
+      <nav aria-label="Main navigation">
+        <a href="/docs/">Docs</a>
+        <a href="https://github.com/Sportinger/MasterSelects">Source</a>
+        <a href="/editor">Open editor <span aria-hidden="true">↗</span></a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <article>
+        <header class="intro">
+          <p class="eyebrow">Video · Audio · Motion · 3D · Live</p>
+          <h1>MasterSelects</h1>
+          <p class="lead">A media editor and an agent-friendly foundation for creative tools.</p>
+          <p>Edit video, mix audio, animate graphics, build 3D scenes, and work with live
+            visuals. MasterSelects brings these workflows together in a browser-based
+            workspace with WebGPU rendering and a multitrack timeline.</p>
+          <div class="actions">
+            <a class="button primary" href="/editor">Open the editor <span aria-hidden="true">↗</span></a>
+            <a class="button" href="https://github.com/Sportinger/MasterSelects#run-locally">Build from source</a>
+          </div>
+        </header>
+
+        <section aria-labelledby="build-heading">
+          <h2 id="build-heading">Build while you create</h2>
+          <p>When your project needs a tool that isn't there yet, you can have a coding
+            agent build it into the editor while you work. Run MasterSelects locally
+            from source, open your project, and try the new effect, panel, or workflow
+            in that same project. Refine it around the job in front of you.</p>
+          <p>The codebase includes architecture and feature documentation, reusable
+            effect modules and inspector controls, typed tool schemas, and thousands
+            of automated test definitions. These give you and your agent existing
+            patterns to build on and ways to check changes.</p>
+          <p>The local agent bridge connects coding agents to the running editor.
+            Agents can inspect the timeline, operate tools, and examine results.
+            When playback feels slow or laggy, they can inspect frame timings,
+            decoder state, cache usage, audio drift, and playback traces, then use
+            repeatable playback and scrub probes to compare changes.</p>
+          <p>See the <a href="/docs/features/ai-bridge-control/">agent bridge guide</a>
+            and <a href="/docs/features/playback-debugging/">playback debugging guide</a>
+            for setup and diagnostics.</p>
+        </section>
+
+        <section class="community" aria-labelledby="community-heading">
+          <h2 id="community-heading">A tool for one project can help the next</h2>
+          <blockquote>
+            <p>I want people to contribute the useful things they build. An effect
+              made for one person's project can become a tool someone else already
+              has when they need it. As those contributions become part of
+              MasterSelects, both people and their agents have more to work with,
+              and the next task gets a little easier.</p>
+          </blockquote>
+          <p>Meanwhile, I'll keep a refined version available at masterselects.com,
+            reviewing and polishing contributions as I bring them together into
+            a cohesive editor.</p>
+          <a href="https://github.com/Sportinger/MasterSelects#contribute">Contribute on GitHub <span aria-hidden="true">↗</span></a>
+        </section>
+
+        <section aria-labelledby="workspace-heading">
+          <h2 id="workspace-heading">One workspace, many kinds of media</h2>
+          <dl class="features">
+            <div><dt>Video &amp; color</dt><dd>Edit multiple tracks and nested compositions,
+              sync multicam footage, work with proxies, grade with curves and scopes,
+              and animate effects and masks.</dd></div>
+            <div><dt>Audio</dt><dd>Edit waveforms and spectrograms, mix tracks with
+              effects and sends, record audio, and separate stems.</dd></div>
+            <div><dt>Motion &amp; tracking</dt><dd>Animate text, shapes, Lottie, and Rive
+              assets. Create captions, track faces and surfaces, and attach graphics
+              to tracked motion.</dd></div>
+            <div><dt>3D &amp; live</dt><dd>Combine footage with models, lights, cameras,
+              and Gaussian splats. Use live inputs and multiple preview outputs
+              for live and installation workflows.</dd></div>
+          </dl>
+          <p>Arrange the dockable panels for the work at hand. The interface is
+            optimized for touch and iPad, with phone workflows still being refined.</p>
+        </section>
+
+        <section aria-labelledby="try-heading">
+          <h2 id="try-heading">Try it in your browser</h2>
+          <p>Open the editor, import a clip, and drag it onto the timeline. Use a
+            recent browser with WebGPU support. Available codecs, local file access,
+            and performance depend on your browser, operating system, and GPU.</p>
+          <p>Editing and rendering run locally. Hosted AI and media generation use
+            external services and may require credits; local AI features may
+            download models on first use. The hosted AI kernel is maintained
+            separately from the public editor source.</p>
+          <p>MasterSelects is under active development. Keep backups of important
+            projects, and share reproducible issues to help improve it.</p>
+          <p>The editor source is available under
+            <a href="https://github.com/Sportinger/MasterSelects/blob/master/LICENSING.md">AGPL-3.0-only</a>.
+            See the repository for license scope and component notices.</p>
+        </section>
+      </article>
+    </main>
+
+    <footer>
+      <span>MasterSelects</span>
+      <nav aria-label="More information">
+        <a href="/docs/">Documentation</a>
+        <a href="https://discord.com/invite/K8dApzG3XC">Discord</a>
+        <a href="/imprint">Imprint</a>
+        <a href="/privacy">Privacy</a>
+      </nav>
+    </footer>
+  </body>
+</html>

@@ -38,7 +38,7 @@ function makeContext(
 
 describe('Pages middleware routing', () => {
   it('returns a real 404 without tracking unknown HTML fallbacks', async () => {
-    const { context, pending, put } = makeContext('/about', new Response('<!doctype html>', {
+    const { context, pending, put } = makeContext('/about/missing', new Response('<!doctype html>', {
       headers: { 'Content-Type': 'text/html; charset=UTF-8' },
       status: 200,
     }));
@@ -52,7 +52,7 @@ describe('Pages middleware routing', () => {
     expect(pending).toHaveLength(0);
     expect(put).not.toHaveBeenCalled();
 
-    const headContext = makeContext('/about', new Response('<!doctype html>', {
+    const headContext = makeContext('/about/missing', new Response('<!doctype html>', {
       headers: { 'Content-Type': 'text/html; charset=UTF-8' },
       status: 200,
     }), 'HEAD').context;
@@ -67,6 +67,9 @@ describe('Pages middleware routing', () => {
       '/',
       '/?test=parallel-decode',
       '/index.html',
+      '/about',
+      '/about/',
+      '/about/index.html',
       '/landing',
       '/landing-preview',
       '/chat',

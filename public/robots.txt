@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://www.masterselects.com/sitemap.xml
+Sitemap: https://www.masterselects.com/docs/sitemap-index.xml
