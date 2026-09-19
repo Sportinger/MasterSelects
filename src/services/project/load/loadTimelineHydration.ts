@@ -223,9 +223,20 @@ export function convertProjectCompositionToStore(
   projectComps: ProjectComposition[],
   compositionViewState?: CompositionViewState,
 ): Composition[] {
+  const compositionsById = new Map(projectComps.map(composition => [composition.id, composition]));
   return projectComps.map((pc) => {
     const viewState = compositionViewState?.[pc.id];
-    const normalizedClips = quantizeFrameLockedClipTimings(pc.clips, pc.frameRate);
+    const clipsWithSourceDurations = pc.clips.map(clip => {
+      const sourceComposition = clip.isComposition && clip.compositionId
+        ? compositionsById.get(clip.compositionId)
+        : undefined;
+      // Older snapshots saved a split wrapper's own length as naturalDuration.
+      // Resolve the full source before frame quantization clamps its trim range.
+      return sourceComposition
+        ? { ...clip, naturalDuration: resolveProjectCompositionDuration(sourceComposition).duration }
+        : clip;
+    });
+    const normalizedClips = quantizeFrameLockedClipTimings(clipsWithSourceDurations, pc.frameRate);
     const normalizedComposition = { ...pc, clips: normalizedClips };
     const { duration, durationLocked } = resolveProjectCompositionDuration(normalizedComposition);
     const timelineData: CompositionTimelineData = {

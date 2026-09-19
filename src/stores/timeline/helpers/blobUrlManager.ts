@@ -24,6 +24,7 @@ class BlobUrlManager {
       ownerId: clipId,
       blob: file,
       policy: 'interactive',
+      cleanupScope: 'timeline-clip',
     });
     return lease.getRuntimeHandles()?.url ?? '';
   }
@@ -109,10 +110,10 @@ class BlobUrlManager {
   }
 
   /**
-   * Clear all URLs. Use only during cleanup/reset.
+   * Clear timeline-owned URLs without revoking media-wide proxy cache leases.
    */
   clear(): void {
-    mediaRuntimeObjectUrlLeaseOwner.clear();
+    mediaRuntimeObjectUrlLeaseOwner.clear('timeline-clip');
   }
 
   /**

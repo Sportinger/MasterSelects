@@ -11,7 +11,7 @@ import type { AudioEffectParamValue } from '../../../types/audio';
 import { isAudioEffect, type EffectType } from '../../../types/effects';
 import { EFFECT_REGISTRY, getDefaultParams, getCategoriesWithEffects } from '../../../effects';
 import { groupEffectParameters } from '../../../effects/parameterGroups';
-import { getExtraControls } from '../../../effects/EffectControls';
+import { EXTRA_CONTROLS_REGISTRY } from '../../../effects/extraControlsRegistry';
 import '../../../effects/effectParameterGroups.css';
 import { addParticleDisintegrateOutroPreset } from '../../../effects/presets/particleDisintegrateOutro';
 import {
@@ -197,9 +197,7 @@ function EffectParams({ effect, onChange, clipId, onDragStart, onDragEnd, onPara
   }
 
   const parameterGroups = groupEffectParameters(effectDef.params);
-  const ExtraControls = 'extraControls' in effectDef && effectDef.extraControls
-    ? getExtraControls(effectDef.id, effectDef.extraControls)
-    : null;
+  const ExtraControls = EXTRA_CONTROLS_REGISTRY[effectDef.id];
   const ungroupedParams = parameterGroups.find((group) => group.id === '__ungrouped__')?.params ?? [];
   const namedGroups = parameterGroups.filter((group) => !group.quality && group.label);
   const qualityParams = parameterGroups.find((group) => group.quality)?.params ?? [];

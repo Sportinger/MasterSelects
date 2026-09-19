@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 
 import {
   describeMotionDesignMd0Fixture,
@@ -39,11 +39,12 @@ interface Md0RunnerModule {
 }
 
 async function loadRunnerModule(): Promise<Md0RunnerModule> {
-  const moduleUrl = pathToFileURL(path.resolve(
+  // Load the executable ESM through Node, which handles its shebang. Vitest's
+  // inlined file-URL transform can move the shebang below instrumentation.
+  return createRequire(import.meta.url)(path.resolve(
     process.cwd(),
     'scripts/run-motion-design-md0-evidence.mjs',
-  )).href;
-  return import(/* @vite-ignore */ moduleUrl) as Promise<Md0RunnerModule>;
+  )) as Md0RunnerModule;
 }
 
 function videoTrack(id: string): TimelineTrack {

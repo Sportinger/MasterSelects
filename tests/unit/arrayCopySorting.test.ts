@@ -19,7 +19,9 @@ it('sorts frozen state without mutation and preserves equal-key order', () => {
 
 it('materializes holes and ignores custom iterators and species', () => {
   installFallback();
-  const sparse = [3, , 1];
+  const sparse = new Array<number>(3);
+  sparse[0] = 3;
+  sparse[2] = 1;
   const sorted = sparse.toSorted();
   expect(sorted).toEqual([1, 3, undefined]);
   expect(Object.hasOwn(sorted, 2)).toBe(true);

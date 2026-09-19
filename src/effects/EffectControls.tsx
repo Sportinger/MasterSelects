@@ -1,9 +1,10 @@
 // Generic Effect Controls Component
 // Renders UI controls based on effect parameter definitions
 
-import React, { Suspense, lazy, type ComponentType, type LazyExoticComponent } from 'react';
+import React, { Suspense } from 'react';
 import { EFFECT_REGISTRY } from './index';
-import type { EffectControlProps, EffectParam } from './types';
+import type { EffectParam } from './types';
+import { EXTRA_CONTROLS_REGISTRY } from './extraControlsRegistry';
 import { groupEffectParameters } from './parameterGroups';
 import { LabeledValue } from '../components/panels/properties/LabeledValue';
 import '../components/panels/properties/effectValueControls.css';
@@ -44,9 +45,7 @@ export function EffectControls({
   }
 
   const groups = groupEffectParameters(effect.params);
-  const ExtraControls = 'extraControls' in effect && effect.extraControls
-    ? getExtraControls(effectType, effect.extraControls)
-    : undefined;
+  const ExtraControls = EXTRA_CONTROLS_REGISTRY[effectType];
 
   const renderParams = (entries: Array<[string, EffectParam]>) => entries.map(([key, paramDef]) => (
     <EffectParamControl
@@ -84,18 +83,6 @@ export function EffectControls({
       )}
     </div>
   );
-}
-
-type ExtraControlsLoader = () => Promise<{ default: ComponentType<EffectControlProps> }>;
-const extraControlsCache = new Map<string, LazyExoticComponent<ComponentType<EffectControlProps>>>();
-
-export function getExtraControls(effectType: string, loader: ExtraControlsLoader) {
-  let component = extraControlsCache.get(effectType);
-  if (!component) {
-    component = lazy(loader);
-    extraControlsCache.set(effectType, component);
-  }
-  return component;
 }
 
 interface EffectParamControlProps {

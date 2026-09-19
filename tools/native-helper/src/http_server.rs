@@ -39,19 +39,23 @@ pub(crate) fn is_cloudflare_pages_origin(origin: &str) -> bool {
 }
 
 pub(super) async fn run(port: u16, state: Arc<AppState>, allowed_origins: Arc<Vec<String>>) {
+    let routes = create_routes(state, &allowed_origins);
+
+    info!("HTTP file server listening on http://127.0.0.1:{}", port);
+    warp::serve(routes).run(([127, 0, 0, 1], port)).await;
+}
+
+// Erase the composed filter and reply types before crossing Warp's async server
+// boundary so the spawned server future has an owned, Send + 'static filter.
+fn create_routes(
+    state: Arc<AppState>,
+    allowed_origins: &[String],
+) -> warp::filters::BoxedFilter<(warp::reply::Response,)> {
     // CORS setup: static origins from config + Cloudflare Pages production domain.
     // For preview deployments (*.masterselects.pages.dev), use --allowed-origins CLI flag.
     // WebSocket handler has dynamic pattern matching for CF Pages subdomains.
-    let cors_origins: Vec<String> = allowed_origins.iter().cloned().collect();
-    let cors_headers: Vec<String> = cors_origins.iter().map(|o| o.to_string()).collect();
-
     let cors = warp::cors()
-        .allow_origins(
-            cors_headers
-                .iter()
-                .map(|s| s.as_str())
-                .collect::<Vec<&str>>(),
-        )
+        .allow_origins(allowed_origins.iter().map(String::as_str))
         .allow_methods(vec!["GET", "POST", "OPTIONS"])
         .allow_headers(vec!["Content-Type", "Authorization"]);
 
@@ -104,15 +108,14 @@ pub(super) async fn run(port: u16, state: Arc<AppState>, allowed_origins: Arc<Ve
         .and(with_state(state_for_startup_token))
         .and_then(get_startup_token);
 
-    let routes = file_route
+    file_route
         .or(upload_route)
         .or(project_root_route)
         .or(startup_token_route)
         .recover(handle_rejection)
-        .with(cors);
-
-    info!("HTTP file server listening on http://127.0.0.1:{}", port);
-    warp::serve(routes).run(([127, 0, 0, 1], port)).await;
+        .with(cors)
+        .map(warp::Reply::into_response)
+        .boxed()
 }
 
 /// Custom rejection for auth failures
@@ -240,7 +243,7 @@ async fn serve_file(
 /// POST /upload?path=<absolute_path> â€” write binary body to disk
 async fn handle_upload(
     params: std::collections::HashMap<String, String>,
-    body: warp::hyper::body::Bytes,
+    body: bytes::Bytes,
     state: Arc<AppState>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let path = params.get("path").ok_or_else(warp::reject::not_found)?;

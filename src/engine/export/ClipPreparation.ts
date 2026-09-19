@@ -46,7 +46,7 @@ export async function prepareClipsForExport(
   exportRunId?: string
 ): Promise<ClipPreparationResult> {
   const endPrepare = log.time('prepareClipsForExport TOTAL');
-  const { clips, tracks } = useTimelineStore.getState();
+  const { clips, tracks, clipKeyframes } = useTimelineStore.getState();
   const mediaState = useMediaStore.getState();
   const mediaFiles = mediaState.files;
   const mediaCompositions = mediaState.compositions;
@@ -125,7 +125,12 @@ export async function prepareClipsForExport(
 
   if (effectiveExportMode === 'precise') {
     try {
-      const result = await initializePreciseMode(preparationVideoClips, clipStates, mediaFiles, startTime, exportRunId);
+      const result = await initializePreciseMode(preparationVideoClips, clipStates, mediaFiles, {
+        startTime,
+        endTime,
+        hasAnimatedSpeed: (clip) => clipKeyframes.get(clip.id)
+          ?.some((keyframe) => keyframe.property === 'speed') ?? false,
+      }, exportRunId);
       endPrepare();
       return withMedia(result);
     } catch (error) {

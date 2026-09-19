@@ -18,32 +18,11 @@ export class ExportDriver {
   }
 
   async selectFastWebCodecs(): Promise<void> {
-    const method = this.panel.getByRole('button', {
-      name: 'Use WebCodecs Fast export',
-      exact: true,
-    });
-    let lastError: unknown;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      await this.ensureOpen();
-      try {
-        await method.click({ timeout: 2_000 });
-        await this.ensureOpen();
-        await expect(method).toHaveClass(/is-active/);
-        return;
-      } catch (error) {
-        lastError = error;
-      }
-    }
-    throw lastError instanceof Error
-      ? lastError
-      : new Error('Could not select the visible WebCodecs Fast export workflow.');
+    await this.selectMethod('WebCodecs Fast');
   }
 
   async selectPreciseHtmlVideo(): Promise<void> {
-    await this.ensureOpen();
-    const method = this.panel.getByRole('button', { name: 'HTMLVideo', exact: true });
-    await method.click();
-    await expect(method).toHaveClass(/is-active/);
+    await this.selectMethod('HTMLVideo Precise');
   }
 
   async useCompositionSettings(): Promise<void> {
@@ -61,7 +40,7 @@ export class ExportDriver {
 
   async setFilename(filename: string): Promise<void> {
     await this.ensureOpen();
-    const input = this.panel.getByRole('textbox', { name: 'Name', exact: true });
+    const input = this.panel.getByRole('textbox', { name: 'Output name', exact: true });
     await expect(input).toBeVisible();
     await input.fill(filename);
     await expect(input).toHaveValue(filename);
@@ -69,12 +48,16 @@ export class ExportDriver {
 
   async useInOutMarkers(): Promise<void> {
     await this.ensureOpen();
-    const button = this.panel.getByRole('button', { name: 'Use In/Out', exact: true });
-    await expect(button).toBeVisible();
-    if (!await button.getAttribute('class').then((value) => value?.includes('is-active'))) {
-      await button.click();
+    const section = this.panel.getByRole('button', { name: 'Range & Summary', exact: true });
+    await expect(section).toBeVisible();
+    if (await section.getAttribute('aria-expanded') !== 'true') {
+      await section.click();
     }
-    await expect(button).toHaveClass(/is-active/);
+    const range = this.panel.getByRole('combobox', { name: 'Export range', exact: true });
+    await expect(range).toBeVisible();
+    await range.click();
+    await this.page.getByRole('option', { name: 'In / Out markers', exact: true }).click();
+    await expect(range).toContainText('In / Out markers');
   }
 
   async exportTo(destination: string, timeout = 120_000): Promise<Download> {
@@ -95,27 +78,30 @@ export class ExportDriver {
       // A successful export leaves this waiter behind. Convert its eventual
       // timeout into a forever-pending promise so it cannot become unhandled.
       .catch(() => new Promise<never>(() => {}));
-    let primary: unknown;
+    let download: Download;
     try {
-    await exportButton.click();
-    const result = await Promise.race([downloadPromise, productErrorPromise]);
-    if (result.kind === 'product-error') {
-      throw new Error(`Product export failed before download: ${result.message}`);
-    }
-    const { download } = result;
-    await download.saveAs(destination);
+      await exportButton.click();
+      const result = await Promise.race([downloadPromise, productErrorPromise]);
+      if (result.kind === 'product-error') {
+        throw new Error(`Product export failed before download: ${result.message}`);
+      }
+      download = result.download;
+      await download.saveAs(destination);
 
-    const failure = await download.failure();
-    if (failure) {
-      throw new Error(`Browser download failed: ${failure}`);
-    }
-    await expect(this.panel).not.toHaveAttribute('aria-busy', 'true', { timeout: 10_000 });
-    return download;
-    } catch (error) { primary = error; throw error; }
-    finally {
+      const failure = await download.failure();
+      if (failure) {
+        throw new Error(`Browser download failed: ${failure}`);
+      }
+      await expect(this.panel).not.toHaveAttribute('aria-busy', 'true', { timeout: 10_000 });
+    } catch (error) {
+      // Preserve the export failure if releasing the observer also fails.
       try { await retainedObserver?.stop(); }
-      catch (error) { if (!primary) throw error; console.error('Export observer cleanup failed:', error); }
+      catch (cleanupError) { console.error('Export observer cleanup failed:', cleanupError); }
+      throw error;
     }
+    // Cleanup failure after a successful export must still fail the journey.
+    await retainedObserver?.stop();
+    return download;
   }
 
   private async ensureOpen(): Promise<void> {
@@ -125,5 +111,13 @@ export class ExportDriver {
     await tab.click();
     await expect(tab).toHaveAttribute('aria-selected', 'true');
     await expect(this.panel).toBeVisible();
+  }
+
+  private async selectMethod(name: 'WebCodecs Fast' | 'HTMLVideo Precise'): Promise<void> {
+    await this.ensureOpen();
+    const method = this.panel.getByRole('combobox', { name: 'Export method', exact: true });
+    await method.click();
+    await this.page.getByRole('option', { name, exact: true }).click();
+    await expect(method).toContainText(name);
   }
 }

@@ -11,8 +11,7 @@ import {
   createCompLinkedAudioClip,
   createNestedContentHash,
 } from './addCompClip';
-import { releaseCompositionMixdownClipRuntime } from '../../../services/timeline/compositionAudioMixdownRuntimeResources';
-import { detachLegacyTimelineMediaElement } from '../../../services/timeline/timelineClipSourceRuntimeCleanup';
+import { detachCompositionMixdownAudioElement, releaseCompositionMixdownClipRuntime } from '../../../services/timeline/compositionAudioMixdownRuntimeResources';
 import { beginNestedCompositionLoad, releaseStaleNestedCompositionClips } from '../nestedCompositionLoadGeneration';
 import { getCompositionContentDependents } from './nestedCompositionContentHash';
 import type { ClipActionContext } from './clipActionContext';
@@ -21,10 +20,7 @@ import { findCompositionInsertionCycle } from '../compositionCycleGuard';
 const log = Logger.create('CompositionClipActions');
 
 function resetCompositionMixdown(clip: TimelineClip): Partial<TimelineClip> {
-  detachLegacyTimelineMediaElement(
-    clip.source?.type === 'audio' ? clip.source.audioElement : clip.mixdownAudio,
-    { disposeAudioRouting: true },
-  );
+  detachCompositionMixdownAudioElement(clip);
   releaseCompositionMixdownClipRuntime(clip);
   blobUrlManager.revokeType(clip.id, 'audio');
   return {

@@ -26,22 +26,22 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Utilities
-anyhow = "1"
+anyhow = "1.0.103"
 thiserror = "1"
 dirs = "5"
-rand = "0.8"
+rand = "0.8.6"
 uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
 
 # HTTP client (model downloads, API calls)
-ureq = "2"
+ureq = "2.12.1"
 
 # SHA-256 checksums for model integrity
 sha2 = "0.10"
 
 # HTTP for headers parsing and file serving
 http = "1"
-warp = "0.3"
+warp = { version = "0.4.3", features = ["server"] }
 
 # Native file dialog (folder picker for Firefox)
 rfd = "0.15"

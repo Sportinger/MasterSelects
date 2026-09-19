@@ -1,5 +1,6 @@
-import type { TimelineClip } from '../../types';
+import type { TimelineClip } from '../../types/timeline';
 import { timelineRuntimeCoordinator } from './timelineRuntimeCoordinator';
+import { detachLegacyTimelineMediaElement } from './timelineClipSourceRuntimeCleanup';
 
 function hashString(value: string): string {
   let hash = 2166136261;
@@ -38,6 +39,15 @@ export function releaseCompositionMixdownAudioElementResource(clipId: string): v
 
 export function releaseCompletedCompositionAudioMixdownResource(key: string): void {
   timelineRuntimeCoordinator.releaseResource(getCompositionMixdownBufferResourceId(key));
+}
+
+export function detachCompositionMixdownAudioElement(
+  clip: Pick<TimelineClip, 'source' | 'mixdownAudio'>,
+): void {
+  detachLegacyTimelineMediaElement(
+    clip.source?.type === 'audio' ? clip.source.audioElement : clip.mixdownAudio,
+    { disposeAudioRouting: true },
+  );
 }
 
 export function releaseCompositionMixdownClipRuntime(

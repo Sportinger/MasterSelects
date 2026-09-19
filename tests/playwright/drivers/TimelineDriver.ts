@@ -11,26 +11,37 @@ export class TimelineDriver {
   readonly ruler: Locator;
   readonly playhead: Locator;
   private readonly page: Page;
+  private readonly transportControls: Locator;
 
   constructor(page: Page) {
     this.page = page;
     this.ruler = page.locator('[data-ai-id="timeline-ruler"]');
     this.playhead = page.locator('[data-ai-id="timeline-playhead"]');
+    this.transportControls = page.locator('[data-guided-target="timeline-transport-controls"]');
   }
 
   async play(): Promise<void> {
-    await this.page.getByRole('button', { name: 'Play', exact: true }).click();
-    await expect(this.page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
+    await this.transportControls.getByRole('button', { name: 'Play', exact: true }).click();
+    await expect(this.transportControls.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
   }
 
   async pause(): Promise<void> {
-    await this.page.getByRole('button', { name: 'Pause', exact: true }).click();
-    await expect(this.page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
+    await this.transportControls.getByRole('button', { name: 'Pause', exact: true }).click();
+    await expect(this.transportControls.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
   }
 
   async stop(): Promise<void> {
-    await this.page.getByRole('button', { name: 'Stop', exact: true }).click();
-    await expect(this.page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
+    await this.transportControls.getByRole('button', { name: 'Stop', exact: true }).click();
+    await expect(this.transportControls.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
+  }
+
+  async zoomIn(): Promise<void> {
+    const button = this.page.locator('[data-guided-target="timeline-zoom-controls"] button[title="Zoom in"]:visible');
+    const overflow = this.page.getByRole('button', { name: 'More timeline controls', exact: true });
+    const openedOverflow = await button.count() === 0;
+    if (openedOverflow) await overflow.click();
+    await button.click();
+    if (openedOverflow) await overflow.click();
   }
 
   async scrubToFraction(fraction: number, startFraction = 0.2): Promise<void> {

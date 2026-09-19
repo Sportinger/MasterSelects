@@ -1,6 +1,6 @@
 // useClipDrag - Premiere-style clip dragging with snapping
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type { TimelineClip } from '../../../types';
+import type { TimelineClip } from '../../../types/timeline';
 import type { ClipDragState } from '../types';
 import { Logger } from '../../../services/logger';
 import { useTimelineStore } from '../../../stores/timeline';

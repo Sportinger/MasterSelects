@@ -52,4 +52,52 @@ export const currentWorkflowGetStateHardTargets = [
   { path: 'src/stores/streamStore.ts', maxCurrentHits: 1 },
   { path: 'src/stores/trackingStore.ts', maxCurrentHits: 1 },
   { path: 'src/stores/timeline/editOperations/activeCompositionFrameRate.ts', maxCurrentHits: 1 },
+
+  // Packet 345: 5 -> 2+1+1 (presenter + recovery wiring; one site retired
+  // via restore-loop dedup, maxHits 656 -> 655).
+  { path: 'src/engine/WebGPUEngine.ts', maxCurrentHits: 2 },
+  // Device recovery now republishes each rebuilt target canvas (+1) and
+  // publishes ready/failure state in all three lifecycle callbacks (+6).
+  { path: 'src/engine/engineCore/outputPresenter.ts', maxCurrentHits: 2 },
+  { path: 'src/engine/engineCore/contextRecoveryWiring.ts', maxCurrentHits: 7 },
+  { path: 'src/engine/engineCore/outputWindowController.ts', maxCurrentHits: 7 },
+
+  // Source resolution was extracted without adding reads: 13 -> 11 + 2.
+  { path: 'src/services/timelinePlacementCommands.ts', maxCurrentHits: 11 },
+  { path: 'src/services/timelinePlacementSource.ts', maxCurrentHits: 2 },
+  // Re-read the nested source hash after async restoration so superseded
+  // refreshes cannot commit stale media into a newer composition edit (+1).
+  { path: 'src/stores/timeline/clip/compositionClipActions.ts', maxCurrentHits: 3 },
+
+  // Project creation clears tracking before the first save; frame capture
+  // samples the active composition and restores playback only after export.
+  { path: 'src/components/common/toolbar/useToolbarProjectActions.ts', maxCurrentHits: 1 },
+  { path: 'src/components/export/captureCompositionFrame.ts', maxCurrentHits: 6 },
+
+  // Depth/face jobs validate source ranges and composition identity across
+  // awaits. Completion and UI actions publish to the current tracking store.
+  { path: 'src/components/panels/properties/DepthEstimationControls.tsx', maxCurrentHits: 6 },
+  { path: 'src/components/panels/properties/FaceStabilizationControls.tsx', maxCurrentHits: 1 },
+  { path: 'src/components/panels/properties/PreciseFaceTrackingControls.tsx', maxCurrentHits: 4 },
+  { path: 'src/services/landmarkTracking/bakeFaceStabilization.ts', maxCurrentHits: 4 },
+  { path: 'src/services/landmarkTracking/preciseFaceTracking.ts', maxCurrentHits: 1 },
+  { path: 'src/services/landmarkTracking/usePreciseFaceTrack.ts', maxCurrentHits: 1 },
+
+  // Cable edits/bakes read current clip, media, and history state at command or
+  // preview time, including post-bake invalidation and freshly inserted objects.
+  { path: 'src/components/panels/properties/FaceCableLightControls.tsx', maxCurrentHits: 7 },
+  { path: 'src/services/faceCables/bakeFaceCables.ts', maxCurrentHits: 9 },
+  { path: 'src/services/faceCables/previewFaceCables.ts', maxCurrentHits: 2 },
+  { path: 'src/services/faceCables/useCablePreview.ts', maxCurrentHits: 1 },
+  // Each of these also has one render snapshot beside its action-time reads.
+  // Those snapshots remain reduction debt; playback subscriptions are currently
+  // throttled by the controls and are not exempted from the exact file caps.
+  { path: 'src/components/panels/properties/FaceCableEnvironmentControls.tsx', maxCurrentHits: 3 },
+  { path: 'src/components/panels/properties/useFaceCableAnimation.tsx', maxCurrentHits: 5 },
+
+  // Memory freeze samples composition/time on activation; live windows read
+  // the active frame rate at sampling time. The broad scanner also counts the
+  // controls' two heap-source snapshots (not Zustand); keep them visible here.
+  { path: 'src/effects/generate/memoryLeak/MemoryLeakControls.tsx', maxCurrentHits: 4 },
+  { path: 'src/effects/generate/memoryLeak/memorySource.ts', maxCurrentHits: 1 },
 ] as const;

@@ -12,8 +12,8 @@ import {
   getTabLastProjectHandleKey,
   LEGACY_LAST_PROJECT_HANDLE_KEY,
   readLastOpfsProjectName,
-  storeLastOpfsProjectName,
 } from '../tabProjectPersistence';
+import { readProjectParent, rememberLastProject, rememberProjectParent } from './projectDirectoryPersistence';
 
 const log = Logger.create('ProjectCore');
 import { FileStorageService } from './FileStorageService';
@@ -144,10 +144,7 @@ export class ProjectCoreService {
     if (!handle) return false;
 
     try {
-      // Remembering the folder is optional; the project itself lives on disk.
-      await projectDB.storeHandle('projectsFolder', handle).catch(error => {
-        log.warn('Could not cache projects folder; continuing with selected folder', error);
-      });
+      await rememberProjectParent(handle);
       const projectFolder = await handle.getDirectoryHandle(name, { create: true });
       return await this.initializeProject(projectFolder, name);
     } catch (e) {
@@ -164,10 +161,7 @@ export class ProjectCoreService {
     }
 
     try {
-      // Remembering the folder is optional; the project itself lives on disk.
-      await projectDB.storeHandle('projectsFolder', handle).catch(error => {
-        log.warn('Could not cache projects folder; continuing with selected folder', error);
-      });
+      await rememberProjectParent(handle);
       const projectFolder = await handle.getDirectoryHandle(name, { create: true });
       return await this.initializeProject(projectFolder, name);
     } catch (e) {
@@ -225,7 +219,7 @@ export class ProjectCoreService {
       this.projectData = initialProject;
       this.isDirty = false;
 
-      await this.storeLastProject(projectFolder);
+      await rememberLastProject(projectFolder);
       await addRecentFsaProject(projectFolder, initialProject);
 
       log.info(`Created project: ${name}`);
@@ -303,7 +297,7 @@ export class ProjectCoreService {
       this.projectData = projectData;
       this.isDirty = false;
 
-      await this.storeLastProject(handle);
+      await rememberLastProject(handle);
       await addRecentFsaProject(handle, projectData);
 
       // Try to restore API keys from file if IndexedDB keys are empty
@@ -411,7 +405,7 @@ export class ProjectCoreService {
     }
 
     try {
-      const parentHandle = await projectDB.getStoredHandle('projectsFolder');
+      const parentHandle = await readProjectParent();
       if (!parentHandle || parentHandle.kind !== 'directory') {
         // No parent folder stored - just update the package display name.
         log.info(`No parent folder handle, updating display name only to "${trimmedName}"`);
@@ -506,7 +500,7 @@ export class ProjectCoreService {
       unregisterFsaProjectPackageSession(oldProjectHandle);
       this.projectHandle = newFolder;
 
-      await this.storeLastProject(newFolder);
+      await rememberLastProject(newFolder);
       await removeRecentFsaProject(oldProjectHandle);
       await addRecentFsaProject(newFolder, this.projectData);
 
@@ -684,17 +678,4 @@ export class ProjectCoreService {
     this.markDirty();
   }
 
-  private async storeLastProject(handle: FileSystemDirectoryHandle): Promise<void> {
-    if (resolveProjectRootMode() === 'opfs') {
-      storeLastOpfsProjectName(handle.name);
-    }
-    try {
-      await Promise.all([
-        projectDB.storeHandle(getTabLastProjectHandleKey(), handle),
-        projectDB.storeHandle(LEGACY_LAST_PROJECT_HANDLE_KEY, handle),
-      ]);
-    } catch (e) {
-      log.warn('Failed to store last project:', e);
-    }
-  }
 }

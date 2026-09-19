@@ -21,7 +21,8 @@ import {
   getTrackPan,
   getTrackVolumeDb,
 } from './audio/audioGraphRouteSettings';
-import type { TimelineClip, TimelineTrack, SerializableClip, Keyframe } from '../types';
+import type { TimelineClip, TimelineTrack, SerializableClip } from '../types/timeline';
+import type { Keyframe } from '../types/keyframes';
 import { generateWaveformFromBuffer } from '../stores/timeline/helpers/waveformHelpers';
 import { MAX_NESTING_DEPTH } from '../stores/timeline/constants';
 import { blobUrlManager } from '../stores/timeline/helpers/blobUrlManager';

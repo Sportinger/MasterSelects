@@ -4,7 +4,7 @@ import { TimelineContextMenu } from '../../src/components/timeline/TimelineConte
 import { downloadBlob } from '../../src/engine/export';
 import { captureCompositionFrameJpegBlob } from '../../src/components/export/captureCompositionFrame';
 import { useMediaStore, type MediaFile } from '../../src/stores/mediaStore';
-import type { TimelineClip } from '../../src/types';
+import type { TimelineClip } from '../../src/types/timeline';
 
 vi.mock('../../src/engine/export', () => ({
   downloadBlob: vi.fn(),

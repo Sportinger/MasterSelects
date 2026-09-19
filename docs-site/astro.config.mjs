@@ -23,7 +23,7 @@ export default defineConfig({
         },
         {
           label: 'Features',
-          autogenerate: { directory: 'features' },
+          items: [{ autogenerate: { directory: 'features' } }],
         },
       ],
     }),

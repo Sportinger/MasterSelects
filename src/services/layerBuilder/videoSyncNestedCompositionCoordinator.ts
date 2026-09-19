@@ -277,15 +277,17 @@ export class VideoSyncNestedCompositionCoordinator {
       if (nestedClip.isComposition && nestedClip.nestedClips && nestedClip.nestedClips.length > 0) {
         const isActive = compTime >= nestedClip.startTime && compTime < nestedClip.startTime + nestedClip.duration;
         if (isActive) {
-          const mappedNestedCompTime = resolveTransitionSourceMapTime(
-            nestedClip.transitionSourceMap,
+          // Use the same clip-local mapping as the nested layer builder. A
+          // split wrapper's start time must not be counted a second time.
+          const nestedCompTiming = getNestedClipSourceTiming(
+            nestedClip,
             compTime - nestedClip.startTime,
           );
           this.syncNestedCompVideos(
             nestedClip,
             ctx,
             depth + 1,
-            mappedNestedCompTime?.sourceTime ?? compTime + nestedClip.inPoint,
+            nestedCompTiming.sourceTime,
             getNestedPreviewTrackKey(parentTrackKey, compClip, nestedClip),
           );
         }

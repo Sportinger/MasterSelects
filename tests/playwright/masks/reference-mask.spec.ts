@@ -17,6 +17,10 @@ import {
 } from '../assertions/mediaArtifactAssertions'
 import { decodeVideoArtifactFrames } from '../assertions/videoArtifactFrameAssertions'
 import { unexpectedConsoleErrors } from '../assertions/consoleAssertions'
+import {
+  isExpectedReferenceMaskMetadataDiagnostic,
+  REFERENCE_MASK_METADATA_DIAGNOSTIC,
+} from './referenceMaskDiagnostics'
 
 interface CapturedFrame {
   capturedAt: number
@@ -376,7 +380,7 @@ test(
       const decodedFrames = await decodeVideoArtifactFrames(page, artifactPath, [
         project.sampleTime,
         2.5,
-      ])
+      ], project.composition.frameRate)
       expect(decodedFrames).toHaveLength(2)
       decodedFrames.forEach((frame) => {
         expect(frame.width).toBe(project.composition.width)
@@ -393,11 +397,6 @@ test(
         pathEndPreviewFrame.dataUrl,
         decodedFrames[1].dataUrl,
       )
-      expect(startDifference.meanAbsoluteDifference).toBeLessThan(20)
-      expect(startDifference.changedPixelRatio).toBeLessThan(0.65)
-      expect(endDifference.meanAbsoluteDifference).toBeLessThan(20)
-      expect(endDifference.changedPixelRatio).toBeLessThan(0.65)
-
       await saveFrame(testInfo, 'mask-export-frame-start', decodedFrames[0])
       await saveFrame(testInfo, 'mask-export-frame-end', decodedFrames[1])
       await testInfo.attach('mask-export-metadata.json', {
@@ -405,13 +404,22 @@ test(
         contentType: 'application/json',
       })
       await testInfo.attach('mask-export-frame-differences.json', {
-        body: Buffer.from(JSON.stringify({ startDifference, endDifference }, null, 2)),
+        body: Buffer.from(JSON.stringify({
+          startDifference,
+          endDifference,
+          samples: decodedFrames.map(({ requestedTime, decodedTime }) => ({ requestedTime, decodedTime })),
+        }, null, 2)),
         contentType: 'application/json',
       })
       await testInfo.attach('mask-export.mp4', {
         path: artifactPath,
         contentType: 'video/mp4',
       })
+
+      expect(startDifference.meanAbsoluteDifference).toBeLessThan(20)
+      expect(startDifference.changedPixelRatio).toBeLessThan(0.65)
+      expect(endDifference.meanAbsoluteDifference).toBeLessThan(20)
+      expect(endDifference.changedPixelRatio).toBeLessThan(0.65)
 
       if (REVIEW_MODE) await page.pause()
     })
@@ -431,8 +439,19 @@ test(
 
     await test.step('assert no fatal browser errors escaped the mask journey', async () => {
       expect(failureEvidence.pageErrors, 'Unexpected uncaught page errors.').toEqual([])
+      const consoleErrors = unexpectedConsoleErrors(failureEvidence.consoleEntries)
+      const knownMetadataDiagnostics = consoleErrors.filter(entry =>
+        isExpectedReferenceMaskMetadataDiagnostic(entry, page.url()))
+      await testInfo.attach('mask-reference-metadata-diagnostics.json', {
+        body: Buffer.from(JSON.stringify({
+          ...REFERENCE_MASK_METADATA_DIAGNOSTIC,
+          entries: knownMetadataDiagnostics,
+        }, null, 2)),
+        contentType: 'application/json',
+      })
+
       expect(
-        unexpectedConsoleErrors(failureEvidence.consoleEntries),
+        consoleErrors.filter(entry => !knownMetadataDiagnostics.includes(entry)),
         'Unexpected browser console errors.',
       ).toEqual([])
     })

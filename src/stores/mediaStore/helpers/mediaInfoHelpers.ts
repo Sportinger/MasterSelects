@@ -166,6 +166,14 @@ function startVideoElementMetadataProbe(
       if (timeoutId !== undefined) clearTimeout(timeoutId);
       video.onloadedmetadata = null;
       video.onerror = null;
+      video.pause();
+      video.removeAttribute('src');
+      try {
+        // Abort any pending metadata request before its object URL is revoked.
+        video.load();
+      } catch {
+        // Detached-element cleanup must still release the URL and settle.
+      }
       URL.revokeObjectURL(url);
       resolve(info);
     };

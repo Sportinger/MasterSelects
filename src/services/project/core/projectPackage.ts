@@ -429,19 +429,36 @@ export class ProjectPackageSession {
     if (this.writeBatchDepth++ === 0) {
       this.batchSettled = new Promise(resolve => { this.resolveBatchSettled = resolve; });
     }
+    let outcome: { ok: true; value: T } | { ok: false; error: unknown };
     try {
-      return await work();
-    } finally {
-      this.writeBatchDepth--;
-      if (this.writeBatchDepth === 0) {
-        this.resolveBatchSettled?.();
-        this.resolveBatchSettled = null;
-        if (this.batchNeedsPersist) {
-          this.batchNeedsPersist = false;
+      outcome = { ok: true, value: await work() };
+    } catch (error) {
+      outcome = { ok: false, error };
+    }
+    let persistenceFailure: { error: unknown } | undefined;
+    this.writeBatchDepth--;
+    if (this.writeBatchDepth === 0) {
+      // Save callbacks may themselves wait for the batch. Release them before
+      // awaiting persistence, including when artifact processing failed.
+      this.resolveBatchSettled?.();
+      this.resolveBatchSettled = null;
+      if (this.batchNeedsPersist) {
+        this.batchNeedsPersist = false;
+        try {
           if (!await this.persist()) throw new Error('Could not persist project artifact batch');
+        } catch (error) {
+          persistenceFailure = { error };
         }
       }
     }
+    if (!outcome.ok) {
+      if (persistenceFailure) {
+        throw new AggregateError([outcome.error, persistenceFailure.error], 'Project artifact processing and persistence both failed');
+      }
+      throw outcome.error;
+    }
+    if (persistenceFailure) throw persistenceFailure.error;
+    return outcome.value;
   }
 
   setPersistCallback(callback: PackagePersistence): void {

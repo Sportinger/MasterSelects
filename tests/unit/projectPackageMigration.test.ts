@@ -4,6 +4,9 @@ import { ProjectCoreService } from '../../src/services/project/core/ProjectCoreS
 import { fileStorageService } from '../../src/services/project/core/FileStorageService';
 import { decodeProjectPackage } from '../../src/services/project/core/projectPackage';
 import type { ProjectFile } from '../../src/services/project/types';
+import { readLastOpfsProjectName } from '../../src/services/project/tabProjectPersistence';
+import { readProjectParent } from '../../src/services/project/core/projectDirectoryPersistence';
+import { getRecentProjects } from '../../src/services/project/recentProjects';
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
@@ -138,6 +141,29 @@ function createLegacyProject(): ProjectFile {
 describe('legacy project to .msproj migration', () => {
   beforeEach(() => localStorage.clear());
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+  it('creates and restores an OPFS package by name without caching directory handles', async () => {
+    const root = new MemoryDirectoryHandle('Origin root');
+    vi.stubGlobal('showDirectoryPicker', undefined);
+    vi.stubGlobal('showSaveFilePicker', undefined);
+    vi.stubGlobal('FileSystemFileHandle', MemoryFileHandle);
+    vi.stubGlobal('navigator', { storage: { getDirectory: vi.fn(async () => root) } });
+    const storeHandle = vi.spyOn(projectDB, 'storeHandle').mockRejectedValue(new Error('Unexpected handle cache write'));
+    const getHandle = vi.spyOn(projectDB, 'getStoredHandle').mockRejectedValue(new Error('Unsafe legacy handle read'));
+    const core = new ProjectCoreService(fileStorageService);
+    expect(await core.createProject('Browser Cut')).toBe(true);
+    expect(readLastOpfsProjectName()).toBe('Browser Cut');
+    expect(getRecentProjects()).toMatchObject([{ backend: 'opfs', path: 'Browser Cut' }]);
+    core.closeProject();
+
+    const reopened = new ProjectCoreService(fileStorageService);
+    expect(await reopened.restoreLastProject()).toBe(true);
+    expect(reopened.getProjectData()?.name).toBe('Browser Cut');
+    // Rename also reacquires the origin root instead of reading projectsFolder.
+    expect(await readProjectParent()).toBe(root);
+    expect(storeHandle).not.toHaveBeenCalled();
+    expect(getHandle).not.toHaveBeenCalled();
+  });
 
   it.each(['picker', 'existing-folder'])('creates a readable project despite unavailable handle cache (%s)', async (mode) => {
     const root = new MemoryDirectoryHandle('Projects');

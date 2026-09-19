@@ -32,12 +32,14 @@ const ADOPTED_EFFECT_IDS = [
 
 describe('Ladybug adoption catalog', () => {
   it('registers the complete original implementation catalog in split categories', () => {
-    expect(new Set(ADOPTED_EFFECT_IDS).size).toBe(61);
+    const adoptedIds = new Set<string>(ADOPTED_EFFECT_IDS);
+    expect(adoptedIds.size).toBe(61);
     for (const id of ADOPTED_EFFECT_IDS) expect(getEffect(id), id).toBeDefined();
-    expect(EFFECT_CATEGORIES.halftone).toHaveLength(13);
-    expect(EFFECT_CATEGORIES.glyph).toHaveLength(18);
-    expect(EFFECT_CATEGORIES.geometry).toHaveLength(11);
-    expect(EFFECT_CATEGORIES.tracking).toHaveLength(8);
+    // Other additions, such as Face Cables, do not change the adopted catalog.
+    for (const [category, count] of Object.entries({ halftone: 13, glyph: 18, geometry: 11, tracking: 8 })) {
+      const effects = EFFECT_CATEGORIES[category as keyof typeof EFFECT_CATEGORIES];
+      expect(effects.filter(effect => adoptedIds.has(effect.id)), category).toHaveLength(count);
+    }
     expect(EFFECT_CATEGORIES.analog.map((effect) => effect.id)).toContain('pixel-sort');
   });
 

@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-09-19",
+    "type": "fix",
+    "title": "MasterSelects 3.1.4",
+    "description": "Security and reliability update: refreshed dependencies and security checks, reliable browser-storage project reopening, clearer import and save failures, stable audio proxy cleanup, restored nested composition source durations and preview timing, and accurate export frames across nested cuts. Timeline gestures, shortcut search, and audio automation editing are also refined.",
+    "section": "Release"
+  },
+  {
     "date": "2026-09-12",
     "type": "improve",
     "title": "MasterSelects 3.1.3",

@@ -101,6 +101,10 @@ describe('ISOBMFF media metadata', () => {
         duration: Number.NaN,
         videoWidth: 0,
         videoHeight: 0,
+        pause: vi.fn(),
+        removeAttribute(name: string) {
+          if (name === 'src') this.src = '';
+        },
         load() {
           this.onerror?.();
         },
@@ -125,6 +129,44 @@ describe('ISOBMFF media metadata', () => {
     expect(createObjectURL).toHaveBeenCalledWith(file);
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:prores');
   });
+
+  it.each([false, true])(
+    'cancels the pending HTML probe before revoking its URL when container metadata wins (reset throws: %s)',
+    async (resetThrows) => {
+      const video = document.createElement('video');
+      const loadedSources: Array<string | null> = [];
+      vi.spyOn(video, 'pause').mockImplementation(() => undefined);
+      vi.spyOn(video, 'load').mockImplementation(() => {
+        const source = video.getAttribute('src');
+        loadedSources.push(source);
+        if (source === null && resetThrows) throw new Error('Detached video reset failed');
+      });
+      const realCreateElement = document.createElement.bind(document);
+      vi.spyOn(document, 'createElement').mockImplementation(((tagName: string) => (
+        tagName === 'video' ? video : realCreateElement(tagName)
+      )) as typeof document.createElement);
+      vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:pending-metadata');
+      const revokedSources: Array<{ src: string | null; loadedSources: Array<string | null> }> = [];
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {
+        revokedSources.push({ src: video.getAttribute('src'), loadedSources: [...loadedSources] });
+      });
+
+      // The HTML probe never emits loadedmetadata or error: the independent
+      // container reader must cancel its still-pending browser request.
+      const info = await getMediaInfo(
+        new File(['mov-bytes'], 'camera.mov', { type: 'video/quicktime' }),
+        'video',
+      );
+
+      expect(info).toMatchObject({ duration: 10, videoCodecId: 'apch', hasAudio: true });
+      expect(revokedSources).toEqual([
+        { src: null, loadedSources: ['blob:pending-metadata', null] },
+      ]);
+      expect(video.pause).toHaveBeenCalledOnce();
+      expect(video.onloadedmetadata).toBeNull();
+      expect(video.onerror).toBeNull();
+    },
+  );
 
   it('does not instantiate a demuxer for non-ISOBMFF names', async () => {
     const result = await readIsobmffMetadata(

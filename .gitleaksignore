@@ -1,0 +1,11 @@
+# Reviewed synthetic claim-token and redaction fixtures from historical commits.
+# Exact fingerprints keep all other content in these test files scanned.
+7eb34e26884fcf79b6e3ecec5e006e1842807aa6:tests/unit/creditClaims.test.ts:generic-api-key:50
+768e7cb2d2436d68cf1b08aa4b1c5210b4af92ab:tests/unit/redact.test.ts:generic-api-key:33
+768e7cb2d2436d68cf1b08aa4b1c5210b4af92ab:tests/unit/redact.test.ts:generic-api-key:40
+768e7cb2d2436d68cf1b08aa4b1c5210b4af92ab:tests/unit/redact.test.ts:generic-api-key:47
+768e7cb2d2436d68cf1b08aa4b1c5210b4af92ab:tests/unit/redact.test.ts:generic-api-key:86
+768e7cb2d2436d68cf1b08aa4b1c5210b4af92ab:tests/unit/redact.test.ts:generic-api-key:104
+# User-accepted historical ImgBB finding in a removed integration (revocation unverified).
+# This exact legacy occurrence is exempt; new occurrences remain subject to scanning.
+1ae02749f79b15cfd1c399090171f9d18e1ab96a:src/services/piApiService.ts:generic-api-key:266

@@ -152,4 +152,29 @@ describe('media runtime object URL lease owner', () => {
       toObjectUrlRuntimeSourceId('clip-key', 'model'),
     )).toBe('blob:facade-key');
   });
+
+  it('clears timeline URLs after sharing and transfer while preserving independent cache owners', () => {
+    const { revokeObjectURL } = installUrlMocks(['blob:timeline', 'blob:proxy']);
+    blobUrlManager.create('clip-source', new Blob(['timeline']), 'audio');
+    blobUrlManager.share('clip-source', 'clip-copy', 'audio');
+    blobUrlManager.transfer('clip-copy', 'clip-moved', 'audio');
+    const proxyLease = mediaRuntimeObjectUrlLeaseOwner.acquire({
+      runtimeSourceId: toObjectUrlRuntimeSourceId('proxy-cache', 'audio-proxy'),
+      ownerId: 'proxy-cache',
+      blob: new Blob(['proxy']),
+    });
+
+    blobUrlManager.clear();
+
+    expect(blobUrlManager.has('clip-source', 'audio')).toBe(false);
+    expect(blobUrlManager.has('clip-moved', 'audio')).toBe(false);
+    expect(proxyLease.status).toBe('active');
+    expect(proxyLease.getRuntimeHandles()?.url).toBe('blob:proxy');
+    expect(revokeObjectURL).not.toHaveBeenCalledWith('blob:proxy');
+
+    // A full runtime shutdown still owns the independent cache lease.
+    mediaRuntimeObjectUrlLeaseOwner.clear();
+    expect(proxyLease.status).toBe('released');
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:proxy');
+  });
 });

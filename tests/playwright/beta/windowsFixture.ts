@@ -17,7 +17,7 @@ const execute = promisify(execFile)
 // The user explicitly requested closing test-owned browsers and removing their
 // temporary folders, including failed runs. Ordinary Chrome profiles are excluded.
 const ownedTest = editorTest.extend({
-  editorPage: async ({ page, baseURL, failureEvidence }, use, testInfo) => {
+  editorPage: async ({ page, baseURL, failureEvidence }, provide, testInfo) => {
     const tabId = createEditorTabId(testInfo)
     failureEvidence.setBridge(new BridgeClient({ baseURL: baseURL!, targetTabId: tabId }))
     const projectRoot = path.join(projectWorkspace, 'native-project-root')
@@ -49,9 +49,9 @@ const ownedTest = editorTest.extend({
         }
       } })
     failureEvidence.setBridge(editor.bridge)
-    await use(editor)
+    await provide(editor)
   },
-  context: async ({}, use, testInfo) => {
+  context: async ({}, provide, testInfo) => {
     if (process.platform !== 'win32') throw new Error('This profile requires Windows with installed Chrome')
     const candidates = [process.env.PROGRAMFILES, process.env['PROGRAMFILES(X86)'], process.env.LOCALAPPDATA]
       .filter(Boolean).map(root => path.join(root!, 'Google/Chrome/Application/chrome.exe'))
@@ -81,7 +81,7 @@ const ownedTest = editorTest.extend({
     const context = browser.contexts()[0]
     await context.tracing.start({ screenshots: true, snapshots: true, sources: true })
     try {
-      await use(context)
+      await provide(context)
     } finally {
       const trace = testInfo.outputPath('trace.zip')
       await context.tracing.stop({ path: trace })
@@ -92,7 +92,7 @@ const ownedTest = editorTest.extend({
       await testInfo.attach('cleanup', { body: JSON.stringify(cleanup), contentType: 'application/json' })
     }
   },
-  page: async ({ context }, use, testInfo) => {
+  page: async ({ context }, provide, testInfo) => {
     const page = context.pages()[0] || await context.newPage()
     await page.setViewportSize({ width: 1920, height: 1080 })
     await page.bringToFront()
@@ -130,7 +130,7 @@ const ownedTest = editorTest.extend({
         revoke(url)
       }
     })
-    try { await use(page) }
+    try { await provide(page) }
     finally {
       if (!page.isClosed()) await testInfo.attach('resource-lifetimes', { body: JSON.stringify(await page.evaluate(() => {
         const state = window as unknown as { __betaObjectUrlAudit: unknown; __betaGpuImportFailures: unknown }

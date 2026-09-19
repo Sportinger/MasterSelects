@@ -10,6 +10,7 @@ import { proxyFrameCache } from '../../src/services/proxyFrameCache';
 import { mediaRuntimeObjectUrlLeaseOwner } from '../../src/services/mediaRuntime/objectUrlLeases';
 import { mediaRuntimeScrubAudioLeaseOwner } from '../../src/services/mediaRuntime/scrubAudioLeases';
 import { MAX_AUDIO_BUFFER_CACHE_ENTRIES } from '../../src/services/proxyFrame/audioBufferLoader';
+import { blobUrlManager } from '../../src/stores/timeline/helpers/blobUrlManager';
 
 type ProxyFrameCacheInternals = typeof proxyFrameCache & {
   cache: Map<string, {
@@ -562,6 +563,35 @@ describe('proxyFrameCache audio proxy element runtime reporting', () => {
     resetProxyFrameCacheInternals();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it('keeps a cached WAV playable across timeline URL cleanup until its own cache releases it', async () => {
+    const audioElement = createMockAudioElement();
+    vi.stubGlobal('Audio', vi.fn(function AudioConstructor() { return audioElement; }));
+    vi.spyOn(projectFileService, 'getProxyAudio').mockResolvedValue(new Blob(['wav']));
+    vi.spyOn(URL, 'createObjectURL')
+      .mockReturnValueOnce('blob:shared-wav')
+      .mockReturnValueOnce('blob:composition-mixdown');
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    useMediaStore.setState({ files: [{
+      id: 'shared-audio', type: 'video', audioProxyStatus: 'ready', hasProxyAudio: true,
+    }] });
+    const audio = await proxyFrameCache.getAudioProxy('shared-audio');
+    blobUrlManager.create('outgoing-composition-clip', new Blob(['mixdown']), 'audio');
+
+    // loadState clears the outgoing timeline while the imported media stays.
+    blobUrlManager.clear();
+
+    expect(await proxyFrameCache.getAudioProxy('shared-audio')).toBe(audio);
+    expect(audio?.src).toBe('blob:shared-wav');
+    expect(revokeObjectURL).toHaveBeenCalledExactlyOnceWith('blob:composition-mixdown');
+
+    proxyFrameCache.releaseAudioProxy('shared-audio');
+
+    expect(audioElement.src).toBe('');
+    expect(proxyFrameCache.getCachedAudioProxy('shared-audio')).toBeNull();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:shared-wav');
+    expect(revokeObjectURL).toHaveBeenCalledTimes(2);
   });
 
   it('reports retained audio proxy elements and releases object URLs on proxy release', async () => {

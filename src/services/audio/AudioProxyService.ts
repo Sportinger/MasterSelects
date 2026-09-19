@@ -86,13 +86,14 @@ export async function ensureAudioProxyForMediaFile(
     return;
   }
 
+  let readyUpdate: AudioProxyGenerationUpdate | undefined;
   const job = withProjectArtifactWriteBatch(async () => {
     callbacks.onUpdate?.({ status: 'generating', progress: 2, storageKey });
 
     if (projectFileService.isProjectOpen() && !callbacks.force) {
       const existing = await projectFileService.hasProxyAudio(storageKey);
       if (existing) {
-        callbacks.onUpdate?.({ status: 'ready', progress: 100, storageKey });
+        readyUpdate = { status: 'ready', progress: 100, storageKey };
         return;
       }
     }
@@ -175,16 +176,29 @@ export async function ensureAudioProxyForMediaFile(
         return;
       }
 
-      callbacks.onUpdate?.({ status: 'ready', progress: 100, storageKey });
+      readyUpdate = { status: 'ready', progress: 100, storageKey };
       return;
     }
 
-    callbacks.onUpdate?.({
+    readyUpdate = {
       status: 'ready',
       progress: 100,
       storageKey,
       url: URL.createObjectURL(wavBlob),
+    };
+  }).then(() => {
+    // Ready means the WAV sidecar or temporary URL is available. Concurrent or
+    // parent batches may still be staging package artifacts for a later save.
+    if (readyUpdate) callbacks.onUpdate?.(readyUpdate);
+  }, (error: unknown) => {
+    // Only generation/batch failures own an unpublished URL. A ready callback
+    // may publish it before throwing, so its errors must not revoke that URL.
+    if (readyUpdate?.url) URL.revokeObjectURL(readyUpdate.url);
+    callbacks.onUpdate?.({
+      status: 'error', progress: 0, storageKey,
+      error: error instanceof Error ? error.message : 'Could not save audio proxy to project',
     });
+    throw error;
   });
 
   activeJobs.set(mediaFile.id, job);

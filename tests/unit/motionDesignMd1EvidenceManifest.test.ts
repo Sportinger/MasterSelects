@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createRequire } from 'node:module';
 import {
   MD1_GOLDEN_CROPS,
   MD1_GOLDEN_HEIGHT,
@@ -14,17 +15,16 @@ import {
   flattenPremultipliedMd1PixelBufferOnBlack,
   measureMd1PixelCoverage,
 } from '../../src/services/motionDesign/evidence/md1PixelComparison';
-// The production evidence runner is intentionally plain ESM so it can execute
-// without a build step. These exported guards are its unit-testable safety seam.
-// @ts-expect-error JavaScript CLI module has no declaration file.
-import {
+// Load the executable ESM through Node, which handles its shebang. Vitest's
+// inlined transform can move the shebang below instrumentation.
+const {
   createMd1DebugActionRequest,
   prepareMd1RecordSurfacePngs,
   requireMd1EvidenceData,
   selectExactMd1EvidenceSession,
   shouldWriteMd1EvidenceArtifacts,
   validateMd1DisposableSession,
-} from '../../scripts/run-motion-design-md1-evidence.mjs';
+} = createRequire(import.meta.url)('../../scripts/run-motion-design-md1-evidence.mjs');
 
 describe('MD1 golden fixture manifest', () => {
   it('is deterministic, isolated, and covers every required MD1 surface', () => {

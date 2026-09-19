@@ -10,6 +10,7 @@ import {
 import type { ExportClipState } from '../ClipPreparation';
 import {
   createClipElementAdmissionReport,
+  createExportPreparationAdmissionError,
   getClipMediaFileId,
   getExportSrcKind,
 } from './admission';
@@ -171,13 +172,7 @@ export async function createPreciseExportVideoElement(
   if (admissionReport) {
     const admission = reserveExportPreciseVideoElement(admissionReport);
     if (!admission.admitted) {
-      log.debug('Export precise video skipped by runtime admission', {
-        clipId: clip.id,
-        resourceId: admission.resourceId,
-        reason: admission.reason,
-        rejectedUnits: admission.rejectedUnits.map((entry) => entry.unit),
-      });
-      return null;
+      throw createExportPreparationAdmissionError('PRECISE video element', clip, admission);
     }
   }
 

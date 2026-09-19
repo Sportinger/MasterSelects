@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ChangeEvent } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -16,7 +16,56 @@ afterEach(() => {
   window.history.replaceState(null, '', '/');
 });
 
+function renderImportCommands(importFiles: ReturnType<typeof vi.fn>, importFilesWithPicker: ReturnType<typeof vi.fn>) {
+  const noop = vi.fn();
+  return renderHook(() => useMediaPanelAddImportCommands({
+    fileInputRef: { current: null }, fileSystemSupported: true, contextMenu: null,
+    viewMode: 'list', gridFolderId: null, selectedIds: [], folders: [], compositionCount: 0,
+    importFiles, importFilesWithPicker, openNewCompositionSettings: noop,
+    createFolder: noop, createTextItem: noop, getOrCreateTextFolder: noop,
+    createSolidItem: noop, getOrCreateSolidFolder: noop,
+    createMeshItem: noop, getOrCreateMeshFolder: noop,
+    createCameraItem: noop, getOrCreateCameraFolder: noop,
+    createLightItem: noop, getOrCreateLightFolder: noop,
+    createSplatEffectorItem: noop, getOrCreateSplatEffectorFolder: noop,
+    createMathSceneItem: noop, getOrCreateMathSceneFolder: noop,
+    createMotionShapeItem: noop, getOrCreateMotionShapeFolder: noop,
+    importGaussianSplat: noop, closeContextMenu: noop,
+  } as Parameters<typeof useMediaPanelAddImportCommands>[0]));
+}
+
 describe('MediaPanel native import picker', () => {
+  it.each(['picker', 'native input'] as const)('shows both import and save failures from the %s without an unhandled rejection', async (source) => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Desktop');
+    Object.defineProperty(navigator, 'maxTouchPoints', { configurable: true, value: 0 });
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const failure = new AggregateError([new Error('The media could not be decoded.'), new Error('The project could not be saved.')], 'Artifact batch failed');
+    const importFiles = vi.fn().mockRejectedValue(failure);
+    const importFilesWithPicker = vi.fn().mockRejectedValue(failure);
+    const { result } = renderImportCommands(importFiles, importFilesWithPicker);
+
+    if (source === 'picker') {
+      act(() => result.current.handleImport());
+    } else {
+      const input = { files: [new File(['media'], 'clip.mp4')], value: 'selected' } as unknown as HTMLInputElement;
+      await expect(result.current.handleFileChange({ currentTarget: input } as ChangeEvent<HTMLInputElement>)).resolves.toBeUndefined();
+      expect(input.value).toBe('');
+    }
+    await waitFor(() => expect(alert).toHaveBeenCalledOnce());
+    expect(alert).toHaveBeenCalledWith('Could not complete the media import.\n\nThe media could not be decoded.\nThe project could not be saved.');
+  });
+
+  it('keeps a cancelled desktop picker silent', async () => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Desktop');
+    Object.defineProperty(navigator, 'maxTouchPoints', { configurable: true, value: 0 });
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const picker = vi.fn().mockRejectedValue(new DOMException('Cancelled', 'AbortError'));
+    const { result } = renderImportCommands(vi.fn(), picker);
+    await act(async () => { result.current.handleImport(); });
+    expect(picker).toHaveBeenCalledOnce();
+    expect(alert).not.toHaveBeenCalled();
+  });
+
   it('prefers the native input on iPadOS even when picker APIs appear supported', () => {
     vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit');
     Object.defineProperty(navigator, 'maxTouchPoints', { configurable: true, value: 5 });

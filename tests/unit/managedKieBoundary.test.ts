@@ -29,7 +29,7 @@ describe('managed Kie.ai boundary', () => {
 
     expect(managerSource).toContain('const DB_VERSION = 3');
     expect(managerSource).toContain("'kieai-api-key'");
-    expect(managerSource).toContain('store?.delete(id)');
+    expect(managerSource).toContain('store.delete(id)');
   });
 
   it('keeps removed provider ids only at the old-project migration boundary', () => {

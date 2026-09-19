@@ -9,7 +9,7 @@ import * as runtimeCleanup from '../../src/services/timeline/timelineClipSourceR
 import * as nestedLoader from '../../src/stores/timeline/nestedCompositionLoader';
 import * as deletedClipResources from '../../src/stores/timeline/deletedClipResources';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
-import type { CompositionTimelineData, SerializableClip, TimelineClip } from '../../src/types';
+import type { CompositionTimelineData, SerializableClip, TimelineClip } from '../../src/types/timeline';
 import type { ClipActionContext } from '../../src/stores/timeline/clip/clipActionContext';
 
 function timelineData(): CompositionTimelineData {

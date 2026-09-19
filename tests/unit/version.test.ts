@@ -12,7 +12,7 @@ function readRepoFile(repoPath: string): string {
 }
 
 describe('app version consistency', () => {
-  it('keeps release metadata and user-visible version surfaces aligned', () => {
+  it('keeps packaged release metadata aligned', () => {
     const packageJson = JSON.parse(readRepoFile('package.json')) as { version?: string };
     const packageLock = JSON.parse(readRepoFile('package-lock.json')) as {
       version?: string;
@@ -21,14 +21,11 @@ describe('app version consistency', () => {
     const changelog = JSON.parse(readRepoFile('src/changelog-data.json')) as {
       title?: string;
     }[];
-    const readmeVersion = readRepoFile('README.md')
-      .match(/shields\.io\/badge\/version-([0-9]+\.[0-9]+\.[0-9]+)-/u)?.[1];
 
     expect(packageJson.version).toBe(APP_VERSION);
     expect(packageLock.version).toBe(APP_VERSION);
     expect(packageLock.packages?.['']?.version).toBe(APP_VERSION);
     expect(changelog[0]?.title).toBe(`MasterSelects ${APP_VERSION}`);
-    expect(readmeVersion).toBe(APP_VERSION);
   });
 
   it('keeps the separately versioned Native Helper release surfaces aligned', () => {

@@ -6,9 +6,21 @@ import type { MediaFolder, useMediaStore } from '../../../../stores/mediaStore';
 import type { MeshPrimitiveType } from '../../../../stores/mediaStore/types';
 import type { ShapePrimitive } from '../../../../types/motionDesign';
 import { trackEditorControlCommitted } from '../../../../services/productAnalytics';
+import { Logger } from '../../../../services/logger';
 import type { NewCompositionSettingsRequest } from './useMediaPanelCompositionSettings';
 
 type MediaStoreState = ReturnType<typeof useMediaStore.getState>;
+const log = Logger.create('MediaPanel');
+
+function reportImportFailure(error: unknown): void {
+  if (error instanceof DOMException && error.name === 'AbortError') return;
+  log.warn('Media import failed', { error });
+  const failures: unknown[] = error instanceof AggregateError ? error.errors : [error];
+  const details = failures.map(failure => failure instanceof Error
+    ? failure.message
+    : typeof failure === 'string' ? failure : '').filter(Boolean).join('\n');
+  alert(`Could not complete the media import.${details ? `\n\n${details}` : ''}`);
+}
 
 const DESKTOP_MEDIA_INPUT_ACCEPT = 'video/*,image/*,audio/*,.mp4,.mov,.m4v,.webm,.mkv,.mp3,.wav,.m4a,.jpg,.jpeg,.png,.heic';
 
@@ -158,7 +170,7 @@ export function useMediaPanelAddImportCommands({
       input.click();
       return;
     }
-    void importFilesWithPicker();
+    void importFilesWithPicker().catch(reportImportFailure);
   }, [contextMenu, fileInputRef, fileSystemSupported, importFilesWithPicker]);
 
   const handleFileChange = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
@@ -168,7 +180,13 @@ export function useMediaPanelAddImportCommands({
     // Release the native Photos picker synchronously. Import work may continue
     // for seconds, but Safari no longer needs to retain the selected input.
     input.value = '';
-    if (files.length > 0) await importFiles(files);
+    if (files.length > 0) {
+      try {
+        await importFiles(files);
+      } catch (error) {
+        reportImportFailure(error);
+      }
+    }
   }, [importFiles]);
 
   const placeCreatedItems = useCallback((itemIds: string[]) => {

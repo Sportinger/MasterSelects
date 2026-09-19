@@ -1,6 +1,15 @@
 import { STORES } from './stores';
 import { requestResult, requestSuccess } from './transactions';
 import type { ProjectDbLogger } from './types';
+import { resolveProjectRootMode } from '../project/core/projectRootAccess';
+import { readLastOpfsProjectName } from '../project/tabProjectPersistence';
+
+function isOpfsProjectDirectoryKey(key: string): boolean {
+  return resolveProjectRootMode() === 'opfs' && (
+    key === 'projectsFolder' || key === 'lastProject'
+    || key.startsWith('lastProject:') || key.startsWith('recentProject:')
+  );
+}
 
 // Store a FileSystemHandle (directory or file).
 //
@@ -14,6 +23,9 @@ export async function storeHandle(
   key: string,
   handle: FileSystemHandle,
 ): Promise<void> {
+  // Chromium can terminate its browser process while deserializing OPFS
+  // directory handles. Project names/paths already provide their restore path.
+  if (isOpfsProjectDirectoryKey(key)) return;
   try {
     const transaction = db.transaction(STORES.FS_HANDLES, 'readwrite');
     const store = transaction.objectStore(STORES.FS_HANDLES);
@@ -32,6 +44,8 @@ export async function storeHandle(
 
 // Get a stored FileSystemHandle
 export async function getStoredHandle(db: IDBDatabase, key: string): Promise<FileSystemHandle | null> {
+  // Skip legacy records before issuing get(): a JS catch cannot catch the crash.
+  if (isOpfsProjectDirectoryKey(key)) return null;
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORES.FS_HANDLES, 'readonly');
     const store = transaction.objectStore(STORES.FS_HANDLES);
@@ -63,6 +77,15 @@ export async function listHandleKeys(db: IDBDatabase): Promise<string[]> {
 
 // Get all stored handles
 export async function getAllHandles(db: IDBDatabase): Promise<Array<{ key: string; handle: FileSystemHandle }>> {
+  if (resolveProjectRootMode() === 'opfs') {
+    const entries: Array<{ key: string; handle: FileSystemHandle }> = [];
+    for (const key of await listHandleKeys(db)) {
+      if (isOpfsProjectDirectoryKey(key)) continue;
+      const handle = await getStoredHandle(db, key);
+      if (handle) entries.push({ key, handle });
+    }
+    return entries;
+  }
   const transaction = db.transaction(STORES.FS_HANDLES, 'readonly');
   const store = transaction.objectStore(STORES.FS_HANDLES);
   const request = store.getAll();
@@ -72,9 +95,12 @@ export async function getAllHandles(db: IDBDatabase): Promise<Array<{ key: strin
 
 // Check if there's a stored last project handle (for determining if welcome overlay should show)
 export async function hasLastProject(db: IDBDatabase): Promise<boolean> {
+  if (resolveProjectRootMode() === 'opfs' && readLastOpfsProjectName()) return true;
   try {
-    const handle = await getStoredHandle(db, 'lastProject');
-    return handle !== null;
+    // Polling needs existence only. count() never deserializes a stored handle,
+    // including OPFS records written by previous versions or another tab.
+    const store = db.transaction(STORES.FS_HANDLES, 'readonly').objectStore(STORES.FS_HANDLES);
+    return await requestResult(store.count('lastProject')) > 0;
   } catch {
     return false;
   }

@@ -28,7 +28,7 @@ function TrackingResultTab({clipId,assetId}:{clipId?:string;assetId?:string}) {
   const asset = assets.find(a => a.id === assetId || (a.track.id === w.track?.id && a.sourceMediaId === w.track?.sourceId));
   const canTrack = w.clip?.source?.type === 'video' && !w.clip.source.liveInputId;
   const blocked = w.busy || w.locked || editor.actionBusy;
-  const useResult = (action: 'use' | 'scene-3d', project = false) => {
+  const handleUseResult = (action: 'use' | 'scene-3d', project = false) => {
     const result = w.publish();
     if (result) {
       if(action==='use') editor.setEditor({assetId:result.id,attachMode:project?'surface':'follow',message:''});
@@ -84,9 +84,9 @@ function TrackingResultTab({clipId,assetId}:{clipId?:string;assetId?:string}) {
             <button disabled={blocked||!w.url} title="Short solve: 8–180 source frames. Detailed meshes can be imported." onClick={() => void w.run('3d')}>Reconstruct</button></div>
         </div>
       </details>}
-      <div className="surface-buttons"><button disabled={blocked || !ranges.length} onClick={() => useResult('use')}>Attach element</button>
-        <button disabled={blocked || !ranges.length} onClick={() => useResult('use',true)}>Project onto surface</button>
-        {w.track.terrain && calibration?.exactSupported && <button disabled={blocked} onClick={() => useResult('scene-3d')}>Create 3D scene</button>}
+      <div className="surface-buttons"><button disabled={blocked || !ranges.length} onClick={() => handleUseResult('use')}>Attach element</button>
+        <button disabled={blocked || !ranges.length} onClick={() => handleUseResult('use',true)}>Project onto surface</button>
+        {w.track.terrain && calibration?.exactSupported && <button disabled={blocked} onClick={() => handleUseResult('scene-3d')}>Create 3D scene</button>}
         {w.track.terrain && calibration && !calibration.exactSupported && <button disabled={blocked} title={`The model stays exact. The scene camera approximates the lens: up to ${calibration.maxPixelError.toFixed(2)} pixels at reconstruction resolution. Video surface projection keeps the full calibration.`} onClick={()=>{
           const result=w.publish();if(result)requestTrackingAssetAction('scene-3d',result,{allowApproximateCamera:true});
         }}>Create 3D scene · approximate lens</button>}</div>

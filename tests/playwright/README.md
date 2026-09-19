@@ -38,6 +38,11 @@ BrowserContext and never a personal Chrome profile. Tests run serially with one
 worker because media, GPU, audio, bridge, and filesystem state are not yet
 qualified for parallel execution.
 
+The default bootstrap uses the visible Choose project dialog to create a unique
+project in that context's browser storage. Native file pickers are disabled only
+for this portable entry flow; the Windows beta profile keeps its native folder
+selection. Any autosave writes stay in the disposable context's test project.
+
 ## Module and test tags
 
 Every journey carries its canonical `@module:*` tag. Add `@smoke` only to the
@@ -75,6 +80,9 @@ connection to the optional Native Helper at `ws://127.0.0.1:9876`. The owned
 allowance lives in `assertions/consoleAssertions.ts`; every other console error
 and every uncaught page error fails the Golden Smoke. Platform tests must start
 the helper and do not inherit this exception when they verify that integration.
+The managed Vite server does not start the local API: keep the API at
+`127.0.0.1:8788` available for account and analytics requests. A missing API
+produces console errors and correctly fails the final diagnostics assertion.
 
 The managed E2E dev server keeps the source snapshot it booted with. Filesystem
 changes do not trigger HMR or full-page reloads during a journey, while the
@@ -125,9 +133,10 @@ unique temporary project directory and hard-links the checked reference media
 into its `Raw/` directory (falling back to copies where hard links are not
 available). Because the optional Native Helper is not part of the managed E2E
 server, the browser then imports those files through the authenticated local
-file broker and hydrates the captured project into memory. The toolbar therefore
-intentionally says `No Project Open`: no autosave target exists and neither the
-checked template nor the temporary evidence copy can be modified by the editor.
+file broker and hydrates the captured project into the isolated browser context.
+The startup project's browser-storage root remains the autosave target. Neither
+the checked template nor the temporary evidence copy is opened as a writable
+project by the editor.
 Run it explicitly while the module remains draft:
 
 ```text

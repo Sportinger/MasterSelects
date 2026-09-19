@@ -1,4 +1,4 @@
-import type { TimelineClip } from '../../types';
+import type { TimelineClip } from '../../types/timeline';
 import { isSilentGeneratedComposition } from './generatedCompositionAudio';
 import { Logger } from '../logger';
 import {

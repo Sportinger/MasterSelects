@@ -3,7 +3,7 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useClipDrag } from '../../src/components/timeline/hooks/useClipDrag';
 import { useTimelineStore } from '../../src/stores/timeline';
-import type { TimelineClip } from '../../src/types';
+import type { TimelineClip } from '../../src/types/timeline';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 
 function mountDrag({

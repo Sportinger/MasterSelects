@@ -93,7 +93,10 @@ describe('clipSlice', () => {
       const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:old-comp-mixdown');
       const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
       blobUrlManager.create('comp-clip', new Blob(['old']), 'audio');
-      const mixdownAudio = { src: 'blob:old-comp-mixdown' } as HTMLAudioElement;
+      const mixdownAudio = document.createElement('audio');
+      mixdownAudio.src = 'blob:old-comp-mixdown';
+      const pauseMixdown = vi.spyOn(mixdownAudio, 'pause').mockImplementation(() => {});
+      const unloadMixdown = vi.spyOn(mixdownAudio, 'load').mockImplementation(() => {});
       const mixdownBuffer = { duration: 10 } as AudioBuffer;
       const timelineData = { duration: 12, clips: [], tracks: [] };
       setCompositionTimelineData(timelineData);
@@ -119,6 +122,9 @@ describe('clipSlice', () => {
       expect(createObjectURL).toHaveBeenCalledOnce();
       expect(blobUrlManager.get('comp-clip', 'audio')).toBeUndefined();
       expect(revokeObjectURL).toHaveBeenCalledWith('blob:old-comp-mixdown');
+      expect(pauseMixdown).toHaveBeenCalledOnce();
+      expect(unloadMixdown).toHaveBeenCalledOnce();
+      expect(mixdownAudio.hasAttribute('src')).toBe(false);
       expect(updated).toEqual(expect.objectContaining({
         nestedContentHash: createNestedContentHash(timelineData),
         mixdownAudio: undefined,

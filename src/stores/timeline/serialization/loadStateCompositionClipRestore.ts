@@ -64,15 +64,16 @@ export async function restoreLoadStateCompositionClip(params: {
     return 'handled';
   }
 
+  const compDuration = composition.timelineData?.duration ?? composition.duration;
   const nestedContentHash = createNestedContentHash(composition.timelineData, mediaStore.compositions);
   const isLatestLoad = beginNestedCompositionLoad(get, serializedClip.id);
   const isCurrentTimelineSession = () => isCurrentSession() && isLatestLoad();
   if (serializedClip.sourceType === 'audio') {
-    pushRestoredClip({ ...createCompositionAudioClip(serializedClip), nestedContentHash });
+    pushRestoredClip({ ...createCompositionAudioClip(serializedClip, compDuration), nestedContentHash });
     return 'handled';
   }
 
-  const compClip = { ...createCompositionVideoClip(serializedClip), nestedContentHash };
+  const compClip = { ...createCompositionVideoClip(serializedClip, compDuration), nestedContentHash };
   pushRestoredClip(compClip);
   const batchGenerated = !!patchRestoredClip
     && !!pushRestoredNestedKeyframes
@@ -137,7 +138,6 @@ export async function restoreLoadStateCompositionClip(params: {
   }
   restoreNestedVideoSourceThumbnails(nestedClips, restoreSourceThumbnails, mediaStore);
 
-  const compDuration = composition.timelineData?.duration ?? composition.duration;
   const boundaries = calculateNestedClipBoundaries(composition.timelineData, compDuration);
 
   const finishClip = (clip: TimelineClip): TimelineClip => ({
@@ -174,7 +174,7 @@ export async function restoreLoadStateCompositionClip(params: {
   return 'handled';
 }
 
-function createCompositionAudioClip(serializedClip: SerializableClip): TimelineClip {
+function createCompositionAudioClip(serializedClip: SerializableClip, sourceDuration: number): TimelineClip {
   return {
     id: serializedClip.id,
     trackId: serializedClip.trackId,
@@ -186,7 +186,7 @@ function createCompositionAudioClip(serializedClip: SerializableClip): TimelineC
     outPoint: serializedClip.outPoint,
     source: {
       type: 'audio',
-      naturalDuration: serializedClip.naturalDuration || serializedClip.duration,
+      naturalDuration: sourceDuration,
     },
     linkedClipId: serializedClip.linkedClipId,
     parentClipId: serializedClip.parentClipId,
@@ -220,7 +220,7 @@ function createCompositionAudioClip(serializedClip: SerializableClip): TimelineC
   };
 }
 
-function createCompositionVideoClip(serializedClip: SerializableClip): TimelineClip {
+function createCompositionVideoClip(serializedClip: SerializableClip, sourceDuration: number): TimelineClip {
   return {
     id: serializedClip.id,
     trackId: serializedClip.trackId,
@@ -232,7 +232,7 @@ function createCompositionVideoClip(serializedClip: SerializableClip): TimelineC
     outPoint: serializedClip.outPoint,
     source: {
       type: 'video',
-      naturalDuration: serializedClip.duration,
+      naturalDuration: sourceDuration,
     },
     thumbnails: serializedClip.thumbnails,
     linkedClipId: serializedClip.linkedClipId,

@@ -1,4 +1,6 @@
-import type { LayerRenderData } from '../../core/types';
+import type { Layer, LayerRenderData } from '../../core/types';
+import type { TextureManager } from '../../texture/TextureManager';
+import type { ScrubbingCache } from '../../texture/ScrubbingCache';
 import { getCopiedHtmlVideoPreviewFrame } from '../htmlVideoPreviewFallback';
 import type { HtmlVideoCollectRequest } from './htmlVideoCollector';
 import { getSurfaceVideoFrameTime } from '../surfaceVideoFrame';
@@ -9,18 +11,39 @@ export function collectExportHtmlVideo(
   targetTime: number
 ): LayerRenderData | null {
   const { layer, video, deps, videoKey, controller } = request;
+  const frame = collectExportHtmlVideoFrame(
+    layer, video, deps.textureManager, deps.scrubbingCache, false, currentTime, targetTime,
+  );
+  if (frame) {
+    if (frame.isVideo) deps.setLastVideoTime(videoKey, currentTime);
+    controller.setDecoder('HTMLVideo');
+    controller.markHasVideo();
+  }
+  return frame;
+}
+
+/** Shared export source collection, without interactive scrub/hold policy. */
+export function collectExportHtmlVideoFrame(
+  layer: Layer,
+  video: HTMLVideoElement,
+  textureManager: TextureManager,
+  scrubbingCache: ScrubbingCache | null,
+  requireFreshCapture = false,
+  currentTime = video.currentTime,
+  targetTime = layer.source?.mediaTime ?? currentTime,
+): LayerRenderData | null {
   const surfaceFrameLocked = layer.effects.some(effect => effect.surfaceTrack);
   const frameTime = surfaceFrameLocked ? getSurfaceVideoFrameTime(video) : currentTime;
   const copiedFrame = getCopiedHtmlVideoPreviewFrame(
     video,
-    deps.scrubbingCache,
+    scrubbingCache,
     targetTime,
     layer.sourceClipId,
     layer.sourceClipId,
+    false,
+    requireFreshCapture,
   );
   if (copiedFrame) {
-    controller.setDecoder('HTMLVideo');
-    controller.markHasVideo();
     return {
       layer,
       isVideo: false,
@@ -34,14 +57,11 @@ export function collectExportHtmlVideo(
     };
   }
 
-  const extTex = deps.textureManager.importVideoTexture(video);
+  const extTex = textureManager.importVideoTexture(video);
   if (!extTex) {
     return null;
   }
 
-  deps.setLastVideoTime(videoKey, currentTime);
-  controller.setDecoder('HTMLVideo');
-  controller.markHasVideo();
   return {
     layer,
     isVideo: true,

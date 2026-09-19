@@ -24,6 +24,8 @@ jobs:
       - run: npm run test
       - run: npm audit --audit-level=high
         continue-on-error: true
+      - run: npm --prefix docs-site audit --audit-level=high
+        continue-on-error: true
 
   native-helper-security:
     runs-on: ubuntu-latest
@@ -36,7 +38,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --manifest-path tools/native-helper/Cargo.toml --all-targets
       - run: cargo install cargo-audit --locked
-      - run: cargo audit --manifest-path tools/native-helper/Cargo.toml
+      - run: cargo audit --file tools/native-helper/Cargo.lock
         continue-on-error: true
 
   secret-scanning:

@@ -47,6 +47,7 @@ interface TimelineStateResult {
   activeCompositionName: string | null
   playheadPosition: number
   duration: number
+  zoom: number
   totalClips: number
   videoTracks: TimelineTrackSummary[]
   audioTracks: TimelineTrackSummary[]
@@ -134,13 +135,18 @@ test(
       const state = await bridge.toolData<TimelineStateResult>('getTimelineState')
       expect(state.activeCompositionId).toBe(project.compositions.main.id)
       expect(state.activeCompositionName).toBe(project.compositions.main.name)
-      expect(state.duration).toBe(project.compositions.main.duration)
       expect(state.totalClips).toBe(4)
-      expectSplitPair(
+      const outerEnd = expectSplitPair(
         allClips(state),
         project.compositions.main.nestedVideoClipIds ?? [],
         project.compositions.main.splitTime ?? -1,
+        project.compositions.main.frameRate,
+        project.compositions.level2.duration,
       )
+      // The authored non-frame-aligned source in-point stays fixed. Its tail
+      // can hold only whole frames, so the automatic timeline follows that end.
+      const savedPadding = project.compositions.main.duration - project.compositions.level2.duration
+      expect(state.duration).toBeCloseTo(outerEnd + savedPadding, 9)
 
       const screenshotPath = testInfo.outputPath('nested-super-project-main.png')
       await page.screenshot({ path: screenshotPath, animations: 'disabled' })
@@ -156,7 +162,10 @@ test(
       const state = await bridge.toolData<TimelineStateResult>('getTimelineState')
       expect(state.activeCompositionId).toBe(level2.id)
       expect(state.totalClips).toBe(17)
-      expectSplitPair(allClips(state), level2.nestedVideoClipIds ?? [], level2.splitTime ?? -1)
+      expectSplitPair(
+        allClips(state), level2.nestedVideoClipIds ?? [], level2.splitTime ?? -1,
+        level2.frameRate, project.compositions.level1.duration,
+      )
 
       const clipId = level2.animatedNestedClipId ?? ''
       const masks = await bridge.toolData<MasksResult>('getMasks', { clipId })
@@ -231,6 +240,18 @@ test(
       await timeline.expectPlayheadNear(readTimeline, 0, 0.05)
 
       const duration = (await readTimeline()).duration
+      // Fit-to-window gives this 550s fixture about 3px/s: 0.75s and 0.9s
+      // fall on the same integer mouse pixel. At 40px/s each pixel is <=25ms.
+      const minimumScrubZoom = 40
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        const beforeZoom = (await readTimeline()).zoom
+        if (beforeZoom >= minimumScrubZoom) break
+        await timeline.zoomIn()
+        await expect.poll(async () => (await readTimeline()).zoom).toBeGreaterThan(beforeZoom)
+      }
+      await expect.poll(async () => (
+        ((await timeline.ruler.boundingBox())?.width ?? 0) / duration
+      )).toBeGreaterThanOrEqual(minimumScrubZoom)
       await timeline.scrubToFraction(EARLY_SOURCE_TIME / duration, 0)
       await timeline.expectPlayheadNear(readTimeline, EARLY_SOURCE_TIME, 0.12)
       earlyPreviewFrame = await bridge.toolData<CapturedFrame>('captureFrame', {
@@ -303,7 +324,7 @@ test(
       const decodedFrames = await decodeVideoArtifactFrames(page, artifactPath, [
         earlyArtifactTime,
         lateArtifactTime,
-      ])
+      ], project.compositions.main.frameRate)
       expect(decodedFrames).toHaveLength(2)
       decodedFrames.forEach((frame) => {
         expect(frame.width).toBe(project.compositions.main.width)
@@ -320,11 +341,6 @@ test(
         latePreviewFrame.dataUrl,
         decodedFrames[1].dataUrl,
       )
-      expect(earlyDifference.meanAbsoluteDifference).toBeLessThan(25)
-      expect(earlyDifference.changedPixelRatio).toBeLessThan(0.72)
-      expect(lateDifference.meanAbsoluteDifference).toBeLessThan(25)
-      expect(lateDifference.changedPixelRatio).toBeLessThan(0.72)
-
       await attachFrame(testInfo, 'super-project-export-early', decodedFrames[0])
       await attachFrame(testInfo, 'super-project-export-late', decodedFrames[1])
       await testInfo.attach('super-project-export-metadata.json', {
@@ -339,6 +355,11 @@ test(
         path: artifactPath,
         contentType: 'video/mp4',
       })
+
+      expect(earlyDifference.meanAbsoluteDifference).toBeLessThan(25)
+      expect(earlyDifference.changedPixelRatio).toBeLessThan(0.72)
+      expect(lateDifference.meanAbsoluteDifference).toBeLessThan(25)
+      expect(lateDifference.changedPixelRatio).toBeLessThan(0.72)
     })
 
     await test.step('assert the complete workflow left no fatal browser errors', async () => {
@@ -359,14 +380,35 @@ function expectSplitPair(
   clips: TimelineClipSummary[],
   clipIds: string[],
   splitTime: number,
-): void {
+  frameRate: number,
+  sourceDuration: number,
+): number {
   expect(clipIds).toHaveLength(2)
   const pair = clipIds.map((clipId) => clips.find((clip) => clip.id === clipId))
   expect(pair[0], `missing split clip ${clipIds[0]}`).toBeTruthy()
   expect(pair[1], `missing split clip ${clipIds[1]}`).toBeTruthy()
-  expect(pair[0]?.endTime).toBeCloseTo(splitTime, 9)
-  expect(pair[1]?.startTime).toBeCloseTo(splitTime, 9)
+  const timelineSplit = Math.round(splitTime * frameRate) / frameRate
+  const remainingFrames = Math.floor((sourceDuration - splitTime) * frameRate + 1e-9)
+  const remainingDuration = remainingFrames / frameRate
+  expect(pair[0]?.startTime).toBe(0)
+  expect(pair[0]?.duration).toBeCloseTo(timelineSplit, 9)
+  expect(pair[0]?.endTime).toBeCloseTo(timelineSplit, 9)
+  expect(pair[0]?.inPoint).toBe(0)
+  expect(pair[0]?.outPoint).toBeCloseTo(timelineSplit, 9)
+  expect(pair[1]?.startTime).toBeCloseTo(timelineSplit, 9)
+  expect(pair[1]?.duration).toBeCloseTo(remainingDuration, 9)
+  expect(pair[1]?.endTime).toBeCloseTo(timelineSplit + remainingDuration, 9)
   expect(pair[1]?.inPoint).toBeCloseTo(splitTime, 9)
+  expect(pair[1]?.outPoint).toBeCloseTo(splitTime + remainingDuration, 9)
+  for (const video of pair) {
+    const audio = clips.find(clip => clip.id === video?.linkedClipId)
+    expect(audio, `missing linked audio for ${video?.id}`).toBeTruthy()
+    expect(audio).toMatchObject({
+      startTime: video!.startTime, duration: video!.duration,
+      inPoint: video!.inPoint, outPoint: video!.outPoint,
+    })
+  }
+  return timelineSplit + remainingDuration
 }
 
 async function attachFrame(

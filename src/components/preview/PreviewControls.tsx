@@ -4,7 +4,7 @@ import React from 'react';
 import './PreviewControls.css';
 import type { Composition } from '../../stores/mediaStore/types';
 import { isUserVisibleComposition } from '../../stores/mediaStore/compositionVisibility';
-import type { TimelineTrack } from '../../types';
+import type { TimelineTrack } from '../../types/timeline';
 import type { PreviewPanelSource } from '../../types/dock';
 import { PreviewCompositionSourceGroup } from './PreviewCompositionSourceGroup';
 import {

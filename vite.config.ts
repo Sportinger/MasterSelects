@@ -394,7 +394,19 @@ export default defineConfig(({ command, mode }) => {
       // Keep a headed release journey on the source snapshot it booted with.
       // The dev bridge still uses Vite's websocket; only filesystem-triggered
       // HMR/full reloads are suppressed for this isolated test server.
-      watch: freezeE2eSourceSnapshot ? { ignored: ['**/*'] } : { ignored: ['**/output/**'] },
+      watch: {
+        ignored: freezeE2eSourceSnapshot ? ['**/*'] : [
+          // Cargo executes locked binaries here on Windows. Generated reports
+          // also contain HTML copies that must not trigger editor reloads.
+          'tools/native-helper/target',
+          'output',
+          'test-results',
+          'playwright-report',
+          'playwright-built-report',
+          'blob-report',
+          'coverage',
+        ].map(directory => `${path.resolve(__dirname, directory).replace(/\\/g, '/')}/**`),
+      },
       headers: {
         // Required for SharedArrayBuffer (FFmpeg multi-threaded, cross-tab sync)
         // Using 'credentialless' instead of 'require-corp' to allow CDN resources

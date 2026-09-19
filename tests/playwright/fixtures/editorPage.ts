@@ -32,7 +32,6 @@ export class EditorPage {
   readonly tabId: string
   readonly bridge: BridgeClient
   readonly shell: Locator
-  readonly startEditingButton: Locator
 
   private constructor(page: Page, baseURL: string, tabId: string, bridge?: BridgeClient) {
     this.page = page
@@ -40,10 +39,6 @@ export class EditorPage {
     this.tabId = tabId
     this.bridge = bridge ?? new BridgeClient({ baseURL, targetTabId: tabId })
     this.shell = page.locator('.app--editor-layout')
-    // The visible button also contains an Enter-key hint, which is part of its
-    // computed accessible name. Match the stable text without requiring the
-    // decorative keyboard glyph.
-    this.startEditingButton = page.getByRole('button', { name: /^Start editing\b/i })
   }
 
   static async adoptExistingReady(page: Page, bridge: BridgeClient): Promise<EditorPage> {
@@ -66,6 +61,14 @@ export class EditorPage {
 
     const editor = new EditorPage(page, options.baseURL, tabId)
     await editor.installDeterministicStorage()
+    if (!options.prepareEntry) {
+      await page.addInitScript(() => {
+        // The default profile owns a fresh browser context. Keep its project
+        // in browser storage; Windows beta supplies its own native entry flow.
+        Reflect.deleteProperty(window, 'showDirectoryPicker')
+        Reflect.deleteProperty(window, 'showSaveFilePicker')
+      })
+    }
 
     const targetURL = new URL(options.navigationPath ?? '/', options.baseURL).toString()
     await page.goto(targetURL, {
@@ -75,7 +78,7 @@ export class EditorPage {
 
     await editor.shell.waitFor({ state: 'visible', timeout: options.welcomeTimeoutMs ?? 30_000 })
     if (options.prepareEntry) await options.prepareEntry(page)
-    else await editor.dismissWelcomeThroughUI(options.welcomeTimeoutMs ?? 30_000)
+    else await editor.createBrowserProjectThroughUI(options.welcomeTimeoutMs ?? 30_000)
     await editor.bridge.waitForTarget({
       timeoutMs: options.bridgeTimeoutMs ?? 30_000,
       requireVisible: true,
@@ -166,10 +169,13 @@ export class EditorPage {
     })
   }
 
-  private async dismissWelcomeThroughUI(timeoutMs: number): Promise<void> {
-    await this.startEditingButton.waitFor({ state: 'visible', timeout: timeoutMs })
-    await this.startEditingButton.click()
-    await this.startEditingButton.waitFor({ state: 'hidden', timeout: timeoutMs })
+  private async createBrowserProjectThroughUI(timeoutMs: number): Promise<void> {
+    const dialog = this.page.getByRole('dialog', { name: 'Choose project' })
+    await dialog.waitFor({ state: 'visible', timeout: timeoutMs })
+    await dialog.getByRole('button', { name: 'New project Empty timeline' }).click()
+    await dialog.getByRole('textbox', { name: 'Project name' }).fill(`Playwright ${this.tabId}`)
+    await dialog.getByRole('button', { name: 'Continue', exact: true }).click()
+    await dialog.waitFor({ state: 'hidden', timeout: timeoutMs })
   }
 }
 

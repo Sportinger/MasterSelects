@@ -17,7 +17,7 @@ type Fixtures = { bridge: BridgeClient; editorPage: EditorPage; failureEvidence:
 const collectors = new WeakMap<Page, FailureEvidenceCollector>()
 export const existingTest = base.extend<Fixtures>({
   // This override does not request any Playwright-owned browser/context/page.
-  page: [async ({}, use, testInfo) => {
+  page: [async ({}, provide, testInfo) => {
     if (process.env.MS_BETA_EXISTING !== '1') throw new Error('Explicit existing mode required')
     const manifest = process.env.MS_BETA_PACKAGE_MANIFEST!, pin = process.env.MS_BETA_PACKAGE_SHA256!
     const localRoot = process.env.MS_BETA_LOCAL_ARTIFACTS
@@ -72,7 +72,7 @@ export const existingTest = base.extend<Fixtures>({
       await testInfo.attach('existing-admission', { body: JSON.stringify({ target: targets[0], loaderId: protectedPage.loaderId,
         manifestSha256: pin, projectSetup: 'Pinned project restore in same target before each case',
         diagnostics: 'Pre-navigation URL/GPU audit, full action trace and startup console collection' }), contentType: 'application/json' })
-      await use(page)
+      await provide(page)
     } catch (error) { primary = error }
     finally {
       // Attempt all evidence/cleanup even if another operation fails; preserve the primary failure.
@@ -148,12 +148,12 @@ export const existingTest = base.extend<Fixtures>({
     if (cleanupErrors.length) throw new AggregateError(cleanupErrors, 'Existing-target cleanup/evidence incomplete')
     // No browser/context/page close. The runner releases its CDP transport at exit.
   }, { scope: 'test', timeout: 90_000 }],
-  failureEvidence: async ({ page }, use) => {
+  failureEvidence: async ({ page }, provide) => {
     const collector = collectors.get(page)
     if (!collector) throw Error('Startup evidence collector missing')
-    await use(collector)
+    await provide(collector)
   },
-  editorPage: [async ({ page, failureEvidence }, use, testInfo) => {
+  editorPage: [async ({ page, failureEvidence }, provide, testInfo) => {
     const gate = actionGateFor(page), raw = unguardedPage(page)
     const bridge = new BridgeClient({ baseURL: origin, targetTabId: process.env.MS_BETA_TARGET_ID!, transport: {
       async tool(name, args, timeoutMs, fetchTimeoutMs) {
@@ -175,8 +175,8 @@ export const existingTest = base.extend<Fixtures>({
     const inventory = await bridge.toolData<{ files: Array<{ id: string; name: string; fileSize: number | null }> }>('getMediaItems')
     await testInfo.attach('existing-before-case-media', { body: JSON.stringify(inventory), contentType: 'application/json' })
     expect(inventory.files.filter(file => ['beta-background.mp4', 'beta-foreground.mp4'].includes(file.name))).toEqual([])
-    await use(editor)
+    await provide(editor)
   }, { auto: true }],
-  bridge: async ({ editorPage }, use) => { await use(editorPage.bridge) },
+  bridge: async ({ editorPage }, provide) => { await provide(editorPage.bridge) },
 })
 export { expect }

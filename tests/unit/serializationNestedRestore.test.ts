@@ -266,6 +266,33 @@ describe('serialization nested video restore', () => {
     expect(serialized?.transitionRecipeBlendWindows).toEqual(transitionRecipeBlendWindows);
   });
 
+  it.each(['video', 'audio'] as const)('restores a trimmed %s wrapper with its full composition source duration', async (sourceType) => {
+    const child = composition({
+      duration: 600,
+      timelineData: timelineData({ clips: [], duration: 540 }),
+    });
+    vi.mocked(useMediaStore.getState).mockReturnValue(mediaStoreState({ compositions: [child] }));
+    await useTimelineStore.getState().loadState(timelineData({ clips: [clip({
+      id: 'trimmed-wrapper',
+      mediaFileId: '',
+      sourceType,
+      isComposition: true,
+      compositionId: child.id,
+      naturalDuration: 20,
+      startTime: 5,
+      duration: 20,
+      inPoint: 100,
+      outPoint: 140,
+      speed: 2,
+    })] }));
+
+    expect(useTimelineStore.getState().clips[0]).toMatchObject({
+      startTime: 5, duration: 20, inPoint: 100, outPoint: 140, speed: 2,
+      source: { type: sourceType, naturalDuration: 540 },
+    });
+    expect(useTimelineStore.getState().getSerializableState().clips[0].naturalDuration).toBe(540);
+  });
+
   it('continues restoring later clips when a refresh supersedes one nested composition load', async () => {
     const child = composition({ timelineData: timelineData({ clips: [clip({ id: 'inner-video' })] }) });
     const mediaState = mediaStoreState({ files: [mediaFile()], compositions: [child] });

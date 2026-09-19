@@ -407,14 +407,20 @@ describe('Effect parameter validation', () => {
     }
   });
 
-  it('number parameters should have min, max, step with min <= default <= max', () => {
+  it('editable and bounded number parameters should have min, max, step with min <= default <= max', () => {
     for (const effect of getAllEffects()) {
-      for (const [, param] of Object.entries(effect.params)) {
+      for (const [name, param] of Object.entries(effect.params)) {
         if (param.type !== 'number') continue;
-
-        expect(typeof param.min).toBe('number');
-        expect(typeof param.max).toBe('number');
-        expect(typeof param.step).toBe('number');
+        const context = `${effect.id}.${name}`;
+        // Hidden renderer values (such as clip-local cableTime) have no slider
+        // domain. Hidden controls with any bounds still require complete metadata.
+        if (param.hidden && param.min === undefined && param.max === undefined && param.step === undefined) {
+          expect(param.animatable, context).toBe(false);
+          continue;
+        }
+        expect(typeof param.min, context).toBe('number');
+        expect(typeof param.max, context).toBe('number');
+        expect(typeof param.step, context).toBe('number');
 
         expect(param.min!).toBeLessThanOrEqual(param.max!);
         expect(param.default as number).toBeGreaterThanOrEqual(param.min!);
@@ -478,11 +484,19 @@ describe('Effect parameter validation', () => {
 describe('Animatable parameter properties', () => {
   it('every number param should have an animatable property defined', () => {
     for (const effect of getAllEffects()) {
-      for (const [, param] of Object.entries(effect.params)) {
+      for (const [name, param] of Object.entries(effect.params)) {
         if (param.type !== 'number') continue;
-        expect(typeof param.animatable).toBe('boolean');
+        expect(typeof param.animatable, `${effect.id}.${name}`).toBe('boolean');
       }
     }
+  });
+
+  it('declares shared cable wind as animatable while keeping its render clock internal', () => {
+    const params = getEffect('face-cables')!.params;
+    for (const name of ['globalWindStrength', 'globalWindYaw', 'globalWindPitch', 'globalWindGusts']) {
+      expect(params[name], name).toMatchObject({ type: 'number', hidden: true, animatable: true });
+    }
+    expect(params.cableTime).toMatchObject({ type: 'number', default: 0, hidden: true, animatable: false });
   });
 
   it('quality parameters should not be animatable', () => {

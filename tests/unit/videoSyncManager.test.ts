@@ -554,7 +554,7 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
     ['without a source map', undefined],
     ['with an invalid source map', { version: 1, segments: [] } as unknown as TimelineClip['transitionSourceMap']],
   ] as const) {
-    it(`keeps legacy two-stage composition timing ${mapDescription}`, () => {
+    it(`subtracts each nested wrapper start before adding its trim ${mapDescription}`, () => {
       const activeVideo = {
         currentTime: 0,
         paused: true,
@@ -577,7 +577,7 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
       const activeChild = {
         id: 'legacy-active-child',
         trackId: 'legacy-active-track',
-        startTime: 10,
+        startTime: 5,
         duration: 2,
         inPoint: 3,
         outPoint: 8,
@@ -586,7 +586,7 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
       const inactiveChild = {
         id: 'legacy-inactive-child',
         trackId: 'legacy-inactive-track',
-        startTime: 5,
+        startTime: 10,
         duration: 4,
         inPoint: 0,
         outPoint: 8,
@@ -649,9 +649,26 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
 
       coordinator.syncNestedCompVideos(outerComposition, ctx);
 
+      // Main 13 -> outer source 6 -> child composition source 5 -> video
+      // source 3. Omitting the child wrapper's start incorrectly seeks the
+      // inactive video at composition time 10 instead.
       expect(throttledSeek).toHaveBeenCalledTimes(1);
       expect(throttledSeek).toHaveBeenCalledWith(activeChild.id, activeVideo, 3, ctx);
       expect(inactiveVideo.pause).toHaveBeenCalledTimes(1);
+
+      // The saved Super Project splits its inner wrapper at frame 166/60.
+      // Its equal start/in trims preserve source time across that cut.
+      throttledSeek.mockClear();
+      Object.assign(activeChild, { startTime: 0, inPoint: 0, outPoint: 300, duration: 300 });
+      Object.assign(inactiveChild, { startTime: 300 });
+      Object.assign(nestedComposition, { startTime: 166 / 60, inPoint: 166 / 60, duration: 297 });
+      Object.assign(outerComposition, { startTime: 0, inPoint: 0, duration: 550 });
+      const splitContext = { ...ctx, playheadPosition: 2.82 };
+      coordinator.syncNestedCompVideos(outerComposition, splitContext);
+      expect(throttledSeek).toHaveBeenCalledTimes(1);
+      expect(throttledSeek.mock.calls[0]?.[0]).toBe(activeChild.id);
+      expect(throttledSeek.mock.calls[0]?.[1]).toBe(activeVideo);
+      expect(throttledSeek.mock.calls[0]?.[2]).toBeCloseTo(2.82, 12);
     });
   }
 

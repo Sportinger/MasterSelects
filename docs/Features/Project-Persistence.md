@@ -2,13 +2,13 @@
 
 [← Back to Index](./README.md)
 
-Local project folder storage with manual saving and interval autosave (five minutes by default), backups, and media relinking. Supports two backends: **File System Access API** (when the browser exposes it) and the **Native Helper** (when FSA is unavailable and the helper is connected).
+Local project storage with manual saving and interval autosave (five minutes by default), backups, and media relinking. Projects can use a user-selected folder through the **File System Access API**, **browser storage (OPFS)**, or the **Native Helper**.
 
 ---
 
 ## Table of Contents
 
-- [Welcome Overlay](#welcome-overlay)
+- [Choose Project](#choose-project)
 - [Storage Backends](#storage-backends)
 - [Recent Projects](#recent-projects)
 - [Project Folder Structure](#project-folder-structure)
@@ -21,47 +21,33 @@ Local project folder storage with manual saving and interval autosave (five minu
 
 ---
 
-## Welcome Overlay
+## Choose Project
 
-### First Launch
-On first launch or when no project is open, the Welcome Overlay appears:
-- Animated entrance with blur backdrop
-- "Local. Private. Free." tagline (typewriter effect with deliberate typo correction)
-- Two options: **New Project** or **Open Existing**
-- **Start editing** button (or press Enter) to skip without persistence
+The **Choose project** dialog offers **New project** (Empty timeline), **Open existing**, and remembered recent projects.
 
-### Browser Handling
+### Create a Project
 
-| Browser | Behavior |
-|---------|----------|
-| Google Chrome | Recommended experience; full FSA support when the platform exposes it |
-| Firefox | Uses the **Native Helper** for file-system access because FSA is unavailable; the welcome screen does not show browser recommendations |
-| Safari | Shows the friendly Chrome recommendation; runtime support is available only on some systems |
-| Edge / Chromium / Opera / Brave / other | Shows the friendly Chrome recommendation; FSA and helper availability are detected at runtime |
+1. Select **New project**.
+2. Enter a **Project name** and select **Continue**.
+3. Choose the parent folder when a system picker is available. Browser-storage projects are created directly in OPFS.
+4. The app creates the named project folder, its `.msproj` package, and companion folders, then opens the editor.
 
-For browsers without FSA support:
-- The overlay checks if the Native Helper is running and connected
-- If available, activates the native backend and shows "New Project" / "Open Existing" buttons (using the OS folder picker via Native Helper)
-- If the helper cannot show an OS folder picker on the current platform, MasterSelects falls back to a manual path prompt seeded with the helper's project root
-- If unavailable or outdated, persistence is unavailable until the helper is installed and connected
+Invalid names and creation failures remain visible in the dialog. Cancelling the name form returns to the chooser; cancelling folder selection keeps the entered name available for another attempt.
 
-### Select Project Folder
-1. Click **"New Project"**
-2. Choose or create a folder for your project
-3. App creates the project folder with `project.json` plus the standard subfolders (`Raw/`, `Raw/Baked Audio/`, `Downloads/`, `Proxy/`, `Audio Proxies/`, `Cache/`, `Analysis/`, `Transcripts/`, `Renders/`, `Backups/`, `Prompts/`, `AI/Chat/`)
-4. Folder handle stored in IndexedDB (FSA) or path stored in localStorage (`ms-native-last-project-path`)
+### Open a Project
 
-### Continue Without Saving
-- Click **"Start editing"** or press **Enter**
-- Work without persistence
-- The project is lost on refresh
-- Useful for quick experiments
+- With browser folder pickers, **Open existing** opens a project-folder picker.
+- Without those pickers, it shows projects **Stored on this device** in browser storage. Select a project name to open it.
+- Recent-project cards reopen their remembered location and may require folder permission again.
+- Storage access and listing failures appear as errors. An empty stored-project list is reported separately.
+
+*Source: `src/components/common/EditorProjectSelectionOverlay.tsx`*
 
 ---
 
 ## Storage Backends
 
-The project system supports two backends, selected automatically based on browser capabilities:
+Storage is selected from available capabilities. Browser folder pickers use FSA. Without them, project creation and restoration try the connected Native Helper and fall back to OPFS when the helper is unavailable.
 
 ### FSA Backend
 - Uses the [File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API)
@@ -69,6 +55,15 @@ The project system supports two backends, selected automatically based on browse
 - `FileSystemDirectoryHandle` + `FileSystemFileHandle` for all I/O
 - Handles stored in IndexedDB (`fsHandles` store) for session persistence
 - Permission re-requested on page reload if needed
+
+### Browser Storage (OPFS)
+
+- Uses the origin-private filesystem through `navigator.storage.getDirectory()` without a system folder picker
+- Stores named project folders within this browser profile and site origin
+- Uses the same project package and file-storage code as the FSA backend
+- Requires `FileSystemFileHandle.createWritable()` to create or save projects; the chooser reports missing write support
+- Remembers the project folder name and reacquires its handle from the OPFS root when reopening; OPFS restoration does not depend on cloning directory handles into IndexedDB
+- Requests persistent browser storage, but access remains subject to browser quota, eviction, and clearing site data
 
 ### Native Helper Backend
 - Uses a local Rust helper (`tools/native-helper`) communicating via WebSocket (port 9876) and HTTP (port 9877)
@@ -78,18 +73,20 @@ The project system supports two backends, selected automatically based on browse
 - File I/O via `NativeHelperClient.writeFile()` / `readFileText()` / `writeFileBinary()` plus `createDir()`, `deleteFile()`, `rename()`, `exists()`, `listDir()`, and `pickFolder()`
 - Project files are written through the helper's path-based storage layer; the browser never needs a `FileSystemDirectoryHandle`
 - Last project path stored in `localStorage` key `ms-native-last-project-path`
-- No permission prompts needed -- the Native Helper has full filesystem access
+- Uses the helper's granted project paths instead of browser FSA permission prompts
 - Project listing: `NativeProjectCoreService.listProjects()` scans the project root for directories containing `project.json`
 - The default project root comes from the helper (`Documents/MasterSelects` when available, otherwise `Home/MasterSelects`, or `MASTERSELECTS_PROJECT_ROOT` when set to an absolute path)
-- On Firefox refresh, `ProjectFileService.restoreLastProject()` activates the Native backend before attempting restore
+- When the helper is available, `ProjectFileService.restoreLastProject()` activates the Native backend before restoring its remembered project
 
 ### Backend Switching
-The `ProjectFileService` facade routes all calls to the active backend:
-- `projectFileService.activeBackend` -- returns `'fsa'` or `'native'`
-- `projectFileService.activateNativeBackend()` -- switches to Native Helper
-- `projectFileService.activateFsaBackend()` -- switches back to FSA
+The `ProjectFileService` facade routes calls to the browser or Native Helper backend:
 
-*Source: `src/services/project/ProjectFileService.ts`*
+- `projectFileService.activeBackend` -- returns `'fsa'` for the browser core (including OPFS), or `'native'`
+- `projectFileService.activateNativeBackend()` -- switches to Native Helper
+- `projectFileService.activateFsaBackend()` -- switches back to the browser core
+- `resolveProjectRootMode()` -- distinguishes browser folder pickers (`'fsa'`), browser storage (`'opfs'`), and unavailable storage (`'none'`)
+
+*Source: `src/services/project/ProjectFileService.ts`, `src/services/project/core/projectRootAccess.ts`*
 
 ---
 
@@ -99,6 +96,7 @@ Recent projects are tracked in browser storage and exposed through **File -> Ope
 
 - Opening, creating, or renaming a project updates the recent-project list.
 - FSA projects store browser `FileSystemDirectoryHandle` references in IndexedDB and keep lightweight metadata in `localStorage`.
+- OPFS projects remember their folder name and reopen it from the browser's private filesystem.
 - Native Helper projects store normalized project paths in `localStorage`.
 - Selecting an FSA recent project re-requests read/write permission if the browser has dropped it.
 - Missing or unreadable recent entries are removed when opening them fails.
@@ -106,7 +104,7 @@ Recent projects are tracked in browser storage and exposed through **File -> Ope
 
 Implementation:
 - `src/services/project/recentProjects.ts` stores and normalizes recent metadata.
-- `ProjectFileService.openRecentProject()` routes a selected entry to the FSA or Native backend.
+- `ProjectFileService.openRecentProject()` routes a selected entry to its FSA, OPFS, or Native location.
 - `Toolbar.tsx` renders the File menu flyout and listens for recent-project updates.
 
 ---
@@ -224,6 +222,10 @@ There are two save modes:
 Legacy continuous-save preferences migrate to interval or manual mode. Loading an unchanged project does not start a save. Project writes are serialized; edits made during a write remain dirty until included in a later successful save.
 
 Large terrain geometry and linked artifacts are persisted separately and reused when unchanged. A save still writes the project metadata snapshot; it does not rewrite every mesh or audio artifact for a small keyframe edit. Restore and history snapshots share retained geometry rather than cloning the full mesh for each clip.
+
+Packaged artifact batches report persistence failures to their caller. If both
+processing and saving fail, both errors are retained. Media-panel imports show
+these failures to the user; cancelling a file picker remains silent.
 
 ### Autosave Configuration
 Access **Settings -> General**, or **File -> Autosave** for timer controls:
@@ -381,7 +383,7 @@ interface ProjectFile {
 - Mask shapes (vertices, mode, feather, opacity)
 - Audio settings (volume, audioEnabled)
 - Speed/reverse/disabled flags
-- Nested composition references
+- Nested composition references, using the child composition's full source duration when restoring trimmed or split clips
 - Text clip properties
 - Solid clip color
 - Vector animation settings (loop, end behavior, fit, animation selection, background)
@@ -448,7 +450,7 @@ Temporary camera `NO KF` live offsets are intentionally not saved. They only aff
 - Opens the in-app project setup dialog; spaces are supported and invalid filesystem characters are reported inline
 - Keeps the dialog open with the entered name when folder selection or project creation fails
 - Shows the unsaved-work warning inside the dialog instead of a browser-native confirmation
-- Opens folder picker (FSA) or OS folder picker (Native Helper)
+- Opens a folder picker (FSA or Native Helper), or creates directly in browser storage (OPFS)
 - Creates a project subfolder with its `.msproj` package and required companion folders
 - Clears the previous project's tracking assets and selection before resetting media and writing the first blank-project snapshot. Large terrain reconstructions are not copied into the new project.
 - Cancelling folder selection leaves the current tracking data intact; Save and Save As preserve it as part of the current edit.
@@ -466,9 +468,9 @@ Temporary camera `NO KF` live offsets are intentionally not saved. They only aff
 - Current state synced to the new project
 
 ### Open Existing Project
-- From Welcome Overlay: "Open Existing"
+- From **Choose project**: **Open existing**
 - Or File menu -> Open Project (`Ctrl+O`)
-- Select folder containing `project.json`
+- Select a project folder containing a `.msproj` package or legacy `project.json`; the chooser lists stored project names when browser folder pickers are unavailable
 
 ### Open Recent
 - File menu -> Open Recent
@@ -488,6 +490,7 @@ Temporary camera `NO KF` live offsets are intentionally not saved. They only aff
 On app load, attempts to restore the last opened project:
 - Restores the saved project name into editor state, including the Color workspace header and bridge session metadata. Opening another project replaces the previous name.
 - **FSA**: Retrieves `lastProject` handle from IndexedDB, checks permission
+- **OPFS**: Reopens the remembered project folder name from browser storage. Older projects can fall back to a recent name or a single stored project when the choice is unambiguous.
 - **Native**: Activates the helper backend, reconnects to the helper with a bounded timeout, grants the stored project path to the helper, then reads path from `localStorage` key `ms-native-last-project-path`
 - If permission is needed, shows a "Grant Access" prompt
 - If the project folder no longer exists, the saved path is cleared and the user must choose/open another project
@@ -647,7 +650,7 @@ Run tests: `npx vitest run`
 
 ---
 
-*Source: `src/services/project/`, `src/services/projectDB.ts`, `src/services/fileSystemService.ts`, `src/stores/mediaStore/init.ts`, `src/components/common/Toolbar.tsx`, `src/components/common/WelcomeOverlay.tsx`*
+*Source: `src/services/project/`, `src/services/projectDB.ts`, `src/services/fileSystemService.ts`, `src/stores/mediaStore/init.ts`, `src/components/common/Toolbar.tsx`, `src/components/common/EditorProjectSelectionOverlay.tsx`*
 
 ## Dense terrain and save responsiveness
 

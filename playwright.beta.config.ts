@@ -8,7 +8,9 @@ if (!path.resolve(root).startsWith(allowedRoot + path.sep)) {
 }
 export default defineConfig({
   globalTeardown: './tests/playwright/beta/cleanup.ts',
-  testDir: './tests/playwright/beta', testMatch: '**/*.spec.ts',
+  testDir: './tests/playwright/beta',
+  // Existing-session qualifications require their separate reservation profile.
+  testMatch: ['**/cleanup.spec.ts', '**/edit-mask-export.spec.ts', '**/readiness.spec.ts', '**/temporalOracle.spec.ts'],
   outputDir: path.join(root, 'artifacts'), workers: 1, retries: 0,
   timeout: 180_000, expect: { timeout: 15_000 }, forbidOnly: true,
   reporter: [['list'], ['html', { outputFolder: path.join(root, 'report'), open: 'never' }],

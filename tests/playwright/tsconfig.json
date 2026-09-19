@@ -17,5 +17,5 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["../../playwright.config.ts", "../../playwright.built.config.ts", "../../playwright.beta.config.ts", "**/*.ts"]
+  "include": ["../../playwright.config.ts", "../../playwright.built.config.ts", "../../playwright.beta.config.ts", "../../playwright.beta.existing.config.ts", "**/*.ts"]
 }

@@ -14,7 +14,8 @@ export function getCopiedHtmlVideoPreviewFrame(
   targetTime?: number,
   lookupOwnerId?: string,
   captureOwnerId?: string,
-  forceCopy = false
+  forceCopy = false,
+  requireFreshCapture = false,
 ): { view: GPUTextureView; width: number; height: number; mediaTime?: number } | null {
   if ((!isFirefoxBrowser()
     && !forceCopy
@@ -28,7 +29,9 @@ export function getCopiedHtmlVideoPreviewFrame(
   }
 
   const safeTargetTime = targetTime ?? video.currentTime;
-  const previousFrame = scrubbingCache.getLastFrameNearTime(video, safeTargetTime, 0.35, lookupOwnerId);
+  const previousFrame = requireFreshCapture
+    ? null
+    : scrubbingCache.getLastFrameNearTime(video, safeTargetTime, 0.35, lookupOwnerId);
 
   // Firefox can intermittently sample imported HTML video textures as black
   // during playback. Copying into a persistent texture is slower but stable.

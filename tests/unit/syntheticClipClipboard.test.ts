@@ -1,6 +1,6 @@
 import { waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { TimelineClip } from '../../src/types';
+import type { TimelineClip } from '../../src/types/timeline';
 import type { ClipNodeGraph } from '../../src/types/nodeGraph';
 import { DEFAULT_MODEL_MATERIAL_SETTINGS } from '../../src/types/modelMaterial';
 import { DEFAULT_TRACKS, useTimelineStore } from '../../src/stores/timeline';

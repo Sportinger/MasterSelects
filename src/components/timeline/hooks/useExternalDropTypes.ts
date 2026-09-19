@@ -1,5 +1,6 @@
 import type { RefObject } from 'react';
-import type { TimelineTrack, TimelineClip, TextClipProperties } from '../../../types';
+import type { TimelineTrack, TimelineClip } from '../../../types/timeline';
+import type { TextClipProperties } from '../../../types/text';
 import type { Composition } from '../../../stores/mediaStore';
 import type { CameraItem, MeshItem, MeshPrimitiveType, TextItem } from '../../../stores/mediaStore/types';
 import type { ShapePrimitive } from '../../../types/motionDesign';

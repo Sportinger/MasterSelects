@@ -150,12 +150,6 @@ export const classCHardTargets = [
   // resolves media assets at sample time (render-host reads, not React state).
   { path: 'src/engine/flock/runtime/flockAudioSampler.ts', maxCurrentHits: 2 },
   { path: 'src/engine/flock/gpu/flockModelMeshes.ts', maxCurrentHits: 2 },
-  // Packet 345: 5 -> 2+1+1 (presenter + recovery wiring; one site retired
-  // via restore-loop dedup, maxHits 656 -> 655).
-  { path: 'src/engine/WebGPUEngine.ts', maxCurrentHits: 2 },
-  { path: 'src/engine/engineCore/outputPresenter.ts', maxCurrentHits: 1 },
-  { path: 'src/engine/engineCore/contextRecoveryWiring.ts', maxCurrentHits: 1 },
-  { path: 'src/engine/engineCore/outputWindowController.ts', maxCurrentHits: 7 },
   // Packet 306: 25 -> 12+4+3+3+2 (engine sync hooks; maxHits 657 -> 656).
   { path: 'src/hooks/useEngine.ts', maxCurrentHits: 9 },
   { path: 'src/hooks/engine/useEngineMaskTextureSync.ts', maxCurrentHits: 4 },
@@ -206,7 +200,10 @@ export const classCHardTargets = [
   { path: 'src/services/layerBuilder/layerBuilderMotionLayers.ts', maxCurrentHits: 1 },
   { path: 'src/services/layerBuilder/layerBuilderFlockLayers.ts', maxCurrentHits: 1 },
   { path: 'src/services/layerBuilder/layerBuilderNestedLayers.ts', maxCurrentHits: 1 },
-  { path: 'src/services/layerBuilder/LayerBuilderService.ts', maxCurrentHits: 5 },
+  // Retire the former slotGridProgress read and allocate that one owner-budget
+  // slot to the video-effects playback/export preview guard: 5 -> 4 + 1.
+  { path: 'src/services/layerBuilder/LayerBuilderService.ts', maxCurrentHits: 4 },
+  { path: 'src/services/layerBuilder/layerBuilderVideoEffects.ts', maxCurrentHits: 1 },
   { path: 'src/services/layerBuilder/videoSyncHtmlSeekCoordinator.ts', maxCurrentHits: 2 },
   { path: 'src/services/layerPlaybackManager.ts', maxCurrentHits: 6 },
   { path: 'src/services/landmarkTracking/LandmarkTrackingService.ts', maxCurrentHits: 1 },
@@ -228,7 +225,6 @@ export const classCHardTargets = [
   { path: 'src/services/timeline/timelineExternalDropMediaResolver.ts', maxCurrentHits: 2 },
   { path: 'src/services/timeline/timelineSourceWaveformWarmup.ts', maxCurrentHits: 2 },
   { path: 'src/services/timeline/timelineThumbnailGenerationWarmup.ts', maxCurrentHits: 5 },
-  { path: 'src/services/timelinePlacementCommands.ts', maxCurrentHits: 13 },
   { path: 'src/services/timelineSubcomposition.ts', maxCurrentHits: 9 },
   { path: 'src/stores/flashboardStore/activeGenerationRecords.ts', maxCurrentHits: 2 },
   { path: 'src/stores/creditActivityStore.ts', maxCurrentHits: 1 },
@@ -262,7 +258,6 @@ export const classCHardTargets = [
   { path: 'src/stores/timeline/clip/addVideoClip.ts', maxCurrentHits: 3 },
   { path: 'src/stores/timeline/clip/clipAudioAnalysisShared.ts', maxCurrentHits: 1 },
   { path: 'src/stores/timeline/clip/completeDownload.ts', maxCurrentHits: 1 },
-  { path: 'src/stores/timeline/clip/compositionClipActions.ts', maxCurrentHits: 2 },
   { path: 'src/stores/timeline/clip/upgradeToNativeDecoder.ts', maxCurrentHits: 6 },
   { path: 'src/stores/timeline/clip/videoLinkedAudioLoader.ts', maxCurrentHits: 1 },
   { path: 'src/stores/timeline/clip/videoThumbnailLoader.ts', maxCurrentHits: 1 },
@@ -294,6 +289,8 @@ export const classCHardTargets = [
 
 export const getStateAccessPolicyBaselines = {
   allowedAdapterPathCount: 39,
-  classCHardTargetFileCount: 314,
-  classCHardTargetMaxHits: 954,
+  // 18 newly classified paths: two conserve existing owner budgets; the
+  // remaining feature reads (+56) and recovery/refresh guards (+8) are explicit.
+  classCHardTargetFileCount: 332,
+  classCHardTargetMaxHits: 1018,
 } as const;

@@ -176,7 +176,7 @@ describe('FlockTab', () => {
       await Promise.resolve();
     });
     expect(screen.getByText('Ready')).toBeInTheDocument();
-    expect(screen.getByText(/3[,.  ]?990 alive/)).toBeInTheDocument();
+    expect(screen.getByText(/3[,.\u202f\u00a0]?990 alive/)).toBeInTheDocument();
     expect(screen.getByText(/Current/)).toBeInTheDocument();
   });
 });

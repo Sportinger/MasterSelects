@@ -119,6 +119,10 @@ export function loadVideoSource(
     const finish = () => {
       if (!settled) {
         settled = true;
+        // Loading listeners belong to this request, not the cached video's lifetime.
+        // In particular, cache disposal must not report a new load failure.
+        video.removeEventListener('canplaythrough', onCanPlayThrough);
+        video.removeEventListener('error', onError);
         if (sources.pendingSourceDisposers.get(pendingKey) === cleanupPendingSource) {
           sources.pendingSourceDisposers.delete(pendingKey);
         }
@@ -178,7 +182,6 @@ export function loadVideoSource(
       finish();
     };
     const onError = () => {
-      admission.release();
       log.error(`Failed to load video: ${file.name}`, {
         mediaErrorCode: video.error?.code ?? null,
         readyState: video.readyState,

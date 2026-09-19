@@ -11,7 +11,7 @@ import {
   warmCompositionAudioMixdownRequest,
 } from '../../src/services/timeline/compositionAudioMixdownWarmup';
 import type { CompositionAudioMixdownRequestResult } from '../../src/services/timeline/compositionAudioMixdownCache';
-import type { TimelineClip } from '../../src/types';
+import type { TimelineClip } from '../../src/types/timeline';
 
 function audioBuffer(duration = 1): AudioBuffer {
   return {

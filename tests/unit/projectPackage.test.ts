@@ -62,6 +62,69 @@ describe('.msproj project package', () => {
     expect(persist).toHaveBeenCalledTimes(2);
   });
 
+  it.each([new Error('Artifact processing failed'), undefined])('preserves a work rejection when the staged artifacts persist (%s)', async (workError) => {
+    const session = ProjectPackageSession.create(createProject());
+    const persist = vi.fn(async () => true);
+    session.setPersistCallback(persist);
+    await expect(session.batchWrites(async () => {
+      await session.writeEntry('CACHE_ARTIFACTS', 'pcm', 'samples');
+      throw workError;
+    })).rejects.toBe(workError);
+    expect(persist).toHaveBeenCalledOnce();
+    expect(session.isBatchingWrites).toBe(false);
+    await session.waitForWriteBatch();
+  });
+
+  it.each(['false', 'throw'] as const)('retains both work and persistence failures when saving fails via %s', async (failureMode) => {
+    const session = ProjectPackageSession.create(createProject());
+    const workError = new Error('Could not decode artifact');
+    const persistError = new Error('Storage unavailable');
+    const persist = vi.fn(async () => {
+      if (failureMode === 'throw') throw persistError;
+      return false;
+    });
+    session.setPersistCallback(persist);
+    const result = session.batchWrites(async () => {
+      await session.writeEntry('CACHE_ARTIFACTS', 'pcm', 'samples');
+      throw workError;
+    });
+    await expect(result).rejects.toBeInstanceOf(AggregateError);
+    await expect(result).rejects.toMatchObject({ errors: [
+      workError,
+      failureMode === 'throw' ? persistError : expect.objectContaining({ message: 'Could not persist project artifact batch' }),
+    ] });
+    expect(session.isBatchingWrites).toBe(false);
+    await session.waitForWriteBatch();
+    persist.mockResolvedValue(true);
+    expect(await session.writeEntry('CACHE_ARTIFACTS', 'pcm', 'samples')).toBe(true);
+    expect(persist).toHaveBeenCalledTimes(2);
+  });
+
+  it('releases the batch before its save callback waits for it and awaits the final save', async () => {
+    const session = ProjectPackageSession.create(createProject());
+    let startPersist!: () => void;
+    const persistStarted = new Promise<void>(resolve => { startPersist = resolve; });
+    let finishPersist!: (saved: boolean) => void;
+    const persisted = new Promise<boolean>(resolve => { finishPersist = resolve; });
+    session.setPersistCallback(async () => {
+      await session.waitForWriteBatch();
+      startPersist();
+      return persisted;
+    });
+    let completed = false;
+    const batch = session.batchWrites(async () => {
+      await session.writeEntry('CACHE_ARTIFACTS', 'pcm', 'samples');
+      return 'artifact result';
+    }).then(value => { completed = true; return value; });
+    const waitingSave = session.waitForWriteBatch();
+    await persistStarted;
+    await waitingSave;
+    expect(session.isBatchingWrites).toBe(false);
+    expect(completed).toBe(false);
+    finishPersist(true);
+    await expect(batch).resolves.toBe('artifact result');
+  });
+
   it('stores mesh payloads once and reuses compressed geometry after a reload', async () => {
     const project = createProject();
     const mesh = { positions: [0, 0, 0, 1, 0, 0, 0, 1, 0], indices: [0, 1, 2],

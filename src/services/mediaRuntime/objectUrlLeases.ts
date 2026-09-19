@@ -18,6 +18,8 @@ export interface AcquireObjectUrlLeaseParams {
   blob: Blob;
   runtimeSessionKey?: RuntimeSessionKey;
   policy?: DecodeSessionPolicy;
+  /** Composition cleanup must leave media-wide caches with their owning service. */
+  cleanupScope?: 'timeline-clip';
 }
 
 export interface TrackExistingObjectUrlLeaseParams {
@@ -28,6 +30,7 @@ export interface TrackExistingObjectUrlLeaseParams {
   policy?: DecodeSessionPolicy;
   createdAt?: number;
   replaceExisting?: boolean;
+  cleanupScope?: 'timeline-clip';
 }
 
 export interface ObjectUrlLeaseStats {
@@ -62,6 +65,7 @@ class MediaRuntimeObjectUrlLease implements MediaRuntimeLease<ObjectUrlRuntimeHa
   status: MediaRuntimeLeaseStatus = 'pending';
   acquiredAt = 0;
   releasedAt?: number;
+  readonly cleanupScope?: 'timeline-clip';
 
   private handles: ObjectUrlRuntimeHandles | null = null;
   private readonly source: ObjectUrlLeaseSource;
@@ -74,6 +78,7 @@ class MediaRuntimeObjectUrlLease implements MediaRuntimeLease<ObjectUrlRuntimeHa
     policy: DecodeSessionPolicy;
     source: ObjectUrlLeaseSource;
     leaseOwner: MediaRuntimeObjectUrlLeaseOwner;
+    cleanupScope?: 'timeline-clip';
   }) {
     this.runtimeSourceId = params.runtimeSourceId;
     this.runtimeSessionKey = params.runtimeSessionKey;
@@ -81,6 +86,7 @@ class MediaRuntimeObjectUrlLease implements MediaRuntimeLease<ObjectUrlRuntimeHa
     this.policy = params.policy;
     this.source = params.source;
     this.leaseOwner = params.leaseOwner;
+    this.cleanupScope = params.cleanupScope;
   }
 
   acquire(): MediaRuntimeObjectUrlLease {
@@ -147,6 +153,7 @@ export class MediaRuntimeObjectUrlLeaseOwner {
       policy: params.policy ?? 'interactive',
       source: { kind: 'blob', blob: params.blob },
       leaseOwner: this,
+      cleanupScope: params.cleanupScope,
     }).acquire();
   }
 
@@ -166,6 +173,7 @@ export class MediaRuntimeObjectUrlLeaseOwner {
         createdAt: params.createdAt,
       },
       leaseOwner: this,
+      cleanupScope: params.cleanupScope,
     }).acquire();
   }
 
@@ -212,7 +220,8 @@ export class MediaRuntimeObjectUrlLeaseOwner {
     ownerId: string,
     options?: ObjectUrlLeaseTransferOptions
   ): string | undefined {
-    const handles = this.leases.get(fromRuntimeSourceId)?.getRuntimeHandles();
+    const sourceLease = this.leases.get(fromRuntimeSourceId);
+    const handles = sourceLease?.getRuntimeHandles();
     if (!handles) {
       return undefined;
     }
@@ -222,13 +231,14 @@ export class MediaRuntimeObjectUrlLeaseOwner {
       ownerId,
       url: handles.url,
       replaceExisting: options?.replaceExisting,
+      cleanupScope: sourceLease?.cleanupScope,
     });
     return handles.url;
   }
 
-  clear(): void {
+  clear(cleanupScope?: 'timeline-clip'): void {
     for (const lease of Array.from(this.leases.values())) {
-      lease.release();
+      if (!cleanupScope || lease.cleanupScope === cleanupScope) lease.release();
     }
   }
 

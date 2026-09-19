@@ -1,4 +1,4 @@
-import type { TimelineClip, TimelineTrack } from '../types';
+import type { TimelineClip, TimelineTrack } from '../types/timeline';
 import { placeSignalAssetOnTimeline } from '../runtime/renderers/signalTimelineRendererAdapter';
 import { useTimelineStore } from '../stores/timeline';
 import type { TimelinePlacementMode } from '../stores/timeline/editOperations/types';

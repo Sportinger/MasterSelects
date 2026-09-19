@@ -64,14 +64,15 @@ export function revokeObjectUrls(...urls: Array<string | undefined>): void {
 export function releaseVideoElement(video: HTMLVideoElement, ownedObjectUrl?: string): void {
   const src = video.currentSrc || video.src;
   video.pause();
-  revokeObjectUrls(ownedObjectUrl, src);
   video.removeAttribute('src');
-  video.src = '';
   try {
     video.load();
   } catch {
     // Some browsers throw if load() runs during teardown; src removal is enough.
   }
+  // An empty src attribute is a new (invalid) media request. Detach first, then
+  // revoke owned URLs so no active element can request a revoked blob.
+  revokeObjectUrls(ownedObjectUrl, src);
 }
 
 export function releaseImageElement(image: HTMLImageElement, ownedObjectUrl?: string): void {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createNestedContentHash, getCompositionContentDependents } from '../../src/stores/timeline/clip/nestedCompositionContentHash';
 import { createMockClip, createMockKeyframe, createMockTrack } from '../helpers/mockData';
-import type { CompositionTimelineData, SerializableClip } from '../../src/types';
+import type { CompositionTimelineData, SerializableClip } from '../../src/types/timeline';
 import { MAX_NESTING_DEPTH } from '../../src/stores/timeline/constants';
 
 function content(): CompositionTimelineData {

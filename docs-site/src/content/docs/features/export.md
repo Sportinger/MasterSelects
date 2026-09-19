@@ -63,8 +63,12 @@ Canvas-backed sources such as text, solids, Lottie, and Rive are re-rendered for
 
 ### Precise Mode
 
+Nested preview and export account for each composition wrapper's start time and trim when seeking deeper video sources.
+
 - Uses detached `HTMLVideoElement` instances and browser seeking.
-- Tries to wait for ready state and a fresh frame before export captures.
+- Prepares nested video sources for the selected export range and parent trims. Ordinary forward 1x composition branches skip unused descendants; retimed or transition-driven branches keep conservative preparation. Composition wrappers do not consume video decoders.
+- If a required video cannot be admitted within the media budget, preparation reports the failure before rendering.
+- Waits for ready state and a fresh frame before capture. A temporarily unavailable nested source triggers the export readiness retry; an older preview composition texture is never accepted as the current export frame.
 - Is slower than fast mode, but it is the explicit compatibility choice for difficult files or timing cases.
 
 ---

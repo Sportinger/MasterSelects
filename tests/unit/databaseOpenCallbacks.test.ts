@@ -2,13 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 let request: {
   result?: IDBDatabase;
-  transaction: { abort: ReturnType<typeof vi.fn> };
+  transaction: EventTarget & { abort: ReturnType<typeof vi.fn> };
   onupgradeneeded?: (event: unknown) => void;
   onsuccess?: () => void;
 };
 beforeEach(() => {
   vi.resetModules();
-  request = { transaction: { abort: vi.fn() } };
+  request = { transaction: Object.assign(new EventTarget(), { abort: vi.fn() }) };
   vi.stubGlobal('indexedDB', { open: () => request });
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -47,7 +47,10 @@ for (const database of ['project', 'youtube']) {
         delete: deleted,
         get: () => {
           const read: { result?: unknown; onsuccess?: () => void } = {};
-          queueMicrotask(() => read.onsuccess?.());
+          queueMicrotask(() => {
+            read.onsuccess?.();
+            request.transaction.dispatchEvent(new Event('complete'));
+          });
           return read;
         },
       };

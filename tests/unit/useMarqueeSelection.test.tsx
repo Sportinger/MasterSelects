@@ -3,7 +3,8 @@ import { useRef } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useTimelineStore } from '../../src/stores/timeline';
-import type { AnimatableProperty, TimelineClip, TimelineTrack } from '../../src/types';
+import type { AnimatableProperty } from '../../src/types/animationProperties';
+import type { TimelineClip, TimelineTrack } from '../../src/types/timeline';
 import { useMarqueeSelection } from '../../src/components/timeline/hooks/useMarqueeSelection';
 
 const rect = (left: number, top: number, width: number, height: number): DOMRect => ({

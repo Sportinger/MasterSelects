@@ -94,6 +94,14 @@ outputs support live and installation workflows.
 
 Explore the [feature guide](docs/Features/README.md) for workflows and examples.
 
+Media imports report processing and save failures. Failed audio-proxy writes can
+be retried; project packages follow the configured save policy.
+Switching compositions keeps cached proxy audio available. Reopening split nested
+clips uses the full source composition duration, and nested previews retain the
+correct source timing after splits. Precise export skips unused
+nested video sources when the selected range and composition timing allow it.
+At nested cuts, export waits for the new frame before capture.
+
 Find keyboard shortcuts by action or key combination in Settings. Copy and paste
 automation curves to replace the destination range while keeping surrounding
 keyframes and other properties intact.

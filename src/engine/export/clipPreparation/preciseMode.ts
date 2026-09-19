@@ -4,7 +4,7 @@ import type { MediaFile } from '../../../stores/mediaStore/types';
 import type { ClipPreparationModeResult, ExportClipState } from '../ClipPreparation';
 import { createPreciseExportVideoElement, getClipWarmupSourceTime } from './mediaElements';
 import { createExportRuntimeSource, getExportRuntimeOwnerId } from './runtimeBinding';
-import { collectNestedVideoClips } from './nestedVideoClips';
+import { collectNestedVideoClips, type NestedVideoExportRange } from './nestedVideoClips';
 import {
   collectShareableRegularVideoSourceKeys,
   getExportSourceKey,
@@ -20,7 +20,7 @@ export async function initializePreciseMode(
   videoClips: TimelineClip[],
   clipStates: Map<string, ExportClipState>,
   mediaFiles: MediaFile[],
-  exportStartTime: number,
+  exportRange: NestedVideoExportRange,
   exportRunId?: string
 ): Promise<ClipPreparationModeResult> {
   const preparedVideoClipIds = new Set<string>();
@@ -80,6 +80,16 @@ export async function initializePreciseMode(
         preparedRuntimeBindings.set(runtimeBindingKey, runtimeBinding);
       }
     }
+    // Record ownership before any async preparation can fail, so the outer
+    // export cleanup also releases the runtime binding for the failing clip.
+    clipStates.set(clip.id, {
+      clipId: clip.id,
+      webCodecsPlayer: null,
+      lastSampleIndex: 0,
+      isSequential: false,
+      ...(runtimeOwnerId ? { runtimeOwnerId } : {}),
+      runtimeSource: runtimeBinding.runtimeSource,
+    });
     const mediaFileId = clip.mediaFileId || clip.source?.mediaFileId;
     const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
     const providerPlan = selectRuntimeFrameProviderPlan({
@@ -135,6 +145,10 @@ export async function initializePreciseMode(
       }
     }
 
+    const preciseVideoElement = preparedVideo?.videoElement ?? clip.source?.videoElement ?? null;
+    if (!preciseVideoElement) {
+      throw new Error(`PRECISE export preparation could not load video source "${clip.name}".`);
+    }
     clipStates.set(clip.id, {
       clipId: clip.id,
       webCodecsPlayer: null,
@@ -142,7 +156,7 @@ export async function initializePreciseMode(
       isSequential: false,
       ...(runtimeOwnerId ? { runtimeOwnerId } : {}),
       runtimeSource: runtimeBinding.runtimeSource,
-      preciseVideoElement: preparedVideo?.videoElement ?? clip.source?.videoElement ?? null,
+      preciseVideoElement,
       preciseVideoObjectUrl: ownsPreparedVideo
         ? preparedVideo?.objectUrl ?? null
         : null,
@@ -155,10 +169,14 @@ export async function initializePreciseMode(
   let preciseClipCount = 0;
   let preciseNestedClipCount = 0;
   let dedicatedPreciseVideoCount = 0;
+  const incomingTransitionIds = new Set(videoClips.flatMap((clip) =>
+    clip.transitionOut ? [clip.transitionOut.linkedClipId] : [],
+  ));
 
   for (const clip of videoClips) {
     if (clip.isComposition) {
-      for (const { clip: nestedClip } of collectNestedVideoClips(clip)) {
+      const nestedRange = incomingTransitionIds.has(clip.id) ? undefined : exportRange;
+      for (const { clip: nestedClip } of collectNestedVideoClips(clip, nestedRange)) {
         const dedicated = await registerPreciseClip(
           nestedClip,
           getClipWarmupSourceTime(nestedClip, nestedClip.startTime),
@@ -169,10 +187,12 @@ export async function initializePreciseMode(
         }
         preciseNestedClipCount += 1;
       }
+      // A composition's file is a placeholder, not another video source.
+      continue;
     }
 
     if (clip.source?.type !== 'video') continue;
-    const dedicated = await registerPreciseClip(clip, getClipWarmupSourceTime(clip, exportStartTime));
+    const dedicated = await registerPreciseClip(clip, getClipWarmupSourceTime(clip, exportRange.startTime));
     if (dedicated === null) continue;
     if (dedicated) {
       dedicatedPreciseVideoCount += 1;

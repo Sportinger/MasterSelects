@@ -432,6 +432,69 @@ describe('NestedCompRenderer shared-scene integration', () => {
     }
   });
 
+  it.each(['missing-video', 'pending-layer', 'pending-scene'] as const)(
+    'defers export instead of encoding the previous split frame when %s is unavailable', (pendingKind) => {
+      const previousGPUTextureUsage = globalThis.GPUTextureUsage;
+      Object.defineProperty(globalThis, 'GPUTextureUsage', {
+        configurable: true,
+        value: { RENDER_ATTACHMENT: 1, TEXTURE_BINDING: 2, COPY_SRC: 4, COPY_DST: 8 },
+      });
+      const renderer = createRenderer({
+        createTexture: vi.fn(() => createSizedMockTexture()),
+      } as unknown as GPUDevice);
+      const encoder = { copyTextureToTexture: vi.fn() } as unknown as GPUCommandEncoder;
+      const beforeSplit = {
+        id: 'split-a', visible: true, opacity: 1, blendMode: 'classic-color-burn',
+        scale: { x: 1, y: 1 }, source: { type: 'video' },
+      } as Layer;
+      const afterSplit = {
+        ...beforeSplit, id: 'split-b', blendMode: 'normal', scale: { x: 0.98722, y: 0.98722 },
+      } as Layer;
+      const collected = (layer: Layer): LayerRenderData[] => [{
+        layer, isVideo: false, externalTexture: null, textureView: {} as GPUTextureView,
+        sourceWidth: 16, sourceHeight: 16,
+      }];
+      const collect = vi.spyOn(renderer, 'collectNestedLayerData');
+      collect.mockReturnValueOnce(collected(beforeSplit));
+      const render = (layers: Layer[], time: number, quality: 'preview' | 'export' = 'export') => renderer.preRender(
+        'same-parent-composition', layers, 16, 16, encoder, {} as GPUSampler, time,
+        [{ id: 'scene-clip' }] as TimelineClip[], undefined, 0, false, quality, undefined, 'same-root-occurrence',
+      );
+      try {
+        const previousView = render([beforeSplit], 2.7333333333333334);
+        expect(previousView).not.toBeNull();
+        const pendingLayers = pendingKind === 'pending-scene' ? [] : [{
+          ...afterSplit, source: pendingKind === 'missing-video' ? afterSplit.source : null,
+        }] as Layer[];
+        collect.mockReturnValue([]);
+        expect(render(pendingLayers, 2.7666666666666666)).toBeNull();
+        expect(render(pendingLayers, 2.8)).toBeNull();
+        expect(mockCompositeNestedLayers).toHaveBeenCalledTimes(1);
+        expect(encoder.copyTextureToTexture).toHaveBeenCalledTimes(1);
+
+        // Interactive preview may still hold that last good frame during the
+        // same decode gap, while exact export must wait at its requested time.
+        expect(render(pendingLayers, 2.8, 'preview')).toBe(previousView);
+        expect(mockCompositeNestedLayers).toHaveBeenCalledTimes(1);
+
+        collect.mockReturnValue(collected(afterSplit));
+        expect(render([afterSplit], 2.8)).toBe(previousView);
+        expect(mockCompositeNestedLayers).toHaveBeenCalledTimes(2);
+        expect(mockCompositeNestedLayers).toHaveBeenLastCalledWith(expect.objectContaining({
+          particleQuality: 'export', motionTime: 2.8,
+          layerData: [expect.objectContaining({ layer: afterSplit })],
+        }));
+        expect(encoder.copyTextureToTexture).toHaveBeenCalledTimes(2);
+      } finally {
+        collect.mockRestore();
+        renderer.destroy();
+        Object.defineProperty(globalThis, 'GPUTextureUsage', {
+          configurable: true, value: previousGPUTextureUsage,
+        });
+      }
+    },
+  );
+
   it('renders an intentionally transparent nested frame instead of deferring it', () => {
     const previousGPUTextureUsage = (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
     Object.defineProperty(globalThis, 'GPUTextureUsage', {

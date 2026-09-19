@@ -8,7 +8,8 @@ import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { createBuffer } from '../../src/engine/audio/audioBufferFactory';
 import { createMockClip, createMockKeyframe, createMockTrack } from '../helpers/mockData';
-import type { Composition, SerializableClip, TimelineClip, TimelineTrack } from '../../src/types';
+import type { Composition } from '../../src/stores/mediaStore/types';
+import type { SerializableClip, TimelineClip, TimelineTrack } from '../../src/types/timeline';
 
 function serialized(clip: TimelineClip): SerializableClip {
   const { file: _file, source, ...data } = clip;

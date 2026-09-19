@@ -100,4 +100,40 @@ describe('project composition duration persistence', () => {
     expect(composition.duration).toBe(130);
     expect(composition.timelineData?.durationLocked).toBe(false);
   });
+
+  it('uses the referenced composition duration before quantizing legacy split video and audio wrappers', () => {
+    const splitTime = 0.8727257702515707;
+    const child = { ...projectComposition(540, 300, true), id: 'nested-source', frameRate: 60 };
+    const parent = {
+      ...projectComposition(550, 540, false),
+      frameRate: 30,
+      clips: (['video', 'audio'] as const).map(sourceType => ({
+        ...projectClip(540 - splitTime),
+        id: `split-${sourceType}`,
+        sourceType,
+        naturalDuration: sourceType === 'video' ? 540 - splitTime : 300,
+        linkedClipId: sourceType === 'video' ? 'split-audio' : 'split-video',
+        startTime: splitTime,
+        inPoint: splitTime,
+        outPoint: 540,
+        isComposition: true,
+        compositionId: child.id,
+      })),
+    };
+
+    const [restored] = convertProjectCompositionToStore([parent, child]);
+    const clips = restored.timelineData!.clips;
+    expect(clips).toHaveLength(2);
+    for (const clip of clips) {
+      expect(clip.naturalDuration).toBe(540);
+      expect(clip.startTime).toBe(26 / 30);
+      // Keep the authored source in-point; 16173 full frames remain before 540s.
+      expect(clip.duration).toBe(16173 / 30);
+      expect(clip.inPoint).toBe(splitTime);
+      expect(clip.outPoint).toBe(splitTime + 16173 / 30);
+    }
+    expect(restored.duration).toBe(550);
+    expect(restored.timelineData?.durationLocked).toBe(false);
+    expect(parent.clips.map(clip => clip.naturalDuration)).toEqual([540 - splitTime, 300]);
+  });
 });

@@ -133,11 +133,7 @@ export function collectTimelineClipCanvasWorkerThumbnailPreparation(input: {
       : staticThumbnailUrl
       ? Array.from({ length: count }, () => staticThumbnailUrl)
       : thumbnailCacheService.getThumbnailsForRange(
-        mediaFileId,
-        visibleInPoint,
-        visibleOutPoint,
-        count,
-        clip.reversed,
+        mediaFileId, visibleInPoint, visibleOutPoint, count, clip.reversed,
       );
     if (!urls.some((url) => Boolean(url))) {
       handledClipIds.add(clip.id);

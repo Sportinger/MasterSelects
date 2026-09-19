@@ -4,7 +4,8 @@ import * as textRestore from '../../src/stores/timeline/nestedComposition/nested
 import { generateNestedClipId } from '../../src/stores/timeline/helpers/idGenerator';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 import type { Composition, MediaFile } from '../../src/stores/mediaStore/types';
-import type { CompositionTimelineData, Keyframe, SerializableClip } from '../../src/types';
+import type { CompositionTimelineData, SerializableClip } from '../../src/types/timeline';
+import type { Keyframe } from '../../src/types/keyframes';
 
 afterEach(() => vi.restoreAllMocks());
 

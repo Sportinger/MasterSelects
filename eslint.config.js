@@ -8,6 +8,13 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 export default defineConfig([
   globalIgnores([
     'dist',
+    // Generated browser reports and deliberately malformed qualification fixtures.
+    'output/**',
+    'test-results/**',
+    'playwright-report/**',
+    'playwright-built-report/**',
+    'tests/windows-quality/evidence/**',
+    'tests/windows-quality/inventory/evidence/**',
     'docs-site/.astro/**',
     '.codex-tmp/**',
     '.codex-ref/**',
@@ -47,6 +54,14 @@ export default defineConfig([
       'react-hooks/invariant': 'warn',
       // React Refresh - allow non-component exports (common for constants/types)
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+    },
+  },
+  {
+    files: ['tests/playwright/**/*.{ts,tsx}'],
+    rules: {
+      // Playwright reads fixture dependencies from the first parameter pattern.
+      // {} is required when only testInfo or a test-owned context is needed.
+      'no-empty-pattern': ['error', { allowObjectPatternsAsParameters: true }],
     },
   },
 ])
