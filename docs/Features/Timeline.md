@@ -171,6 +171,8 @@ getTrackChildren()  // Query child tracks
 
 ## Clip Operations
 
+Timeline snapping starts disabled unless a previous choice was saved. Hold `Shift` to snap temporarily; `Alt` bypasses snapping. The magnet button saves your on/off preference.
+
 | Action | Current Behavior |
 |--------|------------------|
 | Move | Drag a clip or a multi-selection with a mouse, or hold briefly and drag with touch. |

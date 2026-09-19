@@ -199,7 +199,7 @@ export const useTimelineStore = create<TimelineStore>()(
         MAX_TRACK_HEADER_WIDTH,
       ),
       timelineSplitRatio: readStoredTimelineSplitRatio(null),
-      snappingEnabled: readStoredTimelineSnappingEnabled(true),
+      snappingEnabled: readStoredTimelineSnappingEnabled(false),
       timelineGridSubdivision: readStoredTimelineGridSubdivision('beat'),
       pianoRollSnapEnabled: readStoredPianoRollSnapEnabled(true),
       pianoRollGridSubdivision: readStoredPianoRollGridSubdivision('1/16'),

@@ -3,6 +3,7 @@ import { DEFAULT_TRACK_HEADER_WIDTH } from '../../src/stores/timeline/constants'
 import { useTimelineStore } from '../../src/stores/timeline';
 import {
   readStoredTimelineSplitRatio,
+  readStoredTimelineSnappingEnabled,
   readStoredTimelineTrackFocusMode,
   readStoredTimelineTrackHeaderWidth,
 } from '../../src/stores/timeline/viewPreferences';
@@ -15,11 +16,24 @@ describe('timeline view preference persistence', () => {
       timelineSplitRatio: null,
       audioFocusMode: false,
       trackFocusMode: 'balanced',
+      snappingEnabled: false,
     });
   });
 
   afterEach(() => {
     localStorage.clear();
+  });
+
+  it('starts with snapping disabled when there is no saved preference', () => {
+    expect(useTimelineStore.getInitialState().snappingEnabled).toBe(false);
+  });
+
+  it('preserves the user snapping choice across preference reads', () => {
+    useTimelineStore.getState().toggleSnapping();
+    expect(readStoredTimelineSnappingEnabled(false)).toBe(true);
+
+    useTimelineStore.getState().toggleSnapping();
+    expect(readStoredTimelineSnappingEnabled(true)).toBe(false);
   });
 
   it('persists the draggable timeline split position', () => {

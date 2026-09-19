@@ -101,6 +101,8 @@ Use **View > Thumbnails** in the timeline to hide or restore clip previews while
 keeping clip labels and audio waveforms visible.
 Timeline volume keyframe rows and inline curves show gain in dB.
 Deleting timeline gaps moves the playhead with the remaining material.
+Timeline snapping starts off; hold **Shift** to snap temporarily or enable the
+magnet button to keep it on. Your choice is remembered.
 
 ## Try it
 
