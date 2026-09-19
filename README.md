@@ -87,9 +87,9 @@ existing systems, and check their work:
 | **3D** | Combine footage with models, lights, cameras, and Gaussian splats in a shared scene. |
 | **AI** | Ask the editor to change the timeline, generate media, or use local transcription, segmentation, and depth estimation. |
 
-Arrange the dockable panels for the work at hand. Touch controls support editing
-on phones and tablets, and multiple preview outputs support live and installation
-workflows.
+Arrange the dockable panels for the work at hand. The interface is optimized for
+touch and iPad, with phone workflows still being refined. Multiple preview
+outputs support live and installation workflows.
 
 Explore the [feature guide](docs/Features/README.md) for workflows and examples.
 
