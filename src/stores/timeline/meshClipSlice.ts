@@ -9,6 +9,7 @@ import { useMediaStore } from '../mediaStore';
 import { Logger } from '../../services/logger';
 import { layerBuilder } from '../../services/layerBuilder';
 import { renderHostPort } from '../../services/render/renderHostPort';
+import { mergeModelMaterialSettings } from '../../types/modelMaterial';
 
 const log = Logger.create('MeshClipSlice');
 
@@ -23,7 +24,7 @@ const MESH_LABELS: Record<MeshPrimitiveType, string> = {
 };
 
 export const createMeshClipSlice: SliceCreator<MeshClipActions> = (set, get) => ({
-  addMeshClip: (trackId, startTime, meshType, duration = 10, skipMediaItem = true) => {
+  addMeshClip: (trackId, startTime, meshType, duration = 10, skipMediaItem = true, mediaItem) => {
     const { clips, tracks, updateDuration, invalidateCache } = get();
     const track = tracks.find(t => t.id === trackId);
 
@@ -41,16 +42,21 @@ export const createMeshClipSlice: SliceCreator<MeshClipActions> = (set, get) => 
     const meshClip: TimelineClip = {
       id: clipId,
       trackId,
-      name: label,
+      name: mediaItem?.name ?? label,
       file: new File([], `mesh-${meshType}.dat`, { type: 'application/octet-stream' }),
       startTime,
       duration,
       inPoint: 0,
       outPoint: duration,
+      ...(mediaItem ? { mediaFileId: mediaItem.id } : {}),
       source: {
         type: 'model',
         meshType,
         naturalDuration: 3600,
+        ...(mediaItem ? {
+          mediaFileId: mediaItem.id,
+          modelMaterialSettings: mergeModelMaterialSettings({ overrideBaseColor: true, baseColor: mediaItem.color }),
+        } : {}),
         ...(text3DProperties ? { text3DProperties } : {}),
       },
       transform: meshType === 'text3d'
@@ -66,7 +72,7 @@ export const createMeshClipSlice: SliceCreator<MeshClipActions> = (set, get) => 
       isLoading: false,
     };
 
-    if (!skipMediaItem) {
+    if (!skipMediaItem && !mediaItem) {
       const mediaStore = useMediaStore.getState();
       const parentFolderId = meshType === 'text3d'
         ? mediaStore.getOrCreateTextFolder()

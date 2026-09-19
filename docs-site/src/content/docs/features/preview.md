@@ -29,6 +29,7 @@ Current preview-related overlays and modes include:
 ### Main Preview
 
 - Renders the active composition or a pinned composition source.
+- The source menu groups layers under each composition. Hovering or keyboard focus expands a group and keeps it open while moving to its layers; leaving the group collapses it. A disclosure button supports touch input.
 - Uses `renderHostPort.registerTargetCanvas()` through the preview-target registration helper to attach the canvas to WebGPU.
 - Registers as an active-comp or independent render target in `renderTargetStore`.
 - Normal composition previews use the same viewer navigation model as the Source Monitor: wheel or trackpad gestures zoom around the pointer, middle-button drag pans, and zooming fully out stops at Fit (100%) and restores the centered position.

@@ -1,4 +1,4 @@
-export type MediaSourceRevealSource = 'timeline' | 'media-queue';
+export type MediaSourceRevealSource = 'timeline' | 'media-queue' | 'media-panel';
 
 export interface MediaSourceRevealRequest {
   requestId: number;

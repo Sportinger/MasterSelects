@@ -12,6 +12,8 @@ import {
   scheduleNestedClipSegmentBuild,
 } from '../nestedCompositionLoader';
 import { restorePersistedClipVideoState } from '../nestedRestore';
+import { createNestedContentHash } from '../clip/nestedCompositionContentHash';
+import { beginNestedCompositionLoad, releaseStaleNestedCompositionClips } from '../nestedCompositionLoadGeneration';
 import {
   canBatchGeneratedComposition,
   createLoadStateMissingNestedRuntimeSource,
@@ -47,7 +49,7 @@ export async function restoreLoadStateCompositionClip(params: {
     flushRestoredClipBuffer,
     patchRestoredClip,
     pushRestoredNestedKeyframes,
-    isCurrentTimelineSession,
+    isCurrentTimelineSession: isCurrentSession,
     wakePreviewAfterRestore,
     restoreSourceThumbnails,
   } = params;
@@ -62,12 +64,15 @@ export async function restoreLoadStateCompositionClip(params: {
     return 'handled';
   }
 
+  const nestedContentHash = createNestedContentHash(composition.timelineData, mediaStore.compositions);
+  const isLatestLoad = beginNestedCompositionLoad(get, serializedClip.id);
+  const isCurrentTimelineSession = () => isCurrentSession() && isLatestLoad();
   if (serializedClip.sourceType === 'audio') {
-    pushRestoredClip(createCompositionAudioClip(serializedClip));
+    pushRestoredClip({ ...createCompositionAudioClip(serializedClip), nestedContentHash });
     return 'handled';
   }
 
-  const compClip = createCompositionVideoClip(serializedClip);
+  const compClip = { ...createCompositionVideoClip(serializedClip), nestedContentHash };
   pushRestoredClip(compClip);
   const batchGenerated = !!patchRestoredClip
     && !!pushRestoredNestedKeyframes
@@ -76,7 +81,7 @@ export async function restoreLoadStateCompositionClip(params: {
 
   if (!composition.timelineData) {
     if (!isCurrentTimelineSession()) {
-      return 'stale';
+      return isCurrentSession() ? 'handled' : 'stale';
     }
     set(state => ({
       clips: state.clips.map(c =>
@@ -124,14 +129,17 @@ export async function restoreLoadStateCompositionClip(params: {
     },
     deferNestedKeyframeMerge: batchGenerated ? pushRestoredNestedKeyframes : undefined,
   });
+  if (!isCurrentTimelineSession()) {
+    releaseStaleNestedCompositionClips(nestedClips);
+    // A newer installer only owns this clip. Continue restoring the remaining
+    // project clips unless the entire timeline session was replaced.
+    return isCurrentSession() ? 'handled' : 'stale';
+  }
   restoreNestedVideoSourceThumbnails(nestedClips, restoreSourceThumbnails, mediaStore);
 
   const compDuration = composition.timelineData?.duration ?? composition.duration;
   const boundaries = calculateNestedClipBoundaries(composition.timelineData, compDuration);
 
-  if (!isCurrentTimelineSession()) {
-    return 'stale';
-  }
   const finishClip = (clip: TimelineClip): TimelineClip => ({
     ...clip,
     nestedClips,

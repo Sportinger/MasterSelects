@@ -8,6 +8,7 @@ import {
   MEDIA_BOARD_SLOT_CELL_WIDTH,
 } from './constants';
 import { getMediaBoardGroupChrome, getMediaBoardNodeSize } from './layout';
+import { findNearestMediaBoardGridSlot, getMediaBoardGridColumnLimit } from './nearestGridSlot';
 import type {
   MediaBoardGroupOffset,
   MediaBoardItem,
@@ -80,8 +81,16 @@ export function useMediaBoardLayoutCommit({
         columns: Math.max(1, Math.ceil((size.width + MEDIA_BOARD_NODE_GAP) / MEDIA_BOARD_SLOT_CELL_WIDTH)),
         rows: Math.max(1, Math.ceil((size.height + MEDIA_BOARD_NODE_GAP) / MEDIA_BOARD_SLOT_CELL_HEIGHT)),
       });
+      const stationaryItems = mediaBoardItems.filter((item) => !movingIdSet.has(item.id) && (item.parentId ?? null) === targetGroupId);
+      const columnCount = getMediaBoardGridColumnLimit(targetGroupId, [
+        ...stationaryItems.map((item, index) => ({
+          x: (current[item.id] ?? getFallbackLocalPosition(item.id, index)).x, width: getItemSize(item.id).width,
+        })),
+        ...normalizedMovingIds.map((id, index) => ({ x: getMovingDesiredPosition(id, index).x, width: getItemSize(id).width })),
+      ]);
       const canPlace = (column: number, row: number, span: { columns: number; rows: number }) => {
         if (!allowNegativePositions && (column < 0 || row < 0)) return false;
+        if (column + span.columns > columnCount) return false;
         for (let y = row; y < row + span.rows; y += 1) {
           for (let x = column; x < column + span.columns; x += 1) if (occupied.has(`${x}:${y}`)) return false;
         }
@@ -93,35 +102,24 @@ export function useMediaBoardLayoutCommit({
         }
       };
 
-      mediaBoardItems
-        .filter((item) => !movingIdSet.has(item.id) && (item.parentId ?? null) === targetGroupId)
-        .forEach((item, index) => {
-          const desired = current[item.id] ?? getFallbackLocalPosition(item.id, index);
-          const span = getSpan(getItemSize(item.id));
-          markOccupied(
-            allowNegativePositions ? Math.round(desired.x / MEDIA_BOARD_SLOT_CELL_WIDTH) : Math.max(0, Math.round(desired.x / MEDIA_BOARD_SLOT_CELL_WIDTH)),
-            allowNegativePositions ? Math.round(desired.y / MEDIA_BOARD_SLOT_CELL_HEIGHT) : Math.max(0, Math.round(desired.y / MEDIA_BOARD_SLOT_CELL_HEIGHT)),
-            span,
-          );
-        });
+      stationaryItems.forEach((item, index) => {
+        const desired = current[item.id] ?? getFallbackLocalPosition(item.id, index);
+        const span = getSpan(getItemSize(item.id));
+        markOccupied(
+          allowNegativePositions ? Math.round(desired.x / MEDIA_BOARD_SLOT_CELL_WIDTH) : Math.max(0, Math.round(desired.x / MEDIA_BOARD_SLOT_CELL_WIDTH)),
+          allowNegativePositions ? Math.round(desired.y / MEDIA_BOARD_SLOT_CELL_HEIGHT) : Math.max(0, Math.round(desired.y / MEDIA_BOARD_SLOT_CELL_HEIGHT)),
+          span,
+        );
+      });
 
       normalizedMovingIds.forEach((id, index) => {
         const desired = getMovingDesiredPosition(id, index);
         const span = getSpan(getItemSize(id));
         const initialColumn = allowNegativePositions ? Math.round(desired.x / MEDIA_BOARD_SLOT_CELL_WIDTH) : Math.max(0, Math.round(desired.x / MEDIA_BOARD_SLOT_CELL_WIDTH));
         const initialRow = allowNegativePositions ? Math.round(desired.y / MEDIA_BOARD_SLOT_CELL_HEIGHT) : Math.max(0, Math.round(desired.y / MEDIA_BOARD_SLOT_CELL_HEIGHT));
-        let column = initialColumn;
-        let row = initialRow;
-        let attempts = 0;
-        while (!canPlace(column, row, span)) {
-          column += 1;
-          attempts += 1;
-          if (attempts > 10000) {
-            row += 1;
-            column = initialColumn;
-            attempts = 0;
-          }
-        }
+        const { column, row } = findNearestMediaBoardGridSlot(
+          initialColumn, initialRow, (candidateColumn, candidateRow) => canPlace(candidateColumn, candidateRow, span),
+        );
         markOccupied(column, row, span);
         const resolvedPosition = { x: column * MEDIA_BOARD_SLOT_CELL_WIDTH, y: row * MEDIA_BOARD_SLOT_CELL_HEIGHT };
         if (next[id]?.x !== resolvedPosition.x || next[id]?.y !== resolvedPosition.y) {

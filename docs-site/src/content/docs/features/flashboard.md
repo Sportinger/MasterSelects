@@ -35,6 +35,8 @@ The prompt book is presented as a "magic book": it opens with a one-shot fall-op
 
 ---
 
+The open Prompt Book updates completed tool calls as a chat run progresses, including failed tool calls and calls completed before a later provider error. It does not need to be reopened after the response finishes.
+
 ## Node Lifecycle
 
 Nodes move through the following states:

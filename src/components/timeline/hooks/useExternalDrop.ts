@@ -31,13 +31,11 @@ import { canDropExternalMediaPreviewOnTrack } from './externalDropPreviewDragTyp
 import { useExternalDropNewTrackDragOver } from './useExternalDropNewTrackDragOver';
 import { useExternalDropTrackDragLeave } from './useExternalDropTrackDragLeave';
 import { useDroppedTimelineMediaFiles as placeTimelineExternalDropFilesViaHook } from './useDroppedTimelineMediaFiles';
-import type { TimelineTrack, TimelineClip, TextClipProperties } from '../../../types';
-import type { Composition, MediaFile, SignalAssetItem } from '../../../stores/mediaStore';
-import type { ShapePrimitive } from '../../../types/motionDesign';
+import type { MediaFile, SignalAssetItem } from '../../../stores/mediaStore';
 import { Logger } from '../../../services/logger';
 import { placeSignalAssetOnTimeline } from '../../../runtime/renderers/signalTimelineRendererAdapter';
-import type { AddClipOptions, TimelineToolId } from '../../../stores/timeline/types';
-import type { TimelineEditResult, TimelinePlacementMode } from '../../../stores/timeline/editOperations/types';
+import type { AddClipOptions } from '../../../stores/timeline/types';
+import type { UseExternalDropProps } from './useExternalDropTypes';
 import {
   canRouteTimelineExternalDropCommandToTrack,
 } from '../../../timeline';
@@ -48,57 +46,6 @@ const log = Logger.create('useExternalDrop');
 
 function isAudioOnlyMediaFile(mediaFile: MediaFile, file?: File): boolean {
   return mediaFile.type === 'audio' || Boolean(file && isAudioFile(file));
-}
-
-interface UseExternalDropProps {
-  timelineRef: React.RefObject<HTMLDivElement | null>;
-  scrollX: number;
-  tracks: TimelineTrack[];
-  clips: TimelineClip[];
-  isExporting: boolean;
-  activeTimelineToolId: TimelineToolId;
-  pixelToTime: (pixel: number) => number;
-  prepareTimelinePlacementRange: (
-    mode: TimelinePlacementMode,
-    options: {
-      trackIds?: string[];
-      startTime?: number;
-      duration?: number;
-      includeLinked?: boolean;
-      source?: 'external-drop';
-      historyLabel?: string;
-    },
-  ) => TimelineEditResult;
-  addTrack: (type: 'video' | 'audio') => string | undefined;
-  addClip: (
-    trackId: string,
-    file: File,
-    startTime: number,
-    duration?: number,
-    mediaFileId?: string,
-    mediaTypeOverride?: string,
-    options?: AddClipOptions,
-  ) => Promise<string | undefined> | string | undefined | void;
-  addCompClip: (trackId: string, comp: Composition, startTime: number) => void | Promise<void>;
-  addTextClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => Promise<string | null>;
-  updateTextProperties: (clipId: string, props: Partial<TextClipProperties>) => void;
-  updateClip: (id: string, updates: Partial<TimelineClip>) => void;
-  addSolidClip: (trackId: string, startTime: number, color?: string, duration?: number, skipMediaItem?: boolean) => string | null;
-  addMeshClip: (trackId: string, startTime: number, meshType: import('../../../stores/mediaStore/types').MeshPrimitiveType, duration?: number, skipMediaItem?: boolean) => string | null;
-  addCameraClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
-  addLightClip: (
-    trackId: string,
-    startTime: number,
-    duration?: number,
-    skipMediaItem?: boolean,
-    lightSettings?: import('../../../types/light').LightClipSettings,
-    mediaItemId?: string,
-  ) => string | null;
-  addSplatEffectorClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
-  addMathSceneClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
-  addMotionShapeClip: (trackId: string, startTime: number, options?: { primitive?: ShapePrimitive; duration?: number; name?: string }) => string | null;
-  replaceClipSource: (clipId: string, mediaFileId: string) => boolean;
-  replaceClipSourceWithComposition: (clipId: string, compositionId: string) => Promise<boolean>;
 }
 
 interface UseExternalDropReturn {

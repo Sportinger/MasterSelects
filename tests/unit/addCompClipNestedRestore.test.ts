@@ -1856,7 +1856,7 @@ describe('addCompClip nested restore', () => {
       .toBeUndefined();
   });
 
-  it('skips stale nested keyframe merges', async () => {
+  it('skips stale nested loading and keyframe merges', async () => {
     const videoTrack = track('video-1', 'video');
     const video = {
       ...serializedClip('clip-video', 'video', 'media-video', videoTrack.id),
@@ -1885,7 +1885,7 @@ describe('addCompClip nested restore', () => {
       isCurrentTimelineSession: () => false,
     });
 
-    expect(nestedClips).toHaveLength(1);
+    expect(nestedClips).toHaveLength(0);
     expect(harness.state.clipKeyframes.size).toBe(0);
     expect(harness.setCalls.some((patch) => 'clipKeyframes' in patch)).toBe(false);
   });

@@ -1,4 +1,5 @@
 import type { Composition, MediaFile, SignalAssetItem } from '../../stores/mediaStore';
+import type { CameraItem, MeshItem, TextItem } from '../../stores/mediaStore/types';
 import type { AddClipOptions } from '../../stores/timeline/types';
 import type { ShapePrimitive } from '../../types/motionDesign';
 import type { TimelineExternalDropCommand } from '../../timeline';
@@ -28,10 +29,10 @@ export interface TimelineExternalDropCommandExecutionActions {
     options?: AddClipOptions,
   ) => Promise<string | undefined> | string | undefined | void;
   addCompClip: (trackId: string, comp: Composition, startTime: number) => void | Promise<void>;
-  addTextClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => Promise<string | null> | string | null | void;
+  addTextClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean, mediaItem?: TextItem) => Promise<string | null> | string | null | void;
   addSolidClip: (trackId: string, startTime: number, color?: string, duration?: number, skipMediaItem?: boolean) => string | null;
-  addMeshClip: (trackId: string, startTime: number, meshType: import('../../stores/mediaStore/types').MeshPrimitiveType, duration?: number, skipMediaItem?: boolean) => string | null;
-  addCameraClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
+  addMeshClip: (trackId: string, startTime: number, meshType: import('../../stores/mediaStore/types').MeshPrimitiveType, duration?: number, skipMediaItem?: boolean, mediaItem?: MeshItem) => string | null;
+  addCameraClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean, mediaItem?: CameraItem) => string | null;
   addLightClip: (
     trackId: string,
     startTime: number,
@@ -207,7 +208,7 @@ export async function executeTimelineExternalDropCommand(
   if (command.kind === 'text' && itemId) {
     const textItem = mediaStore.textItems.find((item) => item.id === itemId);
     if (!textItem) return rejected('missing-text-item');
-    await actions.addTextClip(trackId, resolveStartTime(textItem.duration), textItem.duration, true);
+    await actions.addTextClip(trackId, resolveStartTime(textItem.duration), textItem.duration, true, textItem);
     return handled();
   }
 
@@ -221,14 +222,14 @@ export async function executeTimelineExternalDropCommand(
   if (command.kind === 'mesh' && itemId) {
     const meshItem = mediaStore.meshItems.find((item) => item.id === itemId);
     if (!meshItem) return rejected('missing-mesh-item');
-    actions.addMeshClip(trackId, resolveStartTime(meshItem.duration), meshItem.meshType, meshItem.duration, true);
+    actions.addMeshClip(trackId, resolveStartTime(meshItem.duration), meshItem.meshType, meshItem.duration, true, meshItem);
     return handled();
   }
 
   if (command.kind === 'camera' && itemId) {
     const cameraItem = mediaStore.cameraItems.find((item) => item.id === itemId);
     if (!cameraItem) return rejected('missing-camera-item');
-    actions.addCameraClip(trackId, resolveStartTime(cameraItem.duration), cameraItem.duration, true);
+    actions.addCameraClip(trackId, resolveStartTime(cameraItem.duration), cameraItem.duration, true, cameraItem);
     return handled();
   }
 

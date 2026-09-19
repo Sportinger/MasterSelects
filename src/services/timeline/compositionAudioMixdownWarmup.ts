@@ -128,7 +128,10 @@ function findCurrentClip(
 ): TimelineClip | null {
   const state = deps.getWarmupState();
   if (state.timelineSessionId !== request.timelineSessionId) return null;
-  return state.clips.find((clip) => clip.id === request.clipId) ?? null;
+  const clip = state.clips.find((clip) => clip.id === request.clipId);
+  if (!clip) return null;
+  const key = getCompositionAudioMixdownKey(clip);
+  return request.requestKey === `${state.timelineSessionId}:${clip.id}:${key}` ? clip : null;
 }
 
 function updateWarmupGenerating(
@@ -136,7 +139,7 @@ function updateWarmupGenerating(
   request: CompositionAudioMixdownWarmupRequest,
   mixdownGenerating: boolean,
 ): void {
-  if (deps.getWarmupState().timelineSessionId !== request.timelineSessionId) return;
+  if (!findCurrentClip(deps, request)) return;
   deps.setClips((clips) => setCompositionAudioMixdownGenerating(clips, request.clipId, mixdownGenerating));
 }
 
@@ -176,6 +179,7 @@ export async function warmCompositionAudioMixdownRequest(
       return { clipId: request.clipId, status: 'warmed' };
     } catch (error) {
       log.warn('Composition audio mixdown warmup failed', { clipId: request.clipId, error });
+      if (!findCurrentClip(deps, request)) return { clipId: request.clipId, status: 'stale' };
       updateWarmupGenerating(deps, request, false);
       return { clipId: request.clipId, status: 'skipped' };
     }

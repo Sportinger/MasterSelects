@@ -17,6 +17,7 @@ import { getTimelineCompositionReplacementContext } from '../../../services/time
 import type { TimelineClip } from '../../../types/timeline';
 import { createNestedContentHash } from './addCompClip';
 import type { ClipActionContext } from './clipActionContext';
+import { beginNestedCompositionLoad, releaseStaleNestedCompositionClips } from '../nestedCompositionLoadGeneration';
 
 const log = Logger.create('ReplaceClipSourceWithComposition');
 
@@ -251,6 +252,9 @@ export async function replaceClipSourceWithCompositionAction(
     ...createCompositionVideoClip(clip, composition, compositionDuration),
     linkedClipId: nextAudioClip.id,
   };
+  const nestedContentHash = createNestedContentHash(composition.timelineData, mediaContext.compositions);
+  nextVideoClip.nestedContentHash = nestedContentHash;
+  nextAudioClip.nestedContentHash = nestedContentHash;
   const propertyTimelineState = clearOldNestedKeyframes(
     state,
     collectNestedClipIds(clip.nestedClips),
@@ -269,7 +273,9 @@ export async function replaceClipSourceWithCompositionAction(
   });
 
   const timelineSessionId = state.timelineSessionId;
-  const isCurrentTimelineSession = () => context.get().timelineSessionId === timelineSessionId;
+  const isLatestLoad = beginNestedCompositionLoad(context.get, clip.id);
+  const isCurrentTimelineSession = () => context.get().timelineSessionId === timelineSessionId
+    && isLatestLoad() && context.get().clips.some(candidate => candidate.id === clip.id && candidate.compositionId === compositionId);
   let nestedClips: TimelineClip[] = [];
   if (composition.timelineData) {
     try {
@@ -289,7 +295,10 @@ export async function replaceClipSourceWithCompositionAction(
     }
   }
 
-  if (!isCurrentTimelineSession()) return false;
+  if (!isCurrentTimelineSession()) {
+    releaseStaleNestedCompositionClips(nestedClips);
+    return false;
+  }
   context.set({
     clips: context.get().clips.map(candidate => (
       candidate.id === clip.id && candidate.compositionId === compositionId

@@ -2,16 +2,10 @@ import type {
   Keyframe,
   SerializableClip,
   TimelineClip,
-  TimelineTrack,
 } from './types';
-import type {
-  VectorAnimationClipSettings,
-  VectorAnimationProvider,
-} from '../../types/vectorAnimation';
 import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 import type { Composition } from './types';
-import type { MediaFile } from '../mediaStore/types';
-import { DEFAULT_TRANSFORM, MAX_NESTING_DEPTH } from './constants';
+import { MAX_NESTING_DEPTH } from './constants';
 import { generateNestedClipId } from './helpers/idGenerator';
 import { createDataOnlyRestoredMediaSource } from './restoredMediaSource';
 import {
@@ -25,7 +19,6 @@ import {
   createRestoredSolidClip,
   createRestoredTransitionOverlayClip,
   isRestoredSpatialSourceType,
-  patchNestedClipInCompositionClip,
 } from './nestedRestore';
 import {
   startRestoredVectorRuntimeRestore,
@@ -34,6 +27,29 @@ import {
 import { collectNestedClipKeyframes, publishNestedClipKeyframes } from './nestedComposition/nestedCompositionKeyframes';
 import { appendNestedTextClip } from './nestedComposition/nestedCompositionTextClip';
 import { pushRestoredNestedFlockClip } from './nestedComposition/nestedFlockRestore';
+import {
+  applyMissingRuntimeSourceFromHooks,
+  createNestedMediaRestoreEvent,
+  createNestedPlaceholderFile,
+  getNestedNeedsReload,
+  loadVectorAnimationNestedClip,
+  notifyNestedRuntimeReady,
+  patchNestedClipInStore,
+  type NestedCompositionMediaGet,
+  type NestedCompositionRestoreHooks,
+  type NestedCompositionStoreGet,
+  type NestedCompositionStoreSet,
+} from './nestedComposition/nestedCompositionRuntimeRestore';
+export type {
+  NestedCompositionMediaGet,
+  NestedCompositionMediaState,
+  NestedCompositionRestoreHooks,
+  NestedCompositionStoreGet,
+  NestedCompositionStoreSet,
+  NestedCompositionStoreState,
+  NestedMediaRestoreEvent,
+  NestedRuntimeReadyEvent,
+} from './nestedComposition/nestedCompositionRuntimeRestore';
 import { Logger } from '../../services/logger';
 import { sanitizeTimelineParentRestoreTree } from '../../services/motionDesign/structure/timelineParentRestoreAdapter';
 
@@ -107,57 +123,6 @@ export type { ApplyNestedClipSegmentBuildParams, ClipSegmentData, ScheduleNested
 export { generateCompThumbnails } from './nestedComposition/nestedCompositionThumbnails';
 export type { GenerateCompThumbnailsParams } from './nestedComposition/nestedCompositionThumbnails';
 
-export interface NestedCompositionStoreState {
-  clips: TimelineClip[];
-  tracks: TimelineTrack[];
-  thumbnailsEnabled: boolean;
-  clipKeyframes: Map<string, Keyframe[]>;
-  invalidateCache?: () => void;
-}
-
-export type NestedCompositionStoreGet = () => NestedCompositionStoreState;
-export type NestedCompositionStoreSet = (state: Partial<NestedCompositionStoreState>) => void;
-
-export interface NestedRuntimeReadyEvent {
-  rootCompClipId: string;
-  parentClipId: string;
-  nestedClipId: string;
-  clip: TimelineClip;
-  sourceType: 'image' | VectorAnimationProvider;
-  depth: number;
-  defaultInvalidatesCache: boolean;
-}
-
-export interface NestedMediaRestoreEvent {
-  rootCompClipId: string;
-  parentClipId: string;
-  nestedClipId: string;
-  serializedClip: SerializableClip;
-  mediaFile: MediaFile;
-  sourceType: SerializableClip['sourceType'];
-  hasBrowserFile: boolean;
-  depth: number;
-}
-
-export interface NestedCompositionRestoreHooks {
-  runtimeReady?: {
-    invalidateCache?: boolean;
-    onReady?: (event: NestedRuntimeReadyEvent) => void;
-  };
-  mediaRelink?: {
-    getNeedsReload?: (event: NestedMediaRestoreEvent) => boolean;
-    createMissingRuntimeSource?: (event: NestedMediaRestoreEvent) => TimelineClip['source'] | undefined;
-  };
-}
-
-export interface NestedCompositionMediaState {
-  files: MediaFile[];
-  compositions: Composition[];
-  activeCompositionId?: string | null;
-}
-
-export type NestedCompositionMediaGet = () => NestedCompositionMediaState;
-
 async function getDefaultNestedCompositionMediaState(): Promise<NestedCompositionMediaGet> {
   const { useMediaStore } = await import('../mediaStore');
   return useMediaStore.getState;
@@ -177,79 +142,6 @@ export interface LoadNestedClipsParams {
   deferNestedKeyframeMerge?: (keyframes: ReadonlyMap<string, Keyframe[]>) => void;
   /** Composition IDs above `composition` in the current nesting chain. */
   compositionPath?: readonly string[];
-}
-
-function patchNestedClipInStore(
-  get: NestedCompositionStoreGet,
-  set: NestedCompositionStoreSet,
-  compClipId: string,
-  nestedClipId: string,
-  patch: RestoredRuntimePatch,
-): void {
-  const result = patchNestedClipInCompositionClip(get().clips, compClipId, nestedClipId, patch);
-  if (result.patched) {
-    set({ clips: result.clips });
-  }
-}
-
-function createNestedPlaceholderFile(name: string | undefined): File {
-  return new File([], name || 'pending');
-}
-
-function createNestedMediaRestoreEvent(params: {
-  rootCompClipId: string;
-  parentClipId: string;
-  nestedClipId: string;
-  serializedClip: SerializableClip;
-  mediaFile: MediaFile;
-  depth: number;
-}): NestedMediaRestoreEvent {
-  return {
-    rootCompClipId: params.rootCompClipId,
-    parentClipId: params.parentClipId,
-    nestedClipId: params.nestedClipId,
-    serializedClip: params.serializedClip,
-    mediaFile: params.mediaFile,
-    sourceType: params.serializedClip.sourceType,
-    hasBrowserFile: !!params.mediaFile.file,
-    depth: params.depth,
-  };
-}
-
-function getNestedNeedsReload(
-  restoreHooks: NestedCompositionRestoreHooks | undefined,
-  event: NestedMediaRestoreEvent,
-): boolean | undefined {
-  return restoreHooks?.mediaRelink?.getNeedsReload?.(event);
-}
-
-function applyMissingRuntimeSourceFromHooks(
-  clip: TimelineClip,
-  restoreHooks: NestedCompositionRestoreHooks | undefined,
-  event: NestedMediaRestoreEvent,
-): void {
-  const source = restoreHooks?.mediaRelink?.createMissingRuntimeSource?.(event);
-  if (source !== undefined) {
-    clip.source = source;
-  }
-}
-
-function notifyNestedRuntimeReady(params: {
-  get: NestedCompositionStoreGet;
-  restoreHooks?: NestedCompositionRestoreHooks;
-  event: Omit<NestedRuntimeReadyEvent, 'defaultInvalidatesCache'>;
-  defaultInvalidatesCache: boolean;
-}): void {
-  const { get, restoreHooks, event, defaultInvalidatesCache } = params;
-  const shouldInvalidateCache = restoreHooks?.runtimeReady?.invalidateCache ?? defaultInvalidatesCache;
-  if (shouldInvalidateCache) {
-    get().invalidateCache?.();
-  }
-
-  restoreHooks?.runtimeReady?.onReady?.({
-    ...event,
-    defaultInvalidatesCache,
-  });
 }
 
 async function loadSubNestedClips(
@@ -283,6 +175,7 @@ async function loadSubNestedClips(
   const result: TimelineClip[] = [];
 
   for (const sc of composition.timelineData.clips) {
+    if (paramsIsCurrentTimelineSession && !paramsIsCurrentTimelineSession()) break;
     if (sc.isComposition && sc.compositionId) {
       const subComp = mediaStore.compositions.find(c => c.id === sc.compositionId);
       if (!subComp) continue;
@@ -349,6 +242,7 @@ async function loadSubNestedClips(
     }
 
     if (await appendNestedTextClip(result, sc, clipId, { width: composition.width, height: composition.height })) continue;
+    if (paramsIsCurrentTimelineSession && !paramsIsCurrentTimelineSession()) break;
 
     const mediaFile = mediaStore.files.find(f => f.id === sc.mediaFileId);
     if (!mediaFile) {
@@ -535,6 +429,7 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
   });
 
   for (const serializedClip of composition.timelineData.clips) {
+    if (isCurrentTimelineSession && !isCurrentTimelineSession()) break;
     if (serializedClip.isComposition && serializedClip.compositionId) {
       const nestedComp = mediaStore.compositions.find(c => c.id === serializedClip.compositionId);
       if (!nestedComp) {
@@ -567,6 +462,7 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
         get,
         isCurrentTimelineSession,
         (nestedClipIdToPatch, patch) => {
+          if (isCurrentTimelineSession && !isCurrentTimelineSession()) return;
           patchNestedClipInStore(get, set, compClipId, nestedClipIdToPatch, patch);
         },
         applySpatialFieldsWhenSourceMissing,
@@ -623,6 +519,7 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
     }
 
     if (await appendNestedTextClip(nestedClips, serializedClip, nestedClipId, { width: composition.width, height: composition.height })) continue;
+    if (isCurrentTimelineSession && !isCurrentTimelineSession()) break;
 
     const mediaFile = mediaStore.files.find(f => f.id === serializedClip.mediaFileId);
     if (!mediaFile) {
@@ -757,77 +654,4 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
   })) return sanitizedNestedClips;
 
   return sanitizedNestedClips;
-}
-
-function loadVectorAnimationNestedClip(
-  compClipId: string,
-  nestedClipId: string,
-  file: File,
-  sourceType: VectorAnimationProvider,
-  sourceInfo: {
-    mediaFileId?: string;
-    naturalDuration?: number;
-    vectorAnimationSettings?: VectorAnimationClipSettings;
-  },
-  targetClip: TimelineClip | undefined,
-  get: NestedCompositionStoreGet,
-  set: NestedCompositionStoreSet,
-  isCurrentTimelineSession?: () => boolean,
-  restoreHooks?: NestedCompositionRestoreHooks,
-  depth = 1,
-): void {
-  const baseClip = targetClip ?? get().clips
-    .find((clip) => clip.id === compClipId)
-    ?.nestedClips?.find((clip) => clip.id === nestedClipId);
-
-  const runtimeClip: TimelineClip = baseClip ?? {
-    id: nestedClipId,
-    trackId: '',
-    name: file.name,
-    file,
-    startTime: 0,
-    duration: sourceInfo.naturalDuration ?? 0,
-    inPoint: 0,
-    outPoint: sourceInfo.naturalDuration ?? 0,
-    source: null,
-    transform: { ...DEFAULT_TRANSFORM },
-    effects: [],
-  };
-  runtimeClip.file = file;
-  runtimeClip.source = null;
-
-  startRestoredVectorRuntimeRestore({
-    clip: runtimeClip,
-    serializedClip: {
-      mediaFileId: sourceInfo.mediaFileId,
-      naturalDuration: sourceInfo.naturalDuration,
-      duration: runtimeClip.duration,
-      vectorAnimationSettings: sourceInfo.vectorAnimationSettings,
-    } as SerializableClip,
-    sourceType,
-    file,
-    isCurrentSession: isCurrentTimelineSession,
-    applyPatch: (patch) => {
-      patchNestedClipInStore(get, set, compClipId, nestedClipId, patch);
-    },
-    onReady: () => {
-      log.debug('Nested vector animation loaded', { compClipId, nestedClipId, sourceType });
-      notifyNestedRuntimeReady({
-        get,
-        restoreHooks,
-        defaultInvalidatesCache: true,
-        event: {
-          rootCompClipId: compClipId,
-          parentClipId: compClipId,
-          nestedClipId,
-          clip: runtimeClip,
-          sourceType,
-          depth,
-        },
-      });
-    },
-    onError: (error) => {
-      log.warn('Nested vector animation load failed', { compClipId, nestedClipId, sourceType, error });
-    },
-  });
 }

@@ -5,7 +5,7 @@ export const BOARD_ORDER_STORAGE_KEY = 'media-panel-board-order';
 export const BOARD_GROUP_OFFSETS_STORAGE_KEY = 'media-panel-board-group-offsets';
 export const BOARD_LAYOUTS_STORAGE_KEY = 'media-panel-board-layouts';
 export const BOARD_LAYOUT_SNAPSHOT_STORAGE_KEY = 'media-panel-board-layout-snapshot';
-export const BOARD_LAYOUT_SNAPSHOT_VERSION = 1;
+export const BOARD_LAYOUT_SNAPSHOT_VERSION = 2;
 
 export const MEDIA_BOARD_ROOT_ORDER_KEY = '__root__';
 export const MEDIA_BOARD_EMPTY_SLOT_ID = '__media_board_empty_slot__';

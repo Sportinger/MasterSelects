@@ -127,6 +127,7 @@ export async function runFlashBoardBridgeChatTurn(
       },
       onExecutedToolCalls: (calls) => {
         toolCalls.push(...calls);
+        if (messageIds) updatePendingToolCalls(messageIds.assistantId, toolCalls);
         input.onExecutedToolCalls?.(calls);
       },
       onKernelProgress: (progress) => {
@@ -279,6 +280,19 @@ function appendPendingActivity(
               event,
             ].slice(-100),
           }
+        : message
+    ))
+  ));
+}
+
+function updatePendingToolCalls(
+  assistantId: string,
+  toolCalls: FlashBoardExecutedToolCall[],
+): void {
+  useFlashBoardStore.getState().setChatMessages((chatMessages) => (
+    chatMessages.map((message): FlashBoardChatMessage => (
+      message.id === assistantId && message.isPending
+        ? { ...message, toolCalls: [...toolCalls] }
         : message
     ))
   ));

@@ -27,13 +27,13 @@ import type {
   ShapePrimitive,
 } from '../../../types/motionDesign';
 import type { Composition } from '../../mediaStore';
-import type { MeshPrimitiveType } from '../../mediaStore/types';
+import type { CameraItem, MeshItem, MeshPrimitiveType, TextItem } from '../../mediaStore/types';
 import type { CaptionClipActions } from './captionClipActionTypes';
 import type { ClipSpeedActions } from './clipSpeedActionTypes';
 import type { StoryboardClipActions } from './storyboardClipActionTypes';
 
 export interface TextClipActions {
-  addTextClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => Promise<string | null>;
+  addTextClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean, mediaItem?: TextItem) => Promise<string | null>;
   updateTextProperties: (clipId: string, props: Partial<TextClipProperties>) => void;
   updateTextBounds: (clipId: string, updates: Partial<TextBoundsPath>) => void;
   updateTextBoundsVertex: (clipId: string, vertexId: string, updates: Partial<MaskVertex>, recordKeyframe?: boolean) => void;
@@ -157,12 +157,12 @@ export interface MotionClipActions {
 }
 
 export interface MeshClipActions {
-  addMeshClip: (trackId: string, startTime: number, meshType: MeshPrimitiveType, duration?: number, skipMediaItem?: boolean) => string | null;
+  addMeshClip: (trackId: string, startTime: number, meshType: MeshPrimitiveType, duration?: number, skipMediaItem?: boolean, mediaItem?: MeshItem) => string | null;
   updateText3DProperties: (clipId: string, props: Partial<Text3DProperties>) => void;
 }
 
 export interface CameraClipActions {
-  addCameraClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
+  addCameraClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean, mediaItem?: CameraItem) => string | null;
 }
 
 export interface LightClipActions {

@@ -1,12 +1,14 @@
 // Composition clip addition - extracted from addCompClip
 // Handles nested composition loading, audio mixdown, and linked audio creation
 
-import type { TimelineClip, TimelineTrack, CompositionTimelineData } from '../../../types/timeline';
+import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
 import type { Composition } from '../types';
 import { DEFAULT_TRANSFORM } from '../constants';
 import { findOrCreateAudioTrack, createCompositionAudioClip } from '../helpers/audioTrackHelpers';
 import { generateCompClipId, generateClipId } from '../helpers/idGenerator';
 import { Logger } from '../../../services/logger';
+import { createNestedContentHash } from './nestedCompositionContentHash';
+export { createNestedContentHash } from './nestedCompositionContentHash';
 // Note: compositionRenderer is used elsewhere for cache invalidation
 
 const log = Logger.create('AddCompClip');
@@ -23,27 +25,9 @@ type CompClipStoreSet = (state: Partial<CompClipStoreState>) => void;
 export interface AddCompClipParams {
   trackId: string;
   composition: Composition;
+  compositions?: readonly Composition[];
   startTime: number;
   findNonOverlappingPosition: (clipId: string, startTime: number, trackId: string, duration: number) => number;
-}
-
-/**
- * Create a content hash for nested composition change detection.
- */
-export function createNestedContentHash(timelineData: CompositionTimelineData | undefined): string {
-  if (!timelineData) return '';
-  const clipData = timelineData.clips?.map((c) => ({
-    id: c.id,
-    inPoint: c.inPoint,
-    outPoint: c.outPoint,
-    startTime: c.startTime,
-    effectCount: c.effects?.length ?? 0,
-  })) ?? [];
-  return JSON.stringify({
-    clipCount: timelineData.clips?.length ?? 0,
-    duration: timelineData.duration,
-    clips: clipData,
-  });
 }
 
 /**
@@ -57,7 +41,7 @@ export function createCompClipPlaceholder(params: AddCompClipParams): TimelineCl
   const finalStartTime = findNonOverlappingPosition(clipId, startTime, trackId, compDuration);
 
   // Create content hash for change detection
-  const nestedContentHash = createNestedContentHash(composition.timelineData);
+  const nestedContentHash = createNestedContentHash(composition.timelineData, params.compositions);
 
   return {
     id: clipId,
@@ -83,6 +67,7 @@ export function createCompClipPlaceholder(params: AddCompClipParams): TimelineCl
 export interface CreateCompLinkedAudioParams {
   compClipId: string;
   composition: Composition;
+  compositions?: readonly Composition[];
   compClipStartTime: number;
   compDuration: number;
   tracks: TimelineTrack[];
@@ -121,6 +106,7 @@ export async function createCompLinkedAudioClip(params: CreateCompLinkedAudioPar
     hasAudio: false,
     linkedClipId: compClipId,
   });
+  audioClip.nestedContentHash = createNestedContentHash(composition.timelineData, params.compositions);
 
   // Update comp clip and add audio clip
   const clipsAfter = get().clips;

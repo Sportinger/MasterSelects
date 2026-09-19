@@ -11,7 +11,7 @@ import { Logger } from '../../services/logger';
 const log = Logger.create('CameraClipSlice');
 
 export const createCameraClipSlice: SliceCreator<CameraClipActions> = (set, get) => ({
-  addCameraClip: (trackId, startTime, duration = 10, skipMediaItem = true) => {
+  addCameraClip: (trackId, startTime, duration = 10, skipMediaItem = true, mediaItem) => {
     const { clips, tracks, updateDuration, invalidateCache } = get();
     const track = tracks.find(t => t.id === trackId);
 
@@ -25,23 +25,25 @@ export const createCameraClipSlice: SliceCreator<CameraClipActions> = (set, get)
     const cameraClip: TimelineClip = {
       id: clipId,
       trackId,
-      name: 'Camera',
+      name: mediaItem?.name ?? 'Camera',
       file: new File([], 'camera-clip.dat', { type: 'application/octet-stream' }),
       startTime,
       duration,
       inPoint: 0,
       outPoint: duration,
+      ...(mediaItem ? { mediaFileId: mediaItem.id } : {}),
       source: {
         type: 'camera',
         naturalDuration: Number.MAX_SAFE_INTEGER,
-        cameraSettings: { ...DEFAULT_SCENE_CAMERA_SETTINGS },
+        cameraSettings: { ...DEFAULT_SCENE_CAMERA_SETTINGS, ...mediaItem?.cameraSettings },
+        ...(mediaItem ? { mediaFileId: mediaItem.id } : {}),
       },
       transform: { ...DEFAULT_TRANSFORM, position: { ...DEFAULT_TRANSFORM.position, z: 1 } },
       effects: [],
       isLoading: false,
     };
 
-    if (!skipMediaItem) {
+    if (!skipMediaItem && !mediaItem) {
       const mediaStore = useMediaStore.getState();
       const cameraFolderId = mediaStore.getOrCreateCameraFolder();
       const mediaItemId = mediaStore.createCameraItem(undefined, cameraFolderId);

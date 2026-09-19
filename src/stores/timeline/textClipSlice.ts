@@ -145,8 +145,8 @@ function invalidateTextGpuBindings(): void {
 }
 
 export const createTextClipSlice: SliceCreator<TextClipActions> = (set, get) => ({
-  addTextClip: async (trackId, startTime, duration = DEFAULT_TEXT_DURATION, skipMediaItem = true) => {
-    const { clips, tracks, updateDuration, invalidateCache } = get();
+  addTextClip: async (trackId, startTime, duration = DEFAULT_TEXT_DURATION, skipMediaItem = true, mediaItem) => {
+    const { tracks, updateDuration, invalidateCache } = get();
     const track = tracks.find(t => t.id === trackId);
 
     if (!track || track.type !== 'video') {
@@ -155,31 +155,39 @@ export const createTextClipSlice: SliceCreator<TextClipActions> = (set, get) => 
     }
 
     const clipId = generateTextClipId();
-    await googleFontsService.loadFont(DEFAULT_TEXT_PROPERTIES.fontFamily, DEFAULT_TEXT_PROPERTIES.fontWeight);
-
     const resolution = getActiveCompositionResolution();
     const { canvas, textProperties } = await createTimelineTextCanvasRuntime({
-      textProperties: getInitialTextProperties(resolution.width, resolution.height),
+      textProperties: {
+        ...getInitialTextProperties(resolution.width, resolution.height),
+        ...(mediaItem ? {
+          text: mediaItem.text, fontFamily: mediaItem.fontFamily,
+          fontSize: mediaItem.fontSize, color: mediaItem.color,
+        } : {}),
+      },
       dimensions: resolution,
     });
 
     const textClip: TimelineClip = {
       id: clipId,
       trackId,
-      name: 'Text',
+      name: mediaItem?.name ?? 'Text',
       file: new File([], 'text-clip.txt', { type: 'text/plain' }),
       startTime,
       duration,
       inPoint: 0,
       outPoint: duration,
-      source: { type: 'text', textCanvas: canvas, naturalDuration: duration },
+      ...(mediaItem ? { mediaFileId: mediaItem.id } : {}),
+      source: {
+        type: 'text', textCanvas: canvas, naturalDuration: duration,
+        ...(mediaItem ? { mediaFileId: mediaItem.id } : {}),
+      },
       transform: { ...DEFAULT_TRANSFORM },
       effects: [],
       textProperties,
       isLoading: false,
     };
 
-    if (!skipMediaItem) {
+    if (!skipMediaItem && !mediaItem) {
       const mediaStore = useMediaStore.getState();
       const textFolderId = mediaStore.getOrCreateTextFolder();
       const mediaItemId = mediaStore.createTextItem('Text', textFolderId);
@@ -187,7 +195,7 @@ export const createTextClipSlice: SliceCreator<TextClipActions> = (set, get) => 
       textClip.source = { ...textClip.source!, mediaFileId: mediaItemId };
     }
 
-    set({ clips: [...clips, textClip] });
+    set(state => ({ clips: [...state.clips, textClip] }));
     updateDuration();
     invalidateCache();
 

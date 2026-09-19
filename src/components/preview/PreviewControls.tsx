@@ -1,10 +1,12 @@
 // Preview top toolbar: scene overlay, edit/source controls, and 3D tools
 
 import React from 'react';
+import './PreviewControls.css';
 import type { Composition } from '../../stores/mediaStore/types';
 import { isUserVisibleComposition } from '../../stores/mediaStore/compositionVisibility';
 import type { TimelineTrack } from '../../types';
 import type { PreviewPanelSource } from '../../types/dock';
+import { PreviewCompositionSourceGroup } from './PreviewCompositionSourceGroup';
 import {
   getCompositionVideoTracks,
   getPreviewLayerLabel,
@@ -107,33 +109,30 @@ export function PreviewControls({
       {selectorOpen && (
         <div className="preview-comp-dropdown" ref={dropdownRef} style={dropdownStyle}>
           <div className="preview-comp-group-label">Dynamic</div>
-          <button
-            className={`preview-comp-option ${source.type === 'activeComp' ? 'active' : ''}`}
-            onClick={() => {
+          <PreviewCompositionSourceGroup
+            label="Active Composition"
+            active={source.type === 'activeComp'}
+            onSelect={() => {
               setPanelSource({ type: 'activeComp' });
               setSelectorOpen(false);
             }}
           >
-            Active Composition
-          </button>
-          {renderLayerOptions(null)}
+            {renderLayerOptions(null)}
+          </PreviewCompositionSourceGroup>
           <div className="preview-comp-separator" />
           <div className="preview-comp-group-label">Compositions</div>
           {visibleCompositions.map((comp) => (
-            <React.Fragment key={comp.id}>
-              <button
-                className={`preview-comp-option ${
-                  source.type === 'composition' && source.compositionId === comp.id ? 'active' : ''
-                }`}
-                onClick={() => {
-                  setPanelSource({ type: 'composition', compositionId: comp.id });
-                  setSelectorOpen(false);
-                }}
-              >
-                {comp.name}
-              </button>
+            <PreviewCompositionSourceGroup
+              key={comp.id}
+              label={comp.name}
+              active={source.type === 'composition' && source.compositionId === comp.id}
+              onSelect={() => {
+                setPanelSource({ type: 'composition', compositionId: comp.id });
+                setSelectorOpen(false);
+              }}
+            >
               {renderLayerOptions(comp.id)}
-            </React.Fragment>
+            </PreviewCompositionSourceGroup>
           ))}
         </div>
       )}

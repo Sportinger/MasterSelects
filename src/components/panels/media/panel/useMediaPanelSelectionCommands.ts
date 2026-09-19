@@ -6,14 +6,14 @@ import type { Composition, MediaFile, ProjectItem, useMediaStore } from '../../.
 import type { MediaPanelContextMenu } from '../context/types';
 import { collectDroppedMediaFiles, importDroppedMediaFiles } from '../dropImport';
 import type { MediaPanelViewMode } from './types';
-import { DEFAULT_TRACKS, useTimelineStore } from '../../../../stores/timeline';
+import { useTimelineStore } from '../../../../stores/timeline';
 import { useDockStore } from '../../../../stores/dockStore';
 import { isDockResizeActive } from '../../../dock/dockResizeDomState';
-import { DEFAULT_COMPOSITION } from '../../../../stores/mediaStore/constants';
-import { requestMediaBoardPlacement } from '../board/placementRequests';
 import { liveInputRuntime } from '../../../../services/mediaRuntime/liveInputRuntime';
-import { placeLiveInputOnTimeline } from '../../../../services/mediaRuntime/liveInputTimelineAdapter';
 import { isSyntheticTouchContextMenuEvent } from '../../../../hooks/useTouchContextMenu';
+
+import { useMediaPanelCreateComposition } from './useMediaPanelCreateComposition';
+export { getMediaCompositionSettings } from './useMediaPanelCreateComposition';
 
 const log = Logger.create('MediaPanel');
 
@@ -95,24 +95,6 @@ function isMediaPanelPasteTarget(root: HTMLDivElement | null, pointer: { x: numb
 function getClipboardImageExtension(type: string): string {
   const subtype = type.split('/')[1]?.split('+')[0] || 'png';
   return subtype === 'jpeg' ? 'jpg' : subtype;
-}
-
-function cleanCompositionBaseName(fileName: string): string {
-  return fileName.replace(/\.[^.]+$/, '').trim() || fileName;
-}
-
-export function getMediaCompositionSettings(mediaFile: MediaFile): {
-  duration: number;
-  frameRate: number;
-  height: number;
-  width: number;
-} {
-  return {
-    duration: Math.max(1, mediaFile.duration ?? 5),
-    frameRate: Math.max(1, Math.round(mediaFile.fps ?? DEFAULT_COMPOSITION.frameRate)),
-    height: Math.max(1, Math.round(mediaFile.height ?? DEFAULT_COMPOSITION.height)),
-    width: Math.max(1, Math.round(mediaFile.width ?? DEFAULT_COMPOSITION.width)),
-  };
 }
 
 async function readClipboardImageFiles(): Promise<File[]> {
@@ -293,10 +275,6 @@ export function useMediaPanelSelectionCommands({
   });
   const hasTimelineSelection = (timelineClipboardRouting & 1) !== 0;
   const timelineOwnsPaste = (timelineClipboardRouting & 2) !== 0;
-  const addTimelineClip = useTimelineStore((state) => state.addClip);
-  const addTimelineCompClip = useTimelineStore((state) => state.addCompClip);
-  const setTimelineDuration = useTimelineStore((state) => state.setDuration);
-  const getSerializableTimelineState = useTimelineStore((state) => state.getSerializableState);
   const invalidateTimelineCache = useTimelineStore((state) => state.invalidateCache);
   const activatePanelType = useDockStore((state) => state.activatePanelType);
 
@@ -411,76 +389,10 @@ export function useMediaPanelSelectionCommands({
     });
   }, [closeContextMenu, showFloatingText]);
 
-  const handleCreateCompositionFromItem = useCallback(async (item: MediaFile | Composition) => {
-    const isNestedComposition = item.type === 'composition';
-    const mediaItem = isNestedComposition ? null : item;
-    const mediaSourceFile = mediaItem?.file;
-    const isSupportedLiveInput = Boolean(
-      mediaItem?.liveInput && mediaItem.liveInput.kind !== 'composition-feedback',
-    );
-    if (
-      !isNestedComposition
-      && !isSupportedLiveInput
-      && (!mediaSourceFile || (mediaItem?.type !== 'video' && mediaItem?.type !== 'image'))
-    ) return;
-
-    const settings = isNestedComposition
-      ? {
-          duration: Math.max(0.001, item.timelineData?.duration ?? item.duration),
-          frameRate: item.frameRate,
-          height: item.height,
-          width: item.width,
-        }
-      : getMediaCompositionSettings(mediaItem!);
-    const composition = createComposition(`${cleanCompositionBaseName(item.name)} Comp`, {
-      ...settings,
-      backgroundColor: isNestedComposition ? item.backgroundColor : undefined,
-      parentId: getActiveParentId(),
-    });
-    if (contextMenu?.boardPosition) {
-      requestMediaBoardPlacement({ itemIds: [composition.id], point: contextMenu.boardPosition });
-    }
-
-    await openCompositionTab(composition.id, { skipAnimation: true });
-
-    const tracks = composition.timelineData?.tracks ?? DEFAULT_TRACKS;
-    const trackId = tracks.find((track) => track.type === 'video' && !track.locked)?.id;
-    if (!trackId) return;
-
-    if (isNestedComposition) {
-      await addTimelineCompClip(trackId, item, 0);
-    } else if (isSupportedLiveInput && mediaItem) {
-      const clipId = placeLiveInputOnTimeline({
-        item: mediaItem,
-        trackId,
-        startTime: 0,
-        duration: settings.duration,
-      });
-      if (!clipId) return;
-    } else {
-      if (!mediaSourceFile) return;
-      await addTimelineClip(trackId, mediaSourceFile, 0, settings.duration, mediaItem!.id, mediaItem!.type);
-    }
-    setTimelineDuration(settings.duration);
-    updateComposition(composition.id, {
-      duration: settings.duration,
-      timelineData: getSerializableTimelineState(),
-    });
-    showFloatingText('Comp created');
-    closeContextMenu();
-  }, [
-    addTimelineClip,
-    addTimelineCompClip,
-    closeContextMenu,
-    contextMenu,
-    createComposition,
-    getActiveParentId,
-    getSerializableTimelineState,
-    openCompositionTab,
-    setTimelineDuration,
-    showFloatingText,
-    updateComposition,
-  ]);
+  const handleCreateCompositionFromItem = useMediaPanelCreateComposition({
+    contextMenu, createComposition, updateComposition, openCompositionTab,
+    getActiveParentId, showFloatingText, closeContextMenu,
+  });
 
   const handleRegenerateMediaThumbnails = useCallback((mediaFile: MediaFile) => {
     void (async () => {

@@ -6,7 +6,6 @@ import {
   MEDIA_BOARD_EMPTY_FOLDER_BODY_MIN_HEIGHT,
   MEDIA_BOARD_EMPTY_SLOT_ID,
   MEDIA_BOARD_EMPTY_SLOT_SIZE_SEPARATOR,
-  MEDIA_BOARD_FOLDER_ROW_MAX_WIDTH,
   MEDIA_BOARD_GROUP_HEADER_HEIGHT,
   MEDIA_BOARD_GROUP_MAX_BODY_WIDTH,
   MEDIA_BOARD_GROUP_MIN_WIDTH,
@@ -26,6 +25,7 @@ import {
   MEDIA_BOARD_SLOT_CELL_HEIGHT,
   MEDIA_BOARD_SLOT_CELL_WIDTH,
 } from './constants';
+import { findNearestMediaBoardGridSlot, getMediaBoardGridColumnLimit } from './nearestGridSlot';
 import type {
   MediaBoardFolderLookup,
   MediaBoardGroupLayout,
@@ -402,9 +402,9 @@ export function buildMediaBoardLayoutGeometry({
 
   function placeEntriesOnGrid<T extends MediaBoardLayoutEntry>(
     entries: T[],
-    maxBodyWidth: number,
-    allowNegativePositions: boolean,
+    groupId: string | null,
   ): Array<{ entries: T[]; width: number; height: number }> {
+    const allowNegativePositions = groupId === null;
     const columnPitch = MEDIA_BOARD_SLOT_CELL_WIDTH;
     const rowPitch = MEDIA_BOARD_SLOT_CELL_HEIGHT;
     const occupied = new Set<string>();
@@ -414,12 +414,7 @@ export function buildMediaBoardLayoutGeometry({
       columns: Math.max(1, Math.ceil((entry.width + MEDIA_BOARD_NODE_GAP) / columnPitch)),
       rows: Math.max(1, Math.ceil((entry.height + MEDIA_BOARD_NODE_GAP) / rowPitch)),
     });
-    const columnCount = Math.max(
-      1,
-      Math.floor(maxBodyWidth / columnPitch),
-      ...entries.map((entry) => Math.max(0, Math.round(entry.desiredX / columnPitch)) + getSpan(entry).columns),
-    );
-
+    const columnCount = getMediaBoardGridColumnLimit(groupId, entries.map(entry => ({ x: entry.desiredX, width: entry.width })));
     const canPlace = (column: number, row: number, span: { columns: number; rows: number }) => {
       if (!allowNegativePositions && (column < 0 || row < 0)) return false;
       if (column + span.columns > columnCount) return false;
@@ -447,15 +442,9 @@ export function buildMediaBoardLayoutGeometry({
       const initialRow = allowNegativePositions
         ? Math.round(entry.desiredY / rowPitch)
         : Math.max(0, Math.round(entry.desiredY / rowPitch));
-      let column = initialColumn;
-      let row = initialRow;
-      while (!canPlace(column, row, span)) {
-        column += 1;
-        if (column + span.columns > columnCount) {
-          row += 1;
-          column = allowNegativePositions ? initialColumn : 0;
-        }
-      }
+      const { column, row } = findNearestMediaBoardGridSlot(
+        initialColumn, initialRow, (candidateColumn, candidateRow) => canPlace(candidateColumn, candidateRow, span),
+      );
       markOccupied(column, row, span);
 
       const placedEntry = {
@@ -499,8 +488,7 @@ export function buildMediaBoardLayoutGeometry({
       nextStack.add(groupId);
     }
 
-    const maxBodyWidth = groupId === null ? MEDIA_BOARD_FOLDER_ROW_MAX_WIDTH : MEDIA_BOARD_GROUP_MAX_BODY_WIDTH;
-    const itemRows = placeEntriesOnGrid(getEntriesForGroup(groupId, nextStack), maxBodyWidth, groupId === null) as MediaBoardLayoutRow[];
+    const itemRows = placeEntriesOnGrid(getEntriesForGroup(groupId, nextStack), groupId) as MediaBoardLayoutRow[];
     const hasItems = itemRows.length > 0;
     const bodyWidth = Math.max(0, ...itemRows.map((row) => row.width));
     const bodyHeight = hasItems ? Math.max(0, ...itemRows.map((row) => row.height)) : MEDIA_BOARD_EMPTY_FOLDER_BODY_MIN_HEIGHT;

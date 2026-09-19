@@ -1,5 +1,5 @@
 import { Logger } from '../../../services/logger';
-import type { Composition } from '../types';
+import type { Composition, TimelineClip } from '../types';
 import { blobUrlManager } from '../helpers/blobUrlManager';
 import {
   calculateNestedClipBoundaries,
@@ -12,10 +12,32 @@ import {
   createNestedContentHash,
 } from './addCompClip';
 import { releaseCompositionMixdownClipRuntime } from '../../../services/timeline/compositionAudioMixdownRuntimeResources';
+import { detachLegacyTimelineMediaElement } from '../../../services/timeline/timelineClipSourceRuntimeCleanup';
+import { beginNestedCompositionLoad, releaseStaleNestedCompositionClips } from '../nestedCompositionLoadGeneration';
+import { getCompositionContentDependents } from './nestedCompositionContentHash';
 import type { ClipActionContext } from './clipActionContext';
 import { findCompositionInsertionCycle } from '../compositionCycleGuard';
 
 const log = Logger.create('CompositionClipActions');
+
+function resetCompositionMixdown(clip: TimelineClip): Partial<TimelineClip> {
+  detachLegacyTimelineMediaElement(
+    clip.source?.type === 'audio' ? clip.source.audioElement : clip.mixdownAudio,
+    { disposeAudioRouting: true },
+  );
+  releaseCompositionMixdownClipRuntime(clip);
+  blobUrlManager.revokeType(clip.id, 'audio');
+  return {
+    mixdownAudio: undefined,
+    mixdownBuffer: undefined,
+    mixdownWaveform: undefined,
+    hasMixdownAudio: false,
+    mixdownGenerating: false,
+    ...(clip.audioState ? {
+      audioState: { ...clip.audioState, sourceAnalysisRefs: undefined, processedAnalysisRefs: undefined },
+    } : {}),
+  };
+}
 
 export async function applyAddCompClipAction(
   context: ClipActionContext,
@@ -48,11 +70,28 @@ export async function applyAddCompClipAction(
     }
   }
   const timelineSessionId = get().timelineSessionId;
-  const isCurrentTimelineSession = () => get().timelineSessionId === timelineSessionId;
 
-  const compClip = createCompClipPlaceholder({ trackId, composition, startTime, findNonOverlappingPosition });
+  const compClip = createCompClipPlaceholder({
+    trackId, composition, compositions: mediaState.compositions, startTime, findNonOverlappingPosition,
+  });
   set({ clips: [...clips, compClip] });
   updateDuration();
+  const isLatestLoad = beginNestedCompositionLoad(get, compClip.id);
+  const isCurrentTimelineSession = () => get().timelineSessionId === timelineSessionId
+    && isLatestLoad() && get().clips.some(clip => clip.id === compClip.id && clip.compositionId === composition.id);
+
+  // Install both wrappers before visual loading can yield to another refresh.
+  await createCompLinkedAudioClip({
+    compClipId: compClip.id,
+    composition,
+    compositions: mediaState.compositions,
+    compClipStartTime: compClip.startTime,
+    compDuration: composition.timelineData?.duration ?? composition.duration,
+    tracks: get().tracks,
+    set,
+    get,
+  });
+  if (!isCurrentTimelineSession()) return;
 
   if (composition.timelineData) {
     const nestedClips = await loadNestedClips({
@@ -62,7 +101,10 @@ export async function applyAddCompClipAction(
       set,
       isCurrentTimelineSession,
     });
-    if (!isCurrentTimelineSession()) return;
+    if (!isCurrentTimelineSession()) {
+      releaseStaleNestedCompositionClips(nestedClips);
+      return;
+    }
 
     const nestedTracks = composition.timelineData.tracks;
     const compDuration = composition.timelineData?.duration ?? composition.duration;
@@ -88,16 +130,6 @@ export async function applyAddCompClipAction(
     });
   }
 
-  await createCompLinkedAudioClip({
-    compClipId: compClip.id,
-    composition,
-    compClipStartTime: compClip.startTime,
-    compDuration: composition.timelineData?.duration ?? composition.duration,
-    tracks: get().tracks,
-    set,
-    get,
-  });
-
   invalidateCache();
 }
 
@@ -120,49 +152,67 @@ export async function refreshCompClipNestedDataAction(
     })),
   });
 
-  const compClips = clips.filter(c =>
-    c.isComposition &&
-    c.compositionId === sourceCompositionId &&
-    c.source?.type !== 'audio'
+  const { useMediaStore } = await import('../../mediaStore');
+  if (!isCurrentTimelineSession()) return;
+  const compositions = useMediaStore.getState().compositions;
+  const affectedCompositionIds = getCompositionContentDependents(sourceCompositionId, compositions);
+  const compClips = get().clips.filter(c =>
+    c.isComposition && c.compositionId && affectedCompositionIds.has(c.compositionId)
   );
   if (compClips.length === 0) {
     log.info('No comp clips found referencing this composition');
     return;
   }
 
-  const { useMediaStore } = await import('../../mediaStore');
-  const composition = useMediaStore.getState().compositions.find(c => c.id === sourceCompositionId);
-  if (!composition?.timelineData) {
-    log.debug('No timelineData for composition', { sourceCompositionId });
-    return;
-  }
+  // Reserve every affected instance before awaiting the first video load. This
+  // also prevents an older request from later clearing its linked audio clip.
+  const refreshes = compClips.map(compClip => ({ compClip, isLatestLoad: beginNestedCompositionLoad(get, compClip.id) }));
 
-  const newContentHash = createNestedContentHash(composition.timelineData);
-  log.info('Refreshing nested clips for composition', {
-    compositionId: sourceCompositionId,
-    compositionName: composition.name,
-    affectedClips: compClips.length,
-    newClipCount: composition.timelineData.clips.length,
-    newTrackCount: composition.timelineData.tracks.length,
-  });
-
-  for (const compClip of compClips) {
+  for (const { compClip, isLatestLoad } of refreshes) {
     if (!isCurrentTimelineSession()) return;
-
-    const contentHashChanged = compClip.nestedContentHash !== newContentHash;
-    const needsThumbnailUpdate = contentHashChanged;
+    const composition = compositions.find(c => c.id === compClip.compositionId);
+    if (!composition?.timelineData) continue;
+    const newContentHash = createNestedContentHash(composition.timelineData, compositions);
+    const compDuration = composition.timelineData.duration ?? composition.duration;
+    const isCurrentRefresh = () => {
+      if (!isCurrentTimelineSession() || !isLatestLoad()) return false;
+      const currentClip = get().clips.find(clip => clip.id === compClip.id);
+      if (!currentClip?.isComposition || currentClip.compositionId !== composition.id) return false;
+      const currentCompositions = useMediaStore.getState().compositions;
+      const currentSource = currentCompositions.find(candidate => candidate.id === composition.id);
+      return !!currentSource && createNestedContentHash(currentSource.timelineData, currentCompositions) === newContentHash;
+    };
+    if (!isCurrentRefresh()) continue;
+    if (compClip.source?.type === 'audio') {
+      set({ clips: get().clips.map(c => {
+        if (c.id !== compClip.id) return c;
+        const contentHashChanged = c.nestedContentHash !== newContentHash;
+        return {
+          ...c, nestedContentHash: newContentHash,
+          ...(contentHashChanged ? {
+            ...resetCompositionMixdown(c),
+            source: { ...c.source!, audioElement: undefined, naturalDuration: compDuration },
+            waveform: undefined, waveformChannels: undefined,
+          } : {}),
+        };
+      }) });
+      continue;
+    }
     const nestedClips = await loadNestedClips({
       compClipId: compClip.id,
       composition,
       get,
       set,
-      isCurrentTimelineSession,
+      isCurrentTimelineSession: isCurrentRefresh,
     });
-    if (!isCurrentTimelineSession()) return;
+    if (!isCurrentRefresh()) {
+      releaseStaleNestedCompositionClips(nestedClips);
+      continue;
+    }
 
     const nestedTracks = composition.timelineData.tracks;
-    const compDuration = composition.timelineData?.duration ?? composition.duration;
     const nestedClipBoundaries = calculateNestedClipBoundaries(composition.timelineData, compDuration);
+    const needsThumbnailUpdate = get().clips.find(clip => clip.id === compClip.id)?.nestedContentHash !== newContentHash;
 
     set({
       clips: get().clips.map(c =>
@@ -175,25 +225,12 @@ export async function refreshCompClipNestedDataAction(
               nestedClipBoundaries,
               isLoading: false,
               needsReload: false,
-              ...(contentHashChanged
-                ? {
-                    mixdownAudio: undefined,
-                    mixdownBuffer: undefined,
-                    mixdownWaveform: undefined,
-                    hasMixdownAudio: false,
-                    mixdownGenerating: false,
-                  }
-                : {}),
+              ...(needsThumbnailUpdate ? resetCompositionMixdown(c) : {}),
               clipSegments: needsThumbnailUpdate ? undefined : c.clipSegments,
             }
           : c
       ),
     });
-    if (contentHashChanged) {
-      releaseCompositionMixdownClipRuntime(compClip);
-      blobUrlManager.revokeType(compClip.id, 'audio');
-    }
-
     if (needsThumbnailUpdate && get().thumbnailsEnabled) {
       scheduleNestedClipSegmentBuild({
         clipId: compClip.id,
@@ -203,7 +240,7 @@ export async function refreshCompClipNestedDataAction(
         thumbnailsEnabled: true,
         get,
         set,
-        isCurrentTimelineSession,
+        isCurrentTimelineSession: isCurrentRefresh,
         delayMs: 500,
         logLabel: 'Updated clip segments for nested comp',
       });

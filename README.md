@@ -109,6 +109,12 @@ Right-button scrubbing scrolls at the timeline edges. Moving clips between track
 keeps their original timing, and reversed thumbnails follow the visible source range.
 Nested audio-only compositions retain their sound; mixdowns include clip timing
 and audio processing. Board-to-timeline drops restore the board view after auto-pan.
+New compositions are revealed in the Media panel. Preview source menus group
+composition layers and expand them on hover, keyboard focus, or a touch toggle.
+Board collisions use the nearest free grid position. Reusing Text, Camera, or Mesh
+media preserves the item's saved properties. Nested mixdowns refresh when source
+timing, effects, automation, or child compositions change. Prompt Book updates
+completed tool calls while the chat response is still running.
 
 ## Try it
 

@@ -2742,7 +2742,7 @@ describe('timeline architecture registry', () => {
     expect(segmentsSource).toContain('calculateNestedClipBoundaries');
     expect(segmentsSource).toContain('buildAndApplyNestedClipSegments');
     expect(thumbnailsSource).toContain('generateCompThumbnails');
-    expect(lineCount(loaderSource)).toBeLessThanOrEqual(834);
+    expect(lineCount(loaderSource)).toBeLessThanOrEqual(700);
     expect(lineCount(keyframesSource)).toBeLessThanOrEqual(150);
     expect(lineCount(segmentsSource)).toBeLessThanOrEqual(250);
     expect(lineCount(thumbnailsSource)).toBeLessThanOrEqual(150);
@@ -3073,7 +3073,7 @@ describe('timeline architecture registry', () => {
     expect(trackDragLeaveSource).toContain('useExternalDropTrackDragLeave');
     expect(trackDragLeaveSource).toContain('dragCounterRef.current--');
     expect(trackDragLeaveSource).toContain("trackId: ''");
-    expect(lineCount(hookSource)).toBeLessThanOrEqual(714);
+    expect(lineCount(hookSource)).toBeLessThanOrEqual(700);
     expect(lineCount(bridgeRoutingSource)).toBeLessThanOrEqual(300);
     expect(lineCount(immediatePreviewSource)).toBeLessThanOrEqual(250);
     expect(lineCount(previewDragTypesSource)).toBeLessThanOrEqual(50);

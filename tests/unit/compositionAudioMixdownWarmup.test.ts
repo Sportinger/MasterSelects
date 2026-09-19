@@ -8,6 +8,7 @@ import {
   collectCompositionAudioMixdownWarmupRequests,
   resetCompositionAudioMixdownWarmupForTest,
   scheduleCompositionAudioMixdownWarmup,
+  warmCompositionAudioMixdownRequest,
 } from '../../src/services/timeline/compositionAudioMixdownWarmup';
 import type { CompositionAudioMixdownRequestResult } from '../../src/services/timeline/compositionAudioMixdownCache';
 import type { TimelineClip } from '../../src/types';
@@ -51,6 +52,25 @@ function clip(overrides: Partial<TimelineClip> = {}): TimelineClip {
 }
 
 describe('compositionAudioMixdownWarmup', () => {
+  it.each(['success', 'failure'] as const)('does not overwrite a newer source revision when an old warmup finishes with %s', async (outcome) => {
+    let clips = [clip()];
+    let finish!: (result: CompositionAudioMixdownRequestResult) => void;
+    let fail!: (error: Error) => void;
+    const pending = new Promise<CompositionAudioMixdownRequestResult>((resolve, reject) => { finish = resolve; fail = reject; });
+    const [request] = collectCompositionAudioMixdownWarmupRequests({ clips, timelineSessionId: 1 });
+    const warmup = warmCompositionAudioMixdownRequest(request, { deps: {
+      getWarmupState: () => ({ clips, timelineSessionId: 1 }),
+      setClips: update => { clips = update(clips); },
+      requestMixdown: () => pending,
+    } });
+    const newBuffer = audioBuffer(2);
+    clips = [clip({ nestedContentHash: 'hash-b', mixdownBuffer: newBuffer, mixdownGenerating: true })];
+    if (outcome === 'success') finish({ key: 'comp-1:hash-a', buffer: audioBuffer(3), waveform: [0.1], duration: 3, hasAudio: true });
+    else fail(new Error('old revision failed'));
+    expect((await warmup).status).toBe('stale');
+    expect(clips[0].mixdownBuffer).toBe(newBuffer);
+    expect(clips[0].mixdownGenerating).toBe(true);
+  });
   it('does not schedule audio jobs for thousands of restored graphics compositions', () => {
     const shape = clip({ isComposition: false, source: { type: 'motion-shape' } });
     const graphics = clip({ source: { type: 'video' }, nestedClips: [shape], isLoading: false });

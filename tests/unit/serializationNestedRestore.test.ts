@@ -14,7 +14,9 @@ import * as riveMetadata from '../../src/services/vectorAnimation/riveMetadata';
 import { useMediaStore, type Composition, type MediaFile } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { blobUrlManager } from '../../src/stores/timeline/helpers/blobUrlManager';
-import type { CompositionTimelineData, GaussianSplatSequenceData, Keyframe, SerializableClip, TimelineTrack } from '../../src/types';
+import * as nestedLoader from '../../src/stores/timeline/nestedCompositionLoader';
+import { createMockClip } from '../helpers/mockData';
+import type { CompositionTimelineData, GaussianSplatSequenceData, Keyframe, SerializableClip, TimelineClip, TimelineTrack } from '../../src/types';
 import {
   createDataOnlyRestoredMediaSource,
   createDataOnlyRestoredVideoSource,
@@ -262,6 +264,39 @@ describe('serialization nested video restore', () => {
     expect(restored?.transitionRecipeBlendWindows).toEqual(transitionRecipeBlendWindows);
     expect(serialized?.transitionSourceMap).toEqual(transitionSourceMap);
     expect(serialized?.transitionRecipeBlendWindows).toEqual(transitionRecipeBlendWindows);
+  });
+
+  it('continues restoring later clips when a refresh supersedes one nested composition load', async () => {
+    const child = composition({ timelineData: timelineData({ clips: [clip({ id: 'inner-video' })] }) });
+    const mediaState = mediaStoreState({ files: [mediaFile()], compositions: [child] });
+    vi.mocked(useMediaStore.getState).mockReturnValue(mediaState);
+    let finishOldLoad!: (clips: TimelineClip[]) => void;
+    let signalStarted!: () => void;
+    const started = new Promise<void>(resolve => { signalStarted = resolve; });
+    const oldLoad = new Promise<TimelineClip[]>(resolve => { finishOldLoad = resolve; });
+    const freshNested = [createMockClip({ id: 'fresh-nested', speed: 2, source: null })];
+    vi.spyOn(nestedLoader, 'loadNestedClips')
+      .mockImplementationOnce(() => { signalStarted(); return oldLoad; })
+      .mockResolvedValueOnce(freshNested);
+    const restore = useTimelineStore.getState().loadState(timelineData({ clips: [
+      clip({ id: 'nested-wrapper', mediaFileId: '', isComposition: true, compositionId: child.id }),
+      clip({ id: 'following-video', startTime: 10 }),
+    ] }));
+    await started;
+    const sessionId = useTimelineStore.getState().timelineSessionId;
+    mediaState.compositions = [{
+      ...child,
+      timelineData: { ...child.timelineData!, clips: [{ ...child.timelineData!.clips[0], speed: 2 }] },
+    }];
+    await useTimelineStore.getState().refreshCompClipNestedData(child.id);
+    finishOldLoad([createMockClip({ id: 'stale-nested', source: null })]);
+    await restore;
+    const state = useTimelineStore.getState();
+    expect(state.timelineSessionId).toBe(sessionId);
+    expect(state.clips.map(clip => clip.id)).toEqual(['nested-wrapper', 'following-video']);
+    expect(state.clips[0].nestedClips).toEqual(freshNested);
+    expect(state.clips[0].isLoading).toBe(false);
+    expect(state.clips[1].source).toMatchObject({ type: 'video', mediaFileId: 'media-video' });
   });
 
   it('round-trips v3 transition source fields through normal media restore without shared references', async () => {

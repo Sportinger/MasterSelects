@@ -4,6 +4,7 @@ import { useSettingsStore } from '../../../../stores/settingsStore';
 import type { Composition, useMediaStore } from '../../../../stores/mediaStore';
 import type { CompositionSettingsValues } from '../CompositionSettingsDialog';
 import { requestMediaBoardPlacement } from '../board/placementRequests';
+import { requestMediaSourceReveal } from '../../../../services/mediaSourceReveal';
 import type { MediaPanelCompositionSettingsDialogState } from './MediaPanelOverlayMounts';
 
 type MediaStoreState = ReturnType<typeof useMediaStore.getState>;
@@ -112,6 +113,7 @@ export function useMediaPanelCompositionSettings({
         });
       }
       void openCompositionTab(composition.id);
+      requestMediaSourceReveal(composition.id, 'media-panel');
     } else {
       applySettingsToComposition(settingsDialog.compositionId, settingsDialog);
     }
