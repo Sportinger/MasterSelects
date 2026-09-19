@@ -27,6 +27,7 @@ Restore batching, nested-keyframe publication, tracking-metadata cloning, and tr
 ### Audio Tracks
 - Hold audio-only clips and audio-linked companions for video clips.
 - Waveforms support compact, detailed, and spectral timeline display modes.
+- Volume keyframe rows and inline curve axes display gain in dB: unity is `0.0 dB`, half gain is `-6.0 dB`, and silence is `-∞ dB`. Stored keyframes and curve geometry still use linear gain; opacity and scale retain percentage labels.
 - Audio Focus mode expands audio lanes and compacts video lanes without switching to a separate editor window.
 - Linked audio follows video movement unless moved independently with `Alt` drag.
 - Default layout includes one audio track named `Audio`.

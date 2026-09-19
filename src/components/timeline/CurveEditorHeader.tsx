@@ -4,6 +4,7 @@ import React, { useMemo } from 'react';
 import { parseCameraProperty, type AnimatableProperty, type Keyframe, type TimelineClip } from '../../types';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
+import { formatAudioAutomationGain } from './utils/audioAutomationValue';
 import {
   getVectorAnimationStateLabelAtIndex,
   parseVectorAnimationInputProperty,
@@ -115,9 +116,8 @@ function formatValue(value: number, property: AnimatableProperty, stateNames: re
   if (parseVectorAnimationStateProperty(property)) {
     return getVectorAnimationStateLabelAtIndex(stateNames, value) ?? `State ${Math.round(value)}`;
   }
-  if (property === 'opacity' || property.includes('.volume')) {
-    return `${(value * 100).toFixed(0)}%`;
-  }
+  if (property.includes('.volume')) return formatAudioAutomationGain(value);
+  if (property === 'opacity') return `${(value * 100).toFixed(0)}%`;
   const cameraProperty = parseCameraProperty(property);
   if (cameraProperty === 'fov') {
     return `${value.toFixed(0)}°`;

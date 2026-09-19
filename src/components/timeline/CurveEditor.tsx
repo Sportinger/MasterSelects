@@ -10,6 +10,7 @@ import {
 import { BEZIER_HANDLE_SIZE } from '../../stores/timeline/constants';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
+import { formatAudioAutomationGain } from './utils/audioAutomationValue';
 import {
   clampBezierHandleTimeOffset,
   resolveBezierSegmentHandles,
@@ -527,7 +528,8 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
               fill="var(--text-secondary)"
             >
               {line.label ? line.label :
-               (property === 'opacity' || property.includes('.volume')) ? `${(line.value * 100).toFixed(0)}%` :
+               property.includes('.volume') ? formatAudioAutomationGain(line.value) :
+               property === 'opacity' ? `${(line.value * 100).toFixed(0)}%` :
                parseCameraProperty(property) === 'fov' ? `${line.value.toFixed(0)}°` :
                property.startsWith('scale.') ? `${(line.value * 100).toFixed(0)}%` :
                property.startsWith('rotation.') ? `${line.value.toFixed(0)}°` :

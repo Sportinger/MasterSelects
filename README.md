@@ -99,6 +99,7 @@ automation curves to replace the destination range while keeping surrounding
 keyframes and other properties intact.
 Use **View > Thumbnails** in the timeline to hide or restore clip previews while
 keeping clip labels and audio waveforms visible.
+Timeline volume keyframe rows and inline curves show gain in dB.
 
 ## Try it
 

@@ -25,6 +25,7 @@ import {
   getTimelineHeaderVectorAnimationPropertyValue,
 } from './timelineHeaderVectorPropertyModel';
 import { type HeaderKeyframe, type KeyframeTrackClip, usesCameraPropertyModel } from './timelineHeaderPropertyTypes';
+import { formatAudioAutomationGain } from './audioAutomationValue';
 
 export { getHeaderPropertyLabel, sortTimelineHeaderProperties } from './timelineHeaderPropertyLabels';
 export { type HeaderKeyframe, type KeyframeTrackClip, shouldHide3DOnlyProperties, usesCameraPropertyModel } from './timelineHeaderPropertyTypes';
@@ -239,7 +240,7 @@ export function formatHeaderPropertyValue(value: number, prop: string, clip?: Ke
     if (eqMeta.paramName.endsWith('q')) return value.toFixed(2);
     if (eqMeta.paramName.endsWith('attackMs') || eqMeta.paramName.endsWith('releaseMs')) return `${value.toFixed(0)}ms`;
   }
-  if (prop.includes('.volume')) return (value * 100).toFixed(0) + '%';
+  if (prop.includes('.volume')) return formatAudioAutomationGain(value);
   if (prop.includes('.band')) return (value > 0 ? '+' : '') + value.toFixed(1) + 'dB';
   const vectorValue = formatTimelineHeaderVectorAnimationPropertyValue(value, prop, clip);
   if (vectorValue !== null) return vectorValue;
